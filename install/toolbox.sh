@@ -1,4 +1,4 @@
-sudo apt install libfuse2
+sudo apt install -y libfuse2
 
 cd /tmp
 curl -sLo jetbrains-toolbox.tar.gz "https://download.jetbrains.com/toolbox/jetbrains-toolbox-2.3.2.31487.tar.gz"
