@@ -4,7 +4,7 @@ SAVEHIST=5000
 HISTFILE=~/.zsh_history
 
 # Autocompletion
-source /usr/share/bash-completion/bash_completion
+# source /usr/share/bash-completion/bash_completion
 
 # Set complete path
 export PATH="./bin:$HOME/.local/bin:$HOME/.local/share/devex/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
