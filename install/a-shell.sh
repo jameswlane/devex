@@ -1,4 +1,4 @@
-sudo apt install zsh zplug
+sudo apt install -y zsh zplug
 
 [ -f "~/.zshrc" ] && mv ~/.zshrc ~/.zshrc.bak
 cp ~/.local/share/devex/configs/zshrc ~/.zshrc
