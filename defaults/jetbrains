@@ -1,0 +1,16 @@
+# https://www.jetbrains.com/help/idea/working-with-the-ide-features-from-command-line.html#standalone
+
+# https://www.jetbrains.com/help/idea/managing-plugins.html#install_plugin_cmd
+idea.sh installPlugins <PluginID>
+
+# Developer Tools
+# https://plugins.jetbrains.com/plugin/21904-developer-tools
+idea.sh installPlugins dev.turingcomplete.intellijdevelopertoolsplugins
+
+# Material Theme UI
+# https://plugins.jetbrains.com/plugin/8006-material-theme-ui
+idea.sh installPlugins com.chrisrm.idea.MaterialThemeUI
+
+
+# https://www.jetbrains.com/help/idea/configuring-project-and-ide-settings.html#restore-defaults
+~/.config/JetBrains/<product><version>-backup

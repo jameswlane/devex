@@ -1,0 +1,2 @@
+# Leave this file as-is to allow DevEx to swap fonts system wide
+import = [ "~/.local/share/devex/fonts/alacritty/cascadia-mono.toml" ]

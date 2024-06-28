@@ -1,0 +1,2 @@
+# Leave this file as-is to allow devex to swap themes system wide
+import = [ "~/.local/share/devex/themes/alacritty/tokyo-night.toml" ]

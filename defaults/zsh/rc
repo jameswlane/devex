@@ -1,0 +1,4 @@
+source ~/.local/share/devex/defaults/zsh/shell
+source ~/.local/share/devex/defaults/zsh/aliases
+source ~/.local/share/devex/defaults/zsh/prompt
+source ~/.local/share/devex/defaults/zsh/init
