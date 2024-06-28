@@ -5,6 +5,7 @@ curl -sLo jetbrains-toolbox.tar.gz "https://download.jetbrains.com/toolbox/jetbr
 tar -xf jetbrains-toolbox.tar.gz
 [ ! -d $HOME/Applications ] && mkdir $HOME/Applications
 mv ./jetbrains-toolbox-2.3.2.31487/jetbrains-toolbox $HOME/Applications
+sudo chmod a+x $HOME/Applications/jetbrains-toolbox
 rm -rf jetbrains-toolbox.tar.gz jetbrains-toolbox-2.3.2.31487
 cd -
 
