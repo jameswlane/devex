@@ -54,4 +54,4 @@ if [ -n "$THEME" ] && [ "$THEME" != "<<-back" ]; then
   sed -i "s/\"workbench.colorTheme\": \".*\"/\"workbench.colorTheme\": \"$VSC_THEME\"/g" ~/.config/Code/User/settings.json
 fi
 
-source $DEVEX_PATH/bin/devex-menu
+source $DEVEX_PATH/bin/devex-menu.sh

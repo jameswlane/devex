@@ -17,4 +17,4 @@ done
 cd -
 gum spin --spinner globe --title "Update has completed!" -- sleep 3
 clear
-source $DEVEX_PATH/bin/devex
+source $DEVEX_PATH/bin/devex.sh

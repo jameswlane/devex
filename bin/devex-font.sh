@@ -40,4 +40,4 @@ case $choice in
     ;;
 esac
 
-source $DEVEX_PATH/bin/devex-menu
+source $DEVEX_PATH/bin/devex-menu.sh
