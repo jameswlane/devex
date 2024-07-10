@@ -1,6 +1,5 @@
 # Favorite apps for dock
 apps=(
-	"Alacritty.desktop"
 	"code.desktop"
 	"typora.desktop"
 	"1password.desktop"
