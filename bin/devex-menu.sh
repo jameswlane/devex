@@ -4,4 +4,4 @@ else
 	SUB=$1
 fi
 
-[ -n "$SUB" ] && [ "$SUB" != "quit" ] && source $DEVEX_PATH/bin/devex-$SUB
+[ -n "$SUB" ] && [ "$SUB" != "quit" ] && source $DEVEX_PATH/bin/devex-$SUB.sh
