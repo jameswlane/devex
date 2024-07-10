@@ -4,12 +4,12 @@ THEME=$(gum choose "${THEME_NAMES[@]}" "<< Back" --header "Choose your theme" --
 
 if [ -n "$THEME" ] && [ "$THEME" != "<<-back" ]; then
   # Install theme in Gnome, Terminal, and both default editors
-  source $DEVEX_PATH/themes/gnome/$THEME.sh
-  cp $DEVEX_PATH/themes/alacritty/$THEME.toml ~/.config/alacritty/theme.toml
+  # shellcheck disable=SC1090
+  source "$DEVEX_PATH/themes/gnome/$THEME.sh"
 
   if [ ! -f ~/.config/nvim/plugin/after/transparency.lua ]; then
       mkdir -p ~/.config/nvim/plugin/after
-      cp $DEVEX_PATH/configs/neovim/transparency.lua ~/.config/nvim/plugin/after/transparency.lua
+      cp "$DEVEX_PATH"/configs/neovim/transparency.lua ~/.config/nvim/plugin/after/transparency.lua
   fi
 
   # Chrome theme update
@@ -20,11 +20,12 @@ if [ -n "$THEME" ] && [ "$THEME" != "<<-back" ]; then
         sleep 0.1
     done
 
-    source $DEVEX_PATH/themes/chrome/$THEME.sh
+    # shellcheck disable=SC1090
+    source "$DEVEX_PATH/themes/chrome/$THEME.sh"
     google-chrome > /dev/null 2>&1 &
   fi
 
-  cp $DEVEX_PATH/themes/neovim/$THEME.lua ~/.config/nvim/lua/plugins/theme.lua
+  cp "$DEVEX_PATH/themes/neovim/$THEME.lua" ~/.config/nvim/lua/plugins/theme.lua
 
   # Translate to specific VSC theme name
   if [ "$THEME" == "gruvbox" ]; then
