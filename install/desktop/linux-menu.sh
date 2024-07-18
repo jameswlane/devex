@@ -4,3 +4,5 @@ apps=$(gum choose "1password" --no-limit --selected "1password" --height 7 --hea
 for app in $apps; do
 	source "$DEVEX_PATH/install/optional/${app,,}.sh"
 done
+
+source $DEVEX_PATH/install/install-menu.sh

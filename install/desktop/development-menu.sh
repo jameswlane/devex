@@ -20,3 +20,5 @@ if [[ -v DEVELOPER_APPS ]]; then
     done
   fi
 fi
+
+source $DEVEX_PATH/install/install-menu.sh
