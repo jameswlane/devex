@@ -6,6 +6,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
+	"time"
 )
 
 var brewExecCommand = exec.Command
@@ -25,6 +26,7 @@ func Install(packageName string, dryRun bool, db *datastore.DB, logger *logger.L
 	// Handle dry-run case
 	if dryRun {
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: brew install %s", packageName))
+		time.Sleep(5 * time.Second)
 		return nil
 	}
 

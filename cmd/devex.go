@@ -6,6 +6,7 @@ import (
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/logger"
 	"github.com/jameswlane/devex/pkg/steps"
+	"github.com/jameswlane/devex/pkg/sysmetrics"
 	"github.com/jameswlane/devex/pkg/view"
 	"golang.org/x/term"
 	"os"
@@ -36,7 +37,11 @@ func main() {
 	log := logger.InitLogger()
 
 	// Initialize view model with system info
-	viewModel := view.NewViewModel("CPU: 2.3 GHz | RAM: 16 GB | Disk: 256 GB SSD", width, height)
+	cpuPercent, _ := sysmetrics.GetCPUUsage()
+	ramPercent, _ := sysmetrics.GetRAMUsage()
+	diskPercent, _ := sysmetrics.GetDiskUsage()
+	systemInfo := fmt.Sprintf("CPU Usage: %.2f%% | RAM Usage: %.2f%% | Disk Usage: %.2f%%", cpuPercent, ramPercent, diskPercent)
+	viewModel := view.NewViewModel(systemInfo, width, height)
 
 	// Generate and execute steps from YAML files
 	stepsList, err := steps.GenerateSteps()
