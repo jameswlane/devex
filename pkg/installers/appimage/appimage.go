@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 var downloadFileFunc = downloadFile
@@ -34,6 +35,7 @@ func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *d
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would extract tarball to: %s", "/tmp"))
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary)))
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary)))
+		time.Sleep(5 * time.Second)
 		return nil
 	}
 

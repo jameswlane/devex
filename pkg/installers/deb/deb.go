@@ -6,6 +6,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
+	"time"
 )
 
 var execCommand = exec.Command
@@ -26,6 +27,7 @@ func Install(filePath string, dryRun bool, db *datastore.DB, logger *logger.Logg
 	if dryRun {
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: sudo dpkg -i %s", filePath))
 		logger.LogInfo("[Dry Run] Would run command: sudo apt-get install -f -y")
+		time.Sleep(5 * time.Second)
 		return nil
 	}
 

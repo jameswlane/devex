@@ -77,7 +77,7 @@ func InstallApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) e
 			InstallCommand: app.InstallCommand,
 			DockerOptions:  docker.DockerOptions(app.DockerOptions),
 		}
-		return docker.InstallDockerApp(dockerApp, dryRun, db, logger)
+		return docker.Install(dockerApp, dryRun, db, logger)
 	case "flatpak":
 		// Assuming the InstallCommand contains both appID and repo separated by a space
 		parts := strings.Split(app.InstallCommand, " ")

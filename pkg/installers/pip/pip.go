@@ -7,6 +7,7 @@ import (
 	"github.com/jameswlane/devex/pkg/logger"
 	"os"
 	"os/exec"
+	"time"
 )
 
 var pipExecCommand = exec.Command
@@ -28,6 +29,7 @@ func Install(packageName string, dryRun bool, db *datastore.DB, logger *logger.L
 	if dryRun {
 		cmd := pipExecCommand("pip", "install", packageName)
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
+		time.Sleep(5 * time.Second)
 		return nil
 	}
 

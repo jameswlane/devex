@@ -6,6 +6,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
+	"time"
 )
 
 var flatpakExecCommand = exec.Command
@@ -26,6 +27,7 @@ func Install(appID, repo string, dryRun bool, db *datastore.DB, logger *logger.L
 	if dryRun {
 		cmd := flatpakExecCommand("flatpak", "install", repo, appID, "-y")
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
+		time.Sleep(5 * time.Second)
 		return nil
 	}
 

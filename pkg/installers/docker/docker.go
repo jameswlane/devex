@@ -8,6 +8,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"os"
 	"os/exec"
+	"time"
 )
 
 type App struct {
@@ -42,8 +43,8 @@ func LoadApps(filename string) ([]App, error) {
 	return apps, nil
 }
 
-// InstallDockerApp installs a Docker app based on the app configuration
-func InstallDockerApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+// Install installs a Docker app based on the app configuration
+func Install(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
 	// Check if the container is already running using Docker ps
 	isInstalledOnSystem, err := check_install.IsAppInstalled(app.DockerOptions.ContainerName)
 	if err != nil {
@@ -58,6 +59,7 @@ func InstallDockerApp(app App, dryRun bool, db *datastore.DB, logger *logger.Log
 	// Handle dry-run case
 	if dryRun {
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run Docker command for container: %s", app.DockerOptions.ContainerName))
+		time.Sleep(5 * time.Second)
 		return nil
 	}
 
