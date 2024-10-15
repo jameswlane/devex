@@ -1,0 +1,19 @@
+gnome_extensions:
+  - id: "tactile@lundal.io"
+    schema_files:
+      - source: "~/.local/share/gnome-shell/extensions/tactile@lundal.io/schemas/org.gnome.shell.extensions.tactile.gschema.xml"
+        destination: "/usr/share/glib-2.0/schemas/"
+  - id: "just-perfection-desktop@just-perfection"
+    schema_files:
+      - source: "~/.local/share/gnome-shell/extensions/just-perfection-desktop@just-perfection/schemas/org.gnome.shell.extensions.just-perfection.gschema.xml"
+        destination: "/usr/share/glib-2.0/schemas/"
+  - id: "blur-my-shell@aunetx"
+    schema_files:
+      - source: "~/.local/share/gnome-shell/extensions/blur-my-shell@aunetx/schemas/org.gnome.shell.extensions.blur-my-shell.gschema.xml"
+        destination: "/usr/share/glib-2.0/schemas/"
+  - id: "space-bar@luchrioh"
+    schema_files:
+      - source: "~/.local/share/gnome-shell/extensions/space-bar@luchrioh/schemas/org.gnome.shell.extensions.space-bar.gschema.xml"
+        destination: "/usr/share/glib-2.0/schemas/"
+  - id: "undecorate@sun.wxg@gmail.com"
+    schema_files: []

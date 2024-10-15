@@ -3,32 +3,51 @@ package datastore
 import (
 	"database/sql"
 	"fmt"
-
 	_ "github.com/mattn/go-sqlite3"
+	"os"
+	"path/filepath"
 )
 
-// InitDB initializes the SQLite database and creates the table if it doesn't exist
-func InitDB(dbPath string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+type DB struct {
+	*sql.DB
+}
+
+// InitDB initializes the SQLite database and returns the custom DB type
+func InitDB(dbPath string) (*DB, error) {
+	// Get the directory path from the dbPath
+	dbDir := filepath.Dir(dbPath)
+
+	// Check if the directory exists, if not, create it
+	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
+		err := os.MkdirAll(dbDir, 0755)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create database directory: %v", err)
+		}
+	}
+
+	// Open the database
+	sqlDB, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %v", err)
 	}
 
+	// Create table if it doesn't exist
 	createTableQuery := `
     CREATE TABLE IF NOT EXISTS installed_apps (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         app_name TEXT NOT NULL UNIQUE
     );`
-	_, err = db.Exec(createTableQuery)
+	_, err = sqlDB.Exec(createTableQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create table: %v", err)
 	}
 
-	return db, nil
+	// Wrap the sql.DB in the custom DB type
+	return &DB{sqlDB}, nil
 }
 
 // AddInstalledApp adds an app to the installed_apps table
-func AddInstalledApp(db *sql.DB, appName string) error {
+func AddInstalledApp(db *DB, appName string) error {
 	insertQuery := `INSERT INTO installed_apps (app_name) VALUES (?)`
 	_, err := db.Exec(insertQuery, appName)
 	if err != nil {
@@ -38,7 +57,7 @@ func AddInstalledApp(db *sql.DB, appName string) error {
 }
 
 // IsAppInDB checks if an app is already stored in the database
-func IsAppInDB(db *sql.DB, appName string) (bool, error) {
+func IsAppInDB(db *DB, appName string) (bool, error) {
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM installed_apps WHERE app_name = ? LIMIT 1)`
 	err := db.QueryRow(query, appName).Scan(&exists)
@@ -49,7 +68,7 @@ func IsAppInDB(db *sql.DB, appName string) (bool, error) {
 }
 
 // RemoveInstalledApp removes an app from the installed_apps table
-func RemoveInstalledApp(db *sql.DB, appName string) error {
+func RemoveInstalledApp(db *DB, appName string) error {
 	deleteQuery := `DELETE FROM installed_apps WHERE app_name = ?`
 	_, err := db.Exec(deleteQuery, appName)
 	if err != nil {

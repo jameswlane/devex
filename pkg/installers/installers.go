@@ -2,19 +2,20 @@ package installers
 
 import (
 	"fmt"
-	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
 	"github.com/jameswlane/devex/pkg/installers/brew"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/installers/deb"
+	"github.com/jameswlane/devex/pkg/installers/docker"
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
+	"github.com/jameswlane/devex/pkg/installers/pip"
+	"github.com/jameswlane/devex/pkg/logger"
 	"strings"
 )
 
+// App struct as defined in YAML
 type App struct {
 	Name             string   `yaml:"name"`
 	Description      string   `yaml:"description"`
@@ -49,66 +50,47 @@ type App struct {
 	} `yaml:"docker_options"`
 }
 
-// LoadYAML loads the app configuration from a YAML file
-func LoadYAML(filename string) ([]App, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		log.Error("Failed to read YAML file", "filename", filename, "error", err)
-		return nil, err
-	}
-
-	var apps []App
-	err = yaml.Unmarshal(data, &apps)
-	if err != nil {
-		log.Error("Failed to unmarshal YAML", "error", err)
-		return nil, err
-	}
-
-	log.Info("Loaded app configuration from YAML", "filename", filename)
-	return apps, nil
-}
-
-// InstallApp installs the app based on the InstallMethod field
-func InstallApp(app App, dryRun bool) error {
-	// Check if the app is already installed using IsAppInstalled
-	isInstalled, err := check_install.IsAppInstalled(app.Name)
-	if err != nil {
-		log.Error("Error checking if app is installed", "app", app.Name, "error", err)
-		return err
-	}
-
-	if isInstalled {
-		log.Info("App is already installed, skipping", "app", app.Name)
-		return nil
-	}
-
-	log.Info("Installing app", "app", app.Name, "method", app.InstallMethod)
+// InstallApp installs the app based on the InstallMethod field, with dry-run and datastore integration
+func InstallApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+	// Install the app using the appropriate method
+	logger.LogInfo(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
 
 	switch app.InstallMethod {
+	case "appimage":
+		parts := strings.Split(app.InstallCommand, " ")
+		if len(parts) != 3 {
+			return fmt.Errorf("invalid install command for appimage: %s", app.InstallCommand)
+		}
+		return appimage.Install(parts[0], parts[1], parts[2], parts[3], dryRun, db, logger)
 	case "apt":
-		return apt.Install(app.InstallCommand, dryRun)
+		return apt.Install(app.InstallCommand, dryRun, db, logger)
 	case "brew":
-		return brew.Install(app.InstallCommand, dryRun)
+		return brew.Install(app.InstallCommand, dryRun, db, logger)
+	case "deb":
+		return deb.Install(app.InstallCommand, dryRun, db, logger)
+	case "docker":
+		dockerApp := docker.App{
+			Name:           app.Name,
+			Description:    app.Description,
+			Category:       app.Category,
+			InstallMethod:  app.InstallMethod,
+			InstallCommand: app.InstallCommand,
+			DockerOptions:  docker.DockerOptions(app.DockerOptions),
+		}
+		return docker.InstallDockerApp(dockerApp, dryRun, db, logger)
 	case "flatpak":
 		// Assuming the InstallCommand contains both appID and repo separated by a space
 		parts := strings.Split(app.InstallCommand, " ")
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid install command for flatpak: %s", app.InstallCommand)
 		}
-		return flatpak.Install(parts[0], parts[1], dryRun)
-	case "appimage":
-		// Assuming the InstallCommand contains downloadURL, installDir, and binary separated by spaces
-		parts := strings.Split(app.InstallCommand, " ")
-		if len(parts) != 3 {
-			return fmt.Errorf("invalid install command for appimage: %s", app.InstallCommand)
-		}
-		return appimage.Install(parts[0], parts[1], parts[2], dryRun)
-	case "deb":
-		return deb.Install(app.InstallCommand, dryRun)
+		return flatpak.Install(parts[0], parts[1], dryRun, db, logger)
 	case "mise":
-		return mise.Install(app.InstallCommand, dryRun)
+		return mise.Install(app.InstallCommand, dryRun, db, logger)
+	case "pip":
+		return pip.Install(app.InstallCommand, dryRun, db, logger)
 	default:
-		log.Error("Unsupported install method", "method", app.InstallMethod, "app", app.Name)
+		logger.LogError(fmt.Sprintf("Unsupported install method: %s for app %s", app.InstallMethod, app.Name), nil)
 		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
 	}
 }

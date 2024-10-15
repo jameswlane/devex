@@ -8,15 +8,6 @@ apps:
     dependencies:
       - "apt"
 
-  - name: Rust and Cargo
-    description: "Rust programming language and package manager Cargo"
-    category: "Programming Languages"
-    install_method: "apt"
-    install_command: "rustc cargo"
-    uninstall_command: "rustc cargo"
-    dependencies:
-      - "apt"
-
   - name: Clang
     description: "C/C++ compiler"
     category: "Development"
@@ -41,34 +32,6 @@ apps:
     install_method: "apt"
     install_command: "libvips imagemagick libmagickwand-dev mupdf mupdf-tools"
     uninstall_command: "libvips imagemagick libmagickwand-dev mupdf mupdf-tools"
-    dependencies:
-      - "apt"
-
-  - name: Redis Tools
-    description: "Tools for working with Redis"
-    category: "Databases"
-    install_method: "apt"
-    install_command: "redis-tools"
-    uninstall_command: "redis-tools"
-    dependencies:
-      - "redis"
-      - "apt"
-
-  - name: SQLite Libraries
-    description: "SQLite libraries for database operations"
-    category: "Databases"
-    install_method: "apt"
-    install_command: "sqlite3 libsqlite3-0"
-    uninstall_command: "sqlite3 libsqlite3-0"
-    dependencies:
-      - "apt"
-
-  - name: MySQL Development Libraries
-    description: "Development libraries for MySQL"
-    category: "Databases"
-    install_method: "apt"
-    install_command: "default-libmysqlclient-dev"
-    uninstall_command: "default-libmysqlclient-dev"
     dependencies:
       - "apt"
 
@@ -98,45 +61,6 @@ apps:
     uninstall_command: "flameshot"
     dependencies:
       - "apt"
-
-  - name: "Proton Mail"
-    description: "Secure email app by Proton"
-    category: "Optional Apps"
-    install_method: "deb"
-    install_command: "wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb"
-    uninstall_command: "sudo apt remove protonmail-desktop-beta"
-    dependencies:
-      - "apt"
-
-  - name: "Proton VPN"
-    description: "VPN service by Proton"
-    category: "Optional Apps"
-    install_method: "script"
-    install_command: |
-      wget https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.4_all.deb &&
-      sudo dpkg -i ./protonvpn-stable-release_1.0.4_all.deb && sudo apt update &&
-      sudo apt install proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator
-    uninstall_command: "sudo apt remove proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator"
-    dependencies:
-      - "apt"
-
-  - name: "Proton Pass"
-    description: "Password manager by Proton"
-    category: "Optional Apps"
-    install_method: "deb"
-    install_command: "wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb && sudo apt install ./proton-pass_1.23.1_amd64.deb"
-    uninstall_command: "sudo apt remove proton-pass"
-    dependencies:
-      - "apt"
-
-  - name: "Zen Browser"
-    description: "A secure and private browser"
-    category: "Optional Apps"
-    install_method: "flatpak"
-    install_command: "flatpak install flathub io.github.zen_browser.zen"
-    uninstall_command: "flatpak remove io.github.zen_browser.zen"
-    dependencies:
-      - "flatpak"
 
   - name: Fastfetch
     description: "A fast and lightweight system information tool"
@@ -242,9 +166,9 @@ apps:
       - command: "[ ! -d \"$HOME/.config/nvim\" ] && git clone https://github.com/LazyVim/starter ~/.config/nvim"
       - command: "sed -i 's/checker = { enabled = true }/checker = { enabled = true, notify = false }/g' ~/.config/nvim/lua/config/lazy.lua"
       - command: "mkdir -p ~/.config/nvim/plugin/after"
-      - command: "cp ~/.local/share/devex/configs/neovim/transparency.lua ~/.config/nvim/plugin/after/"
+      - command: "cp ~/.local/share/devex/assets/defaults//neovim/transparency.lua ~/.config/nvim/plugin/after/"
       - command: "cp ~/.local/share/devex/themes/neovim/tokyo-night.lua ~/.config/nvim/lua/plugins/theme.lua"
-      - command: "cp ~/.local/share/devex/configs/neovim/lazyvim.json ~/.config/nvim/lazyvim.json"
+      - command: "cp ~/.local/share/devex/assets/defaults/neovim/lazyvim.json ~/.config/nvim/lazyvim.json"
 
   - name: Typora
     description: "A minimal and configurable markdown editor"
@@ -393,86 +317,6 @@ apps:
     dependencies:
       - "apt"
 
-
-  - name: Bun
-    description: "A fast all-in-one JavaScript runtime"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "bun@latest"
-    uninstall_command: "bun"
-    dependencies:
-      - "mise"
-
-  - name: Deno
-    description: "A modern runtime for JavaScript and TypeScript"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "deno@latest"
-    uninstall_command: "deno"
-    dependencies:
-      - "mise"
-
-  - name: Erlang
-    description: "A programming language used to build massively scalable soft real-time systems"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "erlang@latest"
-    uninstall_command: "erlang"
-    dependencies:
-      - "mise"
-    post_install:
-      - command: "mise use --global elixir@latest"
-      - command: "mise x elixir -- mix local.hex --force"
-
-  - name: Go
-    description: "Go programming language"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "go@latest"
-    uninstall_command: "go"
-    dependencies:
-      - "mise"
-    post_install:
-      - command: "code --install-extension golang.go"
-
-  - name: Java
-    description: "Java programming language"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "java@latest"
-    uninstall_command: "java"
-    dependencies:
-      - "mise"
-
-  - name: Node.js
-    description: "Node.js runtime"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "node@lts"
-    uninstall_command: "node"
-    dependencies:
-      - "mise"
-
-  - name: Python
-    description: "Python programming language"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "python@latest"
-    uninstall_command: "python"
-    dependencies:
-      - "mise"
-
-  - name: Ruby
-    description: "Ruby programming language"
-    category: "Programming Languages"
-    install_method: "mise"
-    install_command: "ruby@latest"
-    uninstall_command: "ruby"
-    dependencies:
-      - "mise"
-    post_install:
-      - command: "mise x ruby -- gem install rails --no-document"
-
   - name: Rails
     description: "Rails web application framework"
     category: "Web Frameworks"
@@ -481,44 +325,6 @@ apps:
     uninstall_command: "rails"
     dependencies:
       - "ruby"
-
-  - name: MySQL
-    description: "MySQL relational database management system"
-    category: "Databases"
-    install_method: "docker"
-    install_command: "mysql:8.4"
-    docker_options:
-      ports:
-        - "127.0.0.1:3306:3306"
-      container_name: "mysql8"
-      environment:
-        - MYSQL_ROOT_PASSWORD=
-        - MYSQL_ALLOW_EMPTY_PASSWORD=true
-      restart_policy: "unless-stopped"
-
-  - name: Redis
-    description: "Redis in-memory data structure store"
-    category: "Databases"
-    install_method: "docker"
-    install_command: "redis:7"
-    docker_options:
-      ports:
-        - "127.0.0.1:6379:6379"
-      container_name: "redis"
-      restart_policy: "unless-stopped"
-
-  - name: PostgreSQL
-    description: "PostgreSQL relational database system"
-    category: "Databases"
-    install_method: "docker"
-    install_command: "postgres:16"
-    docker_options:
-      ports:
-        - "127.0.0.1:5432:5432"
-      container_name: "postgres16"
-      environment:
-        - POSTGRES_HOST_AUTH_METHOD=trust
-      restart_policy: "unless-stopped"
 
   - name: Podman
     description: "A daemonless container engine for developing, managing, and running OCI Containers"
