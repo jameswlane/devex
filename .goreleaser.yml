@@ -1,4 +1,3 @@
-# .goreleaser.yaml
 release:
   # Repo in which the release will be created.
   # Default: extracted from the origin remote URL or empty if its private hosted.
@@ -99,23 +98,6 @@ release:
 
     Welcome to this new release!
 
-  # Header for the release body.
-  #
-  # This feature is only available in GoReleaser Pro.
-  header:
-    # Loads from an URL.
-    from_url:
-      # Templates: allowed.
-      url: https://foo.bar/header.md
-      headers:
-        x-api-token: "${MYCOMPANY_TOKEN}"
-
-    # Loads from a local file.
-    # Overrides `from_url`.
-    from_file:
-      # Templates: allowed.
-      path: ./header.md
-
   # Footer for the release body.
   #
   # Templates: allowed.
@@ -123,23 +105,6 @@ release:
     ## Thanks
 
     Those were the changes on {{ .Tag }}!
-
-  # Footer for the release body.
-  #
-  # This feature is only available in GoReleaser Pro.
-  footer:
-    # Loads from an URL.
-    from_url:
-      # Templates: allowed.
-      url: https://foo.bar/footer.md
-      footers:
-        x-api-token: "${MYCOMPANY_TOKEN}"
-
-    # Loads from a local file.
-    # Overrides `from_url`.
-    from_file:
-      # Templates: allowed.
-      path: ./footer.md
 
   # You can change the name of the release.
   #
@@ -172,16 +137,6 @@ release:
     - glob: ./glob/foo/to/bar/file/foobar/override_from_previous
     - glob: ./single_file.txt
       name_template: file.txt # note that this only works if glob matches 1 file only
-
-  # Additional templated extra files to add to the release.
-  # Those files will have their contents pass through the template engine,
-  # and its results will be added to the release.
-  #
-  # This feature is only available in GoReleaser Pro.
-  # Templates: allowed.
-  templated_extra_files:
-    - src: LICENSE.tpl
-      dst: LICENSE.txt
 
   # Upload metadata.json and artifacts.json to the release as well.
   include_meta: true
