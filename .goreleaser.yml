@@ -1,0 +1,18 @@
+# .goreleaser.yml
+project_name: myapp
+builds:
+  - main: ./cmd/myapp
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+archives:
+  - format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+release:
+  github:
+    owner: jameswlane
+    name: devex

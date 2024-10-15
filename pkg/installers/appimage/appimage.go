@@ -4,57 +4,71 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
+	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/logger"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 )
 
-// Assignable functions for easier testing
 var downloadFileFunc = downloadFile
 var extractTarballFunc = extractTarball
 
-// InstallAppImage handles the installation of AppImages
-func Install(downloadURL, installDir, binary string, dryRun bool) error {
-	// Step 1: Download the tarball
-	tarballPath := "/tmp/appimage.tar.gz"
-	if dryRun {
-		log.Printf("[Dry Run] Would download file from URL: %s", downloadURL)
-		log.Printf("[Dry Run] Would extract tarball to: %s", "/tmp")
-		log.Printf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary))
-		log.Printf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary))
+func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+	// Check if the app is already installed on the system
+	isInstalledOnSystem, err := check_install.IsAppInstalled(binary)
+	if err != nil {
+		return fmt.Errorf("failed to check if app is installed on system: %v", err)
+	}
+
+	if isInstalledOnSystem {
+		logger.LogInfo(fmt.Sprintf("%s is already installed on the system, skipping installation", appName))
 		return nil
 	}
 
-	err := downloadFileFunc(downloadURL, tarballPath)
+	// Handle dry-run case
+	if dryRun {
+		logger.LogInfo(fmt.Sprintf("[Dry Run] Would download file from URL: %s", downloadURL))
+		logger.LogInfo(fmt.Sprintf("[Dry Run] Would extract tarball to: %s", "/tmp"))
+		logger.LogInfo(fmt.Sprintf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary)))
+		logger.LogInfo(fmt.Sprintf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary)))
+		return nil
+	}
+
+	// Download and install
+	tarballPath := "/tmp/appimage.tar.gz"
+	err = downloadFileFunc(downloadURL, tarballPath)
 	if err != nil {
 		return fmt.Errorf("failed to download AppImage: %v", err)
 	}
 
-	// Step 2: Extract the tarball
 	err = extractTarballFunc(tarballPath, "/tmp")
 	if err != nil {
 		return fmt.Errorf("failed to extract AppImage tarball: %v", err)
 	}
 
-	// Step 3: Move the binary to the install directory
 	binaryPath := filepath.Join("/tmp", binary)
 	err = moveFile(binaryPath, filepath.Join(installDir, binary))
 	if err != nil {
 		return fmt.Errorf("failed to move AppImage binary: %v", err)
 	}
 
-	// Step 4: Make the binary executable
 	err = os.Chmod(filepath.Join(installDir, binary), 0755)
 	if err != nil {
 		return fmt.Errorf("failed to set executable permissions: %v", err)
 	}
 
+	// Add to the database
+	err = datastore.AddInstalledApp(db, appName)
+	if err != nil {
+		return fmt.Errorf("failed to add %s to database: %v", appName, err)
+	}
+
 	return nil
 }
 
-// Helper to download a file
 func downloadFile(url, dest string) error {
 	out, err := os.Create(dest)
 	if err != nil {
@@ -72,7 +86,6 @@ func downloadFile(url, dest string) error {
 	return err
 }
 
-// Helper to extract tarball
 func extractTarball(tarballPath, destDir string) error {
 	file, err := os.Open(tarballPath)
 	if err != nil {
@@ -112,7 +125,6 @@ func extractTarball(tarballPath, destDir string) error {
 	return nil
 }
 
-// Helper to move a file
 func moveFile(src, dest string) error {
 	return os.Rename(src, dest)
 }
