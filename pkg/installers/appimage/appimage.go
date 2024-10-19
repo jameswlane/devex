@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
@@ -35,7 +36,9 @@ func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *d
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would extract tarball to: %s", "/tmp"))
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary)))
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary)))
+		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
+		log.Info("Dry run: Completed simulation delay")
 		return nil
 	}
 

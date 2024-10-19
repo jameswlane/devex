@@ -2,6 +2,7 @@ package mise
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
@@ -27,7 +28,9 @@ func Install(language string, dryRun bool, db *datastore.DB, logger *logger.Logg
 	if dryRun {
 		cmd := miseExecCommand("mise", "use", "--global", language)
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
+		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
+		log.Info("Dry run: Completed simulation delay")
 		return nil
 	}
 

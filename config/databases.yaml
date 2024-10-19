@@ -1,4 +1,4 @@
-apps:
+databases:
   - name: Redis Tools
     description: "Tools for working with Redis"
     category: "Databases"
@@ -46,6 +46,7 @@ apps:
     category: "Databases"
     install_method: "docker"
     install_command: "redis:7"
+    default: true
     docker_options:
       ports:
         - "127.0.0.1:6379:6379"
@@ -57,6 +58,7 @@ apps:
     category: "Databases"
     install_method: "docker"
     install_command: "postgres:16"
+    default: true
     docker_options:
       ports:
         - "127.0.0.1:5432:5432"

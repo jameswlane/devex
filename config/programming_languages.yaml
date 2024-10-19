@@ -1,4 +1,4 @@
-apps:
+programming_languages:
   - name: Rust and Cargo
     description: "Rust programming language and package manager Cargo"
     category: "Programming Languages"
@@ -44,6 +44,7 @@ apps:
     install_method: "mise"
     install_command: "go@latest"
     uninstall_command: "go"
+    default: true
     dependencies:
       - "mise"
     post_install:
@@ -64,6 +65,7 @@ apps:
     install_method: "mise"
     install_command: "node@lts"
     uninstall_command: "node"
+    default: true
     dependencies:
       - "mise"
 
@@ -73,6 +75,7 @@ apps:
     install_method: "mise"
     install_command: "python@latest"
     uninstall_command: "python"
+    default: true
     dependencies:
       - "mise"
 
@@ -82,6 +85,7 @@ apps:
     install_method: "mise"
     install_command: "ruby@latest"
     uninstall_command: "ruby"
+    default: true
     dependencies:
       - "mise"
     post_install:
