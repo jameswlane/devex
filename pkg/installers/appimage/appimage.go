@@ -7,7 +7,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"github.com/jameswlane/devex/pkg/logger"
 	"io"
 	"net/http"
 	"os"
@@ -18,7 +17,7 @@ import (
 var downloadFileFunc = downloadFile
 var extractTarballFunc = extractTarball
 
-func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *datastore.DB) error {
 	// Check if the app is already installed on the system
 	isInstalledOnSystem, err := check_install.IsAppInstalled(binary)
 	if err != nil {
@@ -26,16 +25,16 @@ func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *d
 	}
 
 	if isInstalledOnSystem {
-		logger.LogInfo(fmt.Sprintf("%s is already installed on the system, skipping installation", appName))
+		log.Info(fmt.Sprintf("%s is already installed on the system, skipping installation", appName))
 		return nil
 	}
 
 	// Handle dry-run case
 	if dryRun {
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would download file from URL: %s", downloadURL))
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would extract tarball to: %s", "/tmp"))
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary)))
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary)))
+		log.Info(fmt.Sprintf("[Dry Run] Would download file from URL: %s", downloadURL))
+		log.Info(fmt.Sprintf("[Dry Run] Would extract tarball to: %s", "/tmp"))
+		log.Info(fmt.Sprintf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary)))
+		log.Info(fmt.Sprintf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary)))
 		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
 		log.Info("Dry run: Completed simulation delay")

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -66,6 +68,15 @@ func loadCustomConfig(filename string) {
 }
 
 func init() {
+
+	homeDir, err := os.UserHomeDir()
+	db, err := datastore.InitDB(filepath.Join(homeDir, ".devex/installed_apps.db"))
+	if err != nil {
+		fmt.Println("Failed to initialize database:", err)
+		return
+	}
+	defer db.Close()
+
 	// Adding subcommand: install
 	var installCmd = &cobra.Command{
 		Use:   "install",
@@ -87,6 +98,7 @@ func init() {
 			loadCustomConfig("./config/programming_languages.yaml")
 
 			// Check if DEVEX_NONINTERACTIVE is set
+			var selectedLanguages, selectedDatabases []string
 			if viper.GetBool("DEVEX_NONINTERACTIVE") {
 				log.Info("Running in non-interactive mode, using default settings")
 				// Use defaults from the loaded configuration files
@@ -95,9 +107,6 @@ func init() {
 				log.Info("Selected programming languages: ", "languages", defaultLanguages)
 				log.Info("Selected databases: ", "databases", defaultDatabases)
 			} else {
-				// Use huh form to ask for user input
-				var selectedLanguages, selectedDatabases []string
-
 				// Populate options from the configuration
 				var languageOptions []huh.Option[string]
 				if languages, ok := viper.Get("programming_languages").([]interface{}); ok {
@@ -150,20 +159,71 @@ func init() {
 				log.Info("User selected databases: ", "databases", selectedDatabases)
 			}
 
-			// Placeholder for the actual install logic
-			fmt.Println("Running installation...")
+			// Install the selected programming languages and databases
+			installApps(selectedLanguages, "programming_languages", db)
+			installApps(selectedDatabases, "databases", db)
 		},
 	}
 
 	// Adding flags to the install command (placeholder)
 	installCmd.Flags().Bool("dry-run", false, "Run in dry-run mode without making any changes")
-	viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run"))
+	err = viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run"))
+	if err != nil {
+		return
+	}
 
 	// Adding global debug flag
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
-	viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
+	err = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
+	if err != nil {
+		return
+	}
 
 	rootCmd.AddCommand(installCmd)
+}
+
+// Helper function to install apps based on category (programming_languages or databases)
+func installApps(selectedItems []string, category string, db *datastore.DB) {
+	for _, itemName := range selectedItems {
+		apps := viper.Get(fmt.Sprintf("%s", category))
+		if apps == nil {
+			log.Warn(fmt.Sprintf("No apps found for category %s", category))
+			continue
+		}
+
+		appList, ok := apps.([]interface{})
+		if !ok {
+			log.Error(fmt.Sprintf("Invalid type for %s configuration", category))
+			os.Exit(1)
+		}
+
+		for _, app := range appList {
+			appMap, ok := app.(map[string]interface{})
+			if !ok {
+				log.Warn("Skipping invalid app entry due to type mismatch")
+				continue
+			}
+
+			if appName, ok := appMap["name"].(string); ok && appName == itemName {
+				installMethod := appMap["install_method"].(string)
+				installCommand := appMap["install_command"].(string)
+				log.Info(fmt.Sprintf("Installing %s using method %s", appName, installMethod))
+
+				// Call the appropriate installer based on method
+				app := installers.App{
+					Name:           appName,
+					Description:    appMap["description"].(string),
+					Category:       category,
+					InstallMethod:  installMethod,
+					InstallCommand: installCommand,
+				}
+
+				if err := installers.InstallApp(app, viper.GetBool("dry-run"), db); err != nil {
+					log.Error(oops.With("context", fmt.Sprintf("failed to install %s", appName)).Wrap(err))
+				}
+			}
+		}
+	}
 }
 
 // Helper function to get defaults from configuration

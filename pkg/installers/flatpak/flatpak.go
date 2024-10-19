@@ -5,14 +5,13 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
 	"time"
 )
 
 var flatpakExecCommand = exec.Command
 
-func Install(appID, repo string, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+func Install(appID, repo string, dryRun bool, db *datastore.DB) error {
 	// Check if the app is already installed
 	isInstalledOnSystem, err := check_install.IsAppInstalled(appID)
 	if err != nil {
@@ -20,14 +19,14 @@ func Install(appID, repo string, dryRun bool, db *datastore.DB, logger *logger.L
 	}
 
 	if isInstalledOnSystem {
-		logger.LogInfo(fmt.Sprintf("Flatpak app %s is already installed, skipping installation", appID))
+		log.Info(fmt.Sprintf("Flatpak app %s is already installed, skipping installation", appID))
 		return nil
 	}
 
 	// Handle dry-run case
 	if dryRun {
 		cmd := flatpakExecCommand("flatpak", "install", repo, appID, "-y")
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
+		log.Info(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
 		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
 		log.Info("Dry run: Completed simulation delay")
@@ -47,6 +46,6 @@ func Install(appID, repo string, dryRun bool, db *datastore.DB, logger *logger.L
 		return fmt.Errorf("failed to add Flatpak app %s to database: %v", appID, err)
 	}
 
-	logger.LogInfo(fmt.Sprintf("Flatpak app %s installed successfully", appID))
+	log.Info(fmt.Sprintf("Flatpak app %s installed successfully", appID))
 	return nil
 }

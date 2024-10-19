@@ -5,7 +5,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"github.com/jameswlane/devex/pkg/logger"
 	"gopkg.in/yaml.v2"
 	"os"
 	"os/exec"
@@ -45,7 +44,7 @@ func LoadApps(filename string) ([]App, error) {
 }
 
 // Install installs a Docker app based on the app configuration
-func Install(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+func Install(app App, dryRun bool, db *datastore.DB) error {
 	// Check if the container is already running using Docker ps
 	isInstalledOnSystem, err := check_install.IsAppInstalled(app.DockerOptions.ContainerName)
 	if err != nil {
@@ -53,13 +52,13 @@ func Install(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) erro
 	}
 
 	if isInstalledOnSystem {
-		logger.LogInfo(fmt.Sprintf("Docker container %s is already running, skipping installation", app.DockerOptions.ContainerName))
+		log.Info(fmt.Sprintf("Docker container %s is already running, skipping installation", app.DockerOptions.ContainerName))
 		return nil
 	}
 
 	// Handle dry-run case
 	if dryRun {
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run Docker command for container: %s", app.DockerOptions.ContainerName))
+		log.Info(fmt.Sprintf("[Dry Run] Would run Docker command for container: %s", app.DockerOptions.ContainerName))
 		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
 		log.Info("Dry run: Completed simulation delay")
@@ -91,7 +90,7 @@ func Install(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) erro
 	cmd := exec.Command("sudo", append([]string{"docker"}, cmdArgs...)...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		logger.LogError(fmt.Sprintf("Failed to install Docker container: %s - %s", app.DockerOptions.ContainerName, string(output)), err)
+		log.Info(fmt.Sprintf("Failed to install Docker container: %s - %s", app.DockerOptions.ContainerName, string(output)), err)
 		return err
 	}
 
@@ -101,6 +100,6 @@ func Install(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) erro
 		return fmt.Errorf("failed to add Docker container %s to database: %v", app.DockerOptions.ContainerName, err)
 	}
 
-	logger.LogInfo(fmt.Sprintf("Docker container %s installed successfully", app.DockerOptions.ContainerName))
+	log.Info(fmt.Sprintf("Docker container %s installed successfully", app.DockerOptions.ContainerName))
 	return nil
 }

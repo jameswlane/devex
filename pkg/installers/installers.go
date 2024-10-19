@@ -12,7 +12,6 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
 	"github.com/jameswlane/devex/pkg/installers/pip"
-	"github.com/jameswlane/devex/pkg/logger"
 	"strings"
 )
 
@@ -52,9 +51,8 @@ type App struct {
 }
 
 // InstallApp installs the app based on the InstallMethod field, with dry-run and datastore integration
-func InstallApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+func InstallApp(app App, dryRun bool, db *datastore.DB) error {
 	// Install the app using the appropriate method
-	logger.LogInfo(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
 	log.Info(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
 
 	switch app.InstallMethod {
@@ -63,13 +61,13 @@ func InstallApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) e
 		if len(parts) != 3 {
 			return fmt.Errorf("invalid install command for appimage: %s", app.InstallCommand)
 		}
-		return appimage.Install(parts[0], parts[1], parts[2], parts[3], dryRun, db, logger)
+		return appimage.Install(parts[0], parts[1], parts[2], parts[3], dryRun, db)
 	case "apt":
-		return apt.Install(app.InstallCommand, dryRun, db, logger)
+		return apt.Install(app.InstallCommand, dryRun, db)
 	case "brew":
-		return brew.Install(app.InstallCommand, dryRun, db, logger)
+		return brew.Install(app.InstallCommand, dryRun, db)
 	case "deb":
-		return deb.Install(app.InstallCommand, dryRun, db, logger)
+		return deb.Install(app.InstallCommand, dryRun, db)
 	case "docker":
 		dockerApp := docker.App{
 			Name:           app.Name,
@@ -79,20 +77,20 @@ func InstallApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) e
 			InstallCommand: app.InstallCommand,
 			DockerOptions:  docker.DockerOptions(app.DockerOptions),
 		}
-		return docker.Install(dockerApp, dryRun, db, logger)
+		return docker.Install(dockerApp, dryRun, db)
 	case "flatpak":
 		// Assuming the InstallCommand contains both appID and repo separated by a space
 		parts := strings.Split(app.InstallCommand, " ")
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid install command for flatpak: %s", app.InstallCommand)
 		}
-		return flatpak.Install(parts[0], parts[1], dryRun, db, logger)
+		return flatpak.Install(parts[0], parts[1], dryRun, db)
 	case "mise":
-		return mise.Install(app.InstallCommand, dryRun, db, logger)
+		return mise.Install(app.InstallCommand, dryRun, db)
 	case "pip":
-		return pip.Install(app.InstallCommand, dryRun, db, logger)
+		return pip.Install(app.InstallCommand, dryRun, db)
 	default:
-		logger.LogError(fmt.Sprintf("Unsupported install method: %s for app %s", app.InstallMethod, app.Name), nil)
+		log.Error(fmt.Sprintf("Unsupported install method: %s for app %s", app.InstallMethod, app.Name), nil)
 		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
 	}
 }

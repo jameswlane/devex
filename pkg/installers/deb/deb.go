@@ -5,14 +5,13 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
 	"time"
 )
 
 var execCommand = exec.Command
 
-func Install(filePath string, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+func Install(filePath string, dryRun bool, db *datastore.DB) error {
 	// Check if the app is already installed on the system (via dpkg-query)
 	isInstalledOnSystem, err := check_install.IsAppInstalled(filePath)
 	if err != nil {
@@ -20,14 +19,14 @@ func Install(filePath string, dryRun bool, db *datastore.DB, logger *logger.Logg
 	}
 
 	if isInstalledOnSystem {
-		logger.LogInfo(fmt.Sprintf(".deb package %s is already installed on the system, skipping installation", filePath))
+		log.Info(fmt.Sprintf(".deb package %s is already installed on the system, skipping installation", filePath))
 		return nil
 	}
 
 	// Handle dry-run case
 	if dryRun {
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: sudo dpkg -i %s", filePath))
-		logger.LogInfo("[Dry Run] Would run command: sudo apt-get install -f -y")
+		log.Info(fmt.Sprintf("[Dry Run] Would run command: sudo dpkg -i %s", filePath))
+		log.Info("[Dry Run] Would run command: sudo apt-get install -f -y")
 		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
 		log.Info("Dry run: Completed simulation delay")
