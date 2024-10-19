@@ -5,7 +5,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"github.com/jameswlane/devex/pkg/logger"
 	"os"
 	"os/exec"
 	"time"
@@ -14,7 +13,7 @@ import (
 var pipExecCommand = exec.Command
 
 // Install installs a pip package globally, supporting dry-run mode and datastore integration
-func Install(packageName string, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
+func Install(packageName string, dryRun bool, db *datastore.DB) error {
 	// Check if the package is already installed
 	isInstalledOnSystem, err := check_install.IsAppInstalled(packageName)
 	if err != nil {
@@ -22,14 +21,14 @@ func Install(packageName string, dryRun bool, db *datastore.DB, logger *logger.L
 	}
 
 	if isInstalledOnSystem {
-		logger.LogInfo(fmt.Sprintf("Pip package %s is already installed, skipping installation", packageName))
+		log.Info(fmt.Sprintf("Pip package %s is already installed, skipping installation", packageName))
 		return nil
 	}
 
 	// Handle dry-run case
 	if dryRun {
 		cmd := pipExecCommand("pip", "install", packageName)
-		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
+		log.Info(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
 		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
 		log.Info("Dry run: Completed simulation delay")
@@ -51,6 +50,6 @@ func Install(packageName string, dryRun bool, db *datastore.DB, logger *logger.L
 		return fmt.Errorf("failed to add pip package %s to database: %v", packageName, err)
 	}
 
-	logger.LogInfo(fmt.Sprintf("Pip package %s installed successfully", packageName))
+	log.Info(fmt.Sprintf("Pip package %s installed successfully", packageName))
 	return nil
 }
