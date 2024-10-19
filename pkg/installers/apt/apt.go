@@ -2,6 +2,7 @@ package apt
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
@@ -27,7 +28,9 @@ func Install(packageName string, dryRun bool, db *datastore.DB, logger *logger.L
 	// Step 3: Handle dry-run scenario, just log the command
 	if dryRun {
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: sudo apt-get install -y %s", packageName))
+		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
+		log.Info("Dry run: Completed simulation delay")
 		return nil // Skip actual execution
 	}
 

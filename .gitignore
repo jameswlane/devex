@@ -37,3 +37,6 @@ zsdoc/data
 # IDEs
 .idea/
 .vscode/
+
+# Binary files
+bin/

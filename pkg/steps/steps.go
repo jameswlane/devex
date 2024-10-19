@@ -2,6 +2,7 @@ package steps
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers"
@@ -17,20 +18,27 @@ type Step struct {
 
 // ExecuteSteps runs the installation process for each step and updates the status
 func ExecuteSteps(stepsList []Step, dryRun bool, db *datastore.DB, logger *logger.Logger) {
-	for i := range stepsList {
+	for i := 0; i < len(stepsList); i++ {
 		step := &stepsList[i]
 
+		// Check if the step is already completed
+		if step.Status == "Completed" {
+			log.Info(fmt.Sprintf("Skipping step: %s (already completed)", step.Name))
+			continue
+		}
+
 		// Log the beginning of the step
-		logger.LogInfo(fmt.Sprintf("Starting step: %s", step.Name))
+		log.Info(fmt.Sprintf("Starting step: %s", step.Name))
 
 		// Call the InstallApp function
+		log.Info(fmt.Sprintf("Dry run mode: %t", dryRun))
 		err := installers.InstallApp(step.App, dryRun, db, logger)
 		if err != nil {
 			step.Status = "Error"
-			logger.LogError(fmt.Sprintf("Failed to complete step: %s", step.Name), err)
+			log.Error(fmt.Sprintf("Failed to complete step: %s", step.Name), "error", err)
 		} else {
 			step.Status = "Completed"
-			logger.LogInfo(fmt.Sprintf("Completed step: %s", step.Name))
+			log.Info(fmt.Sprintf("Completed step: %s", step.Name))
 		}
 	}
 }
@@ -43,7 +51,7 @@ func GenerateSteps() ([]Step, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load apps config: %v", err)
 	}
-
+	log.Info("Loaded apps configuration")
 	// Convert each app to a step
 	for _, app := range appsConfig.Apps {
 		step := Step{

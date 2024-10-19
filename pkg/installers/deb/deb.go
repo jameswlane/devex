@@ -2,6 +2,7 @@ package deb
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
@@ -27,7 +28,9 @@ func Install(filePath string, dryRun bool, db *datastore.DB, logger *logger.Logg
 	if dryRun {
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: sudo dpkg -i %s", filePath))
 		logger.LogInfo("[Dry Run] Would run command: sudo apt-get install -f -y")
+		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
+		log.Info("Dry run: Completed simulation delay")
 		return nil
 	}
 

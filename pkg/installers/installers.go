@@ -2,6 +2,7 @@ package installers
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
@@ -54,6 +55,7 @@ type App struct {
 func InstallApp(app App, dryRun bool, db *datastore.DB, logger *logger.Logger) error {
 	// Install the app using the appropriate method
 	logger.LogInfo(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
+	log.Info(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
 
 	switch app.InstallMethod {
 	case "appimage":

@@ -2,6 +2,7 @@ package flatpak
 
 import (
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
@@ -27,7 +28,9 @@ func Install(appID, repo string, dryRun bool, db *datastore.DB, logger *logger.L
 	if dryRun {
 		cmd := flatpakExecCommand("flatpak", "install", repo, appID, "-y")
 		logger.LogInfo(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
+		log.Info("Dry run: Simulating installation delay (5 seconds)")
 		time.Sleep(5 * time.Second)
+		log.Info("Dry run: Completed simulation delay")
 		return nil
 	}
 
