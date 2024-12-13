@@ -21,6 +21,8 @@ type Font struct {
 	Destination string `yaml:"destination,omitempty"`
 }
 
+var log = logger.InitLogger()
+
 // LoadFonts loads the font configuration from a YAML file
 func LoadFonts(filename string) ([]Font, error) {
 	data, err := os.ReadFile(filename)
@@ -59,7 +61,7 @@ func installFromURL(font Font) error {
 	}
 
 	// Download the file
-	logger.LogInfo("Downloading font", "url", font.URL)
+	log.LogInfo(fmt.Sprintf("Downloading font: url=%s", font.URL))
 	resp, err := http.Get(font.URL)
 	if err != nil {
 		return fmt.Errorf("failed to download font: %v", err)
@@ -86,7 +88,7 @@ func installFromURL(font Font) error {
 	}
 
 	// Refresh font cache
-	logger.LogInfo("Refreshing font cache...")
+	log.LogInfo("Refreshing font cache...")
 	if err := exec.Command("fc-cache", "-f", "-v").Run(); err != nil {
 		return fmt.Errorf("failed to refresh font cache: %v", err)
 	}
@@ -123,7 +125,7 @@ func unzipAndMove(zipFile, extractPath, dest string) error {
 			if err != nil {
 				return fmt.Errorf("failed to copy font file: %v", err)
 			}
-			logger.LogInfo("Installed font", "file", destFile)
+			log.LogInfo(fmt.Sprintf("Installed font: file=%s", destFile))
 		}
 	}
 
@@ -132,7 +134,7 @@ func unzipAndMove(zipFile, extractPath, dest string) error {
 
 // installWithOhMyPosh installs the font via Oh-my-posh
 func installWithOhMyPosh(fontName string) error {
-	logger.LogInfo("Installing font with Oh-my-posh", "font", fontName)
+	log.LogInfo(fmt.Sprintf("Installing font with Oh-my-posh: font=%s", fontName))
 	cmd := exec.Command("oh-my-posh", "font", "install", fontName)
 	err := cmd.Run()
 	if err != nil {
@@ -143,7 +145,7 @@ func installWithOhMyPosh(fontName string) error {
 
 // installWithHomebrew installs the font via Homebrew
 func installWithHomebrew(fontName string) error {
-	logger.LogInfo("Installing font with Homebrew", "font", fontName)
+	log.LogInfo(fmt.Sprintf("Installing font with Homebrew: font=%s", fontName))
 	cmd := exec.Command("brew", "install", "--cask", "font-"+fontName+"-nerd-font")
 	err := cmd.Run()
 	if err != nil {

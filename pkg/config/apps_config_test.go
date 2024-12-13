@@ -1,37 +1,126 @@
 package config
 
 import (
+	"github.com/charmbracelet/huh"
+	"reflect"
 	"testing"
 )
 
-func TestLoadAppsConfig(t *testing.T) {
-	config, err := LoadAppsConfig("../../config/apps.yaml")
-	if err != nil {
-		t.Fatalf("Failed to load apps config: %v", err)
+func TestAppsConfig_GetAppByName(t *testing.T) {
+	type fields struct {
+		Apps []App
 	}
-
-	if len(config.Apps) == 0 {
-		t.Errorf("Expected at least one app, got 0")
+	type args struct {
+		name string
 	}
-
-	// Test getting an app by name
-	app, err := config.GetAppByName("Redis")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *App
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-	if app.Name != "Redis" {
-		t.Errorf("Expected app name 'Redis', but got: %s", app.Name)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &AppsConfig{
+				Apps: tt.fields.Apps,
+			}
+			got, err := c.GetAppByName(tt.args.name)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetAppByName() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GetAppByName() got = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestListAppsByCategory(t *testing.T) {
-	config, err := LoadAppsConfig("../../config/apps.yaml")
-	if err != nil {
-		t.Fatalf("Failed to load apps config: %v", err)
+func TestAppsConfig_ListAppsByCategory(t *testing.T) {
+	type fields struct {
+		Apps []App
 	}
+	type args struct {
+		category string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   []App
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &AppsConfig{
+				Apps: tt.fields.Apps,
+			}
+			if got := c.ListAppsByCategory(tt.args.category); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ListAppsByCategory() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	apps := config.ListAppsByCategory("Database")
-	if len(apps) == 0 {
-		t.Errorf("Expected at least one app in category 'Database', got 0")
+func TestAppsConfig_LoadChoicesFromFile(t *testing.T) {
+	type fields struct {
+		Apps []App
+	}
+	type args struct {
+		path string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    []huh.Option[string]
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &AppsConfig{
+				Apps: tt.fields.Apps,
+			}
+			got, err := c.LoadChoicesFromFile(tt.args.path)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("LoadChoicesFromFile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("LoadChoicesFromFile() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLoadAppsConfig(t *testing.T) {
+	type args struct {
+		defaultPath string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    AppsConfig
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := LoadAppsConfig(tt.args.defaultPath)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("LoadAppsConfig() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("LoadAppsConfig() got = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

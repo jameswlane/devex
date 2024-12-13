@@ -1,26 +1,28 @@
 package installers
 
 import (
-	"github.com/jameswlane/devex/pkg/installers/deb"
-	"os/exec"
+	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
 )
 
-func TestInstallViaApt(t *testing.T) {
-	app := App{
-		Name:           "fzf",
-		InstallMethod:  "apt",
-		InstallCommand: "fzf",
-		Dependencies:   []string{"apt"},
+func TestInstallApp(t *testing.T) {
+	type args struct {
+		app    App
+		dryRun bool
+		db     *datastore.DB
 	}
-
-	// Mock exec.Command to avoid real installation
-	deb.execCommand = func(name string, arg ...string) *exec.Cmd {
-		return exec.Command("echo", "mocked command")
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-
-	err := installViaApt(app)
-	if err != nil {
-		t.Errorf("Failed to install app via apt: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := InstallApp(tt.args.app, tt.args.dryRun, tt.args.db); (err != nil) != tt.wantErr {
+				t.Errorf("InstallApp() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

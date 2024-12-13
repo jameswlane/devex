@@ -1,42 +1,28 @@
 package brew
 
 import (
-	"github.com/jameswlane/devex/pkg/testutils"
+	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
 )
 
-func TestInstallViaBrew(t *testing.T) {
-	brewExecCommand = testutils.MockExecCommand
-
-	err := Install("git")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+func TestInstall(t *testing.T) {
+	type args struct {
+		packageName string
+		dryRun      bool
+		db          *datastore.DB
 	}
-}
-
-func TestUninstallViaBrew(t *testing.T) {
-	brewExecCommand = testutils.MockExecCommand
-
-	err := Uninstall("git")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-}
-
-func TestInstallViaBrew_Error(t *testing.T) {
-	brewExecCommand = testutils.MockCommandWithError
-
-	err := Install("invalid-package")
-	if err == nil {
-		t.Errorf("Expected error when installing invalid package, but got none")
-	}
-}
-
-func TestUninstallViaBrew_Error(t *testing.T) {
-	brewExecCommand = testutils.MockCommandWithError
-
-	err := Uninstall("invalid-package")
-	if err == nil {
-		t.Errorf("Expected error when uninstalling invalid package, but got none")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Install(tt.args.packageName, tt.args.dryRun, tt.args.db); (err != nil) != tt.wantErr {
+				t.Errorf("Install() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

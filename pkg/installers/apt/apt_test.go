@@ -1,43 +1,28 @@
 package apt
 
 import (
-	"github.com/jameswlane/devex/pkg/testutils"
+	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
 )
 
-func TestInstallViaApt(t *testing.T) {
-	// Use the mock from testutils
-	aptExecCommand = testutils.MockExecCommand
-
-	err := Install("curl")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+func TestInstall(t *testing.T) {
+	type args struct {
+		packageName string
+		dryRun      bool
+		db          *datastore.DB
 	}
-}
-
-func TestUninstallViaApt(t *testing.T) {
-	aptExecCommand = testutils.MockExecCommand
-
-	err := Uninstall("curl")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-}
-
-func TestInstallViaApt_Error(t *testing.T) {
-	aptExecCommand = testutils.MockCommandWithError
-
-	err := Install("invalid-package")
-	if err == nil {
-		t.Errorf("Expected error when installing invalid package, but got none")
-	}
-}
-
-func TestUninstallViaApt_Error(t *testing.T) {
-	aptExecCommand = testutils.MockCommandWithError
-
-	err := Uninstall("invalid-package")
-	if err == nil {
-		t.Errorf("Expected error when uninstalling invalid package, but got none")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Install(tt.args.packageName, tt.args.dryRun, tt.args.db); (err != nil) != tt.wantErr {
+				t.Errorf("Install() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

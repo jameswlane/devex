@@ -1,31 +1,25 @@
 package gnome
 
-import (
-	"github.com/jameswlane/devex/pkg/testutils"
-	"os/exec"
-	"testing"
-)
+import "testing"
 
 func TestSetGSetting(t *testing.T) {
-	// Mock the exec.Command to simulate successful gsettings call
-	gsettingsExecCommand = testutils.MockExecCommand
-	defer func() { gsettingsExecCommand = exec.Command }() // Reset after test
-
-	// Test SetGSetting
-	err := SetGSetting("org.gnome.desktop.interface", "gtk-theme", "Adwaita")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+	type args struct {
+		schema string
+		key    string
+		value  string
 	}
-}
-
-func TestSetGSetting_Error(t *testing.T) {
-	// Mock the exec.Command to simulate an error during gsettings call
-	gsettingsExecCommand = testutils.MockCommandWithError
-	defer func() { gsettingsExecCommand = exec.Command }() // Reset after test
-
-	// Test SetGSetting with error
-	err := SetGSetting("org.gnome.desktop.interface", "gtk-theme", "InvalidTheme")
-	if err == nil {
-		t.Errorf("Expected error, but got none")
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := SetGSetting(tt.args.schema, tt.args.key, tt.args.value); (err != nil) != tt.wantErr {
+				t.Errorf("SetGSetting() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

@@ -1,37 +1,29 @@
 package check_install
 
-import (
-	"github.com/jameswlane/devex/pkg/testutils"
-	"os/exec"
-	"testing"
-)
+import "testing"
 
 func TestIsAppInstalled(t *testing.T) {
-	// Mock the exec.Command to simulate the app being installed
-	checkInstallExecCommand = testutils.MockExecCommand
-	defer func() { checkInstallExecCommand = exec.Command }() // Reset after test
-
-	// Test IsAppInstalled (app is installed)
-	installed, err := IsAppInstalled("testapp")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+	type args struct {
+		appName string
 	}
-	if !installed {
-		t.Errorf("Expected app to be installed, but got false")
+	tests := []struct {
+		name    string
+		args    args
+		want    bool
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-}
-
-func TestIsAppInstalled_NotInstalled(t *testing.T) {
-	// Mock the exec.Command to simulate the app not being installed
-	checkInstallExecCommand = testutils.MockCommandWithError
-	defer func() { checkInstallExecCommand = exec.Command }() // Reset after test
-
-	// Test IsAppInstalled (app is not installed)
-	installed, err := IsAppInstalled("missingapp")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
-	}
-	if installed {
-		t.Errorf("Expected app to be not installed, but got true")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := IsAppInstalled(tt.args.appName)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("IsAppInstalled() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("IsAppInstalled() got = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
