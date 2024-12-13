@@ -27,3 +27,13 @@ release:
     - glob: ./help/**/*
     - glob: ./README.md
   include_meta: true
+
+builds:
+  - id: devex
+    main: ./cmd/devex
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
