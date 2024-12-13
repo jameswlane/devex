@@ -1,10 +1,5 @@
-#!/bin/bash
-
-# Navigate to the sandbox directory
-cd "$(dirname "$0")/sandbox"
-
-# Build the Docker image
-docker build -t sandbox-cli .
+# Build the Docker image with the root directory as the build context
+docker build -t sandbox-cli -f sandbox/Dockerfile .
 
 # Allow local connections to the X server
 xhost +local:root

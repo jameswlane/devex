@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers"
+	"github.com/jameswlane/devex/pkg/types"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -21,34 +22,26 @@ var rootCmd = &cobra.Command{
 
 var debug bool
 
-// Entry point
 func main() {
-	// Setup configuration using Viper
 	setupConfig()
 
-	// Execute the root command
 	if err := rootCmd.Execute(); err != nil {
 		log.Error(oops.In("root command").With("context", "root command execution failed").Wrap(err))
 		os.Exit(1)
 	}
 }
 
-// Setup configuration with Viper
 func setupConfig() {
-	viper.SetConfigName("config") // name of config file (without extension)
-	viper.SetConfigType("yaml")   // specify the config file type
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
 
-	// Check in ~/.devex first for a custom config
 	homeDir, err := os.UserHomeDir()
 	if err == nil {
 		viper.AddConfigPath(filepath.Join(homeDir, ".devex"))
 		viper.AddConfigPath(filepath.Join(homeDir, ".devex/config"))
 	}
 
-	// Fallback to /config
 	viper.AddConfigPath("./config")
-
-	// Read in environment variables that match
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -68,165 +61,134 @@ func loadCustomConfig(filename string) {
 }
 
 func init() {
-
 	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Error(oops.In("user directory").With("context", "failed to get user home directory").Wrap(err))
+		os.Exit(1)
+	}
+
 	db, err := datastore.InitDB(filepath.Join(homeDir, ".devex/installed_apps.db"))
 	if err != nil {
-		fmt.Println("Failed to initialize database:", err)
-		return
+		log.Error(oops.In("database initialization").With("context", "failed to initialize database").Wrap(err))
+		os.Exit(1)
 	}
 	defer db.Close()
 
-	// Adding subcommand: install
 	var installCmd = &cobra.Command{
 		Use:   "install",
 		Short: "Install development environment",
 		Long:  "Install all necessary tools, programming languages, and databases for your development environment.",
 		Run: func(cmd *cobra.Command, args []string) {
-			// Load custom configs for databases and programming languages
-			homeDir, err := os.UserHomeDir()
-			if err == nil {
-				loadCustomConfig(filepath.Join(homeDir, ".devex/config/databases.yaml"))
-				loadCustomConfig(filepath.Join(homeDir, ".devex/config/programming_languages.yaml"))
-			} else {
-				log.Error(oops.In("user directory").With("context", "failed to get user home directory").Wrap(err))
-				os.Exit(1)
-			}
+			loadConfigs()
 
-			// Fallback to default config paths if custom configs are not found
-			loadCustomConfig("./config/databases.yaml")
-			loadCustomConfig("./config/programming_languages.yaml")
-
-			// Check if DEVEX_NONINTERACTIVE is set
 			var selectedLanguages, selectedDatabases []string
 			if viper.GetBool("DEVEX_NONINTERACTIVE") {
 				log.Info("Running in non-interactive mode, using default settings")
-				// Use defaults from the loaded configuration files
-				defaultLanguages := getDefaultsFromConfig("programming_languages")
-				defaultDatabases := getDefaultsFromConfig("databases")
-				log.Info("Selected programming languages: ", "languages", defaultLanguages)
-				log.Info("Selected databases: ", "databases", defaultDatabases)
+				selectedLanguages = getDefaultsFromConfig("programming_languages")
+				selectedDatabases = getDefaultsFromConfig("databases")
 			} else {
-				// Populate options from the configuration
-				var languageOptions []huh.Option[string]
-				if languages, ok := viper.Get("programming_languages").([]interface{}); ok {
-					for _, lang := range languages {
-						if langMap, ok := lang.(map[string]interface{}); ok {
-							option := huh.NewOption(langMap["name"].(string), langMap["name"].(string))
-							if defaultFlag, ok := langMap["default"].(bool); ok && defaultFlag {
-								option = option.Selected(true)
-							}
-							languageOptions = append(languageOptions, option)
-						}
-					}
-				}
-
-				var databaseOptions []huh.Option[string]
-				if databases, ok := viper.Get("databases").([]interface{}); ok {
-					for _, db := range databases {
-						if dbMap, ok := db.(map[string]interface{}); ok {
-							option := huh.NewOption(dbMap["name"].(string), dbMap["name"].(string))
-							if defaultFlag, ok := dbMap["default"].(bool); ok && defaultFlag {
-								option = option.Selected(true)
-							}
-							databaseOptions = append(databaseOptions, option)
-						}
-					}
-				}
-
-				// Create form groups for selecting programming languages and databases
-				form := huh.NewForm(
-					huh.NewGroup(
-						huh.NewMultiSelect[string]().
-							Title("Select Programming Languages to Install").
-							Options(languageOptions...).
-							Value(&selectedLanguages),
-					),
-					huh.NewGroup(
-						huh.NewMultiSelect[string]().
-							Title("Select Databases to Install").
-							Options(databaseOptions...).
-							Value(&selectedDatabases),
-					),
-				)
-
-				if err := form.Run(); err != nil {
-					log.Error(oops.In("form execution").With("context", "running form failed").Wrap(err))
-					os.Exit(1)
-				}
-
-				log.Info("User selected programming languages: ", "languages", selectedLanguages)
-				log.Info("User selected databases: ", "databases", selectedDatabases)
+				selectedLanguages = getUserSelections("programming_languages")
+				selectedDatabases = getUserSelections("databases")
 			}
 
-			// Install the selected programming languages and databases
+			log.Info("Selected programming languages: ", "languages", selectedLanguages)
+			log.Info("Selected databases: ", "databases", selectedDatabases)
+
 			installApps(selectedLanguages, "programming_languages", db)
 			installApps(selectedDatabases, "databases", db)
 		},
 	}
 
-	// Adding flags to the install command (placeholder)
 	installCmd.Flags().Bool("dry-run", false, "Run in dry-run mode without making any changes")
-	err = viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run"))
-	if err != nil {
-		return
+	if err := viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run")); err != nil {
+		log.Error(oops.In("flag binding").With("context", "failed to bind dry-run flag").Wrap(err))
+		os.Exit(1)
 	}
 
-	// Adding global debug flag
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
-	err = viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug"))
-	if err != nil {
-		return
+	if err := viper.BindPFlag("debug", rootCmd.PersistentFlags().Lookup("debug")); err != nil {
+		log.Error(oops.In("flag binding").With("context", "failed to bind debug flag").Wrap(err))
+		os.Exit(1)
 	}
 
 	rootCmd.AddCommand(installCmd)
 }
 
-// Helper function to install apps based on category (programming_languages or databases)
-func installApps(selectedItems []string, category string, db *datastore.DB) {
-	for _, itemName := range selectedItems {
-		apps := viper.Get(fmt.Sprintf("%s", category))
-		if apps == nil {
-			log.Warn(fmt.Sprintf("No apps found for category %s", category))
-			continue
-		}
+func loadConfigs() {
+	homeDir, err := os.UserHomeDir()
+	if err == nil {
+		loadCustomConfig(filepath.Join(homeDir, ".devex/config/databases.yaml"))
+		loadCustomConfig(filepath.Join(homeDir, ".devex/config/programming_languages.yaml"))
+	} else {
+		log.Error(oops.In("user directory").With("context", "failed to get user home directory").Wrap(err))
+		os.Exit(1)
+	}
 
-		appList, ok := apps.([]interface{})
-		if !ok {
-			log.Error(fmt.Sprintf("Invalid type for %s configuration", category))
-			os.Exit(1)
-		}
+	loadCustomConfig("./config/databases.yaml")
+	loadCustomConfig("./config/programming_languages.yaml")
+}
 
-		for _, app := range appList {
-			appMap, ok := app.(map[string]interface{})
-			if !ok {
-				log.Warn("Skipping invalid app entry due to type mismatch")
-				continue
+func getUserSelections(category string) []string {
+	var selectedItems []string
+	var options []huh.Option[string]
+
+	if items, ok := viper.Get(category).([]interface{}); ok {
+		for _, item := range items {
+			if itemMap, ok := item.(map[string]interface{}); ok {
+				option := huh.NewOption(itemMap["name"].(string), itemMap["name"].(string))
+				if defaultFlag, ok := itemMap["default"].(bool); ok && defaultFlag {
+					option = option.Selected(true)
+				}
+				options = append(options, option)
 			}
+		}
+	}
 
-			if appName, ok := appMap["name"].(string); ok && appName == itemName {
-				installMethod := appMap["install_method"].(string)
-				installCommand := appMap["install_command"].(string)
-				log.Info(fmt.Sprintf("Installing %s using method %s", appName, installMethod))
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(fmt.Sprintf("Select %s to Install", category)).
+				Options(options...).
+				Value(&selectedItems),
+		),
+	)
 
-				// Call the appropriate installer based on method
+	if err := form.Run(); err != nil {
+		log.Error(oops.In("form execution").With("context", "running form failed").Wrap(err))
+		os.Exit(1)
+	}
+
+	return selectedItems
+}
+
+func installApps(selectedItems []string, category string, db *datastore.DB) {
+	var appConfigs []types.AppConfig
+	if err := viper.UnmarshalKey(category, &appConfigs); err != nil {
+		log.Error(fmt.Sprintf("Failed to unmarshal apps for category %s: %v", category, err))
+		return
+	}
+
+	for _, itemName := range selectedItems {
+		for _, appConfig := range appConfigs {
+			if appConfig.Name == itemName {
+				log.Info(fmt.Sprintf("Installing %s using method %s", appConfig.Name, appConfig.InstallMethod))
+
 				app := installers.App{
-					Name:           appName,
-					Description:    appMap["description"].(string),
+					Name:           appConfig.Name,
+					Description:    appConfig.Description,
 					Category:       category,
-					InstallMethod:  installMethod,
-					InstallCommand: installCommand,
+					InstallMethod:  appConfig.InstallMethod,
+					InstallCommand: appConfig.InstallCommand,
 				}
 
 				if err := installers.InstallApp(app, viper.GetBool("dry-run"), db); err != nil {
-					log.Error(oops.With("context", fmt.Sprintf("failed to install %s", appName)).Wrap(err))
+					log.Error(oops.With("context", fmt.Sprintf("failed to install %s", appConfig.Name)).Wrap(err))
 				}
 			}
 		}
 	}
 }
 
-// Helper function to get defaults from configuration
 func getDefaultsFromConfig(category string) []string {
 	var defaults []string
 	apps := viper.GetStringMap(fmt.Sprintf("%s.apps", category))
