@@ -82,7 +82,11 @@ func init() {
 			loadConfigs()
 
 			var selectedLanguages, selectedDatabases []string
-			if viper.GetBool("DEVEX_NONINTERACTIVE") {
+			if viper.GetBool("default") {
+				log.Info("Running with default settings")
+				selectedLanguages = getDefaultsFromConfig("programming_languages")
+				selectedDatabases = getDefaultsFromConfig("databases")
+			} else if viper.GetBool("DEVEX_NONINTERACTIVE") {
 				log.Info("Running in non-interactive mode, using default settings")
 				selectedLanguages = getDefaultsFromConfig("programming_languages")
 				selectedDatabases = getDefaultsFromConfig("databases")
@@ -102,6 +106,18 @@ func init() {
 	installCmd.Flags().Bool("dry-run", false, "Run in dry-run mode without making any changes")
 	if err := viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run")); err != nil {
 		log.Error(oops.In("flag binding").With("context", "failed to bind dry-run flag").Wrap(err))
+		os.Exit(1)
+	}
+
+	installCmd.Flags().Bool("default", false, "Use default programming languages and databases")
+	if err := viper.BindPFlag("default", installCmd.Flags().Lookup("default")); err != nil {
+		log.Error(oops.In("flag binding").With("context", "failed to bind default flag").Wrap(err))
+		os.Exit(1)
+	}
+
+	installCmd.Flags().Int("debug-delay", 0, "Set delay in seconds for debug mode")
+	if err := viper.BindPFlag("debug-delay", installCmd.Flags().Lookup("debug-delay")); err != nil {
+		log.Error(oops.In("flag binding").With("context", "failed to bind debug-delay flag").Wrap(err))
 		os.Exit(1)
 	}
 
