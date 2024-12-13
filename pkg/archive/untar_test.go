@@ -14,7 +14,9 @@ func TestDownloadTarGz(t *testing.T) {
 	// Create a mock server to serve the tar.gz file
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("This is a test tar.gz file"))
+		if _, err := w.Write([]byte("This is a test tar.gz file")); err != nil {
+			t.Errorf("Failed to write response: %v", err)
+		}
 	}))
 	defer server.Close()
 

@@ -3,6 +3,8 @@ package gnome
 import "testing"
 
 func TestSetBackground(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		imagePath string
 	}

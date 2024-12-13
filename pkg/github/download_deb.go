@@ -1,12 +1,14 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Release represents a GitHub release
@@ -57,7 +59,18 @@ func GetLatestDebURL(owner, repo, baseURL string, client *http.Client) (string, 
 
 // DownloadDeb downloads a .deb file from the given URL and saves it to the destination path
 func DownloadDeb(url, destination string) error {
-	resp, err := http.Get(url)
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create a new request with context
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
+	// Download the file
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download .deb file: %v", err)
 	}

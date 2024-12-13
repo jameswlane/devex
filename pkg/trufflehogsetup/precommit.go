@@ -2,7 +2,6 @@ package trufflehogsetup
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 )
@@ -37,7 +36,7 @@ repos:
 	}
 
 	// Write the config to .pre-commit-config.yaml
-	err := ioutil.WriteFile(".pre-commit-config.yaml", []byte(preCommitConfig), 0o644)
+	err := os.WriteFile(".pre-commit-config.yaml", []byte(preCommitConfig), 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to write .pre-commit-config.yaml: %v", err)
 	}
