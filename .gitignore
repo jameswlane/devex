@@ -40,3 +40,5 @@ zsdoc/data
 
 # Binary files
 bin/
+
+.task/

@@ -156,7 +156,7 @@ go test ./...
 To build the application, use the following command:
 
 ```sh
-go build -o myapp ./...
+go build -o bin/devex cmd/devex/main.go
 ```
 
 ## Common Information

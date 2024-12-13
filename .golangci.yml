@@ -1,0 +1,32 @@
+# NOTE(@andreynering): The linters listed here are additions on top of
+# those enabled by default:
+#
+# https://golangci-lint.run/usage/linters/#enabled-by-default
+
+linters:
+  enable:
+    - depguard
+    - goimports
+    - gofmt
+    - gofumpt
+    - misspell
+    - noctx
+    - paralleltest
+    - tenv
+    - thelper
+    - tparallel
+
+linters-settings:
+  depguard:
+    rules:
+      main:
+        files:
+          - "$all"
+          - "!$test"
+          - "!**/errors/*.go"
+  goimports:
+    local-prefixes: github.com/jameswlane/devex
+  gofmt:
+    rewrite-rules:
+      - pattern: 'interface{}'
+        replacement: 'any'
