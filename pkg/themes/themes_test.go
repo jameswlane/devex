@@ -6,6 +6,8 @@ import (
 )
 
 func TestLoadThemes(t *testing.T) {
+	t.Parallel() // Add this line to run the test in parallel
+
 	type args struct {
 		filePath string
 	}
@@ -18,7 +20,9 @@ func TestLoadThemes(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt // Capture range variable
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel() // Add this line to run the subtest in parallel
 			got, err := LoadThemes(tt.args.filePath)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoadThemes() error = %v, wantErr %v", err, tt.wantErr)

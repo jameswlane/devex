@@ -11,6 +11,8 @@ import (
 )
 
 func TestDownloadGPGKey(t *testing.T) {
+	t.Parallel() // Add this line to run the test in parallel
+
 	// Create a mock server to serve the GPG key
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -39,6 +41,8 @@ func TestDownloadGPGKey(t *testing.T) {
 }
 
 func TestAddGPGKeyToKeyring(t *testing.T) {
+	t.Parallel() // Add this line to run the test in parallel
+
 	// Mock the exec.Command to simulate successful key addition
 	execCommand = testutils.MockExecCommand
 	defer func() { execCommand = exec.Command }() // Reset after test

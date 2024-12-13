@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 // Release represents a GitHub release
@@ -31,7 +30,12 @@ func GetLatestDebURL(owner, repo, baseURL string, client *http.Client) (string, 
 	}
 
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", baseURL, owner, repo)
-	resp, err := client.Get(url)
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch release: %v", err)
 	}
@@ -59,20 +63,15 @@ func GetLatestDebURL(owner, repo, baseURL string, client *http.Client) (string, 
 
 // DownloadDeb downloads a .deb file from the given URL and saves it to the destination path
 func DownloadDeb(url, destination string) error {
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Create a new request with context
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	client := &http.Client{}
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %v", err)
 	}
-
-	// Download the file
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to download .deb file: %v", err)
+		return err
 	}
 	defer resp.Body.Close()
 
