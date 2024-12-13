@@ -3,6 +3,7 @@ package appimage
 import (
 	"testing"
 
+	"github.com/jameswlane/devex/pkg/datastore"
 )
 
 func TestInstall(t *testing.T) {
