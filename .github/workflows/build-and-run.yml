@@ -1,0 +1,50 @@
+name: Build and Run
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+
+jobs:
+  build-and-run:
+    name: Build and Run
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [debian-latest, ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download Go modules
+        run: go mod download
+        env:
+          GOPROXY: https://proxy.golang.org
+
+      - name: Build
+        run: go build -o ./bin/devex -v ./cmd/devex
+
+      - name: Run
+        run: ./bin/devex
