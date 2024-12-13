@@ -32,7 +32,7 @@ func ExecuteSteps(stepsList []Step, dryRun bool, db *datastore.DB, logger *logge
 
 		// Call the InstallApp function
 		log.Info(fmt.Sprintf("Dry run mode: %t", dryRun))
-		err := installers.InstallApp(step.App, dryRun, db, logger)
+		err := installers.InstallApp(step.App, dryRun, db)
 		if err != nil {
 			step.Status = "Error"
 			log.Error(fmt.Sprintf("Failed to complete step: %s", step.Name), "error", err)

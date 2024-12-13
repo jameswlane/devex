@@ -1,4 +1,3 @@
-// pkg/view/view.go
 package view
 
 import (

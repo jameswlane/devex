@@ -2,6 +2,7 @@ package gitconfig
 
 import (
 	"fmt"
+	"github.com/jameswlane/devex/pkg/logger"
 	"gopkg.in/yaml.v2"
 	"os"
 	"os/exec"
@@ -11,6 +12,8 @@ type GitConfig struct {
 	Aliases  map[string]string `yaml:"aliases"`
 	Settings map[string]string `yaml:"settings"`
 }
+
+var log = logger.InitLogger()
 
 // LoadGitConfig loads the Git configuration from a YAML file
 func LoadGitConfig(filename string) (*GitConfig, error) {
@@ -32,7 +35,7 @@ func LoadGitConfig(filename string) (*GitConfig, error) {
 func ApplyGitConfig(gitConfig *GitConfig) error {
 	// Apply aliases
 	for alias, command := range gitConfig.Aliases {
-		logger.LogInfo("Setting Git alias", "alias", alias, "command", command)
+		log.LogInfo(fmt.Sprintf("Setting Git alias: alias=%s, command=%s", alias, command))
 		cmd := exec.Command("git", "config", "--global", fmt.Sprintf("alias.%s", alias), command)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to set git alias %s: %v", alias, err)
@@ -41,7 +44,7 @@ func ApplyGitConfig(gitConfig *GitConfig) error {
 
 	// Apply settings
 	for key, value := range gitConfig.Settings {
-		logger.LogInfo("Setting Git configuration", "key", key, "value", value)
+		log.LogInfo(fmt.Sprintf("Setting Git configuration: key=%s, value=%s", key, value))
 		cmd := exec.Command("git", "config", "--global", key, value)
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("failed to set git configuration %s: %v", key, err)

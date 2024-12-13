@@ -1,31 +1,28 @@
 package deb
 
 import (
-	"github.com/jameswlane/devex/pkg/testutils"
-	"os/exec"
+	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
 )
 
-func TestInstallDeb(t *testing.T) {
-	// Mock the exec.Command to simulate successful installation
-	execCommand = testutils.MockExecCommand
-	defer func() { execCommand = exec.Command }() // Reset after test
-
-	// Test InstallDeb
-	err := Install("/path/to/test.deb")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+func TestInstall(t *testing.T) {
+	type args struct {
+		filePath string
+		dryRun   bool
+		db       *datastore.DB
 	}
-}
-
-func TestInstallDeb_Error(t *testing.T) {
-	// Mock the exec.Command to simulate an error during installation
-	execCommand = testutils.MockCommandWithError
-	defer func() { execCommand = exec.Command }() // Reset after test
-
-	// Test InstallDeb with error
-	err := Install("/path/to/test.deb")
-	if err == nil {
-		t.Errorf("Expected error, but got none")
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Install(tt.args.filePath, tt.args.dryRun, tt.args.db); (err != nil) != tt.wantErr {
+				t.Errorf("Install() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }

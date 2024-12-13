@@ -3,9 +3,6 @@ version: '3'
 vars:
   BIN: "{{.ROOT_DIR}}/bin"
 
-env:
-  CGO_ENABLED: '0'
-
 tasks:
   default:
     cmds:

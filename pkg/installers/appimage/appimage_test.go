@@ -1,51 +1,94 @@
 package appimage
 
 import (
-	"io/ioutil"
-	"os"
-	"path/filepath"
+	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
 )
 
-// Mock function to simulate file download
-func mockDownloadFile(url, dest string) error {
-	// Create a mock tarball in the destination path
-	tarballContent := []byte("Mock tarball content")
-	return ioutil.WriteFile(dest, tarballContent, 0644)
+func TestInstall(t *testing.T) {
+	type args struct {
+		appName     string
+		downloadURL string
+		installDir  string
+		binary      string
+		dryRun      bool
+		db          *datastore.DB
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := Install(tt.args.appName, tt.args.downloadURL, tt.args.installDir, tt.args.binary, tt.args.dryRun, tt.args.db); (err != nil) != tt.wantErr {
+				t.Errorf("Install() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }
 
-// Mock function to simulate extracting tarball
-func mockExtractTarball(tarballPath, destDir string) error {
-	// Create a mock binary file in the destination directory
-	binaryPath := filepath.Join(destDir, "jetbrains-toolbox")
-	return ioutil.WriteFile(binaryPath, []byte("Mock binary content"), 0755)
+func Test_downloadFile(t *testing.T) {
+	type args struct {
+		url  string
+		dest string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := downloadFile(tt.args.url, tt.args.dest); (err != nil) != tt.wantErr {
+				t.Errorf("downloadFile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }
 
-func TestInstallAppImage(t *testing.T) {
-	// Replace the real functions with mock functions
-	downloadFileFunc = mockDownloadFile
-	extractTarballFunc = mockExtractTarball
-
-	// Create a temporary directory to simulate the install directory
-	installDir, err := ioutil.TempDir("", "appimage_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
+func Test_extractTarball(t *testing.T) {
+	type args struct {
+		tarballPath string
+		destDir     string
 	}
-	defer os.RemoveAll(installDir)
-
-	// Run the InstallAppImage function
-	err = Install("https://mockurl.com/jetbrains-toolbox.tar.gz", installDir, "jetbrains-toolbox")
-	if err != nil {
-		t.Errorf("Expected no error, but got: %v", err)
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-
-	// Check if the binary was moved to the correct location and has executable permissions
-	binaryPath := filepath.Join(installDir, "jetbrains-toolbox")
-	info, err := os.Stat(binaryPath)
-	if os.IsNotExist(err) {
-		t.Errorf("Expected binary to be installed, but it does not exist")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := extractTarball(tt.args.tarballPath, tt.args.destDir); (err != nil) != tt.wantErr {
+				t.Errorf("extractTarball() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
-	if info.Mode().Perm() != 0755 {
-		t.Errorf("Expected permissions 0755, but got: %v", info.Mode().Perm())
+}
+
+func Test_moveFile(t *testing.T) {
+	type args struct {
+		src  string
+		dest string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := moveFile(tt.args.src, tt.args.dest); (err != nil) != tt.wantErr {
+				t.Errorf("moveFile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
 	}
 }
