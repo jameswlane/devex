@@ -6,6 +6,7 @@ import (
 )
 
 func TestCheckIfDesktopFileExists(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		desktopFile string
 	}
@@ -18,7 +19,9 @@ func TestCheckIfDesktopFileExists(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, got1 := CheckIfDesktopFileExists(tt.args.desktopFile)
 			if got != tt.want {
 				t.Errorf("CheckIfDesktopFileExists() got = %v, want %v", got, tt.want)
@@ -31,6 +34,7 @@ func TestCheckIfDesktopFileExists(t *testing.T) {
 }
 
 func TestLoadConfig(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		configFile string
 	}
@@ -43,7 +47,9 @@ func TestLoadConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := LoadConfig(tt.args.configFile)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoadConfig() error = %v, wantErr %v", err, tt.wantErr)
@@ -57,6 +63,7 @@ func TestLoadConfig(t *testing.T) {
 }
 
 func TestSetFavoriteApps(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		config Config
 	}
@@ -68,7 +75,9 @@ func TestSetFavoriteApps(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if err := SetFavoriteApps(tt.args.config); (err != nil) != tt.wantErr {
 				t.Errorf("SetFavoriteApps() error = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -77,6 +86,7 @@ func TestSetFavoriteApps(t *testing.T) {
 }
 
 func Test_joinStrings(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		items []string
 		sep   string
@@ -89,7 +99,9 @@ func Test_joinStrings(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := joinStrings(tt.args.items, tt.args.sep); got != tt.want {
 				t.Errorf("joinStrings() = %v, want %v", got, tt.want)
 			}

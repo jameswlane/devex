@@ -7,6 +7,7 @@ import (
 )
 
 func TestCopyToBin(t *testing.T) {
+	t.Parallel()
 	// Create a temporary bin directory for testing
 	tempBinDir, err := os.MkdirTemp("", "bin_test")
 	if err != nil {

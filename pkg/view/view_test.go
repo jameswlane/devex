@@ -11,6 +11,7 @@ import (
 )
 
 func TestNewViewModel(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		systemInfo string
 		width      int
@@ -24,7 +25,9 @@ func TestNewViewModel(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := NewViewModel(tt.args.systemInfo, tt.args.width, tt.args.height); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("NewViewModel() = %v, want %v", got, tt.want)
 			}
@@ -33,6 +36,7 @@ func TestNewViewModel(t *testing.T) {
 }
 
 func TestViewModel_ExecuteSteps(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		layout     layout.LayoutModel
 		logs       []string
@@ -53,7 +57,9 @@ func TestViewModel_ExecuteSteps(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := &ViewModel{
 				layout:     tt.fields.layout,
 				logs:       tt.fields.logs,
@@ -66,6 +72,7 @@ func TestViewModel_ExecuteSteps(t *testing.T) {
 }
 
 func TestViewModel_Render(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		layout     layout.LayoutModel
 		logs       []string
@@ -80,7 +87,9 @@ func TestViewModel_Render(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := ViewModel{
 				layout:     tt.fields.layout,
 				logs:       tt.fields.logs,
@@ -95,6 +104,7 @@ func TestViewModel_Render(t *testing.T) {
 }
 
 func TestViewModel_addLog(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		layout     layout.LayoutModel
 		logs       []string
@@ -112,7 +122,9 @@ func TestViewModel_addLog(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := &ViewModel{
 				layout:     tt.fields.layout,
 				logs:       tt.fields.logs,
@@ -125,6 +137,7 @@ func TestViewModel_addLog(t *testing.T) {
 }
 
 func TestViewModel_updateLogsPane(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		layout     layout.LayoutModel
 		logs       []string
@@ -138,7 +151,9 @@ func TestViewModel_updateLogsPane(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := &ViewModel{
 				layout:     tt.fields.layout,
 				logs:       tt.fields.logs,
@@ -151,6 +166,7 @@ func TestViewModel_updateLogsPane(t *testing.T) {
 }
 
 func TestViewModel_updateStepsPane(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		layout     layout.LayoutModel
 		logs       []string
@@ -168,7 +184,9 @@ func TestViewModel_updateStepsPane(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := &ViewModel{
 				layout:     tt.fields.layout,
 				logs:       tt.fields.logs,
