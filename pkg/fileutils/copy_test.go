@@ -1,15 +1,15 @@
 package fileutils
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
 func TestCopyFile(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory for testing
-	tempDir, err := ioutil.TempDir("", "copy_test")
+	tempDir, err := os.MkdirTemp("", "copy_test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,7 @@ func TestCopyFile(t *testing.T) {
 
 	// Create a temporary source file
 	srcFile := filepath.Join(tempDir, "source.txt")
-	err = ioutil.WriteFile(srcFile, []byte("Hello, World!"), 0o644)
+	err = os.WriteFile(srcFile, []byte("Hello, World!"), 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestCopyFile(t *testing.T) {
 	}
 
 	// Check if destination file was copied correctly
-	dstContent, err := ioutil.ReadFile(dstFile)
+	dstContent, err := os.ReadFile(dstFile)
 	if err != nil {
 		t.Errorf("Expected no error, but got: %v", err)
 	}
@@ -43,8 +43,9 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestCopyConfigFiles(t *testing.T) {
+	t.Parallel()
 	// Create a temporary directory for testing
-	tempDir, err := ioutil.TempDir("", "copy_config_test")
+	tempDir, err := os.MkdirTemp("", "copy_config_test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,13 +53,27 @@ func TestCopyConfigFiles(t *testing.T) {
 
 	// Create a temporary source directory and files
 	srcDir := filepath.Join(tempDir, "src")
-	os.Mkdir(srcDir, 0o755)
-	ioutil.WriteFile(filepath.Join(srcDir, "config1.txt"), []byte("Config 1"), 0o644)
-	ioutil.WriteFile(filepath.Join(srcDir, "config2.txt"), []byte("Config 2"), 0o644)
+	err = os.Mkdir(srcDir, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create srcDir: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(srcDir, "config1.txt"), []byte("Config 1"), 0o644)
+	if err != nil {
+		t.Fatalf("failed to write config1.txt: %v", err)
+	}
+
+	err = os.WriteFile(filepath.Join(srcDir, "config2.txt"), []byte("Config 2"), 0o644)
+	if err != nil {
+		t.Fatalf("failed to write config2.txt: %v", err)
+	}
 
 	// Set the destination directory
 	dstDir := filepath.Join(tempDir, "dst")
-	os.Mkdir(dstDir, 0o755)
+	err = os.Mkdir(dstDir, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create dstDir: %v", err)
+	}
 
 	// Test CopyConfigFiles
 	err = CopyConfigFiles(srcDir, dstDir)

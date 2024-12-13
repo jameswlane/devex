@@ -7,12 +7,13 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/installers"
-	"github.com/jameswlane/devex/pkg/types"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/installers"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
 var rootCmd = &cobra.Command{

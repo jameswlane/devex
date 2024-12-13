@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
@@ -119,14 +120,20 @@ func extractTarball(tarballPath, destDir string) error {
 		target := filepath.Join(destDir, header.Name)
 		switch header.Typeflag {
 		case tar.TypeDir:
-			os.MkdirAll(target, 0o755)
+			err = os.MkdirAll(target, 0o755)
+			if err != nil {
+				return fmt.Errorf("failed to create directory: %v", err)
+			}
 		case tar.TypeReg:
 			outFile, err := os.Create(target)
 			if err != nil {
 				return err
 			}
 			defer outFile.Close()
-			io.Copy(outFile, tarReader)
+			_, err = io.Copy(outFile, tarReader)
+			if err != nil {
+				return fmt.Errorf("failed to copy data: %v", err)
+			}
 		}
 	}
 	return nil

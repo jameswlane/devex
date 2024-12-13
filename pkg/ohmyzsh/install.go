@@ -3,6 +3,7 @@ package ohmyzsh
 import (
 	"os/exec"
 
+	"github.com/jameswlane/devex/pkg/logger"
 )
 
 var log = logger.InitLogger()
