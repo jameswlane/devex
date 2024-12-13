@@ -3,14 +3,15 @@ package fonts
 import (
 	"archive/zip"
 	"fmt"
-	"github.com/jameswlane/devex/pkg/logger"
-	"gopkg.in/yaml.v2"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/jameswlane/devex/pkg/logger"
+	"gopkg.in/yaml.v2"
 )
 
 type Font struct {

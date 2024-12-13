@@ -1,12 +1,13 @@
 package view
 
 import (
+	"reflect"
+	"testing"
+
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/layout"
 	"github.com/jameswlane/devex/pkg/logger"
 	"github.com/jameswlane/devex/pkg/steps"
-	"reflect"
-	"testing"
 )
 
 func TestNewViewModel(t *testing.T) {

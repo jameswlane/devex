@@ -2,10 +2,11 @@
 package layout
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
-	"strings"
 )
 
 type LayoutModel struct {

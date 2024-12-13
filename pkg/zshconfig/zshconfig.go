@@ -2,11 +2,12 @@ package zshconfig
 
 import (
 	"fmt"
-	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/fileutils"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/fileutils"
 )
 
 // InstallZSH installs zsh and zplug

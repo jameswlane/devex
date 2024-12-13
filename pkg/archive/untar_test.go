@@ -47,7 +47,7 @@ func TestUntar(t *testing.T) {
 	// Write a test file to the tar archive
 	err = tarWriter.WriteHeader(&tar.Header{
 		Name: "testfile.txt",
-		Mode: 0600,
+		Mode: 0o600,
 		Size: int64(len("Hello, World!")),
 	})
 	if err != nil {

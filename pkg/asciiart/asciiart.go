@@ -2,8 +2,8 @@ package asciiart
 
 import (
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
 	"strings"
+
 )
 
 // Define the ASCII art

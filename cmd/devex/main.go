@@ -2,16 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/installers"
-	"github.com/jameswlane/devex/pkg/types"
 	"github.com/samber/oops"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"os"
-	"path/filepath"
 )
 
 var rootCmd = &cobra.Command{
@@ -74,7 +72,7 @@ func init() {
 	}
 	defer db.Close()
 
-	var installCmd = &cobra.Command{
+	installCmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install development environment",
 		Long:  "Install all necessary tools, programming languages, and databases for your development environment.",
@@ -148,9 +146,9 @@ func getUserSelections(category string) []string {
 	var selectedItems []string
 	var options []huh.Option[string]
 
-	if items, ok := viper.Get(category).([]interface{}); ok {
+	if items, ok := viper.Get(category).([]any); ok {
 		for _, item := range items {
-			if itemMap, ok := item.(map[string]interface{}); ok {
+			if itemMap, ok := item.(map[string]any); ok {
 				option := huh.NewOption(itemMap["name"].(string), itemMap["name"].(string))
 				if defaultFlag, ok := itemMap["default"].(bool); ok && defaultFlag {
 					option = option.Selected(true)
@@ -209,7 +207,7 @@ func getDefaultsFromConfig(category string) []string {
 	var defaults []string
 	apps := viper.GetStringMap(fmt.Sprintf("%s.apps", category))
 	for _, app := range apps {
-		appMap := app.(map[string]interface{})
+		appMap := app.(map[string]any)
 		if defaultFlag, ok := appMap["default"].(bool); ok && defaultFlag {
 			if name, ok := appMap["name"].(string); ok {
 				defaults = append(defaults, name)

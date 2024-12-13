@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path/filepath"
+
+	"gopkg.in/yaml.v2"
 )
 
 // GnomeExtension struct for gnome_extensions.yaml
@@ -41,7 +42,7 @@ func LoadCustomOrDefaultFile(defaultPath, assetType string) (string, error) {
 }
 
 // LoadYAMLConfig loads a YAML file into the provided interface (e.g., []GnomeExtension, []ProgrammingLanguage)
-func LoadYAMLConfig(filePath string, out interface{}) error {
+func LoadYAMLConfig(filePath string, out any) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %v", err)

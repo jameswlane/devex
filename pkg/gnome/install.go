@@ -2,11 +2,12 @@ package gnome
 
 import (
 	"fmt"
-	"github.com/jameswlane/devex/pkg/logger"
-	"gopkg.in/yaml.v2"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/jameswlane/devex/pkg/logger"
+	"gopkg.in/yaml.v2"
 )
 
 type GnomeExtension struct {

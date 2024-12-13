@@ -2,12 +2,10 @@ package pip
 
 import (
 	"fmt"
-	"github.com/charmbracelet/log"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"os"
 	"os/exec"
 	"time"
+
 )
 
 var pipExecCommand = exec.Command

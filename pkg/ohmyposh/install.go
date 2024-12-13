@@ -1,8 +1,8 @@
 package ohmyposh
 
 import (
-	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
+
 )
 
 var log = logger.InitLogger()

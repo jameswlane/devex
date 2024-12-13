@@ -3,9 +3,10 @@ package datastore
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/mattn/go-sqlite3"
 	"os"
 	"path/filepath"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type DB struct {
@@ -19,7 +20,7 @@ func InitDB(dbPath string) (*DB, error) {
 
 	// Check if the directory exists, if not, create it
 	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
-		err := os.MkdirAll(dbDir, 0755)
+		err := os.MkdirAll(dbDir, 0o755)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create database directory: %v", err)
 		}

@@ -2,7 +2,10 @@ package installers
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/charmbracelet/log"
+
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
@@ -12,7 +15,6 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
 	"github.com/jameswlane/devex/pkg/installers/pip"
-	"strings"
 )
 
 // App struct as defined in YAML

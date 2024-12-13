@@ -86,8 +86,8 @@ type GnomeSetting struct {
 }
 
 type Setting struct {
-	Key   string      `mapstructure:"key"`
-	Value interface{} `mapstructure:"value"`
+	Key   string `mapstructure:"key"`
+	Value any    `mapstructure:"value"`
 }
 
 type Theme struct {

@@ -1,8 +1,8 @@
 package ohmyzsh
 
 import (
-	"github.com/jameswlane/devex/pkg/logger"
 	"os/exec"
+
 )
 
 var log = logger.InitLogger()

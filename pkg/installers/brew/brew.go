@@ -2,11 +2,13 @@ package brew
 
 import (
 	"fmt"
-	"github.com/charmbracelet/log"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"os/exec"
 	"time"
+
+	"github.com/charmbracelet/log"
+
+	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
 
 var brewExecCommand = exec.Command
