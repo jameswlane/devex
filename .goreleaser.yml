@@ -8,13 +8,12 @@ release:
   replace_existing_draft: true
   replace_existing_artifacts: true
   target_commitish: "{{ .Commit }}"
-  tag: "{{ .CurrentTag }}"
   discussion_category_name: General
   prerelease: auto
   make_latest: true
   mode: append
   header: |
-    ## Some title ({{ .Date }})
+    ## DevEx Release ({{ .Date }})
     Welcome to this new release!
   footer: |
     ## Thanks
@@ -23,9 +22,8 @@ release:
   disable: true
   skip_upload: true
   extra_files:
-    - glob: ./path/to/file.txt
-    - glob: ./glob/**/to/**/file/**/*
-    - glob: ./glob/foo/to/bar/file/foobar/override_from_previous
-    - glob: ./single_file.txt
-      name_template: file.txt
+    - glob: ./assets/**/*
+    - glob: ./config/**/*
+    - glob: ./help/**/*
+    - glob: ./README.md
   include_meta: true
