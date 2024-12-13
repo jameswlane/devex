@@ -11,6 +11,7 @@ import (
 )
 
 func TestDownloadTarGz(t *testing.T) {
+	t.Parallel()
 	// Create a mock server to serve the tar.gz file
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -33,6 +34,7 @@ func TestDownloadTarGz(t *testing.T) {
 }
 
 func TestUntar(t *testing.T) {
+	t.Parallel()
 	// Create a temporary tar.gz file for testing
 	tarFilePath := "/tmp/test.tar.gz"
 	outFile, err := os.Create(tarFilePath)
