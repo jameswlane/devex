@@ -1,9 +1,10 @@
 package config
 
 import (
-	"github.com/charmbracelet/huh"
 	"reflect"
 	"testing"
+
+	"github.com/charmbracelet/huh"
 )
 
 func TestAppsConfig_GetAppByName(t *testing.T) {

@@ -46,7 +46,7 @@ func TestCopyToBin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if info.Mode().Perm() != 0755 {
+	if info.Mode().Perm() != 0o755 {
 		t.Errorf("Expected file to be executable, but permissions are: %v", info.Mode().Perm())
 	}
 }

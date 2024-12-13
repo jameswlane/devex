@@ -1,10 +1,9 @@
 package layout
 
 import (
-	"github.com/charmbracelet/bubbles/progress"
-	"github.com/charmbracelet/bubbles/viewport"
 	"reflect"
 	"testing"
+
 )
 
 func TestLayoutModel_RenderView(t *testing.T) {

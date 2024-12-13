@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/jameswlane/devex/pkg/datastore"
 	"reflect"
 	"testing"
+
+	"github.com/jameswlane/devex/pkg/datastore"
 )
 
 func Test_getDefaultsFromConfig(t *testing.T) {

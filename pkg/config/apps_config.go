@@ -2,10 +2,9 @@ package config
 
 import (
 	"fmt"
-	"github.com/charmbracelet/huh"
-	"gopkg.in/yaml.v2"
 	"os"
 	"path/filepath"
+
 )
 
 // AppsConfig represents the list of apps in the YAML file

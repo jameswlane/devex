@@ -1,10 +1,9 @@
 package steps
 
 import (
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/logger"
 	"reflect"
 	"testing"
+
 )
 
 func TestExecuteSteps(t *testing.T) {

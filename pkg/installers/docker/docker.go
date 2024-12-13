@@ -2,13 +2,10 @@ package docker
 
 import (
 	"fmt"
-	"github.com/charmbracelet/log"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"gopkg.in/yaml.v2"
 	"os"
 	"os/exec"
 	"time"
+
 )
 
 type App struct {

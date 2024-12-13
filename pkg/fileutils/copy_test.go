@@ -17,7 +17,7 @@ func TestCopyFile(t *testing.T) {
 
 	// Create a temporary source file
 	srcFile := filepath.Join(tempDir, "source.txt")
-	err = ioutil.WriteFile(srcFile, []byte("Hello, World!"), 0644)
+	err = ioutil.WriteFile(srcFile, []byte("Hello, World!"), 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,13 +52,13 @@ func TestCopyConfigFiles(t *testing.T) {
 
 	// Create a temporary source directory and files
 	srcDir := filepath.Join(tempDir, "src")
-	os.Mkdir(srcDir, 0755)
-	ioutil.WriteFile(filepath.Join(srcDir, "config1.txt"), []byte("Config 1"), 0644)
-	ioutil.WriteFile(filepath.Join(srcDir, "config2.txt"), []byte("Config 2"), 0644)
+	os.Mkdir(srcDir, 0o755)
+	ioutil.WriteFile(filepath.Join(srcDir, "config1.txt"), []byte("Config 1"), 0o644)
+	ioutil.WriteFile(filepath.Join(srcDir, "config2.txt"), []byte("Config 2"), 0o644)
 
 	// Set the destination directory
 	dstDir := filepath.Join(tempDir, "dst")
-	os.Mkdir(dstDir, 0755)
+	os.Mkdir(dstDir, 0o755)
 
 	// Test CopyConfigFiles
 	err = CopyConfigFiles(srcDir, dstDir)

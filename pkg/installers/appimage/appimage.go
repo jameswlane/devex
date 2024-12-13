@@ -4,18 +4,21 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
-	"github.com/charmbracelet/log"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
 
-var downloadFileFunc = downloadFile
-var extractTarballFunc = extractTarball
+var (
+	downloadFileFunc   = downloadFile
+	extractTarballFunc = extractTarball
+)
 
 func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *datastore.DB) error {
 	// Check if the app is already installed on the system
@@ -59,7 +62,7 @@ func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *d
 		return fmt.Errorf("failed to move AppImage binary: %v", err)
 	}
 
-	err = os.Chmod(filepath.Join(installDir, binary), 0755)
+	err = os.Chmod(filepath.Join(installDir, binary), 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to set executable permissions: %v", err)
 	}
@@ -116,7 +119,7 @@ func extractTarball(tarballPath, destDir string) error {
 		target := filepath.Join(destDir, header.Name)
 		switch header.Typeflag {
 		case tar.TypeDir:
-			os.MkdirAll(target, 0755)
+			os.MkdirAll(target, 0o755)
 		case tar.TypeReg:
 			outFile, err := os.Create(target)
 			if err != nil {

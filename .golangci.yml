@@ -17,13 +17,6 @@ linters:
     - tparallel
 
 linters-settings:
-  depguard:
-    rules:
-      main:
-        files:
-          - "$all"
-          - "!$test"
-          - "!**/errors/*.go"
   goimports:
     local-prefixes: github.com/jameswlane/devex
   gofmt:

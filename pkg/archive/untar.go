@@ -65,7 +65,7 @@ func Untar(src, dest string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
+			if err := os.MkdirAll(target, 0o755); err != nil {
 				return fmt.Errorf("failed to create directory: %v", err)
 			}
 		case tar.TypeReg:

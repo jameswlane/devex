@@ -1,8 +1,8 @@
 package brew
 
 import (
-	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
+
 )
 
 func TestInstall(t *testing.T) {

@@ -1,12 +1,13 @@
 package gpg
 
 import (
-	"github.com/jameswlane/devex/pkg/testutils"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"testing"
+
+	"github.com/jameswlane/devex/pkg/testutils"
 )
 
 func TestDownloadGPGKey(t *testing.T) {

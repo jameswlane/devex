@@ -1,8 +1,8 @@
 package themes
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
+
 )
 
 type Theme struct {

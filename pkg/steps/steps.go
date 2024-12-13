@@ -2,7 +2,9 @@ package steps
 
 import (
 	"fmt"
+
 	"github.com/charmbracelet/log"
+
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers"

@@ -1,10 +1,11 @@
 package sysmetrics
 
 import (
+	"time"
+
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
-	"time"
 )
 
 func GetCPUUsage() (float64, error) {

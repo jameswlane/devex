@@ -1,9 +1,10 @@
 package shell
 
 import (
+	"os/exec"
+
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 	"github.com/jameswlane/devex/pkg/logger"
-	"os/exec"
 )
 
 var log = logger.InitLogger()

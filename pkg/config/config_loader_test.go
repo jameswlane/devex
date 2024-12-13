@@ -87,7 +87,7 @@ func TestLoadProgrammingLanguagesConfig(t *testing.T) {
 func TestLoadYAMLConfig(t *testing.T) {
 	type args struct {
 		filePath string
-		out      interface{}
+		out      any
 	}
 	tests := []struct {
 		name    string

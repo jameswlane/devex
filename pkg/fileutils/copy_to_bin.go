@@ -39,7 +39,7 @@ func CopyToBin(src, binDir string) error {
 	}
 
 	// Make the file executable
-	err = os.Chmod(dest, 0755)
+	err = os.Chmod(dest, 0o755)
 	if err != nil {
 		return fmt.Errorf("failed to make file executable: %v", err)
 	}

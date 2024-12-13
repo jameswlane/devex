@@ -37,7 +37,7 @@ repos:
 	}
 
 	// Write the config to .pre-commit-config.yaml
-	err := ioutil.WriteFile(".pre-commit-config.yaml", []byte(preCommitConfig), 0644)
+	err := ioutil.WriteFile(".pre-commit-config.yaml", []byte(preCommitConfig), 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to write .pre-commit-config.yaml: %v", err)
 	}

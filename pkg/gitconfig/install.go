@@ -2,10 +2,9 @@ package gitconfig
 
 import (
 	"fmt"
-	"github.com/jameswlane/devex/pkg/logger"
-	"gopkg.in/yaml.v2"
 	"os"
 	"os/exec"
+
 )
 
 type GitConfig struct {
