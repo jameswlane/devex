@@ -6,6 +6,7 @@ import (
 )
 
 func TestLoadCustomOrDefaultFile(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		defaultPath string
 		assetType   string
@@ -19,7 +20,9 @@ func TestLoadCustomOrDefaultFile(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := LoadCustomOrDefaultFile(tt.args.defaultPath, tt.args.assetType)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoadCustomOrDefaultFile() error = %v, wantErr %v", err, tt.wantErr)
@@ -33,6 +36,7 @@ func TestLoadCustomOrDefaultFile(t *testing.T) {
 }
 
 func TestLoadGnomeExtensionsConfig(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		filename string
 	}
@@ -45,7 +49,9 @@ func TestLoadGnomeExtensionsConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := LoadGnomeExtensionsConfig(tt.args.filename)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoadGnomeExtensionsConfig() error = %v, wantErr %v", err, tt.wantErr)
@@ -59,6 +65,7 @@ func TestLoadGnomeExtensionsConfig(t *testing.T) {
 }
 
 func TestLoadProgrammingLanguagesConfig(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		filename string
 	}
@@ -71,7 +78,9 @@ func TestLoadProgrammingLanguagesConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := LoadProgrammingLanguagesConfig(tt.args.filename)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoadProgrammingLanguagesConfig() error = %v, wantErr %v", err, tt.wantErr)
@@ -85,6 +94,7 @@ func TestLoadProgrammingLanguagesConfig(t *testing.T) {
 }
 
 func TestLoadYAMLConfig(t *testing.T) {
+	t.Parallel()
 	type args struct {
 		filePath string
 		out      any
@@ -97,7 +107,9 @@ func TestLoadYAMLConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if err := LoadYAMLConfig(tt.args.filePath, tt.args.out); (err != nil) != tt.wantErr {
 				t.Errorf("LoadYAMLConfig() error = %v, wantErr %v", err, tt.wantErr)
 			}

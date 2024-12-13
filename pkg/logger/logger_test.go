@@ -7,6 +7,7 @@ import (
 )
 
 func TestInitLogger(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		want *Logger
@@ -14,7 +15,9 @@ func TestInitLogger(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := InitLogger(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("InitLogger() = %v, want %v", got, tt.want)
 			}
@@ -23,6 +26,7 @@ func TestInitLogger(t *testing.T) {
 }
 
 func TestLogger_ExecCommandWithLogging(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		logs []string
 	}
@@ -38,7 +42,9 @@ func TestLogger_ExecCommandWithLogging(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			l := &Logger{
 				logs: tt.fields.logs,
 			}
@@ -50,6 +56,7 @@ func TestLogger_ExecCommandWithLogging(t *testing.T) {
 }
 
 func TestLogger_GetLogs(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		logs []string
 	}
@@ -61,7 +68,9 @@ func TestLogger_GetLogs(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			l := &Logger{
 				logs: tt.fields.logs,
 			}
@@ -73,6 +82,7 @@ func TestLogger_GetLogs(t *testing.T) {
 }
 
 func TestLogger_LogError(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		logs []string
 	}
@@ -88,7 +98,9 @@ func TestLogger_LogError(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			l := &Logger{
 				logs: tt.fields.logs,
 			}
@@ -98,6 +110,7 @@ func TestLogger_LogError(t *testing.T) {
 }
 
 func TestLogger_LogInfo(t *testing.T) {
+	t.Parallel()
 	type fields struct {
 		logs []string
 	}
@@ -112,7 +125,9 @@ func TestLogger_LogInfo(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			l := &Logger{
 				logs: tt.fields.logs,
 			}
