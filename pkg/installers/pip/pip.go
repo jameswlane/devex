@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
 
 var pipExecCommand = exec.Command
