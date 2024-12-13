@@ -9,6 +9,8 @@ import (
 )
 
 func TestExecuteSteps(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		stepsList []Step
 		dryRun    bool
@@ -22,13 +24,17 @@ func TestExecuteSteps(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ExecuteSteps(tt.args.stepsList, tt.args.dryRun, tt.args.db, tt.args.logger)
 		})
 	}
 }
 
 func TestGenerateSteps(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		want    []Step
@@ -37,7 +43,9 @@ func TestGenerateSteps(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := GenerateSteps()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GenerateSteps() error = %v, wantErr %v", err, tt.wantErr)
