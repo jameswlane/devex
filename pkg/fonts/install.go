@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/logger"
 	"gopkg.in/yaml.v2"
+
+	"github.com/jameswlane/devex/pkg/logger"
 )
 
 type Font struct {

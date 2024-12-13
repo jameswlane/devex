@@ -5,8 +5,9 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/jameswlane/devex/pkg/logger"
 	"gopkg.in/yaml.v3"
+
+	"github.com/jameswlane/devex/pkg/logger"
 )
 
 type GitConfig struct {

@@ -3,6 +3,7 @@ package themes
 import (
 	"io/ioutil"
 
+	"gopkg.in/yaml.v3"
 )
 
 type Theme struct {

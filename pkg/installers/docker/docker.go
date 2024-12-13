@@ -7,9 +7,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"gopkg.in/yaml.v3"
+
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"gopkg.in/yaml.v3"
 )
 
 type App struct {
