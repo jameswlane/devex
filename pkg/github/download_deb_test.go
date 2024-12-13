@@ -8,6 +8,8 @@ import (
 )
 
 func TestGetLatestDebURL(t *testing.T) {
+	t.Parallel() // Add this line to run the test in parallel
+
 	// Create a mock server for GitHub API
 	mockResponse := `{
         "tag_name": "v1.0.0",
@@ -18,7 +20,9 @@ func TestGetLatestDebURL(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(mockResponse))
+		if _, err := w.Write([]byte(mockResponse)); err != nil {
+			t.Errorf("Failed to write mock response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -36,10 +40,14 @@ func TestGetLatestDebURL(t *testing.T) {
 }
 
 func TestDownloadDeb(t *testing.T) {
+	t.Parallel() // Add this line to run the test in parallel
+
 	// Create a mock server to serve the .deb file
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("This is a test .deb file"))
+		if _, err := w.Write([]byte("This is a test .deb file")); err != nil {
+			t.Errorf("Failed to write mock .deb file: %v", err)
+		}
 	}))
 	defer server.Close()
 

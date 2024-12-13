@@ -1,8 +1,9 @@
 package installers
 
 import (
-	"github.com/jameswlane/devex/pkg/datastore"
 	"testing"
+
+	"github.com/jameswlane/devex/pkg/datastore"
 )
 
 func TestInstallApp(t *testing.T) {
