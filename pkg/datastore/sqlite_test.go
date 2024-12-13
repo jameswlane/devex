@@ -6,6 +6,8 @@ import (
 )
 
 func TestSQLiteDatastore(t *testing.T) {
+	t.Parallel() // Enable parallel execution
+
 	// Create a temporary database
 	dbPath := "/tmp/test_installed_apps.db"
 	db, err := InitDB(dbPath)

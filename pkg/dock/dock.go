@@ -2,7 +2,6 @@ package dock
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +24,7 @@ type Config struct {
 // LoadConfig loads the YAML config file
 func LoadConfig(configFile string) (Config, error) {
 	var config Config
-	data, err := ioutil.ReadFile(configFile)
+	data, err := os.ReadFile(configFile)
 	if err != nil {
 		return config, fmt.Errorf("failed to read config file: %v", err)
 	}
@@ -72,7 +71,7 @@ func SetFavoriteApps(config Config) error {
 		return fmt.Errorf("no favorite apps were found on the system")
 	}
 
-	favoritesList := fmt.Sprintf("['%s']", joinStrings(installedApps, "','"))
+	favoritesList := fmt.Sprintf("['%s']", strings.Join(installedApps, "','"))
 
 	// Set the favorite apps using gsettings
 	cmd := exec.Command("gsettings", "set", "org.gnome.shell", "favorite-apps", favoritesList)
@@ -91,5 +90,5 @@ func joinStrings(items []string, sep string) string {
 	if len(items) == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%s", items[0]) + sep + strings.Join(items[1:], sep)
+	return items[0] + sep + strings.Join(items[1:], sep)
 }

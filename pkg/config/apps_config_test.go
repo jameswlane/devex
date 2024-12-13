@@ -8,6 +8,8 @@ import (
 )
 
 func TestAppsConfig_GetAppByName(t *testing.T) {
+	t.Parallel()
+
 	type fields struct {
 		Apps []App
 	}
@@ -24,7 +26,9 @@ func TestAppsConfig_GetAppByName(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := &AppsConfig{
 				Apps: tt.fields.Apps,
 			}
@@ -41,6 +45,8 @@ func TestAppsConfig_GetAppByName(t *testing.T) {
 }
 
 func TestAppsConfig_ListAppsByCategory(t *testing.T) {
+	t.Parallel()
+
 	type fields struct {
 		Apps []App
 	}
@@ -56,7 +62,9 @@ func TestAppsConfig_ListAppsByCategory(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := &AppsConfig{
 				Apps: tt.fields.Apps,
 			}
@@ -68,6 +76,8 @@ func TestAppsConfig_ListAppsByCategory(t *testing.T) {
 }
 
 func TestAppsConfig_LoadChoicesFromFile(t *testing.T) {
+	t.Parallel()
+
 	type fields struct {
 		Apps []App
 	}
@@ -84,7 +94,9 @@ func TestAppsConfig_LoadChoicesFromFile(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			c := &AppsConfig{
 				Apps: tt.fields.Apps,
 			}
@@ -101,6 +113,8 @@ func TestAppsConfig_LoadChoicesFromFile(t *testing.T) {
 }
 
 func TestLoadAppsConfig(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		defaultPath string
 	}
@@ -113,7 +127,9 @@ func TestLoadAppsConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := LoadAppsConfig(tt.args.defaultPath)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LoadAppsConfig() error = %v, wantErr %v", err, tt.wantErr)

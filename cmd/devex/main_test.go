@@ -8,6 +8,8 @@ import (
 )
 
 func Test_getDefaultsFromConfig(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		category string
 	}
@@ -19,7 +21,9 @@ func Test_getDefaultsFromConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := getDefaultsFromConfig(tt.args.category); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getDefaultsFromConfig() = %v, want %v", got, tt.want)
 			}
@@ -28,6 +32,8 @@ func Test_getDefaultsFromConfig(t *testing.T) {
 }
 
 func Test_getUserSelections(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		category string
 	}
@@ -39,7 +45,9 @@ func Test_getUserSelections(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if got := getUserSelections(tt.args.category); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("getUserSelections() = %v, want %v", got, tt.want)
 			}
@@ -48,6 +56,8 @@ func Test_getUserSelections(t *testing.T) {
 }
 
 func Test_installApps(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		selectedItems []string
 		category      string
@@ -60,26 +70,34 @@ func Test_installApps(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			installApps(tt.args.selectedItems, tt.args.category, tt.args.db)
 		})
 	}
 }
 
 func Test_loadConfigs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			loadConfigs()
 		})
 	}
 }
 
 func Test_loadCustomConfig(t *testing.T) {
+	t.Parallel()
+
 	type args struct {
 		filename string
 	}
@@ -90,20 +108,26 @@ func Test_loadCustomConfig(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			loadCustomConfig(tt.args.filename)
 		})
 	}
 }
 
 func Test_setupConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			setupConfig()
 		})
 	}

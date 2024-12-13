@@ -1,7 +1,7 @@
 package themes
 
 import (
-	"io/ioutil"
+	"os"
 
 	"gopkg.in/yaml.v3"
 )
@@ -18,7 +18,7 @@ type ThemeConfig struct {
 }
 
 func LoadThemes(filePath string) ([]Theme, error) {
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}

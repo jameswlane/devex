@@ -2,6 +2,7 @@ package fonts
 
 import (
 	"archive/zip"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v2"
 
@@ -62,9 +64,19 @@ func installFromURL(font Font) error {
 		return fmt.Errorf("failed to create font destination: %v", err)
 	}
 
+	// Create a context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create a new request with context
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, font.URL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %v", err)
+	}
+
 	// Download the file
 	log.LogInfo(fmt.Sprintf("Downloading font: url=%s", font.URL))
-	resp, err := http.Get(font.URL)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download font: %v", err)
 	}
