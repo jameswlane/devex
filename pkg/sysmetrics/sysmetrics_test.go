@@ -3,6 +3,7 @@ package sysmetrics
 import "testing"
 
 func TestGetCPUUsage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		want    float64
@@ -11,7 +12,9 @@ func TestGetCPUUsage(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := GetCPUUsage()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetCPUUsage() error = %v, wantErr %v", err, tt.wantErr)
@@ -25,6 +28,7 @@ func TestGetCPUUsage(t *testing.T) {
 }
 
 func TestGetDiskUsage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		want    float64
@@ -33,7 +37,9 @@ func TestGetDiskUsage(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := GetDiskUsage()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetDiskUsage() error = %v, wantErr %v", err, tt.wantErr)
@@ -47,6 +53,7 @@ func TestGetDiskUsage(t *testing.T) {
 }
 
 func TestGetRAMUsage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		want    float64
@@ -55,7 +62,9 @@ func TestGetRAMUsage(t *testing.T) {
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := GetRAMUsage()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetRAMUsage() error = %v, wantErr %v", err, tt.wantErr)
