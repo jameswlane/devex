@@ -1,0 +1,92 @@
+programming_languages:
+  - name: Rust and Cargo
+    description: "Rust programming language and package manager Cargo"
+    category: "Programming Languages"
+    install_method: "apt"
+    install_command: "rustc cargo"
+    uninstall_command: "rustc cargo"
+    dependencies:
+      - "apt"
+
+  - name: Bun
+    description: "A fast all-in-one JavaScript runtime"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "bun@latest"
+    uninstall_command: "bun"
+    dependencies:
+      - "mise"
+
+  - name: Deno
+    description: "A modern runtime for JavaScript and TypeScript"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "deno@latest"
+    uninstall_command: "deno"
+    dependencies:
+      - "mise"
+
+  - name: Erlang
+    description: "A programming language used to build massively scalable soft real-time systems"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "erlang@latest"
+    uninstall_command: "erlang"
+    dependencies:
+      - "mise"
+    post_install:
+      - command: "mise use --global elixir@latest"
+      - command: "mise x elixir -- mix local.hex --force"
+
+  - name: Go
+    description: "Go programming language"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "go@latest"
+    uninstall_command: "go"
+    default: true
+    dependencies:
+      - "mise"
+    post_install:
+      - command: "code --install-extension golang.go"
+
+  - name: Java
+    description: "Java programming language"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "java@latest"
+    uninstall_command: "java"
+    dependencies:
+      - "mise"
+
+  - name: Node.js
+    description: "Node.js runtime"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "node@lts"
+    uninstall_command: "node"
+    default: true
+    dependencies:
+      - "mise"
+
+  - name: Python
+    description: "Python programming language"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "python@latest"
+    uninstall_command: "python"
+    default: true
+    dependencies:
+      - "mise"
+
+  - name: Ruby
+    description: "Ruby programming language"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "ruby@latest"
+    uninstall_command: "ruby"
+    default: true
+    dependencies:
+      - "mise"
+    post_install:
+      - command: "mise x ruby -- gem install rails --no-document"
