@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/charmbracelet/huh"
+	"gopkg.in/yaml.v3"
 )
 
 // AppsConfig represents the list of apps in the YAML file

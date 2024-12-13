@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/viewport"
 )
 
 func TestLayoutModel_RenderView(t *testing.T) {
