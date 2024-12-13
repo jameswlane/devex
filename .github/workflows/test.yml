@@ -35,4 +35,4 @@ jobs:
         run: go build -o ./bin/devex -v ./cmd/devex
 
       - name: Test
-        run: ./bin/devex test
+        run: ./bin/devex install --dry-run --default
