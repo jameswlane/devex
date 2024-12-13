@@ -1,5 +1,19 @@
 version: 2
 
+builds:
+  - id: devex
+    binary: devex
+    main: ./cmd/devex
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    goarm:
+      - '6'
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
 release:
   github:
     owner: jameswlane
@@ -19,8 +33,6 @@ release:
     ## Thanks
     Those were the changes on {{ .Tag }}!
   name_template: "{{.ProjectName}}-v{{.Version}} {{.Env.USER}}"
-  disable: true
-  skip_upload: true
   extra_files:
     - glob: ./assets/**/*
     - glob: ./config/**/*
@@ -28,12 +40,8 @@ release:
     - glob: ./README.md
   include_meta: true
 
-builds:
-  - id: devex
-    main: ./cmd/devex
-    goos:
-      - linux
-      - darwin
-    goarch:
-      - amd64
-      - arm64
+snapshot:
+  version_template: "{{.Version}}"
+
+checksum:
+  name_template: "devex_checksums.txt"
