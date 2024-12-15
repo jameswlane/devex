@@ -3,6 +3,7 @@ version: 2
 builds:
   - id: devex
     main: ./cmd/devex
+    binary: bin/devex
     goos:
       - linux
       - darwin
@@ -28,11 +29,9 @@ archives:
     # Default: [ 'LICENSE*', 'README*', 'CHANGELOG', 'license*', 'readme*', 'changelog'].
     # Templates: allowed.
     files:
-      - LICENSE
-      - README.md
       - assets/**/*
-      - config/**/*
-      - help/**/*
+      - config/*
+      - help/*
 
 # Whether to enable the size reporting or not.
 report_sizes: true
