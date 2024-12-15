@@ -41,4 +41,8 @@ zsdoc/data
 # Binary files
 bin/
 
-.task/
+# Task Runner
+.task
+
+# Node.js
+node_modules
