@@ -28,9 +28,8 @@ archives:
     # Default: [ 'LICENSE*', 'README*', 'CHANGELOG', 'license*', 'readme*', 'changelog'].
     # Templates: allowed.
     files:
-      - LICENSE.txt
+      - LICENSE
       - README.md
-      - CHANGELOG.md
       - assets/**/*
       - config/**/*
       - help/**/*
