@@ -36,7 +36,7 @@ jobs:
       - name: Test
         run: go test ./...
       - name: Build
-        run: go build
+        run: go build -o ./bin/devex -v ./cmd/devex
   release:
     needs: [build]
     name: Release
