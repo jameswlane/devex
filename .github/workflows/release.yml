@@ -45,18 +45,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 9
-          run_install: false
-      - name: Install Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18.x
-          cache: 'pnpm'
       - name: Install dependencies
-        run: pnpm install
+        run: npm install -g semantic-release @semantic-release/github @semantic-release/release-notes-generator conventional-changelog-conventionalcommits conventional-changelog-eslint
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
