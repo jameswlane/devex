@@ -77,14 +77,6 @@ changelog:
       order: 1
     - title: Others
       order: 999
-      groups:
-        - title: "Docs"
-          regex: ".*docs.*"
-          order: 1
-        - title: "CI"
-          regex: ".*build.*"
-          order: 2
-  divider: "---"
   filters:
     exclude:
       - "^docs:"
