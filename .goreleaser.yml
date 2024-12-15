@@ -2,26 +2,50 @@ version: 2
 
 builds:
   - id: devex
-    binary: devex
     main: ./cmd/devex
     goos:
-      - darwin
       - linux
+      - darwin
     goarch:
       - amd64
+      - arm
       - arm64
-    goarm:
-      - '6'
-    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: devex
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    # Sets the given file info to all the binaries included from the `builds`.
+    #
+    # Default: copied from the source binary.
+    # builds_info:
+    # group: root
+    # owner: root
+    # mode: 0644
+    # format is `time.RFC3339Nano`
+    # mtime: 2008-01-02T15:04:05Z
+    # Additional files/globs you want to add to the archive.
+    #
+    # Default: [ 'LICENSE*', 'README*', 'CHANGELOG', 'license*', 'readme*', 'changelog'].
+    # Templates: allowed.
+    files:
+      - LICENSE.txt
+      - README.md
+      - CHANGELOG.md
+      - assets/**/*
+      - config/**/*
+      - help/**/*
+
+# Whether to enable the size reporting or not.
+report_sizes: true
 
 release:
   github:
     owner: jameswlane
     name: devex
-  draft: true
+  draft: false
   replace_existing_draft: true
-  replace_existing_artifacts: true
   target_commitish: "{{ .Commit }}"
+  replace_existing_artifacts: true
   discussion_category_name: General
   prerelease: auto
   make_latest: true
@@ -33,11 +57,6 @@ release:
     ## Thanks
     Those were the changes on {{ .Tag }}!
   name_template: "{{.ProjectName}}-v{{.Version}} {{.Env.USER}}"
-  extra_files:
-    - glob: ./assets/**/*
-    - glob: ./config/**/*
-    - glob: ./help/**/*
-    - glob: ./README.md
   include_meta: true
 
 snapshot:
@@ -45,3 +64,31 @@ snapshot:
 
 checksum:
   name_template: "devex_checksums.txt"
+
+changelog:
+  use: github
+  format: "{{.SHA}}: {{.Message}} (@{{.AuthorUsername}})"
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug fixes"
+      regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+      groups:
+        - title: "Docs"
+          regex: ".*docs.*"
+          order: 1
+        - title: "CI"
+          regex: ".*build.*"
+          order: 2
+  divider: "---"
+  filters:
+    exclude:
+      - "^docs:"
+      - typo
+      - (?i)foo
+    include:
+      - "^feat:"
