@@ -1,21 +1,45 @@
 # DevEx
 
-## Setup Environment
-
-
-Here’s a documentation snippet for how the custom configuration works, which you can add to your README in Markdown format:
+DevEx is a powerful CLI tool designed to streamline the setup and management of development environments. It simplifies the installation of applications, configuration of programming languages, and customization of themes.
 
 ---
 
-## Custom Configuration Files
+## Features
 
-The `devex` tool allows users to provide custom configuration files for applications, GNOME extensions, programming languages, and more. If no custom configuration is provided, `devex` will fall back to default configurations stored within the `assets/` directory.
+- **Custom Configuration Management**: Tailor application, GNOME extension, and programming language setups with YAML files.
+- **Automated Releases**: Leverage `commitizen`, `semantic-release`, and `goreleaser` for seamless versioning and publishing.
+- **Task Automation**: Use `Taskfile` for efficient script execution and workflow management.
+- **Community Support**: Engage with contributors through GitHub Issues, Discussions, and Wiki.
+- **Prettier Formatting**: Standardize YAML and Markdown files with Prettier.
+- **Comprehensive Website**: Access guides, documentation, and updates at [devex.sh](https://devex.sh).
 
-### Configuration File Structure
+---
 
-Custom configuration files should be stored in the user's home directory under a hidden `.devex` folder with subdirectories for different categories of configuration files:
+## Getting Started
 
+### Prerequisites
+
+- **Go**: Version 1.20 or later.
+- **Mise**: Install from the [Mise GitHub page](https://github.com/mise/mise).
+- **Prettier**: Ensure Prettier is installed for formatting YAML and Markdown.
+
+### Installation
+
+To install DevEx:
+
+```bash
+task install
 ```
+
+---
+
+## Configuration
+
+### Custom Configuration Files
+
+Custom configurations are stored under `~/.devex/`:
+
+```plaintext
 ~/.devex/
     ├── apps.yaml
     ├── gnome_extensions.yaml
@@ -25,171 +49,158 @@ Custom configuration files should be stored in the user's home directory under a
     └── themes.yaml
 ```
 
-Each YAML file defines a specific aspect of the `devex` environment. Here’s an overview of each configuration file:
-
-1. **apps.yaml**  
-   Defines applications to be installed and managed by `devex`, including installation methods and any dependencies.
-
-2. **gnome_extensions.yaml**  
-   Lists the GNOME extensions that should be installed and managed.
-
-3. **programming_languages.yaml**  
-   Specifies the programming languages and tools (e.g., Python, Go) to install and configure.
-
-4. **themes.yaml**  
-   Defines visual themes and any related configuration.
-
 ### Default vs Custom Configuration
 
-The `devex` tool will first check for custom configuration files in the `~/.devex` directory. If it finds a custom file, it will load that instead of the default configuration. If no custom file is found, `devex` will fall back to its built-in defaults stored in the `assets/` directory.
+DevEx prioritizes custom configurations in `~/.devex/`. If not found, it falls back to defaults in the `assets/` directory.
 
-For example, the tool looks for the `apps.yaml` file like this:
-
-- **Custom file path**: `~/.devex/apps.yaml`
-- **Default fallback**: `assets/apps.yaml`
-
-This allows users to tailor their installations and configurations without modifying the tool’s default behavior.
-
-### How to Customize
-
-To create a custom configuration, you can copy the relevant YAML file from the `assets/` folder into the `~/.devex/` directory. For example:
-
-```bash
-cp assets/apps.yaml ~/.devex/apps.yaml
-```
-
-Then, edit `~/.devex/apps.yaml` as needed to add or modify applications.
-
-### Example: apps.yaml
-
-Here’s an example structure of an `apps.yaml` file:
+#### Example: `apps.yaml`
 
 ```yaml
 apps:
-  - name: "Visual Studio Code"
-    description: "Code editor from Microsoft"
-    category: "Editors"
-    install_method: "apt"
-    install_command: "code"
-    uninstall_command: "apt-get remove -y code"
-    dependencies:
-      - "gnome-shell"
-      - "git"
-  - name: "Docker"
-    description: "Containerization platform"
-    category: "DevOps"
-    install_method: "apt"
-    install_command: "docker"
-    uninstall_command: "apt-get remove -y docker"
+   - name: "Visual Studio Code"
+     description: "Code editor from Microsoft"
+     category: "Editors"
+     install_method: "apt"
+     install_command: "code"
+     dependencies:
+        - "gnome-shell"
+        - "git"
 ```
 
-### Example: gnome_extensions.yaml
+### Formatting
 
-```yaml
-extensions:
-  - id: "clipboard-indicator@tudmotu.com"
-    name: "Clipboard Indicator"
-  - id: "user-themes@gnome-shell-extensions.gcampax.github.com"
-    name: "User Themes"
+To format configuration files, run:
+
+```bash
+prettier --write "**/*.{yaml,md}"
 ```
-
-### How to Load Custom Configurations
-
-To load custom configurations, simply run `devex` as you normally would. The tool will automatically detect and load any custom YAML files in the `~/.devex/` directory.
-
-If you ever want to revert to the default configuration, simply remove the corresponding custom YAML file from `~/.devex/`.
 
 ---
 
-### Prerequisites
+## Taskfile Integration
 
-- Go 1.20 or later
-- Mise
+We use `Task` for task automation. Below is an overview of the `Taskfile.yml`:
 
-### Install Mise
+```yaml
+version: '3'
 
-To install Mise, follow the instructions on the [Mise GitHub page](https://github.com/mise/mise).
+vars:
+   BIN: "{{.ROOT_DIR}}/bin"
 
-### Install Dependencies
+tasks:
+   default:
+      cmds:
+         - task: lint
+         - task: test
 
-Run the following command to install the required dependencies:
+   install:
+      desc: Installs DevEx
+      aliases: [i]
+      sources:
+         - './**/*.go'
+      cmds:
+         - go install -v ./cmd/devex
 
-```sh
-mise use --global go@1.20
+   lint:
+      desc: Runs golangci-lint
+      cmds:
+         - golangci-lint run
+
+   test:
+      desc: Runs test suite
+      cmds:
+         - go test ./...
 ```
 
-## Linting
+To execute tasks, simply run:
 
-### Install golangci-lint
+```bash
+task <task-name>
+```
 
-To install `golangci-lint`, run the following command:
+---
 
-```sh
+## Development
+
+### Testing
+
+Run all tests:
+
+```bash
+task test
+```
+
+### Linting
+
+Install `golangci-lint`:
+
+```bash
 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
 ```
 
-If using Mise, you can install `golangci-lint` to the Mise installation directory:
-```sh
-curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ~/.local/share/mise/installs/go/1.23.1/bin v1.61.0
+Run the linter:
+
+```bash
+task lint
 ```
 
-For more information, refer to the [golangci-lint documentation](https://golangci-lint.run/usage/install/).
+### Building
 
-### Run Linter
+Build the application:
 
-To run the linter, use the following command:
-
-```sh
-golangci-lint run
-```
-
-## Testing
-
-To run the tests, use the following command:
-
-```sh
-go test ./...
-```
-
-## Building
-
-To build the application, use the following command:
-
-```sh
+```bash
 go build -o bin/devex cmd/devex/main.go
 ```
 
-## Common Information
+---
 
-### Project Structure
+## Automated Releases
 
-- `cmd/`: Contains the main application entry point.
-- `pkg/`: Contains the library code.
-- `config/`: Contains configuration files.
+DevEx uses `commitizen`, `semantic-release`, and `goreleaser` for automated versioning and releases.
 
-### Dependency Management
+To prepare a release:
 
-This project uses Go modules for dependency management. Dependencies are listed in the `go.mod` file.
-
-### Versioning
-
-This project follows semantic versioning. Tags are used to mark release versions.
-
-### Releasing
-
-To create a new release, push a new tag to the repository:
-
-```sh
-git tag -a v1.0.0 -m "Release version 1.0.0"
-git push origin v1.0.0
+```bash
+task release:<version>
 ```
 
-This will trigger the CI/CD pipeline to build and create a release.
+Where `<version>` can be `major`, `minor`, `patch`, or a specific semantic version (e.g., `1.2.3`).
+
+---
+
+## Community and Support
+
+### GitHub Features
+
+- **[Issues](https://github.com/jameswlane/devex/issues)**: Report bugs or request features.
+- **[Discussions](https://github.com/jameswlane/devex/discussions)**: Ask questions or share ideas.
+- **[Projects](https://github.com/jameswlane/devex/projects)**: Track project progress.
+- **[Wiki](https://github.com/jameswlane/devex/wiki)**: Access in-depth documentation.
+- **[Security](https://github.com/jameswlane/devex/security)**: Report vulnerabilities.
+- **[Pulse](https://github.com/jameswlane/devex/pulse)**: View project activity.
+
+### Website
+
+Visit the official website at [devex.sh](https://devex.sh) for documentation, guides, and updates.
+
+---
+
+## Contributing
+
+Contributions are welcome! Refer to the [Contributing Guide](.github/CONTRIBUTING.md) for details.
+
+### Code of Conduct
+
+We expect all contributors to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+---
 
 ## License
 
-All content created by Rafaël De Jongh and published on www.RafaelDeJongh.com, or anywhere else on the internet is licensed under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License, unless stated otherwise.
+DevEx is licensed under the [GNU GPL v3 License](LICENSE).
 
-If you use any work or redistribute it in any form, please remember to credit the original author (Rafaël De Jongh) and others if stated, in the description, as a footnote or in the authors/credits section of the website or online or offline publication you are going to use it on.
+---
 
-Requesting permission to use any of the work for any online or offline publication is always required and therefore highly advised. Any inquiry for commercial use of any of my content, please contact me at: info@rafaeldejongh.com
+## Security
+
+For security concerns, please refer to our [Security Policy](SECURITY.md).
