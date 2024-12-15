@@ -4,7 +4,9 @@ plugins:
   - "@semantic-release/release-notes-generator"
   - "@semantic-release/github"
 
-preset: eslint
+preset: "conventionalcommits"
+branches:
+  - main
 success: false
 fail: false
 npmPublish: false
