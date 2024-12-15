@@ -20,9 +20,12 @@ jobs:
         os: [ ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - run: git fetch --prune --unshallow
-      - uses: actions/cache@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Fetch full Git history
+        run: git fetch --prune --unshallow
+      - name: Cache Go modules
+        uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
