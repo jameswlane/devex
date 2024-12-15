@@ -3,10 +3,10 @@ name: goreleaser
 on:
   push:
     branches:
-      - main
       - master
-    tags:
-      - "*"
+  pull_request:
+    branches:
+      - '*'
 
 permissions:
   contents: write
@@ -15,19 +15,50 @@ permissions:
   id-token: write
 
 jobs:
-  goreleaser:
+  build:
+    strategy:
+      matrix:
+        go-version: [ 1.23.x ]
+        os: [ ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: git fetch --prune --unshallow
+      - uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+      - name: Install Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: Test
+        run: go test ./...
+      - name: Build
+        run: go build
+  release:
+    needs: [build]
+    name: Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
-      - name: Set up Go
+          node-version: 18.x
+      - name: Install dependencies
+        run: npm install -g semantic-release @semantic-release/github @semantic-release/release-notes-generator conventional-changelog-conventionalcommits conventional-changelog-eslint
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: semantic-release $DRY_RUN_OPT
+      - name: Set up Go 1.x
         uses: actions/setup-go@v5
         with:
-          go-version: stable
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+          go-version: 1.23.x
+      - run: docker login docker.pkg.github.com -u docker -p ${{ secrets.GITHUB_TOKEN }}
+      - uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
