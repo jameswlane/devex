@@ -1,12 +1,9 @@
-name: goreleaser
+name: Build, Lint, Test, and Release
 
 on:
   push:
     branches:
-      - master
-  pull_request:
-    branches:
-      - '*'
+      - main
 
 permissions:
   contents: write
@@ -32,6 +29,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.60.1
       - name: Test
         run: go test ./...
       - name: Build
