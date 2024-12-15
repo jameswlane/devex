@@ -1,2 +1,8 @@
-default_language: go
-default_database: postgres
+default_language:
+  - go
+  - node
+  - python
+  - ruby
+default_database:
+  - postgresql
+  - redis
