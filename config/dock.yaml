@@ -1,4 +1,4 @@
-favorites:
+dock:
   - name: "VS Code"
     desktop_file: "code.desktop"
   - name: "Typora"
