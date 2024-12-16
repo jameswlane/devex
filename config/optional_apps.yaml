@@ -1,4 +1,4 @@
-apps:
+optional_apps:
   - name: "Proton Mail"
     description: "Secure email app by Proton"
     category: "Optional Apps"
