@@ -92,8 +92,8 @@ func init() {
 
 			var selectedLanguages, selectedDatabases []string
 
-			var apps = getDefaultsFromConfig("apps")
-			installApps(apps, "apps", db)
+			selectedApps := getDefaultsFromConfig("apps")
+			installApps(selectedApps, "apps", db)
 
 			if viper.GetBool("default") {
 				log.Info("Running with default settings")
