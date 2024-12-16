@@ -34,16 +34,23 @@ func main() {
 }
 
 func setupConfig() {
-	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 
 	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		viper.AddConfigPath(filepath.Join(homeDir, ".devex"))
-		viper.AddConfigPath(filepath.Join(homeDir, ".devex/config"))
+	if err != nil {
+		log.Error(oops.In("user directory").With("context", "failed to get user home directory").Wrap(err))
+		os.Exit(1)
 	}
 
-	viper.AddConfigPath("./config")
+	localConfigPath := filepath.Join(homeDir, ".devex/config/config.yaml")
+	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config/config.yaml")
+
+	if _, err := os.Stat(localConfigPath); err == nil {
+		viper.SetConfigFile(localConfigPath)
+	} else {
+		viper.SetConfigFile(defaultConfigPath)
+	}
+
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
@@ -84,6 +91,10 @@ func init() {
 			loadConfigs()
 
 			var selectedLanguages, selectedDatabases []string
+
+			var apps = getDefaultsFromConfig("apps")
+			installApps(apps, "apps", db)
+
 			if viper.GetBool("default") {
 				log.Info("Running with default settings")
 				selectedLanguages = getDefaultsFromConfig("programming_languages")
@@ -134,16 +145,33 @@ func init() {
 
 func loadConfigs() {
 	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		loadCustomConfig(filepath.Join(homeDir, ".devex/config/databases.yaml"))
-		loadCustomConfig(filepath.Join(homeDir, ".devex/config/programming_languages.yaml"))
-	} else {
+	if err != nil {
 		log.Error(oops.In("user directory").With("context", "failed to get user home directory").Wrap(err))
 		os.Exit(1)
 	}
 
-	loadCustomConfig("./config/databases.yaml")
-	loadCustomConfig("./config/programming_languages.yaml")
+	configFiles := []string{
+		"config/apps.yaml",
+		"config/databases.yaml",
+		"config/dock.yaml",
+		"config/fonts.yaml",
+		"config/git_config.yaml",
+		"config/gnome_extensions.yaml",
+		"config/gnome_settings.yaml",
+		"config/optional_apps.yaml",
+		"config/programming_languages.yaml",
+		"config/themes.yaml",
+	}
+
+	for _, configFile := range configFiles {
+		localConfigPath := filepath.Join(homeDir, ".devex", configFile)
+		if _, err := os.Stat(localConfigPath); err == nil {
+			loadCustomConfig(localConfigPath)
+		} else {
+			defaultConfigPath := filepath.Join(homeDir, ".local/share/devex", configFile)
+			loadCustomConfig(defaultConfigPath)
+		}
+	}
 }
 
 func getUserSelections(category string) []string {
