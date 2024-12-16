@@ -69,8 +69,15 @@ func loadCustomConfig(filename string) {
 	}
 }
 
+func getHomeDir() (string, error) {
+	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
+		return os.UserHomeDir()
+	}
+	return os.UserHomeDir()
+}
+
 func init() {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := getHomeDir()
 	if err != nil {
 		log.Error(oops.In("user directory").With("context", "failed to get user home directory").Wrap(err))
 		os.Exit(1)
