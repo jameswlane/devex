@@ -4,12 +4,13 @@ import (
 	"testing"
 
 	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
 func TestInstallApp(t *testing.T) {
 	t.Parallel()
 	type args struct {
-		app    App
+		app    types.AppConfig
 		dryRun bool
 		db     *datastore.DB
 	}

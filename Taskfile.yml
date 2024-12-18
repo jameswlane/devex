@@ -9,6 +9,16 @@ tasks:
       - task: lint
       - task: test
 
+  build:
+    desc: Builds the Go project
+    cmds:
+      - go build -o {{.BIN}}/myapp ./cmd/myapp
+
+  build:local:
+    desc: Builds the Go project
+    cmds:
+      - go build -o ./bin/devex -v ./cmd/devex
+
   install:
     desc: Installs DevEx
     aliases: [i]

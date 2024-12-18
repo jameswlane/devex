@@ -5,58 +5,64 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
 	"github.com/jameswlane/devex/pkg/installers/brew"
+	"github.com/jameswlane/devex/pkg/installers/curlpipe"
 	"github.com/jameswlane/devex/pkg/installers/deb"
 	"github.com/jameswlane/devex/pkg/installers/docker"
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
 	"github.com/jameswlane/devex/pkg/installers/pip"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-// App struct as defined in YAML
-type App struct {
-	Name             string   `yaml:"name"`
-	Description      string   `yaml:"description"`
-	Category         string   `yaml:"category"`
-	InstallMethod    string   `yaml:"install_method"`
-	InstallCommand   string   `yaml:"install_command"`
-	UninstallCommand string   `yaml:"uninstall_command"`
-	Dependencies     []string `yaml:"dependencies"`
-	AptSources       []struct {
-		Source   string `yaml:"source"`
-		ListFile string `yaml:"list_file"`
-		Repo     string `yaml:"repo"`
-	} `yaml:"apt_sources"`
-	GpgUrl      string `yaml:"gpg_url"`
-	DownloadUrl string `yaml:"download_url"`
-	InstallDir  string `yaml:"install_dir"`
-	Symlink     string `yaml:"symlink"`
-	PostInstall []struct {
-		Command string `yaml:"command"`
-		Sleep   int    `yaml:"sleep"`
-	} `yaml:"post_install"`
-	ConfigFiles []struct {
-		Source      string `yaml:"source"`
-		Destination string `yaml:"destination"`
-	} `yaml:"config_files"`
-	CleanupFiles  []string `yaml:"cleanup_files"`
-	DockerOptions struct {
-		Ports         []string `yaml:"ports"`
-		ContainerName string   `yaml:"container_name"`
-		Environment   []string `yaml:"environment"`
-		RestartPolicy string   `yaml:"restart_policy"`
-	} `yaml:"docker_options"`
+func ensureDependenciesInstalled(dependencies []string, dryRun bool, db *datastore.DB) error {
+	var apps []types.AppConfig
+
+	// Load all apps from configuration
+	if err := viper.UnmarshalKey("apps", &apps); err != nil {
+		return fmt.Errorf("failed to load apps configuration: %v", err)
+	}
+
+	// Map dependencies to apps
+	for _, dependency := range dependencies {
+		found := false
+		for _, app := range apps {
+			if app.Name == dependency {
+				found = true
+				log.Info("Installing dependency", "dependency", app.Name)
+
+				if err := InstallApp(app, dryRun, db); err != nil {
+					return fmt.Errorf("failed to install dependency %s: %v", app.Name, err)
+				}
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("dependency %s not found in apps configuration", dependency)
+		}
+	}
+
+	return nil
 }
 
 // InstallApp installs the app based on the InstallMethod field, with dry-run and datastore integration
-func InstallApp(app App, dryRun bool, db *datastore.DB) error {
-	// Install the app using the appropriate method
+func InstallApp(app types.AppConfig, dryRun bool, db *datastore.DB) error {
 	log.Info(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
 
+	// Step 1: Handle dependencies
+	if len(app.Dependencies) > 0 {
+		log.Info("Checking dependencies for app", "app", app.Name, "dependencies", app.Dependencies)
+		if err := ensureDependenciesInstalled(app.Dependencies, dryRun, db); err != nil {
+			return fmt.Errorf("failed to install dependencies for %s: %v", app.Name, err)
+		}
+	}
+
+	// Step 2: Install the app using the appropriate method
 	switch app.InstallMethod {
 	case "appimage":
 		parts := strings.Split(app.InstallCommand, " ")
@@ -81,7 +87,6 @@ func InstallApp(app App, dryRun bool, db *datastore.DB) error {
 		}
 		return docker.Install(dockerApp, dryRun, db)
 	case "flatpak":
-		// Assuming the InstallCommand contains both appID and repo separated by a space
 		parts := strings.Split(app.InstallCommand, " ")
 		if len(parts) != 2 {
 			return fmt.Errorf("invalid install command for flatpak: %s", app.InstallCommand)
@@ -91,6 +96,11 @@ func InstallApp(app App, dryRun bool, db *datastore.DB) error {
 		return mise.Install(app.InstallCommand, dryRun, db)
 	case "pip":
 		return pip.Install(app.InstallCommand, dryRun, db)
+	case "curlpipe":
+		if app.DownloadUrl == "" {
+			return fmt.Errorf("missing download_url for curlpipe installation")
+		}
+		return curlpipe.Install(app.DownloadUrl, dryRun, db)
 	default:
 		log.Error(fmt.Sprintf("Unsupported install method: %s for app %s", app.InstallMethod, app.Name), nil)
 		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)

@@ -18,6 +18,7 @@ type AppConfig struct {
 	AptSources       []AptSource   `mapstructure:"apt_sources"`
 	GpgURL           string        `mapstructure:"gpg_url"`
 	ConfigFiles      []ConfigFile  `mapstructure:"config_files"`
+	DownloadUrl      string
 }
 
 type ProgrammingLanguage struct {
@@ -30,6 +31,7 @@ type ProgrammingLanguage struct {
 	Dependencies     []string      `mapstructure:"dependencies"`
 	Default          bool          `mapstructure:"default"`
 	PostInstall      []PostInstall `mapstructure:"post_install"`
+	DownloadURL      string        `mapstructure:"download_url"`
 }
 
 type OptionalApp struct {
@@ -40,6 +42,7 @@ type OptionalApp struct {
 	InstallCommand   string   `mapstructure:"install_command"`
 	UninstallCommand string   `mapstructure:"uninstall_command"`
 	Dependencies     []string `mapstructure:"dependencies"`
+	DownloadURL      string   `mapstructure:"download_url"`
 }
 
 type DockerOptions struct {
