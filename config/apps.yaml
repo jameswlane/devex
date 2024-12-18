@@ -17,6 +17,12 @@ apps:
     dependencies:
       - "apt"
 
+  - name: curl
+    description: "Curl utility for transferring data"
+    category: "Utilities"
+    install_method: "apt"
+    install_command: "curl"
+
   - name: Ruby Development Libraries
     description: "Libraries required for building Ruby software"
     category: "Development"
@@ -129,19 +135,11 @@ apps:
   - name: Mise
     description: "A tool for managing multiple versions of programming languages"
     category: "Language Management"
-    install_method: "apt"
-    install_command: "mise"
-    uninstall_command: "mise"
+    default: true
+    install_method: "curlpipe"
+    download_url: "https://mise.run"
     dependencies:
-      - "gpg"
-      - "wget"
       - "curl"
-      - "apt"
-    apt_sources:
-      - source: "/etc/apt/keyrings/mise-archive-keyring.gpg"
-        list_file: "/etc/apt/sources.list.d/mise.list"
-        repo: "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main"
-    gpg_url: "https://mise.jdx.dev/gpg-key.pub"
 
   - name: Nala
     description: "A front-end for the apt package manager with better output"
