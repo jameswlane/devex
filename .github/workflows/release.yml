@@ -17,13 +17,15 @@ jobs:
     strategy:
       matrix:
         go-version: [ 1.23.x ]
-        os: [ ubuntu-latest, macos-latest]
+        os: [ ubuntu-latest, macos-latest ]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Fetch full Git history
-        run: git fetch --prune --unshallow
+        with:
+          fetch-depth: 0 # Fetch full history for tags
+      - name: Fetch all tags
+        run: git fetch --tags
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -40,7 +42,7 @@ jobs:
       - name: Test
         run: go test ./...
       - name: Build
-        run: go build -o ./bin/devex -v ./cmd/devex
+        run: go build -ldflags="-s -w -X main.version=$(git describe --tags)" -o ./bin/devex ./cmd/devex
   release:
     needs: [build]
     name: Release
@@ -48,6 +50,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch full history for tags
+      - name: Fetch all tags
+        run: git fetch --tags
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
@@ -68,8 +74,10 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: 1.23.x
-      - run: docker login docker.pkg.github.com -u docker -p ${{ secrets.GITHUB_TOKEN }}
-      - uses: goreleaser/goreleaser-action@v6
+      - name: Login to Docker
+        run: docker login docker.pkg.github.com -u docker -p ${{ secrets.GITHUB_TOKEN }}
+      - name: Release with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: "~> v2"
