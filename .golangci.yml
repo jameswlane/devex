@@ -1,8 +1,3 @@
-# NOTE(@andreynering): The linters listed here are additions on top of
-# those enabled by default:
-#
-# https://golangci-lint.run/usage/linters/#enabled-by-default
-
 linters:
   enable:
     - goimports
@@ -14,6 +9,16 @@ linters:
     - tenv
     - thelper
     - tparallel
+    - errcheck
+    - gosimple
+    - staticcheck
+    - unparam
+    - unused
+    - ineffassign
+    - prealloc
+    - staticcheck
+    - errcheck
+    - goimports
 
 linters-settings:
   goimports:
@@ -22,3 +27,15 @@ linters-settings:
     rewrite-rules:
       - pattern: 'interface{}'
         replacement: 'any'
+  misspell:
+    locale: US
+
+run:
+  timeout: 5m
+  output: json
+
+issues:
+  exclude-rules:
+    - linters:
+        - errcheck
+      text: "ignoring error"
