@@ -1,0 +1,36 @@
+site_name: DevEx Documentation
+site_url: https://your-project-docs.example.com
+repo_url: https://github.com/jameswlane/devex
+theme:
+    name: material
+    palette:
+        primary: blue
+        accent: pink
+    font:
+        text: Roboto
+        code: Roboto Mono
+    favicon: img/favicon.ico
+
+nav:
+    - Home: index.md
+    - CLI Reference:
+          - Overview: docs/cli/overview.md
+          - Commands: docs/cli/commands.md
+    - Configuration:
+          - Overview: docs/configuration/overview.md
+          - Apps: docs/configuration/apps.md
+          - Programming Languages: docs/configuration/programming_languages.md
+          - Databases: docs/configuration/databases.md
+
+plugins:
+    - search
+    - include-markdown
+    - mermaid2
+    - awesome-pages
+
+markdown_extensions:
+    - toc:
+          permalink: true
+    - tables
+    - codehilite
+    - admonition
