@@ -7,13 +7,13 @@ import (
 
 	"github.com/charmbracelet/log"
 
-	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
 
 var miseExecCommand = exec.Command
 
-func Install(language string, dryRun bool, db *datastore.DB) error {
+func Install(language string, dryRun bool, repo repository.Repository) error {
 	// Check if the language is already installed
 	isInstalledOnSystem, err := check_install.IsAppInstalled(language)
 	if err != nil {
@@ -42,10 +42,10 @@ func Install(language string, dryRun bool, db *datastore.DB) error {
 		return fmt.Errorf("failed to install language %s via Mise: %v - %s", language, err, string(output))
 	}
 
-	// Add the installed language to the database
-	err = datastore.AddInstalledApp(db, language)
+	// Add the installed language to the repository
+	err = repo.AddApp(language)
 	if err != nil {
-		return fmt.Errorf("failed to add language %s to database: %v", language, err)
+		return fmt.Errorf("failed to add language %s to repository: %v", language, err)
 	}
 
 	log.Info(fmt.Sprintf("Language %s installed successfully via Mise", language))

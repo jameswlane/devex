@@ -1,16 +1,16 @@
 package installers
 
 import (
+	"errors"
 	"fmt"
-	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 
-	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
-	"github.com/jameswlane/devex/pkg/installers/brew"
 	"github.com/jameswlane/devex/pkg/installers/curlpipe"
 	"github.com/jameswlane/devex/pkg/installers/deb"
 	"github.com/jameswlane/devex/pkg/installers/docker"
@@ -20,89 +20,128 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
-func ensureDependenciesInstalled(dependencies []string, dryRun bool, db *datastore.DB) error {
-	var apps []types.AppConfig
+// InstallApp installs the app based on the InstallMethod field
+func InstallApp(app types.AppConfig, dryRun bool, repo repository.Repository) error {
+	log.Info(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
 
-	// Load all apps from configuration
-	if err := viper.UnmarshalKey("apps", &apps); err != nil {
-		return fmt.Errorf("failed to load apps configuration: %v", err)
+	// Step 1: Handle dependencies
+	if err := handleDependencies(app, repo, dryRun); err != nil {
+		return fmt.Errorf("failed to handle dependencies for %s: %v", app.Name, err)
 	}
 
-	// Map dependencies to apps
-	for _, dependency := range dependencies {
-		found := false
-		for _, app := range apps {
-			if app.Name == dependency {
-				found = true
-				log.Info("Installing dependency", "dependency", app.Name)
+	// Step 2: Execute the appropriate installation command
+	if err := executeInstallCommand(app, repo, dryRun); err != nil {
+		return fmt.Errorf("failed to install %s: %v", app.Name, err)
+	}
 
-				if err := InstallApp(app, dryRun, db); err != nil {
-					return fmt.Errorf("failed to install dependency %s: %v", app.Name, err)
-				}
-				break
+	return nil
+}
+
+// handleDependencies ensures all dependencies are installed
+func handleDependencies(app types.AppConfig, repo repository.Repository, dryRun bool) error {
+	if len(app.Dependencies) == 0 {
+		return nil
+	}
+
+	log.Info("Checking dependencies for app", "app", app.Name, "dependencies", app.Dependencies)
+
+	// Batch preload all dependencies from the repository
+	dependencySet := make(map[string]bool)
+	for _, dep := range app.Dependencies {
+		dependencySet[dep] = false
+	}
+
+	installedDeps, err := preloadDependenciesFromRepo(dependencySet, repo)
+	if err != nil {
+		return err
+	}
+
+	// Install missing dependencies
+	for dep, installed := range installedDeps {
+		if !installed {
+			log.Info("Installing missing dependency", "dependency", dep)
+			dependencyApp := findAppByName(dep)
+			if dependencyApp == nil {
+				return fmt.Errorf("dependency %s not found in app configurations", dep)
 			}
-		}
-		if !found {
-			return fmt.Errorf("dependency %s not found in apps configuration", dependency)
+			if err := InstallApp(*dependencyApp, dryRun, repo); err != nil {
+				return fmt.Errorf("failed to install dependency %s: %v", dep, err)
+			}
 		}
 	}
 
 	return nil
 }
 
-// InstallApp installs the app based on the InstallMethod field, with dry-run and datastore integration
-func InstallApp(app types.AppConfig, dryRun bool, db *datastore.DB) error {
-	log.Info(fmt.Sprintf("Installing app %s using method %s", app.Name, app.InstallMethod))
-
-	// Step 1: Handle dependencies
-	if len(app.Dependencies) > 0 {
-		log.Info("Checking dependencies for app", "app", app.Name, "dependencies", app.Dependencies)
-		if err := ensureDependenciesInstalled(app.Dependencies, dryRun, db); err != nil {
-			return fmt.Errorf("failed to install dependencies for %s: %v", app.Name, err)
-		}
-	}
-
-	// Step 2: Install the app using the appropriate method
+// executeInstallCommand runs the installation logic based on the method
+func executeInstallCommand(app types.AppConfig, repo repository.Repository, dryRun bool) error {
 	switch app.InstallMethod {
 	case "appimage":
-		parts := strings.Split(app.InstallCommand, " ")
-		if len(parts) != 3 {
-			return fmt.Errorf("invalid install command for appimage: %s", app.InstallCommand)
-		}
-		return appimage.Install(parts[0], parts[1], parts[2], parts[3], dryRun, db)
+		return appimage.Install(app.DownloadURL, app.InstallDir, app.Symlink, app.Name, dryRun, repo)
 	case "apt":
-		return apt.Install(app.InstallCommand, dryRun, db)
-	case "brew":
-		return brew.Install(app.InstallCommand, dryRun, db)
-	case "deb":
-		return deb.Install(app.InstallCommand, dryRun, db)
-	case "docker":
-		dockerApp := docker.App{
-			Name:           app.Name,
-			Description:    app.Description,
-			Category:       app.Category,
-			InstallMethod:  app.InstallMethod,
-			InstallCommand: app.InstallCommand,
-			DockerOptions:  docker.DockerOptions(app.DockerOptions),
-		}
-		return docker.Install(dockerApp, dryRun, db)
-	case "flatpak":
-		parts := strings.Split(app.InstallCommand, " ")
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid install command for flatpak: %s", app.InstallCommand)
-		}
-		return flatpak.Install(parts[0], parts[1], dryRun, db)
-	case "mise":
-		return mise.Install(app.InstallCommand, dryRun, db)
-	case "pip":
-		return pip.Install(app.InstallCommand, dryRun, db)
+		return apt.Install(app.InstallCommand, dryRun, repo)
 	case "curlpipe":
-		if app.DownloadUrl == "" {
-			return fmt.Errorf("missing download_url for curlpipe installation")
-		}
-		return curlpipe.Install(app.DownloadUrl, dryRun, db)
+		return retryWithBackoff(func() error {
+			return curlpipe.Install(app.DownloadURL, dryRun, repo)
+		})
+	case "deb":
+		return retryWithBackoff(func() error {
+			return deb.Install(app.InstallCommand, dryRun, repo)
+		})
+	case "docker":
+		return docker.Install(app, dryRun, repo)
+	case "flatpak":
+		return flatpak.Install(app.InstallCommand, app.Name, dryRun, repo)
+	case "mise":
+		return mise.Install(app.InstallCommand, dryRun, repo)
+	case "pip":
+		return pip.Install(app.InstallCommand, dryRun, repo)
 	default:
-		log.Error(fmt.Sprintf("Unsupported install method: %s for app %s", app.InstallMethod, app.Name), nil)
 		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
 	}
+}
+
+// preloadDependenciesFromRepo checks which dependencies are already installed in the repository
+func preloadDependenciesFromRepo(dependencySet map[string]bool, repo repository.Repository) (map[string]bool, error) {
+	for dep := range dependencySet {
+		exists, err := repo.GetApp(dep)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check app existence: %v", err)
+		}
+		dependencySet[dep] = exists
+	}
+	return dependencySet, nil
+}
+
+// findAppByName finds an app by name from the global configuration
+func findAppByName(name string) *types.AppConfig {
+	var apps []types.AppConfig
+	if err := viper.UnmarshalKey("apps", &apps); err != nil {
+		log.Warn("Failed to load app configurations", "error", err)
+		return nil
+	}
+	for _, app := range apps {
+		if app.Name == name {
+			return &app
+		}
+	}
+	return nil
+}
+
+// retryWithBackoff retries a function with exponential backoff
+func retryWithBackoff(f func() error) error {
+	const maxRetries = 3
+	const initialDelay = time.Second
+
+	delay := initialDelay
+	for i := 0; i < maxRetries; i++ {
+		err := f()
+		if err == nil {
+			return nil
+		}
+		log.Warn(fmt.Sprintf("Retry %d/%d failed: %v", i+1, maxRetries, err))
+		time.Sleep(delay)
+		delay *= 2
+	}
+	return errors.New("max retries exceeded")
 }

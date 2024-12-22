@@ -3,111 +3,112 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"sync"
 
-	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
+
 	"gopkg.in/yaml.v3"
+
+	"github.com/jameswlane/devex/pkg/types"
 )
 
 // AppsConfig represents the list of apps in the YAML file
 type AppsConfig struct {
-	Apps []App `yaml:"apps"`
+	Apps []types.AppConfig `yaml:"apps"`
 }
 
-// App structure from the apps.yaml
-type App struct {
-	Name             string   `yaml:"name"`
-	Description      string   `yaml:"description"`
-	Category         string   `yaml:"category"`
-	InstallMethod    string   `yaml:"install_method"`
-	InstallCommand   string   `yaml:"install_command"`
-	UninstallCommand string   `yaml:"uninstall_command"`
-	Dependencies     []string `yaml:"dependencies"`
-	AptSources       []struct {
-		Source   string `yaml:"source"`
-		ListFile string `yaml:"list_file"`
-		Repo     string `yaml:"repo"`
-	} `yaml:"apt_sources"`
-	GpgUrl      string `yaml:"gpg_url"`
-	DownloadUrl string `yaml:"download_url"`
-	InstallDir  string `yaml:"install_dir"`
-	Symlink     string `yaml:"symlink"`
-	PostInstall []struct {
-		Command string `yaml:"command"`
-		Sleep   int    `yaml:"sleep"`
-	} `yaml:"post_install"`
-	ConfigFiles []struct {
-		Source      string `yaml:"source"`
-		Destination string `yaml:"destination"`
-	} `yaml:"config_files"`
-	CleanupFiles  []string `yaml:"cleanup_files"`
-	DockerOptions struct {
-		Ports         []string `yaml:"ports"`
-		ContainerName string   `yaml:"container_name"`
-		Environment   []string `yaml:"environment"`
-		RestartPolicy string   `yaml:"restart_policy"`
-	} `yaml:"docker_options"`
-}
+// In-memory cache for loaded configurations
+var (
+	configCache = make(map[string]any)
+	cacheLock   sync.RWMutex
+)
 
-// LoadAppsConfig loads the apps configuration from a YAML file
-func LoadAppsConfig(defaultPath string) (AppsConfig, error) {
-	// Define the custom path (e.g., ~/.devex/config/apps.yaml)
-	customPath := filepath.Join(os.Getenv("HOME"), ".devex/config/apps.yaml")
-
-	// Use the helper function to load custom or default config
-	data, err := LoadCustomOrDefault(defaultPath, customPath)
-	if err != nil {
-		return AppsConfig{}, fmt.Errorf("failed to load apps config: %v", err)
-	}
-
+// LoadAppsConfig loads the apps configuration from a YAML file and validates it
+func LoadAppsConfig() (AppsConfig, error) {
 	var config AppsConfig
-	err = yaml.Unmarshal(data, &config)
+	err := viper.UnmarshalKey("apps", &config.Apps)
 	if err != nil {
 		return AppsConfig{}, fmt.Errorf("failed to unmarshal apps config: %v", err)
+	}
+
+	// Validate loaded apps
+	for _, app := range config.Apps {
+		if err := validateApp(app); err != nil {
+			return AppsConfig{}, fmt.Errorf("invalid app configuration: %v", err)
+		}
 	}
 
 	return config, nil
 }
 
-// ListAppsByCategory lists all apps by category
-func (c *AppsConfig) ListAppsByCategory(category string) []App {
-	var appsInCategory []App
-	for _, app := range c.Apps {
-		if app.Category == category {
-			appsInCategory = append(appsInCategory, app)
-		}
+// validateApp checks that all required fields in an App struct are populated
+func validateApp(app types.AppConfig) error {
+	if app.Name == "" {
+		return fmt.Errorf("app name is required")
 	}
-	return appsInCategory
+	if app.InstallMethod == "" {
+		return fmt.Errorf("install method is required for app %s", app.Name)
+	}
+	if app.InstallCommand == "" {
+		return fmt.Errorf("install command is required for app %s", app.Name)
+	}
+	return nil
 }
 
-// GetAppByName retrieves an app by its name
-func (c *AppsConfig) GetAppByName(name string) (*App, error) {
+// ListAppsByCategories lists all apps matching any of the specified categories
+func (c *AppsConfig) ListAppsByCategories(categories []string) ([]types.AppConfig, error) {
+	var appsInCategories []types.AppConfig
+	var missingDeps []string
+
 	for _, app := range c.Apps {
-		if app.Name == name {
-			return &app, nil
+		// Check if app's category matches any of the given categories
+		for _, category := range categories {
+			if app.Category == category {
+				appsInCategories = append(appsInCategories, app)
+
+				// Validate dependencies
+				for _, dep := range app.Dependencies {
+					if dep == "" {
+						missingDeps = append(missingDeps, fmt.Sprintf("App: %s, Missing Dependency: %s", app.Name, dep))
+					}
+				}
+			}
 		}
 	}
-	return nil, fmt.Errorf("app not found: %s", name)
+
+	// Return error if missing dependencies are found
+	if len(missingDeps) > 0 {
+		return appsInCategories, fmt.Errorf("missing dependencies detected: %v", missingDeps)
+	}
+
+	return appsInCategories, nil
 }
 
-// LoadChoicesFromFile loads choices from a YAML file and returns them as a slice of huh.Option[string]
-func (c *AppsConfig) LoadChoicesFromFile(path string) ([]huh.Option[string], error) {
-	file, err := os.Open(path)
+// loadYAMLWithCache loads a YAML file into the provided structure and caches the result
+func loadYAMLWithCache(filePath string, out any) error {
+	cacheLock.RLock()
+	if cached, found := configCache[filePath]; found {
+		cacheLock.RUnlock()
+		*out.(*any) = cached
+		return nil
+	}
+	cacheLock.RUnlock()
+
+	// Load YAML from file
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %v", err)
-	}
-	defer file.Close()
-
-	var appsConfig AppsConfig
-	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&appsConfig); err != nil {
-		return nil, fmt.Errorf("failed to decode YAML: %v", err)
+		return fmt.Errorf("failed to read file: %v", err)
 	}
 
-	var options []huh.Option[string]
-	for _, app := range appsConfig.Apps {
-		options = append(options, huh.NewOption(app.Name, app.Description))
+	err = yaml.Unmarshal(data, out)
+	if err != nil {
+		return fmt.Errorf("failed to parse YAML: %v", err)
 	}
 
-	return options, nil
+	// Cache the parsed configuration
+	cacheLock.Lock()
+	configCache[filePath] = out
+	cacheLock.Unlock()
+
+	return nil
 }

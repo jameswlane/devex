@@ -2,51 +2,18 @@ package docker
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"time"
 
 	"github.com/charmbracelet/log"
-	"gopkg.in/yaml.v3"
 
-	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-type App struct {
-	Name           string        `yaml:"name"`
-	Description    string        `yaml:"description"`
-	Category       string        `yaml:"category"`
-	InstallMethod  string        `yaml:"install_method"`
-	InstallCommand string        `yaml:"install_command"`
-	DockerOptions  DockerOptions `yaml:"docker_options"`
-}
-
-type DockerOptions struct {
-	Ports         []string `yaml:"ports"`
-	ContainerName string   `yaml:"container_name"`
-	Environment   []string `yaml:"environment,omitempty"`
-	RestartPolicy string   `yaml:"restart_policy"`
-}
-
-// LoadApps loads the app configuration from a YAML file
-func LoadApps(filename string) ([]App, error) {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read apps YAML file: %v", err)
-	}
-
-	var apps []App
-	err = yaml.Unmarshal(data, &apps)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal apps YAML: %v", err)
-	}
-
-	return apps, nil
-}
-
 // Install installs a Docker app based on the app configuration
-func Install(app App, dryRun bool, db *datastore.DB) error {
+func Install(app types.AppConfig, dryRun bool, repo repository.Repository) error {
 	// Check if the container is already running using Docker ps
 	isInstalledOnSystem, err := check_install.IsAppInstalled(app.DockerOptions.ContainerName)
 	if err != nil {
@@ -96,10 +63,10 @@ func Install(app App, dryRun bool, db *datastore.DB) error {
 		return err
 	}
 
-	// Add the installed container to the database
-	err = datastore.AddInstalledApp(db, app.DockerOptions.ContainerName)
+	// Add the installed container to the repository
+	err = repo.AddApp(app.DockerOptions.ContainerName)
 	if err != nil {
-		return fmt.Errorf("failed to add Docker container %s to database: %v", app.DockerOptions.ContainerName, err)
+		return fmt.Errorf("failed to add Docker container %s to repository: %v", app.DockerOptions.ContainerName, err)
 	}
 
 	log.Info(fmt.Sprintf("Docker container %s installed successfully", app.DockerOptions.ContainerName))

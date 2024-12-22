@@ -7,13 +7,13 @@ import (
 
 	"github.com/charmbracelet/log"
 
-	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
 
 var execCommand = exec.Command
 
-func Install(filePath string, dryRun bool, db *datastore.DB) error {
+func Install(filePath string, dryRun bool, repo repository.Repository) error {
 	// Check if the app is already installed on the system (via dpkg-query)
 	isInstalledOnSystem, err := check_install.IsAppInstalled(filePath)
 	if err != nil {
@@ -49,10 +49,10 @@ func Install(filePath string, dryRun bool, db *datastore.DB) error {
 		return fmt.Errorf("failed to fix broken dependencies: %v - %s", err, string(output))
 	}
 
-	// Add to the database after successful installation
-	err = datastore.AddInstalledApp(db, filePath)
+	// Add to the repository after successful installation
+	err = repo.AddApp(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to add %s to database: %v", filePath, err)
+		return fmt.Errorf("failed to add %s to repository: %v", filePath, err)
 	}
 
 	return nil

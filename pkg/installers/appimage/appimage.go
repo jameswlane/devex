@@ -13,7 +13,7 @@ import (
 
 	"github.com/charmbracelet/log"
 
-	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/check_install"
 )
 
@@ -22,7 +22,7 @@ var (
 	extractTarballFunc = extractTarball
 )
 
-func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *datastore.DB) error {
+func Install(appName, downloadURL, installDir, binary string, dryRun bool, repo repository.Repository) error {
 	// Check if the app is already installed on the system
 	isInstalledOnSystem, err := check_install.IsAppInstalled(binary)
 	if err != nil {
@@ -69,10 +69,10 @@ func Install(appName, downloadURL, installDir, binary string, dryRun bool, db *d
 		return fmt.Errorf("failed to set executable permissions: %v", err)
 	}
 
-	// Add to the database
-	err = datastore.AddInstalledApp(db, appName)
+	// Add to the repository
+	err = repo.AddApp(appName)
 	if err != nil {
-		return fmt.Errorf("failed to add %s to database: %v", appName, err)
+		return fmt.Errorf("failed to add %s to repository: %v", appName, err)
 	}
 
 	return nil

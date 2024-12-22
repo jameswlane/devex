@@ -2,42 +2,29 @@ package curlpipe
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/log"
 
-	"github.com/jameswlane/devex/pkg/datastore"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
-// Install downloads and runs a script from the given URL using curl and pipes it to sh.
-func Install(url string, dryRun bool, db *datastore.DB) error {
-	// Step 1: Log the action
+func Install(url string, dryRun bool, repo repository.Repository) error {
 	log.Info("Running installer via curl pipe", "url", url)
 
-	// Step 2: Prepare the command
+	// Prepare the curl command
 	command := fmt.Sprintf("curl -fsSL %s | sh", url)
 
-	// Step 3: Handle dry-run scenario
-	if dryRun {
-		log.Info(fmt.Sprintf("[Dry Run] Would run command: %s", command))
-		return nil
+	// Execute command as the target user
+	if err := utils.ExecAsUser(command, dryRun); err != nil {
+		return fmt.Errorf("failed to execute curl pipe installer: %v", err)
 	}
 
-	// Step 4: Execute the command
-	cmd := exec.Command("bash", "-c", command)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to execute curl pipe installer: %v - %s", err, string(output))
-	}
-
-	// Step 5: Log success
-	log.Info("Installer script executed successfully", "url", url)
-
-	// Step 6: Add to database
+	// Add to repository
 	name := extractNameFromURL(url)
-	if err := datastore.AddInstalledApp(db, name); err != nil {
-		return fmt.Errorf("failed to add %s to database: %v", name, err)
+	if err := repo.AddApp(name); err != nil {
+		return fmt.Errorf("failed to add %s to repository: %v", name, err)
 	}
 
 	return nil
