@@ -140,6 +140,9 @@ apps:
     download_url: "https://mise.run"
     dependencies:
       - "curl"
+    post_install:
+      - update_shell_config: "eval \"$(/home/%USER%/.local/bin/mise activate bash)\""
+      - shell: "source ~/.bashrc"
 
   - name: Nala
     description: "A front-end for the apt package manager with better output"

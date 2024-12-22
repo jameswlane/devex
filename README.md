@@ -81,36 +81,176 @@ prettier --write "**/*.{yaml,md}"
 
 We use `Task` for task automation. Below is an overview of the `Taskfile.yml`:
 
-```yaml
-version: '3'
+### Default Task
 
-vars:
-   BIN: "{{.ROOT_DIR}}/bin"
+- **default**: Runs linting and testing.
+  ```bash
+  task default
+  ```
 
-tasks:
-   default:
-      cmds:
-         - task: lint
-         - task: test
+### Build Tasks
 
-   install:
-      desc: Installs DevEx
-      aliases: [i]
-      sources:
-         - './**/*.go'
-      cmds:
-         - go install -v ./cmd/devex
+- **build**: Builds the Go project.
+  ```bash
+  task build
+  ```
 
-   lint:
-      desc: Runs golangci-lint
-      cmds:
-         - golangci-lint run
+- **build:local**: Builds the Go project for local development.
+  ```bash
+  task build:local
+  ```
 
-   test:
-      desc: Runs test suite
-      cmds:
-         - go test ./...
-```
+### Installation Task
+
+- **install**: Installs DevEx.
+  ```bash
+  task install
+  ```
+
+### Setup Python Environment
+
+- **setup:python**: Sets up Python environment and installs requirements.
+  ```bash
+  task setup:python
+  ```
+
+### Manage Go Modules
+
+- **mod**: Downloads and tidies Go modules.
+  ```bash
+  task mod
+  ```
+
+### Clean Up Temporary Files
+
+- **clean**: Cleans temp files and folders.
+  ```bash
+  task clean
+  ```
+
+### Linting Tasks
+
+- **lint**: Runs golangci-lint.
+  ```bash
+  task lint
+  ```
+
+- **lint:fix**: Runs golangci-lint and fixes issues.
+  ```bash
+  task lint:fix
+  ```
+
+- **lint:staticcheck**: Runs staticcheck.
+  ```bash
+  task lint:staticcheck
+  ```
+
+### Vulnerability Checks
+
+- **vulncheck**: Runs vulnerability checks.
+  ```bash
+  task vulncheck
+  ```
+
+### Testing Tasks
+
+- **test**: Runs test suite.
+  ```bash
+  task test
+  ```
+
+- **test:all**: Runs test suite with additional tags.
+  ```bash
+  task test:all
+  ```
+
+- **test:testify**: Runs tests with testify.
+  ```bash
+  task test:testify
+  ```
+
+- **test:ginkgo**: Runs tests with Ginkgo.
+  ```bash
+  task test:ginkgo
+  ```
+
+### Mock Generation
+
+- **mockgen**: Generates mocks for interfaces.
+  ```bash
+  task mockgen
+  ```
+
+### Prettier Formatting
+
+- **prettier:check**: Checks if files are formatted with Prettier.
+  ```bash
+  task prettier:check
+  ```
+
+- **prettier:fix**: Formats files with Prettier.
+  ```bash
+  task prettier:fix
+  ```
+
+### Documentation Tasks
+
+- **docs:build**: Builds the MkDocs site.
+  ```bash
+  task docs:build
+  ```
+
+- **docs:serve**: Serves MkDocs documentation locally.
+  ```bash
+  task docs:serve
+  ```
+
+### Code Visualization
+
+- **callvis**: Generates a visualization of code.
+  ```bash
+  task callvis
+  ```
+
+### Static Analysis
+
+- **gocritic**: Runs Go Critic for advanced analysis.
+  ```bash
+  task gocritic
+  ```
+
+### CLI Tasks
+
+- **cli:generate**: Generates CLI commands.
+  ```bash
+  task cli:generate
+  ```
+
+### GoReleaser Tasks
+
+- **goreleaser:test**: Tests the release process without publishing.
+  ```bash
+  task goreleaser:test
+  ```
+
+- **goreleaser:install**: Installs GoReleaser.
+  ```bash
+  task goreleaser:install
+  ```
+
+### Release Management
+
+- **release:\***: Prepares the project for a new release.
+  ```bash
+  task release:<version>
+  ```
+
+### Package Listing
+
+- **packages**: Lists Go packages.
+  ```bash
+  task packages
+  ```
 
 To execute tasks, simply run:
 
