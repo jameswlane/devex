@@ -1,3 +1,9 @@
+## [0.1.6](https://github.com/jameswlane/devex/compare/0.1.5...0.1.6) (2024-12-23)
+
+### Bug Fixes
+
+* **datastore:** finished migration and datastore versioning ([bb1bfb9](https://github.com/jameswlane/devex/commit/bb1bfb9c659e403b4b7ec210fc7d65bf355bf06d))
+
 ## [0.1.5](https://github.com/jameswlane/devex/compare/0.1.4...0.1.5) (2024-12-22)
 
 ### Bug Fixes
