@@ -23,7 +23,7 @@ func TestApplySchemaUpdates(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if err := ApplySchemaUpdates(tt.args.repo); (err != nil) != tt.wantErr {
+			if err := ApplySchemaUpdates(tt.args.repo, "/home/username"); (err != nil) != tt.wantErr {
 				t.Errorf("ApplySchemaUpdates() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

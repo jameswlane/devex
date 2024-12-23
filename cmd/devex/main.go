@@ -30,39 +30,58 @@ var (
 )
 
 func main() {
+	log.Info("Starting DevEx CLI")
 	initializeConfig()
 
 	if err := rootCmd.Execute(); err != nil {
 		handleError("root command", err)
 	}
+	log.Info("DevEx CLI execution completed")
 }
 
 func initializeConfig() {
+	log.Info("Initializing configuration")
 	if homeDir == "" {
 		homeDir, _ = os.UserHomeDir()
+		log.Info("Home directory set", "homeDir", homeDir)
 	}
 	config.SetupConfig(homeDir)
+	log.Info("Configuration initialized")
 }
 
 func init() {
+	log.Info("Running init function")
 	homeDir = setupHomeDir()
 	initializeCLI()
+	log.Info("Init function completed")
 }
 
 func setupHomeDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		handleError("unable to retrieve user home directory", err)
+	log.Info("Setting up home directory")
+	sudoUser := os.Getenv("SUDO_USER")
+	var home string
+	var err error
+
+	if sudoUser != "" {
+		home = filepath.Join("/home", sudoUser)
+	} else {
+		home, err = os.UserHomeDir()
+		if err != nil {
+			handleError("unable to retrieve user home directory", err)
+		}
 	}
+	log.Info("Home directory retrieved", "home", home)
 	return home
 }
 
 func initializeCLI() {
+	log.Info("Initializing CLI")
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug logging")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Simulate commands without applying changes")
 	cobra.OnInitialize(func() {
 		if debugMode {
 			log.SetLevel(log.DebugLevel)
+			log.Info("Debug mode enabled")
 		}
 	})
 
@@ -72,30 +91,37 @@ func initializeCLI() {
 	applySchemaUpdates(repo)
 	registerCommands(repo)
 	defer repo.DB().Close()
+	log.Info("CLI initialization completed")
 }
 
 func initializeDatabase() repository.Repository {
-	dbPath := filepath.Join(homeDir, ".devex/installed_apps.db")
+	log.Info("Initializing database")
+	dbPath := filepath.Join(homeDir, ".devex/datastore.db")
 	db, err := datastore.InitDB(dbPath)
 	if err != nil {
 		handleError("database initialization", err)
 	}
+	log.Info("Database initialized", "dbPath", dbPath)
 
 	// Pass the correct type to NewRepository
 	return repository.NewRepository(db.GetDB())
 }
 
 func applySchemaUpdates(repo repository.Repository) {
+	log.Info("Applying schema updates")
 	// Use repository's database abstraction
 	schemaRepo := repository.NewSchemaRepository(repo.DB().DB)
-	if err := datastore.ApplySchemaUpdates(schemaRepo); err != nil {
+	if err := datastore.ApplySchemaUpdates(schemaRepo, homeDir); err != nil {
 		handleError("schema updates", err)
 	}
+	log.Info("Schema updates applied")
 }
 
 func registerCommands(repo repository.Repository) {
+	log.Info("Registering commands")
 	rootCmd.AddCommand(createInstallCmd(repo))
 	rootCmd.AddCommand(createVersionCmd())
+	log.Info("Commands registered")
 }
 
 func createVersionCmd() *cobra.Command {
