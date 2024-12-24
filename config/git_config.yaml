@@ -5,4 +5,5 @@ git_config:
     ci: "commit"
     st: "status"
   settings:
-    pull.rebase: "true"
+    pull:
+      rebase: true

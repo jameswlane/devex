@@ -2,26 +2,6 @@ package types
 
 import "fmt"
 
-func (a *AppConfig) Validate() error {
-	if a.Name == "" {
-		return fmt.Errorf("Name is required")
-	}
-	if a.InstallMethod == "" {
-		return fmt.Errorf("InstallMethod is required")
-	}
-	if a.InstallCommand == "" {
-		return fmt.Errorf("InstallCommand is required")
-	}
-	return nil
-}
-
-func (d *DockerOptions) Validate() error {
-	if d.ContainerName == "" {
-		return fmt.Errorf("ContainerName is required for DockerOptions")
-	}
-	return nil
-}
-
 type AppConfig struct {
 	Name             string           `mapstructure:"name" yaml:"name"`
 	Description      string           `mapstructure:"description" yaml:"description"`
@@ -76,19 +56,15 @@ type DockerOptions struct {
 }
 
 type AptSource struct {
-	Source   string `mapstructure:"source"`
-	ListFile string `mapstructure:"list_file"`
-	Repo     string `mapstructure:"repo"`
+	KeySource  string `mapstructure:"source" yaml:"source"`
+	KeyName    string `mapstructure:"destination" yaml:"destination"`
+	SourceRepo string `mapstructure:"repo" yaml:"repo"`
+	SourceName string `mapstructure:"list_file" yaml:"list_file"`
 }
 
 type ConfigFile struct {
 	Source      string `mapstructure:"source"`
 	Destination string `mapstructure:"destination"`
-}
-
-type GitConfig struct {
-	Aliases  map[string]string `mapstructure:"aliases"`
-	Settings map[string]string `mapstructure:"settings"`
 }
 
 type GnomeExtension struct {
@@ -137,4 +113,59 @@ type InstallCommand struct {
 type CopyCommand struct {
 	Source      string `mapstructure:"source"`
 	Destination string `mapstructure:"destination"`
+}
+
+type DockItem struct {
+	Name        string `mapstructure:"name"`
+	DesktopFile string `mapstructure:"desktop_file"`
+}
+
+type GitConfig struct {
+	Aliases  map[string]string `mapstructure:"aliases"`
+	Settings struct {
+		Pull Pull `mapstructure:"pull" yaml:"pull"`
+	} `mapstructure:"settings" yaml:"settings"`
+}
+
+type Pull struct {
+	Rebase      bool `mapstructure:"rebase" yaml:"rebase"`
+	FastForward bool `mapstructure:"fast_forward" yaml:"fast_forward"`
+}
+
+func (a *AppConfig) Validate() error {
+	if a.Name == "" {
+		return fmt.Errorf("Name is required")
+	}
+	if a.InstallMethod == "" {
+		return fmt.Errorf("InstallMethod is required")
+	}
+	if a.InstallMethod == "apt" && len(a.AptSources) > 0 {
+		for _, source := range a.AptSources {
+			if source.SourceRepo == "" || source.SourceName == "" {
+				return fmt.Errorf("APT source must have a list_file and repo defined")
+			}
+			if source.KeySource == "" || source.KeyName == "" {
+				return fmt.Errorf("APT source must include a GPG key URL")
+			}
+		}
+	}
+	switch a.InstallMethod {
+	case "curlpipe":
+		if a.DownloadURL == "" {
+			return fmt.Errorf("download URL is required for app %s with install method curlpipe", a.Name)
+		}
+	default:
+		if a.InstallCommand == "" {
+			return fmt.Errorf("install command is required for app %s", a.Name)
+		}
+	}
+
+	return nil
+}
+
+func (d *DockerOptions) Validate() error {
+	if d.ContainerName == "" {
+		return fmt.Errorf("ContainerName is required for DockerOptions")
+	}
+	return nil
 }

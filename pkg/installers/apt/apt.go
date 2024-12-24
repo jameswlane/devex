@@ -19,6 +19,8 @@ var (
 
 // RunAptUpdate runs `sudo apt update` if it hasn't already been run in the past 24 hours.
 func RunAptUpdate(forceUpdate bool, repo repository.Repository) error {
+	log.Info("Starting RunAptUpdate", "forceUpdate", forceUpdate)
+
 	// Step 1: Check in-memory cache for the last update time
 	aptCacheLock.RLock()
 	if !forceUpdate && !lastAptUpdateTime.IsZero() && time.Since(lastAptUpdateTime) < 24*time.Hour {
@@ -37,11 +39,15 @@ func RunAptUpdate(forceUpdate bool, repo repository.Repository) error {
 				log.Info("Skipping 'apt update' as it was recently run (repository)")
 				return nil
 			}
+		} else {
+			log.Warn("Failed to get last apt update time from repository", "error", err)
 		}
 	}
 
 	// Step 3: Execute `sudo apt update`
+	log.Info("Running 'sudo apt-get update'")
 	if err := utils.ExecAsUser("sudo apt-get update", false); err != nil {
+		log.Error("Failed to run 'apt update'", "error", err)
 		return fmt.Errorf("failed to run 'apt update': %v", err)
 	}
 
@@ -55,14 +61,18 @@ func RunAptUpdate(forceUpdate bool, repo repository.Repository) error {
 		log.Warn("Failed to store last apt update time in repository", "error", err)
 	}
 
+	log.Info("RunAptUpdate completed successfully")
 	return nil
 }
 
 // Install installs a package using apt
 func Install(packageName string, dryRun bool, repo repository.Repository) error {
+	log.Info("Starting Install", "packageName", packageName, "dryRun", dryRun)
+
 	// Step 1: Check if the app is already recorded in the repository
 	exists, err := repo.GetApp(packageName)
 	if err != nil {
+		log.Error("Failed to check app existence in repository", "packageName", packageName, "error", err)
 		return fmt.Errorf("failed to check app existence in repository: %v", err)
 	}
 
@@ -72,21 +82,26 @@ func Install(packageName string, dryRun bool, repo repository.Repository) error 
 	}
 
 	// Step 2: Check if the app is installed on the system
+	log.Info("Checking if app is installed on the system", "packageName", packageName)
 	isInstalledOnSystem, err := check_install.IsAppInstalled(packageName)
 	if err != nil {
+		log.Error("Failed to check if app is installed on system", "packageName", packageName, "error", err)
 		return fmt.Errorf("failed to check if app is installed on system: %v", err)
 	}
 
 	if isInstalledOnSystem {
 		log.Info(fmt.Sprintf("%s is already installed on the system, adding to repository", packageName))
 		if err := repo.AddApp(packageName); err != nil {
+			log.Error("Failed to add app to repository", "packageName", packageName, "error", err)
 			return fmt.Errorf("failed to add %s to repository: %v", packageName, err)
 		}
 		return nil
 	}
 
 	// Step 3: Run `apt update` if needed
+	log.Info("Running apt update if needed", "packageName", packageName)
 	if err := RunAptUpdate(false, repo); err != nil {
+		log.Error("Failed to run apt update", "packageName", packageName, "error", err)
 		return err
 	}
 
@@ -97,12 +112,16 @@ func Install(packageName string, dryRun bool, repo repository.Repository) error 
 		return nil
 	}
 
+	log.Info("Executing installation command", "command", command)
 	if err := utils.ExecAsUser(command, false); err != nil {
+		log.Error("Failed to install package", "packageName", packageName, "error", err)
 		return fmt.Errorf("failed to install %s: %v", packageName, err)
 	}
 
 	// Step 5: Add the app to the repository after successful installation
+	log.Info("Adding app to repository after successful installation", "packageName", packageName)
 	if err := repo.AddApp(packageName); err != nil {
+		log.Error("Failed to add app to repository", "packageName", packageName, "error", err)
 		return fmt.Errorf("failed to add %s to repository: %v", packageName, err)
 	}
 

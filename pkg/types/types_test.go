@@ -35,7 +35,49 @@ func TestAppConfigValidation(t *testing.T) {
 		Name:          "test-app",
 		InstallMethod: "docker",
 	}
-	assert.EqualError(t, missingCommand.Validate(), "InstallCommand is required")
+	assert.EqualError(t, missingCommand.Validate(), "install command is required for app test-app")
+
+	validAptApp := types.AppConfig{
+		Name:           "test-apt-app",
+		InstallMethod:  "apt",
+		InstallCommand: "apt-get install test-apt-app",
+		AptSources: []types.AptSource{
+			{
+				KeySource:  "http://example.com/key",
+				KeyName:    "example-key",
+				SourceRepo: "http://example.com/repo",
+				SourceName: "example.list",
+			},
+		},
+	}
+	assert.NoError(t, validAptApp.Validate())
+
+	invalidAptApp := types.AppConfig{
+		Name:          "test-apt-app",
+		InstallMethod: "apt",
+		AptSources: []types.AptSource{
+			{
+				KeySource:  "",
+				KeyName:    "",
+				SourceRepo: "",
+				SourceName: "",
+			},
+		},
+	}
+	assert.EqualError(t, invalidAptApp.Validate(), "APT source must have a list_file and repo defined")
+
+	validCurlpipeApp := types.AppConfig{
+		Name:          "test-curlpipe-app",
+		InstallMethod: "curlpipe",
+		DownloadURL:   "http://example.com/download",
+	}
+	assert.NoError(t, validCurlpipeApp.Validate())
+
+	invalidCurlpipeApp := types.AppConfig{
+		Name:          "test-curlpipe-app",
+		InstallMethod: "curlpipe",
+	}
+	assert.EqualError(t, invalidCurlpipeApp.Validate(), "download URL is required for app test-curlpipe-app with install method curlpipe")
 }
 
 func TestDockerOptionsValidation(t *testing.T) {
