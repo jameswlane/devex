@@ -23,6 +23,7 @@ func NewAppRepository(db *db.DB) AppRepository {
 	return &appRepository{
 		db:    db,
 		cache: make(map[string]bool),
+		mu:    &sync.RWMutex{},
 	}
 }
 
@@ -42,11 +43,15 @@ func (r *appRepository) AddApp(appName string) error {
 }
 
 func (r *appRepository) GetApp(appName string) (bool, error) {
+	if r.mu == nil {
+		return false, fmt.Errorf("appRepository is not properly initialized")
+	}
 	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	if exists, found := r.cache[appName]; found {
 		return exists, nil
 	}
-	r.mu.RUnlock()
 
 	var exists bool
 	query := `SELECT EXISTS(SELECT 1 FROM installed_apps WHERE app_name = ? LIMIT 1)`
@@ -55,11 +60,7 @@ func (r *appRepository) GetApp(appName string) (bool, error) {
 		return false, fmt.Errorf("failed to check app existence: %v", err)
 	}
 
-	// Cache the result
-	r.mu.Lock()
 	r.cache[appName] = exists
-	r.mu.Unlock()
-
 	return exists, nil
 }
 

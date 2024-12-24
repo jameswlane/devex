@@ -49,8 +49,7 @@ tasks:
         desc: Cleans temp files and folders
         aliases: [clear]
         cmds:
-            - rm -rf dist/
-            - rm -rf tmp/
+            - rm -rf bin/
 
     # Linting tasks
     lint:

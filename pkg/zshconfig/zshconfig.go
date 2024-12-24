@@ -5,9 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/fileutils"
 )
 
 // InstallZSH installs zsh and zplug
@@ -24,15 +21,15 @@ func InstallZSH() error {
 }
 
 func InstallZSHConfig() error {
-	zshrcPath, err := config.LoadCustomOrDefaultFile(".zshrc", "zsh")
-	if err != nil {
-		return fmt.Errorf("failed to load zsh config: %v", err)
-	}
+	//zshrcPath, err := config.LoadCustomOrDefaultFile(".zshrc", "zsh")
+	//if err != nil {
+	//	return fmt.Errorf("failed to load zsh config: %v", err)
+	//}
 
-	err = fileutils.CopyFile(zshrcPath, filepath.Join(os.Getenv("HOME"), ".zshrc"))
-	if err != nil {
-		return fmt.Errorf("failed to copy zsh config: %v", err)
-	}
+	//err = fileutils.CopyFile(zshrcPath, filepath.Join(os.Getenv("HOME"), ".zshrc"))
+	//if err != nil {
+	//	return fmt.Errorf("failed to copy zsh config: %v", err)
+	//}
 
 	fmt.Println(".zshrc installed successfully")
 	return nil
