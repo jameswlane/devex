@@ -1,3 +1,9 @@
+## [0.1.7](https://github.com/jameswlane/devex/compare/0.1.6...0.1.7) (2024-12-24)
+
+### Bug Fixes
+
+* **installer:** fixed the installer, added gpg and apt source ([6b3a432](https://github.com/jameswlane/devex/commit/6b3a4322f84b4f6cf3e1800347164b56a5cf1506))
+
 ## [0.1.6](https://github.com/jameswlane/devex/compare/0.1.5...0.1.6) (2024-12-23)
 
 ### Bug Fixes
