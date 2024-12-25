@@ -1,388 +1,411 @@
 apps:
-  - name: Build Tools
-    description: "Essential tools for building software"
-    category: "Development"
-    install_method: "apt"
-    install_command: "build-essential pkg-config autoconf bison"
-    uninstall_command: "build-essential pkg-config autoconf bison"
-    dependencies:
-      - "apt"
+    # ----------------------------
+    # install_method: appimage
+    # ----------------------------
+#    - name: JetBrains Toolbox
+#      description: "A tool to manage your JetBrains IDEs and other products"
+#      category: "Development Tools"
+#      install_method: "appimage"
+#      install_command: "jetbrains-toolbox"
+#      uninstall_command: ""
+#      dependencies:
+#          - "libfuse2"
+#      appimage_install:
+#          download_url: "https://download.jetbrains.com/toolbox/jetbrains-toolbox-2.3.2.31487.tar.gz"
+#          install_dir: "$HOME/Applications"
+#          binary: "jetbrains-toolbox"
 
-  - name: Clang
-    description: "C/C++ compiler"
-    category: "Development"
-    install_method: "apt"
-    install_command: "clang"
-    uninstall_command: "clang"
-    dependencies:
-      - "apt"
+    # ----------------------------
+    # install_method: apt
+    # ----------------------------
+#    - name: apache2-utils
+#      description: "A collection of utilities including tools to create HTTP authentication files"
+#      category: "Utilities"
+#      install_method: "apt"
+#      install_command: "apache2-utils"
+#      uninstall_command: "apache2-utils"
+#      dependencies:
+#          - "apt"
 
-  - name: curl
-    description: "A tool to transfer data from or to a server"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "curl"
+    - name: bat
+      description: "A cat(1) clone with wings"
+      github: "https://github.com/sharkdp/bat"
+      category: "Utilities"
+      default: true
+      install_method: "apt"
+      install_command: "bat"
+      uninstall_command: "bat"
 
-  - name: gpg
-    description: "A tool for secure communication and data storage"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "gpg"
+#    - name: btop
+#      description: "A resource monitor that shows usage and stats for processors, memory, disks, network, and processes"
+#      category: "System Monitoring"
+#      install_method: "apt"
+#      install_command: "btop"
+#      uninstall_command: "btop"
+#      dependencies:
+#          - "apt"
 
-  - name: wget
-    description: "A tool for retrieving files from the web"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "wget"
+#    - name: Build Tools
+#      description: "Essential tools for building software"
+#      category: "Development"
+#      install_method: "apt"
+#      install_command: "build-essential pkg-config autoconf bison"
+#      uninstall_command: "build-essential pkg-config autoconf bison"
+#      dependencies:
+#          - "apt"
 
-  - name: Ruby Development Libraries
-    description: "Libraries required for building Ruby software"
-    category: "Development"
-    install_method: "apt"
-    install_command: "libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev"
-    uninstall_command: "libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev"
-    dependencies:
-      - "apt"
+#    - name: Clang
+#      description: "C/C++ compiler"
+#      category: "Development"
+#      install_method: "apt"
+#      install_command: "clang"
+#      uninstall_command: "clang"
+#      dependencies:
+#          - "apt"
 
-  - name: Image Processing Tools
-    description: "Tools for processing images"
-    category: "Image Processing"
-    install_method: "apt"
-    install_command: "libvips imagemagick libmagickwand-dev mupdf mupdf-tools"
-    uninstall_command: "libvips imagemagick libmagickwand-dev mupdf mupdf-tools"
-    dependencies:
-      - "apt"
+    - name: curl
+      description: "A tool to transfer data from or to a server"
+      category: "dependency"
+      install_method: "apt"
+      install_command: "curl"
 
-  - name: pre-commit
-    description: "A framework for managing and maintaining multi-language pre-commit hooks"
-    category: "Development Tools"
-    install_method: "apt"
-    install_command: "pre-commit"
-    uninstall_command: "pre-commit"
-    dependencies:
-      - "apt"
+    - name: Docker
+      description: "A platform for developing, shipping, and running containerized applications"
+      github: "https://github.com/docker/cli"
+      url: "https://www.docker.com/"
+      category: "Container Management"
+      default: true
+      install_method: "apt"
+      install_command: "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+      uninstall_command: "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+      apt_sources:
+          - key_source: "https://download.docker.com/linux/debian/gpg"
+            key_name: "docker"
+            source_repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
+            source_name: "docker"
+      dependencies:
+          - "ca-certificates"
+          - "curl"
+          - "gpg"
+          - "wget"
 
-  - name: VLC
-    description: "A free and open-source multimedia player"
-    category: "Multimedia"
-    install_method: "apt"
-    install_command: "vlc"
-    uninstall_command: "vlc"
-    dependencies:
-      - "apt"
+    - name: Eza
+      description: "A modern alternative to ls"
+      github: "https://github.com/eza-community/eza"
+      url: "https://eza.rocks/"
+      category: "System Utilities"
+      default: true
+      install_method: "apt"
+      install_command: "eza"
+      uninstall_command: "eza"
+      apt_sources:
+          - key_source: "https://raw.githubusercontent.com/eza-community/eza/main/deb.asc"
+            key_name: "gierens"
+            source_repo: "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main"
+            source_name: "gierens"
+      dependencies:
+          - "curl"
+          - "gpg"
+          - "wget"
 
-  - name: Flameshot
-    description: "A powerful, simple, and open-source screenshot tool"
-    category: "System Utilities"
-    install_method: "apt"
-    install_command: "flameshot"
-    uninstall_command: "flameshot"
-    dependencies:
-      - "apt"
+    - name: Fastfetch
+      description: "A maintained, feature-rich and performance oriented, neofetch like system information tool."
+      github: "https://github.com/fastfetch-cli/fastfetch"
+      category: "System Utilities"
+      default: true
+      install_method: "apt"
+      install_command: "fastfetch"
 
-  - name: Fastfetch
-    description: "A fast and lightweight system information tool"
-    category: "System Utilities"
-    install_method: "deb"
-    install_command: "fastfetch-linux-amd64.deb"
-    download_url: "https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb"
-    cleanup_files:
-      - "/tmp/fastfetch-linux-amd64.deb"
+#    - name: fd-find
+#      description: "A simple, fast, and user-friendly alternative to find"
+#      category: "Utilities"
+#      install_method: "apt"
+#      install_command: "fd-find"
+#      uninstall_command: "fd-find"
+#      dependencies:
+#          - "apt"
 
-  - name: GitHub CLI
-    description: "A command-line tool for GitHub"
-    category: "Development Tools"
-    install_method: "apt"
-    install_command: "gh"
-    uninstall_command: "gh"
-    dependencies:
-      - "curl"
-      - "apt"
-    apt_sources:
-      - source: "/usr/share/keyrings/githubcli-archive-keyring.gpg"
-        list_file: "/etc/apt/sources.list.d/github-cli.list"
-        repo: "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
-    gpg_url: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+#    - name: Flameshot
+#      description: "A powerful, simple, and open-source screenshot tool"
+#      category: "System Utilities"
+#      install_method: "apt"
+#      install_command: "flameshot"
+#      uninstall_command: "flameshot"
+#      dependencies:
+#          - "apt"
 
-  - name: Gnome Tweaks
-    description: "A tool to customize advanced GNOME settings"
-    category: "System Utilities"
-    install_method: "apt"
-    install_command: "gnome-tweaks"
-    uninstall_command: "gnome-tweaks"
-    dependencies:
-      - "apt"
+#    - name: Flatpak
+#      description: "A system for building and distributing desktop applications on Linux"
+#      category: "Package Management"
+#      install_method: "apt"
+#      install_command: "flatpak gnome-software-plugin-flatpak"
+#      uninstall_command: "flatpak gnome-software-plugin-flatpak"
+#      dependencies:
+#          - "apt"
+#      post_install:
+#          - command: "sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
 
-  - name: Lazy Docker
-    description: "A simple terminal UI for Docker and Docker Compose"
-    category: "System Utilities"
-    install_method: "manual"
-    install_command: "lazydocker"
-    download_url: "https://github.com/jesseduffield/lazydocker/releases/latest/download/lazydocker_${LAZYDOCKER_VERSION}_Linux_x86_64.tar.gz"
-    install_dir: "/usr/local/bin"
-    cleanup_files:
-      - "/tmp/lazydocker.tar.gz"
-      - "/tmp/lazydocker"
+    - name: fzf
+      description: "A command-line fuzzy finder"
+      github: "https://github.com/junegunn/fzf"
+      url: "https://junegunn.github.io/fzf/"
+      category: "Utilities"
+      default: true
+      install_method: "apt"
+      install_command: "fzf"
+      uninstall_command: "fzf"
 
-  - name: Lazy Git
-    description: "A simple terminal UI for Git commands"
-    category: "Development Tools"
-    install_method: "manual"
-    install_command: "lazygit"
-    download_url: "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
-    install_dir: "/usr/local/bin"
-    cleanup_files:
-      - "/tmp/lazygit.tar.gz"
-      - "/tmp/lazygit"
+    - name: GitHub CLI
+      description: "GitHub’s official command line tool "
+      github: "https://github.com/cli/cli"
+      url: "https://cli.github.com/"
+      category: "Development Tools"
+      install_method: "apt"
+      install_command: "gh"
+      uninstall_command: "gh"
+      apt_sources:
+          -   key_source: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+              key_name: "githubcli-archive-keyring"
+              source_repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+              source_name: "github-cli"
+      dependencies:
+          - "curl"
+          - "gpg"
+          - "wget"
 
-  - name: LocalSend
-    description: "A tool for sending files over local networks"
-    category: "Networking"
-    install_method: "deb"
-    install_command: "localsend.deb"
-    download_url: "https://github.com/localsend/localsend/releases/latest/download/LocalSend-${LOCALSEND_VERSION}-linux-x86-64.deb"
-    cleanup_files:
-      - "/tmp/localsend.deb"
+#    - name: Gnome Tweaks
+#      description: "A tool to customize advanced GNOME settings"
+#      category: "System Utilities"
+#      install_method: "apt"
+#      install_command: "gnome-tweaks"
+#      uninstall_command: "gnome-tweaks"
+#      dependencies:
+#          - "apt"
 
-  - name: Mise
-    description: "A tool for managing multiple versions of programming languages"
-    category: "Language Management"
-    default: true
-    install_method: "apt"
-    apt_sources:
-        - key_source: "https://mise.jdx.dev/gpg-key.pub"
-          key_name: "mise-archive-keyring"
-          source_repo: "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main"
-          source_name: "mise"
-    dependencies:
-        - "gpg"
-        - "wget"
-        - "curl"
+    - name: gpg
+      description: "A tool for secure communication and data storage"
+      category: "Dependency"
+      install_method: "apt"
+      install_command: "gpg"
 
-  - name: Nala
-    description: "A front-end for the apt package manager with better output"
-    category: "Package Management"
-    install_method: "apt"
-    install_command: "nala"
-    uninstall_command: "nala"
-    dependencies:
-      - "apt"
+#    - name: Image Processing Tools
+#      description: "Tools for processing images"
+#      category: "Image Processing"
+#      install_method: "apt"
+#      install_command: "libvips imagemagick libmagickwand-dev mupdf mupdf-tools"
+#      uninstall_command: "libvips imagemagick libmagickwand-dev mupdf mupdf-tools"
+#      dependencies:
+#          - "apt"
 
-  - name: Neovim
-    description: "A highly extensible and customizable text editor"
-    category: "Development Tools"
-    install_method: "manual"
-    install_command: "nvim"
-    download_url: "https://github.com/neovim/neovim/releases/latest/download/nvim-linux64.tar.gz"
-    install_dir: "/usr/local/bin"
-    cleanup_files:
-      - "/tmp/nvim-linux64"
-      - "/tmp/nvim.tar.gz"
-    post_install:
-      - command: "[ ! -d \"$HOME/.config/nvim\" ] && git clone https://github.com/LazyVim/starter ~/.config/nvim"
-      - command: "sed -i 's/checker = { enabled = true }/checker = { enabled = true, notify = false }/g' ~/.config/nvim/lua/config/lazy.lua"
-      - command: "mkdir -p ~/.config/nvim/plugin/after"
-      - command: "cp ~/.local/share/devex/assets/defaults//neovim/transparency.lua ~/.config/nvim/plugin/after/"
-      - command: "cp ~/.local/share/devex/themes/neovim/tokyo-night.lua ~/.config/nvim/lua/plugins/theme.lua"
-      - command: "cp ~/.local/share/devex/assets/defaults/neovim/lazyvim.json ~/.config/nvim/lazyvim.json"
+    - name: Mise
+      description: "A tool for managing multiple versions of programming languages"
+      category: "Language Management"
+      default: true
+      install_method: "apt"
+      apt_sources:
+          - key_source: "https://mise.jdx.dev/gpg-key.pub"
+            key_name: "mise-archive-keyring"
+            source_repo: "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main"
+            source_name: "mise"
+      dependencies:
+          - "curl"
+          - "gpg"
+          - "wget"
 
-  - name: Typora
-    description: "A minimal and configurable markdown editor"
-    category: "Text Editors"
-    install_method: "apt"
-    install_command: "typora"
-    uninstall_command: "typora"
-    dependencies:
-      - "wget"
-      - "apt"
-    apt_sources:
-      - source: "/etc/apt/trusted.gpg.d/typora.asc"
-        repo: "deb https://typora.io/linux ./"
-    gpg_url: "https://typora.io/linux/public-key.asc"
-    post_install:
-      - command: "mkdir -p ~/.config/Typora/themes"
-      - command: "cp ~/.local/share/devex/themes/typora/ia_typora.css ~/.config/Typora/themes/"
-      - command: "cp ~/.local/share/devex/themes/typora/ia_typora_night.css ~/.config/Typora/themes/"
+#    - name: Nala
+#      description: "A front-end for the apt package manager with better output"
+#      category: "Package Management"
+#      install_method: "apt"
+#      install_command: "nala"
+#      uninstall_command: "nala"
+#      dependencies:
+#          - "apt"
 
-  - name: Docker
-    description: "A platform for developing, shipping, and running containerized applications"
-    category: "Container Management"
-    install_method: "apt"
-    install_command: "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras"
-    uninstall_command: "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras"
-    dependencies:
-      - "wget"
-      - "apt"
-    apt_sources:
-      - source: "/etc/apt/keyrings/docker.asc"
-        repo: "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo \"$VERSION_CODENAME\") stable"
-    gpg_url: "https://download.docker.com/linux/debian/gpg"
-    post_install:
-      - command: "sudo usermod -aG docker ${USER}"
-      - command: "echo '{\"log-driver\":\"local\",\"log-opts\":{\"max-size\":\"10m\",\"max-file\":\"5\"}}' | sudo tee /etc/docker/daemon.json > /dev/null"
+    - name: Neovim
+      description: "Vim-fork focused on extensibility and usability"
+      github: "https://github.com/neovim/neovim"
+      url: "https://neovim.io/"
+      category: "Development Tools"
+      default: true
+      install_method: "apt"
+      install_command: "neovim"
+      post_install:
+          # TODO: Verify these post-install commands work
+          - command: "git clone https://github.com/LazyVim/starter ~/.config/nvim"
+          - command: "rm -rf ~/.config/nvim/.git"
+          - command: "mkdir -p ~/.config/nvim/plugin/after"
+          - command: "cp ~/.local/share/devex/assets/defaults//neovim/transparency.lua ~/.config/nvim/plugin/after/"
+          - command: "cp ~/.local/share/devex/themes/neovim/tokyo-night.lua ~/.config/nvim/lua/plugins/theme.lua"
+          - command: "cp ~/.local/share/devex/assets/defaults/neovim/lazyvim.json ~/.config/nvim/lazyvim.json"
 
-  - name: Eza
-    description: "A modern replacement for the ls command"
-    category: "System Utilities"
-    install_method: "apt"
-    install_command: "eza"
-    uninstall_command: "eza"
-    dependencies:
-      - "gpg"
-      - "wget"
-      - "apt"
-    apt_sources:
-      - source: "/etc/apt/keyrings/gierens.gpg"
-        repo: "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main"
-    gpg_url: "https://raw.githubusercontent.com/eza-community/eza/main/deb.asc"
-    post_install:
-      - command: "sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list"
+#    - name: Podman
+#      description: "A daemonless container engine for developing, managing, and running OCI Containers"
+#      category: "Container Management"
+#      install_method: "apt"
+#      install_command: "podman"
+#      uninstall_command: "podman"
+#      dependencies:
+#          - "apt"
 
-  - name: Firefox Developer Edition
-    description: "A version of Firefox tailored for developers"
-    category: "Web Browsers"
-    install_method: "manual"
-    install_command: "firefox-dev"
-    download_url: "https://download.mozilla.org/?product=firefox-devedition-latest-ssl&os=linux64&lang=en-US"
-    install_dir: "~/.local/opt"
-    symlink: "~/.local/bin/firefox-dev"
-    post_install:
-      - command: "ln -s ~/.local/opt/firefox/firefox ~/.local/bin/firefox-dev"
-      - command: "PATH=${PATH}:${HOME}/.local/bin"
+#    - name: pre-commit
+#      description: "A framework for managing and maintaining multi-language pre-commit hooks"
+#      category: "Development Tools"
+#      install_method: "apt"
+#      install_command: "pre-commit"
+#      uninstall_command: "pre-commit"
+#      dependencies:
+#          - "apt"
 
-  - name: Flatpak
-    description: "A system for building and distributing desktop applications on Linux"
-    category: "Package Management"
-    install_method: "apt"
-    install_command: "flatpak gnome-software-plugin-flatpak"
-    uninstall_command: "flatpak gnome-software-plugin-flatpak"
-    dependencies:
-      - "apt"
-    post_install:
-      - command: "sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo"
+    - name: ripgrep
+      description: "ripgrep recursively searches directories for a regex pattern while respecting your gitignore"
+      github: "https://github.com/BurntSushi/ripgrep"
+      category: "Utilities"
+      default: true
+      install_method: "apt"
+      install_command: "ripgrep"
+      uninstall_command: "ripgrep"
 
-  - name: fzf
-    description: "A command-line fuzzy finder"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "fzf"
-    uninstall_command: "fzf"
-    dependencies:
-      - "apt"
+#    - name: Ruby Development Libraries
+#      description: "Libraries required for building Ruby software"
+#      category: "Development"
+#      install_method: "apt"
+#      install_command: "libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev"
+#      uninstall_command: "libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev"
+#      dependencies:
+#          - "apt"
 
-  - name: ripgrep
-    description: "A line-oriented search tool that recursively searches your current directory"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "ripgrep"
-    uninstall_command: "ripgrep"
-    dependencies:
-      - "apt"
+#    - name: Typora
+#      description: "A minimal and configurable markdown editor"
+#      category: "Text Editors"
+#      install_method: "apt"
+#      install_command: "typora"
+#      uninstall_command: "typora"
+#      dependencies:
+#          - "wget"
+#          - "apt"
+#      apt_sources:
+#          - source: "/etc/apt/trusted.gpg.d/typora.asc"
+#            repo: "deb https://typora.io/linux ./"
+#      gpg_url: "https://typora.io/linux/public-key.asc"
+#      post_install:
+#          - command: "mkdir -p ~/.config/Typora/themes"
+#          - command: "cp ~/.local/share/devex/themes/typora/ia_typora.css ~/.config/Typora/themes/"
+#          - command: "cp ~/.local/share/devex/themes/typora/ia_typora_night.css ~/.config/Typora/themes/"
 
-  - name: bat
-    description: "A cat clone with syntax highlighting and Git integration"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "bat"
-    uninstall_command: "bat"
-    dependencies:
-      - "apt"
+#    - name: Ulauncher
+#      description: "A fast application launcher for Linux"
+#      category: "Utility"
+#      install_method: "apt"
+#      install_command: "ulauncher"
+#      uninstall_command: "ulauncher"
+#      config_files:
+#          - source: "~/.local/share/devex/configs/ulauncher.desktop"
+#            destination: "~/.config/autostart/ulauncher.desktop"
+#          - source: "~/.local/share/devex/configs/ulauncher.json"
+#            destination: "~/.config/ulauncher/settings.json"
+#      gpg_url: "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176"
+#      apt_sources:
+#          - source: "/usr/share/keyrings/ulauncher-archive-keyring.gpg"
+#            list_file: "/etc/apt/sources.list.d/ulauncher-jammy.list"
+#            repo: "deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main"
+#      dependencies:
+#          - "gnupg"
+#          - "apt"
+#      post_install:
+#          - command: "gtk-launch ulauncher.desktop"
+#          - sleep: 2  # Ensure time for Ulauncher to set defaults
 
-  - name: zoxide
-    description: "A smarter cd command for terminal navigation"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "zoxide"
-    uninstall_command: "zoxide"
-    dependencies:
-      - "apt"
+#    - name: VLC
+#      description: "A free and open-source multimedia player"
+#      category: "Multimedia"
+#      install_method: "apt"
+#      install_command: "vlc"
+#      uninstall_command: "vlc"
+#      dependencies:
+#          - "apt"
 
-  - name: plocate
-    description: "A faster and smaller locate command replacement"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "plocate"
-    uninstall_command: "plocate"
-    dependencies:
-      - "apt"
+    - name: wget
+      description: "A tool for retrieving files from the web"
+      category: "dependency"
+      install_method: "apt"
+      install_command: "wget"
 
-  - name: btop
-    description: "A resource monitor that shows usage and stats for processors, memory, disks, network, and processes"
-    category: "System Monitoring"
-    install_method: "apt"
-    install_command: "btop"
-    uninstall_command: "btop"
-    dependencies:
-      - "apt"
+    # ----------------------------
+    # install_method: deb
+    # ----------------------------
+#    - name: LocalSend
+#      description: "A tool for sending files over local networks"
+#      category: "Networking"
+#      install_method: "deb"
+#      install_command: "localsend.deb"
+#      download_url: "https://github.com/localsend/localsend/releases/latest/download/LocalSend-${LOCALSEND_VERSION}-linux-x86-64.deb"
+#      cleanup_files:
+#          - "/tmp/localsend.deb"
 
-  - name: apache2-utils
-    description: "A collection of utilities including tools to create HTTP authentication files"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "apache2-utils"
-    uninstall_command: "apache2-utils"
-    dependencies:
-      - "apt"
+    # ----------------------------
+    # install_method: manual
+    # ----------------------------
+#    - name: Firefox Developer Edition
+#      description: "A version of Firefox tailored for developers"
+#      category: "Web Browsers"
+#      install_method: "manual"
+#      install_command: "firefox-dev"
+#      download_url: "https://download.mozilla.org/?product=firefox-devedition-latest-ssl&os=linux64&lang=en-US"
+#      install_dir: "~/.local/opt"
+#      symlink: "~/.local/bin/firefox-dev"
+#      post_install:
+#          - command: "ln -s ~/.local/opt/firefox/firefox ~/.local/bin/firefox-dev"
+#          - command: "PATH=${PATH}:${HOME}/.local/bin"
 
-  - name: fd-find
-    description: "A simple, fast, and user-friendly alternative to find"
-    category: "Utilities"
-    install_method: "apt"
-    install_command: "fd-find"
-    uninstall_command: "fd-find"
-    dependencies:
-      - "apt"
+# TODO: Convert to Curl Pipe or another method
+#    - name: Lazy Docker
+#      description: "The lazier way to manage everything docker"
+#      github: "https://github.com/jesseduffield/lazydocker"
+#      category: "System Utilities"
+#      default: true
+#      install_method: "manual"
+#      install_command: "lazydocker"
+#      download_url: "https://github.com/jesseduffield/lazydocker/releases/latest/download/lazydocker_${LAZYDOCKER_VERSION}_Linux_x86_64.tar.gz"
+#      install_dir: "/usr/local/bin"
+#      cleanup_files:
+#          - "/tmp/lazydocker.tar.gz"
+#          - "/tmp/lazydocker"
 
-  - name: Rails
-    description: "Rails web application framework"
-    category: "Web Frameworks"
-    install_method: "mise"
-    install_command: "rails"
-    uninstall_command: "rails"
-    dependencies:
-      - "ruby"
+#    TODO: Convert to Curl Pipe or another method
+#    - name: Lazy Git
+#      description: "Simple terminal UI for git commands"
+#      github: "https://github.com/jesseduffield/lazygit"
+#      category: "Development Tools"
+#      default: true
+#      install_method: "manual"
+#      install_command: "lazygit"
+#      download_url: "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
+#      install_dir: "/usr/local/bin"
+#      cleanup_files:
+#          - "/tmp/lazygit.tar.gz"
+#          - "/tmp/lazygit"
 
-  - name: Podman
-    description: "A daemonless container engine for developing, managing, and running OCI Containers"
-    category: "Container Management"
-    install_method: "apt"
-    install_command: "podman"
-    uninstall_command: "podman"
-    dependencies:
-      - "apt"
+    # ----------------------------
+    # install_method: mise
+    # ----------------------------
+#    - name: Rails
+#      description: "Rails web application framework"
+#      category: "Web Frameworks"
+#      install_method: "mise"
+#      install_command: "rails"
+#      uninstall_command: "rails"
+#      dependencies:
+#          - "ruby"
 
-  - name: JetBrains Toolbox
-    description: "A tool to manage your JetBrains IDEs and other products"
-    category: "Development Tools"
-    install_method: "appimage"
-    install_command: "jetbrains-toolbox"
-    uninstall_command: ""  # Manual uninstall for AppImages
-    dependencies:
-      - "libfuse2"
-    appimage_install:
-      download_url: "https://download.jetbrains.com/toolbox/jetbrains-toolbox-2.3.2.31487.tar.gz"
-      install_dir: "$HOME/Applications"
-      binary: "jetbrains-toolbox"
-
-  - name: Ulauncher
-    description: "A fast application launcher for Linux"
-    category: "Utility"
-    install_method: "apt"
-    install_command: "ulauncher"
-    uninstall_command: "ulauncher"
-    config_files:
-      - source: "~/.local/share/devex/configs/ulauncher.desktop"
-        destination: "~/.config/autostart/ulauncher.desktop"
-      - source: "~/.local/share/devex/configs/ulauncher.json"
-        destination: "~/.config/ulauncher/settings.json"
-    gpg_url: "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176"
-    apt_sources:
-      - source: "/usr/share/keyrings/ulauncher-archive-keyring.gpg"
-        list_file: "/etc/apt/sources.list.d/ulauncher-jammy.list"
-        repo: "deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main"
-    dependencies:
-      - "gnupg"
-      - "apt"
-    post_install:
-      - command: "gtk-launch ulauncher.desktop"
-      - sleep: 2  # Ensure time for Ulauncher to set defaults
+    # ----------------------------
+    # install_method: pip
+    # ----------------------------
+    # TODO: Test pip install method
+#    -   name: tldr-pages
+#        description: "Collaborative cheatsheets for console commands"
+#        github: "https://github.com/tldr-pages/tldr"
+#        url: "https://tldr.sh/"
+#        category: "Utilities"
+#        default: true
+#        install_method: "pip"
+#        install_command: "tldr"

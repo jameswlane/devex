@@ -5,6 +5,8 @@ import "fmt"
 type AppConfig struct {
 	Name             string           `mapstructure:"name" yaml:"name"`
 	Description      string           `mapstructure:"description" yaml:"description"`
+	GitHub           string           `mapstructure:"github" yaml:"github"`
+	Url              string           `mapstructure:"url" yaml:"url"`
 	Category         string           `mapstructure:"category" yaml:"category"`
 	InstallMethod    string           `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand   string           `mapstructure:"install_command" yaml:"install_command"`
