@@ -1,3 +1,9 @@
+## [0.1.8](https://github.com/jameswlane/devex/compare/0.1.7...0.1.8) (2024-12-25)
+
+### Bug Fixes
+
+* **defaults:** updated default apps, added more tested apps ([8b293e1](https://github.com/jameswlane/devex/commit/8b293e139d7bdff35647a755680d2504218cd0b3))
+
 ## [0.1.7](https://github.com/jameswlane/devex/compare/0.1.6...0.1.7) (2024-12-24)
 
 ### Bug Fixes
