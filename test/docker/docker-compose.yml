@@ -1,0 +1,18 @@
+services:
+    debian-test:
+        build:
+            context: ../..
+            dockerfile: test/docker/Dockerfile.debian
+        container_name: devex_debian_test
+        environment:
+            - CI=true
+        tty: true
+
+#    ubuntu-test:
+#        build:
+#            context: ../..
+#            dockerfile: test/docker/Dockerfile.ubuntu
+#        container_name: devex_ubuntu_test
+#        environment:
+#            - CI=true
+#        tty: true
