@@ -7,46 +7,51 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/utils"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
 )
 
-func Install(url string, dryRun bool, repo repository.Repository) error {
-	log.Info("Starting Install", "url", url, "dryRun", dryRun)
+type CurlPipeInstaller struct{}
 
-	// Prepare the curl command
-	command := fmt.Sprintf("curl -fsSL %s | sh", url)
-	log.Info("Prepared curl command", "command", command)
+func New() *CurlPipeInstaller {
+	return &CurlPipeInstaller{}
+}
 
-	// Execute command as the target user
-	log.Info("Executing curl command")
-	if err := utils.ExecAsUser(command, dryRun); err != nil {
-		log.Error("Failed to execute curl pipe installer", "command", command, "error", err)
-		return fmt.Errorf("failed to execute curl pipe installer: %v", err)
+func (c *CurlPipeInstaller) Install(command string, repo repository.Repository) error {
+	log.Info("CurlPipe Installer: Starting installation", "command", command)
+
+	// Run curl | sh command
+	err := utilities.RunCommand(command)
+	if err != nil {
+		log.Error("CurlPipe Installer: Failed to execute curl command", "command", command, "error", err)
+		return fmt.Errorf("failed to execute curl command: %v", err)
 	}
-	log.Info("Curl command executed successfully")
+
+	log.Info("CurlPipe Installer: Command executed successfully", "command", command)
+
+	// Extract app name from the command (basic heuristic)
+	appName := extractNameFromCurlCommand(command)
+	if appName == "" {
+		log.Warn("CurlPipe Installer: Could not determine app name from command", "command", command)
+		appName = "unknown"
+	}
 
 	// Add to repository
-	name := extractNameFromURL(url)
-	log.Info("Extracted app name from URL", "name", name)
-	if err := repo.AddApp(name); err != nil {
-		log.Error("Failed to add app to repository", "name", name, "error", err)
-		return fmt.Errorf("failed to add %s to repository: %v", name, err)
+	if err := repo.AddApp(appName); err != nil {
+		log.Error("CurlPipe Installer: Failed to add app to repository", "appName", appName, "error", err)
+		return fmt.Errorf("failed to add app to repository: %v", err)
 	}
-	log.Info("App added to repository successfully", "name", name)
 
-	log.Info("Install completed successfully", "url", url)
+	log.Info("CurlPipe Installer: App added to repository", "appName", appName)
 	return nil
 }
 
-// extractNameFromURL generates a simple name for the app based on the URL
-func extractNameFromURL(url string) string {
-	log.Info("Extracting name from URL", "url", url)
-	parts := strings.Split(strings.TrimSpace(url), "/")
-	if len(parts) > 0 {
-		name := strings.Replace(parts[len(parts)-1], ".run", "", 1)
-		log.Info("Extracted name from URL", "name", name)
-		return name
+func extractNameFromCurlCommand(command string) string {
+	parts := strings.Fields(command)
+	for _, part := range parts {
+		if strings.HasPrefix(part, "http") && strings.Contains(part, "/") {
+			segments := strings.Split(part, "/")
+			return strings.TrimSuffix(segments[len(segments)-1], ".sh")
+		}
 	}
-	log.Warn("Failed to extract name from URL, returning default name", "url", url)
-	return "unknown-app"
+	return ""
 }

@@ -9,86 +9,102 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
 
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-var (
-	downloadFileFunc   = downloadFile
-	extractTarballFunc = extractTarball
-)
+type AppImageInstaller struct{}
 
-func Install(appName, downloadURL, installDir, binary string, dryRun bool, repo repository.Repository) error {
-	log.Info("Starting Install", "appName", appName, "downloadURL", downloadURL, "installDir", installDir, "binary", binary, "dryRun", dryRun)
+func New() *AppImageInstaller {
+	return &AppImageInstaller{}
+}
 
-	// Check if the app is already installed on the system
-	isInstalledOnSystem, err := check_install.IsAppInstalled(binary)
-	if err != nil {
-		log.Error("Failed to check if app is installed on system", "binary", binary, "error", err)
-		return fmt.Errorf("failed to check if app is installed on system: %v", err)
+func (a *AppImageInstaller) Install(command string, repo repository.Repository) error {
+	log.Info("AppImage Installer: Starting installation", "downloadURL", command)
+
+	// Parse command to extract download URL and binary name
+	downloadURL, binaryName := parseAppImageCommand(command)
+	if downloadURL == "" || binaryName == "" {
+		log.Error("AppImage Installer: Invalid command format", "command", command)
+		return fmt.Errorf("invalid command format for AppImage installer")
 	}
 
-	if isInstalledOnSystem {
-		log.Info(fmt.Sprintf("%s is already installed on the system, skipping installation", appName))
+	// Wrap the command into a types.AppConfig object for the utilities function
+	appConfig := types.AppConfig{
+		Name:           command,
+		InstallMethod:  "appimage",
+		InstallCommand: command,
+	}
+
+	// Check if the AppImage binary is already installed
+	isInstalled, err := utilities.IsAppInstalled(appConfig)
+	if err != nil {
+		log.Error("AppImage Installer: Failed to check if app is installed", "binaryName", binaryName, "error", err)
+		return fmt.Errorf("failed to check if AppImage binary is installed: %v", err)
+	}
+
+	if isInstalled {
+		log.Info("AppImage Installer: App already installed, skipping", "binaryName", binaryName)
 		return nil
 	}
 
-	// Handle dry-run case
-	if dryRun {
-		log.Info(fmt.Sprintf("[Dry Run] Would download file from URL: %s", downloadURL))
-		log.Info(fmt.Sprintf("[Dry Run] Would extract tarball to: %s", "/tmp"))
-		log.Info(fmt.Sprintf("[Dry Run] Would move binary to: %s", filepath.Join(installDir, binary)))
-		log.Info(fmt.Sprintf("[Dry Run] Would set executable permissions for: %s", filepath.Join(installDir, binary)))
-		log.Info("Dry run: Simulating installation delay (5 seconds)")
-		time.Sleep(5 * time.Second)
-		log.Info("Dry run: Completed simulation delay")
-		return nil
+	// Download and install AppImage
+	err = installAppImage(downloadURL, binaryName)
+	if err != nil {
+		log.Error("AppImage Installer: Failed to install AppImage", "downloadURL", downloadURL, "error", err)
+		return fmt.Errorf("failed to install AppImage: %v", err)
 	}
 
-	// Download and install
-	tarballPath := "/tmp/appimage.tar.gz"
-	log.Info("Downloading file", "url", downloadURL, "dest", tarballPath)
-	err = downloadFileFunc(downloadURL, tarballPath)
-	if err != nil {
-		log.Error("Failed to download AppImage", "url", downloadURL, "dest", tarballPath, "error", err)
+	log.Info("AppImage Installer: Installation successful", "binaryName", binaryName)
+
+	// Add to repository
+	if err := repo.AddApp(binaryName); err != nil {
+		log.Error("AppImage Installer: Failed to add app to repository", "binaryName", binaryName, "error", err)
+		return fmt.Errorf("failed to add AppImage to repository: %v", err)
+	}
+
+	log.Info("AppImage Installer: App added to repository", "binaryName", binaryName)
+	return nil
+}
+
+func parseAppImageCommand(command string) (string, string) {
+	parts := strings.Fields(command)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+func installAppImage(downloadURL, binaryName string) error {
+	tarballPath := fmt.Sprintf("/tmp/%s.tar.gz", binaryName)
+	binaryPath := fmt.Sprintf("/usr/local/bin/%s", binaryName)
+
+	log.Info("AppImage Installer: Downloading AppImage", "url", downloadURL, "destination", tarballPath)
+	if err := downloadFile(downloadURL, tarballPath); err != nil {
 		return fmt.Errorf("failed to download AppImage: %v", err)
 	}
 
-	log.Info("Extracting tarball", "tarballPath", tarballPath, "destDir", "/tmp")
-	err = extractTarballFunc(tarballPath, "/tmp")
-	if err != nil {
-		log.Error("Failed to extract AppImage tarball", "tarballPath", tarballPath, "destDir", "/tmp", "error", err)
-		return fmt.Errorf("failed to extract AppImage tarball: %v", err)
+	log.Info("AppImage Installer: Extracting AppImage", "tarballPath", tarballPath, "destination", "/tmp")
+	if err := extractTarball(tarballPath, "/tmp"); err != nil {
+		return fmt.Errorf("failed to extract AppImage: %v", err)
 	}
 
-	binaryPath := filepath.Join("/tmp", binary)
-	log.Info("Moving binary", "src", binaryPath, "dest", filepath.Join(installDir, binary))
-	err = moveFile(binaryPath, filepath.Join(installDir, binary))
-	if err != nil {
-		log.Error("Failed to move AppImage binary", "src", binaryPath, "dest", filepath.Join(installDir, binary), "error", err)
+	log.Info("AppImage Installer: Moving binary", "binaryPath", binaryPath)
+	if err := moveFile(fmt.Sprintf("/tmp/%s", binaryName), binaryPath); err != nil {
 		return fmt.Errorf("failed to move AppImage binary: %v", err)
 	}
 
-	log.Info("Setting executable permissions", "file", filepath.Join(installDir, binary))
-	err = os.Chmod(filepath.Join(installDir, binary), 0o755)
-	if err != nil {
-		log.Error("Failed to set executable permissions", "file", filepath.Join(installDir, binary), "error", err)
-		return fmt.Errorf("failed to set executable permissions: %v", err)
+	log.Info("AppImage Installer: Setting executable permissions", "binaryPath", binaryPath)
+	if err := os.Chmod(binaryPath, 0o755); err != nil {
+		return fmt.Errorf("failed to set permissions on AppImage binary: %v", err)
 	}
 
-	// Add to the repository
-	log.Info("Adding app to repository", "appName", appName)
-	err = repo.AddApp(appName)
-	if err != nil {
-		log.Error("Failed to add app to repository", "appName", appName, "error", err)
-		return fmt.Errorf("failed to add %s to repository: %v", appName, err)
-	}
-
-	log.Info(fmt.Sprintf("%s installed successfully", appName))
 	return nil
 }
 

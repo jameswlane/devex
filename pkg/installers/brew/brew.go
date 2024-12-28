@@ -2,59 +2,57 @@ package brew
 
 import (
 	"fmt"
-	"os/exec"
-	"time"
 
 	"github.com/charmbracelet/log"
 
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-var brewExecCommand = exec.Command
+type BrewInstaller struct{}
 
-func Install(packageName string, dryRun bool, repo repository.Repository) error {
-	log.Info("Starting Install", "packageName", packageName, "dryRun", dryRun)
+func New() *BrewInstaller {
+	return &BrewInstaller{}
+}
 
-	// Check if the app is already installed on the system
-	log.Info("Checking if app is installed on the system", "packageName", packageName)
-	isInstalledOnSystem, err := check_install.IsAppInstalled(packageName)
-	if err != nil {
-		log.Error("Failed to check if app is installed on system", "packageName", packageName, "error", err)
-		return fmt.Errorf("failed to check if app is installed on system: %v", err)
+func (b *BrewInstaller) Install(command string, repo repository.Repository) error {
+	log.Info("Brew Installer: Starting installation", "packageName", command)
+
+	// Wrap the command into a types.AppConfig object for the utilities function
+	appConfig := types.AppConfig{
+		Name:           command,
+		InstallMethod:  "brew",
+		InstallCommand: command,
 	}
 
-	if isInstalledOnSystem {
-		log.Info(fmt.Sprintf("%s is already installed on the system, skipping installation", packageName))
+	// Check if the package is already installed
+	isInstalled, err := utilities.IsAppInstalled(appConfig)
+	if err != nil {
+		log.Error("Brew Installer: Failed to check if package is installed", "packageName", command, "error", err)
+		return fmt.Errorf("failed to check if Brew package is installed: %v", err)
+	}
+
+	if isInstalled {
+		log.Info("Brew Installer: Package already installed, skipping", "packageName", command)
 		return nil
 	}
 
-	// Handle dry-run case
-	if dryRun {
-		log.Info(fmt.Sprintf("[Dry Run] Would run command: brew install %s", packageName))
-		log.Info("Dry run: Simulating installation delay (5 seconds)")
-		time.Sleep(5 * time.Second)
-		log.Info("Dry run: Completed simulation delay")
-		return nil
-	}
-
-	// Execute the installation command
-	log.Info("Executing installation command", "command", fmt.Sprintf("brew install %s", packageName))
-	cmd := brewExecCommand("brew", "install", packageName)
-	output, err := cmd.CombinedOutput()
+	// Run brew install command
+	err = utilities.RunCommand(fmt.Sprintf("brew install %s", command))
 	if err != nil {
-		log.Error("Failed to install package", "packageName", packageName, "error", err, "output", string(output))
-		return fmt.Errorf("failed to install %s: %v - %s", packageName, err, string(output))
+		log.Error("Brew Installer: Failed to install package", "packageName", command, "error", err)
+		return fmt.Errorf("failed to install Brew package: %v", err)
 	}
 
-	// Add to the repository
-	log.Info("Adding app to repository", "packageName", packageName)
-	err = repo.AddApp(packageName)
-	if err != nil {
-		log.Error("Failed to add app to repository", "packageName", packageName, "error", err)
-		return fmt.Errorf("failed to add %s to repository: %v", packageName, err)
+	log.Info("Brew Installer: Installation successful", "packageName", command)
+
+	// Add to repository
+	if err := repo.AddApp(command); err != nil {
+		log.Error("Brew Installer: Failed to add package to repository", "packageName", command, "error", err)
+		return fmt.Errorf("failed to add Brew package to repository: %v", err)
 	}
 
-	log.Info(fmt.Sprintf("%s installed successfully", packageName))
+	log.Info("Brew Installer: Package added to repository", "packageName", command)
 	return nil
 }

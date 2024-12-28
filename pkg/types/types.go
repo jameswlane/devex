@@ -8,21 +8,22 @@ type AppConfig struct {
 	GitHub           string           `mapstructure:"github" yaml:"github"`
 	Url              string           `mapstructure:"url" yaml:"url"`
 	Category         string           `mapstructure:"category" yaml:"category"`
+	Default          bool             `mapstructure:"default" yaml:"default"`
 	InstallMethod    string           `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand   string           `mapstructure:"install_command" yaml:"install_command"`
 	UninstallCommand string           `mapstructure:"uninstall_command" yaml:"uninstall_command"`
 	Dependencies     []string         `mapstructure:"dependencies" yaml:"dependencies"`
-	Default          bool             `mapstructure:"default" yaml:"default"`
+	PreInstall       []InstallCommand `mapstructure:"pre_install" yaml:"pre_install"`
+	PostInstall      []InstallCommand `mapstructure:"post_install" yaml:"post_install"`
+	ConfigFiles      []ConfigFile     `mapstructure:"config_files" yaml:"config_files"`
+	Themes           []Theme          `mapstructure:"themes"`
+	AptSources       []AptSource      `mapstructure:"apt_sources" yaml:"apt_sources"`
+	CleanupFiles     []string         `mapstructure:"cleanup_files" yaml:"cleanup_files"`
+	Conflicts        []string         `mapstructure:"conflicts" yaml:"conflicts"`
 	DockerOptions    DockerOptions    `mapstructure:"docker_options" yaml:"docker_options"`
 	DownloadURL      string           `mapstructure:"download_url" yaml:"download_url"`
 	InstallDir       string           `mapstructure:"install_dir" yaml:"install_dir"`
 	Symlink          string           `mapstructure:"symlink" yaml:"symlink"`
-	CleanupFiles     []string         `mapstructure:"cleanup_files" yaml:"cleanup_files"`
-	PreInstall       []InstallCommand `mapstructure:"pre_install" yaml:"pre_install"`
-	PostInstall      []InstallCommand `mapstructure:"post_install" yaml:"post_install"`
-	AptSources       []AptSource      `mapstructure:"apt_sources" yaml:"apt_sources"`
-	GpgURL           string           `mapstructure:"gpg_url" yaml:"gpg_url"`
-	ConfigFiles      []ConfigFile     `mapstructure:"config_files" yaml:"config_files"`
 	ShellUpdates     []string         `mapstructure:"shell_updates" yaml:"shell_updates"`
 }
 
@@ -58,15 +59,16 @@ type DockerOptions struct {
 }
 
 type AptSource struct {
-	KeySource  string `mapstructure:"source" yaml:"source"`
-	KeyName    string `mapstructure:"destination" yaml:"destination"`
-	SourceRepo string `mapstructure:"repo" yaml:"repo"`
-	SourceName string `mapstructure:"list_file" yaml:"list_file"`
+	KeySource      string `mapstructure:"key_source" yaml:"key_source"`
+	KeyName        string `mapstructure:"key_name" yaml:"key_name"`
+	SourceRepo     string `mapstructure:"source_repo" yaml:"source_repo"`
+	SourceName     string `mapstructure:"source_name" yaml:"source_name"`
+	RequireDearmor bool   `mapstructure:"require_dearmor" yaml:"require_dearmor"`
 }
 
 type ConfigFile struct {
-	Source      string `mapstructure:"source"`
-	Destination string `mapstructure:"destination"`
+	Source      string `mapstructure:"source" yaml:"source"`
+	Destination string `mapstructure:"destination" yaml:"destination"`
 }
 
 type GnomeExtension struct {
@@ -90,10 +92,10 @@ type Setting struct {
 }
 
 type Theme struct {
-	Name              string `mapstructure:"name"`
-	ThemeColor        string `mapstructure:"theme_color"`
-	ThemeBackground   string `mapstructure:"theme_background"`
-	NeovimColorscheme string `mapstructure:"neovim_colorscheme"`
+	Name            string       `mapstructure:"name" yaml:"name"`
+	ThemeColor      string       `mapstructure:"theme_color" yaml:"theme_color"`
+	ThemeBackground string       `mapstructure:"theme_background" yaml:"theme_background"`
+	Files           []ConfigFile `mapstructure:"files" yaml:"files"`
 }
 
 type Font struct {
@@ -105,11 +107,11 @@ type Font struct {
 }
 
 type InstallCommand struct {
-	Shell             string       `mapstructure:"shell"`
-	UpdateShellConfig string       `mapstructure:"update_shell_config"`
-	Copy              *CopyCommand `mapstructure:"copy"`
-	Command           string       `mapstructure:"command"`
-	Sleep             int          `mapstructure:"sleep"`
+	Shell             string       `mapstructure:"shell" yaml:"shell"`
+	UpdateShellConfig string       `mapstructure:"update_shell_config" yaml:"update_shell_config"`
+	Copy              *CopyCommand `mapstructure:"copy" yaml:"copy"`
+	Command           string       `mapstructure:"command" yaml:"command"`
+	Sleep             int          `mapstructure:"sleep" yaml:"sleep"`
 }
 
 type CopyCommand struct {

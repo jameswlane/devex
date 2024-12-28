@@ -1,9 +1,8 @@
 package installers
 
 import (
-	"errors"
 	"fmt"
-	"time"
+	"strings"
 
 	"github.com/charmbracelet/log"
 
@@ -11,131 +10,125 @@ import (
 	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
+	"github.com/jameswlane/devex/pkg/installers/brew"
 	"github.com/jameswlane/devex/pkg/installers/curlpipe"
 	"github.com/jameswlane/devex/pkg/installers/deb"
 	"github.com/jameswlane/devex/pkg/installers/docker"
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
 	"github.com/jameswlane/devex/pkg/installers/pip"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
+type BaseInstaller interface {
+	Install(command string, repo repository.Repository) error
+}
+
+var installerRegistry = map[string]BaseInstaller{}
+
+func init() {
+	installerRegistry["apt"] = apt.New()
+	installerRegistry["brew"] = brew.New()
+	installerRegistry["curlpipe"] = curlpipe.New()
+	installerRegistry["deb"] = deb.New()
+	installerRegistry["docker"] = docker.New()
+	installerRegistry["flatpak"] = flatpak.New()
+	installerRegistry["mise"] = mise.New()
+	installerRegistry["pip"] = pip.New()
+	installerRegistry["appimage"] = appimage.New()
+}
+
+func executeInstallCommand(app types.AppConfig, repo repository.Repository) error {
+	installer, exists := installerRegistry[app.InstallMethod]
+	if !exists {
+		log.Error("Unsupported install method", "method", app.InstallMethod)
+		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
+	}
+	log.Info("Executing installer", "method", app.InstallMethod)
+	return installer.Install(app.InstallCommand, repo)
+}
+
 // InstallApp installs the app based on the InstallMethod field.
 func InstallApp(app types.AppConfig, settings config.Settings, repo repository.Repository) error {
-	log.Info("Starting InstallApp", "app", app.Name, "method", app.InstallMethod)
+	log.Info("Installing app", "app", app.Name)
 
-	// Step 1: Execute pre-install commands
-	if err := runInstallCommands(app.PreInstall, settings); err != nil {
-		log.Error("Failed to execute pre-install commands", "app", app.Name, "error", err)
-		return fmt.Errorf("failed to execute pre-install commands for %s: %v", app.Name, err)
+	// Validate system requirements
+	if err := validateSystemRequirements(app); err != nil {
+		return fmt.Errorf("failed to validate system requirements: %v", err)
 	}
 
-	// Step 2: Handle dependencies
-	if err := handleDependencies(app, settings, repo); err != nil {
-		log.Error("Failed to handle dependencies", "app", app.Name, "error", err)
-		return fmt.Errorf("failed to handle dependencies for %s: %v", app.Name, err)
+	// Backup existing files
+	if err := backupExistingFiles(app); err != nil {
+		return fmt.Errorf("failed to back up existing files: %v", err)
 	}
 
-	// Step 3: Install the app
-	if len(app.AptSources) > 0 {
-		for _, source := range app.AptSources {
-			err := apt.AddAptSource(source.KeySource, source.KeyName, source.SourceRepo, source.SourceName)
-			if err != nil {
-				log.Error("Failed to handle APT source", "source", source, "error", err)
-				return fmt.Errorf("failed to handle APT source: %v", err)
-			}
+	// Remove conflicting packages
+	if len(app.Conflicts) > 0 {
+		if err := RemoveConflictingPackages(app.Conflicts); err != nil {
+			return fmt.Errorf("failed to remove conflicting packages: %v", err)
 		}
 	}
-	if err := executeInstallCommand(app, settings, repo); err != nil {
-		log.Error("Failed to execute install command", "app", app.Name, "error", err)
-		return fmt.Errorf("failed to install %s: %v", app.Name, err)
+
+	// Run pre-install commands
+	if err := runInstallCommands(app.PreInstall, settings); err != nil {
+		return fmt.Errorf("failed to execute pre-install commands: %v", err)
 	}
 
-	// Step 4: Execute post-install commands
+	// Set up environment
+	if err := setupEnvironment(app); err != nil {
+		return fmt.Errorf("failed to set up environment: %v", err)
+	}
+
+	// Handle dependencies
+	if err := HandleDependencies(app, settings, repo); err != nil {
+		return fmt.Errorf("failed to handle dependencies: %v", err)
+	}
+
+	// Handle APT sources
+	if len(app.AptSources) > 0 {
+		for _, source := range app.AptSources {
+			if err := apt.AddAptSource(source.KeySource, source.KeyName, source.SourceRepo, source.SourceName, source.RequireDearmor); err != nil {
+				log.Error("Failed to add APT source", "source", source, "error", err)
+				return fmt.Errorf("failed to add APT source: %v", err)
+			}
+		}
+
+		// Run apt-get update to refresh package lists
+		if err := apt.RunAptUpdate(true, repo); err != nil {
+			log.Error("Failed to update APT package lists", "error", err)
+			return fmt.Errorf("failed to update APT package lists: %v", err)
+		}
+	}
+
+	// Process config files (placeholder)
+	if err := processConfigFiles(app); err != nil {
+		return fmt.Errorf("failed to process config files: %v", err)
+	}
+
+	// Process themes (placeholder)
+	if err := processThemes(app); err != nil {
+		return fmt.Errorf("failed to process themes: %v", err)
+	}
+
+	// Execute the installation
+	if err := executeInstallCommand(app, repo); err != nil {
+		return fmt.Errorf("failed to execute install command: %v", err)
+	}
+
+	// Run post-install commands
 	if err := runInstallCommands(app.PostInstall, settings); err != nil {
-		log.Error("Failed to execute post-install commands", "app", app.Name, "error", err)
-		return fmt.Errorf("failed to execute post-install commands for %s: %v", app.Name, err)
+		return fmt.Errorf("failed to execute post-install commands: %v", err)
+	}
+
+	// Perform cleanup
+	if err := cleanupAfterInstall(app); err != nil {
+		return fmt.Errorf("failed to clean up after installation: %v", err)
 	}
 
 	log.Info("App installed successfully", "app", app.Name)
 	return nil
-}
-
-// handleDependencies ensures all dependencies are installed.
-func handleDependencies(app types.AppConfig, settings config.Settings, repo repository.Repository) error {
-	if len(app.Dependencies) == 0 {
-		log.Info("No dependencies to handle", "app", app.Name)
-		return nil
-	}
-
-	log.Info("Checking dependencies for app", "app", app.Name, "dependencies", app.Dependencies)
-
-	for _, dep := range app.Dependencies {
-		dependencyApp, err := config.FindAppByName(settings, dep)
-		if err != nil {
-			log.Error("Dependency not found", "dependency", dep)
-			return fmt.Errorf("dependency %s not found: %v", dep, err)
-		}
-
-		log.Info("Installing dependency", "dependency", dep)
-		if err := InstallApp(*dependencyApp, settings, repo); err != nil {
-			return fmt.Errorf("failed to install dependency %s: %v", dep, err)
-		}
-	}
-
-	log.Info("All dependencies handled successfully", "app", app.Name)
-	return nil
-}
-
-// executeInstallCommand runs the installation logic based on the method.
-func executeInstallCommand(app types.AppConfig, settings config.Settings, repo repository.Repository) error {
-	log.Info("Executing install command", "app", app.Name, "method", app.InstallMethod)
-	switch app.InstallMethod {
-	case "appimage":
-		return appimage.Install(app.DownloadURL, app.InstallDir, app.Symlink, app.Name, settings.DryRun, repo)
-	case "apt":
-		return apt.Install(app.InstallCommand, settings.DryRun, repo)
-	case "curlpipe":
-		return retryWithBackoff(func() error {
-			return curlpipe.Install(app.DownloadURL, settings.DryRun, repo)
-		})
-	case "deb":
-		return retryWithBackoff(func() error {
-			return deb.Install(app.InstallCommand, settings.DryRun, repo)
-		})
-	case "docker":
-		return docker.Install(app, settings.DryRun, repo)
-	case "flatpak":
-		return flatpak.Install(app.InstallCommand, app.Name, settings.DryRun, repo)
-	case "mise":
-		return mise.Install(app.InstallCommand, settings.DryRun, repo)
-	case "pip":
-		return pip.Install(app.InstallCommand, settings.DryRun, repo)
-	default:
-		log.Error("Unsupported install method", "method", app.InstallMethod)
-		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
-	}
-}
-
-// retryWithBackoff retries a function with exponential backoff.
-func retryWithBackoff(f func() error) error {
-	const maxRetries = 3
-	const initialDelay = time.Second
-
-	delay := initialDelay
-	for i := 0; i < maxRetries; i++ {
-		err := f()
-		if err == nil {
-			log.Info("Operation succeeded", "attempt", i+1)
-			return nil
-		}
-		log.Warn("Retry failed", "attempt", i+1, "error", err)
-		time.Sleep(delay)
-		delay *= 2
-	}
-	log.Error("Max retries exceeded")
-	return errors.New("max retries exceeded")
 }
 
 // runInstallCommands executes pre-install or post-install commands.
@@ -170,7 +163,7 @@ func runInstallCommands(commands []types.InstallCommand, settings config.Setting
 			destination := utils.ReplacePlaceholders(cmd.Copy.Destination)
 			log.Info("Copying file", "source", source, "destination", destination)
 			if !settings.DryRun {
-				if err := utils.CopyFile(source, destination); err != nil {
+				if err := utilities.CopyFile(source, destination); err != nil {
 					log.Error("Failed to copy file", "source", source, "destination", destination, "error", err)
 					return fmt.Errorf("failed to copy file from %s to %s: %v", source, destination, err)
 				}
@@ -179,5 +172,82 @@ func runInstallCommands(commands []types.InstallCommand, settings config.Setting
 	}
 
 	log.Info("Completed runInstallCommands successfully")
+	return nil
+}
+
+// RemoveConflictingPackages removes specified conflicting packages before installation.
+func RemoveConflictingPackages(packages []string) error {
+	if len(packages) == 0 {
+		log.Info("No conflicting packages to remove")
+		return nil
+	}
+
+	log.Info("Removing conflicting packages", "packages", packages)
+	command := fmt.Sprintf("sudo apt-get remove -y %s", strings.Join(packages, " "))
+
+	if err := utilities.RunCommand(command); err != nil {
+		log.Error("Failed to remove conflicting packages", "command", command, "error", err)
+		return fmt.Errorf("failed to remove conflicting packages: %v", err)
+	}
+
+	log.Info("Conflicting packages removed successfully")
+	return nil
+}
+
+func HandleDependencies(app types.AppConfig, settings config.Settings, repo repository.Repository) error {
+	for _, dep := range app.Dependencies {
+		// Retrieve the dependency's app configuration
+		depApp, err := config.FindAppByName(settings, dep)
+		if err != nil {
+			return fmt.Errorf("failed to find dependency %s: %v", dep, err)
+		}
+
+		// Install the dependency using InstallApp
+		if err := InstallApp(*depApp, settings, repo); err != nil {
+			return fmt.Errorf("failed to install dependency %s: %v", dep, err)
+		}
+	}
+	return nil
+}
+
+//nolint:unparam
+func processConfigFiles(app types.AppConfig) error {
+	log.Warn("processConfigFiles is not yet implemented", "app", app.Name)
+	// TODO: Implement configuration file processing
+	return nil
+}
+
+//nolint:unparam
+func processThemes(app types.AppConfig) error {
+	log.Warn("processThemes is not yet implemented", "app", app.Name)
+	// TODO: Implement theme processing
+	return nil
+}
+
+//nolint:unparam
+func validateSystemRequirements(app types.AppConfig) error {
+	log.Warn("validateSystemRequirements is not yet implemented", "app", app.Name)
+	// TODO: Validate system requirements for the app
+	return nil
+}
+
+//nolint:unparam
+func backupExistingFiles(app types.AppConfig) error {
+	log.Warn("backupExistingFiles is not yet implemented", "app", app.Name)
+	// TODO: Implement backup logic for existing files
+	return nil
+}
+
+//nolint:unparam
+func setupEnvironment(app types.AppConfig) error {
+	log.Warn("setupEnvironment is not yet implemented", "app", app.Name)
+	// TODO: Implement environment setup logic
+	return nil
+}
+
+//nolint:unparam
+func cleanupAfterInstall(app types.AppConfig) error {
+	log.Warn("cleanupAfterInstall is not yet implemented", "app", app.Name)
+	// TODO: Implement cleanup logic
 	return nil
 }

@@ -2,62 +2,57 @@ package mise
 
 import (
 	"fmt"
-	"os/exec"
-	"time"
 
 	"github.com/charmbracelet/log"
 
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-var miseExecCommand = exec.Command
+type MiseInstaller struct{}
 
-func Install(language string, dryRun bool, repo repository.Repository) error {
-	log.Info("Starting Install", "language", language, "dryRun", dryRun)
+func New() *MiseInstaller {
+	return &MiseInstaller{}
+}
+
+func (m *MiseInstaller) Install(command string, repo repository.Repository) error {
+	log.Info("Mise Installer: Starting installation", "language", command)
+
+	// Wrap the command into a types.AppConfig object for the utilities function
+	appConfig := types.AppConfig{
+		Name:           command,
+		InstallMethod:  "mise",
+		InstallCommand: command,
+	}
 
 	// Check if the language is already installed
-	log.Info("Checking if language is installed", "language", language)
-	isInstalledOnSystem, err := check_install.IsAppInstalled(language)
+	isInstalled, err := utilities.IsAppInstalled(appConfig)
 	if err != nil {
-		log.Error("Failed to check if language is installed", "language", language, "error", err)
-		return fmt.Errorf("failed to check if language %s is installed: %v", language, err)
+		log.Error("Mise Installer: Failed to check if language is installed", "language", command, "error", err)
+		return fmt.Errorf("failed to check if language is installed: %v", err)
 	}
 
-	if isInstalledOnSystem {
-		log.Info(fmt.Sprintf("Language %s is already installed via Mise, skipping installation", language))
+	if isInstalled {
+		log.Info("Mise Installer: Language already installed, skipping", "language", command)
 		return nil
 	}
 
-	// Handle dry-run case
-	if dryRun {
-		cmd := miseExecCommand("mise", "use", "--global", language)
-		log.Info(fmt.Sprintf("[Dry Run] Would run command: %s", cmd.String()))
-		log.Info("Dry run: Simulating installation delay (5 seconds)")
-		time.Sleep(5 * time.Second)
-		log.Info("Dry run: Completed simulation delay")
-		return nil
-	}
-
-	// Install the language via Mise
-	log.Info("Installing language via Mise", "language", language)
-	cmd := miseExecCommand("mise", "use", "--global", language)
-	output, err := cmd.CombinedOutput()
+	// Run mise use command
+	err = utilities.RunCommand(fmt.Sprintf("mise use --global %s", command))
 	if err != nil {
-		log.Error("Failed to install language via Mise", "language", language, "error", err, "output", string(output))
-		return fmt.Errorf("failed to install language %s via Mise: %v - %s", language, err, string(output))
+		log.Error("Mise Installer: Failed to install language", "language", command, "error", err)
+		return fmt.Errorf("failed to install language via Mise: %v", err)
 	}
-	log.Info("Language installed via Mise successfully", "language", language, "output", string(output))
 
-	// Add the installed language to the repository
-	log.Info("Adding language to repository", "language", language)
-	err = repo.AddApp(language)
-	if err != nil {
-		log.Error("Failed to add language to repository", "language", language, "error", err)
-		return fmt.Errorf("failed to add language %s to repository: %v", language, err)
+	log.Info("Mise Installer: Installation successful", "language", command)
+
+	// Add to repository
+	if err := repo.AddApp(command); err != nil {
+		log.Error("Mise Installer: Failed to add language to repository", "language", command, "error", err)
+		return fmt.Errorf("failed to add language to repository: %v", err)
 	}
-	log.Info("Language added to repository successfully", "language", language)
 
-	log.Info("Install completed successfully", "language", language)
+	log.Info("Mise Installer: Language added to repository", "language", command)
 	return nil
 }

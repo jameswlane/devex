@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 
+	"github.com/spf13/viper"
+
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -47,4 +49,57 @@ func FindAppByName(settings Settings, name string) (*types.AppConfig, error) {
 		}
 	}
 	return nil, fmt.Errorf("app not found: %s", name)
+}
+
+// GetAppInfo retrieves the AppConfig for a given install_command or name.
+func GetAppInfo(identifier string) (*types.AppConfig, error) {
+	// List of sections to search
+	sections := []string{"apps", "databases", "optional_apps", "programming_languages"}
+
+	for _, section := range sections {
+		for _, app := range viper.Get(section).([]any) {
+			candidate := app.(map[string]any)
+			if candidate["install_command"] == identifier || candidate["name"] == identifier {
+				return &types.AppConfig{
+					Name:           candidate["name"].(string),
+					Description:    candidate["description"].(string),
+					InstallMethod:  candidate["install_method"].(string),
+					InstallCommand: candidate["install_command"].(string),
+					DownloadURL:    candidate["download_url"].(string),
+					Dependencies:   toStringSlice(candidate["dependencies"]),
+					PostInstall:    toInstallCommandSlice(candidate["post_install"]),
+				}, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("no app configuration found for identifier: %s", identifier)
+}
+
+// Helper to convert interface{} to []string
+func toStringSlice(input any) []string {
+	if input == nil {
+		return nil
+	}
+	result := []string{}
+	for _, item := range input.([]any) {
+		result = append(result, item.(string))
+	}
+	return result
+}
+
+// Helper to convert interface{} to []types.InstallCommand
+func toInstallCommandSlice(input any) []types.InstallCommand {
+	if input == nil {
+		return nil
+	}
+	result := []types.InstallCommand{}
+	for _, item := range input.([]any) {
+		cmd := item.(map[string]any)
+		result = append(result, types.InstallCommand{
+			Command: cmd["command"].(string),
+			Shell:   cmd["shell"].(string),
+		})
+	}
+	return result
 }

@@ -6,61 +6,53 @@ import (
 	"github.com/charmbracelet/log"
 
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
-	"github.com/jameswlane/devex/pkg/utils"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-func Install(appID, repoURL string, dryRun bool, repo repository.Repository) error {
-	log.Info("Starting Install", "appID", appID, "repoURL", repoURL, "dryRun", dryRun)
+type FlatpakInstaller struct{}
+
+func New() *FlatpakInstaller {
+	return &FlatpakInstaller{}
+}
+
+func (f *FlatpakInstaller) Install(command string, repo repository.Repository) error {
+	log.Info("Flatpak Installer: Starting installation", "appID", command)
+
+	// Wrap the command into a types.AppConfig object for the utilities function
+	appConfig := types.AppConfig{
+		Name:           command,
+		InstallMethod:  "flatpak",
+		InstallCommand: command,
+	}
 
 	// Check if the app is already installed
-	log.Info("Checking if Flatpak app is installed", "appID", appID)
-	isInstalled, err := check_install.IsAppInstalled(appID)
+	isInstalled, err := utilities.IsAppInstalled(appConfig)
 	if err != nil {
-		log.Error("Failed to check if Flatpak app is installed", "appID", appID, "error", err)
+		log.Error("Flatpak Installer: Failed to check if app is installed", "appID", command, "error", err)
 		return fmt.Errorf("failed to check if Flatpak app is installed: %v", err)
 	}
 
 	if isInstalled {
-		log.Info(fmt.Sprintf("Flatpak app %s is already installed, skipping installation", appID))
+		log.Info("Flatpak Installer: App already installed, skipping", "appID", command)
 		return nil
 	}
 
-	// Handle dry-run case
-	if dryRun {
-		log.Info(fmt.Sprintf("[Dry Run] Would add repo: %s", repoURL))
-		log.Info(fmt.Sprintf("[Dry Run] Would install app: %s", appID))
-		return nil
-	}
-
-	// Add the Flatpak repository
-	if repoURL != "" {
-		log.Info("Adding Flatpak repository", "repoURL", repoURL)
-		command := fmt.Sprintf("flatpak remote-add --if-not-exists %s", repoURL)
-		if err := utils.ExecAsUser(command, dryRun); err != nil {
-			log.Error("Failed to add Flatpak repository", "repoURL", repoURL, "error", err)
-			return fmt.Errorf("failed to add Flatpak repository: %v", err)
-		}
-		log.Info("Flatpak repository added successfully", "repoURL", repoURL)
-	}
-
-	// Install the Flatpak app
-	log.Info("Installing Flatpak app", "appID", appID)
-	command := fmt.Sprintf("flatpak install -y %s", appID)
-	if err := utils.ExecAsUser(command, dryRun); err != nil {
-		log.Error("Failed to install Flatpak app", "appID", appID, "error", err)
+	// Run flatpak install
+	err = utilities.RunCommand(fmt.Sprintf("flatpak install -y %s", command))
+	if err != nil {
+		log.Error("Flatpak Installer: Failed to install app", "appID", command, "error", err)
 		return fmt.Errorf("failed to install Flatpak app: %v", err)
 	}
-	log.Info("Flatpak app installed successfully", "appID", appID)
 
-	// Add the installed app to the repository
-	log.Info("Adding Flatpak app to repository", "appID", appID)
-	if err := repo.AddApp(appID); err != nil {
-		log.Error("Failed to add Flatpak app to repository", "appID", appID, "error", err)
-		return fmt.Errorf("failed to add Flatpak app %s to repository: %v", appID, err)
+	log.Info("Flatpak Installer: Installation successful", "appID", command)
+
+	// Add to repository
+	if err := repo.AddApp(command); err != nil {
+		log.Error("Flatpak Installer: Failed to add app to repository", "appID", command, "error", err)
+		return fmt.Errorf("failed to add Flatpak app to repository: %v", err)
 	}
-	log.Info("Flatpak app added to repository successfully", "appID", appID)
 
-	log.Info("Install completed successfully", "appID", appID)
+	log.Info("Flatpak Installer: App added to repository", "appID", command)
 	return nil
 }
