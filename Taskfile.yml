@@ -91,6 +91,14 @@ tasks:
             GO_PACKAGES:
                 sh: go list ./...
 
+    # Docker integration tests
+    test:docker:
+        desc: Runs integration tests with Docker
+        cmds:
+            - docker compose -f ./test/docker/docker-compose.yml up --build --abort-on-container-exit
+            - docker compose -f ./test/docker/docker-compose.yml down
+        silent: true
+
     test:all:
         desc: Runs test suite with additional tags
         deps: [install]
