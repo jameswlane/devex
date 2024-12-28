@@ -1,3 +1,9 @@
+## [0.2.0](https://github.com/jameswlane/devex/compare/0.1.8...0.2.0) (2024-12-28)
+
+### Features
+
+* **installer:** continued reworking of the installer ([b6f7e3a](https://github.com/jameswlane/devex/commit/b6f7e3ada9749116a79e006ba71d52be8ebf2235))
+
 ## [0.1.8](https://github.com/jameswlane/devex/compare/0.1.7...0.1.8) (2024-12-25)
 
 ### Bug Fixes
