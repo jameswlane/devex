@@ -54,6 +54,12 @@ apps:
 #      dependencies:
 #          - "apt"
 
+    - name: ca-certificates
+      description: "Common CA certificates"
+      category: "Dependency"
+      install_method: "apt"
+      install_command: "ca-certificates"
+
 #    - name: Clang
 #      description: "C/C++ compiler"
 #      category: "Development"
@@ -78,16 +84,23 @@ apps:
       install_method: "apt"
       install_command: "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
       uninstall_command: "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
-      apt_sources:
-          - key_source: "https://download.docker.com/linux/debian/gpg"
-            key_name: "docker"
-            source_repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable"
-            source_name: "docker"
       dependencies:
           - "ca-certificates"
           - "curl"
-          - "gpg"
-          - "wget"
+      conflicts:
+          - "docker.io"
+          - "docker-doc"
+          - "docker-compose"
+          - "podman-docker"
+          - "containerd"
+          - "runc"
+      apt_sources:
+          - key_source: "https://download.docker.com/linux/debian/gpg"
+            key_name: "/etc/apt/keyrings/docker.asc"
+            source_repo: "deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian %CODENAME% stable"
+            source_name: "/etc/apt/sources.list.d/docker.list"
+      post_install:
+          - command: "sudo usermod -aG docker $USER"
 
     - name: Eza
       description: "A modern alternative to ls"
@@ -97,24 +110,15 @@ apps:
       default: true
       install_method: "apt"
       install_command: "eza"
-      uninstall_command: "eza"
-      apt_sources:
-          - key_source: "https://raw.githubusercontent.com/eza-community/eza/main/deb.asc"
-            key_name: "gierens"
-            source_repo: "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main"
-            source_name: "gierens"
       dependencies:
           - "curl"
           - "gpg"
-          - "wget"
-
-    - name: Fastfetch
-      description: "A maintained, feature-rich and performance oriented, neofetch like system information tool."
-      github: "https://github.com/fastfetch-cli/fastfetch"
-      category: "System Utilities"
-      default: true
-      install_method: "apt"
-      install_command: "fastfetch"
+      apt_sources:
+          - key_source: "https://raw.githubusercontent.com/eza-community/eza/main/deb.asc"
+            key_name: "/etc/apt/keyrings/gierens.gpg"
+            source_repo: "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main"
+            source_name: "/etc/apt/sources.list.d/gierens.list"
+            require_dearmor: true
 
 #    - name: fd-find
 #      description: "A simple, fast, and user-friendly alternative to find"
@@ -155,23 +159,25 @@ apps:
       install_command: "fzf"
       uninstall_command: "fzf"
 
+    - name: git
+      description: "A distributed version control system"
+      category: "Dependency"
+      install_method: "apt"
+      install_command: "git"
+
     - name: GitHub CLI
       description: "GitHub’s official command line tool "
       github: "https://github.com/cli/cli"
       url: "https://cli.github.com/"
       category: "Development Tools"
+      default: true
       install_method: "apt"
       install_command: "gh"
-      uninstall_command: "gh"
       apt_sources:
-          -   key_source: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
-              key_name: "githubcli-archive-keyring"
-              source_repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
-              source_name: "github-cli"
-      dependencies:
-          - "curl"
-          - "gpg"
-          - "wget"
+          - key_source: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+            key_name: "/etc/apt/keyrings/githubcli-archive-keyring.gpg"
+            source_repo: "deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+            source_name: "/etc/apt/sources.list.d/github-cli.list"
 
 #    - name: Gnome Tweaks
 #      description: "A tool to customize advanced GNOME settings"
@@ -199,18 +205,18 @@ apps:
 
     - name: Mise
       description: "A tool for managing multiple versions of programming languages"
+      github: "https://github.com/jdx/mise"
+      url: "https://mise.jdx.dev/"
       category: "Language Management"
       default: true
       install_method: "apt"
+      install_command: "mise"
       apt_sources:
-          - key_source: "https://mise.jdx.dev/gpg-key.pub"
-            key_name: "mise-archive-keyring"
-            source_repo: "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main"
-            source_name: "mise"
-      dependencies:
-          - "curl"
-          - "gpg"
-          - "wget"
+        - key_source: "https://mise.jdx.dev/gpg-key.pub"
+          key_name: "/etc/apt/keyrings/mise-archive-keyring.gpg"
+          source_repo: "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=%ARCHITECTURE%] https://mise.jdx.dev/deb stable main"
+          source_name: "/etc/apt/sources.list.d/mise.list"
+          require_dearmor: true
 
 #    - name: Nala
 #      description: "A front-end for the apt package manager with better output"
@@ -229,14 +235,33 @@ apps:
       default: true
       install_method: "apt"
       install_command: "neovim"
+      dependencies:
+          - "git"
+          - "curl"
+          - "fzf"
       post_install:
-          # TODO: Verify these post-install commands work
           - command: "git clone https://github.com/LazyVim/starter ~/.config/nvim"
           - command: "rm -rf ~/.config/nvim/.git"
           - command: "mkdir -p ~/.config/nvim/plugin/after"
-          - command: "cp ~/.local/share/devex/assets/defaults//neovim/transparency.lua ~/.config/nvim/plugin/after/"
-          - command: "cp ~/.local/share/devex/themes/neovim/tokyo-night.lua ~/.config/nvim/lua/plugins/theme.lua"
-          - command: "cp ~/.local/share/devex/assets/defaults/neovim/lazyvim.json ~/.config/nvim/lazyvim.json"
+          - shell: "nvim --headless +Lazy install +qall"  # Automatically install plugins
+      config_files:
+          - source: "~/.local/share/devex/assets/defaults/neovim/init.vim"
+            destination: "~/.config/nvim/init.vim"
+          - source: "~/.local/share/devex/assets/defaults/neovim/lazy.toml"
+            destination: "~/.config/nvim/lazy.toml"
+          - source: "~/.local/share/devex/assets/defaults/neovim/transparency.lua"
+            destination: "~/.config/nvim/plugin/after/transparency.lua"
+          - source: "~/.local/share/devex/assets/defaults/neovim/lazyvim.json"
+            destination: "~/.config/nvim/lazyvim.json"
+      themes:
+        - name: "Tokyo Night"
+          theme_color: "#1A1B26"
+          theme_background: "dark"
+          files:
+              - source: "~/.local/share/devex/themes/neovim/tokyo-night.lua"
+                destination: "~/.config/nvim/lua/plugins/theme.lua"
+              - source: "~/.local/share/devex/themes/gnome/tokyo-night.css"
+                destination: "~/.config/gnome-shell/themes/tokyo-night.css"
 
 #    - name: Podman
 #      description: "A daemonless container engine for developing, managing, and running OCI Containers"
@@ -274,46 +299,52 @@ apps:
 #      dependencies:
 #          - "apt"
 
-#    - name: Typora
-#      description: "A minimal and configurable markdown editor"
-#      category: "Text Editors"
-#      install_method: "apt"
-#      install_command: "typora"
-#      uninstall_command: "typora"
-#      dependencies:
-#          - "wget"
-#          - "apt"
-#      apt_sources:
-#          - source: "/etc/apt/trusted.gpg.d/typora.asc"
-#            repo: "deb https://typora.io/linux ./"
-#      gpg_url: "https://typora.io/linux/public-key.asc"
-#      post_install:
-#          - command: "mkdir -p ~/.config/Typora/themes"
-#          - command: "cp ~/.local/share/devex/themes/typora/ia_typora.css ~/.config/Typora/themes/"
-#          - command: "cp ~/.local/share/devex/themes/typora/ia_typora_night.css ~/.config/Typora/themes/"
+    - name: Typora
+      description: "A minimal and configurable markdown editor"
+      category: "Text Editors"
+      default: true
+      install_method: "apt"
+      install_command: "typora"
+      apt_sources:
+          - key_source: "https://typora.io/linux/public-key.asc"
+            key_name: "/etc/apt/trusted.gpg.d/typora.asc"
+            source_repo: "deb https://typora.io/linux ./"
+            source_name: "/etc/apt/sources.list.d/typora.list"
+      post_install:
+          - command: "mkdir -p ~/.config/Typora/themes"
+      themes:
+          - name: "Standard Theme"
+            files:
+                - source: "~/.local/share/devex/themes/typora/ia_typora.css"
+                  destination: "~/.config/Typora/themes/ia_typora.css"
+          - name: "Night Theme"
+            files:
+                - source: "~/.local/share/devex/themes/typora/ia_typora_night.css"
+                  destination: "~/.config/Typora/themes/ia_typora_night.css"
 
-#    - name: Ulauncher
-#      description: "A fast application launcher for Linux"
-#      category: "Utility"
-#      install_method: "apt"
-#      install_command: "ulauncher"
-#      uninstall_command: "ulauncher"
-#      config_files:
-#          - source: "~/.local/share/devex/configs/ulauncher.desktop"
-#            destination: "~/.config/autostart/ulauncher.desktop"
-#          - source: "~/.local/share/devex/configs/ulauncher.json"
-#            destination: "~/.config/ulauncher/settings.json"
-#      gpg_url: "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176"
-#      apt_sources:
-#          - source: "/usr/share/keyrings/ulauncher-archive-keyring.gpg"
-#            list_file: "/etc/apt/sources.list.d/ulauncher-jammy.list"
-#            repo: "deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main"
-#      dependencies:
-#          - "gnupg"
-#          - "apt"
-#      post_install:
-#          - command: "gtk-launch ulauncher.desktop"
-#          - sleep: 2  # Ensure time for Ulauncher to set defaults
+    - name: Ulauncher
+      description: "A fast application launcher for Linux"
+      github: "https://github.com/Ulauncher/Ulauncher/"
+      url: "https://ulauncher.io/"
+      category: "Utility"
+      default: true
+      install_method: "apt"
+      install_command: "ulauncher"
+      apt_sources:
+          - key_source: "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176"
+            key_name: "/usr/share/keyrings/ulauncher-archive-keyring.gpg"
+            source_repo: "deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main"
+            source_name: "/etc/apt/sources.list.d/ulauncher-jammy.list"
+            require_dearmor: true
+      config_files:
+          - source: "~/.local/share/devex/configs/ulauncher.desktop"
+            destination: "~/.config/autostart/ulauncher.desktop"
+          - source: "~/.local/share/devex/configs/ulauncher.json"
+            destination: "~/.config/ulauncher/settings.json"
+      post_install:
+          - shell: "gtk-launch ulauncher.desktop"
+          - sleep: 2  # Ensure time for Ulauncher to set defaults
+
 
 #    - name: VLC
 #      description: "A free and open-source multimedia player"
@@ -333,6 +364,15 @@ apps:
     # ----------------------------
     # install_method: deb
     # ----------------------------
+    - name: Fastfetch
+      description: "A maintained, feature-rich and performance-oriented, neofetch-like system information tool."
+      github: "https://github.com/fastfetch-cli/fastfetch"
+      category: "System Utilities"
+      default: true
+      install_method: "deb"
+      install_command: "fastfetch"
+      download_url: "https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-%ARCHITECTURE%.deb"
+
 #    - name: LocalSend
 #      description: "A tool for sending files over local networks"
 #      category: "Networking"

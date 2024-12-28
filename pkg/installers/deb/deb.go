@@ -2,72 +2,86 @@ package deb
 
 import (
 	"fmt"
-	"os/exec"
-	"time"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/charmbracelet/log"
 
+	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
 )
 
-var execCommand = exec.Command
+type DebInstaller struct{}
 
-func Install(filePath string, dryRun bool, repo repository.Repository) error {
-	log.Info("Starting Install", "filePath", filePath, "dryRun", dryRun)
+func New() *DebInstaller {
+	return &DebInstaller{}
+}
 
-	// Check if the app is already installed on the system (via dpkg-query)
-	log.Info("Checking if .deb package is installed on the system", "filePath", filePath)
-	isInstalledOnSystem, err := check_install.IsAppInstalled(filePath)
+func (d *DebInstaller) Install(command string, repo repository.Repository) error {
+	log.Info("Deb Installer: Starting installation", "installCommand", command)
+
+	// Retrieve the app configuration using GetAppInfo
+	appConfig, err := config.GetAppInfo(command)
 	if err != nil {
-		log.Error("Failed to check if .deb package is installed on system", "filePath", filePath, "error", err)
-		return fmt.Errorf("failed to check if .deb package is installed on system: %v", err)
+		log.Error("Deb Installer: App configuration not found", "installCommand", command, "error", err)
+		return fmt.Errorf("app configuration not found: %v", err)
 	}
 
-	if isInstalledOnSystem {
-		log.Info(fmt.Sprintf(".deb package %s is already installed on the system, skipping installation", filePath))
+	// Resolve the download URL with the correct architecture
+	architecture := runtime.GOARCH
+	resolvedURL := strings.ReplaceAll(appConfig.DownloadURL, "%ARCHITECTURE%", architecture)
+
+	// Check if the package is already installed
+	isInstalled, err := utilities.IsAppInstalled(*appConfig)
+	if err != nil {
+		log.Error("Deb Installer: Failed to check if package is installed", "app", appConfig.Name, "error", err)
+		return fmt.Errorf("failed to check if .deb package is installed: %v", err)
+	}
+
+	if isInstalled {
+		log.Info("Deb Installer: Package already installed, skipping", "app", appConfig.Name)
 		return nil
 	}
 
-	// Handle dry-run case
-	if dryRun {
-		log.Info(fmt.Sprintf("[Dry Run] Would run command: sudo dpkg -i %s", filePath))
-		log.Info("[Dry Run] Would run command: sudo apt-get install -f -y")
-		log.Info("Dry run: Simulating installation delay (5 seconds)")
-		time.Sleep(5 * time.Second)
-		log.Info("Dry run: Completed simulation delay")
-		return nil
+	// Download the .deb file to a temporary directory
+	tempDir := os.TempDir()
+	fileName := filepath.Join(tempDir, filepath.Base(resolvedURL))
+	if err := utilities.DownloadFile(resolvedURL, fileName); err != nil {
+		log.Error("Deb Installer: Failed to download .deb file", "url", resolvedURL, "error", err)
+		return fmt.Errorf("failed to download .deb file: %v", err)
 	}
 
-	// Execute dpkg installation command
-	log.Info("Executing dpkg installation command", "command", fmt.Sprintf("sudo dpkg -i %s", filePath))
-	cmd := execCommand("sudo", "dpkg", "-i", filePath)
-	output, err := cmd.CombinedOutput()
+	defer func() {
+		if err := os.Remove(fileName); err != nil {
+			log.Warn("Deb Installer: Failed to remove temporary file", "filePath", fileName, "error", err)
+		}
+	}()
+
+	// Run dpkg -i command
+	err = utilities.RunCommand(fmt.Sprintf("sudo dpkg -i %s", fileName))
 	if err != nil {
-		log.Error("Failed to install .deb package", "filePath", filePath, "error", err, "output", string(output))
-		return fmt.Errorf("failed to install .deb package: %v - %s", err, string(output))
+		log.Error("Deb Installer: Failed to install package", "filePath", fileName, "error", err)
+		return fmt.Errorf("failed to install .deb package: %v", err)
 	}
-	log.Info("dpkg installation command executed successfully", "output", string(output))
 
-	// Fix broken dependencies using apt-get
-	log.Info("Fixing broken dependencies using apt-get", "command", "sudo apt-get install -f -y")
-	cmd = execCommand("sudo", "apt-get", "install", "-f", "-y")
-	output, err = cmd.CombinedOutput()
+	// Run apt-get install -f to fix dependencies
+	err = utilities.RunCommand("sudo apt-get install -f -y")
 	if err != nil {
-		log.Error("Failed to fix broken dependencies", "error", err, "output", string(output))
-		return fmt.Errorf("failed to fix broken dependencies: %v - %s", err, string(output))
+		log.Error("Deb Installer: Failed to fix dependencies", "filePath", fileName, "error", err)
+		return fmt.Errorf("failed to fix dependencies after installing .deb package: %v", err)
 	}
-	log.Info("Fixed broken dependencies successfully", "output", string(output))
 
-	// Add to the repository after successful installation
-	log.Info("Adding .deb package to repository", "filePath", filePath)
-	err = repo.AddApp(filePath)
-	if err != nil {
-		log.Error("Failed to add .deb package to repository", "filePath", filePath, "error", err)
-		return fmt.Errorf("failed to add %s to repository: %v", filePath, err)
+	log.Info("Deb Installer: Installation successful", "filePath", fileName)
+
+	// Add to repository
+	if err := repo.AddApp(appConfig.Name); err != nil {
+		log.Error("Deb Installer: Failed to add package to repository", "app", appConfig.Name, "error", err)
+		return fmt.Errorf("failed to add .deb package to repository: %v", err)
 	}
-	log.Info(".deb package added to repository successfully", "filePath", filePath)
 
-	log.Info("Install completed successfully", "filePath", filePath)
+	log.Info("Deb Installer: Package added to repository", "app", appConfig.Name)
 	return nil
 }

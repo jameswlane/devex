@@ -3,8 +3,9 @@ package shell
 import (
 	"os/exec"
 
-	"github.com/jameswlane/devex/pkg/installers/check_install"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/logger"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
 var log = logger.InitLogger()
@@ -12,7 +13,11 @@ var log = logger.InitLogger()
 // SwitchToZsh installs Zsh if necessary and switches the user's default shell to Zsh
 func SwitchToZsh() error {
 	// Check if Zsh is installed
-	isInstalled, err := check_install.IsAppInstalled("zsh")
+	appConfig := types.AppConfig{
+		Name:           "Zsh",
+		InstallCommand: "zsh",
+	}
+	isInstalled, err := utilities.IsAppInstalled(appConfig)
 	if err != nil {
 		log.LogError("Error checking if Zsh is installed", err)
 		return err

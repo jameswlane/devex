@@ -55,7 +55,7 @@ func getHomeDir() (string, error) {
 
 func initializeDatabase() repository.Repository {
 	log.Info("Initializing database")
-	homeDir, _ := os.UserHomeDir()
+	homeDir, _ := getHomeDir()
 	dbPath := filepath.Join(homeDir, ".devex/datastore.db")
 	db, err := datastore.InitDB(dbPath)
 	if err != nil {
