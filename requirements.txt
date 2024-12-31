@@ -26,6 +26,7 @@ mkdocs-mermaid2-plugin==1.2.1
 mkdocs-redirects==1.2.2
 mkdocstrings==0.27.0
 mkdocstrings-python==1.13.0
+natsort==8.4.0
 packaging==24.2
 pathspec==0.12.1
 platformdirs==4.3.6
