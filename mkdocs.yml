@@ -1,5 +1,5 @@
 site_name: DevEx Documentation
-site_url: https://your-project-docs.example.com
+site_url: https://docs.devex.sh
 repo_url: https://github.com/jameswlane/devex
 theme:
     name: material
@@ -14,13 +14,13 @@ theme:
 nav:
     - Home: index.md
     - CLI Reference:
-          - Overview: docs/cli/overview.md
-          - Commands: docs/cli/commands.md
+          - Overview: cli/overview.md
+          - Commands: cli/commands.md
     - Configuration:
-          - Overview: docs/configuration/overview.md
-          - Apps: docs/configuration/apps.md
-          - Programming Languages: docs/configuration/programming_languages.md
-          - Databases: docs/configuration/databases.md
+          - Overview: configuration/overview.md
+          - Apps: configuration/apps.md
+          - Programming Languages: configuration/programming_languages.md
+          - Databases: configuration/databases.md
 
 plugins:
     - search
