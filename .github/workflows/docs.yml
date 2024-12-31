@@ -6,7 +6,7 @@ on:
 permissions:
     contents: write
 env:
-    GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 jobs:
     deploy:
         runs-on: ubuntu-latest
@@ -30,4 +30,6 @@ jobs:
             - name: Install dependencies
               run: pip install --no-deps -r requirements.txt
             - name: Build site
-              run: mkdocs gh-deploy --force --remote-name origin --remote-branch gh-pages --token ${{ secrets.GH_TOKEN }}
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: mkdocs gh-deploy --force
