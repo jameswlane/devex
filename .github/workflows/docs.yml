@@ -1,4 +1,4 @@
-name: ci
+name: Docs
 on:
     push:
         branches:
@@ -24,5 +24,6 @@ jobs:
                   path: .cache
                   restore-keys: |
                       mkdocs-material-
-            - run: pip install mkdocs-material
+            - name: Install dependencies
+              run: pip install --no-deps -r requirements.txt
             - run: mkdocs gh-deploy --force
