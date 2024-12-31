@@ -314,6 +314,7 @@ Where `<version>` can be `major`, `minor`, `patch`, or a specific semantic versi
 
 - **[Issues](https://github.com/jameswlane/devex/issues)**: Report bugs or request features.
 - **[Discussions](https://github.com/jameswlane/devex/discussions)**: Ask questions or share ideas.
+- **[Docs](https://docs.devex.sh)**: View documentation.
 - **[Projects](https://github.com/jameswlane/devex/projects)**: Track project progress.
 - **[Wiki](https://github.com/jameswlane/devex/wiki)**: Access in-depth documentation.
 - **[Security](https://github.com/jameswlane/devex/security)**: Report vulnerabilities.
