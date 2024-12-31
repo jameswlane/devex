@@ -96,6 +96,18 @@ func runInstall(repo repository.Repository, settings config.Settings) {
 		return
 	}
 
+	// Install Apps (config/apps.yaml) => (pkg/installers)
+	// Install Programming Languages (config/programming_languages.yaml) => (pkg/installers)
+	// Install Databases (config/databases.yaml) => (pkg/installers)
+	// Optional Apps (config/optional_apps.yaml) => (pkg/installers)
+	// Install Fonts (config/fonts.yaml) => (pkg/fonts)
+	// Setup Git Config (config/git_config.yaml) => (pkg/git)
+	// Setup Themes (config/themes.yaml) => (pkg/themes)
+	// Setup Gnome Dock (config/dock.yaml) => (pkg/gnome)
+	// Install Gnome Extensions (config/gnome_extensions.yaml) => (pkg/gnome)
+	// Setup Gnome Settings (config/gnome_settings.yaml) => (pkg/gnome)
+	// Setup Zsh, Oh My Zsh, Oh My Posh (config/gnome_settings.yaml) => (pkg/zsh)
+
 	// Install Programming Languages
 	//if err := installApps(repo, settings, filterDefaultApps(settings.ProgrammingLang)); err != nil {
 	//	log.Error("Failed to install programming languages", "error", err)
