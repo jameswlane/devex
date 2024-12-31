@@ -1,5 +1,6 @@
 beautifulsoup4==4.12.3
 bracex==2.5.post1
+certifi==2024.12.14
 click==8.1.7
 colorama==0.4.6
 ghp-import==2.1.0
