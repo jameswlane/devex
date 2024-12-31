@@ -1,3 +1,9 @@
+## [0.2.1](https://github.com/jameswlane/devex/compare/0.2.0...0.2.1) (2024-12-31)
+
+### Bug Fixes
+
+* **docs:** fixing docs ([eec71b5](https://github.com/jameswlane/devex/commit/eec71b5a1a9157d74fb4fb2d77720643f50b1eb7))
+
 ## [0.2.0](https://github.com/jameswlane/devex/compare/0.1.8...0.2.0) (2024-12-28)
 
 ### Features
