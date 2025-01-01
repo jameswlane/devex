@@ -1,3 +1,9 @@
+## [0.2.2](https://github.com/jameswlane/devex/compare/0.2.1...0.2.2) (2025-01-01)
+
+### Bug Fixes
+
+* **filesystem:** setting up wrappers for easy mocking and testing ([af6c00b](https://github.com/jameswlane/devex/commit/af6c00bd39b8005b914db1a948bc55e15378f834))
+
 ## [0.2.1](https://github.com/jameswlane/devex/compare/0.2.0...0.2.1) (2024-12-31)
 
 ### Bug Fixes
