@@ -3,40 +3,44 @@ package apt
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/log"
+
+	"github.com/jameswlane/devex/pkg/executil"
+	"github.com/jameswlane/devex/pkg/fs"
 )
 
-func AddAptSource(keySource string, keyName string, sourceRepo string, sourceName string, dearmor bool) error {
+// AddAptSource adds a new APT source repository and optional GPG key.
+func AddAptSource(keySource, keyName, sourceRepo, sourceName string, dearmor bool) error {
 	log.Info("Adding APT source", "keySource", keySource, "keyName", keyName, "sourceRepo", sourceRepo, "sourceName", sourceName)
 
+	// Validate repository string
 	if err := ValidateAptRepo(sourceRepo); err != nil {
 		log.Error("Invalid repository string", "repo", sourceRepo, "error", err)
 		return fmt.Errorf("invalid repository: %v", err)
 	}
 
-	// Download and dearmor GPG key
+	// Download GPG key if provided
 	if keySource != "" {
 		if err := DownloadGPGKey(keySource, keyName, dearmor); err != nil {
-			log.Error("Failed to download GPG key", "error", err)
+			log.Error("Failed to download GPG key", "keySource", keySource, "error", err)
 			return fmt.Errorf("failed to download GPG key: %v", err)
 		}
 	}
 
-	// Replace placeholders in sourceRepo
+	// Replace placeholders in the source repository string
 	evaluatedRepo := replaceTemplatePlaceholders(sourceRepo)
 
-	// Ensure the directory exists
+	// Ensure the target directory exists
 	dir := filepath.Dir(sourceName)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := fs.MkdirAll(dir, os.FileMode(0o755)); err != nil {
 		return fmt.Errorf("failed to create directory for source file: %v", err)
 	}
 
-	// Write evaluated repository to source file
-	if err := os.WriteFile(sourceName, []byte(evaluatedRepo+"\n"), 0o644); err != nil {
+	// Write the repository to the source file
+	if err := fs.WriteFile(sourceName, []byte(evaluatedRepo+"\n"), os.FileMode(0o644)); err != nil {
 		return fmt.Errorf("failed to write APT source file: %v", err)
 	}
 
@@ -44,6 +48,7 @@ func AddAptSource(keySource string, keyName string, sourceRepo string, sourceNam
 	return nil
 }
 
+// replaceTemplatePlaceholders replaces placeholders in the repository template.
 func replaceTemplatePlaceholders(template string) string {
 	placeholders := map[string]string{
 		"%ARCHITECTURE%": getCommandOutput("dpkg --print-architecture"),
@@ -57,11 +62,12 @@ func replaceTemplatePlaceholders(template string) string {
 	return template
 }
 
+// getCommandOutput executes a command and returns its output.
 func getCommandOutput(command string) string {
-	output, err := exec.Command("bash", "-c", command).Output()
+	output, err := executil.RunCommand("bash", "-c", command)
 	if err != nil {
 		log.Error("Failed to evaluate placeholder", "command", command, "error", err)
 		return ""
 	}
-	return strings.TrimSpace(string(output))
+	return strings.TrimSpace(output)
 }
