@@ -1,3 +1,9 @@
+## [0.2.3](https://github.com/jameswlane/devex/compare/0.2.2...0.2.3) (2025-01-02)
+
+### Bug Fixes
+
+* **filesystem:** filesystem rewrite ([08bf3bb](https://github.com/jameswlane/devex/commit/08bf3bbc46b1c815dc3c26e94d473e3c5b412493))
+
 ## [0.2.2](https://github.com/jameswlane/devex/compare/0.2.1...0.2.2) (2025-01-01)
 
 ### Bug Fixes
