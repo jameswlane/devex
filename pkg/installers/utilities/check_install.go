@@ -5,8 +5,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/charmbracelet/log"
-
+	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
 

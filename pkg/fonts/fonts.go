@@ -14,7 +14,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/jameswlane/devex/pkg/logger"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 type Font struct {
@@ -24,8 +24,6 @@ type Font struct {
 	ExtractPath string `yaml:"extract_path,omitempty"`
 	Destination string `yaml:"destination,omitempty"`
 }
-
-var log = logger.InitLogger()
 
 // LoadFonts loads the font configuration from a YAML file
 func LoadFonts(filename string) ([]Font, error) {
@@ -139,7 +137,7 @@ func unzipAndMove(zipFile, extractPath, dest string) error {
 			if _, err := io.Copy(outFile, rc); err != nil {
 				return fmt.Errorf("failed to copy font file: %w", err)
 			}
-			log.LogInfo(fmt.Sprintf("Installed font: file=%s", destFile))
+			log.Info(fmt.Sprintf("Installed font: file=%s", destFile))
 		}
 	}
 
@@ -148,7 +146,7 @@ func unzipAndMove(zipFile, extractPath, dest string) error {
 
 // runCommand runs a command with the specified arguments
 func runCommand(cmd string, args []string) error {
-	log.LogInfo(fmt.Sprintf("Running command: %s %s", cmd, strings.Join(args, " ")))
+	log.Info(fmt.Sprintf("Running command: %s %s", cmd, strings.Join(args, " ")))
 	command := exec.Command(cmd, args...)
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr

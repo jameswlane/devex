@@ -7,7 +7,7 @@ import (
 	"os/user"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 func GetShellRCPath() (string, error) {

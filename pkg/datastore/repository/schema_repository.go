@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 type SchemaRepository interface {

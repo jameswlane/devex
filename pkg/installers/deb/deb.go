@@ -7,11 +7,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/charmbracelet/log"
-
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 type DebInstaller struct{}

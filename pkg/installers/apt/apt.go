@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/charmbracelet/log"
-
 	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
 

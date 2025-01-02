@@ -3,10 +3,10 @@ package commands
 import (
 	"fmt"
 
-	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	"github.com/jameswlane/devex/pkg/datastore/repository"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 func CreateSystemCommand(systemRepo repository.SystemRepository) *cobra.Command {
