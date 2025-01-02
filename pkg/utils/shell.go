@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 func RunShellCommand(command string) error {

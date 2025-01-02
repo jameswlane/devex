@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 func CopyFile(source, destination string) error {

@@ -1,4 +1,4 @@
-package dock
+package gnome
 
 import (
 	"fmt"
@@ -83,12 +83,4 @@ func SetFavoriteApps(config Config) error {
 
 	fmt.Println("Favorite apps set successfully")
 	return nil
-}
-
-// Helper function to join strings with a separator
-func joinStrings(items []string, sep string) string {
-	if len(items) == 0 {
-		return ""
-	}
-	return items[0] + sep + strings.Join(items[1:], sep)
 }

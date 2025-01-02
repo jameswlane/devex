@@ -14,7 +14,7 @@ builds:
 
 archives:
   - id: devex
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     # Sets the given file info to all the binaries included from the `builds`.
     #
     # Default: copied from the source binary.

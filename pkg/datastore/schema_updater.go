@@ -8,9 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/log"
-
 	"github.com/jameswlane/devex/pkg/datastore/repository"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 func ApplySchemaUpdates(repo repository.SchemaRepository, homeDir string) error {

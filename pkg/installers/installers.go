@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/log"
-
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
@@ -18,6 +16,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/mise"
 	"github.com/jameswlane/devex/pkg/installers/pip"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )

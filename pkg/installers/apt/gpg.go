@@ -8,15 +8,26 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/log"
+	"github.com/jameswlane/devex/pkg/fs"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 // DownloadGPGKey downloads and optionally processes a GPG key.
 func DownloadGPGKey(url, destination string, dearmor bool) error {
 	log.Info("Downloading GPG key", "url", url, "destination", destination)
 
+	exists, err := fs.FileExistsAndIsFile(destination)
+	if err != nil {
+		return fmt.Errorf("failed to check if GPG key file exists: %v", err)
+	}
+
+	if exists {
+		log.Info("GPG key file already exists", "destination", destination)
+		return nil
+	}
+
 	dir := filepath.Dir(destination)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := fs.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
 
@@ -39,7 +50,7 @@ func DownloadGPGKey(url, destination string, dearmor bool) error {
 	}
 
 	tempFile := destination + ".tmp"
-	outFile, err := os.Create(tempFile)
+	outFile, err := fs.Create(tempFile)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %v", err)
 	}

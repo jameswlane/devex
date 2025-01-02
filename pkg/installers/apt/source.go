@@ -2,7 +2,6 @@ package apt
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,35 +11,38 @@ import (
 	"github.com/jameswlane/devex/pkg/fs"
 )
 
-// AddAptSource adds a new APT source repository and optional GPG key.
 func AddAptSource(keySource, keyName, sourceRepo, sourceName string, dearmor bool) error {
 	log.Info("Adding APT source", "keySource", keySource, "keyName", keyName, "sourceRepo", sourceRepo, "sourceName", sourceName)
 
-	// Validate repository string
 	if err := ValidateAptRepo(sourceRepo); err != nil {
 		log.Error("Invalid repository string", "repo", sourceRepo, "error", err)
 		return fmt.Errorf("invalid repository: %v", err)
 	}
 
-	// Download GPG key if provided
 	if keySource != "" {
-		if err := DownloadGPGKey(keySource, keyName, dearmor); err != nil {
+		if err := DownloadGPGKey(keySource, sourceName+".gpg", dearmor); err != nil {
 			log.Error("Failed to download GPG key", "keySource", keySource, "error", err)
 			return fmt.Errorf("failed to download GPG key: %v", err)
 		}
 	}
 
-	// Replace placeholders in the source repository string
 	evaluatedRepo := replaceTemplatePlaceholders(sourceRepo)
 
-	// Ensure the target directory exists
 	dir := filepath.Dir(sourceName)
-	if err := fs.MkdirAll(dir, os.FileMode(0o755)); err != nil {
+	if err := fs.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory for source file: %v", err)
 	}
+	exists, err := fs.FileExistsAndIsFile(sourceName)
+	if err != nil {
+		return fmt.Errorf("failed to check if source file exists: %v", err)
+	}
 
-	// Write the repository to the source file
-	if err := fs.WriteFile(sourceName, []byte(evaluatedRepo+"\n"), os.FileMode(0o644)); err != nil {
+	if exists {
+		log.Info("APT source file already exists", "sourceName", sourceName)
+		return nil
+	}
+
+	if err := fs.WriteFile(sourceName, []byte(evaluatedRepo+"\n"), 0o644); err != nil {
 		return fmt.Errorf("failed to write APT source file: %v", err)
 	}
 
@@ -48,7 +50,6 @@ func AddAptSource(keySource, keyName, sourceRepo, sourceName string, dearmor boo
 	return nil
 }
 
-// replaceTemplatePlaceholders replaces placeholders in the repository template.
 func replaceTemplatePlaceholders(template string) string {
 	placeholders := map[string]string{
 		"%ARCHITECTURE%": getCommandOutput("dpkg --print-architecture"),

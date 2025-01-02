@@ -8,7 +8,7 @@ import (
 
 	"gopkg.in/yaml.v2"
 
-	"github.com/jameswlane/devex/pkg/logger"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 type GnomeExtension struct {
@@ -20,8 +20,6 @@ type SchemaFile struct {
 	Source      string `yaml:"source"`
 	Destination string `yaml:"destination"`
 }
-
-var log = logger.InitLogger()
 
 // LoadGnomeExtensions loads the GNOME extensions from the YAML configuration
 func LoadGnomeExtensions(filename string) ([]GnomeExtension, error) {
@@ -41,12 +39,12 @@ func LoadGnomeExtensions(filename string) ([]GnomeExtension, error) {
 
 // InstallGnomeExtension installs a GNOME extension using gnome-extensions-cli
 func InstallGnomeExtension(extension GnomeExtension) error {
-	log.LogInfo(fmt.Sprintf("Installing GNOME extension: id=%s", extension.ID))
+	log.Info(fmt.Sprintf("Installing GNOME extension: id=%s", extension.ID))
 
 	cmd := exec.Command("gext", "install", extension.ID)
 	_, err := cmd.CombinedOutput()
 	if err != nil {
-		log.LogError(fmt.Sprintf("Failed to install GNOME extension: id=%s", extension.ID), err)
+		log.Error(fmt.Sprintf("Failed to install GNOME extension: id=%s", extension.ID), err)
 		return err
 	}
 
@@ -62,7 +60,7 @@ func InstallGnomeExtension(extension GnomeExtension) error {
 
 // copySchemaFile copies schema files to the appropriate destination
 func copySchemaFile(schema SchemaFile) error {
-	log.LogInfo(fmt.Sprintf("Copying schema file: source=%s, destination=%s", schema.Source, schema.Destination))
+	log.Info(fmt.Sprintf("Copying schema file: source=%s, destination=%s", schema.Source, schema.Destination))
 
 	// Ensure destination directory exists
 	if err := os.MkdirAll(schema.Destination, os.ModePerm); err != nil {
@@ -93,15 +91,15 @@ func copySchemaFile(schema SchemaFile) error {
 
 // CompileSchemas runs glib-compile-schemas after installing extensions
 func CompileSchemas() error {
-	log.LogInfo("Compiling schemas...")
+	log.Info("Compiling schemas...")
 
 	cmd := exec.Command("sudo", "glib-compile-schemas", "/usr/share/glib-2.0/schemas/")
 	_, err := cmd.CombinedOutput()
 	if err != nil {
-		log.LogError("Failed to compile schemas", err)
+		log.Error("Failed to compile schemas", err)
 		return err
 	}
 
-	log.LogInfo("Schemas compiled successfully")
+	log.Info("Schemas compiled successfully")
 	return nil
 }

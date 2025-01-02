@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/log"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
