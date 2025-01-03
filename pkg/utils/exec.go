@@ -1,4 +1,4 @@
-package executil
+package utils
 
 import (
 	"bytes"

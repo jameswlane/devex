@@ -2,8 +2,6 @@ package commands
 
 import (
 	"github.com/spf13/cobra"
-
-	"github.com/jameswlane/devex/pkg/commands/install"
 )
 
 func RegisterRootCommand(homeDir string) *cobra.Command {
@@ -14,7 +12,7 @@ func RegisterRootCommand(homeDir string) *cobra.Command {
 	}
 
 	// Register subcommands
-	rootCmd.AddCommand(install.CreateInstallCommand(homeDir))
+	rootCmd.AddCommand(CreateInstallCommand(homeDir))
 
 	return rootCmd
 }
