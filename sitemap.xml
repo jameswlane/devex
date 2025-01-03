@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://docs.devex.sh/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.devex.sh/cli/commands/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.devex.sh/cli/overview/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.devex.sh/configuration/apps/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.devex.sh/configuration/databases/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.devex.sh/configuration/overview/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+    <url>
+         <loc>https://docs.devex.sh/configuration/programming_languages/</loc>
+         <lastmod>2025-01-03</lastmod>
+    </url>
+</urlset>
