@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/log"
 
-	"github.com/jameswlane/devex/pkg/executil"
 	"github.com/jameswlane/devex/pkg/fs"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 func AddAptSource(keySource, keyName, sourceRepo, sourceName string, dearmor bool) error {
@@ -65,7 +65,7 @@ func replaceTemplatePlaceholders(template string) string {
 
 // getCommandOutput executes a command and returns its output.
 func getCommandOutput(command string) string {
-	output, err := executil.RunCommand("bash", "-c", command)
+	output, err := utils.RunCommand("bash", "-c", command)
 	if err != nil {
 		log.Error("Failed to evaluate placeholder", "command", command, "error", err)
 		return ""

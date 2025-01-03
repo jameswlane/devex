@@ -1,4 +1,4 @@
-package userutil
+package utils
 
 import "os/user"
 
