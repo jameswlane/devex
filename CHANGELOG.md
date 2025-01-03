@@ -1,3 +1,9 @@
+## [0.2.4](https://github.com/jameswlane/devex/compare/0.2.3...0.2.4) (2025-01-03)
+
+### Bug Fixes
+
+* **refactor:** some refactoring of the code ([c102141](https://github.com/jameswlane/devex/commit/c102141588bee3a121a6d66c47f0d2eadaae0da7))
+
 ## [0.2.3](https://github.com/jameswlane/devex/compare/0.2.2...0.2.3) (2025-01-02)
 
 ### Bug Fixes
