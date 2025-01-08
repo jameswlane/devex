@@ -1,3 +1,10 @@
+## [0.3.1](https://github.com/jameswlane/devex/compare/0.3.0...0.3.1) (2025-01-08)
+
+### Bug Fixes
+
+* **ci:** build pipeline ([aaad350](https://github.com/jameswlane/devex/commit/aaad350fa009d47140e9aeaf25980686fdaab575))
+* **ci:** ginkgo in action ([b09750d](https://github.com/jameswlane/devex/commit/b09750d5cbd0ef7b13b9a2001040997e4930aaa3))
+
 ## [0.3.0](https://github.com/jameswlane/devex/compare/0.2.4...0.3.0) (2025-01-08)
 
 ### Features
