@@ -3,10 +3,10 @@ package pip
 import (
 	"fmt"
 
-	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 type PIPInstaller struct{}
@@ -15,10 +15,10 @@ func New() *PIPInstaller {
 	return &PIPInstaller{}
 }
 
-func (p *PIPInstaller) Install(command string, repo repository.Repository) error {
+func (p *PIPInstaller) Install(command string, repo types.Repository) error {
 	log.Info("PIP Installer: Starting installation", "package", command)
 
-	// Wrap the command into a types.AppConfig object for the utilities function
+	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
 		Name:           command,
 		InstallMethod:  "pip",
@@ -28,30 +28,30 @@ func (p *PIPInstaller) Install(command string, repo repository.Repository) error
 	// Check if the package is already installed
 	isInstalled, err := utilities.IsAppInstalled(appConfig)
 	if err != nil {
-		log.Error("PIP Installer: Failed to check if package is installed", "package", command, "error", err)
-		return fmt.Errorf("failed to check if pip package is installed: %v", err)
+		log.Error("Failed to check if package is installed", err, "package", command)
+		return fmt.Errorf("failed to check if pip package is installed: %w", err)
 	}
 
 	if isInstalled {
-		log.Info("PIP Installer: Package already installed, skipping", "package", command)
+		log.Info("Package is already installed, skipping installation", "package", command)
 		return nil
 	}
 
-	// Run pip install
-	err = utilities.RunCommand(fmt.Sprintf("pip install %s", command))
-	if err != nil {
-		log.Error("PIP Installer: Failed to install package", "package", command, "error", err)
-		return fmt.Errorf("failed to install package via pip: %v", err)
+	// Run `pip install` command
+	installCommand := fmt.Sprintf("pip install %s", command)
+	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
+		log.Error("Failed to install package via pip", err, "package", command, "command", installCommand)
+		return fmt.Errorf("failed to install package via pip '%s': %w", command, err)
 	}
 
-	log.Info("PIP Installer: Installation successful", "package", command)
+	log.Info("Pip package installed successfully", "package", command)
 
-	// Add to repository
+	// Add the package to the repository
 	if err := repo.AddApp(command); err != nil {
-		log.Error("PIP Installer: Failed to add package to repository", "package", command, "error", err)
-		return fmt.Errorf("failed to add package to repository: %v", err)
+		log.Error("Failed to add package to repository", err, "package", command)
+		return fmt.Errorf("failed to add pip package '%s' to repository: %w", command, err)
 	}
 
-	log.Info("PIP Installer: Package added to repository", "package", command)
+	log.Info("Pip package added to repository successfully", "package", command)
 	return nil
 }

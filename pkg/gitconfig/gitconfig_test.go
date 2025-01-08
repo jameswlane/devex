@@ -1,137 +1,77 @@
-package gitconfig
+package gitconfig_test
 
 import (
-	"reflect"
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/jameswlane/devex/pkg/gitconfig"
+	"github.com/jameswlane/devex/pkg/mocks"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
-func TestApplyGitConfig(t *testing.T) {
-	t.Parallel()
+var _ = Describe("GitConfig", func() {
+	var mockUtils *mocks.MockUtils
 
-	type args struct {
-		gitConfig *GitConfig
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	BeforeEach(func() {
+		mockUtils = mocks.NewMockUtils()
+		utils.CommandExec = mockUtils // Replace the real CommandExec with the mock
+	})
 
-			if err := ApplyGitConfig(tt.args.gitConfig); (err != nil) != tt.wantErr {
-				t.Errorf("ApplyGitConfig() error = %v, wantErr %v", err, tt.wantErr)
+	Describe("ApplyGitConfig", func() {
+		It("applies Git aliases and settings successfully", func() {
+			config := &gitconfig.GitConfig{
+				Aliases: map[string]string{
+					"co": "checkout",
+					"br": "branch",
+				},
+				Settings: map[string]string{
+					"user.name":  "Test User",
+					"user.email": "test@example.com",
+				},
 			}
+
+			err := gitconfig.ApplyGitConfig(config)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Verify commands executed by the mock
+			Expect(mockUtils.Commands).To(ContainElements(
+				"git config --global alias.co checkout",
+				"git config --global alias.br branch",
+				"git config --global user.name Test User",
+				"git config --global user.email test@example.com",
+			))
 		})
-	}
-}
 
-func TestLoadGitConfig(t *testing.T) {
-	t.Parallel()
+		It("returns an error if applying an alias fails", func() {
+			// Simulate failure for a specific command
+			mockUtils.FailCommand("git config --global alias.co checkout")
 
-	type args struct {
-		filename string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    *GitConfig
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			got, err := LoadGitConfig(tt.args.filename)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoadGitConfig() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			config := &gitconfig.GitConfig{
+				Aliases: map[string]string{
+					"co": "checkout",
+				},
+				Settings: map[string]string{},
 			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LoadGitConfig() got = %v, want %v", got, tt.want)
-			}
+
+			err := gitconfig.ApplyGitConfig(config)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to set git alias co"))
 		})
-	}
-}
 
-func Test_applyAliases(t *testing.T) {
-	t.Parallel()
+		It("returns an error if applying a setting fails", func() {
+			mockUtils.FailCommand("git config --global user.name Test User")
 
-	type args struct {
-		aliases map[string]string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if err := applyAliases(tt.args.aliases); (err != nil) != tt.wantErr {
-				t.Errorf("applyAliases() error = %v, wantErr %v", err, tt.wantErr)
+			config := &gitconfig.GitConfig{
+				Aliases: map[string]string{},
+				Settings: map[string]string{
+					"user.name": "Test User",
+				},
 			}
+
+			err := gitconfig.ApplyGitConfig(config)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to apply settings"))
+			Expect(err.Error()).To(ContainSubstring("failed to set git configuration user.name"))
 		})
-	}
-}
-
-func Test_applySettings(t *testing.T) {
-	t.Parallel()
-
-	type args struct {
-		settings map[string]string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if err := applySettings(tt.args.settings); (err != nil) != tt.wantErr {
-				t.Errorf("applySettings() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_runGitCommand(t *testing.T) {
-	t.Parallel()
-
-	type args struct {
-		args []string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			if err := runGitCommand(tt.args.args); (err != nil) != tt.wantErr {
-				t.Errorf("runGitCommand() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+	})
+})

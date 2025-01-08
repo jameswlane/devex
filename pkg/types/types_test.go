@@ -1,116 +1,121 @@
 package types_test
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/types"
 )
 
-func TestAppConfigValidation(t *testing.T) {
-	t.Parallel()
+var _ = Describe("AppConfig", func() {
+	Context("Validate", func() {
+		It("returns an error if the name is empty", func() {
+			app := types.AppConfig{
+				InstallMethod: "apt",
+			}
+			err := app.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("app name is required"))
+		})
 
-	validApp := types.AppConfig{
-		Name:           "test-app",
-		InstallMethod:  "docker",
-		InstallCommand: "docker run test-app",
-	}
-	assert.NoError(t, validApp.Validate())
+		It("returns an error if the install method is empty", func() {
+			app := types.AppConfig{
+				Name: "TestApp",
+			}
+			err := app.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("install method is required"))
+		})
 
-	missingName := types.AppConfig{
-		InstallMethod:  "docker",
-		InstallCommand: "docker run test-app",
-	}
-	assert.EqualError(t, missingName.Validate(), "Name is required")
+		It("returns an error if APT sources are invalid", func() {
+			app := types.AppConfig{
+				Name:          "TestApp",
+				InstallMethod: "apt",
+				AptSources: []types.AptSource{
+					{SourceRepo: "", SourceName: ""},
+				},
+			}
+			err := app.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("APT source at index 0 must have repo and list_file defined"))
+		})
 
-	missingMethod := types.AppConfig{
-		Name:           "test-app",
-		InstallCommand: "docker run test-app",
-	}
-	assert.EqualError(t, missingMethod.Validate(), "InstallMethod is required")
+		It("validates successfully with valid fields", func() {
+			app := types.AppConfig{
+				Name:          "TestApp",
+				InstallMethod: "curlpipe",
+				DownloadURL:   "https://example.com",
+			}
+			err := app.Validate()
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+})
 
-	missingCommand := types.AppConfig{
-		Name:          "test-app",
-		InstallMethod: "docker",
-	}
-	assert.EqualError(t, missingCommand.Validate(), "install command is required for app test-app")
+var _ = Describe("DockerOptions", func() {
+	Context("Validate", func() {
+		It("returns an error if ContainerName is empty", func() {
+			options := types.DockerOptions{}
+			err := options.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("container name is required"))
+		})
 
-	validAptApp := types.AppConfig{
-		Name:           "test-apt-app",
-		InstallMethod:  "apt",
-		InstallCommand: "apt-get install test-apt-app",
-		AptSources: []types.AptSource{
-			{
-				KeySource:  "http://example.com/key",
-				KeyName:    "example-key",
-				SourceRepo: "http://example.com/repo",
-				SourceName: "example.list",
-			},
-		},
-	}
-	assert.NoError(t, validAptApp.Validate())
+		It("validates successfully with a valid ContainerName", func() {
+			options := types.DockerOptions{
+				ContainerName: "test-container",
+			}
+			err := options.Validate()
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+})
 
-	invalidAptApp := types.AppConfig{
-		Name:          "test-apt-app",
-		InstallMethod: "apt",
-		AptSources: []types.AptSource{
-			{
-				KeySource:  "",
-				KeyName:    "",
-				SourceRepo: "",
-				SourceName: "",
-			},
-		},
-	}
-	assert.EqualError(t, invalidAptApp.Validate(), "APT source must have a list_file and repo defined")
+var _ = Describe("Font", func() {
+	Context("Validate", func() {
+		It("returns an error if Name is empty", func() {
+			font := types.Font{
+				Method: "url",
+			}
+			err := font.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("font name is required"))
+		})
 
-	validCurlpipeApp := types.AppConfig{
-		Name:          "test-curlpipe-app",
-		InstallMethod: "curlpipe",
-		DownloadURL:   "http://example.com/download",
-	}
-	assert.NoError(t, validCurlpipeApp.Validate())
+		It("returns an error if Method is empty", func() {
+			font := types.Font{
+				Name: "TestFont",
+			}
+			err := font.Validate()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("install method is required"))
+		})
 
-	invalidCurlpipeApp := types.AppConfig{
-		Name:          "test-curlpipe-app",
-		InstallMethod: "curlpipe",
-	}
-	assert.EqualError(t, invalidCurlpipeApp.Validate(), "download URL is required for app test-curlpipe-app with install method curlpipe")
-}
+		It("validates successfully with valid fields", func() {
+			font := types.Font{
+				Name:   "TestFont",
+				Method: "url",
+			}
+			err := font.Validate()
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+})
 
-func TestDockerOptionsValidation(t *testing.T) {
-	t.Parallel()
+var _ = Describe("AptSource", func() {
+	It("allows creation with all fields", func() {
+		source := types.AptSource{
+			KeySource:      "https://example.com/key",
+			KeyName:        "example-key",
+			SourceRepo:     "http://example.com/repo",
+			SourceName:     "example-repo",
+			RequireDearmor: true,
+		}
 
-	validOptions := types.DockerOptions{
-		ContainerName: "test-container",
-	}
-	assert.NoError(t, validOptions.Validate())
-
-	missingContainerName := types.DockerOptions{}
-	assert.EqualError(t, missingContainerName.Validate(), "ContainerName is required for DockerOptions")
-}
-
-func TestAppConfigUnmarshal(t *testing.T) {
-	t.Parallel()
-
-	yamlData := `
-name: test-app
-install_method: docker
-install_command: docker run test-app
-`
-	var app types.AppConfig
-	err := yaml.Unmarshal([]byte(yamlData), &app)
-	assert.NoError(t, err)
-	assert.Equal(t, "test-app", app.Name)
-	assert.Equal(t, "docker", app.InstallMethod)
-	assert.Equal(t, "docker run test-app", app.InstallCommand)
-}
-
-func TestDefaultValues(t *testing.T) {
-	t.Parallel()
-
-	app := types.AppConfig{}
-	assert.False(t, app.Default) // Ensure Default is false by default
-}
+		Expect(source.KeySource).To(Equal("https://example.com/key"))
+		Expect(source.KeyName).To(Equal("example-key"))
+		Expect(source.SourceRepo).To(Equal("http://example.com/repo"))
+		Expect(source.SourceName).To(Equal("example-repo"))
+		Expect(source.RequireDearmor).To(BeTrue())
+	})
+})

@@ -1,53 +1,102 @@
 package commands
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 
 	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/datastore/repository"
+	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-// CreateInstallCommand creates the `install` subcommand.
-func CreateInstallCommand(homeDir string) *cobra.Command {
+func init() {
+	Register(NewInstallCmd)
+}
+
+func NewInstallCmd(repo types.Repository, settings config.Settings) *cobra.Command {
+	var apps string
+
 	cmd := &cobra.Command{
 		Use:   "install",
-		Short: "Install development environment",
-		Long:  "Install all necessary tools, programming languages, and databases for your development environment.",
+		Short: "Install your development environment",
+		Long: `The install command automates the installation of:
+  - Programming languages
+  - Tools
+  - Databases
+  You can configure the apps to be installed using the configuration file.`,
+		Example: `
+# Install all default applications
+devex install
+
+# Install specific applications
+devex install --apps app1,app2`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runInstall(homeDir, cmd.Flags().Changed("dry-run"))
+			if apps != "" {
+				settings.Apps = parseApps(apps)
+			}
+			runInstall(repo, settings)
 		},
 	}
-	cmd.Flags().Bool("dry-run", false, "Simulate installation without applying changes")
+
+	cmd.Flags().StringVar(&apps, "apps", "", "Comma-separated list of apps to install")
 	return cmd
 }
 
-func runInstall(homeDir string, dryRun bool) {
-	log.Print("Initializing database...")
-	db, err := datastore.InitDB(homeDir + "/.devex/installed_apps.db")
-	if err != nil {
-		log.Fatal("Failed to initialize database: %v", err)
+// Helper function to parse apps from a comma-separated string
+func parseApps(apps string) []types.AppConfig {
+	parsedApps := make([]types.AppConfig, 0, len(apps))
+	for _, appName := range strings.Split(apps, ",") {
+		parsedApps = append(parsedApps, types.AppConfig{Name: appName})
 	}
-	defer db.Close()
-
-	// Use the correct type for repository initialization
-	repo := repository.NewRepository(db.GetDB())
-
-	log.Print("Loading configurations...")
-	_, err = config.LoadSettings(homeDir)
-	if err != nil {
-		return
-	} // Removed erroneous value usage
-
-	log.Print("Installing components...")
-	installComponents(repo, dryRun)
-
-	log.Print("Installation process completed!")
+	return parsedApps
 }
 
-func installComponents(repo repository.Repository, dryRun bool) {
-	// Log repo and dryRun values
-	log.Print("Repository: %v\n", repo)
-	log.Print("Dry Run: %v\n", dryRun)
+func runInstall(repo types.Repository, settings config.Settings) {
+	log.Info("Starting installation process", "dryRun", settings.DryRun)
+
+	// Install apps
+	if err := installApps(repo, settings, FilterDefaultApps(settings.Apps)); err != nil {
+		log.Error("Failed to install apps", err)
+		return
+	}
+
+	if settings.DryRun {
+		log.Info("Dry run completed. No changes applied.")
+		return
+	}
+
+	log.Info("Installation process completed successfully")
+}
+
+func installApps(repo types.Repository, settings config.Settings, apps []types.AppConfig) error {
+	for _, app := range apps {
+		log.Info("Installing app", "app", app.Name, "method", app.InstallMethod)
+
+		// Validate app configuration
+		if err := config.ValidateApp(app); err != nil {
+			log.Error("Invalid app configuration", err, "app", app.Name)
+			continue
+		}
+
+		// Perform installation
+		if err := installers.InstallApp(app, settings, repo); err != nil {
+			log.Error("Error installing app", err, "app", app.Name)
+			return err
+		}
+
+		log.Info("App installed successfully", "app", app.Name)
+	}
+	return nil
+}
+
+func FilterDefaultApps(apps []types.AppConfig) []types.AppConfig {
+	var defaultApps []types.AppConfig
+	for _, app := range apps {
+		if app.Default {
+			defaultApps = append(defaultApps, app)
+		}
+	}
+	return defaultApps
 }

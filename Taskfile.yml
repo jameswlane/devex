@@ -15,12 +15,12 @@ tasks:
     build:
         desc: Builds the Go project
         cmds:
-            - go build -o {{.BIN}}/myapp ./cmd/myapp
+            - go build -o {{.BIN}}/devex ./cmd/main.go
 
     build:local:
         desc: Builds the Go project for local development
         cmds:
-            - go build -o ./bin/devex -v ./cmd/devex
+            - go build -o ./bin/devex -v ./cmd/main.go
 
     # Installation task
     install:

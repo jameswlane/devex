@@ -1,27 +1,26 @@
 package utils
 
 import (
-	"bytes"
+	"context"
 	"os/exec"
 )
 
-type CommandExecutor interface {
-	RunCommand(name string, args ...string) (string, error)
-}
-
 type OSCommandExecutor struct{}
 
-func (OSCommandExecutor) RunCommand(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	err := cmd.Run()
-	return out.String(), err
+var CommandExec Interface = &OSCommandExecutor{} // Changed to a pointer
+
+func (OSCommandExecutor) RunShellCommand(command string) (string, error) {
+	cmd := exec.Command("bash", "-c", command)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
 }
 
-var CommandExec CommandExecutor = OSCommandExecutor{}
+func (OSCommandExecutor) RunCommand(ctx context.Context, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
 
-func RunCommand(name string, args ...string) (string, error) {
-	return CommandExec.RunCommand(name, args...)
+func (OSCommandExecutor) DownloadFileWithContext(ctx context.Context, url, filepath string) error {
+	return DownloadFileWithContext(ctx, url, filepath)
 }

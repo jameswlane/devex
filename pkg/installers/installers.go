@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
 	"github.com/jameswlane/devex/pkg/installers/brew"
@@ -15,17 +14,12 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
 	"github.com/jameswlane/devex/pkg/installers/pip"
-	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
-type BaseInstaller interface {
-	Install(command string, repo repository.Repository) error
-}
-
-var installerRegistry = map[string]BaseInstaller{}
+var installerRegistry = map[string]types.BaseInstaller{}
 
 func init() {
 	installerRegistry["apt"] = apt.New()
@@ -39,133 +33,114 @@ func init() {
 	installerRegistry["appimage"] = appimage.New()
 }
 
-func executeInstallCommand(app types.AppConfig, repo repository.Repository) error {
+func executeInstallCommand(app types.AppConfig, repo types.Repository) error {
 	installer, exists := installerRegistry[app.InstallMethod]
 	if !exists {
-		log.Error("Unsupported install method", "method", app.InstallMethod)
+		log.Error("Unsupported install method", fmt.Errorf("method: %s", app.InstallMethod))
 		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
 	}
 	log.Info("Executing installer", "method", app.InstallMethod)
 	return installer.Install(app.InstallCommand, repo)
 }
 
-// InstallApp installs the app based on the InstallMethod field.
-func InstallApp(app types.AppConfig, settings config.Settings, repo repository.Repository) error {
+func InstallApp(app types.AppConfig, settings config.Settings, repo types.Repository) error {
 	log.Info("Installing app", "app", app.Name)
 
-	// Validate system requirements
 	if err := validateSystemRequirements(app); err != nil {
-		return fmt.Errorf("failed to validate system requirements: %v", err)
+		return fmt.Errorf("failed to validate system requirements: %w", err)
 	}
 
-	// Backup existing files
 	if err := backupExistingFiles(app); err != nil {
-		return fmt.Errorf("failed to back up existing files: %v", err)
+		return fmt.Errorf("failed to back up existing files: %w", err)
 	}
 
-	// Remove conflicting packages
 	if len(app.Conflicts) > 0 {
 		if err := RemoveConflictingPackages(app.Conflicts); err != nil {
-			return fmt.Errorf("failed to remove conflicting packages: %v", err)
+			return fmt.Errorf("failed to remove conflicting packages: %w", err)
 		}
 	}
 
-	// Run pre-install commands
-	if err := runInstallCommands(app.PreInstall, settings); err != nil {
-		return fmt.Errorf("failed to execute pre-install commands: %v", err)
+	if err := runInstallCommands(app.PreInstall); err != nil {
+		return fmt.Errorf("failed to execute pre-install commands: %w", err)
 	}
 
-	// Set up environment
 	if err := setupEnvironment(app); err != nil {
-		return fmt.Errorf("failed to set up environment: %v", err)
+		return fmt.Errorf("failed to set up environment: %w", err)
 	}
 
-	// Handle dependencies
 	if err := HandleDependencies(app, settings, repo); err != nil {
-		return fmt.Errorf("failed to handle dependencies: %v", err)
+		return fmt.Errorf("failed to handle dependencies: %w", err)
 	}
 
-	// Handle APT sources
 	if len(app.AptSources) > 0 {
 		for _, source := range app.AptSources {
 			if err := apt.AddAptSource(source.KeySource, source.KeyName, source.SourceRepo, source.SourceName, source.RequireDearmor); err != nil {
-				log.Error("Failed to add APT source", "source", source, "error", err)
-				return fmt.Errorf("failed to add APT source: %v", err)
+				log.Error("Failed to add APT source", err, "source", source)
+				return fmt.Errorf("failed to add APT source: %w", err)
 			}
 		}
 
-		// Run apt-get update to refresh package lists
 		if err := apt.RunAptUpdate(true, repo); err != nil {
-			log.Error("Failed to update APT package lists", "error", err)
-			return fmt.Errorf("failed to update APT package lists: %v", err)
+			log.Error("Failed to update APT package lists", err)
+			return fmt.Errorf("failed to update APT package lists: %w", err)
 		}
 	}
 
-	// Process config files (placeholder)
 	if err := processConfigFiles(app); err != nil {
-		return fmt.Errorf("failed to process config files: %v", err)
+		return fmt.Errorf("failed to process config files: %w", err)
 	}
 
-	// Process themes (placeholder)
 	if err := processThemes(app); err != nil {
-		return fmt.Errorf("failed to process themes: %v", err)
+		return fmt.Errorf("failed to process themes: %w", err)
 	}
 
-	// Execute the installation
 	if err := executeInstallCommand(app, repo); err != nil {
-		return fmt.Errorf("failed to execute install command: %v", err)
+		return fmt.Errorf("failed to execute install command: %w", err)
 	}
 
-	// Run post-install commands
-	if err := runInstallCommands(app.PostInstall, settings); err != nil {
-		return fmt.Errorf("failed to execute post-install commands: %v", err)
+	if err := runInstallCommands(app.PostInstall); err != nil {
+		return fmt.Errorf("failed to execute post-install commands: %w", err)
 	}
 
-	// Perform cleanup
 	if err := cleanupAfterInstall(app); err != nil {
-		return fmt.Errorf("failed to clean up after installation: %v", err)
+		return fmt.Errorf("failed to clean up after installation: %w", err)
 	}
 
 	log.Info("App installed successfully", "app", app.Name)
 	return nil
 }
 
-// runInstallCommands executes pre-install or post-install commands.
-func runInstallCommands(commands []types.InstallCommand, settings config.Settings) error {
-	log.Info("Starting runInstallCommands", "commands", commands, "dryRun", settings.DryRun, "homeDir", settings.HomeDir)
+func runInstallCommands(commands []types.InstallCommand) error {
+	log.Info("Starting runInstallCommands", "commands", commands)
 
 	for _, cmd := range commands {
 		if cmd.UpdateShellConfig != "" {
-			processedCommand := utils.ReplacePlaceholders(cmd.UpdateShellConfig)
+			processedCommand := utils.ReplacePlaceholders(cmd.UpdateShellConfig, map[string]string{})
+
 			log.Info("Updating shell config", "command", processedCommand)
-			if !settings.DryRun {
-				if err := utils.UpdateShellConfig([]string{processedCommand}); err != nil {
-					log.Error("Failed to update shell config", "command", processedCommand, "error", err)
-					return fmt.Errorf("failed to update shell config: %v", err)
-				}
+			if err := utils.UpdateShellConfig("shellPath", "configKey", []string{processedCommand}); err != nil {
+				log.Error("Failed to update shell config", err, "command", processedCommand)
+				return fmt.Errorf("failed to update shell config: %w", err)
 			}
 		}
 
 		if cmd.Shell != "" {
-			processedCommand := utils.ReplacePlaceholders(cmd.Shell)
+			processedCommand := utils.ReplacePlaceholders(cmd.UpdateShellConfig, map[string]string{})
 			log.Info("Executing shell command", "command", processedCommand)
-			if !settings.DryRun {
-				if err := utils.ExecAsUser(processedCommand, settings.DryRun); err != nil {
-					log.Error("Failed to execute shell command", "command", processedCommand, "error", err)
-					return fmt.Errorf("failed to execute shell command: %v", err)
-				}
+			output, err := utils.ExecAsUser(processedCommand)
+			if err != nil {
+				log.Error("Failed to execute shell command", err, "output", output)
+				return fmt.Errorf("failed to execute shell command: %w", err)
 			}
 		}
 
 		if cmd.Copy != nil {
-			source := utils.ReplacePlaceholders(cmd.Copy.Source)
-			destination := utils.ReplacePlaceholders(cmd.Copy.Destination)
+			source := utils.ReplacePlaceholders(cmd.Copy.Source, map[string]string{})
+			destination := utils.ReplacePlaceholders(cmd.Copy.Destination, map[string]string{})
 			log.Info("Copying file", "source", source, "destination", destination)
-			if !settings.DryRun {
-				if err := utilities.CopyFile(source, destination); err != nil {
-					log.Error("Failed to copy file", "source", source, "destination", destination, "error", err)
-					return fmt.Errorf("failed to copy file from %s to %s: %v", source, destination, err)
-				}
+			if err := utils.CopyFile(source, destination); err != nil {
+				log.Error("Failed to copy file", err, "source", source, "destination", destination)
+				return fmt.Errorf("failed to copy file from %s to %s: %w", source, destination, err)
 			}
 		}
 	}
@@ -174,7 +149,6 @@ func runInstallCommands(commands []types.InstallCommand, settings config.Setting
 	return nil
 }
 
-// RemoveConflictingPackages removes specified conflicting packages before installation.
 func RemoveConflictingPackages(packages []string) error {
 	if len(packages) == 0 {
 		log.Info("No conflicting packages to remove")
@@ -184,16 +158,16 @@ func RemoveConflictingPackages(packages []string) error {
 	log.Info("Removing conflicting packages", "packages", packages)
 	command := fmt.Sprintf("sudo apt-get remove -y %s", strings.Join(packages, " "))
 
-	if err := utilities.RunCommand(command); err != nil {
-		log.Error("Failed to remove conflicting packages", "command", command, "error", err)
-		return fmt.Errorf("failed to remove conflicting packages: %v", err)
+	if _, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to remove conflicting packages", err, "command", command)
+		return fmt.Errorf("failed to remove conflicting packages: %w", err)
 	}
 
 	log.Info("Conflicting packages removed successfully")
 	return nil
 }
 
-func HandleDependencies(app types.AppConfig, settings config.Settings, repo repository.Repository) error {
+func HandleDependencies(app types.AppConfig, settings config.Settings, repo types.Repository) error {
 	for _, dep := range app.Dependencies {
 		// Retrieve the dependency's app configuration
 		depApp, err := config.FindAppByName(settings, dep)

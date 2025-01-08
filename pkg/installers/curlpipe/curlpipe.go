@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 type CurlPipeInstaller struct{}
@@ -15,32 +15,32 @@ func New() *CurlPipeInstaller {
 	return &CurlPipeInstaller{}
 }
 
-func (c *CurlPipeInstaller) Install(command string, repo repository.Repository) error {
+func (c *CurlPipeInstaller) Install(command string, repo types.Repository) error {
 	log.Info("CurlPipe Installer: Starting installation", "command", command)
 
-	// Run curl | sh command
-	err := utilities.RunCommand(command)
+	// Execute the curl | sh command
+	_, err := utils.CommandExec.RunShellCommand(command)
 	if err != nil {
-		log.Error("CurlPipe Installer: Failed to execute curl command", "command", command, "error", err)
-		return fmt.Errorf("failed to execute curl command: %v", err)
+		log.Error("Failed to execute curl command", err, "command", command)
+		return fmt.Errorf("failed to execute curl command '%s': %w", command, err)
 	}
 
-	log.Info("CurlPipe Installer: Command executed successfully", "command", command)
+	log.Info("Curl command executed successfully", "command", command)
 
-	// Extract app name from the command (basic heuristic)
+	// Extract app name from the command
 	appName := extractNameFromCurlCommand(command)
 	if appName == "" {
-		log.Warn("CurlPipe Installer: Could not determine app name from command", "command", command)
+		log.Warn("Could not determine app name from command, using 'unknown'", "command", command)
 		appName = "unknown"
 	}
 
-	// Add to repository
+	// Add app to repository
 	if err := repo.AddApp(appName); err != nil {
-		log.Error("CurlPipe Installer: Failed to add app to repository", "appName", appName, "error", err)
-		return fmt.Errorf("failed to add app to repository: %v", err)
+		log.Error("Failed to add app to repository", err, "appName", appName)
+		return fmt.Errorf("failed to add app '%s' to repository: %w", appName, err)
 	}
 
-	log.Info("CurlPipe Installer: App added to repository", "appName", appName)
+	log.Info("App added to repository successfully", "appName", appName)
 	return nil
 }
 

@@ -2,59 +2,88 @@ package log
 
 import (
 	"io"
-	"os"
 
 	"github.com/charmbracelet/log"
 )
 
+// Logger wraps the charmbracelet logger with additional context support.
 type Logger struct {
-	log.Logger
+	logger  *log.Logger
+	context map[string]any
 }
 
-var logger = log.New(os.Stderr)
+var logger *Logger
 
-// ConfigureLogger sets the global logger's level and output.
-func ConfigureLogger(level log.Level, output io.Writer) {
-	logger.SetLevel(level)
-	logger.SetOutput(output)
+// Log levels
+var (
+	DebugLevel = log.DebugLevel
+	ErrorLevel = log.ErrorLevel
+	FatalLevel = log.FatalLevel
+	InfoLevel  = log.InfoLevel
+	WarnLevel  = log.WarnLevel
+)
+
+// New initializes a new logger with the provided writer.
+func New(w io.Writer) *Logger {
+	l := log.New(w)           // Create a logger with the provided writer
+	l.SetLevel(log.InfoLevel) // Set the default log level
+	return &Logger{
+		logger:  l,
+		context: make(map[string]any),
+	}
 }
 
-// SetTimeFormat updates the timestamp format used in logs.
-func SetTimeFormat(format string) {
-	logger.SetTimeFormat(format)
+// InitDefaultLogger initializes the default logger with a specified writer.
+func InitDefaultLogger(w io.Writer) {
+	logger = New(w)
 }
 
-// Logging methods
-func Error(msg any, keyvals ...any) {
-	logger.Error(msg, keyvals...)
+// SetLevel dynamically updates the logging level.
+func SetLevel(level log.Level) {
+	logger.logger.SetLevel(level)
 }
 
-func Debug(msg any, keyvals ...any) {
-	logger.Debug(msg, keyvals...)
+// WithContext adds contextual metadata to the logger.
+func WithContext(ctx map[string]any) {
+	for k, v := range ctx {
+		logger.context[k] = v
+	}
 }
 
-func Info(msg any, keyvals ...any) {
-	logger.Info(msg, keyvals...)
+// logWithContext ensures all logs include the injected context.
+func (l *Logger) logWithContext(level log.Level, msg string, keyvals ...any) {
+	if l == nil || l.logger == nil {
+		return // Skip logging if the logger is not initialized
+	}
+
+	// Merge the context into the key-values
+	mergedKeyvals := make([]any, 0, len(l.context)*2+len(keyvals))
+	for k, v := range l.context {
+		mergedKeyvals = append(mergedKeyvals, k, v)
+	}
+	mergedKeyvals = append(mergedKeyvals, keyvals...)
+
+	l.logger.Log(level, msg, mergedKeyvals...)
 }
 
-func Warn(msg any, keyvals ...any) {
-	logger.Warn(msg, keyvals...)
+// Info logs an informational message with the current context.
+func Info(msg string, keyvals ...any) {
+	logger.logWithContext(log.InfoLevel, msg, keyvals...)
 }
 
-func Fatal(msg any, keyvals ...any) {
-	logger.Fatal(msg, keyvals...)
+// Warn logs a warning message with the current context.
+func Warn(msg string, keyvals ...any) {
+	logger.logWithContext(log.WarnLevel, msg, keyvals...)
 }
 
-func Print(msg any, keyvals ...any) {
-	logger.Print(msg, keyvals...)
+// Error logs an error message with the current context.
+func Error(msg string, err error, keyvals ...any) {
+	keyvals = append(keyvals, err)
+	logger.logWithContext(log.ErrorLevel, msg, keyvals...)
 }
 
-// With creates a sub-logger with additional context.
-func With(keyvals ...any) *Logger {
-	return &Logger{Logger: *logger.With(keyvals...)}
-}
-
-// UseTestLogger sets the logger to discard all output (for tests).
-func UseTestLogger() {
-	ConfigureLogger(log.DebugLevel, io.Discard)
+// Fatal logs a fatal error and exits the application.
+func Fatal(msg string, err error, keyvals ...any) {
+	keyvals = append(keyvals, err)
+	logger.logWithContext(log.FatalLevel, msg, keyvals...)
 }

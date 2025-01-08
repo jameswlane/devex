@@ -2,13 +2,13 @@ package gnome
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 
 	"gopkg.in/yaml.v2"
 
+	"github.com/jameswlane/devex/pkg/fs"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 type GnomeExtension struct {
@@ -21,83 +21,78 @@ type SchemaFile struct {
 	Destination string `yaml:"destination"`
 }
 
-// LoadGnomeExtensions loads the GNOME extensions from the YAML configuration
+// LoadGnomeExtensions loads the GNOME extensions from the YAML configuration.
 func LoadGnomeExtensions(filename string) ([]GnomeExtension, error) {
-	data, err := os.ReadFile(filename)
+	log.Info("Loading GNOME extensions from configuration", "filename", filename)
+
+	data, err := fs.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read GNOME extensions YAML file: %v", err)
+		log.Error("Failed to read GNOME extensions YAML file", err, "filename", filename)
+		return nil, fmt.Errorf("failed to read GNOME extensions YAML file: %w", err)
 	}
 
 	var extensions []GnomeExtension
-	err = yaml.Unmarshal(data, &extensions)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal GNOME extensions YAML: %v", err)
+	if err := yaml.Unmarshal(data, &extensions); err != nil {
+		log.Error("Failed to parse GNOME extensions YAML", err, "filename", filename)
+		return nil, fmt.Errorf("failed to parse GNOME extensions YAML: %w", err)
 	}
 
+	log.Info("GNOME extensions loaded successfully", "count", len(extensions))
 	return extensions, nil
 }
 
-// InstallGnomeExtension installs a GNOME extension using gnome-extensions-cli
+// InstallGnomeExtension installs a GNOME extension using gext and handles schema files.
 func InstallGnomeExtension(extension GnomeExtension) error {
-	log.Info(fmt.Sprintf("Installing GNOME extension: id=%s", extension.ID))
+	log.Info("Installing GNOME extension", "id", extension.ID)
 
-	cmd := exec.Command("gext", "install", extension.ID)
-	_, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Error(fmt.Sprintf("Failed to install GNOME extension: id=%s", extension.ID), err)
-		return err
+	// Install the extension using gext
+	installCommand := fmt.Sprintf("gext install %s", extension.ID)
+	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
+		log.Error("Failed to install GNOME extension", err, "id", extension.ID)
+		return fmt.Errorf("failed to install GNOME extension %s: %w", extension.ID, err)
 	}
 
 	// Handle schema files
 	for _, schema := range extension.SchemaFiles {
 		if err := copySchemaFile(schema); err != nil {
-			return fmt.Errorf("failed to copy schema file for %s: %v", extension.ID, err)
+			log.Error("Failed to copy schema file", err, "id", extension.ID, "source", schema.Source, "destination", schema.Destination)
+			return fmt.Errorf("failed to copy schema file for %s: %w", extension.ID, err)
 		}
 	}
 
+	log.Info("GNOME extension installed successfully", "id", extension.ID)
 	return nil
 }
 
-// copySchemaFile copies schema files to the appropriate destination
+// copySchemaFile copies schema files to the appropriate destination.
 func copySchemaFile(schema SchemaFile) error {
-	log.Info(fmt.Sprintf("Copying schema file: source=%s, destination=%s", schema.Source, schema.Destination))
+	log.Info("Copying schema file", "source", schema.Source, "destination", schema.Destination)
 
 	// Ensure destination directory exists
-	if err := os.MkdirAll(schema.Destination, os.ModePerm); err != nil {
-		return fmt.Errorf("failed to create destination directory: %v", err)
+	if err := fs.EnsureDir(schema.Destination, 0o755); err != nil {
+		log.Error("Failed to create destination directory", err, "destination", schema.Destination)
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
 	// Copy the schema file
-	sourceFile, err := os.Open(schema.Source)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %v", err)
-	}
-	defer sourceFile.Close()
-
 	destinationFile := filepath.Join(schema.Destination, filepath.Base(schema.Source))
-	destFile, err := os.Create(destinationFile)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %v", err)
-	}
-	defer destFile.Close()
-
-	_, err = destFile.ReadFrom(sourceFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file: %v", err)
+	if err := utils.CopyFile(schema.Source, destinationFile); err != nil {
+		log.Error("Failed to copy schema file", err, "source", schema.Source, "destination", destinationFile)
+		return fmt.Errorf("failed to copy schema file: %w", err)
 	}
 
+	log.Info("Schema file copied successfully", "source", schema.Source, "destination", destinationFile)
 	return nil
 }
 
-// CompileSchemas runs glib-compile-schemas after installing extensions
+// CompileSchemas runs glib-compile-schemas after installing extensions.
 func CompileSchemas() error {
-	log.Info("Compiling schemas...")
+	log.Info("Compiling schemas")
 
-	cmd := exec.Command("sudo", "glib-compile-schemas", "/usr/share/glib-2.0/schemas/")
-	_, err := cmd.CombinedOutput()
-	if err != nil {
+	compileCommand := "sudo glib-compile-schemas /usr/share/glib-2.0/schemas/"
+	if _, err := utils.CommandExec.RunShellCommand(compileCommand); err != nil {
 		log.Error("Failed to compile schemas", err)
-		return err
+		return fmt.Errorf("failed to compile schemas: %w", err)
 	}
 
 	log.Info("Schemas compiled successfully")

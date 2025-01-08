@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 type DockerInstaller struct{}
@@ -16,19 +16,19 @@ func New() *DockerInstaller {
 	return &DockerInstaller{}
 }
 
-func (d *DockerInstaller) Install(command string, repo repository.Repository) error {
+func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Docker Installer: Starting installation", "command", command)
 
-	// Parse command to extract Docker container details (e.g., image, name)
+	// Extract container name from the command
 	containerName := extractContainerName(command)
 	if containerName == "" {
-		log.Error("Docker Installer: Failed to extract container name from command", "command", command)
+		log.Error("Failed to extract container name from command", fmt.Errorf("command: %s", command))
 		return fmt.Errorf("failed to extract container name from command")
 	}
 
-	// Wrap the command into a types.AppConfig object for the utilities function
+	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
-		Name:           command,
+		Name:           containerName,
 		InstallMethod:  "docker",
 		InstallCommand: command,
 	}
@@ -36,31 +36,30 @@ func (d *DockerInstaller) Install(command string, repo repository.Repository) er
 	// Check if the container is already running
 	isInstalled, err := utilities.IsAppInstalled(appConfig)
 	if err != nil {
-		log.Error("Docker Installer: Failed to check if container is running", "containerName", containerName, "error", err)
-		return fmt.Errorf("failed to check if Docker container is running: %v", err)
+		log.Error("Failed to check if Docker container is running", err, "containerName", containerName)
+		return fmt.Errorf("failed to check if Docker container is running: %w", err)
 	}
 
 	if isInstalled {
-		log.Info("Docker Installer: Container already running, skipping installation", "containerName", containerName)
+		log.Info("Docker container is already running, skipping installation", "containerName", containerName)
 		return nil
 	}
 
-	// Run Docker command
-	err = utilities.RunCommand(command)
-	if err != nil {
-		log.Error("Docker Installer: Failed to execute Docker command", "command", command, "error", err)
-		return fmt.Errorf("failed to execute Docker command: %v", err)
+	// Run the Docker command
+	if _, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to execute Docker command", err, "command", command)
+		return fmt.Errorf("failed to execute Docker command: %w", err)
 	}
 
-	log.Info("Docker Installer: Command executed successfully", "command", command)
+	log.Info("Docker command executed successfully", "command", command)
 
-	// Add to repository
+	// Add the container to the repository
 	if err := repo.AddApp(containerName); err != nil {
-		log.Error("Docker Installer: Failed to add container to repository", "containerName", containerName, "error", err)
-		return fmt.Errorf("failed to add Docker container to repository: %v", err)
+		log.Error("Failed to add Docker container to repository", err, "containerName", containerName)
+		return fmt.Errorf("failed to add Docker container to repository: %w", err)
 	}
 
-	log.Info("Docker Installer: Container added to repository", "containerName", containerName)
+	log.Info("Docker container added to repository successfully", "containerName", containerName)
 	return nil
 }
 

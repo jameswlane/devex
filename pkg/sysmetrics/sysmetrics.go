@@ -3,31 +3,25 @@ package sysmetrics
 import (
 	"time"
 
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/disk"
-	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/mem"
 )
 
-func GetCPUUsage() (float64, error) {
-	cpuPercent, err := cpu.Percent(time.Second, false)
-	if err != nil {
-		return 0, err
-	}
-	return cpuPercent[0], nil
+var (
+	GetCPULoad     = cpu.Percent
+	GetMemoryStats = mem.VirtualMemory
+	GetDiskUsage   = disk.Usage
+)
+
+func GetCPULoadPercent(interval time.Duration) ([]float64, error) {
+	return GetCPULoad(interval, false)
 }
 
-func GetRAMUsage() (float64, error) {
-	vmStat, err := mem.VirtualMemory()
-	if err != nil {
-		return 0, err
-	}
-	return vmStat.UsedPercent, nil
+func GetMemoryUsagePercent() (*mem.VirtualMemoryStat, error) {
+	return GetMemoryStats()
 }
 
-func GetDiskUsage() (float64, error) {
-	diskStat, err := disk.Usage("/")
-	if err != nil {
-		return 0, err
-	}
-	return diskStat.UsedPercent, nil
+func GetDiskUsagePercent(path string) (*disk.UsageStat, error) {
+	return GetDiskUsage(path)
 }
