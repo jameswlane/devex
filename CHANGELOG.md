@@ -1,3 +1,9 @@
+## [0.3.0](https://github.com/jameswlane/devex/compare/0.2.4...0.3.0) (2025-01-08)
+
+### Features
+
+* **rewrite:** large rewrite with some testing added ([dc6a5e2](https://github.com/jameswlane/devex/commit/dc6a5e23af5c5eb3fdc4a351f6edfb557e0f6f33))
+
 ## [0.2.4](https://github.com/jameswlane/devex/compare/0.2.3...0.2.4) (2025-01-03)
 
 ### Bug Fixes
