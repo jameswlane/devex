@@ -29,7 +29,7 @@ tasks:
         sources:
             - './**/*.go'
         cmds:
-            - go install -v ./cmd/devex
+            - go install -v ./cmd/main.go
 
     # Setup Python environment
     setup:python:

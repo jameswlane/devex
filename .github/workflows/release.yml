@@ -39,8 +39,11 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.60.1
+      -   name: Install Ginkgo
+          working-directory: ./common
+          run: go install github.com/onsi/ginkgo/v2/ginkgo
       - name: Test
-        run: go test ./...
+        run: ginkgo -r
       - name: Build
         run: go build -ldflags="-s -w -X main.version=$(git describe --tags)" -o ./bin/devex ./cmd/main.go
   release:
