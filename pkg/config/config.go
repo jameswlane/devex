@@ -3,12 +3,12 @@ package config
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/pkg/fs"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
@@ -31,28 +31,16 @@ type Settings struct {
 }
 
 func LoadSettings(homeDir string) (Settings, error) {
+	log.Info("Loading settings", "homeDir", homeDir)
+
 	viper.SetConfigType("yaml")
 
 	// Paths for default configurations
 	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
 	overrideConfigPath := filepath.Join(homeDir, ".devex")
 
-	// Define configuration files
-	files := []string{
-		"apps.yaml",
-		"databases.yaml",
-		"dock.yaml",
-		"fonts.yaml",
-		"git_config.yaml",
-		"gnome_extensions.yaml",
-		"gnome_settings.yaml",
-		"optional_apps.yaml",
-		"programming_languages.yaml",
-		"themes.yaml",
-	}
-
 	// Load default configs directly into the main Viper instance
-	for _, file := range files {
+	for _, file := range DefaultFiles {
 		defaultPath := filepath.Join(defaultConfigPath, file)
 		if err := loadYamlFileIntoViper(defaultPath); err != nil {
 			log.Warn("Failed to load default config; skipping", "file", file, "error", err)
@@ -60,9 +48,9 @@ func LoadSettings(homeDir string) (Settings, error) {
 	}
 
 	// Apply overrides from ~/.devex directory
-	for _, file := range files {
+	for _, file := range DefaultFiles {
 		overridePath := filepath.Join(overrideConfigPath, file)
-		if _, err := os.Stat(overridePath); err == nil {
+		if exists, err := fs.Stat(overridePath); err == nil && exists != nil {
 			log.Info("Applying override", "file", overridePath)
 			if err := loadYamlFileIntoViper(overridePath); err != nil {
 				log.Warn("Failed to apply override; skipping", "file", overridePath, "error", err)
@@ -80,26 +68,37 @@ func LoadSettings(homeDir string) (Settings, error) {
 	// Unmarshal into Settings struct
 	var settings Settings
 	if err := viper.Unmarshal(&settings); err != nil {
+		log.Error("Failed to unmarshal settings", err)
 		return Settings{}, fmt.Errorf("failed to unmarshal settings: %w", err)
 	}
 
+	log.Info("Settings loaded successfully")
 	return settings, nil
 }
 
 func loadYamlFileIntoViper(path string) error {
-	data, err := os.ReadFile(path)
+	log.Info("Loading YAML file into Viper", "path", path)
+
+	data, err := fs.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		exists, err := fs.Exists(path)
+		if err != nil {
+			log.Warn("Failed to check if file exists", "path", path, "error", err)
+			return err
+		}
+		if !exists {
 			log.Warn("Config file not found", "path", path)
 			return nil
 		}
-		return err
+		log.Error("Failed to read YAML file", err, "path", path)
+		return fmt.Errorf("failed to read YAML file %s: %w", path, err)
 	}
 
 	// Parse and merge into the main Viper instance
 	subViper := viper.New()
 	subViper.SetConfigType("yaml")
 	if err := subViper.ReadConfig(bytes.NewReader(data)); err != nil {
+		log.Error("Failed to parse YAML file", err, "path", path)
 		return fmt.Errorf("failed to parse YAML file %s: %w", path, err)
 	}
 
@@ -108,5 +107,6 @@ func loadYamlFileIntoViper(path string) error {
 		viper.Set(k, v)
 	}
 
+	log.Info("YAML file loaded successfully", "path", path)
 	return nil
 }

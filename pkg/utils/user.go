@@ -1,108 +1,49 @@
 package utils
 
 import (
-	"bufio"
-	"fmt"
 	"os"
 	"os/user"
-	"strings"
 
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/types"
 )
-
-type UserProvider interface {
-	Current() (*user.User, error)
-	Lookup(username string) (*user.User, error)
-}
 
 type OSUserProvider struct{}
 
 func (OSUserProvider) Current() (*user.User, error) {
-	return user.Current()
+	log.Info("Fetching current user")
+	usr, err := user.Current()
+	if err != nil {
+		log.Error("Failed to fetch current user", err)
+		return nil, ErrUserNotFound
+	}
+	log.Info("Current user fetched successfully", "username", usr.Username)
+	return usr, nil
 }
 
 func (OSUserProvider) Lookup(username string) (*user.User, error) {
-	return user.Lookup(username)
-}
-
-var UserProviderInstance UserProvider = OSUserProvider{}
-
-func Current() (*user.User, error) {
-	return UserProviderInstance.Current()
-}
-
-func Lookup(username string) (*user.User, error) {
-	return UserProviderInstance.Lookup(username)
-}
-
-func GetShellRCPath() (string, error) {
-	log.Info("Starting GetShellRCPath")
-
-	// Get the correct user: use SUDO_USER if running as root, fallback to USER
-	targetUser := os.Getenv("SUDO_USER")
-	if targetUser == "" {
-		targetUser = os.Getenv("USER")
-	}
-	log.Info("Determined target user", "targetUser", targetUser)
-
-	usr, err := user.Lookup(targetUser)
+	log.Info("Looking up user", "username", username)
+	usr, err := user.Lookup(username)
 	if err != nil {
-		log.Error("Failed to lookup user", "targetUser", targetUser, "error", err)
-		return "", fmt.Errorf("failed to lookup user %s: %v", targetUser, err)
+		log.Error("Failed to look up user", err, "username", username)
+		return nil, ErrUserNotFound
 	}
 	log.Info("User lookup successful", "username", usr.Username)
-
-	// Explicitly fetch the user's shell path
-	shellPath, err := getUserShell(targetUser)
-	if err != nil {
-		log.Error("Failed to determine shell for user", "targetUser", targetUser, "error", err)
-		return "", fmt.Errorf("failed to determine shell for user %s: %v", targetUser, err)
-	}
-	log.Info("Determined user shell", "shellPath", shellPath)
-
-	// Construct shell config file path
-	var shellRCPath string
-	switch {
-	case strings.Contains(shellPath, "bash"):
-		shellRCPath = fmt.Sprintf("%s/.bashrc", usr.HomeDir)
-	case strings.Contains(shellPath, "zsh"):
-		shellRCPath = fmt.Sprintf("%s/.zshrc", usr.HomeDir)
-	default:
-		log.Error("Unsupported shell", "shellPath", shellPath)
-		return "", fmt.Errorf("unsupported shell: %s", shellPath)
-	}
-	log.Info("Constructed shell RC path", "shellRCPath", shellRCPath)
-
-	return shellRCPath, nil
+	return usr, nil
 }
 
-func getUserShell(username string) (string, error) {
-	log.Info("Starting getUserShell", "username", username)
+var UserProviderInstance types.UserProvider = OSUserProvider{}
 
-	file, err := os.Open("/etc/passwd")
-	if err != nil {
-		log.Error("Failed to open /etc/passwd", "error", err)
-		return "", fmt.Errorf("failed to open /etc/passwd: %v", err)
-	}
-	defer file.Close()
+// CurrentUserEnvOverride fetches the current user, allowing for overrides via an environment variable.
+func CurrentUserEnvOverride(envVar string) (*user.User, error) {
+	log.Info("Fetching current user with environment override", "envVar", envVar)
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, username+":") {
-			parts := strings.Split(line, ":")
-			if len(parts) >= 7 {
-				log.Info("Found shell for user", "username", username, "shell", parts[6])
-				return parts[6], nil
-			}
-		}
+	username := os.Getenv(envVar)
+	if username != "" {
+		log.Info("Environment variable override detected", "username", username)
+		return UserProviderInstance.Lookup(username)
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Error("Error scanning /etc/passwd", "error", err)
-		return "", fmt.Errorf("error scanning /etc/passwd: %v", err)
-	}
-
-	log.Error("Shell not found for user", "username", username)
-	return "", fmt.Errorf("shell not found for user %s", username)
+	log.Info("No environment variable override, fetching current user")
+	return UserProviderInstance.Current()
 }

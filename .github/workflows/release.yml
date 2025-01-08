@@ -42,7 +42,7 @@ jobs:
       - name: Test
         run: go test ./...
       - name: Build
-        run: go build -ldflags="-s -w -X main.version=$(git describe --tags)" -o ./bin/devex ./cmd/devex
+        run: go build -ldflags="-s -w -X main.version=$(git describe --tags)" -o ./bin/devex ./cmd/main.go
   release:
     needs: [build]
     name: Release

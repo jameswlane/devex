@@ -1,133 +1,98 @@
-package systemsetup
+package systemsetup_test
 
-import "testing"
+import (
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
-func TestDisableSleepSettings(t *testing.T) {
-	t.Parallel()
+	"github.com/jameswlane/devex/pkg/mocks"
+	"github.com/jameswlane/devex/pkg/systemsetup"
+	"github.com/jameswlane/devex/pkg/utils"
+)
 
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+var _ = Describe("SystemSetup", func() {
+	var mockExecutor *mocks.MockCommandExecutor
 
-			if err := DisableSleepSettings(); (err != nil) != tt.wantErr {
-				t.Errorf("DisableSleepSettings() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+	BeforeEach(func() {
+		mockExecutor = mocks.NewMockCommandExecutor()
+		utils.CommandExec = mockExecutor // Replace the real CommandExec with the mock
+		mockExecutor.Commands = nil      // Reset the executed commands
+	})
 
-func TestLogout(t *testing.T) {
-	t.Parallel()
+	It("runs apt update and installs required packages successfully", func() {
+		err := systemsetup.UpdateApt()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mockExecutor.Commands).To(ContainElement("sudo apt update -y"))
+		Expect(mockExecutor.Commands).To(ContainElement("sudo apt install -y curl git unzip"))
+	})
 
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	It("returns an error if apt update fails", func() {
+		mockExecutor.FailingCommand = "sudo apt update -y"
 
-			if err := Logout(); (err != nil) != tt.wantErr {
-				t.Errorf("Logout() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		err := systemsetup.UpdateApt()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock shell command failed: sudo apt update -y"))
+		Expect(mockExecutor.Commands).To(ContainElement("sudo apt update -y"))
+	})
 
-func TestRevertSleepSettings(t *testing.T) {
-	t.Parallel()
+	It("upgrades system packages successfully", func() {
+		err := systemsetup.UpgradeSystem()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mockExecutor.Commands).To(ContainElement("sudo apt upgrade -y"))
+	})
 
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	It("returns an error if upgrading packages fails", func() {
+		mockExecutor.FailingCommand = "sudo apt upgrade -y"
 
-			if err := RevertSleepSettings(); (err != nil) != tt.wantErr {
-				t.Errorf("RevertSleepSettings() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		err := systemsetup.UpgradeSystem()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock shell command failed: sudo apt upgrade -y"))
+		Expect(mockExecutor.Commands).To(ContainElement("sudo apt upgrade -y"))
+	})
 
-func TestRunInstallers(t *testing.T) {
-	t.Parallel()
+	It("disables sleep settings successfully", func() {
+		err := systemsetup.DisableSleepSettings()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mockExecutor.Commands).To(ContainElement("gsettings set org.gnome.desktop.screensaver lock-enabled false"))
+		Expect(mockExecutor.Commands).To(ContainElement("gsettings set org.gnome.desktop.session idle-delay 0"))
+	})
 
-	type args struct {
-		installersDir string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	It("returns an error if disabling sleep settings fails", func() {
+		mockExecutor.FailingCommand = "gsettings set org.gnome.desktop.screensaver lock-enabled false"
 
-			if err := RunInstallers(tt.args.installersDir); (err != nil) != tt.wantErr {
-				t.Errorf("RunInstallers() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		err := systemsetup.DisableSleepSettings()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock shell command failed: gsettings set org.gnome.desktop.screensaver lock-enabled false"))
+		Expect(mockExecutor.Commands).To(ContainElement("gsettings set org.gnome.desktop.screensaver lock-enabled false"))
+	})
 
-func TestUpdateApt(t *testing.T) {
-	t.Parallel()
+	It("reverts sleep settings successfully", func() {
+		err := systemsetup.RevertSleepSettings()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mockExecutor.Commands).To(ContainElement("gsettings set org.gnome.desktop.screensaver lock-enabled true"))
+		Expect(mockExecutor.Commands).To(ContainElement("gsettings set org.gnome.desktop.session idle-delay 300"))
+	})
 
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	It("returns an error if reverting sleep settings fails", func() {
+		mockExecutor.FailingCommand = "gsettings set org.gnome.desktop.screensaver lock-enabled true"
 
-			if err := UpdateApt(); (err != nil) != tt.wantErr {
-				t.Errorf("UpdateApt() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		err := systemsetup.RevertSleepSettings()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock shell command failed: gsettings set org.gnome.desktop.screensaver lock-enabled true"))
+		Expect(mockExecutor.Commands).To(ContainElement("gsettings set org.gnome.desktop.screensaver lock-enabled true"))
+	})
 
-func TestUpgradeSystem(t *testing.T) {
-	t.Parallel()
+	It("logs out successfully", func() {
+		err := systemsetup.Logout()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(mockExecutor.Commands).To(ContainElement("gnome-session-quit --logout --no-prompt"))
+	})
 
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	It("returns an error if logout fails", func() {
+		mockExecutor.FailingCommand = "gnome-session-quit --logout --no-prompt"
 
-			if err := UpgradeSystem(); (err != nil) != tt.wantErr {
-				t.Errorf("UpgradeSystem() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		err := systemsetup.Logout()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock shell command failed: gnome-session-quit --logout --no-prompt"))
+		Expect(mockExecutor.Commands).To(ContainElement("gnome-session-quit --logout --no-prompt"))
+	})
+})

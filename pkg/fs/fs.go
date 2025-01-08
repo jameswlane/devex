@@ -1,13 +1,13 @@
 package fs
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
-
-	"github.com/jameswlane/devex/pkg/log"
 
 	"github.com/spf13/afero"
 )
@@ -15,23 +15,29 @@ import (
 var (
 	AppFs    afero.Fs = afero.NewOsFs()
 	AppAfero          = &afero.Afero{Fs: AppFs}
+	initOnce sync.Once
 )
 
-// Ensure that AppFs is initialized before any operation
 func ensureInitialized() {
-	if AppFs == nil {
-		panic("AppFs is not initialized. Set AppFs to a valid Afero filesystem backend.")
-	}
+	initOnce.Do(func() {
+		if AppFs == nil {
+			AppFs = afero.NewOsFs()
+			AppAfero = &afero.Afero{Fs: AppFs}
+		}
+	})
 }
 
 func UseMemMapFs() {
-	AppFs = afero.NewMemMapFs()
-	AppAfero = &afero.Afero{Fs: AppFs}
+	SetFs(afero.NewMemMapFs())
 }
 
 func UseOsFs() {
-	AppFs = afero.NewOsFs()
-	AppAfero = &afero.Afero{Fs: AppFs}
+	SetFs(afero.NewOsFs())
+}
+
+func SetFs(fs afero.Fs) {
+	AppFs = fs
+	AppAfero = &afero.Afero{Fs: fs}
 }
 
 // Filesystem Operations
@@ -62,18 +68,12 @@ func Mkdir(name string, perm os.FileMode) error {
 
 func MkdirAll(path string, perm os.FileMode) error {
 	ensureInitialized()
-	return AppFs.MkdirAll(path, perm)
+	return AppAfero.MkdirAll(path, perm)
 }
 
 func Remove(name string) error {
 	ensureInitialized()
-	err := AppFs.Remove(name)
-	if err != nil {
-		log.Error("Remove failed", "name", name, "error", err)
-		return fmt.Errorf("failed to remove file or directory '%s': %w", name, err)
-	}
-	log.Info("Remove succeeded", "name", name)
-	return nil
+	return AppFs.Remove(name)
 }
 
 func RemoveAll(path string) error {
@@ -109,12 +109,12 @@ func IsEmpty(path string) (bool, error) {
 
 func Exists(path string) (bool, error) {
 	ensureInitialized()
-	return afero.Exists(AppFs, path)
+	return AppAfero.Exists(path)
 }
 
 func DirExists(path string) (bool, error) {
 	ensureInitialized()
-	return afero.DirExists(AppFs, path)
+	return AppAfero.DirExists(path)
 }
 
 // File I/O Operations
@@ -130,13 +130,7 @@ func OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
 
 func WriteFile(filename string, data []byte, perm os.FileMode) error {
 	ensureInitialized()
-	err := AppAfero.WriteFile(filename, data, perm)
-	if err != nil {
-		log.Error("WriteFile failed", "filename", filename, "error", err)
-		return fmt.Errorf("failed to write file '%s': %w", filename, err)
-	}
-	log.Info("WriteFile succeeded", "filename", filename)
-	return nil
+	return AppAfero.WriteFile(filename, data, perm)
 }
 
 func ReadFile(filename string) ([]byte, error) {
@@ -167,13 +161,16 @@ func TempDir(dir, prefix string) (string, error) {
 
 func TempFile(dir, prefix string) (afero.File, error) {
 	ensureInitialized()
-	return afero.TempFile(AppFs, dir, prefix)
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	return AppAfero.TempFile(dir, prefix+"tmp")
 }
 
 // Miscellaneous
 func Walk(root string, walkFn filepath.WalkFunc) error {
 	ensureInitialized()
-	return afero.Walk(AppFs, root, walkFn)
+	return AppAfero.Walk(root, walkFn)
 }
 
 // Metadata
@@ -184,7 +181,7 @@ func Name() string {
 
 func GetTempDir(subPath string) string {
 	ensureInitialized()
-	return afero.GetTempDir(AppFs, subPath)
+	return AppAfero.GetTempDir(subPath)
 }
 
 // Common Patterns
@@ -198,51 +195,67 @@ func FileExistsAndIsFile(path string) (bool, error) {
 }
 
 func EnsureDir(path string, perm os.FileMode) error {
-	exists, err := DirExists(path)
-	if err != nil {
-		log.Error("EnsureDir failed to check directory existence", "path", path, "error", err)
-		return fmt.Errorf("failed to check directory existence '%s': %w", path, err)
+	if exists, err := AppAfero.DirExists(path); err != nil || exists {
+		return err
 	}
-	if !exists {
-		log.Info("EnsureDir creating directory", "path", path)
-		return MkdirAll(path, perm)
-	}
-	log.Info("EnsureDir directory already exists", "path", path)
-	return nil
+	return AppAfero.MkdirAll(path, perm)
 }
 
 func ReadFileIfExists(path string) ([]byte, error) {
 	exists, err := Exists(path)
 	if err != nil {
-		log.Error("ReadFileIfExists failed to check existence", "path", path, "error", err)
 		return nil, err
 	}
 	if !exists {
-		log.Info("ReadFileIfExists file does not exist", "path", path)
-		return nil, nil // Return nil if file doesn't exist
+		return nil, nil
 	}
 	return ReadFile(path)
 }
 
 func WriteStringToFile(path, content string, perm os.FileMode) error {
 	ensureInitialized()
-	file, err := AppFs.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		log.Error("WriteStringToFile failed to open file", "path", path, "error", err)
-		return fmt.Errorf("failed to open file '%s': %w", path, err)
-	}
-	defer func() {
-		if cerr := file.Close(); cerr != nil {
-			log.Warn("WriteStringToFile failed to close file", "path", path, "error", cerr)
-		}
-	}()
+	return AppAfero.WriteFile(path, []byte(content), perm)
+}
 
-	_, err = file.WriteString(content)
-	if err != nil {
-		log.Error("WriteStringToFile failed to write content", "path", path, "error", err)
-		return fmt.Errorf("failed to write content to file '%s': %w", path, err)
-	}
+// MockFsWithErrors is a mock filesystem that can simulate errors for testing.
+type MockFsWithErrors struct {
+	afero.MemMapFs
+	FailMkdirAll bool
+	FailCreate   bool
+	FailRemove   bool
+	FailStat     bool
+}
 
-	log.Info("WriteStringToFile succeeded", "path", path)
-	return nil
+// MkdirAll mocks the creation of directories, optionally failing.
+func (m *MockFsWithErrors) MkdirAll(path string, perm os.FileMode) error {
+	if m.FailMkdirAll {
+		return errors.New("mock directory creation failure")
+	}
+	return m.MemMapFs.MkdirAll(path, perm)
+}
+
+// Create mocks file creation, optionally failing.
+func (m *MockFsWithErrors) Create(name string) (afero.File, error) {
+	if m.FailCreate {
+		fmt.Println("MockFsWithErrors: Failing Create operation")
+		return nil, errors.New("mock failure in Create")
+	}
+	fmt.Println("MockFsWithErrors: Creating file successfully")
+	return m.MemMapFs.Create(name)
+}
+
+// Remove mocks file removal, optionally failing.
+func (m *MockFsWithErrors) Remove(name string) error {
+	if m.FailRemove {
+		return errors.New("mock failure in Remove")
+	}
+	return m.MemMapFs.Remove(name)
+}
+
+// Stat mocks file status checking, optionally failing.
+func (m *MockFsWithErrors) Stat(name string) (os.FileInfo, error) {
+	if m.FailStat {
+		return nil, errors.New("mock failure in Stat")
+	}
+	return m.MemMapFs.Stat(name)
 }

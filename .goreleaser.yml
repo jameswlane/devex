@@ -54,7 +54,7 @@ release:
   footer: |
     ## Thanks
     Those were the changes on {{ .Tag }}!
-  name_template: "{{.ProjectName}}-v{{.Version}} {{.Env.USER}}"
+  name_template: "{{.ProjectName}}-v{{.Version}}"
   include_meta: true
 
 snapshot:

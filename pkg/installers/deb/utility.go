@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"path/filepath"
+
+	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 // Release represents a GitHub release
@@ -25,72 +26,62 @@ type Asset struct {
 // GetLatestDebURL fetches the latest release and returns the URL of the .deb asset.
 // It accepts a base URL and HTTP client for testing.
 func GetLatestDebURL(owner, repo, baseURL string, client *http.Client) (string, error) {
+	log.Info("Fetching latest release", "owner", owner, "repo", repo, "baseURL", baseURL)
+
 	if client == nil {
 		client = http.DefaultClient
 	}
 
 	url := fmt.Sprintf("%s/repos/%s/%s/releases/latest", baseURL, owner, repo)
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), utils.DefaultHTTPTimeout)
+	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		log.Error("Failed to create HTTP request", err, "url", url)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
+
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch release: %v", err)
+		log.Error("Failed to fetch release data", err, "url", url)
+		return "", fmt.Errorf("failed to fetch release: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Error("Unexpected status code", err, "url", url, "status", resp.StatusCode)
 		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	var release Release
-	err = json.NewDecoder(resp.Body).Decode(&release)
-	if err != nil {
-		return "", fmt.Errorf("failed to decode response: %v", err)
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		log.Error("Failed to decode release data", err, "url", url)
+		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Find the .deb file in the assets
 	for _, asset := range release.Assets {
 		if filepath.Ext(asset.Name) == ".deb" {
+			log.Info("Found .deb asset", "name", asset.Name, "url", asset.URL)
 			return asset.URL, nil
 		}
 	}
 
+	log.Error("No .deb file found in the latest release", fmt.Errorf("URL: %s", url))
 	return "", fmt.Errorf("no .deb file found in the latest release")
 }
 
-// DownloadDeb downloads a .deb file from the given URL and saves it to the destination path
+// DownloadDeb downloads a .deb file from the given URL and saves it to the destination path.
 func DownloadDeb(url, destination string) error {
-	client := &http.Client{}
-	ctx := context.Background()
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+	log.Info("Downloading .deb file", "url", url, "destination", destination)
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	// Use utils.DownloadFile for consistent download logic
+	if err := utils.DownloadFile(url, destination); err != nil {
+		log.Error("Failed to download .deb file", err, "url", url, "destination", destination)
+		return fmt.Errorf("failed to download .deb file '%s': %w", destination, err)
 	}
 
-	// Create the destination file
-	outFile, err := os.Create(destination)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %v", err)
-	}
-	defer outFile.Close()
-
-	// Copy the content to the file
-	_, err = io.Copy(outFile, resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to save .deb file: %v", err)
-	}
-
+	log.Info("Downloaded .deb file successfully", "destination", destination)
 	return nil
 }

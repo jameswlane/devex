@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Define the ASCII art
+// ASCII art content
 var asciiArt = `
 DDDDDDDDDDDDD                                                 EEEEEEEEEEEEEEEEEEEEEE
 D::::::::::::DDD                                              E::::::::::::::::::::E
@@ -27,7 +27,7 @@ D::::::::::::DDD       ee:::::::::::::e          v:::v        E:::::::::::::::::
 DDDDDDDDDDDDD            eeeeeeeeeeeeee           vvv         EEEEEEEEEEEEEEEEEEEEEExxxxxxx      xxxxxxx
 `
 
-// Define a color gradient using lipgloss colors
+// Color gradient for ASCII art
 var colors = []lipgloss.Color{
 	lipgloss.Color("#00FFFF"), // Cyan
 	lipgloss.Color("#5F87FF"), // Light Blue
@@ -38,15 +38,19 @@ var colors = []lipgloss.Color{
 	lipgloss.Color("#0000FF"), // Royal Blue
 }
 
-// RenderArt renders the ASCII art with a color gradient
+// RenderArt renders the ASCII art with a color gradient.
 func RenderArt() {
-	// Split the ASCII art into lines using strings.Split
 	lines := strings.Split(asciiArt, "\n")
 
-	// Apply colors to each line and print
 	for i, line := range lines {
-		colorIndex := i % len(colors)
-		style := lipgloss.NewStyle().Foreground(colors[colorIndex])
-		fmt.Println(style.Render(line))
+		renderedLine := applyGradient(line, i)
+		fmt.Println(renderedLine)
 	}
+}
+
+// applyGradient applies a gradient to a single line of ASCII art.
+func applyGradient(line string, index int) string {
+	colorIndex := index % len(colors)
+	style := lipgloss.NewStyle().Foreground(colors[colorIndex])
+	return style.Render(line)
 }

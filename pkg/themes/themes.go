@@ -1,9 +1,12 @@
 package themes
 
 import (
-	"os"
+	"fmt"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/jameswlane/devex/pkg/fs"
+	"github.com/jameswlane/devex/pkg/log"
 )
 
 type Theme struct {
@@ -17,17 +20,24 @@ type ThemeConfig struct {
 	Themes []Theme `yaml:"themes"`
 }
 
+// LoadThemes loads themes from the specified YAML file.
 func LoadThemes(filePath string) ([]Theme, error) {
-	data, err := os.ReadFile(filePath)
+	log.Info("Loading themes from file", "filePath", filePath)
+
+	// Read the YAML file
+	data, err := fs.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		log.Error("Failed to read theme file", err, "filePath", filePath)
+		return nil, fmt.Errorf("failed to read theme file %s: %w", filePath, err)
 	}
 
+	// Parse the YAML content into ThemeConfig
 	var config ThemeConfig
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		return nil, err
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		log.Error("Failed to parse theme YAML", err, "filePath", filePath)
+		return nil, fmt.Errorf("failed to parse theme YAML: %w", err)
 	}
 
+	log.Info("Themes loaded successfully", "count", len(config.Themes))
 	return config.Themes, nil
 }

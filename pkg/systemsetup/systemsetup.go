@@ -2,117 +2,95 @@ package systemsetup
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
+
+	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
-// UpdateApt updates the apt package list and installs necessary packages
+// UpdateApt updates the apt package list and installs necessary packages.
 func UpdateApt() error {
-	fmt.Println("Updating apt and installing necessary packages...")
-	cmd := exec.Command("sudo", "apt", "update", "-y")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to update apt: %v", err)
+	log.Info("Updating apt package list and installing necessary packages")
+
+	// Update apt package list
+	if _, err := utils.CommandExec.RunShellCommand("sudo apt update -y"); err != nil {
+		log.Error("Failed to update apt", err)
+		return fmt.Errorf("failed to update apt: %w", err)
 	}
 
-	cmd = exec.Command("sudo", "apt", "install", "-y", "curl", "git", "unzip")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to install required packages: %v", err)
+	// Install required packages
+	if _, err := utils.CommandExec.RunShellCommand("sudo apt install -y curl git unzip"); err != nil {
+		log.Error("Failed to install required packages", err)
+		return fmt.Errorf("failed to install required packages: %w", err)
 	}
 
-	fmt.Println("Apt update and package installation complete.")
+	log.Info("Apt update and package installation complete")
 	return nil
 }
 
-// DisableSleepSettings ensures the computer doesn't go to sleep during installation
+// UpgradeSystem upgrades all installed packages.
+func UpgradeSystem() error {
+	log.Info("Upgrading system packages")
+
+	// Upgrade packages
+	if _, err := utils.CommandExec.RunShellCommand("sudo apt upgrade -y"); err != nil {
+		log.Error("Failed to upgrade system packages", err)
+		return fmt.Errorf("failed to upgrade system packages: %w", err)
+	}
+
+	log.Info("System upgrade complete")
+	return nil
+}
+
+// DisableSleepSettings ensures the computer doesn't go to sleep during installation.
 func DisableSleepSettings() error {
-	fmt.Println("Disabling sleep settings...")
+	log.Info("Disabling sleep settings")
 
 	// Disable screen lock
-	cmd := exec.Command("gsettings", "set", "org.gnome.desktop.screensaver", "lock-enabled", "false")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to disable screen lock: %v", err)
+	if _, err := utils.CommandExec.RunShellCommand("gsettings set org.gnome.desktop.screensaver lock-enabled false"); err != nil {
+		log.Error("Failed to disable screen lock", err)
+		return fmt.Errorf("failed to disable screen lock: %w", err)
 	}
 
 	// Set idle delay to 0 (no sleep)
-	cmd = exec.Command("gsettings", "set", "org.gnome.desktop.session", "idle-delay", "0")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to disable idle sleep: %v", err)
+	if _, err := utils.CommandExec.RunShellCommand("gsettings set org.gnome.desktop.session idle-delay 0"); err != nil {
+		log.Error("Failed to disable idle sleep", err)
+		return fmt.Errorf("failed to disable idle sleep: %w", err)
 	}
 
-	fmt.Println("Sleep settings disabled.")
+	log.Info("Sleep settings disabled")
 	return nil
 }
 
-// RunInstallers executes all installer scripts
-func RunInstallers(installersDir string) error {
-	fmt.Println("Running installer scripts...")
-
-	installers, err := filepath.Glob(filepath.Join(installersDir, "*.sh"))
-	if err != nil {
-		return fmt.Errorf("failed to find installer scripts: %v", err)
-	}
-
-	for _, script := range installers {
-		cmd := exec.Command("bash", "-c", fmt.Sprintf("source %s", script))
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("failed to run installer script %s: %v", script, err)
-		}
-	}
-
-	fmt.Println("All installer scripts executed successfully.")
-	return nil
-}
-
-// UpgradeSystem upgrades all installed packages
-func UpgradeSystem() error {
-	fmt.Println("Upgrading system packages...")
-	cmd := exec.Command("sudo", "apt", "upgrade", "-y")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to upgrade system packages: %v", err)
-	}
-	fmt.Println("System upgrade complete.")
-	return nil
-}
-
-// RevertSleepSettings reverts sleep and lock settings to normal
+// RevertSleepSettings reverts sleep and lock settings to normal.
 func RevertSleepSettings() error {
-	fmt.Println("Reverting sleep settings...")
+	log.Info("Reverting sleep settings to default")
 
 	// Enable screen lock
-	cmd := exec.Command("gsettings", "set", "org.gnome.desktop.screensaver", "lock-enabled", "true")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to enable screen lock: %v", err)
+	if _, err := utils.CommandExec.RunShellCommand("gsettings set org.gnome.desktop.screensaver lock-enabled true"); err != nil {
+		log.Error("Failed to enable screen lock", err)
+		return fmt.Errorf("failed to enable screen lock: %w", err)
 	}
 
 	// Set idle delay to 300 seconds (5 minutes)
-	cmd = exec.Command("gsettings", "set", "org.gnome.desktop.session", "idle-delay", "300")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to revert idle delay: %v", err)
+	if _, err := utils.CommandExec.RunShellCommand("gsettings set org.gnome.desktop.session idle-delay 300"); err != nil {
+		log.Error("Failed to revert idle delay", err)
+		return fmt.Errorf("failed to revert idle delay: %w", err)
 	}
 
-	fmt.Println("Sleep settings reverted to normal.")
+	log.Info("Sleep settings reverted to normal")
 	return nil
 }
 
-// Logout logs the user out to apply changes
+// Logout logs the user out to apply changes.
 func Logout() error {
-	fmt.Println("Logging out to apply changes...")
+	log.Info("Logging out to apply changes")
 
-	cmd := exec.Command("gnome-session-quit", "--logout", "--no-prompt")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to log out: %v", err)
+	// Execute logout command
+	if _, err := utils.CommandExec.RunShellCommand("gnome-session-quit --logout --no-prompt"); err != nil {
+		log.Error("Failed to log out", err)
+		return fmt.Errorf("failed to log out: %w", err)
 	}
 
+	log.Info("Logout successful")
 	return nil
 }

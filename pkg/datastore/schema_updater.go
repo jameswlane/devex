@@ -2,58 +2,52 @@ package datastore
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/datastore/repository"
+	"github.com/jameswlane/devex/pkg/fs"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-func ApplySchemaUpdates(repo repository.SchemaRepository, homeDir string) error {
+func ApplySchemaUpdates(repo types.SchemaRepository, homeDir string) error {
 	log.Info("Starting schema updates")
 
 	// Construct the migrations directory path
 	migrationsDir := filepath.Join(homeDir, ".local/share/devex/migrations")
-	log.Info("Migrations directory", "path", migrationsDir)
+	log.Info("Migrations directory path resolved", "path", migrationsDir)
 
 	// Initialize the schema_migrations table if it does not exist
 	initializeTableQuery := `
-  CREATE TABLE IF NOT EXISTS schema_migrations (
-   version INTEGER PRIMARY KEY,
-   applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );`
+	CREATE TABLE IF NOT EXISTS schema_migrations (
+		version INTEGER PRIMARY KEY,
+		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
 	log.Info("Ensuring schema_migrations table exists")
 	if err := repo.ApplyMigrations(initializeTableQuery); err != nil {
-		log.Error("Failed to ensure schema_migrations table exists", "error", err)
-		return fmt.Errorf("failed to ensure schema_migrations table exists: %v", err)
+		log.Error("Failed to ensure schema_migrations table exists", err)
+		return fmt.Errorf("failed to ensure schema_migrations table exists: %w", err)
 	}
 
-	// Initialize schema version if not present
+	// Retrieve the current schema version
 	currentVersion, err := repo.GetVersion()
 	if err != nil {
-		log.Error("Failed to get current schema version", "error", err)
-		return fmt.Errorf("failed to get current schema version: %v", err)
+		log.Error("Failed to get current schema version", err)
+		return fmt.Errorf("failed to get current schema version: %w", err)
 	}
 	log.Info("Current schema version retrieved", "version", currentVersion)
 
-	if currentVersion == 0 {
-		log.Info("Initializing schema version to 0")
-		if err := repo.SetVersion(0); err != nil {
-			log.Error("Failed to initialize schema version to 0", "error", err)
-			return fmt.Errorf("failed to initialize schema version to 0: %v", err)
-		}
-	}
-
-	files, err := os.ReadDir(migrationsDir)
+	// Read the migrations directory
+	files, err := fs.ReadDir(migrationsDir)
 	if err != nil {
-		log.Error("Failed to read migrations directory", "error", err)
-		return fmt.Errorf("failed to read migrations directory: %v", err)
+		log.Error("Failed to read migrations directory", err)
+		return fmt.Errorf("failed to read migrations directory: %w", err)
 	}
-	log.Info("Migrations directory read successfully")
+	log.Info("Migrations directory read successfully", "count", len(files))
 
+	// Collect migration files
 	var migrations []string
 	for _, file := range files {
 		if strings.HasSuffix(file.Name(), "_up.sql") {
@@ -62,34 +56,38 @@ func ApplySchemaUpdates(repo repository.SchemaRepository, homeDir string) error 
 	}
 	log.Info("Migration files loaded", "files", migrations)
 
-	sort.Strings(migrations) // Ensure migrations are applied in order
+	// Sort migrations in ascending order
+	sort.Strings(migrations)
 
+	// Apply migrations in order
 	for _, migration := range migrations {
 		versionStr := strings.Split(migration, "_")[0]
 		version, err := strconv.Atoi(versionStr)
 		if err != nil {
-			log.Error("Invalid migration file name", "file", migration, "error", err)
+			log.Error("Invalid migration file name", err, "file", migration)
 			return fmt.Errorf("invalid migration file name: %s", migration)
 		}
 
 		if version > currentVersion {
 			log.Info("Applying schema update", "version", version)
-			query, err := os.ReadFile(filepath.Join(migrationsDir, migration))
+			query, err := fs.ReadFile(filepath.Join(migrationsDir, migration))
 			if err != nil {
-				log.Error("Failed to read migration file", "file", migration, "error", err)
-				return fmt.Errorf("failed to read migration file %s: %v", migration, err)
+				log.Error("Failed to read migration file", err, "file", migration)
+				return fmt.Errorf("failed to read migration file %s: %w", migration, err)
 			}
 
+			// Execute the migration query
 			log.Info("Executing migration", "version", version)
 			if err := repo.ApplyMigrations(string(query)); err != nil {
-				log.Error("Failed to apply schema update", "version", version, "error", err)
-				return fmt.Errorf("failed to apply schema update for version %d: %v", version, err)
+				log.Error("Failed to apply schema update", err, "version", version)
+				return fmt.Errorf("failed to apply schema update for version %d: %w", version, err)
 			}
 
+			// Update the schema version
 			log.Info("Updating schema version", "version", version)
 			if err := repo.SetVersion(version); err != nil {
-				log.Error("Failed to update schema version", "version", version, "error", err)
-				return fmt.Errorf("failed to update schema version to %d: %v", version, err)
+				log.Error("Failed to update schema version", err, "version", version)
+				return fmt.Errorf("failed to update schema version to %d: %w", version, err)
 			}
 		}
 	}

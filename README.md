@@ -289,7 +289,7 @@ task lint
 Build the application:
 
 ```bash
-go build -o bin/devex cmd/devex/main.go
+go build -o bin/devex cmd/main.go
 ```
 
 ---

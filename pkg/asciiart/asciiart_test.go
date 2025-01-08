@@ -1,21 +1,46 @@
-package asciiart
+package asciiart_test
 
-import "testing"
+import (
+	"bytes"
+	"io"
+	"os"
 
-func TestRenderArt(t *testing.T) {
-	t.Parallel()
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
-	tests := []struct {
-		name string
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	"github.com/jameswlane/devex/pkg/asciiart"
+	"github.com/jameswlane/devex/pkg/log"
+)
 
-			RenderArt()
+var _ = Describe("Asciiart", func() {
+	BeforeEach(func() {
+		// Force ANSI rendering by setting TERM
+		os.Setenv("TERM", "xterm-256color")
+	})
+
+	Context("RenderArt", func() {
+		It("renders the ASCII art with styled lines", func() {
+			// Capture the output of RenderArt
+			r, w, _ := os.Pipe()
+			oldStdout := os.Stdout
+			os.Stdout = w
+
+			// Run RenderArt
+			asciiart.RenderArt()
+			w.Close()
+
+			// Read captured output
+			var buf bytes.Buffer
+			if _, err := io.Copy(&buf, r); err != nil {
+				log.Fatal("", err)
+			}
+			os.Stdout = oldStdout
+
+			output := buf.String()
+
+			// Ensure the output contains expected ASCII characters
+			Expect(output).To(ContainSubstring("DDDDDDDDDDDDD"))
+			Expect(output).To(ContainSubstring("EEEEEEEEEEEEEEEEEEEE"))
 		})
-	}
-}
+	})
+})

@@ -5,31 +5,33 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/pkg/common"
+	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
 // GetAppList retrieves the list of apps from the settings.
 func GetAppList(settings Settings) ([]types.AppConfig, error) {
+	log.Info("Retrieving app list")
 	return settings.Apps, nil
 }
 
 // ValidateApp checks the validity of an individual app.
 func ValidateApp(app types.AppConfig) error {
-	if app.Name == "" {
-		return fmt.Errorf("app name is required")
+	log.Info("Validating app configuration", "app", app.Name)
+
+	if err := common.ValidateAppConfig(app.Name, app.InstallMethod); err != nil {
+		return err
 	}
-	if app.InstallMethod == "" {
-		return fmt.Errorf("install method is required for app %s", app.Name)
-	}
-	// TODO: curlpipe doesn't have a install command
-	//if app.InstallCommand == "" {
-	//	return fmt.Errorf("install command is required for app %s", app.Name)
-	//}
+
+	log.Info("App validated successfully", "app", app.Name)
 	return nil
 }
 
 // ListAppsByCategory filters apps by categories.
 func ListAppsByCategory(settings Settings, categories []string) ([]types.AppConfig, error) {
+	log.Info("Filtering apps by categories", "categories", categories)
+
 	var filteredApps []types.AppConfig
 	for _, app := range settings.Apps {
 		for _, category := range categories {
@@ -38,21 +40,30 @@ func ListAppsByCategory(settings Settings, categories []string) ([]types.AppConf
 			}
 		}
 	}
+
+	log.Info("Filtered apps by categories", "count", len(filteredApps))
 	return filteredApps, nil
 }
 
 // FindAppByName retrieves an app by its name from the settings.
 func FindAppByName(settings Settings, name string) (*types.AppConfig, error) {
+	log.Info("Finding app by name", "name", name)
+
 	for _, app := range settings.Apps {
 		if app.Name == name {
+			log.Info("App found", "name", name)
 			return &app, nil
 		}
 	}
+
+	log.Error("App not found", fmt.Errorf("app name: %s", name))
 	return nil, fmt.Errorf("app not found: %s", name)
 }
 
 // GetAppInfo retrieves the AppConfig for a given install_command or name.
 func GetAppInfo(identifier string) (*types.AppConfig, error) {
+	log.Info("Retrieving app information", "identifier", identifier)
+
 	// List of sections to search
 	sections := []string{"apps", "databases", "optional_apps", "programming_languages"}
 
@@ -60,46 +71,66 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 		for _, app := range viper.Get(section).([]any) {
 			candidate := app.(map[string]any)
 			if candidate["install_command"] == identifier || candidate["name"] == identifier {
+				log.Info("App configuration found", "identifier", identifier)
 				return &types.AppConfig{
 					Name:           candidate["name"].(string),
 					Description:    candidate["description"].(string),
 					InstallMethod:  candidate["install_method"].(string),
 					InstallCommand: candidate["install_command"].(string),
 					DownloadURL:    candidate["download_url"].(string),
-					Dependencies:   toStringSlice(candidate["dependencies"]),
+					Dependencies:   ToStringSlice(candidate["dependencies"]),
 					PostInstall:    toInstallCommandSlice(candidate["post_install"]),
 				}, nil
 			}
 		}
 	}
 
+	// log.Error("No app configuration found", ,"identifier", identifier)
 	return nil, fmt.Errorf("no app configuration found for identifier: %s", identifier)
 }
 
-// Helper to convert interface{} to []string
-func toStringSlice(input any) []string {
+func ToStringSlice(input any) []string {
 	if input == nil {
 		return nil
 	}
-	result := []string{}
-	for _, item := range input.([]any) {
-		result = append(result, item.(string))
+
+	log.Info("Converting to string slice")
+	items, ok := input.([]any)
+	if !ok {
+		log.Warn("Conversion failed: input is not a slice", "input", input)
+		return nil
 	}
+
+	result := make([]string, len(items))
+	for i, item := range items {
+		result[i] = item.(string)
+	}
+
+	log.Info("Converted to string slice", "count", len(result))
 	return result
 }
 
-// Helper to convert interface{} to []types.InstallCommand
 func toInstallCommandSlice(input any) []types.InstallCommand {
 	if input == nil {
 		return nil
 	}
-	result := []types.InstallCommand{}
-	for _, item := range input.([]any) {
+
+	log.Info("Converting to install command slice")
+	items, ok := input.([]any)
+	if !ok {
+		log.Warn("Conversion failed: input is not a slice", "input", input)
+		return nil
+	}
+
+	result := make([]types.InstallCommand, len(items))
+	for i, item := range items {
 		cmd := item.(map[string]any)
-		result = append(result, types.InstallCommand{
+		result[i] = types.InstallCommand{
 			Command: cmd["command"].(string),
 			Shell:   cmd["shell"].(string),
-		})
+		}
 	}
+
+	log.Info("Converted to install command slice", "count", len(result))
 	return result
 }

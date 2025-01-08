@@ -2,12 +2,12 @@ package gitconfig
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/pkg/fs"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 type GitConfig struct {
@@ -15,58 +15,64 @@ type GitConfig struct {
 	Settings map[string]string `yaml:"settings"`
 }
 
-// LoadGitConfig loads the Git configuration from a YAML file
+// LoadGitConfig loads the Git configuration from a YAML file.
 func LoadGitConfig(filename string) (*GitConfig, error) {
-	data, err := os.ReadFile(filename)
+	log.Info("Loading Git configuration from file", "filename", filename)
+
+	data, err := fs.ReadFile(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read git config YAML file: %w", err)
+		log.Error("Failed to read Git config YAML file", err, "filename", filename)
+		return nil, fmt.Errorf("failed to read Git config YAML file: %w", err)
 	}
 
 	var gitConfig GitConfig
 	if err := yaml.Unmarshal(data, &gitConfig); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal git config YAML: %w", err)
+		log.Error("Failed to unmarshal Git config YAML", err, "filename", filename)
+		return nil, fmt.Errorf("failed to unmarshal Git config YAML: %w", err)
 	}
 
+	log.Info("Git configuration loaded successfully", "aliases", len(gitConfig.Aliases), "settings", len(gitConfig.Settings))
 	return &gitConfig, nil
 }
 
-// ApplyGitConfig applies the Git configuration (aliases and settings)
+// ApplyGitConfig applies the Git configuration (aliases and settings).
 func ApplyGitConfig(gitConfig *GitConfig) error {
+	log.Info("Applying Git configuration")
+
 	if err := applyAliases(gitConfig.Aliases); err != nil {
+		log.Error("Failed to apply Git aliases", err)
 		return fmt.Errorf("failed to apply aliases: %w", err)
 	}
 
 	if err := applySettings(gitConfig.Settings); err != nil {
+		log.Error("Failed to apply Git settings", err)
 		return fmt.Errorf("failed to apply settings: %w", err)
 	}
 
+	log.Info("Git configuration applied successfully")
 	return nil
 }
 
+// applyAliases applies Git aliases.
 func applyAliases(aliases map[string]string) error {
 	for alias, command := range aliases {
-		log.Info(fmt.Sprintf("Setting Git alias: alias=%s, command=%s", alias, command))
-		if err := runGitCommand([]string{"config", "--global", fmt.Sprintf("alias.%s", alias), command}); err != nil {
+		log.Info("Setting Git alias", "alias", alias, "command", command)
+		_, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("git config --global alias.%s %s", alias, command))
+		if err != nil {
 			return fmt.Errorf("failed to set git alias %s: %w", alias, err)
 		}
 	}
 	return nil
 }
 
+// applySettings applies Git settings.
 func applySettings(settings map[string]string) error {
 	for key, value := range settings {
-		log.Info(fmt.Sprintf("Setting Git configuration: key=%s, value=%s", key, value))
-		if err := runGitCommand([]string{"config", "--global", key, value}); err != nil {
+		log.Info("Setting Git configuration", "key", key, "value", value)
+		_, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("git config --global %s %s", key, value))
+		if err != nil {
 			return fmt.Errorf("failed to set git configuration %s: %w", key, err)
 		}
 	}
 	return nil
-}
-
-func runGitCommand(args []string) error {
-	log.Info(fmt.Sprintf("Running git command: git %s", args))
-	cmd := exec.Command("git", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }

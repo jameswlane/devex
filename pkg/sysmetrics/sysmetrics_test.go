@@ -1,84 +1,80 @@
-package sysmetrics
+package sysmetrics_test
 
-import "testing"
+import (
+	"fmt"
+	"time"
 
-func TestGetCPUUsage(t *testing.T) {
-	t.Parallel()
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/mem"
 
-	tests := []struct {
-		name    string
-		want    float64
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
-			got, err := GetCPUUsage()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetCPUUsage() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("GetCPUUsage() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	"github.com/jameswlane/devex/pkg/sysmetrics"
+)
 
-func TestGetDiskUsage(t *testing.T) {
-	t.Parallel()
+var _ = Describe("GetCPULoadPercent", func() {
+	It("retrieves CPU usage successfully", func() {
+		sysmetrics.GetCPULoad = func(interval time.Duration, percpu bool) ([]float64, error) {
+			return []float64{25.5}, nil
+		}
 
-	tests := []struct {
-		name    string
-		want    float64
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		load, err := sysmetrics.GetCPULoadPercent(0)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(load).To(Equal([]float64{25.5}))
+	})
 
-			got, err := GetDiskUsage()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetDiskUsage() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("GetDiskUsage() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	It("returns an error if CPU usage retrieval fails", func() {
+		sysmetrics.GetCPULoad = func(interval time.Duration, percpu bool) ([]float64, error) {
+			return nil, fmt.Errorf("mock error")
+		}
 
-func TestGetRAMUsage(t *testing.T) {
-	t.Parallel()
+		_, err := sysmetrics.GetCPULoadPercent(0)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock error"))
+	})
+})
 
-	tests := []struct {
-		name    string
-		want    float64
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+var _ = Describe("GetMemoryUsagePercent", func() {
+	It("retrieves memory usage successfully", func() {
+		sysmetrics.GetMemoryStats = func() (*mem.VirtualMemoryStat, error) {
+			return &mem.VirtualMemoryStat{UsedPercent: 42.7}, nil
+		}
 
-			got, err := GetRAMUsage()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("GetRAMUsage() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("GetRAMUsage() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+		usage, err := sysmetrics.GetMemoryUsagePercent()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(usage.UsedPercent).To(Equal(42.7))
+	})
+
+	It("returns an error if memory usage retrieval fails", func() {
+		sysmetrics.GetMemoryStats = func() (*mem.VirtualMemoryStat, error) {
+			return nil, fmt.Errorf("mock error")
+		}
+
+		_, err := sysmetrics.GetMemoryUsagePercent()
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock error"))
+	})
+})
+
+var _ = Describe("GetDiskUsagePercent", func() {
+	It("retrieves disk usage successfully", func() {
+		sysmetrics.GetDiskUsage = func(path string) (*disk.UsageStat, error) {
+			return &disk.UsageStat{UsedPercent: 65.3}, nil
+		}
+
+		usage, err := sysmetrics.GetDiskUsagePercent("/")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(usage.UsedPercent).To(Equal(65.3))
+	})
+
+	It("returns an error if disk usage retrieval fails", func() {
+		sysmetrics.GetDiskUsage = func(path string) (*disk.UsageStat, error) {
+			return nil, fmt.Errorf("mock error")
+		}
+
+		_, err := sysmetrics.GetDiskUsagePercent("/")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("mock error"))
+	})
+})

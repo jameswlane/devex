@@ -1,171 +1,139 @@
-package fonts
+package fonts_test
 
 import (
-	"reflect"
-	"testing"
+	"archive/zip"
+	"fmt"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"github.com/spf13/afero"
+
+	"github.com/jameswlane/devex/pkg/fonts"
+	"github.com/jameswlane/devex/pkg/fs"
+	"github.com/jameswlane/devex/pkg/mocks"
 )
 
-func TestInstallFont(t *testing.T) {
-	t.Parallel()
+func mockDownloadFile(url string) (string, error) {
+	zipFile := "/mock/test-font.zip"
 
-	type args struct {
-		font Font
+	file, err := fs.AppFs.Create(zipFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to create mock zip file: %w", err)
 	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
 
-			if err := InstallFont(tt.args.font); (err != nil) != tt.wantErr {
-				t.Errorf("InstallFont() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	writer := zip.NewWriter(file)
+
+	// Add a test font file to the zip
+	w, err := writer.Create("test-font.ttf")
+	if err != nil {
+		return "", fmt.Errorf("failed to add file to mock zip: %w", err)
 	}
+	_, err = w.Write([]byte("mock font data"))
+	if err != nil {
+		return "", fmt.Errorf("failed to write mock font data: %w", err)
+	}
+
+	// Close the writer to finalize the zip file
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("failed to finalize mock zip: %w", err)
+	}
+
+	// Close the file to flush its content to the in-memory filesystem
+	if err := file.Close(); err != nil {
+		return "", fmt.Errorf("failed to close mock zip file: %w", err)
+	}
+
+	return zipFile, nil
 }
 
-func TestLoadFonts(t *testing.T) {
-	t.Parallel()
+var _ = Describe("Fonts", func() {
+	BeforeEach(func() {
+		fs.SetFs(afero.NewMemMapFs()) // Reset to in-memory filesystem
+	})
 
-	type args struct {
-		filename string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []Font
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	It("loads fonts from a valid YAML file", func() {
+		fontsYAML := `
+- name: Test Font
+  method: url
+  url: https://example.com/test-font.zip
+  destination: /mock/fonts
+`
+		filename := "/mock/test-fonts.yaml"
+		err := fs.WriteFile(filename, []byte(fontsYAML), 0o644)
+		Expect(err).ToNot(HaveOccurred())
 
-			got, err := LoadFonts(tt.args.filename)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoadFonts() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LoadFonts() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+		fontsList, err := fonts.LoadFonts(filename)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(fontsList).To(HaveLen(1))
+		Expect(fontsList[0].Name).To(Equal("Test Font"))
+	})
 
-func Test_downloadFile(t *testing.T) {
-	t.Parallel()
+	It("handles an invalid YAML file gracefully", func() {
+		filename := "/mock/invalid-fonts.yaml"
+		err := fs.WriteFile(filename, []byte("{invalid_yaml}"), 0o644)
+		Expect(err).ToNot(HaveOccurred())
 
-	type args struct {
-		url string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    string
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		_, err = fonts.LoadFonts(filename)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to unmarshal fonts YAML"))
+	})
 
-			got, err := downloadFile(tt.args.url)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("downloadFile() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("downloadFile() got = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+	It("installs a font from a URL using mock utils", func() {
+		mockUtils := mocks.NewMockUtils()
+		fonts.SetUtils(mockUtils)
+		fonts.SetDownloadFile(mockDownloadFile)
 
-func Test_installFromURL(t *testing.T) {
-	t.Parallel()
+		font := fonts.Font{
+			Name:        "Mock Font",
+			Method:      "url",
+			URL:         "https://mockurl.com/font.zip",
+			Destination: "/mock/fonts",
+		}
 
-	type args struct {
-		font Font
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		err := fonts.InstallFont(font)
+		Expect(err).ToNot(HaveOccurred())
 
-			if err := installFromURL(tt.args.font); (err != nil) != tt.wantErr {
-				t.Errorf("installFromURL() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		exists, err := fs.Exists("/mock/fonts/test-font.ttf")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(exists).To(BeTrue())
+	})
 
-func Test_runCommand(t *testing.T) {
-	t.Parallel()
+	It("extracts fonts from a zip archive", func() {
+		zipFile := "/mock/test-font.zip"
+		destDir := "/mock/fonts"
 
-	type args struct {
-		cmd  string
-		args []string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		// Create a zip file in memory
+		file, err := fs.AppFs.Create(zipFile)
+		Expect(err).ToNot(HaveOccurred())
 
-			if err := runCommand(tt.args.cmd, tt.args.args); (err != nil) != tt.wantErr {
-				t.Errorf("runCommand() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		writer := zip.NewWriter(file)
 
-func Test_unzipAndMove(t *testing.T) {
-	t.Parallel()
+		w, err := writer.Create("test-font.ttf")
+		Expect(err).ToNot(HaveOccurred())
+		_, err = w.Write([]byte("mock font data"))
+		Expect(err).ToNot(HaveOccurred())
 
-	type args struct {
-		zipFile     string
-		extractPath string
-		dest        string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+		// Close the writer and file
+		Expect(writer.Close()).To(Succeed())
+		Expect(file.Close()).To(Succeed())
 
-			if err := unzipAndMove(tt.args.zipFile, tt.args.extractPath, tt.args.dest); (err != nil) != tt.wantErr {
-				t.Errorf("unzipAndMove() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
+		// Test the UnzipAndMove function
+		err = fonts.UnzipAndMove(zipFile, "", destDir)
+		Expect(err).ToNot(HaveOccurred())
+
+		exists, err := fs.Exists("/mock/fonts/test-font.ttf")
+		Expect(err).ToNot(HaveOccurred())
+		Expect(exists).To(BeTrue())
+	})
+
+	It("handles installation via unsupported method gracefully", func() {
+		font := fonts.Font{
+			Name:   "Invalid Font",
+			Method: "unsupported",
+		}
+
+		err := fonts.InstallFont(font)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("unsupported install method"))
+	})
+})

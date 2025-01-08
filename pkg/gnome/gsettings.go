@@ -2,18 +2,24 @@ package gnome
 
 import (
 	"fmt"
-	"os/exec"
+
+	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
-// gsettingsExecCommand is a variable to allow mocking for tests
-var gsettingsExecCommand = exec.Command
-
-// SetGSetting sets a value for a given Gnome schema and key using gsettings
+// SetGSetting sets a value for a given Gnome schema and key using gsettings.
 func SetGSetting(schema, key, value string) error {
-	cmd := gsettingsExecCommand("gsettings", "set", schema, key, value)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to set GSetting: %v - %s", err, string(output))
+	log.Info("Setting GSetting value", "schema", schema, "key", key, "value", value)
+
+	// Construct the gsettings command
+	command := fmt.Sprintf("gsettings set %s %s '%s'", schema, key, value)
+
+	// Execute the command
+	if _, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to set GSetting", err, "schema", schema, "key", key, "value", value)
+		return fmt.Errorf("failed to set GSetting: %w", err)
 	}
+
+	log.Info("GSetting value set successfully", "schema", schema, "key", key, "value", value)
 	return nil
 }
