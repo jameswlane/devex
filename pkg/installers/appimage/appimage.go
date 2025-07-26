@@ -33,7 +33,9 @@ func (a *AppImageInstaller) Install(command string, repo types.Repository) error
 
 	// Check if the AppImage binary is already installed
 	appConfig := types.AppConfig{
-		Name:           command,
+		BaseConfig: types.BaseConfig{
+			Name: command,
+		},
 		InstallMethod:  "appimage",
 		InstallCommand: command,
 	}

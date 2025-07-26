@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os/user"
+	"runtime"
 )
 
 // BaseConfig defines common fields shared across multiple configurations.
@@ -34,8 +35,6 @@ type AppConfig struct {
 	InstallDir       string           `mapstructure:"install_dir" yaml:"install_dir"`
 	Symlink          string           `mapstructure:"symlink" yaml:"symlink"`
 	ShellUpdates     []string         `mapstructure:"shell_updates" yaml:"shell_updates"`
-	Name             string           `mapstructure:"name" yaml:"name"`
-	Description      string           `mapstructure:"description" yaml:"description"`
 }
 
 // Validate checks the validity of the AppConfig structure.
@@ -217,7 +216,7 @@ type ConfigLoader interface {
 type Database interface {
 	Conn() *sql.DB
 	Exec(query string, args ...any) error
-	QueryRow(query string, args ...any) (map[string]any, error)
+	QueryRow(query string, args ...any) *sql.Row
 	Query(query string, args ...any) (*sql.Rows, error)
 	Close() error
 }
@@ -298,4 +297,82 @@ type ShellConfig interface {
 	AddEnvironmentVariable(name, value string) error
 	LoadConfig() error
 	SaveConfig() error
+}
+
+// Cross-Platform Configuration Types
+
+// OSConfig defines OS-specific installation configuration
+type OSConfig struct {
+	InstallMethod    string           `mapstructure:"install_method" yaml:"install_method"`
+	InstallCommand   string           `mapstructure:"install_command" yaml:"install_command"`
+	UninstallCommand string           `mapstructure:"uninstall_command" yaml:"uninstall_command"`
+	AptSources       []AptSource      `mapstructure:"apt_sources" yaml:"apt_sources,omitempty"`
+	BrewCask         bool             `mapstructure:"brew_cask" yaml:"brew_cask,omitempty"`
+	BrewTap          string           `mapstructure:"brew_tap" yaml:"brew_tap,omitempty"`
+	DownloadURL      string           `mapstructure:"download_url" yaml:"download_url,omitempty"`
+	ExtractPath      string           `mapstructure:"extract_path" yaml:"extract_path,omitempty"`
+	Destination      string           `mapstructure:"destination" yaml:"destination,omitempty"`
+	Dependencies     []string         `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
+	PreInstall       []InstallCommand `mapstructure:"pre_install" yaml:"pre_install,omitempty"`
+	PostInstall      []InstallCommand `mapstructure:"post_install" yaml:"post_install,omitempty"`
+	Alternatives     []OSConfig       `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
+	ConfigFiles      []ConfigFile     `mapstructure:"config_files" yaml:"config_files,omitempty"`
+	CleanupFiles     []string         `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
+	Conflicts        []string         `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
+}
+
+// CrossPlatformApp defines an application with OS-specific installation methods
+type CrossPlatformApp struct {
+	Name         string   `mapstructure:"name" yaml:"name"`
+	Description  string   `mapstructure:"description" yaml:"description"`
+	Category     string   `mapstructure:"category" yaml:"category"`
+	Default      bool     `mapstructure:"default" yaml:"default"`
+	Linux        OSConfig `mapstructure:"linux" yaml:"linux,omitempty"`
+	MacOS        OSConfig `mapstructure:"macos" yaml:"macos,omitempty"`
+	Windows      OSConfig `mapstructure:"windows" yaml:"windows,omitempty"`
+	AllPlatforms OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
+}
+
+// GetOSConfig returns the appropriate OS configuration for the current platform
+func (app *CrossPlatformApp) GetOSConfig() OSConfig {
+	// Check if all_platforms is defined (cross-platform tools like mise)
+	if app.AllPlatforms.InstallMethod != "" {
+		return app.AllPlatforms
+	}
+
+	// Return OS-specific config
+	switch runtime.GOOS {
+	case "linux":
+		return app.Linux
+	case "darwin":
+		return app.MacOS
+	case "windows":
+		return app.Windows
+	default:
+		return OSConfig{} // Empty config for unsupported OS
+	}
+}
+
+// IsSupported checks if the app is supported on the current platform
+func (app *CrossPlatformApp) IsSupported() bool {
+	config := app.GetOSConfig()
+	return config.InstallMethod != ""
+}
+
+// Validate checks if the CrossPlatformApp configuration is valid
+func (app *CrossPlatformApp) Validate() error {
+	if app.Name == "" {
+		return fmt.Errorf("app name is required")
+	}
+
+	if !app.IsSupported() {
+		return fmt.Errorf("app %s is not supported on %s", app.Name, runtime.GOOS)
+	}
+
+	osConfig := app.GetOSConfig()
+	if osConfig.InstallMethod == "" {
+		return fmt.Errorf("install method is required for app %s on %s", app.Name, runtime.GOOS)
+	}
+
+	return nil
 }

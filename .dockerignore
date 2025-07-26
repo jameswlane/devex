@@ -1,0 +1,16 @@
+# Ignore files that shouldn't be copied to Docker containers
+.git
+.gitignore
+*.md
+docs/
+node_modules/
+coverage.out
+coverprofile.out
+bin/
+.devex/
+.local/
+
+# Keep only essential files for building and testing
+!CLAUDE.md
+!README.md
+!docs/testing.md

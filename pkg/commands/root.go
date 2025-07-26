@@ -7,7 +7,7 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
-func NewRootCmd(version string, repo types.Repository, settings config.Settings) *cobra.Command {
+func NewRootCmd(version string, repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "devex",
 		Short:   "DevEx CLI for setting up your development environment",

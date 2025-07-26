@@ -1,0 +1,122 @@
+applications:
+  development:
+    - name: "VS Code"
+      description: "Code editor from Microsoft"
+      category: "Editors"
+      default: true
+
+      linux:
+        install_method: "apt"
+        install_command: "code"
+        apt_sources:
+          - key_source: "https://packages.microsoft.com/keys/microsoft.asc"
+            key_name: "microsoft.gpg"
+            source_repo: "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main"
+            source_name: "vscode.list"
+
+      macos:
+        install_method: "brew"
+        install_command: "visual-studio-code"
+        brew_cask: true
+
+      windows:
+        install_method: "winget"
+        install_command: "Microsoft.VisualStudioCode"
+
+    - name: "Git"
+      description: "Version control system"
+      category: "Development Tools"
+      default: true
+
+      linux:
+        install_method: "apt"
+        install_command: "git"
+
+      macos:
+        install_method: "brew"
+        install_command: "git"
+
+      windows:
+        install_method: "winget"
+        install_command: "Git.Git"
+
+  databases:
+    - name: "PostgreSQL"
+      description: "Open source database"
+      category: "Databases"
+      default: false
+
+      linux:
+        install_method: "apt"
+        install_command: "postgresql postgresql-contrib"
+        post_install:
+          - command: "sudo systemctl enable postgresql"
+          - command: "sudo systemctl start postgresql"
+
+      macos:
+        install_method: "brew"
+        install_command: "postgresql"
+        post_install:
+          - command: "brew services start postgresql"
+
+      windows:
+        install_method: "winget"
+        install_command: "PostgreSQL.PostgreSQL"
+
+  system_tools:
+    - name: "curl"
+      description: "Command line tool for transferring data"
+      category: "System Tools"
+      default: true
+
+      linux:
+        install_method: "apt"
+        install_command: "curl"
+
+      macos:
+        install_method: "brew"
+        install_command: "curl"
+
+      windows:
+        install_method: "winget"
+        install_command: "cURL.cURL"
+
+    - name: "htop"
+      description: "Interactive process viewer"
+      category: "System Tools"
+      default: false
+
+      linux:
+        install_method: "apt"
+        install_command: "htop"
+
+      macos:
+        install_method: "brew"
+        install_command: "htop"
+
+      windows:
+        # htop equivalent for Windows
+        install_method: "winget"
+        install_command: "Microsoft.ProcessMonitor"
+
+  optional:
+    - name: "Docker"
+      description: "Container platform"
+      category: "Development Tools"
+      default: false
+
+      linux:
+        install_method: "apt"
+        install_command: "docker.io docker-compose"
+        post_install:
+          - command: "sudo usermod -aG docker $USER"
+          - command: "sudo systemctl enable docker"
+
+      macos:
+        install_method: "brew"
+        install_command: "docker"
+        brew_cask: true
+
+      windows:
+        install_method: "winget"
+        install_command: "Docker.DockerDesktop"
