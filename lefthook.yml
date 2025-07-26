@@ -1,0 +1,95 @@
+pre-commit:
+  parallel: true
+  commands:
+    check-large-files:
+      run: |
+        git diff --cached --name-only | \
+          xargs -I {} find {} -size +10M 2>/dev/null | \
+          head -1 | grep -q . && echo "Large files detected" && exit 1 || exit 0
+      stage_fixed: true
+    yamlfmt:
+      glob: "*.{yml,yaml}"
+      run: yamlfmt {staged_files}
+      stage_fixed: true
+    yamllint:
+      glob: "*.{yml,yaml}"
+      run: yamllint {staged_files}
+    end-of-file-fixer:
+      glob: '*.{js,ts,jsx,tsx,go,md,yml,yaml,json}'
+      run: |
+        for file in {staged_files}; do
+          if [ -s "$file" ] && [ "$(tail -c1 "$file")" != "" ]; then
+            echo "" >> "$file"
+          fi
+        done
+      stage_fixed: true
+    biome:
+      glob: '*.{json}'
+      run: pnpm exec biome check --write {staged_files}
+      stage_fixed: true
+    go-fmt:
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+    go-imports:
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: goimports -w {staged_files}
+      stage_fixed: true
+    go-lint:
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: golangci-lint run --fix
+      stage_fixed: true
+    biome-web:
+      root: 'apps/web/'
+      glob: '*.{js,ts,jsx,tsx}'
+      run: pnpm exec biome check --write {staged_files}
+      stage_fixed: true
+    biome-docs:
+      root: 'apps/docs/'
+      glob: '*.{js,ts,jsx,tsx}'
+      run: pnpm exec biome check --write {staged_files}
+      stage_fixed: true
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm commitlint --edit $1
+pre-push:
+  parallel: true
+  commands:
+    go-test:
+      root: 'apps/cli/'
+      run: go test ./...
+    go-vulncheck:
+      root: 'apps/cli/'
+      run: govulncheck ./...
+    web-build:
+      root: 'apps/web/'
+      run: pnpm turbo run build --filter=web
+    docs-build:
+      root: 'apps/docs/'
+      run: pnpm turbo run build --filter=docs
+commands: &commands
+  lint-go:
+    root: 'apps/cli/'
+    run: golangci-lint run
+  test-go:
+    root: 'apps/cli/'
+    run: ginkgo -r
+  format-all:
+    run: pnpm exec biome check --write .
+  lint-web:
+    root: 'apps/web/'
+    run: pnpm exec biome check --write .
+  lint-docs:
+    root: 'apps/docs/'
+    run: pnpm exec biome check --write .
+  format-yaml:
+    run: yamlfmt .
+  lint-yaml:
+    run: yamllint .
+scripts:
+  'commands/*':
+    runner: bash

@@ -1,36 +1,33 @@
 name: Build, Lint, Test, and Release
-
 on:
   push:
     branches:
       - main
-
 permissions:
   contents: write
   packages: write
   issues: write
   pull-requests: write
   id-token: write
-
 jobs:
   build:
     strategy:
       matrix:
-        go-version: [ 1.23.x ]
-        os: [ ubuntu-latest, macos-latest ]
+        go-version: [1.23.x]
+        os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch full history for tags
+          fetch-depth: 0
       - name: Fetch all tags
         run: git fetch --tags
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('apps/cli/**/go.sum') }}
       - name: Install Go ${{ matrix.go-version }}
         uses: actions/setup-go@v5
         with:
@@ -39,21 +36,45 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.60.1
-      -   name: Install Ginkgo
-          run: go install github.com/onsi/ginkgo/v2/ginkgo
+          working-directory: apps/cli
+      - name: Install Ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo
       - name: Test
+        working-directory: apps/cli
         run: ginkgo -r
       - name: Build
+        working-directory: apps/cli
         run: go build -ldflags="-s -w -X main.version=$(git describe --tags)" -o ./bin/devex ./cmd/main.go
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 9
+          run_install: false
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build web app
+        run: pnpm turbo run build --filter=web
+      - name: Build docs
+        run: pnpm turbo run build --filter=docs
   release:
-    needs: [build]
+    needs: [build, web]
     name: Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch full history for tags
+          fetch-depth: 0
       - name: Fetch all tags
         run: git fetch --tags
       - uses: pnpm/action-setup@v4
@@ -82,7 +103,8 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: "~> v2"
+          version: '~> v2'
           args: release --clean
+          workdir: apps/cli
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

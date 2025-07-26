@@ -1,25 +1,26 @@
 {
-  "name": "devex",
-  "version": "1.0.0",
-  "description": "Used for release automation",
-  "main": "index.js",
-  "scripts": {
-    "semantic-release": "semantic-release",
-    "prettier:check": "prettier --check .",
-    "prettier:fix": "prettier --write ."
-  },
-  "keywords": [],
-  "author": "James W Lane",
-  "license": "GPL-3.0",
-  "dependencies": {
-    "@commitlint/format": "^19.5.0",
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
-    "@semantic-release/github": "^11.0.1",
-    "@semantic-release/release-notes-generator": "^14.0.3",
-    "commitlint": "^19.8.0",
-    "conventional-changelog-conventionalcommits": "^8.0.0",
-    "prettier": "^3.5.3",
-    "semantic-release": "^24.2.7"
-  }
+	"name": "devex",
+	"version": "1.0.0",
+	"description": "Used for release automation",
+	"scripts": {
+		"semantic-release": "semantic-release",
+		"biome:format": "biome format --write",
+		"biome:lint": "biome lint --write",
+		"biome:check": "biome check --write"
+	},
+	"keywords": [],
+	"author": "James W Lane",
+	"license": "GPL-3.0",
+	"dependencies": {},
+	"devDependencies": {
+		"@commitlint/format": "^19.5.0",
+		"@semantic-release/changelog": "^6.0.3",
+		"@semantic-release/git": "^10.0.1",
+		"@semantic-release/github": "^11.0.1",
+		"@semantic-release/release-notes-generator": "^14.0.3",
+		"commitlint": "^19.8.0",
+		"conventional-changelog-conventionalcommits": "^8.0.0",
+		"semantic-release": "^24.2.7",
+		"@biomejs/biome": "2.1.2"
+	}
 }

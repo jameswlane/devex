@@ -1,0 +1,20 @@
+# Programming languages test configuration
+programming_languages:
+  - name: 'Python 3.11'
+    description: 'Python programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'python@3.11'
+    default: true
+  - name: 'Node.js LTS'
+    description: 'JavaScript runtime'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'node@lts'
+    default: true
+  - name: 'Go Latest'
+    description: 'Go programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'go@latest'
+    default: false

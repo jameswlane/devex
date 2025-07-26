@@ -1,6 +1,0 @@
-# config.yaml
-# Configuration for the DevEx CLI itself
-
-log_level: info
-cache: true
-update_check: true

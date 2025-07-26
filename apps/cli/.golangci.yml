@@ -1,0 +1,38 @@
+linters:
+  enable:
+    - errcheck
+    - ineffassign
+    - misspell
+    - noctx
+    - paralleltest
+    - prealloc
+    - staticcheck
+    - thelper
+    - tparallel
+    - unparam
+    - unused
+linters-settings:
+  gofmt:
+    rewrite-rules:
+      - pattern: 'interface{}'
+        replacement: 'any'
+  misspell:
+    locale: US
+formatters:
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/jameswlane/devex
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+run:
+  timeout: 5m
+  output: json
+issues:
+  exclude-rules:
+    - linters:
+        - errcheck
+      text: 'ignoring error'
+version: 2

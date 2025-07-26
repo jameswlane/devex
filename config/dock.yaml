@@ -1,9 +1,0 @@
-dock:
-  - name: "VS Code"
-    desktop_file: "code.desktop"
-  - name: "Typora"
-    desktop_file: "typora.desktop"
-  - name: "1Password"
-    desktop_file: "1password.desktop"
-  - name: "Settings"
-    desktop_file: "org.gnome.Settings.desktop"
