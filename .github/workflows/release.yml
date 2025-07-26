@@ -13,7 +13,7 @@ jobs:
   build:
     strategy:
       matrix:
-        go-version: [1.23.x]
+        go-version: [1.24.5]
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -35,7 +35,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.60.1
+          version: v2.3.0
           working-directory: apps/cli
       - name: Install Ginkgo
         run: go install github.com/onsi/ginkgo/v2/ginkgo
@@ -53,12 +53,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
-          version: 9
+          version: 10.12.4
           run_install: false
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install
@@ -80,12 +80,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         name: Install pnpm
         with:
-          version: 9
+          version: 10.12.4
           run_install: false
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'pnpm'
       - name: Install dependencies
         run: pnpm install
@@ -96,7 +96,7 @@ jobs:
       - name: Set up Go 1.x
         uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.5
       - name: Login to Docker
         run: docker login docker.pkg.github.com -u docker -p ${{ secrets.GITHUB_TOKEN }}
       - name: Release with GoReleaser
