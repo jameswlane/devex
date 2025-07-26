@@ -1,0 +1,67 @@
+programming_languages:
+  - name: 'Go'
+    description: 'Go programming language'
+    category: 'Programming Languages'
+    default: true
+    # Use mise for cross-platform consistency
+    all_platforms:
+      install_method: 'mise'
+      install_command: 'go@latest'
+      pre_install:
+        - command: 'curl https://mise.run | sh'
+          condition: '!command -v mise'
+  - name: 'Node.js'
+    description: 'JavaScript runtime'
+    category: 'Programming Languages'
+    default: true
+    # Cross-platform via mise
+    all_platforms:
+      install_method: 'mise'
+      install_command: 'node@lts'
+  - name: 'Python'
+    description: 'Python programming language'
+    category: 'Programming Languages'
+    default: true
+    # OS-specific installation (since it's often pre-installed)
+    linux:
+      install_method: 'apt'
+      install_command: 'python3 python3-pip python3-venv'
+    macos:
+      install_method: 'brew'
+      install_command: 'python@3.12'
+    windows:
+      install_method: 'winget'
+      install_command: 'Python.Python.3.12'
+fonts:
+  - name: 'JetBrains Mono'
+    method: 'download'
+    url: 'https://github.com/JetBrains/JetBrainsMono/releases/latest/download/JetBrainsMono.zip'
+    extract_path: 'fonts/ttf/*.ttf'
+    destination: '~/.local/share/fonts/'
+  - name: 'Fira Code'
+    method: 'download'
+    url: 'https://github.com/tonsky/FiraCode/releases/latest/download/Fira_Code.zip'
+    extract_path: 'ttf/*.ttf'
+    destination: '~/.local/share/fonts/'
+shell:
+  - name: 'Zsh with Oh My Zsh'
+    description: 'Enhanced shell experience'
+    category: 'Shell'
+    default: true
+    linux:
+      install_method: 'apt'
+      install_command: 'zsh'
+      post_install:
+        - command: 'chsh -s $(which zsh)'
+        - command: 'curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh'
+    macos:
+      # Zsh comes pre-installed on modern macOS
+      post_install:
+        - command: 'curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh | sh'
+    windows:
+      # Use PowerShell instead
+      install_method: 'winget'
+      install_command: 'Microsoft.PowerShell'
+      post_install:
+        - install_method: 'winget'
+          install_command: 'JanDeDobbeleer.OhMyPosh'

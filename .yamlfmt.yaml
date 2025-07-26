@@ -1,0 +1,8 @@
+exclude:
+  - "node_modules"
+  - "**/node_modules"
+  - "**/node_modules/**"
+  - "pnpm-lock.yaml"
+  - "**/.pnpm/**"
+formatter:
+  continue_on_error: true

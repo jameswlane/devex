@@ -6,64 +6,98 @@ Welcome! This guide covers how human contributors and AI agents (including ChatG
 
 ## Project Layout & Key Files
 
-- Most code is under:
-    - `/cmd` – App/service entrypoints
-    - `/pkg` – Core libraries, business logic
-    - `/config` – Configuration files
-    - `/assets` – Static resources (themes, images)
-    - `/test` – Test utilities and fixtures
-- Docs and contribution guidelines:
-    - `README.md` – Main project overview
-    - `CLAUDE.md`, `IMPROVEMENTS.md` – LLM/automation-focused documentation and custom rules for Claude
-    - `.github/` – CI/CD and workflow configuration
+**Monorepo Structure:**
+- `apps/cli/` – DevEx CLI tool (Go)
+    - `apps/cli/cmd/` – CLI entrypoints
+    - `apps/cli/pkg/` – Core libraries, business logic
+    - `apps/cli/config/` – Default configurations
+    - `apps/cli/assets/` – Static resources (themes, defaults)
+    - `apps/cli/test/` – Test utilities and fixtures
+- `apps/web/` – Website (Next.js)
+    - `apps/web/app/` – Next.js app router pages and components
+    - `apps/web/public/` – Static assets
+- `apps/docs/` – Documentation site (MDX + Next.js)
+    - `apps/docs/pages/` – MDX documentation pages
+- `packages/` – Shared packages (future use)
 
-> **Agents:** Work only within the relevant folders for the assigned feature/bug. Prefer contributing to `/pkg` for business logic or `/cmd` for app entrypoints unless directed elsewhere.
+**Root-level files:**
+- `README.md` – Main project overview
+- `CLAUDE.md`, `IMPROVEMENTS.md` – LLM/automation-focused documentation
+- `pnpm-workspace.yaml` – Workspace configuration
+- `.github/` – CI/CD and workflow configuration
+
+> **Agents:** Always work within the appropriate app directory (`apps/cli/`, `apps/web/`, or `apps/docs/`). For CLI development, prefer contributing to `apps/cli/pkg/` for business logic or `apps/cli/cmd/` for entrypoints.
 
 ---
 
 ## Contribution & Style Guidelines
 
-- Follow code style enforced by:
-    - ESLint (`pnpm lint`)
-    - Prettier (`pnpm format`)
-    - GoLint/GoFmt for Go (`make lint` or as per CI)
-- Commit messages should use Conventional Commits via commitlint.
-- Always update/add tests (`/test` or relevant package subdir) for any behavior change.
-- Documentation must be updated if the code change warrants it.
-- Follow the structure of PR titles: `[<project|package_name>] <Title>`
+**Code Style Enforcement:**
+- **Root/Workspace Level**: Biome for formatting and linting (`pnpm biome:format`, `pnpm biome:lint`)
+- **CLI (Go)**: GoLint/GoFmt via Task (`cd apps/cli && task lint`)
+- **Web/Docs (TypeScript/React)**: Biome for TypeScript, app-specific configurations
+
+**Development Commands:**
+- **CLI**: Use Task commands (`cd apps/cli && task <command>`)
+- **Web/Docs**: Use pnpm commands (`cd apps/web && pnpm <command>`)
+- **Workspace**: Use pnpm workspace commands from root (`pnpm <command>`)
+
+**Testing and Documentation:**
+- Always update/add tests in the appropriate app directory
+- CLI tests: `apps/cli/pkg/` subdirectories using Ginkgo or standard Go tests
+- Web/Docs tests: Follow Next.js testing conventions
+- Documentation must be updated if the code change warrants it
+
+**Commit Guidelines:**
+- Use Conventional Commits via commitlint
+- Format: `[<app_name>] <type>: <description>` (e.g., `[cli] feat: add uninstall command`)
+- For cross-app changes: `[workspace] <type>: <description>`
 
 ---
 
 ## Codebase Migration
 
-Parts of the codebase may be migrating from legacy layouts or languages. See `IMPROVEMENTS.md` for ongoing/refactor efforts.
-**Agents:** Prefer working within the new `/pkg` structure & modern idioms when adding or modifying features.
+The codebase has been refactored into a monorepo structure. See `IMPROVEMENTS.md` for ongoing/refactor efforts.
+**Agents:** Always work within the appropriate app directory (`apps/cli/`, `apps/web/`, `apps/docs/`). For CLI development, prefer working within the `apps/cli/pkg/` structure & modern idioms when adding or modifying features.
 
 ---
 
 ## Change Validation
 
-- **Lint:**
-  Run `pnpm lint --filter <project>` or `make lint` for Go code.
-- **Unit Tests:**
-    - JS/TS: `pnpm test --filter <project>`
-    - Go: `go test ./...` from the relevant directory
-- **CI:**
-  All PRs are checked via workflows in `.github/workflows`.
-  **Agents:** Never merge if test suite or linters are failing.
+**Linting:**
+- **Root/Workspace**: `pnpm biome:lint` and `pnpm biome:check`
+- **CLI**: `cd apps/cli && task lint`
+- **Web**: `cd apps/web && pnpm lint` (if configured)
+- **Docs**: `cd apps/docs && pnpm lint` (if configured)
+
+**Unit Tests:**
+- **CLI**: `cd apps/cli && task test` (includes Ginkgo and standard Go tests)
+- **Web**: `cd apps/web && pnpm test` (if configured)
+- **Docs**: `cd apps/docs && pnpm test` (if configured)
+
+**CI:**
+All PRs are checked via workflows in `.github/workflows`.
+**Agents:** Never merge if test suite or linters are failing.
 
 ---
 
 ## How Agents Should Work
 
-- **File Scope:** Respect the most specific (nested) `AGENTS.md` if multiple exist. Default to the closest root.
-- **Exploration:** When exploring for relevant code context, look for matching terms in `/pkg`, `/cmd`, or `/test` based on the prompt.
-- **Documentation:** Update or create docs in `/docs` or near the code changed, as appropriate.
+- **File Scope:** Work within the appropriate app directory. Respect app-specific configurations and workflows.
+- **Exploration:** When exploring for relevant code context:
+  - **CLI Development**: Look in `apps/cli/pkg/`, `apps/cli/cmd/`, or `apps/cli/test/`
+  - **Website Development**: Look in `apps/web/app/`, `apps/web/components/`
+  - **Documentation**: Look in `apps/docs/pages/`, `apps/docs/components/`
+- **Documentation:** Update or create docs in the appropriate app directory or root-level docs.
 - **PRs:**
-    - Use clear, conventional commit titles (`[package] Short summary`)
+    - Use clear, conventional commit titles (`[app_name] type: short summary`)
+    - Examples: `[cli] feat: add uninstall command`, `[web] fix: navigation bug`, `[workspace] chore: update dependencies`
     - Summarize all changes with context in the PR body
-    - List verification steps (lint, test) and confirm status, e.g. "All tests pass locally"
-- **Formatting:** Adhere to Prettier/ESLint for JS/TS; GoFmt for Go code.
+    - List verification steps (lint, test) and confirm status
+- **Formatting:**
+  - Use Biome for workspace-level and TypeScript/React formatting
+  - Use GoFmt/Task for CLI Go code
+  - Follow app-specific conventions
 - **Safety:** Never leak secrets or credentials.
   Log only non-sensitive build/test output in commit comments and PRs.
 
@@ -78,7 +112,10 @@ Include full filenames, stack traces, or snippet blocks where possible to focus 
 State expected outcomes, how to validate (tests, linters), and setup steps if needed.
 
 **Customize approach:**
-Specify if special commit templates, logs, or forbidden/required commands (e.g., use `pnpm` not `npm`) should be used.
+Specify if special commit templates, logs, or forbidden/required commands should be used:
+- Use `pnpm` not `npm` for workspace management
+- Use `task` for CLI development commands
+- Always specify which app directory to work in (`apps/cli/`, `apps/web/`, `apps/docs/`)
 
 **Split complex work:**
 Large tasks should be broken into smaller, self-testable PRs or commits.

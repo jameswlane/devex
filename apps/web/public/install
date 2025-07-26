@@ -1,0 +1,80 @@
+#!/bin/bash
+
+set -e
+
+echo "Starting DevEx installation..."
+
+# Determine OS and architecture
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+
+case "$ARCH" in
+    x86_64) ARCH="amd64" ;;
+    armv8*|aarch64) ARCH="arm64" ;;
+    arm*) ARCH="arm" ;;
+    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+# Fetch the latest release version dynamically
+echo "Fetching the latest DevEx release version..."
+LATEST_VERSION=$(wget -qO- https://api.github.com/repos/jameswlane/devex/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
+
+if [ -z "$LATEST_VERSION" ]; then
+    echo "Failed to fetch the latest release version. Exiting."
+    exit 1
+fi
+
+echo "Latest version: $LATEST_VERSION"
+
+# Construct file name and URL
+FILENAME="devex_${LATEST_VERSION}_${OS}_${ARCH}.tar.gz"
+BASE_URL="https://github.com/jameswlane/devex/releases/download/${LATEST_VERSION}"
+CHECKSUM_FILE="devex_checksums.txt"
+
+echo "Downloading DevEx release: $FILENAME"
+
+# Create a temporary directory for download
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+
+# Download the tarball and checksum file
+wget "$BASE_URL/$FILENAME"
+wget "$BASE_URL/$CHECKSUM_FILE"
+
+# Verify checksum
+echo "Verifying checksum..."
+grep "$FILENAME" "$CHECKSUM_FILE" | sha256sum --check --status
+if [ $? -ne 0 ]; then
+    echo "Checksum verification failed. Exiting."
+    exit 1
+fi
+
+echo "Checksum verification passed."
+
+# Install to target directory
+INSTALL_DIR="$HOME/.local/share/devex"
+mkdir -p "$INSTALL_DIR"
+
+echo "Extracting DevEx to $INSTALL_DIR..."
+tar -xzf "$FILENAME" -C "$INSTALL_DIR"
+
+# Ensure binary is executable
+chmod +x "$INSTALL_DIR/bin/devex"
+
+# Cleanup
+cd ~
+rm -rf "$TEMP_DIR"
+
+# Update PATH if needed
+if ! echo "$PATH" | grep -q "$INSTALL_DIR/bin"; then
+    echo "Updating PATH..."
+    echo "export PATH=\"\$PATH:$INSTALL_DIR/bin\"" >> "$HOME/.bashrc"
+    # Apply the updated PATH to the current session
+    export PATH="$PATH:$INSTALL_DIR/bin"
+fi
+
+# Run the CLI with sudo permissions if needed
+echo "Running DevEx CLI..."
+sudo "$INSTALL_DIR/bin/devex"
+
+echo "DevEx installation and setup complete."

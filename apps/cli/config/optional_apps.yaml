@@ -1,0 +1,36 @@
+optional_apps:
+  - name: 'Proton Mail'
+    description: 'Secure email app by Proton'
+    category: 'Optional Apps'
+    install_method: 'deb'
+    install_command: 'wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb'
+    uninstall_command: 'sudo apt remove protonmail-desktop-beta'
+    dependencies:
+      - 'apt'
+  - name: 'Proton VPN'
+    description: 'VPN service by Proton'
+    category: 'Optional Apps'
+    install_method: 'script'
+    install_command: |
+      wget https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.4_all.deb &&
+      sudo dpkg -i ./protonvpn-stable-release_1.0.4_all.deb && sudo apt update &&
+      sudo apt install proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator
+    uninstall_command: 'sudo apt remove proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator'
+    dependencies:
+      - 'apt'
+  - name: 'Proton Pass'
+    description: 'Password manager by Proton'
+    category: 'Optional Apps'
+    install_method: 'deb'
+    install_command: 'wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb && sudo apt install ./proton-pass_1.23.1_amd64.deb'
+    uninstall_command: 'sudo apt remove proton-pass'
+    dependencies:
+      - 'apt'
+  - name: 'Zen Browser'
+    description: 'A secure and private browser'
+    category: 'Optional Apps'
+    install_method: 'flatpak'
+    install_command: 'flatpak install flathub io.github.zen_browser.zen'
+    uninstall_command: 'flatpak remove io.github.zen_browser.zen'
+    dependencies:
+      - 'flatpak'
