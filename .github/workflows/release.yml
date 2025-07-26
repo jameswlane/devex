@@ -33,7 +33,7 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           version: v2.3.0
           working-directory: apps/cli
