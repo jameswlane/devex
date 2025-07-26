@@ -45,14 +45,37 @@ func ListAppsByCategory(settings Settings, categories []string) ([]types.AppConf
 	return filteredApps, nil
 }
 
-// FindAppByName retrieves an app by its name from the settings.
-func FindAppByName(settings Settings, name string) (*types.AppConfig, error) {
+// FindAppByName retrieves an app by its name from the cross-platform settings.
+func FindAppByName(settings CrossPlatformSettings, name string) (*types.AppConfig, error) {
 	log.Info("Finding app by name", "name", name)
 
-	for _, app := range settings.Apps {
+	for _, app := range settings.GetAllApps() {
 		if app.Name == name {
 			log.Info("App found", "name", name)
-			return &app, nil
+
+			// Convert to AppConfig format for compatibility
+			osConfig := app.GetOSConfig()
+			appConfig := &types.AppConfig{
+				BaseConfig: types.BaseConfig{
+					Name:        app.Name,
+					Description: app.Description,
+					Category:    app.Category,
+				},
+				Default:          app.Default,
+				InstallMethod:    osConfig.InstallMethod,
+				InstallCommand:   osConfig.InstallCommand,
+				UninstallCommand: osConfig.UninstallCommand,
+				Dependencies:     osConfig.Dependencies,
+				PreInstall:       osConfig.PreInstall,
+				PostInstall:      osConfig.PostInstall,
+				ConfigFiles:      osConfig.ConfigFiles,
+				AptSources:       osConfig.AptSources,
+				CleanupFiles:     osConfig.CleanupFiles,
+				Conflicts:        osConfig.Conflicts,
+				DownloadURL:      osConfig.DownloadURL,
+				InstallDir:       osConfig.Destination,
+			}
+			return appConfig, nil
 		}
 	}
 
@@ -73,8 +96,10 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 			if candidate["install_command"] == identifier || candidate["name"] == identifier {
 				log.Info("App configuration found", "identifier", identifier)
 				return &types.AppConfig{
-					Name:           candidate["name"].(string),
-					Description:    candidate["description"].(string),
+					BaseConfig: types.BaseConfig{
+						Name:        candidate["name"].(string),
+						Description: candidate["description"].(string),
+					},
 					InstallMethod:  candidate["install_method"].(string),
 					InstallCommand: candidate["install_command"].(string),
 					DownloadURL:    candidate["download_url"].(string),

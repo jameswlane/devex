@@ -20,7 +20,9 @@ func (f *FlatpakInstaller) Install(command string, repo types.Repository) error 
 
 	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
-		Name:           command,
+		BaseConfig: types.BaseConfig{
+			Name: command,
+		},
 		InstallMethod:  "flatpak",
 		InstallCommand: command,
 	}

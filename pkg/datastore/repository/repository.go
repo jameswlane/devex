@@ -59,7 +59,11 @@ func (r *repository) GetApp(appName string) (*types.AppConfig, error) {
 		log.Warn("App not found", "appName", appName)
 		return nil, nil
 	}
-	return &types.AppConfig{Name: appName}, nil
+	return &types.AppConfig{
+		BaseConfig: types.BaseConfig{
+			Name: appName,
+		},
+	}, nil
 }
 
 func (r *repository) RemoveApp(appName string) error {
@@ -91,7 +95,11 @@ func (r *repository) ListApps() ([]types.AppConfig, error) {
 	}
 	appConfigs := make([]types.AppConfig, len(apps))
 	for i, appName := range apps {
-		appConfigs[i] = types.AppConfig{Name: appName}
+		appConfigs[i] = types.AppConfig{
+			BaseConfig: types.BaseConfig{
+				Name: appName,
+			},
+		}
 	}
 	log.Info("Apps listed successfully", "count", len(appConfigs))
 	return appConfigs, nil

@@ -28,7 +28,9 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 
 	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
-		Name:           containerName,
+		BaseConfig: types.BaseConfig{
+			Name: containerName,
+		},
 		InstallMethod:  "docker",
 		InstallCommand: command,
 	}

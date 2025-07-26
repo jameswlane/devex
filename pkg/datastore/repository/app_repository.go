@@ -24,19 +24,16 @@ func (r *AppRepository) AddApp(appName string) error {
 
 func (r *AppRepository) GetApp(appName string) (bool, error) {
 	query := `SELECT 1 FROM installed_apps WHERE app_name = ? LIMIT 1`
-	result, err := r.db.QueryRow(query, appName)
+	row := r.db.QueryRow(query, appName)
+	var exists int
+	err := row.Scan(&exists)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to query app: %w", err)
 	}
-
-	exists, ok := result["1"].(int64) // Adjust type if necessary
-	if !ok {
-		return false, fmt.Errorf("unexpected result type")
-	}
-	return exists == 1, nil
+	return true, nil
 }
 
 func (r *AppRepository) RemoveApp(appName string) error {

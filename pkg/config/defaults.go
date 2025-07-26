@@ -7,7 +7,7 @@ const (
 	DefaultShellTimeout  = 30 // seconds
 )
 
-// DefaultFiles defines standard configuration file paths
+// DefaultFiles defines standard configuration file paths (legacy)
 var DefaultFiles = []string{
 	"apps.yaml",
 	"databases.yaml",
@@ -19,4 +19,12 @@ var DefaultFiles = []string{
 	"optional_apps.yaml",
 	"programming_languages.yaml",
 	"themes.yaml",
+}
+
+// CrossPlatformFiles defines the new consolidated configuration files
+var CrossPlatformFiles = []string{
+	"applications.yaml",
+	"environment.yaml",
+	"desktop.yaml",
+	"system.yaml",
 }

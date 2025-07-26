@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/errors"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -24,6 +25,19 @@ func main() {
 	// Initialize the default logger
 	log.InitDefaultLogger(os.Stderr)
 
+	// Detect platform information
+	plat := platform.DetectPlatform()
+	log.Info("Platform detected",
+		"os", plat.OS,
+		"desktop", plat.DesktopEnv,
+		"distribution", plat.Distribution,
+		"architecture", plat.Architecture)
+
+	// Check if platform is supported
+	if !platform.IsSupportedPlatform() {
+		log.Fatal("Unsupported platform", fmt.Errorf("platform: %s", plat.OS))
+	}
+
 	log.Info("Validating dependencies")
 	if err := utils.CheckDependencies(utils.RequiredDependencies); err != nil {
 		log.Fatal("Dependency validation failed", err)
@@ -36,31 +50,35 @@ func main() {
 
 	// Add contextual metadata to the logger
 	log.WithContext(map[string]any{
-		"user":    os.Getenv("USER"),
-		"homeDir": homeDir,
+		"user":         os.Getenv("USER"),
+		"homeDir":      homeDir,
+		"platform":     plat.OS,
+		"desktop":      plat.DesktopEnv,
+		"distribution": plat.Distribution,
 	})
 
 	log.Info("Starting DevEx CLI")
 
-	v, err := config.LoadConfigs(homeDir, config.DefaultFiles)
-	if err != nil {
-		handleError("loading configuration files", err)
-	}
-
-	settings := config.Settings{}
-	if err := v.Unmarshal(&settings); err != nil {
-		handleError("unmarshalling settings", err)
-	}
-
+	// Initialize database with proper directory creation
 	repo := initializeDatabase(homeDir)
 
-	rootCmd := commands.NewRootCmd(version, repo, settings)
-	if err := rootCmd.Execute(); err != nil {
-		handleError("executing root command", err)
+	// Load cross-platform configuration
+	crossPlatformSettings, err := config.LoadCrossPlatformSettings(homeDir)
+	if err != nil {
+		handleError("loading cross-platform configuration", err)
 	}
 
+	log.Info("Cross-platform configuration loaded successfully",
+		"totalApps", len(crossPlatformSettings.GetAllApps()))
+
+	// Set runtime flags
+	crossPlatformSettings.HomeDir = homeDir
+
+	rootCmd := commands.NewRootCmd(version, repo, crossPlatformSettings)
+
+	// Execute the command (fixed: removed duplicate execution)
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal("Error executing command", err)
+		handleError("executing root command", err)
 	}
 
 	log.Info("DevEx CLI execution completed successfully")
@@ -78,11 +96,17 @@ func handleError(context string, err error) {
 	}
 }
 
-func initializeDatabase(homeDir string) types.Repository { // Updated return type to match usage
-	dbPath := filepath.Join(homeDir, ".devex/datastore.db")
+func initializeDatabase(homeDir string) types.Repository {
+	// Ensure .devex directory exists
+	devexDir := filepath.Join(homeDir, ".devex")
+	if err := os.MkdirAll(devexDir, 0755); err != nil {
+		handleError("creating .devex directory", err)
+	}
+
+	dbPath := filepath.Join(devexDir, "datastore.db")
 	sqlite, err := datastore.NewSQLite(dbPath)
 	if err != nil {
 		handleError("initializing database", err)
 	}
-	return repository.NewRepository(sqlite) // Pass SQLite as types.Database
+	return repository.NewRepository(sqlite)
 }

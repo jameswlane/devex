@@ -1,0 +1,59 @@
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TERM=xterm-256color
+
+# Install basic dependencies and systemd simulation
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    sudo \
+    gpg \
+    lsb-release \
+    ca-certificates \
+    apt-transport-https \
+    software-properties-common \
+    build-essential \
+    python3 \
+    python3-pip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for testing
+RUN useradd -m -s /bin/bash -G sudo testuser && \
+    echo 'testuser:testpass' | chpasswd && \
+    echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Install Go (required for building devex)
+RUN wget -O go.tar.gz https://go.dev/dl/go1.23.1.linux-amd64.tar.gz && \
+    tar -C /usr/local -xzf go.tar.gz && \
+    rm go.tar.gz
+
+# Set up Go environment
+ENV PATH="/usr/local/go/bin:${PATH}"
+ENV GOPATH="/home/testuser/go"
+ENV PATH="${GOPATH}/bin:${PATH}"
+
+# Switch to test user
+USER testuser
+WORKDIR /home/testuser
+
+# Create directories that devex expects
+RUN mkdir -p .devex .local/share/devex/config
+
+# Copy devex source (will be mounted during testing)
+COPY --chown=testuser:testuser . /home/testuser/devex/
+
+WORKDIR /home/testuser/devex
+
+# Build devex
+RUN go build -o bin/devex ./cmd/main.go
+
+# Set up PATH to include devex
+ENV PATH="/home/testuser/devex/bin:${PATH}"
+
+# Entry point for testing
+CMD ["/bin/bash"]

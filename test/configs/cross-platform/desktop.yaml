@@ -1,0 +1,92 @@
+desktop_environments:
+  gnome:
+    platforms: ["linux"]
+
+    themes:
+      - name: "Catppuccin"
+        theme_color: "#1e1e2e"
+        theme_background: "#181825"
+        files:
+          - source: "assets/themes/gnome/catppuccin.sh"
+            destination: "~/.local/bin/set-catppuccin.sh"
+
+    settings:
+      - name: "Interface"
+        settings:
+          - key: "org.gnome.desktop.interface gtk-theme"
+            value: "Adwaita-dark"
+          - key: "org.gnome.desktop.interface icon-theme"
+            value: "Papirus-Dark"
+          - key: "org.gnome.desktop.interface color-scheme"
+            value: "prefer-dark"
+
+    extensions:
+      - id: "dash-to-dock@micxgx.gmail.com"
+        schema_files:
+          - source: "assets/gnome/dash-to-dock.xml"
+            destination: "~/.local/share/glib-2.0/schemas/"
+
+    dock:
+      - name: "Terminal"
+        desktop_file: "org.gnome.Terminal.desktop"
+      - name: "VS Code"
+        desktop_file: "code.desktop"
+      - name: "Firefox"
+        desktop_file: "firefox.desktop"
+
+  kde:
+    platforms: ["linux"]
+
+    themes:
+      - name: "Breeze Dark"
+        plasma_theme: "org.kde.breezedark.desktop"
+        files:
+          - source: "assets/themes/kde/breeze-dark.sh"
+            destination: "~/.local/bin/set-breeze-dark.sh"
+
+    settings:
+      - name: "Appearance"
+        config_file: "~/.config/kdeglobals"
+        settings:
+          - section: "General"
+            key: "ColorScheme"
+            value: "BreezeDark"
+          - section: "Icons"
+            key: "Theme"
+            value: "breeze-dark"
+
+  macos:
+    platforms: ["macos"]
+
+    themes:
+      - name: "Dark Mode"
+        defaults_commands:
+          - "defaults write NSGlobalDomain AppleInterfaceStyle -string Dark"
+          - "defaults write NSGlobalDomain AppleAccentColor -int 6"
+
+    dock:
+      - name: "Terminal"
+        bundle_id: "com.apple.Terminal"
+      - name: "VS Code"
+        bundle_id: "com.microsoft.VSCode"
+      - name: "Safari"
+        bundle_id: "com.apple.Safari"
+
+  windows:
+    platforms: ["windows"]
+
+    themes:
+      - name: "Dark Theme"
+        registry_commands:
+          - key: "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+            value_name: "AppsUseLightTheme"
+            value: 0
+          - key: "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"
+            value_name: "SystemUsesLightTheme"
+            value: 0
+
+    taskbar:
+      - name: "Windows Terminal"
+        app_id: "Microsoft.WindowsTerminal_8wekyb3d8bbwe"
+      - name: "VS Code"
+        app_id: "Microsoft.VisualStudioCode"

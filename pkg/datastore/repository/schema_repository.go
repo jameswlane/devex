@@ -25,14 +25,10 @@ func (r *schemaRepository) GetVersion() (int, error) {
 	query := "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1"
 	log.Info("Getting schema version", "query", query)
 
-	result, err := r.db.QueryRow(query)
+	result := r.db.QueryRow(query)
+	err := result.Scan(&version)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get schema version: %w", err)
-	}
-
-	version, ok := result["version"].(int) // Adjust key and type as necessary
-	if !ok {
-		return 0, fmt.Errorf("unexpected result type")
+		return 0, fmt.Errorf("failed to scan result: %w", err)
 	}
 	return version, nil
 }

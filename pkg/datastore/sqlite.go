@@ -61,36 +61,8 @@ func (s *SQLite) Exec(query string, args ...any) error {
 }
 
 // QueryRow retrieves a single row result as a map[string]interface{}.
-func (s *SQLite) QueryRow(query string, args ...any) (map[string]any, error) {
-	rows, err := s.conn.Query(query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	columns, err := rows.Columns()
-	if err != nil {
-		return nil, err
-	}
-
-	data := make(map[string]any)
-	values := make([]any, len(columns))
-	pointers := make([]any, len(columns))
-	for i := range values {
-		pointers[i] = &values[i]
-	}
-
-	if rows.Next() {
-		if err := rows.Scan(pointers...); err != nil {
-			return nil, err
-		}
-	}
-
-	for i, col := range columns {
-		data[col] = *(pointers[i].(*any))
-	}
-
-	return data, nil
+func (s *SQLite) QueryRow(query string, args ...any) *sql.Row {
+	return s.conn.QueryRow(query, args...)
 }
 
 // Query executes a query and returns rows for further processing.
