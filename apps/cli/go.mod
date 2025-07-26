@@ -1,6 +1,6 @@
 module github.com/jameswlane/devex
 
-go 1.23.1
+go 1.24.5
 
 require (
 	github.com/charmbracelet/lipgloss v1.1.0
