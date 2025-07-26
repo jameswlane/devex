@@ -11,10 +11,10 @@
 	"keywords": [],
 	"author": "James W Lane",
 	"license": "GPL-3.0",
-	"dependencies": {
-		"@commitlint/config-conventional": "^19.8.1"
-	},
+	"packageManager": "pnpm",
+	"dependencies": {},
 	"devDependencies": {
+		"@commitlint/config-conventional": "^19.8.1",
 		"@biomejs/biome": "2.1.2",
 		"@commitlint/format": "^19.5.0",
 		"@semantic-release/changelog": "^6.0.3",
