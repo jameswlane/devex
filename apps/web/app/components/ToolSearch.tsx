@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { FaGithub, FaGlobe } from "react-icons/fa";
 import { tools } from "../tools";
 
 export function ToolSearch() {
