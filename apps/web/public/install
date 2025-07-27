@@ -4,6 +4,56 @@ set -e
 
 echo "Starting DevEx installation..."
 
+# Function to detect and setup download command
+setup_download_tool() {
+    if command -v wget >/dev/null 2>&1; then
+        DOWNLOAD_CMD="wget -qO-"
+        DOWNLOAD_FILE_CMD="wget"
+        echo "Using wget for downloads..."
+    elif command -v curl >/dev/null 2>&1; then
+        DOWNLOAD_CMD="curl -fsSL"
+        DOWNLOAD_FILE_CMD="curl -fsSL -O"
+        echo "Using curl for downloads..."
+    else
+        echo "Neither wget nor curl found. Installing wget..."
+        
+        # Detect package manager and install wget
+        if command -v apt-get >/dev/null 2>&1; then
+            echo "Updating package list and installing wget..."
+            sudo apt-get update -qq && sudo apt-get install -y wget
+        elif command -v dnf >/dev/null 2>&1; then
+            echo "Installing wget via dnf..."
+            sudo dnf install -y wget
+        elif command -v yum >/dev/null 2>&1; then
+            echo "Installing wget via yum..."
+            sudo yum install -y wget
+        elif command -v pacman >/dev/null 2>&1; then
+            echo "Installing wget via pacman..."
+            sudo pacman -S --noconfirm wget
+        elif command -v zypper >/dev/null 2>&1; then
+            echo "Installing wget via zypper..."
+            sudo zypper install -y wget
+        else
+            echo "Error: Could not find a supported package manager to install wget."
+            echo "Please install wget or curl manually and re-run this script."
+            exit 1
+        fi
+        
+        # Verify wget was installed
+        if command -v wget >/dev/null 2>&1; then
+            DOWNLOAD_CMD="wget -qO-"
+            DOWNLOAD_FILE_CMD="wget"
+            echo "wget installed successfully."
+        else
+            echo "Error: Failed to install wget."
+            exit 1
+        fi
+    fi
+}
+
+# Setup download tools
+setup_download_tool
+
 # Determine OS and architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH=$(uname -m)
@@ -17,7 +67,7 @@ esac
 
 # Fetch the latest release version dynamically
 echo "Fetching the latest DevEx release version..."
-LATEST_VERSION=$(wget -qO- https://api.github.com/repos/jameswlane/devex/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
+LATEST_VERSION=$($DOWNLOAD_CMD https://api.github.com/repos/jameswlane/devex/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
 
 if [ -z "$LATEST_VERSION" ]; then
     echo "Failed to fetch the latest release version. Exiting."
@@ -38,8 +88,13 @@ TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
 # Download the tarball and checksum file
-wget "$BASE_URL/$FILENAME"
-wget "$BASE_URL/$CHECKSUM_FILE"
+if [[ "$DOWNLOAD_FILE_CMD" == "curl -fsSL -O" ]]; then
+    curl -fsSL -O "$BASE_URL/$FILENAME"
+    curl -fsSL -O "$BASE_URL/$CHECKSUM_FILE"
+else
+    $DOWNLOAD_FILE_CMD "$BASE_URL/$FILENAME"
+    $DOWNLOAD_FILE_CMD "$BASE_URL/$CHECKSUM_FILE"
+fi
 
 # Verify checksum
 echo "Verifying checksum..."
