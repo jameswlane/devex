@@ -1,3 +1,14 @@
+## [0.5.0](https://github.com/jameswlane/devex/compare/0.4.0...0.5.0) (2025-07-27)
+
+### Features
+
+* **web:** add curl alternative to installation commands ([eb4dd7b](https://github.com/jameswlane/devex/commit/eb4dd7b3c8c7a2ddb9d398698b1c394c89444c7b))
+
+### Bug Fixes
+
+* **fumadocs:** fixed meta.json ([867567d](https://github.com/jameswlane/devex/commit/867567d349590af289a5872480de8cae007faa87))
+* **installer:** handle missing wget/curl gracefully ([a0df510](https://github.com/jameswlane/devex/commit/a0df5101020edc864d43f8278f014e217169444a))
+
 ## [0.4.0](https://github.com/jameswlane/devex/compare/0.3.1...0.4.0) (2025-07-27)
 
 ### Features
