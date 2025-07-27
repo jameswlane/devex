@@ -935,14 +935,11 @@ func (m *SetupModel) copyShellConfiguration(shell string) error {
 
 	switch shell {
 	case "zsh":
-		// Copy zsh configuration files
 		return m.copyZshConfiguration(homeDir, devexDir)
 	case "bash":
-		// For bash, create a simple configuration that sources DevEx tools
-		return m.createBashConfiguration(homeDir, devexDir)
+		return m.copyBashConfiguration(homeDir, devexDir)
 	case "fish":
-		// For fish, create a simple configuration that sources DevEx tools
-		return m.createFishConfiguration(homeDir, devexDir)
+		return m.copyFishConfiguration(homeDir, devexDir)
 	default:
 		log.Warn("No specific configuration available for shell", "shell", shell)
 		return nil
@@ -986,88 +983,91 @@ func (m *SetupModel) copyZshConfiguration(homeDir, devexDir string) error {
 	return nil
 }
 
-func (m *SetupModel) createBashConfiguration(homeDir, devexDir string) error {
-	log.Info("Creating bash configuration")
+func (m *SetupModel) copyBashConfiguration(homeDir, devexDir string) error {
+	log.Info("Copying bash configuration files")
 
-	bashrcPath := homeDir + "/.bashrc"
+	// Copy main bashrc
+	srcBashrc := devexDir + "/assets/bash/bashrc"
+	dstBashrc := homeDir + "/.bashrc"
 
-	// Create a simple bash configuration that enables DevEx tools
-	bashConfig := fmt.Sprintf(`# DevEx Configuration
-export PATH="$HOME/.local/bin:$HOME/.local/share/devex/bin:$PATH"
-export DEVEX_PATH="%s"
-export EDITOR="nvim"
-export SUDO_EDITOR="nvim"
-
-# Enable mise if available
-if command -v mise >/dev/null 2>&1; then
-    eval "$(mise activate bash)"
-fi
-
-# Basic aliases for improved terminal experience
-alias ls='ls --color=auto'
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
-alias grep='grep --color=auto'
-alias cat='bat 2>/dev/null || cat'
-alias n='nvim'
-alias g='git'
-`, devexDir)
-
-	// Append to existing .bashrc or create new one
-	file, err := os.OpenFile(bashrcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open .bashrc: %w", err)
+	if err := m.copyFile(srcBashrc, dstBashrc); err != nil {
+		return fmt.Errorf("failed to copy .bashrc: %w", err)
 	}
-	defer file.Close()
 
-	if _, err := file.WriteString("\n" + bashConfig); err != nil {
-		return fmt.Errorf("failed to write bash configuration: %w", err)
+	// Create destination directory for bash config modules
+	bashConfigDir := devexDir + "/defaults/bash"
+	if err := os.MkdirAll(bashConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create bash config directory: %w", err)
+	}
+
+	// Copy bash configuration modules
+	bashFiles := []string{"aliases", "extra", "init", "oh-my-bash", "prompt", "rc", "shell"}
+	for _, file := range bashFiles {
+		src := devexDir + "/assets/bash/bash/" + file
+		dst := bashConfigDir + "/" + file
+		if err := m.copyFile(src, dst); err != nil {
+			log.Warn("Failed to copy bash config file", "file", file, "error", err)
+		}
+	}
+
+	// Copy inputrc
+	inputrcSrc := devexDir + "/assets/bash/inputrc"
+	inputrcDst := homeDir + "/.inputrc"
+	if err := m.copyFile(inputrcSrc, inputrcDst); err != nil {
+		log.Warn("Failed to copy .inputrc", "error", err)
+	}
+
+	// Copy bash_profile if it exists
+	bashProfileSrc := devexDir + "/assets/bash/bash_profile"
+	bashProfileDst := homeDir + "/.bash_profile"
+	if err := m.copyFile(bashProfileSrc, bashProfileDst); err != nil {
+		log.Warn("Failed to copy .bash_profile", "error", err)
 	}
 
 	return nil
 }
 
-func (m *SetupModel) createFishConfiguration(homeDir, devexDir string) error {
-	log.Info("Creating fish configuration")
+func (m *SetupModel) copyFishConfiguration(homeDir, devexDir string) error {
+	log.Info("Copying fish configuration files")
 
+	// Create fish config directory
 	fishConfigDir := homeDir + "/.config/fish"
 	if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
 		return fmt.Errorf("failed to create fish config directory: %w", err)
 	}
 
-	configPath := fishConfigDir + "/config.fish"
+	// Copy main config.fish
+	srcConfig := devexDir + "/assets/fish/config.fish"
+	dstConfig := fishConfigDir + "/config.fish"
 
-	// Create fish configuration that enables DevEx tools
-	fishConfig := fmt.Sprintf(`# DevEx Configuration
-set -gx PATH $HOME/.local/bin $HOME/.local/share/devex/bin $PATH
-set -gx DEVEX_PATH "%s"
-set -gx EDITOR "nvim"
-set -gx SUDO_EDITOR "nvim"
-
-# Enable mise if available
-if command -v mise >/dev/null 2>&1
-    mise activate fish | source
-end
-
-# Basic aliases for improved terminal experience
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
-alias cat='bat 2>/dev/null; or cat'
-alias n='nvim'
-alias g='git'
-`, devexDir)
-
-	// Append to existing config.fish or create new one
-	file, err := os.OpenFile(configPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open config.fish: %w", err)
+	if err := m.copyFile(srcConfig, dstConfig); err != nil {
+		return fmt.Errorf("failed to copy config.fish: %w", err)
 	}
-	defer file.Close()
 
-	if _, err := file.WriteString("\n" + fishConfig); err != nil {
-		return fmt.Errorf("failed to write fish configuration: %w", err)
+	// Create destination directory for fish config modules
+	fishDefaultsDir := devexDir + "/defaults/fish"
+	if err := os.MkdirAll(fishDefaultsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create fish defaults directory: %w", err)
+	}
+
+	// Copy fish configuration modules
+	fishFiles := []string{"aliases", "shell", "init", "prompt"}
+	for _, file := range fishFiles {
+		src := devexDir + "/assets/fish/" + file
+		dst := fishDefaultsDir + "/" + file
+		if err := m.copyFile(src, dst); err != nil {
+			log.Warn("Failed to copy fish config file", "file", file, "error", err)
+		}
+	}
+
+	// Copy fish modules from fish subdirectory if they exist
+	fishSubFiles := []string{"extra", "oh-my-fish"}
+	for _, file := range fishSubFiles {
+		src := devexDir + "/assets/fish/fish/" + file
+		dst := fishDefaultsDir + "/" + file
+		if err := m.copyFile(src, dst); err != nil {
+			log.Warn("Failed to copy fish config file", "file", file, "error", err)
+		}
 	}
 
 	return nil
