@@ -1,21 +1,4 @@
 {
-  "title": "Documentation",
-  "pages": [
-    {
-      "title": "Configuration Guide",
-      "url": "/docs"
-    },
-    {
-      "title": "Installation Guide", 
-      "url": "/docs/installation"
-    },
-    {
-      "title": "Usage Examples",
-      "url": "/docs/examples"
-    },
-    {
-      "title": "Components",
-      "url": "/docs/test"
-    }
-  ]
+	"title": "Documentation",
+	"pages": ["index", "installation", "examples", "test"]
 }
