@@ -56,6 +56,15 @@ Examples of representing our community include using an official e-mail address,
 posting via an official social media account, or acting as an appointed
 representative at an online or offline event.
 
+### AI and Automation
+
+DevEx welcomes contributions from AI assistants and automated tools when used responsibly:
+
+* AI-generated contributions must be clearly identified and reviewed by humans
+* Human contributors remain responsible for AI-assisted code and documentation
+* AI tools should follow the same standards of respectful communication
+* Automated contributions must align with project guidelines and quality standards
+
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
