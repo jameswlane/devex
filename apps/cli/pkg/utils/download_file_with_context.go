@@ -18,12 +18,7 @@ func DownloadFileWithContext(ctx context.Context, url string, filepath string) e
 	if err != nil {
 		return err
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println("Failed to close response body", err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	out, err := os.Create(filepath)
 	if err != nil {

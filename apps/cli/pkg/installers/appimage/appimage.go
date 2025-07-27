@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -143,7 +144,7 @@ func extractTarball(tarballPath, destDir string) error {
 		}
 
 		target := filepath.Join(destDir, header.Name)
-		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(filepath.Separator)) {
+		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
 			log.Error("Potential directory traversal detected", fmt.Errorf("invalid entry: %s", header.Name))
 			return fmt.Errorf("tarball entry is outside the target directory: %s", header.Name)
 		}
@@ -168,9 +169,20 @@ func extractTarball(tarballPath, destDir string) error {
 					log.Error("Failed to close file from tarball", err, "target", target)
 				}
 			}(outFile)
-			if _, err := io.Copy(outFile, tarReader); err != nil {
+			// Security: prevent decompression bombs by limiting file size
+			const maxFileSize = 100 * 1024 * 1024 // 100MB limit
+			limitedReader := io.LimitReader(tarReader, maxFileSize)
+
+			written, err := io.Copy(outFile, limitedReader)
+			if err != nil {
 				log.Error("Failed to write data to file from tarball", err, "target", target)
 				return fmt.Errorf("failed to write data: %w", err)
+			}
+
+			// Check if we hit the limit
+			if written == maxFileSize {
+				log.Error("File size exceeds maximum allowed size", fmt.Errorf("file: %s", target))
+				return fmt.Errorf("file size exceeds maximum allowed size of %d bytes: %s", maxFileSize, target)
 			}
 		}
 	}

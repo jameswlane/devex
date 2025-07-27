@@ -290,12 +290,12 @@ func HandleDependencies(app types.AppConfig, settings config.CrossPlatformSettin
 		// Retrieve the dependency's app configuration
 		depApp, err := config.FindAppByName(settings, dep)
 		if err != nil {
-			return fmt.Errorf("failed to find dependency %s: %v", dep, err)
+			return fmt.Errorf("failed to find dependency %s: %w", dep, err)
 		}
 
 		// Install the dependency using InstallApp
 		if err := InstallApp(*depApp, settings, repo); err != nil {
-			return fmt.Errorf("failed to install dependency %s: %v", dep, err)
+			return fmt.Errorf("failed to install dependency %s: %w", dep, err)
 		}
 	}
 	return nil
@@ -332,7 +332,7 @@ func processConfigFiles(app types.AppConfig) error {
 
 		// Create destination directory if it doesn't exist
 		destDir := filepath.Dir(destPath)
-		if err := os.MkdirAll(destDir, 0755); err != nil {
+		if err := os.MkdirAll(destDir, 0750); err != nil {
 			log.Warn("Failed to create destination directory", "error", err, "dir", destDir)
 			continue
 		}
@@ -344,7 +344,7 @@ func processConfigFiles(app types.AppConfig) error {
 		}
 
 		// Set appropriate permissions for config files
-		if err := os.Chmod(destPath, 0644); err != nil {
+		if err := os.Chmod(destPath, 0600); err != nil {
 			log.Warn("Failed to set permissions on config file", "error", err, "file", destPath)
 		}
 
@@ -390,7 +390,7 @@ func processThemes(app types.AppConfig) error {
 
 			// Create destination directory if it doesn't exist
 			destDir := filepath.Dir(destPath)
-			if err := os.MkdirAll(destDir, 0755); err != nil {
+			if err := os.MkdirAll(destDir, 0750); err != nil {
 				log.Warn("Failed to create theme destination directory", "error", err, "dir", destDir)
 				continue
 			}
@@ -403,12 +403,12 @@ func processThemes(app types.AppConfig) error {
 
 			// Set executable permissions for shell scripts
 			if strings.HasSuffix(destPath, ".sh") {
-				if err := os.Chmod(destPath, 0755); err != nil {
+				if err := os.Chmod(destPath, 0700); err != nil {
 					log.Warn("Failed to set executable permissions on theme script", "error", err, "file", destPath)
 				}
 			} else {
 				// Set normal permissions for other files
-				if err := os.Chmod(destPath, 0644); err != nil {
+				if err := os.Chmod(destPath, 0600); err != nil {
 					log.Warn("Failed to set permissions on theme file", "error", err, "file", destPath)
 				}
 			}
@@ -492,7 +492,7 @@ func backupExistingFiles(app types.AppConfig) error {
 	}
 
 	backupDir := filepath.Join(homeDir, ".devex", "backups", app.Name)
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
+	if err := os.MkdirAll(backupDir, 0750); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
@@ -512,7 +512,7 @@ func backupExistingFiles(app types.AppConfig) error {
 
 			// Create backup directory structure if needed
 			backupFileDir := filepath.Dir(backupPath)
-			if err := os.MkdirAll(backupFileDir, 0755); err != nil {
+			if err := os.MkdirAll(backupFileDir, 0750); err != nil {
 				log.Warn("Failed to create backup directory", "error", err, "dir", backupFileDir)
 				continue
 			}
@@ -584,7 +584,7 @@ func setupEnvironment(app types.AppConfig) error {
 
 			// Create target directory if it doesn't exist
 			targetDir := filepath.Dir(target)
-			if err := os.MkdirAll(targetDir, 0755); err != nil {
+			if err := os.MkdirAll(targetDir, 0750); err != nil {
 				log.Warn("Failed to create symlink target directory", "error", err, "dir", targetDir)
 			} else {
 				// Create symlink
@@ -610,7 +610,7 @@ func setupEnvironment(app types.AppConfig) error {
 		installDir = strings.Replace(installDir, "~", homeDir, 1)
 
 		log.Info("Ensuring install directory exists", "app", app.Name, "dir", installDir)
-		if err := os.MkdirAll(installDir, 0755); err != nil {
+		if err := os.MkdirAll(installDir, 0750); err != nil {
 			log.Warn("Failed to create install directory", "error", err, "dir", installDir)
 		}
 	}

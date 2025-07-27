@@ -1,32 +1,119 @@
+# golangci-lint configuration for Go CLI project
 version: "2"
-run:
-  timeout: 5m
 linters:
+  # Start with standard linters for a balanced approach
+  default: standard
+  # Enable specific linters for CLI projects
   enable:
-    - errcheck
-    - ineffassign
-    - misspell
-    - noctx
-    - paralleltest
-    - prealloc
-    - staticcheck
-    - thelper
-    - tparallel
-    - unparam
-    - unused
-linters-settings:
-  gofmt:
-    rewrite-rules:
-      - pattern: 'interface{}'
-        replacement: 'any'
-  misspell:
-    locale: US
-formatters:
+    # Code quality and correctness
+    - errcheck # Check for unchecked errors
+    #        - gosec         # Security issues
+    - govet # Go vet issues
+    - ineffassign # Detect ineffective assignments
+    - staticcheck # Advanced static analysis
+    - unused # Detect unused code
+    - gocritic # Comprehensive Go source code linter
+    - revive # Fast, configurable, extensible linter
+    # Code style and formatting
+    - misspell # Find commonly misspelled English words
+    - unconvert # Remove unnecessary type conversions
+    - whitespace # Detect leading/trailing whitespace
+    # Performance and best practices
+    - prealloc # Find slice declarations that could potentially be pre-allocated
+    - bodyclose # Check whether HTTP response body is closed successfully
+    - noctx # Find sending HTTP request without context.Context
+    # CLI-specific useful linters
+    - errname # Check that error types are of the form FooError
+    #        - rowserrcheck  # Check whether Rows.Err of database/sql is checked successfully
+    #        - sqlclosecheck # Check that sql.Rows and sql.Stmt are closed
+
+    - errorlint # Find code that will cause problems with the error wrapping scheme
+    - contextcheck # Check whether the function uses a non-inherited context
+  # Disable linters that can be too noisy for CLI projects
+  disable:
+    - funlen # Function length can vary in CLI apps
+    - gocyclo # Cyclomatic complexity can be high in CLI parsing
+    - lll # Line length limits can be restrictive
+    - gocognit # Cognitive complexity can be high in CLI apps
+    - nestif # Nested if statements are common in CLI logic
+    - gochecknoglobals # CLI apps often need some global variables
+    - exhaustruct # Too strict for CLI apps
+    - varnamelen # Can be too restrictive for CLI variables
+    - wrapcheck # Can be noisy in CLI apps
+  # Linter-specific settings
   settings:
-    goimports:
-      local-prefixes:
-        - github.com/jameswlane/devex
-    gofmt:
-      rewrite-rules:
-        - pattern: 'interface{}'
-          replacement: 'any'
+    errcheck:
+      # Report about not checking of errors in type assertions
+      check-type-assertions: true
+      # Don't report about assignment of errors to blank identifier
+      check-blank: false
+    govet:
+      # Report about shadowed variables
+      shadow: true
+    gosec:
+      # Exclude some gosec checks for CLI apps
+      excludes:
+        - G204 # Subprocess launched with function call (common in CLI tools)
+    revive:
+      rules:
+        # Disable some rules that can be too strict for CLI apps
+        - name: var-naming
+          disabled: true
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+    staticcheck:
+      # Enable all checks except some that can be noisy
+      checks: ["all", "-ST1000", "-ST1003"]
+  # Configure exclusions for issues
+  exclusions:
+    # Use lax mode for generated files (more permissive)
+    generated: lax
+    # Warn about unused exclusion rules
+    warn-unused: true
+    # Use predefined exclusion presets
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+    # Custom exclusion rules
+    rules:
+      # Exclude some linters from test files
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - gocritic
+          - gocyclo
+issues:
+  # Show all issues
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  # Don't make issues unique by line (can hide multiple issues on same line)
+  uniq-by-line: false
+run:
+  # Timeout for analysis
+  timeout: 5m
+  # Include test files
+  tests: true
+  # Use gomod for relative paths (common for Go projects)
+  relative-path-mode: gomod
+  # Go version
+  go: '1.24.5'
+  # Set concurrency (adjust based on your CI environment)
+  concurrency: 0 # 0 = auto-detect
+output:
+  # Sort results by linter for easier review
+  sort-order:
+    - linter
+    - severity
+    - file
+severity:
+  # Set default severity
+  default: error
+  # Set specific severities for certain linters
+  rules:
+    - linters:
+        - revive
+      severity: warning
