@@ -1,3 +1,10 @@
+## [0.7.0](https://github.com/jameswlane/devex/compare/0.6.0...0.7.0) (2025-07-27)
+
+### Features
+
+* add Configuration Management System to roadmap ([bdd232d](https://github.com/jameswlane/devex/commit/bdd232d7267bf28f2923e6270762b0e9ac754177))
+* implement interactive guided setup with bubbletea ([e9fe4f2](https://github.com/jameswlane/devex/commit/e9fe4f253d30ebbf9feddce40a8e0ac2ac376f09))
+
 ## [0.6.0](https://github.com/jameswlane/devex/compare/0.5.1...0.6.0) (2025-07-27)
 
 ### Features
