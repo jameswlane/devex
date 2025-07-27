@@ -1,3 +1,13 @@
+## [0.10.0](https://github.com/jameswlane/devex/compare/0.9.1...0.10.0) (2025-07-27)
+
+### Features
+
+* implement centralized logging architecture for clean TUI ([ffc7f16](https://github.com/jameswlane/devex/commit/ffc7f162d8a563fe3dc5a4a928e8a737c05d8b05))
+
+### Bug Fixes
+
+* resolve test failures in log and db packages ([f1220e5](https://github.com/jameswlane/devex/commit/f1220e5fed14e845b1a74c364171a78051f7b2a8))
+
 ## [0.9.1](https://github.com/jameswlane/devex/compare/0.9.0...0.9.1) (2025-07-27)
 
 ### Bug Fixes
