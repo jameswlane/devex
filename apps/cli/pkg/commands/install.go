@@ -8,6 +8,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 func init() {
@@ -74,5 +75,26 @@ func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 		return
 	}
 
+	// Switch to zsh as the final step (after all installations are complete)
+	log.Info("Switching to zsh shell as final step")
+	if err := switchToZsh(); err != nil {
+		log.Warn("Failed to switch to zsh shell", "error", err)
+		log.Info("You can manually switch to zsh later with: chsh -s $(which zsh)")
+	} else {
+		log.Info("Successfully switched to zsh shell. Please restart your terminal or run 'exec zsh' to use the new shell.")
+	}
+
 	log.Info("Installation process completed successfully")
+}
+
+// switchToZsh attempts to switch the user's shell to zsh
+func switchToZsh() error {
+	// Get the full path to zsh
+	zshPath, err := utils.GetShellPath("zsh")
+	if err != nil {
+		return err
+	}
+
+	// Change the user's shell to zsh
+	return utils.ChangeUserShell(zshPath)
 }

@@ -198,6 +198,12 @@ development:
     category: 'dependency'
     install_method: 'apt'
     install_command: 'wget'
+  - name: zsh
+    description: 'A powerful shell with many features'
+    category: 'System Utilities'
+    default: true
+    install_method: 'apt'
+    install_command: 'zsh'
   - name: Fastfetch
     description: 'A maintained, feature-rich and performance-oriented, neofetch-like system information tool.'
     github: 'https://github.com/fastfetch-cli/fastfetch'
