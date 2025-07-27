@@ -1,3 +1,9 @@
+## [0.9.1](https://github.com/jameswlane/devex/compare/0.9.0...0.9.1) (2025-07-27)
+
+### Bug Fixes
+
+* improve logging and error handling for guided setup ([84e9cbf](https://github.com/jameswlane/devex/commit/84e9cbfe5573fc61e952e9a25893df06894e66ca))
+
 ## [0.9.0](https://github.com/jameswlane/devex/compare/0.8.0...0.9.0) (2025-07-27)
 
 ### Features
