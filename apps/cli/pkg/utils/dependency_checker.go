@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 
@@ -14,8 +15,9 @@ type Dependency struct {
 
 // CheckDependencies verifies the availability of required dependencies.
 func CheckDependencies(dependencies []Dependency) error {
+	ctx := context.Background()
 	for _, dep := range dependencies {
-		if err := exec.Command("which", dep.Command).Run(); err != nil {
+		if err := exec.CommandContext(ctx, "which", dep.Command).Run(); err != nil {
 			log.Error("Missing dependency", err, "name", dep.Name, "command", dep.Command)
 			return fmt.Errorf("missing dependency: %s (command: %s)", dep.Name, dep.Command)
 		}
