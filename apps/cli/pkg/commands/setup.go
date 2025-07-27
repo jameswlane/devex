@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -68,7 +69,6 @@ type SetupModel struct {
 	settings      config.CrossPlatformSettings
 }
 
-
 // setupSteps defines the guided setup process
 const (
 	StepWelcome = iota
@@ -116,11 +116,9 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	plat := platform.DetectPlatform()
 	if plat.DesktopEnv != "none" {
 		model.desktopApps = []string{
-			"Visual Studio Code",
-			"Firefox Developer Edition",
-			"GIMP",
-			"Slack",
-			"Discord",
+			"Neovim",
+			"Typora",
+			"Ulauncher",
 		}
 	}
 
@@ -512,21 +510,27 @@ func (m *SetupModel) performInstallation() {
 		return
 	}
 
-	// Step 2: Install selected languages via mise
+	// Step 1.5: Update environment and PATH
+	m.updateProgress("Updating environment...", 0.2)
+	if err := m.updateEnvironmentPath(ctx); err != nil {
+		log.Error("Failed to update environment", err)
+	}
+
+	// Step 2: Install selected languages via mise (only if mise is available)
 	if len(m.getSelectedLanguages()) > 0 {
-		m.updateProgress("Installing programming languages...", 0.3)
+		m.updateProgress("Installing programming languages...", 0.4)
 		if err := m.installLanguages(ctx); err != nil {
 			log.Error("Failed to install languages", err)
-			return
+			// Continue with other installations
 		}
 	}
 
-	// Step 3: Install selected databases via Docker
+	// Step 3: Install selected databases via Docker (only if docker is available)
 	if len(m.getSelectedDatabases()) > 0 {
 		m.updateProgress("Installing databases...", 0.6)
 		if err := m.installDatabases(ctx); err != nil {
 			log.Error("Failed to install databases", err)
-			return
+			// Continue with other installations
 		}
 	}
 
@@ -571,7 +575,47 @@ func (m *SetupModel) installEssentialTools(ctx context.Context) error {
 	return installers.InstallCrossPlatformApps(essentialApps, m.settings, m.repo)
 }
 
+func (m *SetupModel) updateEnvironmentPath(ctx context.Context) error {
+	// Update PATH to include common installation directories
+	homeDir := os.Getenv("HOME")
+	pathsToAdd := []string{
+		homeDir + "/.local/bin",
+		homeDir + "/.cargo/bin",
+		"/usr/local/bin",
+	}
+
+	currentPath := os.Getenv("PATH")
+	for _, path := range pathsToAdd {
+		if !contains(currentPath, path) {
+			currentPath = path + ":" + currentPath
+		}
+	}
+
+	os.Setenv("PATH", currentPath)
+	log.Info("Updated PATH environment variable")
+	return nil
+}
+
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (s == substr ||
+		strings.HasPrefix(s, substr+":") ||
+		strings.Contains(s, ":"+substr+":") ||
+		strings.HasSuffix(s, ":"+substr))
+}
+
+func (m *SetupModel) isToolAvailable(tool string) bool {
+	_, err := exec.LookPath(tool)
+	return err == nil
+}
+
 func (m *SetupModel) installLanguages(ctx context.Context) error {
+	// Check if mise is available
+	if !m.isToolAvailable("mise") {
+		log.Warn("mise not available, skipping language installations")
+		log.Info("Languages can be installed manually later using: mise install <language>@latest")
+		return nil
+	}
+
 	// Install languages using mise
 	selectedLangs := m.getSelectedLanguages()
 
@@ -614,6 +658,13 @@ func (m *SetupModel) installLanguages(ctx context.Context) error {
 }
 
 func (m *SetupModel) installDatabases(ctx context.Context) error {
+	// Check if Docker is available
+	if !m.isToolAvailable("docker") {
+		log.Warn("Docker not available, skipping database installations")
+		log.Info("Databases can be installed manually later using: docker run ...")
+		return nil
+	}
+
 	// Install databases using Docker
 	selectedDBs := m.getSelectedDatabases()
 
@@ -707,6 +758,13 @@ func (m *SetupModel) installDesktopApps(ctx context.Context) error {
 func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// Final setup steps like shell configuration
 	log.Info("Finalizing setup - switching shell to zsh")
+
+	// Check if zsh is available
+	if !m.isToolAvailable("zsh") {
+		log.Warn("zsh not available, skipping shell switch")
+		log.Info("You can install zsh later with: sudo apt install zsh && chsh -s $(which zsh)")
+		return nil
+	}
 
 	// Switch to zsh shell (using the existing shell switching logic)
 	zshPath, err := exec.LookPath("zsh")
