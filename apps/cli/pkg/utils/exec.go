@@ -10,7 +10,8 @@ type OSCommandExecutor struct{}
 var CommandExec Interface = &OSCommandExecutor{} // Changed to a pointer
 
 func (OSCommandExecutor) RunShellCommand(command string) (string, error) {
-	cmd := exec.Command("bash", "-c", command)
+	ctx := context.Background()
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }
