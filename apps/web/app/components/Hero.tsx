@@ -10,12 +10,6 @@ export function Hero() {
 			<div className="space-y-4">
 				<div className="bg-gray-800 text-white p-4 rounded-lg inline-block">
 					<code className="text-sm">
-						wget -qO- https://devex.sh/install | bash
-					</code>
-				</div>
-				<p className="text-sm text-gray-500">or if you prefer curl:</p>
-				<div className="bg-gray-800 text-white p-4 rounded-lg inline-block">
-					<code className="text-sm">
 						curl -fsSL https://devex.sh/install | bash
 					</code>
 				</div>
