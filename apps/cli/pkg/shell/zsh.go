@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/jameswlane/devex/pkg/log"
-	"github.com/jameswlane/devex/pkg/types"
 )
 
 // CommandExecutor interface defines a command executor's behavior.
@@ -12,30 +11,12 @@ type CommandExecutor interface {
 	RunShellCommand(cmd string) (string, error)
 }
 
-// AppChecker interface checks if an app is installed.
-type AppChecker interface {
-	IsAppInstalled(appConfig types.AppConfig) (bool, error)
-}
-
 // SwitchToZsh installs Zsh if necessary and switches the user's default shell to Zsh.
-func SwitchToZsh(executor CommandExecutor, checker AppChecker) error {
+func SwitchToZsh(executor CommandExecutor) error {
 	log.Info("Checking if Zsh is installed")
 
-	// Check if Zsh is installed
-	appConfig := types.AppConfig{
-		BaseConfig: types.BaseConfig{
-			Name: "Zsh",
-		},
-		InstallCommand: "zsh",
-	}
-	isInstalled, err := checker.IsAppInstalled(appConfig)
-	if err != nil {
-		log.Error("Error checking if Zsh is installed", err)
-		return fmt.Errorf("error checking if Zsh is installed: %w", err)
-	}
-
-	// Install Zsh if it's not installed
-	if !isInstalled {
+	// Check if Zsh is installed by trying to find the binary
+	if _, err := executor.RunShellCommand("which zsh"); err != nil {
 		log.Info("Zsh not installed. Installing Zsh...")
 		if _, err := executor.RunShellCommand("sudo apt-get install -y zsh"); err != nil {
 			log.Error("Failed to install Zsh", err)
