@@ -503,20 +503,34 @@ func (m *SetupModel) waitForActivity() tea.Cmd {
 func (m *SetupModel) performInstallation() {
 	ctx := context.Background()
 
-	// Step 1: Install essential tools (mise, docker, etc.)
-	m.updateProgress("Installing essential tools...", 0.1)
+	// Step 1: Install mise (required for language management)
+	m.updateProgress("Installing mise...", 0.05)
+	if err := m.installMise(ctx); err != nil {
+		log.Error("Failed to install mise", err)
+		// Continue, but language installations may not work
+	}
+
+	// Step 2: Install Docker (required for database management)
+	m.updateProgress("Installing Docker...", 0.1)
+	if err := m.installDocker(ctx); err != nil {
+		log.Error("Failed to install Docker", err)
+		// Continue, but database installations may not work
+	}
+
+	// Step 3: Install other essential tools
+	m.updateProgress("Installing essential tools...", 0.15)
 	if err := m.installEssentialTools(ctx); err != nil {
 		log.Error("Failed to install essential tools", err)
 		return
 	}
 
-	// Step 1.5: Update environment and PATH
+	// Step 4: Update environment and PATH
 	m.updateProgress("Updating environment...", 0.2)
 	if err := m.updateEnvironmentPath(ctx); err != nil {
 		log.Error("Failed to update environment", err)
 	}
 
-	// Step 2: Install selected languages via mise (only if mise is available)
+	// Step 5: Install selected languages via mise (only if mise is available)
 	if len(m.getSelectedLanguages()) > 0 {
 		m.updateProgress("Installing programming languages...", 0.4)
 		if err := m.installLanguages(ctx); err != nil {
@@ -525,7 +539,7 @@ func (m *SetupModel) performInstallation() {
 		}
 	}
 
-	// Step 3: Install selected databases via Docker (only if docker is available)
+	// Step 6: Install selected databases via Docker (only if docker is available)
 	if len(m.getSelectedDatabases()) > 0 {
 		m.updateProgress("Installing databases...", 0.6)
 		if err := m.installDatabases(ctx); err != nil {
@@ -534,7 +548,7 @@ func (m *SetupModel) performInstallation() {
 		}
 	}
 
-	// Step 4: Install desktop applications
+	// Step 7: Install desktop applications
 	if len(m.getSelectedDesktopApps()) > 0 {
 		m.updateProgress("Installing desktop applications...", 0.8)
 		if err := m.installDesktopApps(ctx); err != nil {
@@ -543,7 +557,7 @@ func (m *SetupModel) performInstallation() {
 		}
 	}
 
-	// Step 5: Final setup and shell configuration
+	// Step 8: Final setup and shell configuration
 	m.updateProgress("Completing setup...", 0.9)
 	if err := m.finalizeSetup(ctx); err != nil {
 		log.Error("Failed to finalize setup", err)
@@ -562,17 +576,58 @@ func (m *SetupModel) installEssentialTools(ctx context.Context) error {
 	// Get default apps from configuration
 	defaultApps := m.settings.GetDefaultApps()
 
-	// Filter for essential tools
+	// Filter for essential tools (excluding mise and Docker which are installed separately)
 	var essentialApps []types.CrossPlatformApp
 	for _, app := range defaultApps {
-		// Include mise, docker, git, and other essential tools
-		if app.Name == "Mise" || app.Name == "Docker" || app.Name == "git" ||
-			app.Name == "curl" || app.Name == "wget" || app.Name == "zsh" {
+		// Include git, curl, wget, zsh and other essential tools but exclude mise and Docker
+		if app.Name == "git" || app.Name == "curl" || app.Name == "wget" || app.Name == "zsh" ||
+			app.Name == "bat" || app.Name == "Eza" || app.Name == "fzf" || app.Name == "ripgrep" {
 			essentialApps = append(essentialApps, app)
 		}
 	}
 
 	return installers.InstallCrossPlatformApps(essentialApps, m.settings, m.repo)
+}
+
+func (m *SetupModel) installMise(ctx context.Context) error {
+	log.Info("Installing mise using official installer")
+
+	// Use the official mise installer with shell-specific activation
+	installCmd := "curl https://mise.run/zsh | sh"
+
+	output, err := exec.CommandContext(ctx, "bash", "-c", installCmd).CombinedOutput()
+	if err != nil {
+		log.Error("Failed to install mise", err, "output", string(output))
+		return fmt.Errorf("failed to install mise: %w", err)
+	}
+
+	log.Info("Successfully installed mise", "output", string(output))
+
+	// Update PATH to include mise
+	homeDir := os.Getenv("HOME")
+	miseDir := homeDir + "/.local/bin"
+	currentPath := os.Getenv("PATH")
+	if !contains(currentPath, miseDir) {
+		os.Setenv("PATH", miseDir+":"+currentPath)
+	}
+
+	return nil
+}
+
+func (m *SetupModel) installDocker(ctx context.Context) error {
+	log.Info("Installing Docker")
+
+	// Get Docker app from configuration
+	allApps := m.settings.GetAllApps()
+	for _, app := range allApps {
+		if app.Name == "Docker" {
+			log.Info("Installing Docker using DevEx installer")
+			return installers.InstallCrossPlatformApp(app, m.settings, m.repo)
+		}
+	}
+
+	log.Warn("Docker not found in configuration")
+	return fmt.Errorf("docker not found in application configuration")
 }
 
 func (m *SetupModel) updateEnvironmentPath(ctx context.Context) error {
