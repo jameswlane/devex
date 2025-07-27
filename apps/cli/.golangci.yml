@@ -47,9 +47,6 @@ linters:
       check-type-assertions: true
       # Don't report about assignment of errors to blank identifier
       check-blank: false
-    govet:
-      # Report about shadowed variables
-      shadow: true
     gosec:
       # Exclude some gosec checks for CLI apps
       excludes:
