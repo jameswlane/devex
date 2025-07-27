@@ -2,36 +2,93 @@
 
 This document outlines the development roadmap for expanding DevEx across platforms and features.
 
+## 🎯 **Platform Prioritization & Support Status**
+
+Based on implementation complexity and market share, platforms are prioritized as follows:
+
+**Priority 1:** Debian-based Linux (Ubuntu, Debian, Mint, etc.)
+**Priority 2:** Red Hat-based Linux (RHEL, Fedora, CentOS, Rocky, Alma)
+**Priority 3:** Arch-based Linux (Arch, Manjaro, EndeavourOS)
+**Priority 4:** SUSE-based Linux (openSUSE, SLES)
+**Priority 5:** macOS (Homebrew ecosystem)
+**Priority 6:** Windows 10/11 (Multiple package managers)
+
 ## 🐧 Phase 1: Linux Feature Completion (Current Focus)
+
+### 🚨 Critical Issues (Fix First)
+
+#### Code Quality & Architecture
+- [ ] **Shell Command Execution Bug** - `pkg/installers/installers.go:127-134` - Wrong field used in shell command processing
+- [ ] **Incomplete Installer Implementations** - Critical functions are stubbed out:
+  - `processConfigFiles()` - Not implemented
+  - `processThemes()` - Not implemented  
+  - `validateSystemRequirements()` - Not implemented
+  - `backupExistingFiles()` - Not implemented
+  - `setupEnvironment()` - Not implemented
+  - `cleanupAfterInstall()` - Not implemented
+- [ ] **Missing Rollback/Recovery** - No mechanism to undo installations or recover from failures
+- [ ] **Missing Dry-Run Implementation** - Many operations don't respect `--dry-run` flag
+
+#### Error Handling & Validation
+- [ ] **Improve Error Handling** - Add structured error types, better error messages, graceful failure recovery
+- [ ] **Add Configuration Validation** - Validate YAML configs on load, check for circular dependencies, validate installer method compatibility
+- [ ] **Add Command Validation** - Validate all shell commands before execution, prevent injection
 
 ### High Priority Linux Features
 
-#### Package Manager Support
-- [x] **APT (Ubuntu/Debian)** - ✅ Implemented
-- [ ] **DNF (Fedora/RHEL/CentOS)** - 🔄 Next up
-- [ ] **Pacman (Arch Linux/Manjaro)** - 🔄 Next up
-- [ ] **Zypper (openSUSE)** - 🔄 Medium priority
-- [x] **Flatpak** - ✅ Implemented
-- [x] **Snap** - ✅ Basic support
+#### Package Manager Support Status
+
+**🟢 Priority 1: Debian-based Linux - READY FOR PRODUCTION**
+- [x] **APT (Ubuntu/Debian)** - ✅ **FULLY IMPLEMENTED** (Advanced GPG, repository management, conflict resolution)
+- [x] **Flatpak** - ✅ Implemented (Universal Linux fallback)
+- [x] **Snap** - ✅ Basic support (Ubuntu integration)
+
+**🟡 Priority 2: Red Hat-based Linux - CRITICAL MISSING INSTALLER**
+- [ ] **DNF (Fedora/RHEL/CentOS)** - ❌ **MISSING** - Blocks RHEL family support
+- [ ] **YUM (Legacy RHEL/CentOS)** - ❌ Missing
+- [ ] **RPM (Manual packages)** - ❌ Missing
+
+**🟡 Priority 3: Arch-based Linux - CRITICAL MISSING INSTALLER**  
+- [ ] **Pacman (Arch Linux/Manjaro)** - ❌ **MISSING** - Blocks Arch family support
+- [ ] **YAY (AUR helper)** - ❌ Missing (for AUR packages)
+
+**🟡 Priority 4: SUSE-based Linux - MISSING INSTALLER**
+- [ ] **Zypper (openSUSE/SLES)** - ❌ **MISSING** - Blocks SUSE family support
+
+**🔴 Priority 5: macOS - PARTIAL SUPPORT**
+- [x] **Homebrew** - ✅ Basic implementation (needs testing)
+- [ ] **Mac App Store (mas)** - ❌ Missing [#55](https://github.com/jameswlane/devex/issues/55)
+
+**🔴 Priority 6: Windows - NO SUPPORT**
+- [ ] **Windows Package Manager (winget)** - ❌ Missing [#56](https://github.com/jameswlane/devex/issues/56)
+- [ ] **Chocolatey** - ❌ Missing [#57](https://github.com/jameswlane/devex/issues/57)
+- [ ] **Scoop** - ❌ Missing [#58](https://github.com/jameswlane/devex/issues/58)
 
 #### Core Installation Features
-- [ ] **Theme Processing** - GNOME/KDE theme application
+- [ ] **Theme Processing** - GNOME/KDE theme application [#5](https://github.com/jameswlane/devex/issues/5)
 - [ ] **Configuration Files** - Copy and process app configs
 - [ ] **Font Installation** - System font management
 - [ ] **Shell Setup** - Zsh/Bash configuration with Oh My Zsh
 - [ ] **Git Configuration** - Aliases, user settings, SSH keys
+- [ ] **Installation State Management** - Track installation progress, handle interruptions, resume capability
+- [ ] **Add tldr utility** - Community-driven help pages [#7](https://github.com/jameswlane/devex/issues/7)
+- [ ] **Enhance NeoVim configuration** - Additional plugins and config [#8](https://github.com/jameswlane/devex/issues/8)
 
 #### Desktop Environment Support
-- [ ] **GNOME Extensions** - Install and configure extensions
+- [ ] **GNOME Extensions** - Install and configure extensions [#3](https://github.com/jameswlane/devex/issues/3)
 - [ ] **GNOME Settings** - Apply gsettings configurations
 - [ ] **KDE Support** - Plasma themes and settings
 - [ ] **Desktop Files** - Application launcher management
+- [ ] **Desktop Environment Auto-Detection** - Enhanced DE detection [#62](https://github.com/jameswlane/devex/issues/62)
 
 #### Essential Commands
 - [ ] **Uninstall Command** - Remove apps and dependencies
-- [ ] **List Command** - Show installed/available apps
-- [ ] **Status Command** - Check installation status
-- [ ] **Update Command** - Update package lists and apps
+- [ ] **List Command** - Show installed/available apps (`devex list installed`, `devex list available`)
+- [ ] **Status Command** - Check installation status (`devex status --app curl`)
+- [ ] **Update Command** - Update package lists and apps (`devex update`, `devex upgrade`)
+
+#### Database & Storage
+- [ ] **Database Schema Management** - Implement proper migrations, add version tracking, schema validation
 
 ### Distribution Testing Priority
 1. **Ubuntu** (20.04, 22.04, 24.04)
@@ -43,19 +100,33 @@ This document outlines the development roadmap for expanding DevEx across platfo
 
 ---
 
-## 🍎 Phase 2: macOS Support (Future)
+## 🍎 Phase 2: macOS Support (Priority 5)
 
-### Package Managers
-- [ ] **Homebrew** - Primary package manager
-- [ ] **MacPorts** - Alternative package manager
-- [ ] **Mac App Store (mas)** - App Store installations
+**Current Status:** 🟡 Basic Homebrew support implemented, needs testing and Mac App Store integration
+
+### Package Managers Status
+- [x] **Homebrew** - ✅ Basic implementation [#53](https://github.com/jameswlane/devex/issues/53) **NEEDS TESTING**
+- [ ] **MacPorts** - Alternative package manager (lower priority)
+- [ ] **Mac App Store (mas)** - App Store installations [#55](https://github.com/jameswlane/devex/issues/55) **HIGH PRIORITY**
+
+### macOS Implementation Milestones
+
+**Milestone 2.1: Core macOS Package Management**
+- [ ] **Test and fix Homebrew installer** - Ensure compatibility with Intel/Apple Silicon Macs
+- [ ] **Implement mas (Mac App Store) installer** - Essential for GUI applications
+- [ ] **Add Homebrew Cask support** - GUI applications via Homebrew
+- [ ] **Handle macOS permissions** - Admin privileges and security
+
+**Milestone 2.2: macOS-Specific Features**
 
 ### macOS-Specific Features
-- [ ] **System Preferences** - Configure via `defaults` commands
+- [ ] **System Preferences** - Configure via `defaults` commands [#54](https://github.com/jameswlane/devex/issues/54)
 - [ ] **Dock Management** - Add/remove dock items
 - [ ] **Launchpad Organization** - App grouping
 - [ ] **Spotlight Configuration** - Search preferences
 - [ ] **Touch Bar Customization** - For supported devices
+- [ ] **Git Installation** - Ensure git is available by default [#6](https://github.com/jameswlane/devex/issues/6)
+- [ ] **Sleep Prevention** - Prevent macOS from sleeping during installs [#4](https://github.com/jameswlane/devex/issues/4)
 
 ### Development Tools
 - [ ] **Xcode Command Line Tools** - Essential dev tools
@@ -76,19 +147,31 @@ macos:
 
 ---
 
-## 🪟 Phase 3: Windows Support (Future)
+## 🪟 Phase 3: Windows Support (Priority 6)
 
-### Package Managers
-- [ ] **Windows Package Manager (winget)** - Primary choice
-- [ ] **Chocolatey** - Community package manager
-- [ ] **Scoop** - Command-line installer
+**Current Status:** 🔴 No Windows support implemented - Requires ground-up development
+
+### Package Managers Status  
+- [ ] **Windows Package Manager (winget)** - ❌ **MISSING** [#56](https://github.com/jameswlane/devex/issues/56) **HIGHEST PRIORITY**
+- [ ] **Chocolatey** - ❌ **MISSING** [#57](https://github.com/jameswlane/devex/issues/57) **HIGH PRIORITY**
+- [ ] **Scoop** - ❌ **MISSING** [#58](https://github.com/jameswlane/devex/issues/58) **MEDIUM PRIORITY**
+
+### Windows Implementation Milestones
+
+**Milestone 3.1: Core Windows Package Management**
+- [ ] **Implement winget installer** - Microsoft's official package manager (Windows 10 v1809+/Windows 11)
+- [ ] **Implement Chocolatey installer** - Community package manager (broader Windows support)
+- [ ] **Implement Scoop installer** - User-scope package manager
+- [ ] **Handle Windows UAC** - Admin elevation and user-scope installations
+
+**Milestone 3.2: Windows-Specific Features**
 
 ### Windows-Specific Features
-- [ ] **Registry Modifications** - System preferences
+- [ ] **Registry Modifications** - System preferences [#59](https://github.com/jameswlane/devex/issues/59)
 - [ ] **Windows Features** - Enable/disable optional features
-- [ ] **PowerShell Configuration** - Profile and modules
-- [ ] **Windows Terminal** - Configuration and themes
-- [ ] **WSL Setup** - Windows Subsystem for Linux
+- [ ] **PowerShell Configuration** - Profile and modules [#60](https://github.com/jameswlane/devex/issues/60)
+- [ ] **Windows Terminal** - Configuration and themes [#61](https://github.com/jameswlane/devex/issues/61)
+- [ ] **WSL Setup** - Windows Subsystem for Linux [#66](https://github.com/jameswlane/devex/issues/66)
 
 ### Development Environment
 - [ ] **Visual Studio Integration** - Extensions and settings
@@ -116,6 +199,25 @@ windows:
 
 ## 🚀 Phase 4: Advanced Features (Future)
 
+### Security & Safety
+- [ ] **Privilege Escalation Control** - Clear separation of operations requiring sudo vs user permissions
+- [ ] **Download Verification** - Verify checksums/signatures for downloaded packages
+- [ ] **Sandbox Mode** - Run installations in isolated environments first
+
+### Performance & Reliability
+- [ ] **Parallel Installation** - Install independent packages concurrently
+- [ ] **Installation Caching** - Cache downloaded packages and validation results
+- [ ] **Progress Reporting** - Show progress bars and status updates
+- [ ] **Retry Logic** - Retry failed operations with exponential backoff
+
+### User Experience Enhancements
+- [ ] **Interactive Mode** - Guided app selection with descriptions [#64](https://github.com/jameswlane/devex/issues/64)
+- [ ] **Configuration Generator** - Generate starter config files (`devex init`)
+- [ ] **Verbose Logging Levels** - Better debug output (`devex install --log-level debug`, `devex install --quiet`)
+- [ ] **Profile Management** - Multiple environment profiles (`devex profile create work`, `devex profile switch personal`)
+- [ ] **Configuration Import/Export** - Backup and restore configurations [#63](https://github.com/jameswlane/devex/issues/63)
+- [ ] **Container Development Support** - DevContainer and containerized environments [#65](https://github.com/jameswlane/devex/issues/65)
+
 ### Cloud Integration
 - [ ] **Dotfiles Sync** - GitHub/GitLab dotfiles integration
 - [ ] **Config Backup** - Cloud storage for configurations
@@ -128,11 +230,11 @@ windows:
 - [ ] **Approval Workflows** - IT approval integration
 - [ ] **Inventory Management** - Asset tracking
 
-### Developer Experience
-- [ ] **Interactive Setup** - Guided configuration wizard
-- [ ] **Preview Mode** - Show what will be installed
-- [ ] **Rollback Support** - Undo installations
-- [ ] **Health Checks** - Verify system state
+### Testing Infrastructure
+- [ ] **Integration Tests** - Test actual installations in containers
+- [ ] **Configuration Tests** - Validate all config files automatically
+- [ ] **Installer Tests** - Mock-test all installer implementations
+- [ ] **CLI Tests** - Test all command combinations
 
 ---
 
@@ -140,23 +242,47 @@ windows:
 
 ### Phase 1 Milestones (Linux Focus)
 
-**Milestone 1.1: Enhanced Package Management**
-- [ ] Implement DNF installer for Fedora/RHEL
-- [ ] Implement Pacman installer for Arch Linux
-- [ ] Add distribution auto-detection logic
-- [ ] Test across major Linux distributions
+**Milestone 1.0: Critical Bug Fixes (Immediate)**
+- [ ] Fix shell command execution bug in installers
+- [ ] Implement missing installer functions (processConfigFiles, processThemes, etc.)
+- [ ] Add proper dry-run support across all operations
+- [ ] Implement rollback/recovery mechanisms
+- [ ] Add structured error handling
 
-**Milestone 1.2: Desktop Environment Integration**
+**Milestone 1.1: Priority 2 - Red Hat Linux Support (Blocks 🟡)**
+- [ ] **Implement DNF installer** - Core package management for Fedora/RHEL/CentOS/Rocky/Alma
+- [ ] **Add YUM fallback** - Legacy RHEL/CentOS 7 support
+- [ ] **Implement RPM installer** - Manual .rpm package support
+- [ ] **Test on Fedora 40+, RHEL 9, CentOS Stream 9**
+
+**Milestone 1.2: Priority 3 - Arch Linux Support (Blocks 🟡)**
+- [ ] **Implement Pacman installer** - Core package management for Arch/Manjaro/EndeavourOS
+- [ ] **Add YAY/AUR support** - Access to Arch User Repository
+- [ ] **Handle Arch-specific configurations** - Rolling release considerations
+- [ ] **Test on Arch Linux, Manjaro, EndeavourOS**
+
+**Milestone 1.3: Priority 4 - SUSE Linux Support (Blocks 🟡)**
+- [ ] **Implement Zypper installer** - Core package management for openSUSE/SLES
+- [ ] **Add pattern support** - SUSE software patterns
+- [ ] **Test on openSUSE Tumbleweed/Leap, SLES**
+
+**Milestone 1.4: Essential Commands (Cross-Platform)**
+- [ ] Add uninstall command (`devex uninstall --app curl`)
+- [ ] Add list commands (`devex list installed`, `devex list available`)
+- [ ] Add status command (`devex status --app curl`)
+- [ ] Add update commands (`devex update`, `devex upgrade`)
+
+**Milestone 1.5: Desktop Environment Integration (Linux)**
 - [ ] Implement GNOME extension management
 - [ ] Add theme processing for GNOME
 - [ ] Implement KDE Plasma support
 - [ ] Add desktop file management
 
-**Milestone 1.3: Core Feature Completion**
+**Milestone 1.6: Core Feature Completion (Linux)**
 - [ ] Implement font installation system
 - [ ] Add shell configuration management
 - [ ] Implement Git setup automation
-- [ ] Add uninstall functionality
+- [ ] Add configuration validation system
 
 ### Testing Strategy
 1. **Unit Tests** - Individual installer components
@@ -204,5 +330,84 @@ windows:
 3. **App Configurations** - Popular development tools
 4. **Distribution Testing** - Verify compatibility
 5. **Documentation** - Usage guides and examples
+
+---
+
+## ⚡ Quick Wins (Start Here)
+
+These are high-impact, low-effort improvements that can be implemented quickly:
+
+### 🚀 **Immediate Actions by Priority**
+
+**🟢 Priority 1: Keep Debian Linux Production-Ready**
+- ✅ **ALREADY COMPLETE** - APT installer fully functional
+- ✅ **ALREADY COMPLETE** - Flatpak and Snap support
+- 🔧 **Quick fixes** - Address critical bugs in existing functionality
+
+**🟡 Priority 2: Unlock Red Hat Linux (Estimated: 1-2 weeks)**
+1. **DNF installer implementation** (8-16 hours) - Core blocker
+2. **YUM fallback support** (4-8 hours) - Legacy compatibility
+3. **RPM installer** (4-6 hours) - Manual packages
+4. **Testing on Fedora/RHEL** (4-8 hours)
+
+**🟡 Priority 3: Unlock Arch Linux (Estimated: 1-2 weeks)**
+1. **Pacman installer implementation** (8-16 hours) - Core blocker  
+2. **YAY/AUR support** (6-12 hours) - Community packages
+3. **Arch-specific handling** (2-4 hours) - Rolling release
+4. **Testing on Arch/Manjaro** (4-8 hours)
+
+**🟡 Priority 4: Unlock SUSE Linux (Estimated: 1 week)**
+1. **Zypper installer implementation** (6-12 hours) - Core blocker
+2. **Pattern support** (2-4 hours) - SUSE software patterns
+3. **Testing on openSUSE** (2-4 hours)
+
+**🔴 Priority 5: Enable macOS (Estimated: 2-3 weeks)**
+1. **Test existing Homebrew installer** (2-4 hours)
+2. **Implement mas installer** (8-12 hours) - App Store
+3. **macOS-specific features** (16-24 hours)
+4. **Testing on Intel/Apple Silicon** (8-16 hours)
+
+**🔴 Priority 6: Enable Windows (Estimated: 3-4 weeks)**  
+1. **winget installer** (12-20 hours) - Primary package manager
+2. **Chocolatey installer** (8-16 hours) - Community favorite
+3. **Scoop installer** (6-12 hours) - User-scope
+4. **Windows-specific features** (20-30 hours)
+
+### ⚡ **Critical Bug Fixes (All Platforms)**
+
+**5-10 Minute Fixes:**
+1. Fix shell command execution bug in `pkg/installers/installers.go:127-134`
+2. Add missing directory creation before database initialization  
+3. Improve help command descriptions and examples
+
+**30-60 Minute Fixes:**
+4. Implement proper dry-run support in core installers
+5. Add basic uninstall command structure
+6. Add configuration validation for YAML files
+7. Implement basic list commands (installed/available apps)
+
+**2-4 Hour Features:**
+8. Add rollback/recovery mechanism for failed installations
+9. Implement structured error types and better error messages
+10. Add status command for checking app installation state
+11. Complete missing installer functions (processConfigFiles, processThemes, etc.)
+
+---
+
+## 🎯 Success Metrics
+
+### Phase 1 (Linux) Success Criteria
+- ✅ Support for top 5 Linux distributions
+- ✅ 90%+ success rate for default app installations
+- ✅ Complete desktop environment theming
+- ✅ Zero-config setup for developers
+- ✅ Comprehensive test coverage
+- ✅ All critical bugs resolved
+- ✅ Robust error handling and recovery
+
+### Future Phase Success Criteria
+- **Phase 2**: Full macOS Homebrew ecosystem support
+- **Phase 3**: Windows development environment automation
+- **Phase 4**: Enterprise-ready deployment capabilities
 
 This roadmap ensures DevEx becomes the definitive development environment automation tool across all major platforms!
