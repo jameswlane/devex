@@ -1,3 +1,9 @@
+## [0.7.1](https://github.com/jameswlane/devex/compare/0.7.0...0.7.1) (2025-07-27)
+
+### Bug Fixes
+
+* add proper dependency verification and graceful error handling ([9eb745e](https://github.com/jameswlane/devex/commit/9eb745e684ca7a6f87f8abfe4a12d93f3d256ea6))
+
 ## [0.7.0](https://github.com/jameswlane/devex/compare/0.6.0...0.7.0) (2025-07-27)
 
 ### Features
