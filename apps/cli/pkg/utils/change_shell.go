@@ -1,10 +1,12 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/jameswlane/devex/pkg/log"
 )
@@ -37,7 +39,10 @@ func ChangeUserShell(shell string) error {
 
 	// Change shell using chsh
 	log.Info("Executing chsh to change shell", "user", currentUser, "shell", shell)
-	cmd := exec.Command("chsh", "-s", shell, currentUser)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "chsh", "-s", shell, currentUser)
 
 	// Run the command
 	output, err := cmd.CombinedOutput()
@@ -73,7 +78,10 @@ func addShellToEtcShells(shell string) error {
 	log.Info("Adding shell to /etc/shells", "shell", shell)
 
 	// Use sudo to append to /etc/shells
-	cmd := exec.Command("sudo", "sh", "-c", fmt.Sprintf("echo '%s' >> /etc/shells", shell))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sudo", "sh", "-c", fmt.Sprintf("echo '%s' >> /etc/shells", shell))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Error("Failed to add shell to /etc/shells", err, "output", string(output))
