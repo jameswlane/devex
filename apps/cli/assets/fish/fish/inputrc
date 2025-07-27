@@ -1,0 +1,29 @@
+# History search with arrow keys (similar to .inputrc history-search)
+bind \e\[A history-search-backward
+bind \e\[B history-search-forward
+
+# Forward and backward character movement (default in fish)
+bind \e\[C forward-char
+bind \e\[D backward-char
+
+# Fish completion settings (add to config.fish)
+# Show all completions immediately without paging
+set -g fish_complete_path_case_insensitive 1
+
+# Custom function to mimic some inputrc behaviors
+function fish_user_key_bindings
+    # Bind up/down arrows to history search
+    bind -k up history-search-backward
+    bind -k down history-search-forward
+
+    # Additional useful bindings
+    bind \cf forward-word
+    bind \cb backward-word
+end
+
+# Configure fish completion behavior
+set -g fish_autosuggestion_enabled 1
+set -g fish_complete_path 1
+
+# Show extra information in completions
+set -g fish_completion_show_description 1

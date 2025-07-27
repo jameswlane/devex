@@ -1,0 +1,4 @@
+source ~/.local/share/devex/defaults/bash/rc
+
+export EDITOR="nvim"
+export SUDO_EDITOR="nvim"

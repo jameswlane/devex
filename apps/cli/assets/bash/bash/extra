@@ -1,0 +1,51 @@
+# Add go bin path:
+export GOPATH=$HOME/go
+export PATH=$PATH:$GOPATH/bin
+
+# Walk
+function lk {
+  cd "$(walk --icons "$@")"
+}
+
+# Editor
+export EDITOR=nano
+
+# bun completions
+[ -s "/Users/jl82576/.bun/_bun" ] && source "/Users/jl82576/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+fcd() {
+  local dir
+  dir=$(find ${1:-.} -type d -not -path '*/\.*' 2> /dev/null | fzf +m) && cd "$dir"
+}
+
+# pnpm
+export PNPM_HOME="/Users/jl82576/Library/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
+
+# Cargo
+export PATH="/Users/jl82576/.cargo/bin:$PATH"
+
+
+# Set path if required
+#export PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+
+
+# Set up the prompt - if you load Theme with zplugin as in this example, this will be overriden by the Theme. If you comment out the Theme in zplugins, this will be loaded.
+autoload -Uz promptinit
+promptinit
+prompt adam1            # see Zsh Prompt Theme below
+
+# Use vi keybindings even if our EDITOR is set to vi
+bindkey -e
+
+# Use modern completion system
+autoload -Uz compinit
+compinit

@@ -1,0 +1,17 @@
+# Fish shell configuration
+
+# Keep 5000 lines of history
+set -U fish_history fish_5000
+
+# Set complete path
+set -gx PATH ./bin $HOME/.local/bin $HOME/.local/share/devex/bin /usr/local/sbin /usr/local/bin /usr/sbin /usr/bin /sbin /bin
+
+set -gx DEVEX_PATH $HOME/.local/share/devex
+
+# Enable mise if available
+if command -v mise >/dev/null 2>&1
+    mise activate fish | source
+end
+
+# Fish-specific settings
+set -g fish_greeting ""  # Disable greeting message
