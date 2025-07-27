@@ -1,3 +1,24 @@
+## [0.4.0](https://github.com/jameswlane/devex/compare/0.3.1...0.4.0) (2025-07-27)
+
+### Features
+
+* complete monorepo restructuring and fix compilation errors ([3325a16](https://github.com/jameswlane/devex/commit/3325a164599d912595f8f4c781ba0946d5a47ad3))
+* **docs:** add new documentation app with MDX and Next.js ([7b53264](https://github.com/jameswlane/devex/commit/7b5326443af0370b67732f6d50664fcd0e656cb3))
+* implement cross-platform installer system and remove legacy compatibility ([efd4c56](https://github.com/jameswlane/devex/commit/efd4c56eed0949af95a4135b7e51c08ca491adbe))
+
+### Bug Fixes
+
+* **github-action:** fixing action config ([f4b7422](https://github.com/jameswlane/devex/commit/f4b7422ea2a95cbe6e87b9b9699f04dda7161cf8))
+* **go:** updated dependencies ([6673f1c](https://github.com/jameswlane/devex/commit/6673f1ce2fdb68194ceec3a2f4c79ee02833df55))
+* **go:** updated go ([1bad452](https://github.com/jameswlane/devex/commit/1bad452889a08e18d6044d9b790aa5bb2fe55420))
+* **lint:** resolve lint issues and enhance security ([41f0261](https://github.com/jameswlane/devex/commit/41f0261564a72eaffacbb9431e7437b1d0e1f18d))
+* **noctx:** complete noctx linter fixes for database and exec operations ([2b52b21](https://github.com/jameswlane/devex/commit/2b52b21d07f5512fc8e9d0adf92a2671c96b6443))
+* **noctx:** use context-aware database operations ([6bce15b](https://github.com/jameswlane/devex/commit/6bce15b5fb30a09afac3dc8a05f0bc0c32facc71))
+* **staticcheck:** simplify embedded field access in db.go ([bbe46fd](https://github.com/jameswlane/devex/commit/bbe46fd334509f0e0ea30be94063132f21dfb7c5))
+* **turbo:** fixing turbo config ([733e435](https://github.com/jameswlane/devex/commit/733e4351c23a08b39f2acdca6ad88aaca298d9ba))
+* **turborepo:** more tweaks to turbo config ([f0cd310](https://github.com/jameswlane/devex/commit/f0cd3101dea08cfe61635b9baa6233e2360c8a4c))
+* **web:** resolve TypeScript build errors in ToolSearch component ([78ab20c](https://github.com/jameswlane/devex/commit/78ab20c319eb242dff40db659c6bb3eeeee14f60))
+
 ## [0.3.1](https://github.com/jameswlane/devex/compare/0.3.0...0.3.1) (2025-01-08)
 
 ### Bug Fixes
