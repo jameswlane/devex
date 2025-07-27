@@ -1,3 +1,9 @@
+## [0.9.0](https://github.com/jameswlane/devex/compare/0.8.0...0.9.0) (2025-07-27)
+
+### Features
+
+* add comprehensive bash and fish shell configurations ([564dad7](https://github.com/jameswlane/devex/commit/564dad7bb6f3cffd71d7d5b900ed08efa09eb6ad))
+
 ## [0.8.0](https://github.com/jameswlane/devex/compare/0.7.1...0.8.0) (2025-07-27)
 
 ### Features
