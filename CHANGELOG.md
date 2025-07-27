@@ -1,3 +1,14 @@
+## [0.6.0](https://github.com/jameswlane/devex/compare/0.5.1...0.6.0) (2025-07-27)
+
+### Features
+
+* defer zsh shell switching to final installation step ([b32c5ec](https://github.com/jameswlane/devex/commit/b32c5ec45e9225b1575498b3618d2547a5cdf4e3))
+
+### Bug Fixes
+
+* **hero:** removed wget in favor of curl ([0e7c5fd](https://github.com/jameswlane/devex/commit/0e7c5fdad9309ff0ec957e2c03977a732215a3cb))
+* use exec.CommandContext to address linting errors ([ad88ef0](https://github.com/jameswlane/devex/commit/ad88ef09f161f04e3b3b00214de99c8ec464606a))
+
 ## [0.5.1](https://github.com/jameswlane/devex/compare/0.5.0...0.5.1) (2025-07-27)
 
 ### Bug Fixes
