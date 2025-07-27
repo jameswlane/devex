@@ -1,6 +1,7 @@
 package repository_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"testing"
@@ -93,7 +94,8 @@ func TestAddApp_Success(t *testing.T) {
 
 	// Verify using direct SQL query
 	var count int
-	row := db.Conn().QueryRow("SELECT COUNT(*) FROM installed_apps WHERE app_name = ?", "testApp")
+	ctx := context.Background()
+	row := db.Conn().QueryRowContext(ctx, "SELECT COUNT(*) FROM installed_apps WHERE app_name = ?", "testApp")
 	err = row.Scan(&count)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count, "App should be added to the database")
@@ -185,7 +187,8 @@ func TestRemoveApp_Success(t *testing.T) {
 
 	// Verify using direct SQL query
 	var count int
-	row := db.Conn().QueryRow("SELECT COUNT(*) FROM installed_apps WHERE app_name = ?", "testApp")
+	ctx := context.Background()
+	row := db.Conn().QueryRowContext(ctx, "SELECT COUNT(*) FROM installed_apps WHERE app_name = ?", "testApp")
 	err = row.Scan(&count)
 	assert.NoError(t, err)
 	assert.Equal(t, 0, count, "App should be removed from the database")
