@@ -7,13 +7,21 @@ export function Hero() {
 			<p className="text-xl text-gray-600 mb-8">
 				DevEx: The customizable CLI for Linux and macOS
 			</p>
-			<div className="bg-gray-800 text-white p-4 rounded-lg inline-block">
-				<code className="text-sm">
-					wget -qO- https://devex.sh/install | bash
-				</code>
+			<div className="space-y-4">
+				<div className="bg-gray-800 text-white p-4 rounded-lg inline-block">
+					<code className="text-sm">
+						wget -qO- https://devex.sh/install | bash
+					</code>
+				</div>
+				<p className="text-sm text-gray-500">or if you prefer curl:</p>
+				<div className="bg-gray-800 text-white p-4 rounded-lg inline-block">
+					<code className="text-sm">
+						curl -fsSL https://devex.sh/install | bash
+					</code>
+				</div>
 			</div>
 			<p className="mt-4 text-sm text-gray-500">
-				Copy and paste this command to install DevEx
+				The installer will automatically detect and install missing tools
 			</p>
 		</section>
 	);
