@@ -131,21 +131,31 @@ go tool cover -html=coverage.out
 
 **Command Structure**: `apps/cli/pkg/commands/`
 - Cobra-based CLI with root command in `root.go`
-- Subcommands: install, system, completion
+- Subcommands: install, uninstall, system, completion
 - All commands accept `--verbose` and `--dry-run` flags
+- Comprehensive dry-run support across all operations
 
 **Installation System**: `apps/cli/pkg/installers/`
-- Multiple installer types: apt, flatpak, brew, docker, pip, mise, etc.
+- **Platform-specific installers**: apt (Debian/Ubuntu), dnf (Fedora/RHEL), pacman (Arch), flatpak, snap
+- **Cross-platform tools**: mise (language versions), curlpipe, docker, pip
+- **macOS support**: brew, mas (Mac App Store)
+- **Windows support**: winget, chocolatey, scoop (planned)
+- **Installer priority system**: Automatically selects best installer for current platform
 - Each installer implements the `Installer` interface from `apps/cli/pkg/types/types.go`
 
 ### Key Configuration Files
 
 **Default Configurations** (in `apps/cli/config/`):
-- `apps.yaml` - Application definitions with install methods
-- `programming_languages.yaml` - Language-specific tools
-- `themes.yaml` - UI theme configurations
-- `gnome_settings.yaml` - GNOME desktop settings
-- `databases.yaml` - Database applications
+- `applications.yaml` - All application definitions with cross-platform support (development tools, databases, system tools, optional apps)
+- `environment.yaml` - Programming languages, fonts, and shell configurations  
+- `desktop.yaml` - Desktop environment settings organized by DE type (GNOME, KDE, macOS)
+- `system.yaml` - Git configuration, SSH settings, and terminal preferences
+
+**Configuration System Features**:
+- **Cross-platform support**: Each app can define Linux, macOS, and Windows configurations
+- **User overrides**: Files in `~/.devex/` override defaults in `~/.local/share/devex/config/`
+- **Built-in validation**: YAML syntax and schema validation via `pkg/config/validation.go`
+- **Platform detection**: Automatic OS, distribution, and desktop environment detection
 
 ### Website Architecture (apps/web/)
 
@@ -154,13 +164,17 @@ go tool cover -html=coverage.out
 - Pages in `apps/web/app/` directory
 - Styling with Tailwind CSS
 - Static assets in `apps/web/public/`
+- **One-line installer**: `apps/web/public/install` (bash script)
+- **Hosted at**: https://devex.sh/
 
 ### Documentation Architecture (apps/docs/)
 
-**Framework**: MDX with Next.js
-- MDX pages in `apps/docs/pages/`
-- Components in `apps/docs/pages/components/`
-- Configuration in `apps/docs/pages/_app.js`
+**Framework**: Fumadocs with Next.js and MDX
+- MDX documentation in `apps/docs/content/docs/`
+- React components in `apps/docs/app/components/`
+- Configuration in `apps/docs/source.config.ts`
+- Navigation structure in `apps/docs/content/docs/meta.json`
+- **Hosted at**: https://docs.devex.sh/
 
 ### Testing Framework (CLI)
 
@@ -208,3 +222,58 @@ When changes affect multiple apps:
 2. Test all affected applications
 3. Consider versioning implications
 4. Update workspace-level configurations if needed
+
+## Project Status & Roadmap
+
+### Recent Major Changes (2025-01)
+
+1. **Configuration Consolidation**: Reduced from 11 separate config files to 4 structured files
+2. **Cross-Platform Architecture**: Modern type system supporting Linux, macOS, and Windows
+3. **Comprehensive Documentation**: Added complete configuration guides at https://docs.devex.sh/
+4. **Code Cleanup**: Removed dead code, obsolete test files, and improved maintainability
+5. **Enhanced CLI**: Added uninstall command and comprehensive dry-run support
+6. **One-Line Installer**: `wget -qO- https://devex.sh/install | bash` for quick setup
+
+### Platform Priorities
+
+Development priority order (as per ROADMAP.md):
+1. **Debian-based Linux** (Ubuntu, Debian) - Primary focus
+2. **Red Hat-based Linux** (Fedora, RHEL, CentOS) - DNF installer development
+3. **Arch-based Linux** (Arch, Manjaro) - Pacman support
+4. **SUSE-based Linux** - Zypper support  
+5. **macOS** - Homebrew and system integration
+6. **Windows 10/11** - winget and chocolatey support
+
+### Current Development Focus
+
+- **DNF installer implementation** for Red Hat-based systems
+- **Enhanced platform detection** and automatic installer selection
+- **Configuration validation improvements**
+- **Installation error handling and recovery**
+
+## Quick Start for New Contributors
+
+### One-Line Setup
+```bash
+# Install DevEx
+wget -qO- https://devex.sh/install | bash
+
+# Or for development
+git clone https://github.com/jameswlane/devex.git
+cd devex
+cd apps/cli
+task install
+```
+
+### Key Files to Understand
+1. **Configuration**: `apps/cli/config/*.yaml` - The 4 main config files
+2. **Types**: `apps/cli/pkg/types/types.go` - Core data structures
+3. **Installers**: `apps/cli/pkg/installers/` - Package manager implementations
+4. **Commands**: `apps/cli/pkg/commands/` - CLI command handlers
+5. **Platform**: `apps/cli/pkg/platform/platform.go` - OS/distribution detection
+
+### Documentation Resources
+- **Main docs**: https://docs.devex.sh/
+- **Configuration guide**: Complete YAML configuration reference
+- **Installation guide**: Platform-specific setup instructions
+- **Usage examples**: Common workflows and team setups

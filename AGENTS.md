@@ -10,21 +10,29 @@ Welcome! This guide covers how human contributors and AI agents (including ChatG
 - `apps/cli/` – DevEx CLI tool (Go)
     - `apps/cli/cmd/` – CLI entrypoints
     - `apps/cli/pkg/` – Core libraries, business logic
-    - `apps/cli/config/` – Default configurations
+    - `apps/cli/config/` – 4 consolidated configuration files (applications.yaml, environment.yaml, desktop.yaml, system.yaml)
     - `apps/cli/assets/` – Static resources (themes, defaults)
-    - `apps/cli/test/` – Test utilities and fixtures
+    - `apps/cli/migrations/` – Database schema migrations
 - `apps/web/` – Website (Next.js)
     - `apps/web/app/` – Next.js app router pages and components
     - `apps/web/public/` – Static assets
-- `apps/docs/` – Documentation site (MDX + Next.js)
-    - `apps/docs/pages/` – MDX documentation pages
+- `apps/docs/` – Documentation site (Fumadocs + Next.js)
+    - `apps/docs/content/docs/` – MDX documentation pages
+    - `apps/docs/app/` – Next.js app components
 - `packages/` – Shared packages (future use)
 
 **Root-level files:**
 - `README.md` – Main project overview
-- `CLAUDE.md`, `IMPROVEMENTS.md` – LLM/automation-focused documentation
+- `CLAUDE.md` – Claude Code specific documentation and architecture guide
+- `ROADMAP.md` – Project roadmap and development priorities (consolidated from IMPROVEMENTS.md)
 - `pnpm-workspace.yaml` – Workspace configuration
 - `.github/` – CI/CD and workflow configuration
+
+**Important URLs:**
+- **GitHub**: https://github.com/jameswlane/devex
+- **Website**: https://devex.sh/
+- **Documentation**: https://docs.devex.sh/
+- **One-line installer**: `wget -qO- https://devex.sh/install | bash`
 
 > **Agents:** Always work within the appropriate app directory (`apps/cli/`, `apps/web/`, or `apps/docs/`). For CLI development, prefer contributing to `apps/cli/pkg/` for business logic or `apps/cli/cmd/` for entrypoints.
 
@@ -55,10 +63,20 @@ Welcome! This guide covers how human contributors and AI agents (including ChatG
 
 ---
 
-## Codebase Migration
+## Recent Major Changes (2025-01)
 
-The codebase has been refactored into a monorepo structure. See `IMPROVEMENTS.md` for ongoing/refactor efforts.
-**Agents:** Always work within the appropriate app directory (`apps/cli/`, `apps/web/`, `apps/docs/`). For CLI development, prefer working within the `apps/cli/pkg/` structure & modern idioms when adding or modifying features.
+The codebase has undergone significant improvements:
+
+1. **Configuration Consolidation**: Reduced 11 config files to 4 structured files in `apps/cli/config/`
+2. **Cross-Platform Architecture**: Modern type system supporting Linux, macOS, Windows
+3. **Code Cleanup**: Removed dead code, obsolete test files, improved maintainability  
+4. **Enhanced CLI**: Added uninstall command, comprehensive dry-run support
+5. **Documentation**: Complete configuration guides at https://docs.devex.sh/
+6. **One-Line Installer**: Production-ready installer at https://devex.sh/install
+
+**Current Focus**: DNF installer implementation for Red Hat-based Linux systems
+
+**Agents:** Always work within the appropriate app directory (`apps/cli/`, `apps/web/`, `apps/docs/`). For CLI development, understand the consolidated configuration system and cross-platform architecture.
 
 ---
 
@@ -87,8 +105,8 @@ All PRs are checked via workflows in `.github/workflows`.
 - **Exploration:** When exploring for relevant code context:
   - **CLI Development**: Look in `apps/cli/pkg/`, `apps/cli/cmd/`, or `apps/cli/test/`
   - **Website Development**: Look in `apps/web/app/`, `apps/web/components/`
-  - **Documentation**: Look in `apps/docs/pages/`, `apps/docs/components/`
-- **Documentation:** Update or create docs in the appropriate app directory or root-level docs.
+  - **Documentation**: Look in `apps/docs/content/docs/`, `apps/docs/app/components/`
+- **Documentation:** Update or create docs in `apps/docs/content/docs/` for user-facing documentation, or update `CLAUDE.md`/`ROADMAP.md` for development documentation.
 - **PRs:**
     - Use clear, conventional commit titles (`[app_name] type: short summary`)
     - Examples: `[cli] feat: add uninstall command`, `[web] fix: navigation bug`, `[workspace] chore: update dependencies`
@@ -145,4 +163,38 @@ Ask agents to refactor, find bugs, or brainstorm solutions for tricky code.
 
 ---
 
-_Last updated: 2025-07-26. Please keep this file up to date as conventions or automation changes!_
+---
+
+## Key Configuration Files (CLI)
+
+Since the major consolidation, understand these 4 core configuration files in `apps/cli/config/`:
+
+1. **applications.yaml** - All application definitions with cross-platform support
+   - Organized by: development, databases, system_tools, optional
+   - Each app can define linux/macos/windows specific configurations
+   - Supports multiple install methods: apt, dnf, pacman, brew, winget, etc.
+
+2. **environment.yaml** - Programming languages, fonts, shell configurations
+   - Uses mise for language version management (Node.js, Python, Go, etc.)
+   - Font installation and management
+   - Shell customization (zsh, oh-my-zsh, etc.)
+
+3. **desktop.yaml** - Desktop environment settings by type
+   - GNOME: themes, extensions, keybindings, settings
+   - KDE: plasma configuration
+   - macOS: dock and system defaults
+
+4. **system.yaml** - Git, SSH, terminal configurations
+   - Git aliases and global settings
+   - SSH host configurations
+   - Terminal profiles and preferences
+
+**Configuration System Features:**
+- User overrides in `~/.devex/` take priority over defaults
+- Built-in validation via `pkg/config/validation.go`
+- Cross-platform type system in `pkg/types/types.go`
+- Platform detection in `pkg/platform/platform.go`
+
+---
+
+_Last updated: 2025-01-27. Please keep this file up to date as conventions or automation changes!_
