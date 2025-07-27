@@ -38,7 +38,7 @@ jobs:
           version: v2.3.0
           working-directory: apps/cli
       - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
       - name: Test
         working-directory: apps/cli
         run: ginkgo -r
