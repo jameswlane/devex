@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'apps/cli/**'
+      - '.github/workflows/release.yml'
 permissions:
   contents: write
   packages: write
