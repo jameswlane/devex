@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jameswlane/devex/pkg/commands"
 	"github.com/jameswlane/devex/pkg/config"
@@ -22,8 +23,15 @@ var (
 )
 
 func main() {
-	// Initialize the default logger
-	log.InitDefaultLogger(os.Stderr)
+	// Determine debug mode from command line arguments or environment
+	debugMode := isDebugMode()
+
+	// Initialize the logger based on debug mode
+	if err := log.InitFileLogger(debugMode); err != nil {
+		// Fallback to stderr logging if file logging fails
+		log.InitDefaultLogger(os.Stderr)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
+	}
 
 	// Detect platform information
 	plat := platform.DetectPlatform()
@@ -82,6 +90,31 @@ func main() {
 	}
 
 	log.Info("DevEx CLI execution completed successfully")
+
+	// Close the log file if it was opened
+	if err := log.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", err)
+	}
+}
+
+// isDebugMode checks if debug mode should be enabled based on command line arguments or environment.
+func isDebugMode() bool {
+	// Check command line arguments for debug flags
+	for _, arg := range os.Args[1:] {
+		if strings.HasPrefix(arg, "--debug") || arg == "-d" {
+			return true
+		}
+		if strings.HasPrefix(arg, "--verbose") || arg == "-v" {
+			return true
+		}
+	}
+
+	// Check environment variables
+	if os.Getenv("DEVEX_DEBUG") == "true" || os.Getenv("DEBUG") == "true" {
+		return true
+	}
+
+	return false
 }
 
 func handleError(context string, err error) {

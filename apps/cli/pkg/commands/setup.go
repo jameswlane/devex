@@ -67,7 +67,6 @@ type SetupModel struct {
 	installing    bool
 	installStatus string
 	progress      float64
-	logFile       string
 	installErrors []string
 	hasErrors     bool
 	repo          types.Repository
@@ -91,14 +90,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	settings.DryRun = viper.GetBool("dry_run")
 	settings.Verbose = viper.GetBool("verbose")
 
-	// Set up file-based logging to keep TUI clean
-	logFile, err := setupFileLogging()
-	if err != nil {
-		log.Error("Failed to setup file logging", err)
-		// Continue anyway, but logging may interfere with TUI
-	}
-
-	log.Info("Starting guided setup process", "dryRun", settings.DryRun, "verbose", settings.Verbose, "logFile", logFile)
+	log.Info("Starting guided setup process", "dryRun", settings.DryRun, "verbose", settings.Verbose, "logFile", log.GetLogFile())
 
 	// Initialize the setup model
 	model := &SetupModel{
@@ -107,7 +99,6 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		selectedLangs: make(map[int]bool),
 		selectedDBs:   make(map[int]bool),
 		selectedApps:  make(map[int]bool),
-		logFile:       logFile,
 		installErrors: make([]string, 0),
 		hasErrors:     false,
 		repo:          repo,
@@ -438,8 +429,8 @@ func (m *SetupModel) View() string {
 			s += "• Reload shell config: 'source ~/.zshrc' (or ~/.bashrc, ~/.config/fish/config.fish)\n\n"
 		}
 
-		if m.logFile != "" {
-			s += fmt.Sprintf("📋 Installation logs: %s\n", m.logFile)
+		if logFile := log.GetLogFile(); logFile != "" {
+			s += fmt.Sprintf("📋 Installation logs: %s\n", logFile)
 			s += "   (Submit this file for debugging if you encounter issues)\n\n"
 		}
 		s += "Press 'q' to exit."
@@ -1187,60 +1178,21 @@ func (m *SetupModel) copyFile(src, dst string) error {
 	return nil
 }
 
-func setupFileLogging() (string, error) {
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		return "", fmt.Errorf("HOME environment variable not set")
-	}
-
-	// Create logs directory
-	logsDir := homeDir + "/.local/share/devex/logs"
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create logs directory: %w", err)
-	}
-
-	// Create timestamped log file
-	timestamp := time.Now().Format("20060102-150405")
-	logFile := logsDir + "/setup-" + timestamp + ".log"
-
-	// Create log file with initial header
-	file, err := os.Create(logFile)
-	if err != nil {
-		return "", fmt.Errorf("failed to create log file: %w", err)
-	}
-
-	// Write initial log header
-	header := fmt.Sprintf("DevEx Guided Setup Log\nStarted: %s\nPlatform: %s\n\n",
-		time.Now().Format("2006-01-02 15:04:05"),
-		fmt.Sprintf("%s %s", strings.ToUpper(os.Getenv("USER")), os.Getenv("HOSTNAME")))
-	_, _ = file.WriteString(header)
-	file.Close()
-
-	// Note: We don't redirect stderr/stdout here as it breaks the TUI
-	// Instead, individual commands should append their output to this log file
-
-	return logFile, nil
-}
-
 // Helper function to run commands and log their output
 func (m *SetupModel) runCommandWithLogging(ctx context.Context, name string, args ...string) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	output, err := cmd.CombinedOutput()
 
-	// Always log the command and its output
-	if m.logFile != "" {
-		logEntry := fmt.Sprintf("[%s] Running: %s %s\n",
-			time.Now().Format("15:04:05"), name, strings.Join(args, " "))
-		logEntry += fmt.Sprintf("Output:\n%s\n", string(output))
-		if err != nil {
-			logEntry += fmt.Sprintf("Error: %v\n", err)
-		}
-		logEntry += "----------------------------------------\n"
+	// Log command execution using centralized logger
+	commandStr := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
+	log.Info("Running command", "command", commandStr)
 
-		if file, openErr := os.OpenFile(m.logFile, os.O_APPEND|os.O_WRONLY, 0644); openErr == nil {
-			_, _ = file.WriteString(logEntry)
-			file.Close()
-		}
+	if len(output) > 0 {
+		log.Info("Command output", "command", commandStr, "output", string(output))
+	}
+
+	if err != nil {
+		log.Error("Command failed", err, "command", commandStr, "output", string(output))
 	}
 
 	return err
