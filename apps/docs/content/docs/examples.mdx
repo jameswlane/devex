@@ -1,0 +1,462 @@
+---
+title: Usage Examples
+description: Common DevEx usage patterns and examples
+---
+
+# Usage Examples
+
+This page provides practical examples of how to use DevEx for common development scenarios.
+
+## Basic Usage
+
+### Install Default Development Environment
+
+```bash
+# Install all default applications and configurations
+sudo devex install
+
+# Preview what would be installed (dry-run)
+devex install --dry-run
+
+# Install with verbose output
+devex install --verbose
+```
+
+### List Available Applications
+
+```bash
+# List all available applications
+devex install --list
+
+# List applications by category
+devex install --list --category development
+devex install --list --category databases
+devex install --list --category system_tools
+```
+
+### Install Specific Applications
+
+```bash
+# Install individual applications
+sudo devex install --app git
+sudo devex install --app "GitHub CLI"
+sudo devex install --app docker
+
+# Install multiple applications
+sudo devex install --app git,docker,neovim
+```
+
+### Install by Category
+
+```bash
+# Install all development tools
+sudo devex install --category development
+
+# Install all databases
+sudo devex install --category databases
+
+# Install system utilities
+sudo devex install --category system_tools
+```
+
+## Configuration Management
+
+### View Current Configuration
+
+```bash
+# Show configuration status
+devex config status
+
+# Validate all configuration files
+devex config validate
+
+# Show platform information
+devex system info
+```
+
+### Customize Configuration
+
+```bash
+# Create user configuration directory
+mkdir -p ~/.devex
+
+# Copy default configuration for editing
+cp ~/.local/share/devex/config/applications.yaml ~/.devex/
+
+# Edit the configuration
+nano ~/.devex/applications.yaml
+
+# Validate your changes
+devex config validate --file ~/.devex/applications.yaml
+```
+
+### Reset Configuration
+
+```bash
+# Reset all configurations to defaults
+devex config reset
+
+# Reset specific configuration file
+devex config reset --file applications.yaml
+
+# Backup current config before reset
+devex config backup
+devex config reset
+```
+
+## Development Workflows
+
+### Frontend Development Setup
+
+```yaml
+# ~/.devex/applications.yaml
+applications:
+  development:
+    - name: "Node.js LTS"
+      default: true
+      linux:
+        install_method: "mise"
+        install_command: "node@lts"
+    
+    - name: "Yarn"
+      default: true
+      linux:
+        install_method: "npm"
+        install_command: "yarn"
+        dependencies: ["node"]
+    
+    - name: "VS Code"
+      default: true
+      linux:
+        install_method: "snap"
+        install_command: "code --classic"
+```
+
+```bash
+# Install frontend development environment
+sudo devex install --category development
+```
+
+### Backend Development Setup
+
+```yaml
+# ~/.devex/applications.yaml
+applications:
+  development:
+    - name: "Docker"
+      default: true
+      linux:
+        install_method: "apt"
+        install_command: "docker.io"
+        post_install:
+          - shell: "sudo usermod -aG docker $USER"
+    
+    - name: "Python 3.11"
+      default: true
+      linux:
+        install_method: "mise"
+        install_command: "python@3.11"
+    
+    - name: "Go Latest"
+      default: false
+      linux:
+        install_method: "mise"
+        install_command: "go@latest"
+```
+
+### Database Development
+
+```bash
+# Install database tools
+sudo devex install --category databases
+
+# Install specific database
+sudo devex install --app postgresql
+sudo devex install --app redis
+sudo devex install --app mongodb
+```
+
+## Desktop Customization
+
+### GNOME Theme Setup
+
+```yaml
+# ~/.devex/desktop.yaml
+desktop_environments:
+  gnome:
+    themes:
+      - name: "Tokyo Night"
+        type: "gtk"
+        settings:
+          - key: "org.gnome.desktop.interface.gtk-theme"
+            value: "Adwaita-dark"
+          - key: "org.gnome.desktop.interface.color-scheme"
+            value: "prefer-dark"
+    
+    extensions:
+      - name: "Dash to Dock"
+        uuid: "dash-to-dock@micxgx.gmail.com"
+        settings:
+          dock-position: "BOTTOM"
+          dock-size-limit: 48
+          autohide: true
+```
+
+```bash
+# Apply desktop configuration
+sudo devex system setup --desktop
+```
+
+### Terminal Configuration
+
+```yaml
+# ~/.devex/system.yaml
+terminal:
+  default: "gnome-terminal"
+  profiles:
+    - name: "Development"
+      background_color: "#1a1b26"
+      foreground_color: "#c0caf5"
+      font: "JetBrains Mono 12"
+      transparency: 0.1
+```
+
+## Team Workflows
+
+### Shared Team Configuration
+
+```bash
+# Create team configuration repository
+git init devex-team-config
+cd devex-team-config
+
+# Add team-specific configurations
+mkdir -p config
+cp ~/.local/share/devex/config/* config/
+
+# Customize for team needs
+# Edit config/applications.yaml, etc.
+
+# Share with team
+git add . && git commit -m "Add team DevEx config"
+git push origin main
+```
+
+### Team Member Setup
+
+```bash
+# Clone team configuration
+git clone https://github.com/yourteam/devex-team-config.git
+cd devex-team-config
+
+# Copy team config to DevEx
+cp config/* ~/.devex/
+
+# Install team environment
+sudo devex install
+```
+
+### Docker Development Environment
+
+```yaml
+# Dockerfile.devex
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    wget curl sudo git
+
+# Install DevEx
+RUN wget -qO- https://devex.sh/install | bash
+
+# Copy team configuration
+COPY config/ /root/.devex/
+
+# Setup environment
+RUN /root/.local/share/devex/bin/devex install --dry-run
+
+CMD ["/bin/bash"]
+```
+
+## CI/CD Integration
+
+### GitHub Actions Workflow
+
+```yaml
+# .github/workflows/devex-setup.yml
+name: DevEx Environment Setup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday
+
+jobs:
+  setup-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install DevEx
+        run: |
+          wget -qO- https://devex.sh/install | bash
+          echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
+      
+      - name: Copy team configuration
+        run: |
+          mkdir -p ~/.devex
+          cp .devex/* ~/.devex/ 2>/dev/null || true
+      
+      - name: Setup development environment
+        run: |
+          devex config validate
+          devex install --dry-run
+          sudo devex install --category development
+      
+      - name: Verify installation
+        run: |
+          devex system info
+          node --version
+          docker --version
+```
+
+### GitLab CI Pipeline
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - setup
+  - test
+  - deploy
+
+setup_devex:
+  stage: setup
+  image: ubuntu:22.04
+  before_script:
+    - apt-get update && apt-get install -y wget curl sudo git
+  script:
+    - wget -qO- https://devex.sh/install | bash
+    - export PATH="$PATH:$HOME/.local/share/devex/bin"
+    - cp .devex/* ~/.devex/ 2>/dev/null || true
+    - devex install --category development --dry-run
+  artifacts:
+    paths:
+      - ~/.local/share/devex/
+    expire_in: 1 hour
+```
+
+## Maintenance Tasks
+
+### Update DevEx
+
+```bash
+# Check for updates
+devex update check
+
+# Update to latest version
+devex update install
+
+# Update configurations
+devex config update
+```
+
+### Backup and Restore
+
+```bash
+# Backup current configuration
+devex config backup --output ~/devex-backup.tar.gz
+
+# Restore from backup
+devex config restore --input ~/devex-backup.tar.gz
+
+# Export configuration for sharing
+devex config export --format yaml --output team-config.yaml
+```
+
+### Health Checks
+
+```bash
+# Check system health
+devex system check
+
+# Verify all installed applications
+devex install --verify
+
+# Check for missing dependencies
+devex system dependencies
+```
+
+## Advanced Usage
+
+### Custom Installer Scripts
+
+```yaml
+# ~/.devex/applications.yaml
+applications:
+  development:
+    - name: "Custom Tool"
+      description: "Our internal development tool"
+      category: "Development Tools"
+      default: false
+      linux:
+        install_method: "curlpipe"
+        install_command: "https://internal.company.com/install.sh"
+        pre_install:
+          - shell: "mkdir -p ~/.local/bin"
+        post_install:
+          - shell: "ln -sf ~/.local/share/custom-tool/bin/tool ~/.local/bin/"
+        config_files:
+          - source: "config/custom-tool.conf"
+            destination: "~/.config/custom-tool/config.conf"
+```
+
+### Environment-Specific Configurations
+
+```bash
+# Development environment
+export DEVEX_ENV=development
+devex install --config ~/.devex/dev-config.yaml
+
+# Production environment
+export DEVEX_ENV=production
+devex install --config ~/.devex/prod-config.yaml
+
+# Testing environment
+export DEVEX_ENV=testing
+devex install --config ~/.devex/test-config.yaml
+```
+
+### Scripted Installations
+
+```bash
+#!/bin/bash
+# setup-dev-machine.sh
+
+set -e
+
+echo "Setting up development machine with DevEx..."
+
+# Install DevEx
+wget -qO- https://devex.sh/install | bash
+export PATH="$PATH:$HOME/.local/share/devex/bin"
+
+# Copy custom configuration
+cp custom-config/* ~/.devex/
+
+# Install base development tools
+sudo devex install --category development
+
+# Install databases for local development
+sudo devex install --app postgresql --app redis
+
+# Setup GNOME theme
+sudo devex system setup --desktop
+
+# Configure git with user information
+git config --global user.name "Developer Name"
+git config --global user.email "dev@company.com"
+
+echo "Development environment setup complete!"
+```
+
+These examples demonstrate the flexibility and power of DevEx for managing development environments across different scenarios and team workflows.
