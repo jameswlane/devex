@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -83,13 +84,18 @@ var _ = Describe("Db", func() {
 
 	Context("QueryRow", func() {
 		BeforeEach(func() {
+			_ = database.Exec(`DROP TABLE IF EXISTS test_table`)
 			query := `CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)`
 			if err := database.Exec(query); err != nil {
-				log.Fatal("", err)
+				Fail(fmt.Sprintf("Failed to create test table: %v", err))
 			}
 			if err := database.Exec(`INSERT INTO test_table (id, name) VALUES (1, 'test')`); err != nil {
-				log.Fatal("", err)
+				Fail(fmt.Sprintf("Failed to insert test data: %v", err))
 			}
+		})
+
+		AfterEach(func() {
+			_ = database.Exec(`DROP TABLE IF EXISTS test_table`)
 		})
 
 		It("retrieves a single row successfully", func() {
@@ -110,10 +116,15 @@ var _ = Describe("Db", func() {
 
 	Context("GetColumns", func() {
 		BeforeEach(func() {
+			_ = database.Exec(`DROP TABLE IF EXISTS test_table`)
 			query := `CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)`
 			if err := database.Exec(query); err != nil {
-				log.Fatal("", err)
+				Fail(fmt.Sprintf("Failed to create test table: %v", err))
 			}
+		})
+
+		AfterEach(func() {
+			_ = database.Exec(`DROP TABLE IF EXISTS test_table`)
 		})
 
 		It("retrieves column names successfully", func() {
