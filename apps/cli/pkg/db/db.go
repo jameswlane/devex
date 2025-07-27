@@ -15,14 +15,14 @@ type DB struct {
 // Exec conforms to the `types.Database` interface.
 func (d *DB) Exec(query string, args ...any) error {
 	ctx := context.Background()
-	_, err := d.DB.ExecContext(ctx, query, args...)
+	_, err := d.ExecContext(ctx, query, args...)
 	return err
 }
 
 // QueryRow conforms to the `types.Database` interface.
 func (d *DB) QueryRow(query string, args ...any) (map[string]any, error) {
 	ctx := context.Background()
-	row := d.DB.QueryRowContext(ctx, query, args...)
+	row := d.QueryRowContext(ctx, query, args...)
 
 	// Get column names
 	columns, err := d.GetColumns(query, args...)
@@ -55,7 +55,7 @@ func (d *DB) QueryRow(query string, args ...any) (map[string]any, error) {
 // GetColumns retrieves column names for the query.
 func (d *DB) GetColumns(query string, args ...any) ([]string, error) {
 	ctx := context.Background()
-	rows, err := d.DB.QueryContext(ctx, query, args...)
+	rows, err := d.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute query: %w", err)
 	}
