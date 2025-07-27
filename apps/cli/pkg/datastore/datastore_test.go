@@ -1,6 +1,7 @@
 package datastore_test
 
 import (
+	"context"
 	"database/sql"
 	"testing"
 
@@ -24,7 +25,8 @@ func TestNewSQLite(t *testing.T) {
 	tables := []string{"system_data", "installed_apps", "schema_migrations"}
 	for _, table := range tables {
 		query := `SELECT name FROM sqlite_master WHERE type='table' AND name=?;`
-		row := db.Conn().QueryRow(query, table)
+		ctx := context.Background()
+		row := db.Conn().QueryRowContext(ctx, query, table)
 		var name string
 		err := row.Scan(&name)
 		assert.NoErrorf(t, err, "Table %s should exist", table)

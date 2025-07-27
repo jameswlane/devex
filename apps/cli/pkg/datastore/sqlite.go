@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -47,7 +48,8 @@ func InitializeSchema(conn *sql.DB) error {
         version INTEGER PRIMARY KEY,
         applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );`
-	_, err := conn.Exec(schema)
+	ctx := context.Background()
+	_, err := conn.ExecContext(ctx, schema)
 	if err != nil {
 		return fmt.Errorf("failed to execute schema: %w", err)
 	}
@@ -56,18 +58,21 @@ func InitializeSchema(conn *sql.DB) error {
 
 // Exec executes a query without returning rows (e.g., INSERT, UPDATE, DELETE).
 func (s *SQLite) Exec(query string, args ...any) error {
-	_, err := s.conn.Exec(query, args...)
+	ctx := context.Background()
+	_, err := s.conn.ExecContext(ctx, query, args...)
 	return err
 }
 
 // QueryRow retrieves a single row result as a map[string]interface{}.
 func (s *SQLite) QueryRow(query string, args ...any) *sql.Row {
-	return s.conn.QueryRow(query, args...)
+	ctx := context.Background()
+	return s.conn.QueryRowContext(ctx, query, args...)
 }
 
 // Query executes a query and returns rows for further processing.
 func (s *SQLite) Query(query string, args ...any) (*sql.Rows, error) {
-	return s.conn.Query(query, args...)
+	ctx := context.Background()
+	return s.conn.QueryContext(ctx, query, args...)
 }
 
 // RowsToMaps converts sql.Rows to a slice of map[string]interface{} for convenience.
