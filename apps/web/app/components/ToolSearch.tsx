@@ -49,7 +49,6 @@ export function ToolSearch() {
 									rel="noopener noreferrer"
 									className="flex items-center text-gray-600 hover:text-gray-800"
 								>
-									<FaGithub className="mr-2" />
 									GitHub
 								</a>
 							)}
@@ -60,7 +59,6 @@ export function ToolSearch() {
 									rel="noopener noreferrer"
 									className="flex items-center text-gray-600 hover:text-gray-800"
 								>
-									<FaGlobe className="mr-2" />
 									Website
 								</a>
 							)}
