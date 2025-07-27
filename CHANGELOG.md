@@ -1,3 +1,10 @@
+## [0.8.0](https://github.com/jameswlane/devex/compare/0.7.1...0.8.0) (2025-07-27)
+
+### Features
+
+* add shell selection to guided setup ([40033f2](https://github.com/jameswlane/devex/commit/40033f255c60270e5d0d1da0b23f9c4ec1dc14ec))
+* implement guided setup with dependency ordering ([9da10a1](https://github.com/jameswlane/devex/commit/9da10a1b781c9237dc41182990772973bd4a18d3))
+
 ## [0.7.1](https://github.com/jameswlane/devex/compare/0.7.0...0.7.1) (2025-07-27)
 
 ### Bug Fixes
