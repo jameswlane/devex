@@ -67,6 +67,9 @@ type SetupModel struct {
 	installing    bool
 	installStatus string
 	progress      float64
+	logFile       string
+	installErrors []string
+	hasErrors     bool
 	repo          types.Repository
 	settings      config.CrossPlatformSettings
 }
@@ -88,7 +91,14 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	settings.DryRun = viper.GetBool("dry_run")
 	settings.Verbose = viper.GetBool("verbose")
 
-	log.Info("Starting guided setup process", "dryRun", settings.DryRun, "verbose", settings.Verbose)
+	// Set up file-based logging to keep TUI clean
+	logFile, err := setupFileLogging()
+	if err != nil {
+		log.Error("Failed to setup file logging", err)
+		// Continue anyway, but logging may interfere with TUI
+	}
+
+	log.Info("Starting guided setup process", "dryRun", settings.DryRun, "verbose", settings.Verbose, "logFile", logFile)
 
 	// Initialize the setup model
 	model := &SetupModel{
@@ -97,6 +107,9 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		selectedLangs: make(map[int]bool),
 		selectedDBs:   make(map[int]bool),
 		selectedApps:  make(map[int]bool),
+		logFile:       logFile,
+		installErrors: make([]string, 0),
+		hasErrors:     false,
 		repo:          repo,
 		settings:      settings,
 		shells: []string{
@@ -380,18 +393,55 @@ func (m *SetupModel) View() string {
 
 	case StepComplete:
 		selectedShell := m.getSelectedShell()
-		s = titleStyle.Render("🎉 Setup Complete!")
+
+		if m.hasErrors {
+			s = titleStyle.Render("⚠️  Setup Completed with Issues")
+			s += "\n\n"
+			s += fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(m.installErrors))
+
+			errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
+			for _, err := range m.installErrors {
+				s += errorStyle.Render("  ❌ "+err) + "\n"
+			}
+			s += "\n"
+		} else {
+			s = titleStyle.Render("🎉 Setup Complete!")
+			s += "\n\n"
+			s += "Your development environment has been successfully set up!\n\n"
+		}
+
+		s += "What was attempted:\n"
+		s += fmt.Sprintf("  • %s shell with DevEx configuration\n", selectedShell)
+		s += "  • Essential development tools\n"
+		if len(m.getSelectedLanguages()) > 0 {
+			s += "  • Programming languages via mise\n"
+		}
+		if len(m.getSelectedDatabases()) > 0 {
+			s += "  • Database containers via Docker\n"
+		}
+		if len(m.getSelectedDesktopApps()) > 0 {
+			s += "  • Desktop applications\n"
+		}
 		s += "\n\n"
-		s += "Your development environment has been successfully set up!\n\n"
-		s += "What's been installed:\n"
-		s += fmt.Sprintf("  ✓ %s shell with DevEx configuration\n", selectedShell)
-		s += "  ✓ Essential development tools\n"
-		s += "  ✓ Selected programming languages\n"
-		s += "  ✓ Selected databases\n"
-		s += "  ✓ Selected desktop applications\n"
-		s += "\n\n"
-		s += fmt.Sprintf("Your shell has been switched to %s. Please restart your terminal\n", selectedShell)
-		s += fmt.Sprintf("or run 'exec %s' to start using your new environment.\n\n", selectedShell)
+
+		if !m.hasErrors {
+			s += fmt.Sprintf("Your shell has been switched to %s. Please restart your terminal\n", selectedShell)
+			s += fmt.Sprintf("or run 'exec %s' to start using your new environment.\n\n", selectedShell)
+			s += "To verify mise is working: 'mise list' or 'mise doctor'\n"
+			s += "To check Docker: 'docker ps'\n\n"
+		} else {
+			s += "Please review the issues above. You may need to manually complete\n"
+			s += fmt.Sprintf("some installations. To activate %s: exec %s\n\n", selectedShell, selectedShell)
+			s += "Troubleshooting:\n"
+			s += "• Check mise: 'mise doctor' or reinstall with 'curl https://mise.jdx.dev/install.sh | sh'\n"
+			s += "• Check Docker: 'sudo systemctl start docker' or install manually\n"
+			s += "• Reload shell config: 'source ~/.zshrc' (or ~/.bashrc, ~/.config/fish/config.fish)\n\n"
+		}
+
+		if m.logFile != "" {
+			s += fmt.Sprintf("📋 Installation logs: %s\n", m.logFile)
+			s += "   (Submit this file for debugging if you encounter issues)\n\n"
+		}
 		s += "Press 'q' to exit."
 	}
 
@@ -570,36 +620,48 @@ func (m *SetupModel) performInstallation() {
 	// Step 1: Install mise (required for language management)
 	m.updateProgress("Installing mise...", 0.05)
 	if err := m.installMise(ctx); err != nil {
-		log.Error("Failed to install mise", err)
-		// Continue, but language installations may not work
+		m.addError("mise", err.Error())
+	} else {
+		// Validate mise installation
+		if err := m.validateMiseInstallation(); err != nil {
+			m.addError("mise validation", err.Error())
+		}
 	}
 
 	// Step 2: Install Docker (required for database management)
 	m.updateProgress("Installing Docker...", 0.1)
 	if err := m.installDocker(ctx); err != nil {
-		log.Error("Failed to install Docker", err)
-		// Continue, but database installations may not work
+		m.addError("Docker", err.Error())
+	} else {
+		// Validate Docker installation
+		if err := m.validateDockerInstallation(); err != nil {
+			m.addError("Docker validation", err.Error())
+		}
 	}
 
 	// Step 3: Install other essential tools
 	m.updateProgress("Installing essential tools...", 0.15)
 	if err := m.installEssentialTools(ctx); err != nil {
-		log.Error("Failed to install essential tools", err)
-		return
+		m.addError("Essential tools", err.Error())
+		// Essential tools failure is more critical, but continue
 	}
 
 	// Step 4: Update environment and PATH
 	m.updateProgress("Updating environment...", 0.2)
 	if err := m.updateEnvironmentPath(ctx); err != nil {
-		log.Error("Failed to update environment", err)
+		m.addError("Environment PATH", err.Error())
 	}
 
 	// Step 5: Install selected languages via mise (only if mise is available)
 	if len(m.getSelectedLanguages()) > 0 {
 		m.updateProgress("Installing programming languages...", 0.4)
 		if err := m.installLanguages(ctx); err != nil {
-			log.Error("Failed to install languages", err)
-			// Continue with other installations
+			m.addError("Programming languages", err.Error())
+		} else {
+			// Validate language installations
+			if err := m.validateInstalledLanguages(); err != nil {
+				m.addError("Language validation", err.Error())
+			}
 		}
 	}
 
@@ -607,8 +669,7 @@ func (m *SetupModel) performInstallation() {
 	if len(m.getSelectedDatabases()) > 0 {
 		m.updateProgress("Installing databases...", 0.6)
 		if err := m.installDatabases(ctx); err != nil {
-			log.Error("Failed to install databases", err)
-			// Continue with other installations
+			m.addError("Databases", err.Error())
 		}
 	}
 
@@ -616,19 +677,28 @@ func (m *SetupModel) performInstallation() {
 	if len(m.getSelectedDesktopApps()) > 0 {
 		m.updateProgress("Installing desktop applications...", 0.8)
 		if err := m.installDesktopApps(ctx); err != nil {
-			log.Error("Failed to install desktop applications", err)
-			return
+			m.addError("Desktop applications", err.Error())
 		}
 	}
 
 	// Step 8: Final setup and shell configuration
 	m.updateProgress("Completing setup...", 0.9)
+	selectedShell := m.getSelectedShell()
 	if err := m.finalizeSetup(ctx); err != nil {
-		log.Error("Failed to finalize setup", err)
-		return
+		m.addError("Shell setup", err.Error())
+	} else {
+		// Validate shell configuration
+		if err := m.validateShellConfiguration(selectedShell); err != nil {
+			m.addError("Shell validation", err.Error())
+		}
 	}
 
-	m.updateProgress("Installation complete!", 1.0)
+	// Final status based on errors
+	if m.hasErrors {
+		m.updateProgress(fmt.Sprintf("Setup completed with %d issues", len(m.installErrors)), 1.0)
+	} else {
+		m.updateProgress("Installation complete!", 1.0)
+	}
 }
 
 func (m *SetupModel) updateProgress(status string, progress float64) {
@@ -660,13 +730,13 @@ func (m *SetupModel) installMise(ctx context.Context) error {
 	// Use the shell-specific mise installer
 	installCmd := fmt.Sprintf("curl https://mise.run/%s | sh", selectedShell)
 
-	output, err := exec.CommandContext(ctx, "bash", "-c", installCmd).CombinedOutput()
+	err := m.runCommandWithLogging(ctx, "bash", "-c", installCmd)
 	if err != nil {
-		log.Error("Failed to install mise", err, "shell", selectedShell, "output", string(output))
+		log.Error("Failed to install mise", err, "shell", selectedShell)
 		return fmt.Errorf("failed to install mise: %w", err)
 	}
 
-	log.Info("Successfully installed mise", "shell", selectedShell, "output", string(output))
+	log.Info("Successfully installed mise", "shell", selectedShell)
 
 	// Update PATH to include mise
 	homeDir := os.Getenv("HOME")
@@ -1114,5 +1184,178 @@ func (m *SetupModel) copyFile(src, dst string) error {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
 
+	return nil
+}
+
+func setupFileLogging() (string, error) {
+	homeDir := os.Getenv("HOME")
+	if homeDir == "" {
+		return "", fmt.Errorf("HOME environment variable not set")
+	}
+
+	// Create logs directory
+	logsDir := homeDir + "/.local/share/devex/logs"
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create logs directory: %w", err)
+	}
+
+	// Create timestamped log file
+	timestamp := time.Now().Format("20060102-150405")
+	logFile := logsDir + "/setup-" + timestamp + ".log"
+
+	// Create log file with initial header
+	file, err := os.Create(logFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to create log file: %w", err)
+	}
+
+	// Write initial log header
+	header := fmt.Sprintf("DevEx Guided Setup Log\nStarted: %s\nPlatform: %s\n\n",
+		time.Now().Format("2006-01-02 15:04:05"),
+		fmt.Sprintf("%s %s", strings.ToUpper(os.Getenv("USER")), os.Getenv("HOSTNAME")))
+	_, _ = file.WriteString(header)
+	file.Close()
+
+	// Note: We don't redirect stderr/stdout here as it breaks the TUI
+	// Instead, individual commands should append their output to this log file
+
+	return logFile, nil
+}
+
+// Helper function to run commands and log their output
+func (m *SetupModel) runCommandWithLogging(ctx context.Context, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	output, err := cmd.CombinedOutput()
+
+	// Always log the command and its output
+	if m.logFile != "" {
+		logEntry := fmt.Sprintf("[%s] Running: %s %s\n",
+			time.Now().Format("15:04:05"), name, strings.Join(args, " "))
+		logEntry += fmt.Sprintf("Output:\n%s\n", string(output))
+		if err != nil {
+			logEntry += fmt.Sprintf("Error: %v\n", err)
+		}
+		logEntry += "----------------------------------------\n"
+
+		if file, openErr := os.OpenFile(m.logFile, os.O_APPEND|os.O_WRONLY, 0644); openErr == nil {
+			_, _ = file.WriteString(logEntry)
+			file.Close()
+		}
+	}
+
+	return err
+}
+
+// Error tracking and validation methods
+func (m *SetupModel) addError(component, message string) {
+	errorMsg := fmt.Sprintf("%s: %s", component, message)
+	m.installErrors = append(m.installErrors, errorMsg)
+	m.hasErrors = true
+	log.Error("Installation error", fmt.Errorf("%s", errorMsg), "component", component, "message", message)
+}
+
+func (m *SetupModel) validateMiseInstallation() error {
+	if !m.isToolAvailable("mise") {
+		return fmt.Errorf("mise command not found")
+	}
+
+	// Test that mise can list installed tools
+	ctx := context.Background()
+	err := m.runCommandWithLogging(ctx, "mise", "list")
+	if err != nil {
+		return fmt.Errorf("mise list failed: %w", err)
+	}
+
+	log.Info("Mise validation successful")
+	return nil
+}
+
+func (m *SetupModel) validateDockerInstallation() error {
+	if !m.isToolAvailable("docker") {
+		return fmt.Errorf("docker command not found")
+	}
+
+	// Test that docker can list containers
+	ctx := context.Background()
+	err := m.runCommandWithLogging(ctx, "docker", "ps")
+	if err != nil {
+		return fmt.Errorf("docker ps failed: %w", err)
+	}
+
+	log.Info("Docker validation successful")
+	return nil
+}
+
+func (m *SetupModel) validateShellConfiguration(shell string) error {
+	homeDir := os.Getenv("HOME")
+
+	switch shell {
+	case "zsh":
+		if _, err := os.Stat(homeDir + "/.zshrc"); err != nil {
+			return fmt.Errorf("zsh configuration not found: %w", err)
+		}
+	case "bash":
+		if _, err := os.Stat(homeDir + "/.bashrc"); err != nil {
+			return fmt.Errorf("bash configuration not found: %w", err)
+		}
+	case "fish":
+		if _, err := os.Stat(homeDir + "/.config/fish/config.fish"); err != nil {
+			return fmt.Errorf("fish configuration not found: %w", err)
+		}
+	}
+
+	log.Info("Shell configuration validation successful", "shell", shell)
+	return nil
+}
+
+func (m *SetupModel) validateInstalledLanguages() error {
+	if !m.isToolAvailable("mise") {
+		return fmt.Errorf("mise not available for language validation")
+	}
+
+	selectedLangs := m.getSelectedLanguages()
+	if len(selectedLangs) == 0 {
+		return nil // No languages selected, nothing to validate
+	}
+
+	// Check if mise can see the installed languages
+	ctx := context.Background()
+	cmd := exec.CommandContext(ctx, "mise", "list")
+	output, err := cmd.CombinedOutput()
+
+	// Log the command
+	_ = m.runCommandWithLogging(ctx, "mise", "list")
+
+	if err != nil {
+		return fmt.Errorf("failed to list mise tools: %w", err)
+	}
+
+	miseOutput := string(output)
+	var missingLangs []string
+
+	langMap := map[string]string{
+		"Node.js":       "node",
+		"Python":        "python",
+		"Go":            "go",
+		"Ruby on Rails": "ruby",
+		"PHP":           "php",
+		"Java":          "java",
+		"Rust":          "rust",
+		"Elixir":        "elixir",
+	}
+
+	for _, lang := range selectedLangs {
+		if toolName, exists := langMap[lang]; exists {
+			if !strings.Contains(miseOutput, toolName) {
+				missingLangs = append(missingLangs, lang)
+			}
+		}
+	}
+
+	if len(missingLangs) > 0 {
+		return fmt.Errorf("missing languages: %v", missingLangs)
+	}
+
+	log.Info("Language validation successful", "installedLanguages", selectedLangs)
 	return nil
 }

@@ -11,3 +11,8 @@ export PATH="./bin:$HOME/.local/bin:$HOME/.local/share/devex/bin:/usr/local/sbin
 set +h
 
 export DEVEX_PATH="/home/$USER/.local/share/devex"
+
+# Enable mise if available
+if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate zsh)"
+fi
