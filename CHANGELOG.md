@@ -1,3 +1,9 @@
+## [0.5.1](https://github.com/jameswlane/devex/compare/0.5.0...0.5.1) (2025-07-27)
+
+### Bug Fixes
+
+* resolve critical installation issues ([384f301](https://github.com/jameswlane/devex/commit/384f301af93f6ad16de6a3eaa100207e83862556))
+
 ## [0.5.0](https://github.com/jameswlane/devex/compare/0.4.0...0.5.0) (2025-07-27)
 
 ### Features
