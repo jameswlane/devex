@@ -98,7 +98,11 @@ func RowsToMaps(rows *sql.Rows) ([]map[string]any, error) {
 		}
 
 		for i, col := range columns {
-			row[col] = *(pointers[i].(*any))
+			if ptr, ok := pointers[i].(*any); ok {
+				row[col] = *ptr
+			} else {
+				row[col] = nil
+			}
 		}
 
 		results = append(results, row)

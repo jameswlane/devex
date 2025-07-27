@@ -51,12 +51,7 @@ func DownloadGPGKey(url, destination string, dearmor bool) error {
 		log.Error("Failed to download GPG key", err, "url", url)
 		return fmt.Errorf("failed to download GPG key: %w", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Warn("Failed to close HTTP response body", "error", err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Error("Unexpected HTTP status code", fmt.Errorf("URL: %s, status code: %d", url, resp.StatusCode))

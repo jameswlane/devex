@@ -74,6 +74,12 @@ func (r *AppRepository) ListAllApps() ([]string, error) {
 		apps = append(apps, appName)
 	}
 
+	// Check for any errors that occurred during iteration
+	if err := rows.Err(); err != nil {
+		log.Error("Error occurred during row iteration", err)
+		return nil, err
+	}
+
 	log.Info("Apps retrieved successfully", "count", len(apps))
 	return apps, nil
 }

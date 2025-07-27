@@ -91,18 +91,58 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 	sections := []string{"apps", "databases", "optional_apps", "programming_languages"}
 
 	for _, section := range sections {
-		for _, app := range viper.Get(section).([]any) {
-			candidate := app.(map[string]any)
+		sectionData := viper.Get(section)
+		apps, ok := sectionData.([]any)
+		if !ok {
+			log.Warn("Section is not a slice", "section", section)
+			continue
+		}
+		for _, app := range apps {
+			candidate, ok := app.(map[string]any)
+			if !ok {
+				log.Warn("App is not a map", "app", app)
+				continue
+			}
 			if candidate["install_command"] == identifier || candidate["name"] == identifier {
 				log.Info("App configuration found", "identifier", identifier)
+
+				name, ok := candidate["name"].(string)
+				if !ok {
+					log.Warn("App name is not a string", "name", candidate["name"])
+					continue
+				}
+
+				description, ok := candidate["description"].(string)
+				if !ok {
+					log.Warn("App description is not a string", "description", candidate["description"])
+					continue
+				}
+
+				installMethod, ok := candidate["install_method"].(string)
+				if !ok {
+					log.Warn("Install method is not a string", "install_method", candidate["install_method"])
+					continue
+				}
+
+				installCommand, ok := candidate["install_command"].(string)
+				if !ok {
+					log.Warn("Install command is not a string", "install_command", candidate["install_command"])
+					continue
+				}
+
+				downloadURL, ok := candidate["download_url"].(string)
+				if !ok {
+					downloadURL = ""
+				}
+
 				return &types.AppConfig{
 					BaseConfig: types.BaseConfig{
-						Name:        candidate["name"].(string),
-						Description: candidate["description"].(string),
+						Name:        name,
+						Description: description,
 					},
-					InstallMethod:  candidate["install_method"].(string),
-					InstallCommand: candidate["install_command"].(string),
-					DownloadURL:    candidate["download_url"].(string),
+					InstallMethod:  installMethod,
+					InstallCommand: installCommand,
+					DownloadURL:    downloadURL,
 					Dependencies:   ToStringSlice(candidate["dependencies"]),
 					PostInstall:    toInstallCommandSlice(candidate["post_install"]),
 				}, nil
@@ -126,9 +166,13 @@ func ToStringSlice(input any) []string {
 		return nil
 	}
 
-	result := make([]string, len(items))
-	for i, item := range items {
-		result[i] = item.(string)
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		if str, ok := item.(string); ok {
+			result = append(result, str)
+		} else {
+			log.Warn("Item is not a string, skipping", "item", item)
+		}
 	}
 
 	log.Info("Converted to string slice", "count", len(result))
@@ -147,13 +191,30 @@ func toInstallCommandSlice(input any) []types.InstallCommand {
 		return nil
 	}
 
-	result := make([]types.InstallCommand, len(items))
-	for i, item := range items {
-		cmd := item.(map[string]any)
-		result[i] = types.InstallCommand{
-			Command: cmd["command"].(string),
-			Shell:   cmd["shell"].(string),
+	result := make([]types.InstallCommand, 0, len(items))
+	for _, item := range items {
+		cmd, ok := item.(map[string]any)
+		if !ok {
+			log.Warn("Item is not a map, skipping", "item", item)
+			continue
 		}
+
+		command, ok := cmd["command"].(string)
+		if !ok {
+			log.Warn("Command is not a string, skipping", "command", cmd["command"])
+			continue
+		}
+
+		shell, ok := cmd["shell"].(string)
+		if !ok {
+			log.Warn("Shell is not a string, skipping", "shell", cmd["shell"])
+			continue
+		}
+
+		result = append(result, types.InstallCommand{
+			Command: command,
+			Shell:   shell,
+		})
 	}
 
 	log.Info("Converted to install command slice", "count", len(result))

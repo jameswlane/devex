@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"path/filepath"
 
@@ -48,12 +47,7 @@ func GetLatestDebURL(owner, repo, baseURL string, client *http.Client) (string, 
 		log.Error("Failed to fetch release data", err, "url", url)
 		return "", fmt.Errorf("failed to fetch release: %w", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			log.Warn("Failed to close HTTP response body", "error", err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		log.Error("Unexpected status code", err, "url", url, "status", resp.StatusCode)

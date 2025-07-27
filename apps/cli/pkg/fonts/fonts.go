@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/afero"
@@ -139,9 +141,15 @@ func UnzipAndMove(zipFile, extractPath, dest string) error {
 	}
 
 	for _, f := range reader.File {
+		// Security: prevent directory traversal attacks
 		destPath := filepath.Join(dest, f.Name)
+		if !strings.HasPrefix(destPath, filepath.Clean(dest)+string(os.PathSeparator)) {
+			log.Warn("Skipping file with invalid path", "file", f.Name)
+			continue
+		}
+
 		if f.FileInfo().IsDir() {
-			err = fs.MkdirAll(destPath, 0o755)
+			err = fs.MkdirAll(destPath, 0o750)
 		} else {
 			err = extractFile(f, destPath)
 		}
@@ -176,6 +184,19 @@ func extractFile(f *zip.File, destPath string) error {
 		}
 	}(file)
 
-	_, err = io.Copy(file, rc)
-	return err
+	// Security: prevent decompression bombs by limiting file size
+	const maxFileSize = 100 * 1024 * 1024 // 100MB limit
+	limitedReader := io.LimitReader(rc, maxFileSize)
+
+	written, err := io.Copy(file, limitedReader)
+	if err != nil {
+		return err
+	}
+
+	// Check if we hit the limit
+	if written == maxFileSize {
+		return fmt.Errorf("file size exceeds maximum allowed size of %d bytes", maxFileSize)
+	}
+
+	return nil
 }

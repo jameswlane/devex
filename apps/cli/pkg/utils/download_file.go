@@ -33,12 +33,7 @@ func DownloadFile(url, destination string) error {
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			fmt.Println("Failed to close response body", err)
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if _, err := io.Copy(outFile, resp.Body); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)

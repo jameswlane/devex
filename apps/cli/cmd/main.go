@@ -99,7 +99,7 @@ func handleError(context string, err error) {
 func initializeDatabase(homeDir string) types.Repository {
 	// Ensure .devex directory exists
 	devexDir := filepath.Join(homeDir, ".devex")
-	if err := os.MkdirAll(devexDir, 0755); err != nil {
+	if err := os.MkdirAll(devexDir, 0750); err != nil {
 		handleError("creating .devex directory", err)
 	}
 
