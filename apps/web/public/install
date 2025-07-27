@@ -20,19 +20,19 @@ setup_download_tool() {
         # Detect package manager and install wget
         if command -v apt-get >/dev/null 2>&1; then
             echo "Updating package list and installing wget..."
-            sudo apt-get update -qq && sudo apt-get install -y wget
+            sudo apt-get update -qq && sudo apt-get install -y wget git
         elif command -v dnf >/dev/null 2>&1; then
-            echo "Installing wget via dnf..."
-            sudo dnf install -y wget
+            echo "Installing wget and git via dnf..."
+            sudo dnf install -y wget git
         elif command -v yum >/dev/null 2>&1; then
-            echo "Installing wget via yum..."
-            sudo yum install -y wget
+            echo "Installing wget and git via yum..."
+            sudo yum install -y wget git
         elif command -v pacman >/dev/null 2>&1; then
-            echo "Installing wget via pacman..."
-            sudo pacman -S --noconfirm wget
+            echo "Installing wget and git via pacman..."
+            sudo pacman -S --noconfirm wget git
         elif command -v zypper >/dev/null 2>&1; then
-            echo "Installing wget via zypper..."
-            sudo zypper install -y wget
+            echo "Installing wget and git via zypper..."
+            sudo zypper install -y wget git
         else
             echo "Error: Could not find a supported package manager to install wget."
             echo "Please install wget or curl manually and re-run this script."
@@ -53,6 +53,40 @@ setup_download_tool() {
 
 # Setup download tools
 setup_download_tool
+
+# Ensure git is installed (required by DevEx)
+ensure_git_installed() {
+    if ! command -v git >/dev/null 2>&1; then
+        echo "Git not found. Installing git..."
+        
+        if command -v apt-get >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y git
+        elif command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y git
+        elif command -v yum >/dev/null 2>&1; then
+            sudo yum install -y git
+        elif command -v pacman >/dev/null 2>&1; then
+            sudo pacman -S --noconfirm git
+        elif command -v zypper >/dev/null 2>&1; then
+            sudo zypper install -y git
+        else
+            echo "Error: Could not install git. Please install git manually."
+            exit 1
+        fi
+        
+        if command -v git >/dev/null 2>&1; then
+            echo "Git installed successfully."
+        else
+            echo "Error: Failed to install git."
+            exit 1
+        fi
+    else
+        echo "Git is already available."
+    fi
+}
+
+# Ensure git is installed
+ensure_git_installed
 
 # Determine OS and architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
