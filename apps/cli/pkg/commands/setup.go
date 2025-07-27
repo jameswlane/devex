@@ -55,9 +55,11 @@ The setup process includes:
 // SetupModel represents the state of our guided setup UI
 type SetupModel struct {
 	step          int
+	shells        []string
 	languages     []string
 	databases     []string
 	desktopApps   []string
+	selectedShell int
 	selectedLangs map[int]bool
 	selectedDBs   map[int]bool
 	selectedApps  map[int]bool
@@ -72,6 +74,7 @@ type SetupModel struct {
 // setupSteps defines the guided setup process
 const (
 	StepWelcome = iota
+	StepShellSelection
 	StepLanguages
 	StepDatabases
 	StepDesktopApps
@@ -90,11 +93,17 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	// Initialize the setup model
 	model := &SetupModel{
 		step:          StepWelcome,
+		selectedShell: 0, // Default to zsh (first option)
 		selectedLangs: make(map[int]bool),
 		selectedDBs:   make(map[int]bool),
 		selectedApps:  make(map[int]bool),
 		repo:          repo,
 		settings:      settings,
+		shells: []string{
+			"zsh",
+			"bash",
+			"fish",
+		},
 		languages: []string{
 			"Node.js",
 			"Python",
@@ -209,12 +218,46 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Let's set up your development environment with the tools you need.")
 		s += "\n\n"
 		s += "This guided setup will help you install:\n"
+		s += "  • Shell configuration and tools\n"
 		s += "  • Programming languages and tools\n"
 		s += "  • Databases (via Docker)\n"
 		s += "  • Essential development applications\n"
 		s += "  • Desktop applications (if applicable)\n"
 		s += "\n\n"
 		s += "Press Enter to continue, or 'q' to quit."
+
+	case StepShellSelection:
+		s = titleStyle.Render("🐚 Select Your Shell")
+		s += "\n\n"
+		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
+		s += "\n\n"
+
+		for i, shell := range m.shells {
+			cursor := " "
+			if m.cursor == i {
+				cursor = cursorStyle.Render(">")
+			}
+
+			selected := " "
+			if m.selectedShell == i {
+				selected = selectedStyle.Render("●")
+			}
+
+			description := ""
+			switch shell {
+			case "zsh":
+				description = " (recommended - modern features, plugins, themes)"
+			case "bash":
+				description = " (classic - widely compatible)"
+			case "fish":
+				description = " (user-friendly - smart completions)"
+			}
+
+			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)
+		}
+
+		s += "\n\n"
+		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
 
 	case StepLanguages:
 		s = titleStyle.Render("📝 Select Programming Languages")
@@ -295,6 +338,10 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "You've selected the following for installation:\n\n"
 
+		s += "🐚 Shell:\n"
+		s += fmt.Sprintf("  • %s\n", m.getSelectedShell())
+		s += "\n"
+
 		if len(m.getSelectedLanguages()) > 0 {
 			s += "📝 Programming Languages:\n"
 			for _, lang := range m.getSelectedLanguages() {
@@ -332,17 +379,19 @@ func (m *SetupModel) View() string {
 		s += "Please wait while we set up your development environment..."
 
 	case StepComplete:
+		selectedShell := m.getSelectedShell()
 		s = titleStyle.Render("🎉 Setup Complete!")
 		s += "\n\n"
 		s += "Your development environment has been successfully set up!\n\n"
 		s += "What's been installed:\n"
+		s += fmt.Sprintf("  ✓ %s shell with DevEx configuration\n", selectedShell)
 		s += "  ✓ Essential development tools\n"
 		s += "  ✓ Selected programming languages\n"
 		s += "  ✓ Selected databases\n"
 		s += "  ✓ Selected desktop applications\n"
 		s += "\n\n"
-		s += "Your shell has been switched to zsh. Please restart your terminal\n"
-		s += "or run 'exec zsh' to start using your new environment.\n\n"
+		s += fmt.Sprintf("Your shell has been switched to %s. Please restart your terminal\n", selectedShell)
+		s += fmt.Sprintf("or run 'exec %s' to start using your new environment.\n\n", selectedShell)
 		s += "Press 'q' to exit."
 	}
 
@@ -354,7 +403,7 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepWelcome:
 		return m.nextStep()
-	case StepLanguages, StepDatabases, StepDesktopApps:
+	case StepShellSelection, StepLanguages, StepDatabases, StepDesktopApps:
 		return m.nextStep()
 	case StepConfirmation:
 		m.step = StepInstalling
@@ -367,6 +416,8 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 	var maxItems int
 	switch m.step {
+	case StepShellSelection:
+		maxItems = len(m.shells)
 	case StepLanguages:
 		maxItems = len(m.languages)
 	case StepDatabases:
@@ -383,6 +434,8 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 
 func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 	switch m.step {
+	case StepShellSelection:
+		m.selectedShell = m.cursor
 	case StepLanguages:
 		m.selectedLangs[m.cursor] = !m.selectedLangs[m.cursor]
 	case StepDatabases:
@@ -397,6 +450,8 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
 	case StepWelcome:
+		m.step = StepShellSelection
+	case StepShellSelection:
 		m.step = StepLanguages
 	case StepLanguages:
 		m.step = StepDatabases
@@ -415,6 +470,8 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
+	case StepLanguages:
+		m.step = StepShellSelection
 	case StepDatabases:
 		m.step = StepLanguages
 	case StepDesktopApps:
@@ -430,6 +487,13 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 }
 
 // Helper methods for getting selected items
+func (m *SetupModel) getSelectedShell() string {
+	if m.selectedShell >= 0 && m.selectedShell < len(m.shells) {
+		return m.shells[m.selectedShell]
+	}
+	return m.shells[0] // Default to zsh
+}
+
 func (m *SetupModel) getSelectedLanguages() []string {
 	var selected []string
 	for i, lang := range m.languages {
@@ -590,18 +654,19 @@ func (m *SetupModel) installEssentialTools(ctx context.Context) error {
 }
 
 func (m *SetupModel) installMise(ctx context.Context) error {
-	log.Info("Installing mise using official installer")
+	selectedShell := m.getSelectedShell()
+	log.Info("Installing mise using official installer", "shell", selectedShell)
 
-	// Use the official mise installer with shell-specific activation
-	installCmd := "curl https://mise.run/zsh | sh"
+	// Use the shell-specific mise installer
+	installCmd := fmt.Sprintf("curl https://mise.run/%s | sh", selectedShell)
 
 	output, err := exec.CommandContext(ctx, "bash", "-c", installCmd).CombinedOutput()
 	if err != nil {
-		log.Error("Failed to install mise", err, "output", string(output))
+		log.Error("Failed to install mise", err, "shell", selectedShell, "output", string(output))
 		return fmt.Errorf("failed to install mise: %w", err)
 	}
 
-	log.Info("Successfully installed mise", "output", string(output))
+	log.Info("Successfully installed mise", "shell", selectedShell, "output", string(output))
 
 	// Update PATH to include mise
 	homeDir := os.Getenv("HOME")
@@ -811,37 +876,242 @@ func (m *SetupModel) installDesktopApps(ctx context.Context) error {
 }
 
 func (m *SetupModel) finalizeSetup(ctx context.Context) error {
-	// Final setup steps like shell configuration
-	log.Info("Finalizing setup - switching shell to zsh")
+	selectedShell := m.getSelectedShell()
+	log.Info("Finalizing setup", "selectedShell", selectedShell)
 
-	// Check if zsh is available
-	if !m.isToolAvailable("zsh") {
-		log.Warn("zsh not available, skipping shell switch")
-		log.Info("You can install zsh later with: sudo apt install zsh && chsh -s $(which zsh)")
+	// Install the selected shell if not available
+	if err := m.ensureShellInstalled(ctx, selectedShell); err != nil {
+		log.Error("Failed to ensure shell is installed", err, "shell", selectedShell)
+		return err
+	}
+
+	// Copy shell configuration files
+	if err := m.copyShellConfiguration(selectedShell); err != nil {
+		log.Error("Failed to copy shell configuration", err, "shell", selectedShell)
+		return err
+	}
+
+	// Switch to the selected shell
+	if err := m.switchToShell(ctx, selectedShell); err != nil {
+		log.Warn("Failed to switch shell", "error", err, "shell", selectedShell)
+		log.Info("You can manually switch later with: chsh -s $(which %s)", selectedShell)
+	}
+
+	return nil
+}
+
+func (m *SetupModel) ensureShellInstalled(ctx context.Context, shell string) error {
+	if m.isToolAvailable(shell) {
+		log.Info("Shell already available", "shell", shell)
 		return nil
 	}
 
-	// Switch to zsh shell (using the existing shell switching logic)
-	zshPath, err := exec.LookPath("zsh")
+	log.Info("Installing shell", "shell", shell)
+
+	// Get shell app from configuration
+	allApps := m.settings.GetAllApps()
+	for _, app := range allApps {
+		if app.Name == shell {
+			return installers.InstallCrossPlatformApp(app, m.settings, m.repo)
+		}
+	}
+
+	log.Warn("Shell not found in configuration, installing via system package manager", "shell", shell)
+
+	// Fallback to system package manager
+	installCmd := fmt.Sprintf("sudo apt-get update && sudo apt-get install -y %s", shell)
+	output, err := exec.CommandContext(ctx, "bash", "-c", installCmd).CombinedOutput()
 	if err != nil {
-		log.Warn("zsh not found, skipping shell switch", "error", err)
-		return nil
+		log.Error("Failed to install shell via apt", err, "shell", shell, "output", string(output))
+		return fmt.Errorf("failed to install %s: %w", shell, err)
 	}
 
-	// Change user shell to zsh
+	return nil
+}
+
+func (m *SetupModel) copyShellConfiguration(shell string) error {
+	homeDir := os.Getenv("HOME")
+	devexDir := homeDir + "/.local/share/devex"
+
+	switch shell {
+	case "zsh":
+		// Copy zsh configuration files
+		return m.copyZshConfiguration(homeDir, devexDir)
+	case "bash":
+		// For bash, create a simple configuration that sources DevEx tools
+		return m.createBashConfiguration(homeDir, devexDir)
+	case "fish":
+		// For fish, create a simple configuration that sources DevEx tools
+		return m.createFishConfiguration(homeDir, devexDir)
+	default:
+		log.Warn("No specific configuration available for shell", "shell", shell)
+		return nil
+	}
+}
+
+func (m *SetupModel) copyZshConfiguration(homeDir, devexDir string) error {
+	log.Info("Copying zsh configuration files")
+
+	// Copy main zshrc
+	srcZshrc := devexDir + "/assets/zsh/zshrc"
+	dstZshrc := homeDir + "/.zshrc"
+
+	if err := m.copyFile(srcZshrc, dstZshrc); err != nil {
+		return fmt.Errorf("failed to copy .zshrc: %w", err)
+	}
+
+	// Create destination directory for zsh config modules
+	zshConfigDir := devexDir + "/defaults/zsh"
+	if err := os.MkdirAll(zshConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create zsh config directory: %w", err)
+	}
+
+	// Copy zsh configuration modules
+	zshFiles := []string{"aliases", "extra", "init", "oh-my-zsh", "prompt", "rc", "shell", "zplug"}
+	for _, file := range zshFiles {
+		src := devexDir + "/assets/zsh/zsh/" + file
+		dst := zshConfigDir + "/" + file
+		if err := m.copyFile(src, dst); err != nil {
+			log.Warn("Failed to copy zsh config file", "file", file, "error", err)
+		}
+	}
+
+	// Copy inputrc
+	inputrcSrc := devexDir + "/assets/zsh/inputrc"
+	inputrcDst := homeDir + "/.inputrc"
+	if err := m.copyFile(inputrcSrc, inputrcDst); err != nil {
+		log.Warn("Failed to copy .inputrc", "error", err)
+	}
+
+	return nil
+}
+
+func (m *SetupModel) createBashConfiguration(homeDir, devexDir string) error {
+	log.Info("Creating bash configuration")
+
+	bashrcPath := homeDir + "/.bashrc"
+
+	// Create a simple bash configuration that enables DevEx tools
+	bashConfig := fmt.Sprintf(`# DevEx Configuration
+export PATH="$HOME/.local/bin:$HOME/.local/share/devex/bin:$PATH"
+export DEVEX_PATH="%s"
+export EDITOR="nvim"
+export SUDO_EDITOR="nvim"
+
+# Enable mise if available
+if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate bash)"
+fi
+
+# Basic aliases for improved terminal experience
+alias ls='ls --color=auto'
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias grep='grep --color=auto'
+alias cat='bat 2>/dev/null || cat'
+alias n='nvim'
+alias g='git'
+`, devexDir)
+
+	// Append to existing .bashrc or create new one
+	file, err := os.OpenFile(bashrcPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open .bashrc: %w", err)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString("\n" + bashConfig); err != nil {
+		return fmt.Errorf("failed to write bash configuration: %w", err)
+	}
+
+	return nil
+}
+
+func (m *SetupModel) createFishConfiguration(homeDir, devexDir string) error {
+	log.Info("Creating fish configuration")
+
+	fishConfigDir := homeDir + "/.config/fish"
+	if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
+		return fmt.Errorf("failed to create fish config directory: %w", err)
+	}
+
+	configPath := fishConfigDir + "/config.fish"
+
+	// Create fish configuration that enables DevEx tools
+	fishConfig := fmt.Sprintf(`# DevEx Configuration
+set -gx PATH $HOME/.local/bin $HOME/.local/share/devex/bin $PATH
+set -gx DEVEX_PATH "%s"
+set -gx EDITOR "nvim"
+set -gx SUDO_EDITOR "nvim"
+
+# Enable mise if available
+if command -v mise >/dev/null 2>&1
+    mise activate fish | source
+end
+
+# Basic aliases for improved terminal experience
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias cat='bat 2>/dev/null; or cat'
+alias n='nvim'
+alias g='git'
+`, devexDir)
+
+	// Append to existing config.fish or create new one
+	file, err := os.OpenFile(configPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open config.fish: %w", err)
+	}
+	defer file.Close()
+
+	if _, err := file.WriteString("\n" + fishConfig); err != nil {
+		return fmt.Errorf("failed to write fish configuration: %w", err)
+	}
+
+	return nil
+}
+
+func (m *SetupModel) switchToShell(ctx context.Context, shell string) error {
+	shellPath, err := exec.LookPath(shell)
+	if err != nil {
+		return fmt.Errorf("%s not found: %w", shell, err)
+	}
+
 	currentUser := os.Getenv("USER")
 	if currentUser == "" {
-		log.Warn("Unable to determine current user, skipping shell switch")
-		return nil
+		return fmt.Errorf("unable to determine current user")
 	}
 
-	chshCmd := fmt.Sprintf("chsh -s %s %s", zshPath, currentUser)
+	log.Info("Switching to shell", "shell", shell, "path", shellPath, "user", currentUser)
+
+	chshCmd := fmt.Sprintf("chsh -s %s %s", shellPath, currentUser)
 	output, err := exec.CommandContext(ctx, "bash", "-c", chshCmd).CombinedOutput()
 	if err != nil {
-		log.Warn("Failed to change shell to zsh", "error", err, "output", string(output))
-		log.Info("You can manually switch to zsh later with: chsh -s $(which zsh)")
-	} else {
-		log.Info("Successfully switched shell to zsh")
+		return fmt.Errorf("failed to change shell: %w (output: %s)", err, string(output))
+	}
+
+	log.Info("Successfully switched shell", "shell", shell)
+	return nil
+}
+
+func (m *SetupModel) copyFile(src, dst string) error {
+	sourceFile, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("failed to open source file %s: %w", src, err)
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("failed to create destination file %s: %w", dst, err)
+	}
+	defer destFile.Close()
+
+	_, err = sourceFile.WriteTo(destFile)
+	if err != nil {
+		return fmt.Errorf("failed to copy file content: %w", err)
 	}
 
 	return nil
