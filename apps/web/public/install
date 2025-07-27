@@ -162,8 +162,17 @@ if ! echo "$PATH" | grep -q "$INSTALL_DIR/bin"; then
     export PATH="$PATH:$INSTALL_DIR/bin"
 fi
 
-# Run the CLI with sudo permissions if needed
-echo "Running DevEx CLI..."
-sudo "$INSTALL_DIR/bin/devex"
+# Run the guided setup
+echo "Starting DevEx guided setup..."
+echo ""
+echo "🚀 Welcome to DevEx!"
+echo ""
+echo "DevEx will now guide you through setting up your development environment."
+echo "You'll be able to choose programming languages, databases, and applications"
+echo "that fit your development workflow."
+echo ""
+
+# Run DevEx setup (this will launch the interactive guided installation)
+"$INSTALL_DIR/bin/devex" setup
 
 echo "DevEx installation and setup complete."

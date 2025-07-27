@@ -28,9 +28,16 @@ DevEx supports multiple platforms and package managers:
 
 All installations are configurable via YAML files in ~/.local/share/devex/config/`,
 		Version: version,
+		Run: func(cmd *cobra.Command, args []string) {
+			// If no subcommand is provided, run the guided setup
+			setupCmd := NewSetupCmd(repo, settings)
+			setupCmd.SetArgs(args)
+			_ = setupCmd.Execute()
+		},
 	}
 
 	// Register other commands
+	cmd.AddCommand(NewSetupCmd(repo, settings))
 	cmd.AddCommand(NewInstallCmd(repo, settings))
 	cmd.AddCommand(NewUninstallCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd())
