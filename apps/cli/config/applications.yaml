@@ -75,7 +75,7 @@ development:
     install_method: 'apt'
     install_command: 'git'
   - name: GitHub CLI
-    description: 'GitHub's official command line tool '
+    description: 'GitHub official command line tool'
     github: 'https://github.com/cli/cli'
     url: 'https://cli.github.com/'
     category: 'Development Tools'
@@ -206,9 +206,7 @@ development:
     install_method: 'deb'
     install_command: 'fastfetch'
     download_url: 'https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-%ARCHITECTURE%.deb'
-
 system_tools: []
-
 databases:
   - name: Redis Tools
     description: 'Tools for working with Redis'
@@ -272,7 +270,6 @@ databases:
       environment:
         - POSTGRES_HOST_AUTH_METHOD=trust
       restart_policy: 'unless-stopped'
-
 optional:
   - name: 'Proton Mail'
     description: 'Secure email app by Proton'
