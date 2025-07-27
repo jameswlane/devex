@@ -2,6 +2,7 @@ package commands
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers"
@@ -17,14 +18,33 @@ func NewInstallCmd(repo types.Repository, settings config.CrossPlatformSettings)
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install your development environment",
-		Long: `The install command automates the installation of:
-  - Programming languages
-  - Tools
-  - Databases
-  You can configure the apps to be installed using the configuration file.`,
-		Example: `
-# Install all default applications
-devex install`,
+		Long: `The install command automates the installation of your complete development environment.
+
+It installs applications from four main categories:
+  • Development tools (Git, Docker, VS Code, Neovim, etc.)
+  • Programming languages (Node.js, Python, Go, Ruby, etc.)
+  • Databases (PostgreSQL, MySQL, Redis, SQLite)
+  • Optional applications (browsers, communication tools, etc.)
+
+The installation respects platform-specific package managers and handles:
+  • Package repository configuration and GPG keys
+  • Dependency resolution and conflict handling
+  • Post-installation configuration and shell setup
+  • Theme application and desktop environment setup
+
+Configuration files are located in ~/.local/share/devex/config/:
+  • applications.yaml - Development tools and applications
+  • environment.yaml - Programming languages and fonts
+  • desktop.yaml - Themes, extensions, and desktop settings
+  • system.yaml - Git configuration and system settings`,
+		Example: `  # Install all default applications
+  devex install
+
+  # Dry run to preview what would be installed
+  devex install --dry-run
+
+  # Install with verbose output
+  devex install --verbose`,
 		Run: func(cmd *cobra.Command, args []string) {
 			runInstall(repo, settings)
 		},
@@ -34,7 +54,11 @@ devex install`,
 }
 
 func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
-	log.Info("Starting installation process", "dryRun", settings.DryRun)
+	// Update settings with runtime flags
+	settings.DryRun = viper.GetBool("dry_run")
+	settings.Verbose = viper.GetBool("verbose")
+
+	log.Info("Starting installation process", "dryRun", settings.DryRun, "verbose", settings.Verbose)
 
 	// Get default apps for installation
 	defaultApps := settings.GetDefaultApps()

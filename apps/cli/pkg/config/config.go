@@ -18,6 +18,7 @@ type Settings struct {
 	DebugMode       bool                   `mapstructure:"debug_mode"`
 	HomeDir         string                 `mapstructure:"home_dir"`
 	DryRun          bool                   `mapstructure:"dry_run"`
+	Verbose         bool                   `mapstructure:"verbose"`
 	Config          map[string]any         `mapstructure:"config"`
 	Apps            []types.AppConfig      `mapstructure:"apps"`
 	Database        []types.AppConfig      `mapstructure:"databases"`
@@ -36,6 +37,7 @@ type CrossPlatformSettings struct {
 	DebugMode    bool               `mapstructure:"debug_mode"`
 	HomeDir      string             `mapstructure:"home_dir"`
 	DryRun       bool               `mapstructure:"dry_run"`
+	Verbose      bool               `mapstructure:"verbose"`
 	Config       map[string]any     `mapstructure:"config"`
 	Applications ApplicationsConfig `mapstructure:"applications"`
 	Environment  EnvironmentConfig  `mapstructure:"environment"`
@@ -186,6 +188,12 @@ func loadYamlFileIntoViper(path string) error {
 // LoadCrossPlatformSettings loads the new consolidated configuration structure
 func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 	log.Info("Loading cross-platform settings", "homeDir", homeDir)
+
+	// Validate configuration files before loading
+	if err := ValidateConfigFiles(homeDir); err != nil {
+		log.Warn("Configuration validation failed, continuing with loading", "error", err)
+		// Don't fail completely, just warn and continue
+	}
 
 	v := viper.New()
 	v.SetConfigType("yaml")

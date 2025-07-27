@@ -50,11 +50,9 @@ func initializeInstallers() {
 	case "darwin":
 		// macOS package managers
 		installerRegistry["brew"] = brew.New()
-		// TODO: Add Mac App Store installer (mas)
 
 	case "windows":
-		// Windows package managers
-		// TODO: Add winget, chocolatey, scoop installers
+		// Windows package managers - will be implemented in future releases
 		log.Warn("Windows installers not yet implemented")
 	}
 
@@ -164,7 +162,12 @@ func InstallCrossPlatformApps(apps []types.CrossPlatformApp, settings config.Cro
 }
 
 func InstallApp(app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
-	log.Info("Installing app", "app", app.Name)
+	log.Info("Installing app", "app", app.Name, "dryRun", settings.DryRun)
+
+	if settings.DryRun {
+		log.Info("DRY RUN: Would install app", "app", app.Name, "method", app.InstallMethod, "command", app.InstallCommand)
+		return nil
+	}
 
 	if err := validateSystemRequirements(app); err != nil {
 		return fmt.Errorf("failed to validate system requirements: %w", err)
@@ -243,7 +246,7 @@ func runInstallCommands(commands []types.InstallCommand) error {
 		}
 
 		if cmd.Shell != "" {
-			processedCommand := utils.ReplacePlaceholders(cmd.UpdateShellConfig, map[string]string{})
+			processedCommand := utils.ReplacePlaceholders(cmd.Shell, map[string]string{})
 			log.Info("Executing shell command", "command", processedCommand)
 			output, err := utils.ExecAsUser(processedCommand)
 			if err != nil {
@@ -416,16 +419,13 @@ func processThemes(app types.AppConfig) error {
 			log.Info("Theme file processed successfully", "app", app.Name, "theme", theme.Name, "dest", destPath)
 		}
 
-		// If theme has a color and background, we could potentially apply them
-		// For now, we just log them - specific theme application would be handled
-		// by desktop environment specific code (GNOME, KDE, etc.)
+		// Log theme properties for future desktop environment integration
 		if theme.ThemeColor != "" || theme.ThemeBackground != "" {
 			log.Info("Theme properties detected",
 				"app", app.Name,
 				"theme", theme.Name,
 				"color", theme.ThemeColor,
 				"background", theme.ThemeBackground)
-			// TODO: Add desktop environment specific theme application
 		}
 	}
 

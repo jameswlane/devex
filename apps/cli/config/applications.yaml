@@ -1,0 +1,311 @@
+development:
+  - name: bat
+    description: 'A cat(1) clone with wings'
+    github: 'https://github.com/sharkdp/bat'
+    category: 'Utilities'
+    default: true
+    install_method: 'apt'
+    install_command: 'bat'
+    uninstall_command: 'bat'
+  - name: ca-certificates
+    description: 'Common CA certificates'
+    category: 'Dependency'
+    install_method: 'apt'
+    install_command: 'ca-certificates'
+  - name: curl
+    description: 'A tool to transfer data from or to a server'
+    category: 'dependency'
+    install_method: 'apt'
+    install_command: 'curl'
+  - name: Docker
+    description: 'A platform for developing, shipping, and running containerized applications'
+    github: 'https://github.com/docker/cli'
+    url: 'https://www.docker.com/'
+    category: 'Container Management'
+    default: true
+    install_method: 'apt'
+    install_command: 'docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin'
+    uninstall_command: 'docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin'
+    dependencies:
+      - 'ca-certificates'
+      - 'curl'
+    conflicts:
+      - 'docker.io'
+      - 'docker-doc'
+      - 'docker-compose'
+      - 'podman-docker'
+      - 'containerd'
+      - 'runc'
+    apt_sources:
+      - key_source: 'https://download.docker.com/linux/debian/gpg'
+        key_name: '/etc/apt/keyrings/docker.asc'
+        source_repo: 'deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian %CODENAME% stable'
+        source_name: '/etc/apt/sources.list.d/docker.list'
+    post_install:
+      - command: 'sudo usermod -aG docker $USER'
+  - name: Eza
+    description: 'A modern alternative to ls'
+    github: 'https://github.com/eza-community/eza'
+    url: 'https://eza.rocks/'
+    category: 'System Utilities'
+    default: true
+    install_method: 'apt'
+    install_command: 'eza'
+    dependencies:
+      - 'curl'
+      - 'gpg'
+    apt_sources:
+      - key_source: 'https://raw.githubusercontent.com/eza-community/eza/main/deb.asc'
+        key_name: '/etc/apt/keyrings/gierens.gpg'
+        source_repo: 'deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main'
+        source_name: '/etc/apt/sources.list.d/gierens.list'
+        require_dearmor: true
+  - name: fzf
+    description: 'A command-line fuzzy finder'
+    github: 'https://github.com/junegunn/fzf'
+    url: 'https://junegunn.github.io/fzf/'
+    category: 'Utilities'
+    default: true
+    install_method: 'apt'
+    install_command: 'fzf'
+    uninstall_command: 'fzf'
+  - name: git
+    description: 'A distributed version control system'
+    category: 'Dependency'
+    install_method: 'apt'
+    install_command: 'git'
+  - name: GitHub CLI
+    description: 'GitHub's official command line tool '
+    github: 'https://github.com/cli/cli'
+    url: 'https://cli.github.com/'
+    category: 'Development Tools'
+    default: true
+    install_method: 'apt'
+    install_command: 'gh'
+    apt_sources:
+      - key_source: 'https://cli.github.com/packages/githubcli-archive-keyring.gpg'
+        key_name: '/etc/apt/keyrings/githubcli-archive-keyring.gpg'
+        source_repo: 'deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main'
+        source_name: '/etc/apt/sources.list.d/github-cli.list'
+  - name: gpg
+    description: 'A tool for secure communication and data storage'
+    category: 'Dependency'
+    install_method: 'apt'
+    install_command: 'gpg'
+  - name: Mise
+    description: 'A tool for managing multiple versions of programming languages'
+    github: 'https://github.com/jdx/mise'
+    url: 'https://mise.jdx.dev/'
+    category: 'Language Management'
+    default: true
+    install_method: 'apt'
+    install_command: 'mise'
+    apt_sources:
+      - key_source: 'https://mise.jdx.dev/gpg-key.pub'
+        key_name: '/etc/apt/keyrings/mise-archive-keyring.gpg'
+        source_repo: 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=%ARCHITECTURE%] https://mise.jdx.dev/deb stable main'
+        source_name: '/etc/apt/sources.list.d/mise.list'
+        require_dearmor: true
+  - name: Neovim
+    description: 'Vim-fork focused on extensibility and usability'
+    github: 'https://github.com/neovim/neovim'
+    url: 'https://neovim.io/'
+    category: 'Development Tools'
+    default: true
+    install_method: 'apt'
+    install_command: 'neovim'
+    dependencies:
+      - 'git'
+      - 'curl'
+      - 'fzf'
+    post_install:
+      - shell: 'git clone https://github.com/LazyVim/starter ~/.config/nvim'
+      - shell: 'rm -rf ~/.config/nvim/.git'
+      - shell: 'mkdir -p ~/.config/nvim/plugin/after'
+      - shell: 'nvim --headless +Lazy install +qall'
+    config_files:
+      - source: '~/.local/share/devex/assets/defaults/neovim/init.vim'
+        destination: '~/.config/nvim/init.vim'
+      - source: '~/.local/share/devex/assets/defaults/neovim/lazy.toml'
+        destination: '~/.config/nvim/lazy.toml'
+      - source: '~/.local/share/devex/assets/defaults/neovim/transparency.lua'
+        destination: '~/.config/nvim/plugin/after/transparency.lua'
+      - source: '~/.local/share/devex/assets/defaults/neovim/lazyvim.json'
+        destination: '~/.config/nvim/lazyvim.json'
+    themes:
+      - name: 'Tokyo Night'
+        theme_color: '#1A1B26'
+        theme_background: 'dark'
+        files:
+          - source: '~/.local/share/devex/themes/neovim/tokyo-night.lua'
+            destination: '~/.config/nvim/lua/plugins/theme.lua'
+          - source: '~/.local/share/devex/themes/gnome/tokyo-night.css'
+            destination: '~/.config/gnome-shell/themes/tokyo-night.css'
+  - name: ripgrep
+    description: 'ripgrep recursively searches directories for a regex pattern while respecting your gitignore'
+    github: 'https://github.com/BurntSushi/ripgrep'
+    category: 'Utilities'
+    default: true
+    install_method: 'apt'
+    install_command: 'ripgrep'
+    uninstall_command: 'ripgrep'
+  - name: Typora
+    description: 'A minimal and configurable markdown editor'
+    category: 'Text Editors'
+    default: true
+    install_method: 'apt'
+    install_command: 'typora'
+    apt_sources:
+      - key_source: 'https://typora.io/linux/public-key.asc'
+        key_name: '/etc/apt/trusted.gpg.d/typora.asc'
+        source_repo: 'deb https://typora.io/linux ./'
+        source_name: '/etc/apt/sources.list.d/typora.list'
+    post_install:
+      - command: 'mkdir -p ~/.config/Typora/themes'
+    themes:
+      - name: 'Standard Theme'
+        files:
+          - source: '~/.local/share/devex/themes/typora/ia_typora.css'
+            destination: '~/.config/Typora/themes/ia_typora.css'
+      - name: 'Night Theme'
+        files:
+          - source: '~/.local/share/devex/themes/typora/ia_typora_night.css'
+            destination: '~/.config/Typora/themes/ia_typora_night.css'
+  - name: Ulauncher
+    description: 'A fast application launcher for Linux'
+    github: 'https://github.com/Ulauncher/Ulauncher/'
+    url: 'https://ulauncher.io/'
+    category: 'Utility'
+    default: true
+    install_method: 'apt'
+    install_command: 'ulauncher'
+    apt_sources:
+      - key_source: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176'
+        key_name: '/usr/share/keyrings/ulauncher-archive-keyring.gpg'
+        source_repo: 'deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main'
+        source_name: '/etc/apt/sources.list.d/ulauncher-jammy.list'
+        require_dearmor: true
+    config_files:
+      - source: '~/.local/share/devex/configs/ulauncher.desktop'
+        destination: '~/.config/autostart/ulauncher.desktop'
+      - source: '~/.local/share/devex/configs/ulauncher.json'
+        destination: '~/.config/ulauncher/settings.json'
+    post_install:
+      - shell: 'gtk-launch ulauncher.desktop'
+      - sleep: 2
+  - name: wget
+    description: 'A tool for retrieving files from the web'
+    category: 'dependency'
+    install_method: 'apt'
+    install_command: 'wget'
+  - name: Fastfetch
+    description: 'A maintained, feature-rich and performance-oriented, neofetch-like system information tool.'
+    github: 'https://github.com/fastfetch-cli/fastfetch'
+    category: 'System Utilities'
+    default: true
+    install_method: 'deb'
+    install_command: 'fastfetch'
+    download_url: 'https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-%ARCHITECTURE%.deb'
+
+system_tools: []
+
+databases:
+  - name: Redis Tools
+    description: 'Tools for working with Redis'
+    category: 'Databases'
+    install_method: 'apt'
+    install_command: 'redis-tools'
+    uninstall_command: 'redis-tools'
+    dependencies:
+      - 'redis'
+      - 'apt'
+  - name: SQLite Libraries
+    description: 'SQLite libraries for database operations'
+    category: 'Databases'
+    install_method: 'apt'
+    install_command: 'sqlite3 libsqlite3-0'
+    uninstall_command: 'sqlite3 libsqlite3-0'
+    dependencies:
+      - 'apt'
+  - name: MySQL Development Libraries
+    description: 'Development libraries for MySQL'
+    category: 'Databases'
+    install_method: 'apt'
+    install_command: 'default-libmysqlclient-dev'
+    uninstall_command: 'default-libmysqlclient-dev'
+    dependencies:
+      - 'apt'
+  - name: MySQL
+    description: 'MySQL relational database management system'
+    category: 'Databases'
+    install_method: 'docker'
+    install_command: 'mysql:8.4'
+    docker_options:
+      ports:
+        - '127.0.0.1:3306:3306'
+      container_name: 'mysql8'
+      environment:
+        - MYSQL_ROOT_PASSWORD=
+        - MYSQL_ALLOW_EMPTY_PASSWORD=true
+      restart_policy: 'unless-stopped'
+  - name: Redis
+    description: 'Redis in-memory data structure store'
+    category: 'Databases'
+    install_method: 'docker'
+    install_command: 'redis:7'
+    default: true
+    docker_options:
+      ports:
+        - '127.0.0.1:6379:6379'
+      container_name: 'redis'
+      restart_policy: 'unless-stopped'
+  - name: PostgreSQL
+    description: 'PostgreSQL relational database system'
+    category: 'Databases'
+    install_method: 'docker'
+    install_command: 'postgres:16'
+    default: true
+    docker_options:
+      ports:
+        - '127.0.0.1:5432:5432'
+      container_name: 'postgres16'
+      environment:
+        - POSTGRES_HOST_AUTH_METHOD=trust
+      restart_policy: 'unless-stopped'
+
+optional:
+  - name: 'Proton Mail'
+    description: 'Secure email app by Proton'
+    category: 'Optional Apps'
+    install_method: 'deb'
+    install_command: 'wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb'
+    uninstall_command: 'sudo apt remove protonmail-desktop-beta'
+    dependencies:
+      - 'apt'
+  - name: 'Proton VPN'
+    description: 'VPN service by Proton'
+    category: 'Optional Apps'
+    install_method: 'script'
+    install_command: |
+      wget https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.4_all.deb &&
+      sudo dpkg -i ./protonvpn-stable-release_1.0.4_all.deb && sudo apt update &&
+      sudo apt install proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator
+    uninstall_command: 'sudo apt remove proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator'
+    dependencies:
+      - 'apt'
+  - name: 'Proton Pass'
+    description: 'Password manager by Proton'
+    category: 'Optional Apps'
+    install_method: 'deb'
+    install_command: 'wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb && sudo apt install ./proton-pass_1.23.1_amd64.deb'
+    uninstall_command: 'sudo apt remove proton-pass'
+    dependencies:
+      - 'apt'
+  - name: 'Zen Browser'
+    description: 'A secure and private browser'
+    category: 'Optional Apps'
+    install_method: 'flatpak'
+    install_command: 'flatpak install flathub io.github.zen_browser.zen'
+    uninstall_command: 'flatpak remove io.github.zen_browser.zen'
+    dependencies:
+      - 'flatpak'
