@@ -17,31 +17,6 @@ development:
     category: 'dependency'
     install_method: 'apt'
     install_command: 'curl'
-  - name: Docker
-    description: 'A platform for developing, shipping, and running containerized applications'
-    category: 'Container Management'
-    default: true
-    linux:
-      install_method: 'apt'
-      install_command: 'docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin'
-      uninstall_command: 'docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin'
-      dependencies:
-        - 'ca-certificates'
-        - 'curl'
-      conflicts:
-        - 'docker.io'
-        - 'docker-doc'
-        - 'docker-compose'
-        - 'podman-docker'
-        - 'containerd'
-        - 'runc'
-      apt_sources:
-        - key_source: 'https://download.docker.com/linux/debian/gpg'
-          key_name: '/etc/apt/keyrings/docker.asc'
-          source_repo: 'deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian %CODENAME% stable'
-          source_name: '/etc/apt/sources.list.d/docker.list'
-      post_install:
-        - command: 'sudo usermod -aG docker $USER'
   - name: Eza
     description: 'A modern alternative to ls'
     github: 'https://github.com/eza-community/eza'
