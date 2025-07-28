@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
@@ -53,17 +54,38 @@ func ValidateDockerInstallation() error {
 	}
 
 	// Check if Docker daemon is running
-	_, err := CommandExec.RunShellCommand("docker ps")
+	output, err := CommandExec.RunShellCommand("docker ps")
 	if err != nil {
+		// Check if it's a permission issue
+		if strings.Contains(output, "permission denied") || strings.Contains(output, "docker.sock") {
+			log.Warn("Docker permission issue detected - user needs to be in docker group")
+			log.Info("Docker is installed but requires group membership refresh")
+			log.Info("Please log out and back in, or run: newgrp docker")
+			log.Info("Then retry the setup or database installation")
+			// Don't fail completely for permission issues - Docker is properly installed
+			return nil
+		}
+
 		// Try to start Docker if it's not running
 		log.Info("Docker daemon not running, attempting to start")
 		if _, startErr := CommandExec.RunShellCommand("sudo systemctl start docker"); startErr != nil {
 			return fmt.Errorf("docker daemon not running and failed to start: %w (original error: %w)", startErr, err)
 		}
 
+		// Wait a moment for Docker to fully start
+		log.Info("Waiting for Docker daemon to start...")
+		time.Sleep(3 * time.Second)
+
 		// Try again after starting
-		if _, err := CommandExec.RunShellCommand("docker ps"); err != nil {
-			return fmt.Errorf("docker daemon still not responding: %w", err)
+		retryOutput, retryErr := CommandExec.RunShellCommand("docker ps")
+		if retryErr != nil {
+			if strings.Contains(retryOutput, "permission denied") || strings.Contains(retryOutput, "docker.sock") {
+				log.Warn("Docker permission issue detected after restart")
+				log.Info("Docker daemon is running but requires group membership refresh")
+				log.Info("Please log out and back in, or run: newgrp docker")
+				return nil
+			}
+			return fmt.Errorf("docker daemon still not responding: %w", retryErr)
 		}
 	}
 
