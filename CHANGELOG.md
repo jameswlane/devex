@@ -1,3 +1,13 @@
+## [0.11.0](https://github.com/jameswlane/devex/compare/0.10.0...0.11.0) (2025-07-28)
+
+### Features
+
+* improve shell change handling and add devex shell command ([c824afc](https://github.com/jameswlane/devex/commit/c824afc2696cb3db93d4a7f44cae94774d5a45cd))
+
+### Bug Fixes
+
+* update Docker configuration to new cross-platform format ([368e2b4](https://github.com/jameswlane/devex/commit/368e2b4488aebd3f462c1341f978b4a8a4605032))
+
 ## [0.10.0](https://github.com/jameswlane/devex/compare/0.9.1...0.10.0) (2025-07-27)
 
 ### Features
