@@ -238,9 +238,31 @@ func runInstallCommands(commands []types.InstallCommand) error {
 		if cmd.UpdateShellConfig != "" {
 			processedCommand := utils.ReplacePlaceholders(cmd.UpdateShellConfig, map[string]string{})
 
-			log.Info("Updating shell config", "command", processedCommand)
-			if err := utils.UpdateShellConfig("shellPath", "configKey", []string{processedCommand}); err != nil {
-				log.Error("Failed to update shell config", err, "command", processedCommand)
+			// Get actual shell path and home directory
+			homeDir := os.Getenv("HOME")
+			if homeDir == "" {
+				log.Warn("HOME environment variable not set, skipping shell config update")
+				continue
+			}
+
+			// Get current user's shell
+			currentUser := os.Getenv("USER")
+			shellPath := os.Getenv("SHELL")
+			if shellPath == "" || currentUser == "" {
+				// Fallback to detecting shell
+				if currentUser != "" {
+					if detectedShell, err := utils.GetUserShell(currentUser); err == nil {
+						shellPath = detectedShell
+					}
+				}
+				if shellPath == "" {
+					shellPath = "/bin/bash" // Safe fallback
+				}
+			}
+
+			log.Info("Updating shell config", "command", processedCommand, "shell", shellPath, "homeDir", homeDir)
+			if err := utils.UpdateShellConfig(shellPath, homeDir, []string{processedCommand}); err != nil {
+				log.Error("Failed to update shell config", err, "command", processedCommand, "shell", shellPath)
 				return fmt.Errorf("failed to update shell config: %w", err)
 			}
 		}
