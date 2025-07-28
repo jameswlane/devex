@@ -1,3 +1,9 @@
+## [0.12.0](https://github.com/jameswlane/devex/compare/0.11.0...0.12.0) (2025-07-28)
+
+### Features
+
+* implement Quick Win improvements for enhanced user experience ([fd43161](https://github.com/jameswlane/devex/commit/fd4316136f13d177ae2ca25e26deb825b330bc97))
+
 ## [0.11.0](https://github.com/jameswlane/devex/compare/0.10.0...0.11.0) (2025-07-28)
 
 ### Features
