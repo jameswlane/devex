@@ -88,10 +88,9 @@ const (
 
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
-	settings.DryRun = viper.GetBool("dry_run")
 	settings.Verbose = viper.GetBool("verbose")
 
-	log.Info("Starting guided setup process", "dryRun", settings.DryRun, "verbose", settings.Verbose, "logFile", log.GetLogFile())
+	log.Info("Starting guided setup process", "verbose", settings.Verbose, "logFile", log.GetLogFile())
 
 	// Initialize the setup model
 	model := &SetupModel{

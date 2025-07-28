@@ -41,9 +41,6 @@ Configuration files are located in ~/.local/share/devex/config/:
 		Example: `  # Install all default applications
   devex install
 
-  # Dry run to preview what would be installed
-  devex install --dry-run
-
   # Install with verbose output
   devex install --verbose`,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -56,10 +53,9 @@ Configuration files are located in ~/.local/share/devex/config/:
 
 func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
-	settings.DryRun = viper.GetBool("dry_run")
 	settings.Verbose = viper.GetBool("verbose")
 
-	log.Info("Starting installation process", "dryRun", settings.DryRun, "verbose", settings.Verbose)
+	log.Info("Starting installation process", "verbose", settings.Verbose)
 
 	// Get default apps for installation
 	defaultApps := settings.GetDefaultApps()
@@ -67,11 +63,6 @@ func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Install apps using the cross-platform installer
 	if err := installers.InstallCrossPlatformApps(defaultApps, settings, repo); err != nil {
 		log.Error("Failed to install apps", err)
-		return
-	}
-
-	if settings.DryRun {
-		log.Info("Dry run completed. No changes applied.")
 		return
 	}
 

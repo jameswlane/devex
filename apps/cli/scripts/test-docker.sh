@@ -32,13 +32,12 @@ print_usage() {
     echo "  logs [ubuntu|debian]     Show container logs"
     echo ""
     echo "Options:"
-    echo "  --dry-run               Run devex in dry-run mode"
     echo "  --config CONFIG_FILE    Use specific test config file"
     echo ""
     echo "Examples:"
     echo "  $0 build ubuntu         # Build Ubuntu test container"
     echo "  $0 shell ubuntu         # Start shell in Ubuntu container"
-    echo "  $0 test ubuntu --dry-run # Test in Ubuntu with dry-run"
+    echo "  $0 test ubuntu          # Test in Ubuntu container"
 }
 
 build_containers() {
@@ -85,17 +84,12 @@ start_shell() {
 
 run_tests() {
     local distro=${1:-"ubuntu"}
-    local dry_run=""
     local config_file=""
 
     # Parse additional arguments
     shift
     while [[ $# -gt 0 ]]; do
         case $1 in
-            --dry-run)
-                dry_run="--dry-run"
-                shift
-                ;;
             --config)
                 config_file="$2"
                 shift 2
@@ -121,9 +115,10 @@ run_tests() {
         ./bin/devex --help &&
         echo '=== DevEx Version ===' &&
         ./bin/devex --version &&
-        echo '=== Running Dry-run Test ===' &&
-        ./bin/devex install $dry_run &&
+        echo '=== Running List Test ===' &&
+        ./bin/devex list available &&
         echo '=== Tests Complete ==='
+    "
     "
 
     # Copy test config if specified

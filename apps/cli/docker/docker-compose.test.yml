@@ -44,8 +44,8 @@ services:
         go build -o bin/devex ./cmd/main.go &&
         echo 'Running basic tests...' &&
         ./bin/devex --help &&
-        echo 'Running dry-run install...' &&
-        ./bin/devex install --dry-run
+        echo 'Running list command test...' &&
+        ./bin/devex list available
       "
 volumes:
   ubuntu-home:

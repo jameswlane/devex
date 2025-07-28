@@ -46,11 +46,9 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.AddCommand(NewCompletionCmd())
 
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
-	cmd.PersistentFlags().Bool("dry-run", false, "Run commands without making changes")
 
 	// Bind flags to viper for global access
 	_ = viper.BindPFlag("verbose", cmd.PersistentFlags().Lookup("verbose"))
-	_ = viper.BindPFlag("dry_run", cmd.PersistentFlags().Lookup("dry-run"))
 
 	return cmd
 }

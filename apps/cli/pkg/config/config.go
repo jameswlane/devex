@@ -17,7 +17,6 @@ import (
 type Settings struct {
 	DebugMode       bool                   `mapstructure:"debug_mode"`
 	HomeDir         string                 `mapstructure:"home_dir"`
-	DryRun          bool                   `mapstructure:"dry_run"`
 	Verbose         bool                   `mapstructure:"verbose"`
 	Config          map[string]any         `mapstructure:"config"`
 	Apps            []types.AppConfig      `mapstructure:"apps"`
@@ -36,7 +35,6 @@ type Settings struct {
 type CrossPlatformSettings struct {
 	DebugMode    bool               `mapstructure:"debug_mode"`
 	HomeDir      string             `mapstructure:"home_dir"`
-	DryRun       bool               `mapstructure:"dry_run"`
 	Verbose      bool               `mapstructure:"verbose"`
 	Config       map[string]any     `mapstructure:"config"`
 	Applications ApplicationsConfig `mapstructure:"applications"`
@@ -134,7 +132,6 @@ func LoadSettings(homeDir string) (Settings, error) {
 
 	// Bind global settings
 	viper.SetDefault("debug_mode", false)
-	viper.SetDefault("dry_run", false)
 	viper.SetDefault("home_dir", homeDir)
 	viper.AutomaticEnv() // Enable environment variable overrides
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -223,7 +220,6 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 
 	// Bind global settings
 	v.SetDefault("debug_mode", false)
-	v.SetDefault("dry_run", false)
 	v.SetDefault("home_dir", homeDir)
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -244,7 +240,6 @@ func (s *CrossPlatformSettings) ToLegacySettings() Settings {
 	legacy := Settings{
 		DebugMode: s.DebugMode,
 		HomeDir:   s.HomeDir,
-		DryRun:    s.DryRun,
 		Config:    s.Config,
 	}
 
