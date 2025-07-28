@@ -1,3 +1,9 @@
+## [0.13.0](https://github.com/jameswlane/devex/compare/0.12.0...0.13.0) (2025-07-28)
+
+### Features
+
+* create dedicated Docker installer utility ([b927cb5](https://github.com/jameswlane/devex/commit/b927cb5bcc8ea58987ed03f7254be011016ad156))
+
 ## [0.12.0](https://github.com/jameswlane/devex/compare/0.11.0...0.12.0) (2025-07-28)
 
 ### Features
