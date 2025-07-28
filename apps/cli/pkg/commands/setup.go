@@ -419,13 +419,13 @@ func (m *SetupModel) View() string {
 			s += fmt.Sprintf("Your shell has been switched to %s. Please restart your terminal\n", selectedShell)
 			s += fmt.Sprintf("or run 'exec %s' to start using your new environment.\n\n", selectedShell)
 			s += "To verify mise is working: 'mise list' or 'mise doctor'\n"
-			s += "To check Docker: 'docker ps'\n\n"
+			s += "To check Docker: 'docker ps' (if permission denied, run 'newgrp docker' or log out/in)\n\n"
 		} else {
 			s += "Please review the issues above. You may need to manually complete\n"
 			s += fmt.Sprintf("some installations. To activate %s: exec %s\n\n", selectedShell, selectedShell)
 			s += "Troubleshooting:\n"
 			s += "• Check mise: 'mise doctor' or reinstall with 'curl https://mise.jdx.dev/install.sh | sh'\n"
-			s += "• Check Docker: 'sudo systemctl start docker' or install manually\n"
+			s += "• Check Docker: 'sudo systemctl start docker' and run 'newgrp docker' for permissions\n"
 			s += "• Reload shell config: 'source ~/.zshrc' (or ~/.bashrc, ~/.config/fish/config.fish)\n\n"
 		}
 
