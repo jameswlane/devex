@@ -1,3 +1,9 @@
+## [0.13.1](https://github.com/jameswlane/devex/compare/0.13.0...0.13.1) (2025-07-28)
+
+### Bug Fixes
+
+* enhance Docker validation and user guidance ([a58674d](https://github.com/jameswlane/devex/commit/a58674db310ec33448b8ff86b158566f45440fa2))
+
 ## [0.13.0](https://github.com/jameswlane/devex/compare/0.12.0...0.13.0) (2025-07-28)
 
 ### Features
