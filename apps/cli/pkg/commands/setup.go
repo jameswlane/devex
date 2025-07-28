@@ -741,19 +741,10 @@ func (m *SetupModel) installMise(ctx context.Context) error {
 }
 
 func (m *SetupModel) installDocker(ctx context.Context) error {
-	log.Info("Installing Docker")
+	log.Info("Installing Docker using dedicated installer")
 
-	// Get Docker app from configuration
-	allApps := m.settings.GetAllApps()
-	for _, app := range allApps {
-		if app.Name == "Docker" {
-			log.Info("Installing Docker using DevEx installer")
-			return installers.InstallCrossPlatformApp(app, m.settings, m.repo)
-		}
-	}
-
-	log.Warn("Docker not found in configuration")
-	return fmt.Errorf("docker not found in application configuration")
+	// Use the dedicated Docker installer utility
+	return utils.InstallDocker(ctx)
 }
 
 func (m *SetupModel) updateEnvironmentPath(ctx context.Context) error {
@@ -1239,19 +1230,8 @@ func (m *SetupModel) validateMiseInstallation() error {
 }
 
 func (m *SetupModel) validateDockerInstallation() error {
-	if !m.isToolAvailable("docker") {
-		return fmt.Errorf("docker command not found")
-	}
-
-	// Test that docker can list containers
-	ctx := context.Background()
-	err := m.runCommandWithLogging(ctx, "docker", "ps")
-	if err != nil {
-		return fmt.Errorf("docker ps failed: %w", err)
-	}
-
-	log.Info("Docker validation successful")
-	return nil
+	// Use the dedicated Docker validation utility
+	return utils.ValidateDockerInstallation()
 }
 
 func (m *SetupModel) validateShellConfiguration(shell string) error {
