@@ -5,8 +5,8 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -55,14 +55,18 @@ func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
 
-	log.Info("Starting installation process", "verbose", settings.Verbose)
-
 	// Get default apps for installation
 	defaultApps := settings.GetDefaultApps()
 
-	// Install apps using the cross-platform installer
-	if err := installers.InstallCrossPlatformApps(defaultApps, settings, repo); err != nil {
-		log.Error("Failed to install apps", err)
+	// Convert cross-platform apps to legacy AppConfig format for TUI
+	legacyApps := make([]types.AppConfig, 0, len(defaultApps))
+	for _, app := range defaultApps {
+		legacyApps = append(legacyApps, app.ToLegacyAppConfig())
+	}
+
+	// Start TUI installation
+	if err := tui.StartInstallation(legacyApps, repo, settings); err != nil {
+		log.Error("Installation failed", err)
 		return
 	}
 
@@ -74,8 +78,6 @@ func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 	} else {
 		log.Info("Successfully switched to zsh shell. Please restart your terminal or run 'exec zsh' to use the new shell.")
 	}
-
-	log.Info("Installation process completed successfully")
 }
 
 // switchToZsh attempts to switch the user's shell to zsh
