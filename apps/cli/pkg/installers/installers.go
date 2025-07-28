@@ -162,12 +162,7 @@ func InstallCrossPlatformApps(apps []types.CrossPlatformApp, settings config.Cro
 }
 
 func InstallApp(app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
-	log.Info("Installing app", "app", app.Name, "dryRun", settings.DryRun)
-
-	if settings.DryRun {
-		log.Info("DRY RUN: Would install app", "app", app.Name, "method", app.InstallMethod, "command", app.InstallCommand)
-		return nil
-	}
+	log.Info("Installing app", "app", app.Name)
 
 	if err := validateSystemRequirements(app); err != nil {
 		return fmt.Errorf("failed to validate system requirements: %w", err)

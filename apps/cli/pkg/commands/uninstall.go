@@ -35,9 +35,6 @@ cleanup and configuration removal will be implemented in future versions.`,
 		Example: `  # Uninstall a specific application
   devex uninstall --app curl
 
-  # Uninstall with dry-run to preview changes
-  devex uninstall --app docker --dry-run
-
   # Uninstall with verbose output
   devex uninstall --app git --verbose`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -53,18 +50,9 @@ cleanup and configuration removal will be implemented in future versions.`,
 
 func runUninstall(appName string, repo types.Repository, settings config.CrossPlatformSettings) error {
 	// Update settings with runtime flags
-	settings.DryRun = viper.GetBool("dry_run")
 	settings.Verbose = viper.GetBool("verbose")
 
-	log.Info("Starting uninstall process", "app", appName, "dryRun", settings.DryRun)
-
-	if settings.DryRun {
-		log.Info("DRY RUN: Would uninstall application", "app", appName)
-		log.Info("DRY RUN: Would remove from package manager")
-		log.Info("DRY RUN: Would update installation database")
-		log.Info("Dry run completed. No changes applied.")
-		return nil
-	}
+	log.Info("Starting uninstall process", "app", appName)
 
 	// Uninstall functionality will be implemented in a future release
 	log.Info("Uninstall functionality not yet implemented", "app", appName)
