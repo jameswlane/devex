@@ -18,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 func init() {
@@ -955,7 +956,10 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// Switch to the selected shell
 	if err := m.switchToShell(ctx, selectedShell); err != nil {
 		log.Warn("Failed to switch shell", "error", err, "shell", selectedShell)
-		log.Info("You can manually switch later with: chsh -s $(which %s)", selectedShell)
+		shellPath, _ := exec.LookPath(selectedShell)
+		log.Info("You can manually switch later with the DevEx shell command", "command", fmt.Sprintf("devex shell %s", selectedShell))
+		log.Info("Or use the system command directly", "command", fmt.Sprintf("chsh -s %s", shellPath))
+		log.Info("Note: The system shell change requires your password for security")
 	}
 
 	return nil
@@ -1143,6 +1147,19 @@ func (m *SetupModel) switchToShell(ctx context.Context, shell string) error {
 	currentUser := os.Getenv("USER")
 	if currentUser == "" {
 		return fmt.Errorf("unable to determine current user")
+	}
+
+	// Get current shell for comparison
+	currentShell, err := utils.GetUserShell(currentUser)
+	if err != nil {
+		log.Warn("Could not detect current shell", "error", err, "user", currentUser)
+	} else {
+		// Check if current shell matches the desired shell
+		if currentShell == shellPath {
+			log.Info("Shell already available", "shell", shell, "path", shellPath, "user", currentUser)
+			return nil
+		}
+		log.Info("Current shell differs from selected", "current", currentShell, "selected", shellPath, "user", currentUser)
 	}
 
 	log.Info("Switching to shell", "shell", shell, "path", shellPath, "user", currentUser)
