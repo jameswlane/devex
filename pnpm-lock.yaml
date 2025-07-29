@@ -112,8 +112,8 @@ importers:
         specifier: ^4.9.0
         version: 4.12.0(react@18.2.0)
       typescript:
-        specifier: 5.1.3
-        version: 5.1.3
+        specifier: 5.8.3
+        version: 5.8.3
     devDependencies:
       '@biomejs/biome':
         specifier: 2.1.2
@@ -3579,11 +3579,6 @@ packages:
   type-fest@4.30.1:
     resolution: {integrity: sha512-ojFL7eDMX2NF0xMbDwPZJ8sb7ckqtlAi1GsmgsFXvErT9kFTk1r0DuQKvrCh73M6D4nngeHJmvogF9OluXs7Hw==}
     engines: {node: '>=16'}
-
-  typescript@5.1.3:
-    resolution: {integrity: sha512-XH627E9vkeqhlZFQuL+UsyAXEnibT0kWR2FWONlr4sTjvxyJYnyefgrkyECLzM5NenmKzRAy2rR/OlYLA1HkZw==}
-    engines: {node: '>=14.17'}
-    hasBin: true
 
   typescript@5.8.3:
     resolution: {integrity: sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ==}
@@ -7423,8 +7418,6 @@ snapshots:
   type-fest@2.19.0: {}
 
   type-fest@4.30.1: {}
-
-  typescript@5.1.3: {}
 
   typescript@5.8.3: {}
 
