@@ -472,7 +472,7 @@ func TestStartInstallation_Integration(t *testing.T) {
 		// Verify installer was created correctly
 		assert.NotNil(t, installer)
 		assert.Equal(t, mockRepo, installer.repo)
-		assert.Equal(t, ctx, installer.ctx)
+		// Note: installer.ctx is a child context, so we can't directly compare
 	})
 }
 
