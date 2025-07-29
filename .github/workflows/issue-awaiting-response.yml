@@ -1,9 +1,10 @@
 name: issue awaiting response
-
+permissions:
+  contents: read
+  issues: write
 on:
   issue_comment:
     types: [created]
-
 jobs:
   issue-awaiting-response:
     runs-on: ubuntu-latest

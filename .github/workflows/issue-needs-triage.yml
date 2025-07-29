@@ -1,11 +1,11 @@
 name: issue needs triage
-
 on:
   issues:
     types: [opened]
-
 jobs:
   issue-needs-triage:
+    permissions:
+      issues: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
