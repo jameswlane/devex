@@ -1,3 +1,14 @@
+## [0.14.0](https://github.com/jameswlane/devex/compare/0.13.1...0.14.0) (2025-07-29)
+
+### Features
+
+* implement streaming installer with real-time installation progress ([a3a9096](https://github.com/jameswlane/devex/commit/a3a90963761123ccde1c3bb9def93716b4ad01bf))
+
+### Bug Fixes
+
+* correct Claude Review action configuration ([fda0fa3](https://github.com/jameswlane/devex/commit/fda0fa3af67c1c7f36e2355cfd938aae30cd3268))
+* improve issue workflow configurations ([cbc14a0](https://github.com/jameswlane/devex/commit/cbc14a08aff491f63a3b38e188f5af250f06a1df))
+
 ## [0.13.1](https://github.com/jameswlane/devex/compare/0.13.0...0.13.1) (2025-07-28)
 
 ### Bug Fixes
