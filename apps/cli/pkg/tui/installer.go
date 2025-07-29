@@ -17,30 +17,47 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
+const (
+	// Channel and timeout constants
+	channelBufferSize   = 5
+	inputTimeout        = 30 * time.Second
+	installationTimeout = 10 * time.Minute
+	initializationDelay = 500 * time.Millisecond
+)
+
 // StreamingInstaller handles installation with real-time output and interaction
 type StreamingInstaller struct {
-	program *tea.Program
-	repo    types.Repository
+	program  *tea.Program
+	repo     types.Repository
+	stdinMux sync.Mutex // Protects stdin access from race conditions
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
-// SecureString represents a string that should be scrubbed from memory
+// SecureString represents a string that should be scrubbed from memory to prevent
+// sensitive data like passwords from lingering in memory after use.
 type SecureString struct {
 	data []byte
 }
 
-// NewSecureString creates a new secure string
+// NewSecureString creates a new secure string from the provided string.
+// The input string is immediately copied to a byte slice to prevent
+// accidental sharing of the underlying string data.
 func NewSecureString(s string) *SecureString {
 	data := make([]byte, len(s))
 	copy(data, s)
 	return &SecureString{data: data}
 }
 
-// String returns the string value (use sparingly)
+// String returns the string value. Use sparingly and ensure Clear() is called
+// immediately after use to scrub the sensitive data from memory.
 func (ss *SecureString) String() string {
 	return string(ss.data)
 }
 
-// Clear scrubs the secure string from memory
+// Clear scrubs the secure string from memory by overwriting all bytes with zeros
+// and setting the slice to nil. This helps prevent sensitive data from remaining
+// in memory where it could potentially be recovered.
 func (ss *SecureString) Clear() {
 	for i := range ss.data {
 		ss.data[i] = 0
@@ -90,7 +107,9 @@ var (
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
 	dangerousPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`[;&]`),                                  // Command separators (but allow pipes for package managers)
+		regexp.MustCompile(`[;&|]`),                                 // Command separators and logical operators
+		regexp.MustCompile(`&&`),                                    // Logical AND operator
+		regexp.MustCompile(`\|\|`),                                  // Logical OR operator
 		regexp.MustCompile(`` + "`" + `[^` + "`" + `]*` + "`" + ``), // Command substitution
 		regexp.MustCompile(`\$\([^)]*\)`),                           // Command substitution
 		regexp.MustCompile(`\$\{[^}]*\}`),                           // Variable expansion (except safe ones)
@@ -105,17 +124,29 @@ var (
 	}
 )
 
-// NewStreamingInstaller creates a new streaming installer
-func NewStreamingInstaller(program *tea.Program, repo types.Repository) *StreamingInstaller {
+// NewStreamingInstaller creates a new streaming installer with context cancellation
+func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx context.Context) *StreamingInstaller {
+	instCtx, cancel := context.WithCancel(ctx)
 	return &StreamingInstaller{
 		program: program,
 		repo:    repo,
+		ctx:     instCtx,
+		cancel:  cancel,
 	}
 }
 
-// InstallApps installs multiple applications with streaming output
+// InstallApps installs multiple applications with streaming output and context cancellation
+// nolint: contextcheck
 func (si *StreamingInstaller) InstallApps(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	for _, app := range apps {
+		// Check for context cancellation before each app
+		select {
+		case <-si.ctx.Done():
+			si.sendLog("INFO", "Installation cancelled before starting next app")
+			return si.ctx.Err()
+		default:
+		}
+
 		if err := si.InstallApp(app, settings); err != nil {
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
 			si.program.Send(AppCompleteMsg{
@@ -229,9 +260,17 @@ func (si *StreamingInstaller) executeDockerInstall(app types.CrossPlatformApp, o
 	return si.executeCommandStream(osConfig.InstallCommand)
 }
 
-// executeCommands executes a list of install commands
+// executeCommands executes a list of install commands with context cancellation support
 func (si *StreamingInstaller) executeCommands(commands []types.InstallCommand) error {
 	for _, cmd := range commands {
+		// Check for context cancellation before each command
+		select {
+		case <-si.ctx.Done():
+			si.sendLog("INFO", "Command execution cancelled")
+			return si.ctx.Err()
+		default:
+		}
+
 		if cmd.Command != "" {
 			si.sendLog("INFO", fmt.Sprintf("Executing: %s", cmd.Command))
 			if err := si.executeCommandStream(cmd.Command); err != nil {
@@ -253,7 +292,13 @@ func (si *StreamingInstaller) executeCommands(commands []types.InstallCommand) e
 
 		if cmd.Sleep > 0 {
 			si.sendLog("INFO", fmt.Sprintf("Sleeping for %d seconds", cmd.Sleep))
-			time.Sleep(time.Duration(cmd.Sleep) * time.Second)
+			// Use context-aware sleep
+			select {
+			case <-si.ctx.Done():
+				return si.ctx.Err()
+			case <-time.After(time.Duration(cmd.Sleep) * time.Second):
+				// Sleep completed normally
+			}
 		}
 	}
 	return nil
@@ -261,7 +306,7 @@ func (si *StreamingInstaller) executeCommands(commands []types.InstallCommand) e
 
 // executeCommandStream executes a command with streaming output
 func (si *StreamingInstaller) executeCommandStream(command string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(si.ctx, installationTimeout)
 	defer cancel()
 
 	// Validate and parse command safely
@@ -335,14 +380,27 @@ func (si *StreamingInstaller) executeCommandStream(command string) error {
 	return cmdErr
 }
 
-// streamOutput streams command output to the TUI
+// streamOutput streams command output to the TUI with proper error handling
 func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
+		// Check for context cancellation
+		select {
+		case <-si.ctx.Done():
+			si.sendLog("INFO", fmt.Sprintf("%s stream cancelled", source))
+			return
+		default:
+		}
+
 		line := scanner.Text()
 		if strings.TrimSpace(line) != "" {
 			si.sendLog(source, line)
 		}
+	}
+
+	// Check for scanner errors
+	if err := scanner.Err(); err != nil {
+		si.sendLog("ERROR", fmt.Sprintf("Scanner error in %s: %v", source, err))
 	}
 }
 
@@ -402,13 +460,16 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 			select {
 			case secureInput := <-response:
 				if secureInput != nil {
+					// Protect stdin access with mutex to prevent race conditions
+					si.stdinMux.Lock()
 					// Write password and immediately scrub from memory
 					if _, err := stdin.Write([]byte(secureInput.String() + "\n")); err != nil {
 						si.sendLog("ERROR", fmt.Sprintf("Failed to write input: %v", err))
 					}
+					si.stdinMux.Unlock()
 					secureInput.Clear() // Scrub password from memory
 				}
-			case <-time.After(30 * time.Second):
+			case <-time.After(inputTimeout):
 				si.sendLog("ERROR", "Input timeout - no response received")
 				return
 			}
@@ -425,26 +486,41 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 	})
 }
 
-// StartInstallation starts the installation process in the TUI
+// StartInstallation starts the installation process in the TUI with context cancellation
 func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
+	// Create context for cancellation support
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Create TUI model
 	m := NewModel(apps)
 
 	// Create program
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
-	// Create streaming installer
-	installer := NewStreamingInstaller(p, repo)
+	// Create streaming installer with context
+	installer := NewStreamingInstaller(p, repo, ctx)
+	defer installer.cancel() // Ensure cleanup
 
-	// Start installation in background
+	// Start installation in background with context cancellation
 	go func() {
-		time.Sleep(500 * time.Millisecond) // Let TUI initialize
-		if err := installer.InstallApps(apps, settings); err != nil {
-			installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
+		select {
+		case <-ctx.Done():
+			// Installation was cancelled
+			installer.sendLog("INFO", "Installation cancelled by user")
+			return
+		case <-time.After(initializationDelay):
+			// Let TUI initialize before starting installation
+			if err := installer.InstallApps(apps, settings); err != nil {
+				installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
+			}
 		}
 	}()
 
 	// Start TUI
 	_, err := p.Run()
+
+	// Cancel any ongoing installation when TUI exits
+	cancel()
 	return err
 }

@@ -17,7 +17,9 @@ const (
 	maxLogLines = 1000 // Maximum number of log lines to keep in memory
 )
 
-// Model represents the main TUI state
+// Model represents the main TUI state for the split-pane installation interface.
+// It manages the installation progress display (left pane) and real-time command
+// output streaming (right pane), along with user input handling for password prompts.
 type Model struct {
 	// UI Components
 	progress  progress.Model
@@ -41,7 +43,8 @@ type Model struct {
 	ready  bool
 }
 
-// InstallStatus represents the current installation state
+// InstallStatus represents the current installation state for tracking
+// progress through the installation lifecycle.
 type InstallStatus int
 
 const (
@@ -52,7 +55,8 @@ const (
 	StatusError
 )
 
-// AppProgress represents progress for a single app
+// AppProgress represents installation progress and status information
+// for a single application in the installation queue.
 type AppProgress struct {
 	Name     string
 	Status   InstallStatus
@@ -60,26 +64,31 @@ type AppProgress struct {
 	Error    error
 }
 
-// LogMsg represents a log message for the viewport
+// LogMsg represents a timestamped log message that will be displayed
+// in the terminal output viewport of the TUI.
 type LogMsg struct {
 	Message   string
 	Timestamp time.Time
 	Level     string
 }
 
-// InputRequestMsg requests user input
+// InputRequestMsg requests user input for interactive prompts such as
+// password requests during package installation.
 type InputRequestMsg struct {
 	Prompt   string
 	Response chan *SecureString
 }
 
-// AppCompleteMsg indicates an app installation completed
+// AppCompleteMsg indicates that an application installation has completed,
+// either successfully or with an error.
 type AppCompleteMsg struct {
 	AppName string
 	Error   error
 }
 
-// NewModel creates a new TUI model
+// NewModel creates and initializes a new TUI model with the provided list of
+// applications to install. It sets up the progress bar, text input, and viewport
+// components with appropriate styling and buffer sizes.
 func NewModel(apps []types.CrossPlatformApp) Model {
 	// Initialize progress bar
 	prog := progress.New(progress.WithDefaultGradient())
@@ -106,11 +115,12 @@ func NewModel(apps []types.CrossPlatformApp) Model {
 		status:        "Ready to install applications",
 		logs:          []string{},
 		needsInput:    false,
-		inputResponse: make(chan *SecureString, 5), // Increased buffer to prevent deadlocks
+		inputResponse: make(chan *SecureString, channelBufferSize), // Prevent deadlocks
 	}
 }
 
-// Init initializes the model
+// Init initializes the Bubble Tea model and returns the initial commands
+// to start text input blinking and begin the installation process.
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
@@ -118,7 +128,9 @@ func (m Model) Init() tea.Cmd {
 	)
 }
 
-// Update handles messages and updates the model
+// Update handles incoming Bubble Tea messages and updates the model state accordingly.
+// It processes window resize events, keyboard input, log messages, input requests,
+// and application completion notifications.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -168,8 +180,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Rotate logs if we have too many
 		if len(m.logs) > maxLogLines {
-			// Keep the last maxLogLines lines
-			m.logs = m.logs[len(m.logs)-maxLogLines:]
+			// Properly release memory by copying to new slice
+			newLogs := make([]string, maxLogLines)
+			copy(newLogs, m.logs[len(m.logs)-maxLogLines:])
+			m.logs = newLogs
 		}
 
 		m.viewport.SetContent(strings.Join(m.logs, "\n"))
@@ -220,7 +234,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// View renders the TUI
+// View renders the complete TUI interface with a 30/70 split layout.
+// The left pane shows installation progress and status, while the right pane
+// displays real-time terminal output from installation commands.
 func (m Model) View() string {
 	if !m.ready {
 		return "Initializing..."
