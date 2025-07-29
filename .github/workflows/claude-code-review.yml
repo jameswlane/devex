@@ -4,6 +4,7 @@ on:
     types: [opened, synchronize]
 jobs:
   claude-review:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,6 +18,9 @@ jobs:
           fetch-depth: 1
       - name: Run Claude Code Review
         id: claude-review
+        if: |
+          !contains(github.event.pull_request.title, '[skip-review]') &&
+          !contains(github.event.pull_request.title, '[WIP]')
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -31,6 +35,4 @@ jobs:
             Be constructive and helpful in your feedback.
           use_sticky_comment: true
           allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          if: |
-            !contains(github.event.pull_request.title, '[skip-review]') &&
-            !contains(github.event.pull_request.title, '[WIP]')
+          timeout_minutes: 45
