@@ -58,14 +58,8 @@ func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Get default apps for installation
 	defaultApps := settings.GetDefaultApps()
 
-	// Convert cross-platform apps to legacy AppConfig format for TUI
-	legacyApps := make([]types.AppConfig, 0, len(defaultApps))
-	for _, app := range defaultApps {
-		legacyApps = append(legacyApps, app.ToLegacyAppConfig())
-	}
-
-	// Start TUI installation
-	if err := tui.StartInstallation(legacyApps, repo, settings); err != nil {
+	// Start TUI installation with cross-platform apps
+	if err := tui.StartInstallation(defaultApps, repo, settings); err != nil {
 		log.Error("Installation failed", err)
 		return
 	}

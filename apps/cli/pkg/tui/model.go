@@ -13,6 +13,10 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
+const (
+	maxLogLines = 1000 // Maximum number of log lines to keep in memory
+)
+
 // Model represents the main TUI state
 type Model struct {
 	// UI Components
@@ -21,7 +25,7 @@ type Model struct {
 	viewport  viewport.Model
 
 	// Application state
-	apps       []types.AppConfig
+	apps       []types.CrossPlatformApp
 	currentApp int
 	status     string
 	logs       []string
@@ -29,7 +33,7 @@ type Model struct {
 	// Installation state
 	needsInput    bool
 	inputPrompt   string
-	inputResponse chan string
+	inputResponse chan *SecureString // Changed to SecureString
 
 	// Layout
 	width  int
@@ -66,7 +70,7 @@ type LogMsg struct {
 // InputRequestMsg requests user input
 type InputRequestMsg struct {
 	Prompt   string
-	Response chan string
+	Response chan *SecureString
 }
 
 // AppCompleteMsg indicates an app installation completed
@@ -76,7 +80,7 @@ type AppCompleteMsg struct {
 }
 
 // NewModel creates a new TUI model
-func NewModel(apps []types.AppConfig) Model {
+func NewModel(apps []types.CrossPlatformApp) Model {
 	// Initialize progress bar
 	prog := progress.New(progress.WithDefaultGradient())
 	prog.Width = 25
@@ -102,7 +106,7 @@ func NewModel(apps []types.AppConfig) Model {
 		status:        "Ready to install applications",
 		logs:          []string{},
 		needsInput:    false,
-		inputResponse: make(chan string, 1),
+		inputResponse: make(chan *SecureString, 5), // Increased buffer to prevent deadlocks
 	}
 }
 
@@ -138,8 +142,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if m.needsInput {
-				// Send input response
-				response := m.textInput.Value()
+				// Send secure input response
+				response := NewSecureString(m.textInput.Value())
 				m.inputResponse <- response
 				m.textInput.SetValue("")
 				m.needsInput = false
@@ -155,12 +159,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case LogMsg:
-		// Add log message to viewport
+		// Add log message to viewport with rotation to prevent memory leaks
 		logLine := fmt.Sprintf("[%s] %s: %s",
 			msg.Timestamp.Format("15:04:05"),
 			msg.Level,
 			msg.Message)
 		m.logs = append(m.logs, logLine)
+
+		// Rotate logs if we have too many
+		if len(m.logs) > maxLogLines {
+			// Keep the last maxLogLines lines
+			m.logs = m.logs[len(m.logs)-maxLogLines:]
+		}
+
 		m.viewport.SetContent(strings.Join(m.logs, "\n"))
 		m.viewport.GotoBottom()
 
