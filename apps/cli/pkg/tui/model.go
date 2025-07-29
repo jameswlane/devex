@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -27,10 +28,12 @@ type Model struct {
 	viewport  viewport.Model
 
 	// Application state
-	apps       []types.CrossPlatformApp
-	currentApp int
-	status     string
-	logs       []string
+	apps          []types.CrossPlatformApp
+	currentApp    int
+	completedApps int64 // Atomic counter for completed apps to prevent race conditions
+	status        string
+	logs          []string
+	appStatus     map[string]bool // Track which apps have completed to prevent double-counting
 
 	// Installation state
 	needsInput    bool
@@ -112,15 +115,21 @@ func NewModel(apps []types.CrossPlatformApp) Model {
 		viewport:      vp,
 		apps:          apps,
 		currentApp:    0,
+		completedApps: 0,
 		status:        "Ready to install applications",
 		logs:          []string{},
+		appStatus:     make(map[string]bool),
 		needsInput:    false,
 		inputResponse: make(chan *SecureString, channelBufferSize), // Prevent deadlocks
 	}
 }
 
-// Init initializes the Bubble Tea model and returns the initial commands
-// to start text input blinking and begin the installation process.
+// Init initializes the Bubble Tea model and returns the initial commands to start the TUI.
+// This method is called once when the Bubble Tea program starts. It returns a batch of
+// commands that begin text input cursor blinking and start the installation process.
+//
+// Returns:
+//   - tea.Cmd: Batch command containing text input blink command and installation starter
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
@@ -154,9 +163,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			if m.needsInput {
-				// Send secure input response
+				// Send secure input response with non-blocking send to prevent deadlocks
 				response := NewSecureString(m.textInput.Value())
-				m.inputResponse <- response
+				select {
+				case m.inputResponse <- response:
+					// Response sent successfully
+				default:
+					// Channel is full or closed, clean up the response
+					response.Clear()
+				}
 				m.textInput.SetValue("")
 				m.needsInput = false
 				m.inputPrompt = ""
@@ -205,16 +220,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AppCompleteMsg:
 		// App installation completed
+		// Prevent double-counting by checking if this app has already been processed
+		if _, alreadyProcessed := m.appStatus[msg.AppName]; alreadyProcessed {
+			// App already processed, ignore duplicate message
+			break
+		}
+
+		// Mark app as processed
+		m.appStatus[msg.AppName] = true
+
 		if msg.Error != nil {
 			m.status = fmt.Sprintf("Error installing %s: %v", msg.AppName, msg.Error)
 		} else {
 			m.status = fmt.Sprintf("Successfully installed %s", msg.AppName)
-			m.currentApp++
 		}
 
-		// Start next app or complete
-		if m.currentApp < len(m.apps) {
-			cmds = append(cmds, m.installNextApp())
+		// Atomically increment completed app counter
+		completed := atomic.AddInt64(&m.completedApps, 1)
+
+		// Use atomic counter for progress tracking instead of currentApp
+		if int(completed) < len(m.apps) {
+			// More apps to install - but don't start next app here to avoid race conditions
+			// The installer handles sequential installation
 		} else {
 			m.status = "All applications installed successfully!"
 		}
@@ -288,7 +315,9 @@ func (m Model) renderLeftPane(width int) string {
 
 	// Progress
 	if len(m.apps) > 0 {
-		currentProgress := float64(m.currentApp) / float64(len(m.apps))
+		// Use atomic counter for thread-safe progress tracking
+		completed := atomic.LoadInt64(&m.completedApps)
+		currentProgress := float64(completed) / float64(len(m.apps))
 		progressView := m.progress.ViewAs(currentProgress)
 
 		content.WriteString(lipgloss.NewStyle().
@@ -297,7 +326,7 @@ func (m Model) renderLeftPane(width int) string {
 		content.WriteString("\n")
 		content.WriteString(progressView)
 		content.WriteString("\n")
-		content.WriteString(fmt.Sprintf("%d/%d apps", m.currentApp, len(m.apps)))
+		content.WriteString(fmt.Sprintf("%d/%d apps", completed, len(m.apps)))
 		content.WriteString("\n\n")
 	}
 
@@ -365,22 +394,6 @@ func (m Model) startInstallation() tea.Cmd {
 	return func() tea.Msg {
 		return LogMsg{
 			Message:   "Starting DevEx installation...",
-			Timestamp: time.Now(),
-			Level:     "INFO",
-		}
-	}
-}
-
-// installNextApp starts installing the next app
-func (m Model) installNextApp() tea.Cmd {
-	if m.currentApp >= len(m.apps) {
-		return nil
-	}
-
-	app := m.apps[m.currentApp]
-	return func() tea.Msg {
-		return LogMsg{
-			Message:   fmt.Sprintf("Installing %s...", app.Name),
 			Timestamp: time.Now(),
 			Level:     "INFO",
 		}

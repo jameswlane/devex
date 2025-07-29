@@ -3,6 +3,7 @@ package tui
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/pkg/config"
@@ -29,7 +31,8 @@ const (
 type StreamingInstaller struct {
 	program  *tea.Program
 	repo     types.Repository
-	stdinMux sync.Mutex // Protects stdin access from race conditions
+	executor CommandExecutor // Pluggable command executor for better testability
+	stdinMux sync.Mutex      // Protects stdin access from race conditions
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
@@ -49,8 +52,10 @@ func NewSecureString(s string) *SecureString {
 	return &SecureString{data: data}
 }
 
-// String returns the string value. Use sparingly and ensure Clear() is called
-// immediately after use to scrub the sensitive data from memory.
+// String returns the string value of the secure string.
+// WARNING: Use sparingly and ensure Clear() is called immediately after use
+// to scrub the sensitive data from memory. The returned string should not be
+// stored in variables or passed to functions that might retain it.
 func (ss *SecureString) String() string {
 	return string(ss.data)
 }
@@ -124,18 +129,165 @@ var (
 	}
 )
 
+// sanitizeUserInput sanitizes user input to prevent command injection and other security issues
+func sanitizeUserInput(input string) string {
+	// Remove null bytes which can be used for injection
+	input = strings.ReplaceAll(input, "\x00", "")
+
+	// Remove control characters except common ones (tab, newline, carriage return)
+	var sanitized strings.Builder
+	for _, r := range input {
+		if r == '\t' || r == '\n' || r == '\r' || !unicode.IsControl(r) {
+			sanitized.WriteRune(r)
+		}
+	}
+
+	// Trim whitespace to prevent padding attacks
+	return strings.TrimSpace(sanitized.String())
+}
+
+// parseCommand safely parses a command string into executable parts
+// Returns (executable, args, needsShell) where needsShell indicates if shell execution is required
+func parseCommand(command string) (string, []string, bool) {
+	// Trim whitespace
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return "", nil, false
+	}
+
+	// Split command into parts
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return "", nil, false
+	}
+
+	// Check if command contains shell features that require shell execution
+	shellFeatures := []string{
+		"|", "&&", "||", ";", "&", ">", ">>", "<", "$(", "`", "\"", "'",
+	}
+
+	needsShell := false
+	for _, feature := range shellFeatures {
+		if strings.Contains(command, feature) {
+			needsShell = true
+			break
+		}
+	}
+
+	// If no shell features, we can execute directly
+	if !needsShell {
+		return parts[0], parts[1:], false
+	}
+
+	// Complex command requires shell
+	return "/bin/bash", []string{"-c", command}, true
+}
+
+// CommandExecutor defines the interface for command execution, allowing for better testing and modularity
+type CommandExecutor interface {
+	// ExecuteCommand executes a command with the given context and returns the command handle
+	ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error)
+	// ValidateCommand validates a command for security before execution
+	ValidateCommand(command string) error
+}
+
+// DefaultCommandExecutor implements CommandExecutor using the standard approach
+type DefaultCommandExecutor struct {
+	// Additional fields can be added here for configuration
+}
+
+// NewDefaultCommandExecutor creates a new default command executor
+func NewDefaultCommandExecutor() *DefaultCommandExecutor {
+	return &DefaultCommandExecutor{}
+}
+
+// ExecuteCommand implements CommandExecutor.ExecuteCommand
+func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	// Validate command first
+	if err := ce.ValidateCommand(command); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
+
+	// Parse and execute using safest method
+	executable, args, _ := parseCommand(command)
+
+	cmd := exec.CommandContext(ctx, executable, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
+	return cmd, nil
+}
+
+// ValidateCommand implements CommandExecutor.ValidateCommand
+func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
+	// Check for dangerous patterns
+	for _, pattern := range dangerousPatterns {
+		if pattern.MatchString(command) {
+			return fmt.Errorf("command contains potentially dangerous pattern: %s", pattern.String())
+		}
+	}
+
+	// Parse command and validate first word
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty command")
+	}
+
+	// Handle sudo commands specially
+	if parts[0] == "sudo" {
+		if len(parts) < 2 {
+			return fmt.Errorf("sudo command missing actual command")
+		}
+		// Validate the command after sudo
+		actualCommand := parts[1]
+		if !allowedCommands[actualCommand] {
+			return fmt.Errorf("sudo command '%s' is not in allowed list", actualCommand)
+		}
+	} else if !allowedCommands[parts[0]] {
+		// Validate regular commands
+		return fmt.Errorf("command '%s' is not in allowed list", parts[0])
+	}
+
+	return nil
+}
+
 // NewStreamingInstaller creates a new streaming installer with context cancellation
 func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx context.Context) *StreamingInstaller {
 	instCtx, cancel := context.WithCancel(ctx)
 	return &StreamingInstaller{
-		program: program,
-		repo:    repo,
-		ctx:     instCtx,
-		cancel:  cancel,
+		program:  program,
+		repo:     repo,
+		executor: NewDefaultCommandExecutor(), // Use default command executor
+		ctx:      instCtx,
+		cancel:   cancel,
 	}
 }
 
-// InstallApps installs multiple applications with streaming output and context cancellation
+// NewStreamingInstallerWithExecutor creates a streaming installer with a custom command executor for testing
+func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Repository, ctx context.Context, executor CommandExecutor) *StreamingInstaller {
+	instCtx, cancel := context.WithCancel(ctx)
+	return &StreamingInstaller{
+		program:  program,
+		repo:     repo,
+		executor: executor,
+		ctx:      instCtx,
+		cancel:   cancel,
+	}
+}
+
+// InstallApps installs multiple applications sequentially with streaming output and context cancellation.
+// It processes each app in the provided slice, handling errors and context cancellation gracefully.
+// If context cancellation occurs, the installation stops immediately and returns the cancellation error.
+// Individual app failures are logged but don't stop the overall installation process, unless caused by cancellation.
+//
+// Parameters:
+//   - apps: Slice of CrossPlatformApp configurations to install
+//   - settings: Installation settings including verbosity and dry-run flags
+//
+// Returns:
+//   - error: nil on success, context.Canceled if cancelled, or other error on critical failures
+//
 // nolint: contextcheck
 func (si *StreamingInstaller) InstallApps(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	for _, app := range apps {
@@ -149,22 +301,47 @@ func (si *StreamingInstaller) InstallApps(apps []types.CrossPlatformApp, setting
 
 		if err := si.InstallApp(app, settings); err != nil {
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
-			si.program.Send(AppCompleteMsg{
-				AppName: app.Name,
-				Error:   err,
-			})
+			if si.program != nil {
+				si.program.Send(AppCompleteMsg{
+					AppName: app.Name,
+					Error:   err,
+				})
+			}
+			// If the error is due to context cancellation, stop installation entirely
+			if errors.Is(err, context.Canceled) || si.ctx.Err() != nil {
+				return si.ctx.Err()
+			}
 			continue
 		}
 
-		si.program.Send(AppCompleteMsg{
-			AppName: app.Name,
-			Error:   nil,
-		})
+		if si.program != nil {
+			si.program.Send(AppCompleteMsg{
+				AppName: app.Name,
+				Error:   nil,
+			})
+		}
 	}
 	return nil
 }
 
-// InstallApp installs a single application with streaming output
+// InstallApp installs a single application with streaming output and comprehensive error handling.
+// It executes the complete installation lifecycle: validation, pre-install commands, main installation,
+// post-install commands, and database registration. All command execution is validated for security.
+//
+// The installation process includes:
+//   - Platform-specific configuration resolution
+//   - App validation using the app's Validate() method
+//   - Pre-install command execution (if configured)
+//   - Main installation command execution via the configured install method
+//   - Post-install command execution (if configured)
+//   - Database registration of the successfully installed app
+//
+// Parameters:
+//   - app: CrossPlatformApp configuration containing installation instructions
+//   - settings: Installation settings including verbosity flags
+//
+// Returns:
+//   - error: nil on success, or detailed error indicating which phase failed
 func (si *StreamingInstaller) InstallApp(app types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	si.sendLog("INFO", fmt.Sprintf("Starting installation of %s", app.Name))
 
@@ -314,15 +491,10 @@ func (si *StreamingInstaller) executeCommandStream(command string) error {
 		return fmt.Errorf("empty command")
 	}
 
-	// Use shell for complex commands but validate first
-	if err := si.validateCommand(command); err != nil {
-		return fmt.Errorf("command validation failed: %w", err)
-	}
-
-	// Execute via shell with proper escaping for complex commands
-	cmd := exec.CommandContext(ctx, "/bin/bash", "-c", command)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
+	// Execute command using the pluggable executor interface
+	cmd, err := si.executor.ExecuteCommand(ctx, command)
+	if err != nil {
+		return err
 	}
 
 	// Create pipes for stdout and stderr
@@ -404,39 +576,6 @@ func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 	}
 }
 
-// validateCommand validates a command for security issues
-func (si *StreamingInstaller) validateCommand(command string) error {
-	// Check for dangerous patterns
-	for _, pattern := range dangerousPatterns {
-		if pattern.MatchString(command) {
-			return fmt.Errorf("command contains potentially dangerous pattern: %s", pattern.String())
-		}
-	}
-
-	// Parse command and validate first word
-	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
-	}
-
-	// Handle sudo commands specially
-	if parts[0] == "sudo" {
-		if len(parts) < 2 {
-			return fmt.Errorf("sudo command missing actual command")
-		}
-		// Validate the command after sudo
-		actualCommand := parts[1]
-		if !allowedCommands[actualCommand] {
-			return fmt.Errorf("sudo command '%s' is not in allowed list", actualCommand)
-		}
-	} else if !allowedCommands[parts[0]] {
-		// Validate regular commands
-		return fmt.Errorf("command '%s' is not in allowed list", parts[0])
-	}
-
-	return nil
-}
-
 // monitorForInput monitors stderr for password prompts and requests user input
 func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCloser) {
 	scanner := bufio.NewScanner(stderr)
@@ -449,28 +588,51 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 			(strings.Contains(lowerLine, "sudo") ||
 				strings.Contains(lowerLine, "enter") ||
 				strings.Contains(lowerLine, ":")) {
-			// Request input from user
+			// Request input from user (skip if program is nil for testing)
+			if si.program == nil {
+				return // Skip password prompts during testing
+			}
 			response := make(chan *SecureString, 1)
-			si.program.Send(InputRequestMsg{
-				Prompt:   line,
-				Response: response,
-			})
 
-			// Wait for user response
+			// Send input request with timeout protection
+			select {
+			case <-si.ctx.Done():
+				// Context was cancelled, abort password prompt
+				si.sendLog("INFO", "Password prompt cancelled due to context cancellation")
+				return
+			default:
+				si.program.Send(InputRequestMsg{
+					Prompt:   line,
+					Response: response,
+				})
+			}
+
+			// Wait for user response with multiple timeout mechanisms
 			select {
 			case secureInput := <-response:
 				if secureInput != nil {
+					// Sanitize user input to prevent injection attacks
+					sanitizedInput := sanitizeUserInput(secureInput.String())
+
 					// Protect stdin access with mutex to prevent race conditions
 					si.stdinMux.Lock()
-					// Write password and immediately scrub from memory
-					if _, err := stdin.Write([]byte(secureInput.String() + "\n")); err != nil {
+					// Write sanitized password and immediately scrub from memory
+					if _, err := stdin.Write([]byte(sanitizedInput + "\n")); err != nil {
 						si.sendLog("ERROR", fmt.Sprintf("Failed to write input: %v", err))
 					}
 					si.stdinMux.Unlock()
 					secureInput.Clear() // Scrub password from memory
 				}
+			case <-si.ctx.Done():
+				// Context cancelled while waiting for input
+				si.sendLog("INFO", "Input cancelled due to context cancellation")
+				// Close the response channel to prevent goroutine leak
+				close(response)
+				return
 			case <-time.After(inputTimeout):
 				si.sendLog("ERROR", "Input timeout - no response received")
+				// Close the response channel to prevent goroutine leak
+				close(response)
 				return
 			}
 		}
@@ -479,6 +641,10 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 
 // sendLog sends a log message to the TUI
 func (si *StreamingInstaller) sendLog(level, message string) {
+	// Skip sending messages when program is nil (during testing)
+	if si.program == nil {
+		return
+	}
 	si.program.Send(LogMsg{
 		Message:   message,
 		Timestamp: time.Now(),
@@ -486,7 +652,24 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 	})
 }
 
-// StartInstallation starts the installation process in the TUI with context cancellation
+// StartInstallation starts the installation process in the TUI with context cancellation and user interaction.
+// This is the main entry point for TUI-based installations, providing a split-pane interface with
+// real-time progress tracking (left pane) and streaming command output (right pane).
+//
+// The function:
+//   - Creates a Bubble Tea TUI with split-pane layout
+//   - Initializes a StreamingInstaller with context cancellation support
+//   - Starts installation in background goroutine with proper cleanup
+//   - Handles user interactions including password prompts
+//   - Provides real-time progress updates and log streaming
+//
+// Parameters:
+//   - apps: Slice of CrossPlatformApp configurations to install
+//   - repo: Repository interface for app state persistence
+//   - settings: Installation settings including verbosity and dry-run options
+//
+// Returns:
+//   - error: nil on successful TUI completion, or error from TUI framework or installation
 func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
 	// Create context for cancellation support
 	ctx, cancel := context.WithCancel(context.Background())
