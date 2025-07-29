@@ -1,11 +1,11 @@
 name: issue closed
-
 on:
   issues:
     types: [closed]
-
 jobs:
   issue-closed:
+    permissions:
+      issues: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
