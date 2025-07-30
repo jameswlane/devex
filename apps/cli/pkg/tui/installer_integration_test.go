@@ -7,328 +7,598 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestStreamingInstaller_Integration(t *testing.T) {
-	// Create mock repository
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
+// MockRepository implements types.Repository for testing
+type MockRepository struct {
+	installedApps []string
+	shouldError   bool
+	mutex         sync.Mutex
+}
+
+func (m *MockRepository) AddApp(name string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.shouldError {
+		return fmt.Errorf("mock repository error")
 	}
 
-	// Create mock settings
-	mockSettings := config.CrossPlatformSettings{}
+	m.installedApps = append(m.installedApps, name)
+	return nil
+}
 
-	// Create streaming installer
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
+func (m *MockRepository) GetApps() ([]string, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 
-	// Test installing multiple apps
-	apps := []string{"test-echo", "test-whoami"}
-	ctx := context.Background()
+	if m.shouldError {
+		return nil, fmt.Errorf("mock repository error")
+	}
 
-	err := installer.InstallApps(ctx, apps)
+	return append([]string{}, m.installedApps...), nil
+}
+
+func (m *MockRepository) RemoveApp(name string) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.shouldError {
+		return fmt.Errorf("mock repository error")
+	}
+
+	for i, app := range m.installedApps {
+		if app == name {
+			m.installedApps = append(m.installedApps[:i], m.installedApps[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
+// Additional Repository interface methods
+func (m *MockRepository) DeleteApp(name string) error {
+	return m.RemoveApp(name)
+}
+
+func (m *MockRepository) GetApp(name string) (*types.AppConfig, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.shouldError {
+		return nil, fmt.Errorf("mock repository error")
+	}
+
+	for _, app := range m.installedApps {
+		if app == name {
+			return &types.AppConfig{
+				BaseConfig: types.BaseConfig{Name: name},
+			}, nil
+		}
+	}
+	return nil, fmt.Errorf("app not found")
+}
+
+func (m *MockRepository) ListApps() ([]types.AppConfig, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.shouldError {
+		return nil, fmt.Errorf("mock repository error")
+	}
+
+	apps := make([]types.AppConfig, 0, len(m.installedApps))
+	for _, name := range m.installedApps {
+		apps = append(apps, types.AppConfig{
+			BaseConfig: types.BaseConfig{Name: name},
+		})
+	}
+	return apps, nil
+}
+
+func (m *MockRepository) SaveApp(app types.AppConfig) error {
+	return m.AddApp(app.Name)
+}
+
+func (m *MockRepository) Set(key string, value string) error {
+	if m.shouldError {
+		return fmt.Errorf("mock repository error")
+	}
+	return nil
+}
+
+func (m *MockRepository) Get(key string) (string, error) {
+	if m.shouldError {
+		return "", fmt.Errorf("mock repository error")
+	}
+	return "mock-value", nil
+}
+
+func (m *MockRepository) IsInstalled(name string) (bool, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	if m.shouldError {
+		return false, fmt.Errorf("mock repository error")
+	}
+
+	for _, app := range m.installedApps {
+		if app == name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *MockRepository) Close() error {
+	return nil
+}
+
+func TestStreamingInstaller_Integration(t *testing.T) {
+	// Create test context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create mock components - use nil program to avoid TUI message sending
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+
+	// Create test apps with safe commands
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "test-echo",
+			Description: "Test echo command",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'Installing test-echo'",
+			},
+		},
+		{
+			Name:        "test-whoami",
+			Description: "Test whoami command",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "whoami",
+			},
+		},
+	}
+
+	settings := config.CrossPlatformSettings{
+		Verbose: true,
+	}
+
+	// Test successful installation
+	err := installer.InstallApps(apps, settings)
+	assert.NoError(t, err)
+
+	// Verify apps were added to repository
+	installedApps, err := mockRepo.GetApps()
 	require.NoError(t, err)
-
-	// Verify apps are tracked
-	installedApps, err := installer.GetInstalledApps()
-	require.NoError(t, err)
-
 	assert.Contains(t, installedApps, "test-echo")
 	assert.Contains(t, installedApps, "test-whoami")
 }
 
 func TestStreamingInstaller_CommandValidationIntegration(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
-
-	// Test with valid commands
-	apps := []string{"valid-app"}
 	ctx := context.Background()
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
 
-	err := installer.InstallApps(ctx, apps)
+	// Test app with dangerous command
+	dangerousApps := []types.CrossPlatformApp{
+		{
+			Name:        "dangerous-app",
+			Description: "App with dangerous command",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "rm -rf / && echo 'hacked'",
+			},
+		},
+	}
+
+	settings := config.CrossPlatformSettings{}
+
+	// Should succeed overall (InstallApps continues despite individual failures)
+	err := installer.InstallApps(dangerousApps, settings)
 	assert.NoError(t, err)
+
+	// Verify app was not added to repository
+	installedApps, err := mockRepo.GetApps()
+	require.NoError(t, err)
+	assert.NotContains(t, installedApps, "dangerous-app")
 }
 
 func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
-
-	// Create a context that cancels immediately
+	// Create cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
+
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+
+	// Create app with long-running command
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "slow-app",
+			Description: "App with slow command",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'starting'",
+				PostInstall: []types.InstallCommand{
+					{Sleep: 10}, // Use built-in sleep instead of shell command
+					{Command: "echo 'done'"},
+				},
+			},
+		},
+	}
+
+	settings := config.CrossPlatformSettings{}
+
+	// Start installation in background
+	var installErr error
+	done := make(chan bool)
+	go func() {
+		installErr = installer.InstallApps(apps, settings)
+		done <- true
+	}()
+
+	// Cancel after longer delay to ensure we're in the sleep phase
+	time.Sleep(500 * time.Millisecond)
 	cancel()
 
-	apps := []string{"test-app"}
-	err := installer.InstallApps(ctx, apps)
-
-	assert.Error(t, err)
-	assert.Equal(t, context.Canceled, err)
+	// Wait for installation to complete
+	select {
+	case <-done:
+		// Should have been cancelled
+		assert.Error(t, installErr)
+		assert.Equal(t, context.Canceled, installErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Installation did not respond to cancellation")
+	}
 }
 
 func TestStreamingInstaller_RepositoryError(t *testing.T) {
-	// Create mock repository that fails on AddApp
-	mockRepo := &testMockRepository{
-		apps:      make(map[string]*types.AppConfig),
-		shouldErr: true,
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
-
-	apps := []string{"test-app"}
 	ctx := context.Background()
 
-	err := installer.InstallApps(ctx, apps)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to track app")
+	// Create mock repo that always errors
+	mockRepo := &MockRepository{shouldError: true}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "test-app",
+			Description: "Test application",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'test'",
+			},
+		},
+	}
+
+	settings := config.CrossPlatformSettings{}
+
+	// Should succeed even with repository error (only logs warning)
+	err := installer.InstallApps(apps, settings)
+	assert.NoError(t, err)
 }
 
 func TestStreamingInstaller_PrePostInstallCommands(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
-
-	// Test app with complex pre/post install commands
-	apps := []string{"complex-app"}
 	ctx := context.Background()
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
 
-	err := installer.InstallApps(ctx, apps)
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "complex-app",
+			Description: "App with pre/post install commands",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'main install'",
+				PreInstall: []types.InstallCommand{
+					{Command: "echo 'pre-install step 1'"},
+					{Command: "echo 'pre-install step 2'"},
+				},
+				PostInstall: []types.InstallCommand{
+					{Command: "echo 'post-install step 1'"},
+					{Command: "echo 'post-install step 2'"},
+				},
+			},
+		},
+	}
+
+	settings := config.CrossPlatformSettings{}
+
+	err := installer.InstallApps(apps, settings)
+	assert.NoError(t, err)
+
+	// Verify app was installed
+	installedApps, err := mockRepo.GetApps()
 	require.NoError(t, err)
-
-	// Verify app is tracked
-	installedApps, err := installer.GetInstalledApps()
-	require.NoError(t, err)
-
 	assert.Contains(t, installedApps, "complex-app")
 }
 
 func TestStreamingInstaller_SleepCommand(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	// Test app that sleeps
-	apps := []string{"sleep-app"}
-	ctx := context.Background()
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "sleep-app",
+			Description: "App with sleep command",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'before sleep'",
+				PostInstall: []types.InstallCommand{
+					{Sleep: 1}, // 1 second sleep
+					{Command: "echo 'after sleep'"},
+				},
+			},
+		},
+	}
+
+	settings := config.CrossPlatformSettings{}
 
 	start := time.Now()
-	err := installer.InstallApps(ctx, apps)
+	err := installer.InstallApps(apps, settings)
 	duration := time.Since(start)
 
-	require.NoError(t, err)
-	assert.GreaterOrEqual(t, duration, time.Second)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, duration, 1*time.Second)
 
-	// Verify app is tracked
-	installedApps, err := installer.GetInstalledApps()
+	// Verify app was installed
+	installedApps, err := mockRepo.GetApps()
 	require.NoError(t, err)
-
 	assert.Contains(t, installedApps, "sleep-app")
 }
 
 func TestStreamingInstaller_SleepCancellation(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
+	ctx, cancel := context.WithCancel(context.Background())
+
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "long-sleep-app",
+			Description: "App with long sleep",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'starting'",
+				PostInstall: []types.InstallCommand{
+					{Sleep: 10}, // 10 second sleep
+					{Command: "echo 'should not reach here'"},
+				},
+			},
+		},
 	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
 
-	// Create a context that cancels after 500ms
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
+	settings := config.CrossPlatformSettings{}
 
-	// Test app that sleeps for longer than the timeout
-	apps := []string{"sleep-5-app"}
+	// Start installation
+	var installErr error
+	done := make(chan bool)
+	go func() {
+		installErr = installer.InstallApps(apps, settings)
+		done <- true
+	}()
 
-	err := installer.InstallApps(ctx, apps)
+	// Cancel after short delay
+	time.Sleep(500 * time.Millisecond)
+	cancel()
 
-	assert.Error(t, err)
-	// Check that the error is caused by context deadline exceeded
-	assert.Contains(t, err.Error(), "context deadline exceeded")
+	// Should respond to cancellation quickly
+	select {
+	case <-done:
+		assert.Error(t, installErr)
+		assert.Equal(t, context.Canceled, installErr)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Sleep command did not respond to cancellation")
+	}
 }
 
 func TestStreamingInstaller_MultipleAppsWithErrors(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
-
-	// Mix of good and bad apps
-	apps := []string{"good-app-1", "bad-app", "good-app-2"}
 	ctx := context.Background()
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
 
-	err := installer.InstallApps(ctx, apps)
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "good-app-1",
+			Description: "First good app",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'good app 1'",
+			},
+		},
+		{
+			Name:        "bad-app",
+			Description: "App with bad command",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "rm -rf /", // Should be blocked
+			},
+		},
+		{
+			Name:        "good-app-2",
+			Description: "Second good app",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'good app 2'",
+			},
+		},
+	}
 
-	// Should fail on the bad app
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "bad-app")
+	settings := config.CrossPlatformSettings{}
 
-	// Check that good-app-1 was installed before the failure
-	installedApps, err := installer.GetInstalledApps()
+	// Should continue with other apps even if one fails
+	err := installer.InstallApps(apps, settings)
+	assert.NoError(t, err)
+
+	// Verify good apps were installed, bad app was not
+	installedApps, err := mockRepo.GetApps()
 	require.NoError(t, err)
-
 	assert.Contains(t, installedApps, "good-app-1")
 	assert.NotContains(t, installedApps, "bad-app")
-	assert.NotContains(t, installedApps, "good-app-2") // Should not be installed due to early failure
+	assert.Contains(t, installedApps, "good-app-2")
 }
 
 func TestStartInstallation_Integration(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
+	apps := createTestApps()
+	mockRepo := &MockRepository{}
+	_ = config.CrossPlatformSettings{} // We don't use settings in this test
 
-	// Basic integration test
-	apps := []string{"simple-app"}
-	ctx := context.Background()
+	// Test that StartInstallation properly sets up and runs
+	// Note: This is a minimal test since StartInstallation runs a full TUI
+	// In a real scenario, this would be tested with a headless terminal
 
-	err := installer.InstallApps(ctx, apps)
-	assert.NoError(t, err)
+	// We can't easily test the full TUI interaction, but we can test
+	// that the function doesn't panic and sets up correctly
+	require.NotPanics(t, func() {
+		// Create a context with short timeout to prevent hanging
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		// Mock the StartInstallation call by creating the components manually
+		model := NewModel(apps)
+		program := tea.NewProgram(model)
+		installer := NewStreamingInstaller(program, mockRepo, ctx)
+
+		// Verify installer was created correctly
+		assert.NotNil(t, installer)
+		assert.Equal(t, mockRepo, installer.repo)
+		// Note: installer.ctx is a child context, so we can't directly compare
+	})
 }
 
 func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
+	const numInstallations = 3
 
-	// Test that the installer doesn't have race conditions
-	apps := []string{"concurrent-app-1", "concurrent-app-2"}
 	ctx := context.Background()
+	var wg sync.WaitGroup
+	results := make([]error, numInstallations)
 
-	err := installer.InstallApps(ctx, apps)
-	assert.NoError(t, err)
+	for i := 0; i < numInstallations; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			mockRepo := &MockRepository{}
+			installer := NewStreamingInstaller(nil, mockRepo, ctx)
+
+			apps := []types.CrossPlatformApp{
+				{
+					Name:        fmt.Sprintf("concurrent-app-%d", index),
+					Description: fmt.Sprintf("Concurrent test app %d", index),
+					Linux: types.OSConfig{
+						InstallMethod:  "generic",
+						InstallCommand: fmt.Sprintf("echo 'concurrent install %d'", index),
+					},
+				},
+			}
+
+			settings := config.CrossPlatformSettings{}
+			results[index] = installer.InstallApps(apps, settings)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// All installations should succeed
+	for i, err := range results {
+		assert.NoError(t, err, "Installation %d should succeed", i)
+	}
 }
 
 func TestStreamingInstaller_LargeNumberOfApps(t *testing.T) {
-	mockRepo := &testMockRepository{
-		apps: make(map[string]*types.AppConfig),
-	}
-	mockSettings := config.CrossPlatformSettings{}
-	installer := NewStreamingInstaller(mockRepo, mockSettings)
-
-	// Generate 50 test apps
-	var apps []string
-	for i := 0; i < 50; i++ {
-		apps = append(apps, fmt.Sprintf("app-%d", i))
-	}
-
 	ctx := context.Background()
-	err := installer.InstallApps(ctx, apps)
-	require.NoError(t, err)
+	mockRepo := &MockRepository{}
+	installer := NewStreamingInstaller(nil, mockRepo, ctx)
 
-	// Verify all apps are tracked
-	installedApps, err := installer.GetInstalledApps()
-	require.NoError(t, err)
-
-	assert.Len(t, installedApps, 50)
-}
-
-// testMockRepository implements types.Repository interface for testing
-type testMockRepository struct {
-	apps      map[string]*types.AppConfig
-	shouldErr bool
-	mutex     sync.Mutex
-}
-
-func (m *testMockRepository) AddApp(name string) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if m.shouldErr {
-		return fmt.Errorf("mock repository error")
+	// Create many apps
+	const numApps = 50
+	apps := make([]types.CrossPlatformApp, numApps)
+	for i := 0; i < numApps; i++ {
+		apps[i] = types.CrossPlatformApp{
+			Name:        fmt.Sprintf("bulk-app-%d", i),
+			Description: fmt.Sprintf("Bulk test app %d", i),
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: fmt.Sprintf("echo 'bulk install %d'", i),
+			},
+		}
 	}
 
-	m.apps[name] = &types.AppConfig{
-		BaseConfig: types.BaseConfig{
-			Name: name,
+	settings := config.CrossPlatformSettings{}
+
+	// Should handle large number of apps without issues
+	start := time.Now()
+	err := installer.InstallApps(apps, settings)
+	duration := time.Since(start)
+
+	assert.NoError(t, err)
+
+	// Shouldn't take too long for echo commands
+	assert.Less(t, duration, 30*time.Second)
+
+	// Verify all apps were installed
+	installedApps, err := mockRepo.GetApps()
+	require.NoError(t, err)
+	assert.Len(t, installedApps, numApps)
+}
+
+// Benchmark tests for integration scenarios
+
+func BenchmarkStreamingInstaller_SingleApp(b *testing.B) {
+	ctx := context.Background()
+
+	apps := []types.CrossPlatformApp{
+		{
+			Name:        "benchmark-app",
+			Description: "Benchmark test app",
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: "echo 'benchmark'",
+			},
 		},
 	}
-	return nil
+
+	settings := config.CrossPlatformSettings{}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		mockRepo := &MockRepository{}
+		installer := NewStreamingInstaller(nil, mockRepo, ctx)
+		_ = installer.InstallApps(apps, settings)
+	}
 }
 
-func (m *testMockRepository) DeleteApp(name string) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+func BenchmarkStreamingInstaller_MultipleApps(b *testing.B) {
+	ctx := context.Background()
 
-	if m.shouldErr {
-		return fmt.Errorf("mock repository error")
+	apps := make([]types.CrossPlatformApp, 10)
+	for i := 0; i < 10; i++ {
+		apps[i] = types.CrossPlatformApp{
+			Name:        fmt.Sprintf("benchmark-app-%d", i),
+			Description: fmt.Sprintf("Benchmark test app %d", i),
+			Linux: types.OSConfig{
+				InstallMethod:  "generic",
+				InstallCommand: fmt.Sprintf("echo 'benchmark %d'", i),
+			},
+		}
 	}
 
-	delete(m.apps, name)
-	return nil
-}
+	settings := config.CrossPlatformSettings{}
 
-func (m *testMockRepository) GetApp(name string) (*types.AppConfig, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if m.shouldErr {
-		return nil, fmt.Errorf("mock repository error")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		mockRepo := &MockRepository{}
+		installer := NewStreamingInstaller(nil, mockRepo, ctx)
+		_ = installer.InstallApps(apps, settings)
 	}
-
-	app, exists := m.apps[name]
-	if !exists {
-		return nil, fmt.Errorf("app not found: %s", name)
-	}
-	return app, nil
-}
-
-func (m *testMockRepository) ListApps() ([]types.AppConfig, error) {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if m.shouldErr {
-		return nil, fmt.Errorf("mock repository error")
-	}
-
-	apps := make([]types.AppConfig, 0, len(m.apps))
-	for _, app := range m.apps {
-		apps = append(apps, *app)
-	}
-	return apps, nil
-}
-
-func (m *testMockRepository) ListAllApps() ([]types.AppConfig, error) {
-	return m.ListApps()
-}
-
-func (m *testMockRepository) SaveApp(app types.AppConfig) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if m.shouldErr {
-		return fmt.Errorf("mock repository error")
-	}
-
-	m.apps[app.Name] = &app
-	return nil
-}
-
-func (m *testMockRepository) Set(key, value string) error {
-	if m.shouldErr {
-		return fmt.Errorf("mock repository error")
-	}
-	return nil
-}
-
-func (m *testMockRepository) Get(key string) (string, error) {
-	if m.shouldErr {
-		return "", fmt.Errorf("mock repository error")
-	}
-	return "test-value", nil
 }

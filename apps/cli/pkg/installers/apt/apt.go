@@ -2,6 +2,7 @@ package apt
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
@@ -20,6 +21,11 @@ func New() *APTInstaller {
 
 func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	log.Info("APT Installer: Starting installation", "command", command)
+
+	// Validate apt availability
+	if err := validateAptSystem(); err != nil {
+		return fmt.Errorf("apt system validation failed: %w", err)
+	}
 
 	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
@@ -42,6 +48,17 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 		return nil
 	}
 
+	// Ensure package lists are up to date if they're stale
+	if err := ensurePackageListsUpdated(repo); err != nil {
+		log.Warn("Failed to update package lists", "error", err)
+		// Continue anyway, as the installation might still work
+	}
+
+	// Check if package is available in repositories
+	if err := validatePackageAvailability(command); err != nil {
+		return fmt.Errorf("package validation failed: %w", err)
+	}
+
 	// Run apt-get install command
 	installCommand := fmt.Sprintf("sudo apt-get install -y %s", command)
 	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
@@ -50,6 +67,13 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	log.Info("APT package installed successfully", "command", command)
+
+	// Verify installation succeeded
+	if isInstalled, err := utilities.IsAppInstalled(appConfig); err != nil {
+		log.Warn("Failed to verify installation", "error", err, "command", command)
+	} else if !isInstalled {
+		return fmt.Errorf("package installation verification failed for: %s", command)
+	}
 
 	// Add the package to the repository
 	if err := repo.AddApp(command); err != nil {
@@ -84,5 +108,58 @@ func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
 	}
 
 	log.Info("APT update completed successfully")
+	return nil
+}
+
+// validateAptSystem checks if apt is available and functional
+func validateAptSystem() error {
+	// Check if apt-get is available
+	if _, err := utils.CommandExec.RunShellCommand("which apt-get"); err != nil {
+		return fmt.Errorf("apt-get not found: %w", err)
+	}
+
+	// Check if dpkg is available (needed for checking installation status)
+	if _, err := utils.CommandExec.RunShellCommand("which dpkg"); err != nil {
+		return fmt.Errorf("dpkg not found: %w", err)
+	}
+
+	// Check if we can access the dpkg database
+	if _, err := utils.CommandExec.RunShellCommand("dpkg --version"); err != nil {
+		return fmt.Errorf("dpkg not functional: %w", err)
+	}
+
+	return nil
+}
+
+// ensurePackageListsUpdated updates package lists if they're stale
+func ensurePackageListsUpdated(repo types.Repository) error {
+	// Check if we need to update (more than 6 hours old)
+	if time.Since(lastAptUpdateTime) > 6*time.Hour {
+		log.Info("Package lists are stale, updating")
+		return RunAptUpdate(false, repo)
+	}
+	return nil
+}
+
+// validatePackageAvailability checks if a package is available in repositories
+func validatePackageAvailability(packageName string) error {
+	// Use apt-cache policy to check if package is available
+	command := fmt.Sprintf("apt-cache policy %s", packageName)
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		return fmt.Errorf("failed to check package availability: %w", err)
+	}
+
+	// Check if the output indicates the package is available
+	if strings.Contains(output, "Unable to locate package") {
+		return fmt.Errorf("package '%s' not found in any repository", packageName)
+	}
+
+	// Check if any installable version is available
+	if !strings.Contains(output, "Candidate:") {
+		return fmt.Errorf("no installable candidate found for package '%s'", packageName)
+	}
+
+	log.Info("Package availability validated", "package", packageName)
 	return nil
 }
