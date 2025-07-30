@@ -471,7 +471,6 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	default:
 		panic("unhandled default case")
 	}
-	return m, nil
 }
 
 func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
@@ -647,339 +646,6 @@ func (m *SetupModel) waitForActivity() tea.Cmd {
 	}
 }
 
-func (m *SetupModel) performInstallation() {
-	ctx := context.Background()
-
-	// Step 1: Install mise (required for language management)
-	m.updateProgress("Installing mise...", 0.05)
-	if err := m.installMise(ctx); err != nil {
-		m.addError("mise", err.Error())
-	} else {
-		// Validate mise installation
-		if err := m.validateMiseInstallation(); err != nil {
-			m.addError("mise validation", err.Error())
-		}
-	}
-
-	// Step 2: Install Docker (required for database management)
-	m.updateProgress("Installing Docker...", 0.1)
-	if err := m.installDocker(ctx); err != nil {
-		m.addError("Docker", err.Error())
-	} else {
-		// Validate Docker installation
-		if err := m.validateDockerInstallation(); err != nil {
-			m.addError("Docker validation", err.Error())
-		}
-	}
-
-	// Step 3: Install other essential tools
-	m.updateProgress("Installing essential tools...", 0.15)
-	if err := m.installEssentialTools(); err != nil {
-		m.addError("Essential tools", err.Error())
-		// Essential tools failure is more critical, but continue
-	}
-
-	// Step 4: Update environment and PATH
-	m.updateProgress("Updating environment...", 0.2)
-	if err := m.updateEnvironmentPath(); err != nil {
-		m.addError("Environment PATH", err.Error())
-	}
-
-	// Step 5: Install selected languages via mise (only if mise is available)
-	if len(m.getSelectedLanguages()) > 0 {
-		m.updateProgress("Installing programming languages...", 0.4)
-		if err := m.installLanguages(ctx); err != nil {
-			m.addError("Programming languages", err.Error())
-		} else {
-			// Validate language installations
-			if err := m.validateInstalledLanguages(); err != nil {
-				m.addError("Language validation", err.Error())
-			}
-		}
-	}
-
-	// Step 6: Install selected databases via Docker (only if docker is available)
-	if len(m.getSelectedDatabases()) > 0 {
-		m.updateProgress("Installing databases...", 0.6)
-		if err := m.installDatabases(ctx); err != nil {
-			m.addError("Databases", err.Error())
-		}
-	}
-
-	// Step 7: Install desktop applications
-	if len(m.getSelectedDesktopApps()) > 0 {
-		m.updateProgress("Installing desktop applications...", 0.8)
-		if err := m.installDesktopApps(); err != nil {
-			m.addError("Desktop applications", err.Error())
-		}
-	}
-
-	// Step 8: Final setup and shell configuration
-	m.updateProgress("Completing setup...", 0.9)
-	selectedShell := m.getSelectedShell()
-	if err := m.finalizeSetup(ctx); err != nil {
-		m.addError("Shell setup", err.Error())
-	} else {
-		// Validate shell configuration
-		if err := m.validateShellConfiguration(selectedShell); err != nil {
-			m.addError("Shell validation", err.Error())
-		}
-	}
-
-	// Final status based on errors
-	if m.hasErrors {
-		m.updateProgress(fmt.Sprintf("Setup completed with %d issues", len(m.installErrors)), 1.0)
-	} else {
-		m.updateProgress("Installation complete!", 1.0)
-	}
-}
-
-func (m *SetupModel) updateProgress(status string, progress float64) {
-	m.installStatus = status
-	m.progress = progress
-}
-
-func (m *SetupModel) installEssentialTools() error {
-	// Get default apps from configuration
-	defaultApps := m.settings.GetDefaultApps()
-
-	// Filter for essential tools (excluding mise and Docker which are installed separately)
-	var essentialApps []types.CrossPlatformApp
-	for _, app := range defaultApps {
-		// Include git, curl, wget, zsh and other essential tools but exclude mise and Docker
-		if app.Name == "git" || app.Name == "curl" || app.Name == "wget" || app.Name == "zsh" ||
-			app.Name == "bat" || app.Name == "Eza" || app.Name == "fzf" || app.Name == "ripgrep" {
-			essentialApps = append(essentialApps, app)
-		}
-	}
-
-	return installers.InstallCrossPlatformApps(essentialApps, m.settings, m.repo)
-}
-
-func (m *SetupModel) installMise(ctx context.Context) error {
-	selectedShell := m.getSelectedShell()
-	log.Info("Installing mise using official installer", "shell", selectedShell)
-
-	// Use the shell-specific mise installer
-	installCmd := fmt.Sprintf("curl https://mise.run/%s | sh", selectedShell)
-
-	err := m.runCommandWithLogging(ctx, "bash", "-c", installCmd)
-	if err != nil {
-		log.Error("Failed to install mise", err, "shell", selectedShell)
-		return fmt.Errorf("failed to install mise: %w", err)
-	}
-
-	log.Info("Successfully installed mise", "shell", selectedShell)
-
-	// Update PATH to include mise
-	homeDir := os.Getenv("HOME")
-	miseDir := homeDir + "/.local/bin"
-	currentPath := os.Getenv("PATH")
-	if !contains(currentPath, miseDir) {
-		err := os.Setenv("PATH", miseDir+":"+currentPath)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (m *SetupModel) installDocker(ctx context.Context) error {
-	log.Info("Installing Docker using dedicated installer")
-
-	// Use the dedicated Docker installer utility
-	return utils.InstallDocker(ctx)
-}
-
-func (m *SetupModel) updateEnvironmentPath() error {
-	// Update PATH to include common installation directories
-	homeDir := os.Getenv("HOME")
-	pathsToAdd := []string{
-		homeDir + "/.local/bin",
-		homeDir + "/.cargo/bin",
-		"/usr/local/bin",
-	}
-
-	currentPath := os.Getenv("PATH")
-	for _, path := range pathsToAdd {
-		if !contains(currentPath, path) {
-			currentPath = path + ":" + currentPath
-		}
-	}
-
-	err := os.Setenv("PATH", currentPath)
-	if err != nil {
-		return err
-	}
-	log.Info("Updated PATH environment variable")
-	return nil
-}
-
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr ||
-		strings.HasPrefix(s, substr+":") ||
-		strings.Contains(s, ":"+substr+":") ||
-		strings.HasSuffix(s, ":"+substr))
-}
-
-func (m *SetupModel) isToolAvailable(tool string) bool {
-	_, err := exec.LookPath(tool)
-	return err == nil
-}
-
-func (m *SetupModel) installLanguages(ctx context.Context) error {
-	// Check if mise is available
-	if !m.isToolAvailable("mise") {
-		log.Warn("mise not available, skipping language installations")
-		log.Info("Languages can be installed manually later using: mise install <language>@latest")
-		return nil
-	}
-
-	// Install languages using mise
-	selectedLangs := m.getSelectedLanguages()
-
-	// Map UI names to mise package names
-	langMap := map[string]string{
-		"Node.js":       "node@lts",
-		"Python":        "python@latest",
-		"Go":            "go@latest",
-		"Ruby on Rails": "ruby@latest",
-		"PHP":           "php@latest",
-		"Java":          "java@latest",
-		"Rust":          "rust@latest",
-		"Elixir":        "elixir@latest",
-	}
-
-	for _, lang := range selectedLangs {
-		if packageName, exists := langMap[lang]; exists {
-			log.Info("Installing language via mise", "language", lang, "package", packageName)
-
-			// Install the language using mise
-			installCmd := fmt.Sprintf("mise install %s", packageName)
-			output, err := exec.CommandContext(ctx, "bash", "-c", installCmd).CombinedOutput()
-			if err != nil {
-				log.Error("Failed to install language", err, "language", lang, "output", string(output))
-				continue
-			}
-
-			// Use the language globally
-			useCmd := fmt.Sprintf("mise use -g %s", packageName)
-			output, err = exec.CommandContext(ctx, "bash", "-c", useCmd).CombinedOutput()
-			if err != nil {
-				log.Error("Failed to set language globally", err, "language", lang, "output", string(output))
-				continue
-			}
-
-			log.Info("Successfully installed language", "language", lang)
-		}
-	}
-	return nil
-}
-
-func (m *SetupModel) installDatabases(ctx context.Context) error {
-	// Check if Docker is available
-	if !m.isToolAvailable("docker") {
-		log.Warn("Docker not available, skipping database installations")
-		log.Info("Databases can be installed manually later using: docker run ...")
-		return nil
-	}
-
-	// Install databases using Docker
-	selectedDBs := m.getSelectedDatabases()
-
-	// Map UI names to Docker configurations
-	dbConfigs := map[string]map[string]string{
-		"PostgreSQL": {
-			"image":     "postgres:16",
-			"container": "postgres16",
-			"port":      "5432:5432",
-			"env":       "POSTGRES_HOST_AUTH_METHOD=trust",
-		},
-		"MySQL": {
-			"image":     "mysql:8.4",
-			"container": "mysql8",
-			"port":      "3306:3306",
-			"env":       "MYSQL_ALLOW_EMPTY_PASSWORD=true",
-		},
-		"Redis": {
-			"image":     "redis:7",
-			"container": "redis",
-			"port":      "6379:6379",
-			"env":       "",
-		},
-	}
-
-	for _, db := range selectedDBs {
-		if config, exists := dbConfigs[db]; exists {
-			log.Info("Installing database via Docker", "database", db, "image", config["image"])
-
-			// Stop and remove the existing container if it exists
-			stopCmd := fmt.Sprintf("docker stop %s || true", config["container"])
-			_ = exec.CommandContext(ctx, "bash", "-c", stopCmd).Run()
-
-			removeCmd := fmt.Sprintf("docker rm %s || true", config["container"])
-			_ = exec.CommandContext(ctx, "bash", "-c", removeCmd).Run()
-
-			// Build docker run command
-			dockerCmd := fmt.Sprintf("docker run -d --name %s --restart unless-stopped -p 127.0.0.1:%s",
-				config["container"], config["port"])
-
-			if config["env"] != "" {
-				dockerCmd += fmt.Sprintf(" -e %s", config["env"])
-			}
-
-			dockerCmd += fmt.Sprintf(" %s", config["image"])
-
-			// Run the database container
-			output, err := exec.CommandContext(ctx, "bash", "-c", dockerCmd).CombinedOutput()
-			if err != nil {
-				outputStr := string(output)
-				if strings.Contains(outputStr, "permission denied") && strings.Contains(outputStr, "docker.sock") {
-					m.addError("Docker permissions", fmt.Sprintf("%s: Docker permission denied. Run 'newgrp docker' or log out/in to refresh group membership", db))
-				} else {
-					m.addError("Database installation", fmt.Sprintf("%s: %s", db, err.Error()))
-				}
-				continue
-			}
-
-			log.Info("Successfully installed database", "database", db, "container", config["container"])
-		}
-	}
-	return nil
-}
-
-func (m *SetupModel) installDesktopApps() error {
-	// Install desktop applications
-	selectedApps := m.getSelectedDesktopApps()
-
-	// Get all available apps from configuration
-	allApps := m.settings.GetAllApps()
-
-	// Map UI names to app configurations
-	appMap := make(map[string]types.CrossPlatformApp)
-	for _, app := range allApps {
-		appMap[app.Name] = app
-	}
-
-	for _, appName := range selectedApps {
-		if app, exists := appMap[appName]; exists {
-			log.Info("Installing desktop application", "app", appName)
-
-			// Install using the existing installer system
-			if err := installers.InstallCrossPlatformApp(app, m.settings, m.repo); err != nil {
-				log.Error("Failed to install desktop application", err, "app", appName)
-				continue
-			}
-
-			log.Info("Successfully installed desktop application", "app", appName)
-		} else {
-			log.Warn("Desktop application not found in configuration", "app", appName)
-		}
-	}
-	return nil
-}
-
 func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	selectedShell := m.getSelectedShell()
 	log.Info("Finalizing setup", "selectedShell", selectedShell)
@@ -1009,7 +675,7 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 }
 
 func (m *SetupModel) ensureShellInstalled(ctx context.Context, shell string) error {
-	if m.isToolAvailable(shell) {
+	if isToolAvailable(shell) {
 		log.Info("Shell already available", "shell", shell)
 		return nil
 	}
@@ -1229,10 +895,7 @@ func (m *SetupModel) copyFile(src, dst string) error {
 		return fmt.Errorf("failed to open source file %s: %w", src, err)
 	}
 	defer func(sourceFile *os.File) {
-		err := sourceFile.Close()
-		if err != nil {
-
-		}
+		_ = sourceFile.Close()
 	}(sourceFile)
 
 	destFile, err := os.Create(dst)
@@ -1240,10 +903,7 @@ func (m *SetupModel) copyFile(src, dst string) error {
 		return fmt.Errorf("failed to create destination file %s: %w", dst, err)
 	}
 	defer func(destFile *os.File) {
-		err := destFile.Close()
-		if err != nil {
-
-		}
+		_ = destFile.Close()
 	}(destFile)
 
 	_, err = sourceFile.WriteTo(destFile)
@@ -1254,24 +914,9 @@ func (m *SetupModel) copyFile(src, dst string) error {
 	return nil
 }
 
-// Helper functions to run commands and log their output
-func (m *SetupModel) runCommandWithLogging(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	output, err := cmd.CombinedOutput()
-
-	// Log command execution using centralized logger
-	commandStr := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
-	log.Info("Running command", "command", commandStr)
-
-	if len(output) > 0 {
-		log.Info("Command output", "command", commandStr, "output", string(output))
-	}
-
-	if err != nil {
-		log.Error("Command failed", err, "command", commandStr, "output", string(output))
-	}
-
-	return err
+func isToolAvailable(tool string) bool {
+	_, err := exec.LookPath(tool)
+	return err == nil
 }
 
 // Error tracking and validation methods
@@ -1280,101 +925,6 @@ func (m *SetupModel) addError(component, message string) {
 	m.installErrors = append(m.installErrors, errorMsg)
 	m.hasErrors = true
 	log.Error("Installation error", fmt.Errorf("%s", errorMsg), "component", component, "message", message)
-}
-
-func (m *SetupModel) validateMiseInstallation() error {
-	if !m.isToolAvailable("mise") {
-		return fmt.Errorf("mise command not found")
-	}
-
-	// Test that mise can list installed tools
-	ctx := context.Background()
-	err := m.runCommandWithLogging(ctx, "mise", "list")
-	if err != nil {
-		return fmt.Errorf("mise list failed: %w", err)
-	}
-
-	log.Info("Mise validation successful")
-	return nil
-}
-
-func (m *SetupModel) validateDockerInstallation() error {
-	// Use the dedicated Docker validation utility
-	return utils.ValidateDockerInstallation()
-}
-
-func (m *SetupModel) validateShellConfiguration(shell string) error {
-	homeDir := os.Getenv("HOME")
-
-	switch shell {
-	case "zsh":
-		if _, err := os.Stat(homeDir + "/.zshrc"); err != nil {
-			return fmt.Errorf("zsh configuration not found: %w", err)
-		}
-	case "bash":
-		if _, err := os.Stat(homeDir + "/.bashrc"); err != nil {
-			return fmt.Errorf("bash configuration not found: %w", err)
-		}
-	case "fish":
-		if _, err := os.Stat(homeDir + "/.config/fish/config.fish"); err != nil {
-			return fmt.Errorf("fish configuration not found: %w", err)
-		}
-	}
-
-	log.Info("Shell configuration validation successful", "shell", shell)
-	return nil
-}
-
-func (m *SetupModel) validateInstalledLanguages() error {
-	if !m.isToolAvailable("mise") {
-		return fmt.Errorf("mise not available for language validation")
-	}
-
-	selectedLangs := m.getSelectedLanguages()
-	if len(selectedLangs) == 0 {
-		return nil // No languages selected, nothing to validate
-	}
-
-	// Check if mise can see the installed languages
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "mise", "list")
-	output, err := cmd.CombinedOutput()
-
-	// Log the command
-	_ = m.runCommandWithLogging(ctx, "mise", "list")
-
-	if err != nil {
-		return fmt.Errorf("failed to list mise tools: %w", err)
-	}
-
-	miseOutput := string(output)
-	var missingLangs []string
-
-	langMap := map[string]string{
-		"Node.js":       "node",
-		"Python":        "python",
-		"Go":            "go",
-		"Ruby on Rails": "ruby",
-		"PHP":           "php",
-		"Java":          "java",
-		"Rust":          "rust",
-		"Elixir":        "elixir",
-	}
-
-	for _, lang := range selectedLangs {
-		if toolName, exists := langMap[lang]; exists {
-			if !strings.Contains(miseOutput, toolName) {
-				missingLangs = append(missingLangs, lang)
-			}
-		}
-	}
-
-	if len(missingLangs) > 0 {
-		return fmt.Errorf("missing languages: %v", missingLangs)
-	}
-
-	log.Info("Language validation successful", "installedLanguages", selectedLangs)
-	return nil
 }
 
 // buildAppList converts user selections into CrossPlatformApp objects for the streaming installer
@@ -1564,15 +1114,15 @@ func (m *SetupModel) getDatabaseApps() []types.CrossPlatformApp {
 	}
 
 	for _, db := range selectedDBs {
-		if config, exists := dbConfigs[db]; exists {
+		if dbConfig, exists := dbConfigs[db]; exists {
 			dockerCmd := fmt.Sprintf("docker run -d --name %s --restart unless-stopped -p 127.0.0.1:%s",
-				config["container"], config["port"])
+				dbConfig["container"], dbConfig["port"])
 
-			if config["env"] != "" {
-				dockerCmd += fmt.Sprintf(" -e %s", config["env"])
+			if dbConfig["env"] != "" {
+				dockerCmd += fmt.Sprintf(" -e %s", dbConfig["env"])
 			}
 
-			dockerCmd += fmt.Sprintf(" %s", config["image"])
+			dockerCmd += fmt.Sprintf(" %s", dbConfig["image"])
 
 			app := types.CrossPlatformApp{
 				Name:        fmt.Sprintf("docker-%s", strings.ToLower(db)),
