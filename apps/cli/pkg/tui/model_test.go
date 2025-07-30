@@ -19,7 +19,7 @@ func TestNewModel(t *testing.T) {
 	assert.Equal(t, apps, model.apps)
 	assert.Equal(t, 0, model.currentApp)
 	assert.Equal(t, "Ready to install applications", model.status)
-	assert.Empty(t, model.logs)
+	assert.Equal(t, 0, model.logs.Size())
 	assert.False(t, model.needsInput)
 	assert.Equal(t, "", model.inputPrompt)
 	assert.NotNil(t, model.inputResponse)
@@ -92,7 +92,7 @@ func TestModel_LogMessages(t *testing.T) {
 	}
 
 	// Verify logs are stored
-	assert.Len(t, model.logs, 3)
+	assert.Equal(t, 3, model.logs.Size())
 
 	// Verify log formatting
 	expectedLogs := make([]string, len(testLogs))
@@ -103,7 +103,8 @@ func TestModel_LogMessages(t *testing.T) {
 			log.Message)
 	}
 
-	assert.Equal(t, expectedLogs, model.logs)
+	actualLogs := model.logs.GetAll()
+	assert.Equal(t, expectedLogs, actualLogs)
 }
 
 func TestModel_LogRotation(t *testing.T) {
@@ -126,15 +127,18 @@ func TestModel_LogRotation(t *testing.T) {
 		model = updatedModel.(Model)
 	}
 
-	// Verify log rotation occurred
-	assert.Equal(t, maxLogLines, len(model.logs))
+	// Verify log rotation occurred (circular buffer should be at capacity)
+	assert.Equal(t, maxLogLines, model.logs.Size())
+
+	// Get all logs from circular buffer
+	allLogs := model.logs.GetAll()
 
 	// Verify the oldest logs were removed (should start from log 10)
-	firstLogMessage := model.logs[0]
+	firstLogMessage := allLogs[0]
 	assert.Contains(t, firstLogMessage, "Log message 10")
 
 	// Verify the newest logs are retained
-	lastLogMessage := model.logs[len(model.logs)-1]
+	lastLogMessage := allLogs[len(allLogs)-1]
 	assert.Contains(t, lastLogMessage, fmt.Sprintf("Log message %d", maxLogLines+9))
 }
 

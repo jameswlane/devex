@@ -18,6 +18,58 @@ const (
 	maxLogLines = 1000 // Maximum number of log lines to keep in memory
 )
 
+// CircularBuffer implements an efficient circular buffer for log storage
+// PERFORMANCE: Avoids memory allocations during log rotation
+type CircularBuffer struct {
+	buffer []string
+	head   int
+	size   int
+	cap    int
+}
+
+// NewCircularBuffer creates a new circular buffer with the specified capacity
+func NewCircularBuffer(capacity int) *CircularBuffer {
+	return &CircularBuffer{
+		buffer: make([]string, capacity),
+		head:   0,
+		size:   0,
+		cap:    capacity,
+	}
+}
+
+// Add adds a new log entry to the circular buffer
+func (cb *CircularBuffer) Add(log string) {
+	cb.buffer[cb.head] = log
+	cb.head = (cb.head + 1) % cb.cap
+	if cb.size < cb.cap {
+		cb.size++
+	}
+}
+
+// GetAll returns all log entries in chronological order
+func (cb *CircularBuffer) GetAll() []string {
+	if cb.size == 0 {
+		return nil
+	}
+
+	result := make([]string, cb.size)
+	if cb.size < cb.cap {
+		// Buffer not full yet, data is at the beginning
+		copy(result, cb.buffer[:cb.size])
+	} else {
+		// Buffer is full, data wraps around
+		tailSize := cb.cap - cb.head
+		copy(result, cb.buffer[cb.head:])
+		copy(result[tailSize:], cb.buffer[:cb.head])
+	}
+	return result
+}
+
+// Size returns the current number of entries in the buffer
+func (cb *CircularBuffer) Size() int {
+	return cb.size
+}
+
 // Model represents the main TUI state for the split-pane installation interface.
 // It manages the installation progress display (left pane) and real-time command
 // output streaming (right pane), along with user input handling for password prompts.
@@ -32,7 +84,7 @@ type Model struct {
 	currentApp    int
 	completedApps int64 // Atomic counter for completed apps to prevent race conditions
 	status        string
-	logs          []string
+	logs          *CircularBuffer // PERFORMANCE: Use circular buffer for efficient log storage
 	appStatus     map[string]bool // Track which apps have completed to prevent double-counting
 
 	// Installation state
@@ -117,7 +169,7 @@ func NewModel(apps []types.CrossPlatformApp) Model {
 		currentApp:    0,
 		completedApps: 0,
 		status:        "Ready to install applications",
-		logs:          []string{},
+		logs:          NewCircularBuffer(maxLogLines), // PERFORMANCE: Use circular buffer
 		appStatus:     make(map[string]bool),
 		needsInput:    false,
 		inputResponse: make(chan *SecureString, channelBufferSize), // Prevent deadlocks
@@ -186,22 +238,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case LogMsg:
-		// Add log message to viewport with rotation to prevent memory leaks
+		// Add log message to viewport using efficient circular buffer
 		logLine := fmt.Sprintf("[%s] %s: %s",
 			msg.Timestamp.Format("15:04:05"),
 			msg.Level,
 			msg.Message)
-		m.logs = append(m.logs, logLine)
 
-		// Rotate logs if we have too many
-		if len(m.logs) > maxLogLines {
-			// Properly release memory by copying to new slice
-			newLogs := make([]string, maxLogLines)
-			copy(newLogs, m.logs[len(m.logs)-maxLogLines:])
-			m.logs = newLogs
+		// PERFORMANCE: Use circular buffer for efficient log storage (no more slice reallocations)
+		m.logs.Add(logLine)
+
+		// Update viewport content with all logs
+		allLogs := m.logs.GetAll()
+		if allLogs != nil {
+			m.viewport.SetContent(strings.Join(allLogs, "\n"))
+		} else {
+			m.viewport.SetContent("")
 		}
-
-		m.viewport.SetContent(strings.Join(m.logs, "\n"))
 		m.viewport.GotoBottom()
 
 	case InputRequestMsg:
