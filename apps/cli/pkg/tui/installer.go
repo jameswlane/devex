@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -26,6 +27,46 @@ const (
 	installationTimeout = 10 * time.Minute
 	initializationDelay = 500 * time.Millisecond
 )
+
+var (
+	// trustedDomains are the only domains allowed for curl pipe installations
+	// SECURITY: This allowlist prevents execution of arbitrary remote scripts
+	trustedDomains = []string{
+		"mise.run",
+		"mise.jdx.dev",
+		"get.docker.com",
+		"download.docker.com",
+		"raw.githubusercontent.com", // For official GitHub-hosted scripts only
+	}
+)
+
+// validateDownloadURL validates that a URL is from a trusted domain
+// SECURITY: This prevents arbitrary remote script execution
+func validateDownloadURL(urlStr string) error {
+	if urlStr == "" {
+		return fmt.Errorf("empty URL not allowed")
+	}
+
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Only allow HTTPS URLs
+	if parsedURL.Scheme != "https" {
+		return fmt.Errorf("only HTTPS URLs are allowed, got: %s", parsedURL.Scheme)
+	}
+
+	// Check if domain is in trusted list
+	hostname := parsedURL.Hostname()
+	for _, trustedDomain := range trustedDomains {
+		if hostname == trustedDomain {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("domain %s is not in trusted domains list", hostname)
+}
 
 // StreamingInstaller handles installation with real-time output and interaction
 type StreamingInstaller struct {
@@ -112,20 +153,20 @@ var (
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
 	dangerousPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`[;&|]`),                                 // Command separators and logical operators
-		regexp.MustCompile(`&&`),                                    // Logical AND operator
-		regexp.MustCompile(`\|\|`),                                  // Logical OR operator
-		regexp.MustCompile(`` + "`" + `[^` + "`" + `]*` + "`" + ``), // Command substitution
-		regexp.MustCompile(`\$\([^)]*\)`),                           // Command substitution
-		regexp.MustCompile(`\$\{[^}]*\}`),                           // Variable expansion (except safe ones)
-		regexp.MustCompile(`\.\./`),                                 // Directory traversal
-		regexp.MustCompile(`/etc/passwd`),                           // Sensitive files
-		regexp.MustCompile(`/etc/shadow`),                           // Sensitive files
-		regexp.MustCompile(`rm\s+-rf\s+/[^a-zA-Z]`),                 // Dangerous rm commands on root
-		regexp.MustCompile(`dd\s+if=/dev`),                          // Dangerous dd commands
-		regexp.MustCompile(`:\(\)\{`),                               // Fork bombs
-		regexp.MustCompile(`>\s*/etc/`),                             // Writing to system directories
-		regexp.MustCompile(`>\s*/dev/`),                             // Writing to device files
+		regexp.MustCompile(`[;&|]`),                 // Command separators and logical operators
+		regexp.MustCompile(`&&`),                    // Logical AND operator
+		regexp.MustCompile(`\|\|`),                  // Logical OR operator
+		regexp.MustCompile("`[^`]*`"),               // Command substitution (backticks)
+		regexp.MustCompile(`\$\([^)]*\)`),           // Command substitution $()
+		regexp.MustCompile(`\$\{[^}]*\}`),           // Variable expansion (except safe ones)
+		regexp.MustCompile(`\.\./`),                 // Directory traversal
+		regexp.MustCompile(`/etc/passwd`),           // Sensitive files
+		regexp.MustCompile(`/etc/shadow`),           // Sensitive files
+		regexp.MustCompile(`rm\s+-rf\s+/[^a-zA-Z]`), // Dangerous rm commands on root
+		regexp.MustCompile(`dd\s+if=/dev`),          // Dangerous dd commands
+		regexp.MustCompile(`:\(\)\{`),               // Fork bombs
+		regexp.MustCompile(`>\s*/etc/`),             // Writing to system directories
+		regexp.MustCompile(`>\s*/dev/`),             // Writing to device files
 	}
 )
 
@@ -148,6 +189,7 @@ func sanitizeUserInput(input string) string {
 
 // parseCommand safely parses a command string into executable parts
 // Returns (executable, args, needsShell) where needsShell indicates if shell execution is required
+// SECURITY: This function now REJECTS shell execution to prevent security bypass
 func parseCommand(command string) (string, []string, bool) {
 	// Trim whitespace
 	command = strings.TrimSpace(command)
@@ -161,26 +203,29 @@ func parseCommand(command string) (string, []string, bool) {
 		return "", nil, false
 	}
 
-	// Check if command contains shell features that require shell execution
-	shellFeatures := []string{
-		"|", "&&", "||", ";", "&", ">", ">>", "<", "$(", "`", "\"", "'",
+	// SECURITY FIX: Check for dangerous shell features and REJECT them
+	// Allow simple quoted strings but reject complex shell constructs
+	dangerousFeatures := []string{
+		"|", "&&", "||", ";", "&", ">", ">>", "<", "$(", "`",
 	}
 
-	needsShell := false
-	for _, feature := range shellFeatures {
+	for _, feature := range dangerousFeatures {
 		if strings.Contains(command, feature) {
-			needsShell = true
-			break
+			// SECURITY: Reject commands with dangerous shell features
+			return "", nil, false
 		}
 	}
 
-	// If no shell features, we can execute directly
-	if !needsShell {
-		return parts[0], parts[1:], false
+	// ADDITIONAL SECURITY: Check against dangerous patterns using our regex list
+	for _, pattern := range dangerousPatterns {
+		if pattern.MatchString(command) {
+			// SECURITY: Reject commands matching dangerous patterns
+			return "", nil, false
+		}
 	}
 
-	// Complex command requires shell
-	return "/bin/bash", []string{"-c", command}, true
+	// Only allow direct execution of validated commands
+	return parts[0], parts[1:], false
 }
 
 // CommandExecutor defines the interface for command execution, allowing for better testing and modularity
@@ -424,9 +469,19 @@ func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osCo
 	return si.executeCommandStream(osConfig.InstallCommand)
 }
 
-// executeCurlPipeInstall handles curl pipe installations
+// executeCurlPipeInstall handles curl pipe installations with security validation
+// SECURITY: Now validates URLs against trusted domains before execution
 func (si *StreamingInstaller) executeCurlPipeInstall(app types.CrossPlatformApp, osConfig *types.OSConfig) error {
-	si.sendLog("INFO", fmt.Sprintf("Downloading from %s", osConfig.DownloadURL))
+	// SECURITY: Validate URL before attempting download
+	if err := validateDownloadURL(osConfig.DownloadURL); err != nil {
+		si.sendLog("ERROR", fmt.Sprintf("URL validation failed for %s: %v", app.Name, err))
+		return fmt.Errorf("URL validation failed: %w", err)
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Downloading from validated URL: %s", osConfig.DownloadURL))
+
+	// SECURITY: Still risky but now limited to trusted domains
+	// TODO: Consider downloading script first, validating content, then executing
 	command := fmt.Sprintf("curl -fsSL %s | bash", osConfig.DownloadURL)
 	return si.executeCommandStream(command)
 }
@@ -593,6 +648,7 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 				return // Skip password prompts during testing
 			}
 			response := make(chan *SecureString, 1)
+			var closeOnce sync.Once // SECURITY: Prevent panic from closing channel multiple times
 
 			// Send input request with timeout protection
 			select {
@@ -626,13 +682,13 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 			case <-si.ctx.Done():
 				// Context cancelled while waiting for input
 				si.sendLog("INFO", "Input cancelled due to context cancellation")
-				// Close the response channel to prevent goroutine leak
-				close(response)
+				// SECURITY FIX: Safely close channel only once to prevent panic
+				closeOnce.Do(func() { close(response) })
 				return
 			case <-time.After(inputTimeout):
 				si.sendLog("ERROR", "Input timeout - no response received")
-				// Close the response channel to prevent goroutine leak
-				close(response)
+				// SECURITY FIX: Safely close channel only once to prevent panic
+				closeOnce.Do(func() { close(response) })
 				return
 			}
 		}
