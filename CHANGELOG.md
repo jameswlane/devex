@@ -1,3 +1,9 @@
+## [0.15.1](https://github.com/jameswlane/devex/compare/0.15.0...0.15.1) (2025-07-31)
+
+### Bug Fixes
+
+* resolve Windows cross-compilation issue with syscall.SysProcAttr ([db668c3](https://github.com/jameswlane/devex/commit/db668c356a3052000e2e8743d026f9ec0eedfbe3))
+
 ## [0.15.0](https://github.com/jameswlane/devex/compare/0.14.0...0.15.0) (2025-07-31)
 
 ### Features
