@@ -14,7 +14,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unicode"
 
@@ -351,9 +350,7 @@ func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command st
 	executable, args, _ := parseCommand(command)
 
 	cmd := exec.CommandContext(ctx, executable, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
+	cmd.SysProcAttr = ce.getPlatformSysProcAttr()
 
 	return cmd, nil
 }
