@@ -20,12 +20,12 @@ Based on implementation complexity and market share, platforms are prioritized a
 #### Code Quality & Architecture
 - [ ] **Shell Command Execution Bug** - `pkg/installers/installers.go:127-134` - Wrong field used in shell command processing
 - [ ] **Incomplete Installer Implementations** - Critical functions are stubbed out:
-  - `processConfigFiles()` - Not implemented
-  - `processThemes()` - Not implemented  
-  - `validateSystemRequirements()` - Not implemented
-  - `backupExistingFiles()` - Not implemented
-  - `setupEnvironment()` - Not implemented
-  - `cleanupAfterInstall()` - Not implemented
+    - `processConfigFiles()` - Not implemented
+    - `processThemes()` - Not implemented
+    - `validateSystemRequirements()` - Not implemented
+    - `backupExistingFiles()` - Not implemented
+    - `setupEnvironment()` - Not implemented
+    - `cleanupAfterInstall()` - Not implemented
 - [ ] **Missing Rollback/Recovery** - No mechanism to undo installations or recover from failures
 - [ ] **Missing Dry-Run Implementation** - Many operations don't respect `--dry-run` flag
 
@@ -44,16 +44,16 @@ Based on implementation complexity and market share, platforms are prioritized a
 - [x] **Snap** - ✅ Basic support (Ubuntu integration)
 
 **🟡 Priority 2: Red Hat-based Linux - CRITICAL MISSING INSTALLER**
-- [ ] **DNF (Fedora/RHEL/CentOS)** - ❌ **MISSING** - Blocks RHEL family support
+- [ ] **DNF (Fedora/RHEL/CentOS)** - ❌ **MISSING** - Blocks RHEL family support [#92](https://github.com/jameswlane/devex/issues/92)
 - [ ] **YUM (Legacy RHEL/CentOS)** - ❌ Missing
 - [ ] **RPM (Manual packages)** - ❌ Missing
 
-**🟡 Priority 3: Arch-based Linux - CRITICAL MISSING INSTALLER**  
-- [ ] **Pacman (Arch Linux/Manjaro)** - ❌ **MISSING** - Blocks Arch family support
+**🟡 Priority 3: Arch-based Linux - CRITICAL MISSING INSTALLER**
+- [ ] **Pacman (Arch Linux/Manjaro)** - ❌ **MISSING** - Blocks Arch family support [#93](https://github.com/jameswlane/devex/issues/93)
 - [ ] **YAY (AUR helper)** - ❌ Missing (for AUR packages)
 
 **🟡 Priority 4: SUSE-based Linux - MISSING INSTALLER**
-- [ ] **Zypper (openSUSE/SLES)** - ❌ **MISSING** - Blocks SUSE family support
+- [ ] **Zypper (openSUSE/SLES)** - ❌ **MISSING** - Blocks SUSE family support [#94](https://github.com/jameswlane/devex/issues/94)
 
 **🔴 Priority 5: macOS - PARTIAL SUPPORT**
 - [x] **Homebrew** - ✅ Basic implementation (needs testing)
@@ -65,7 +65,7 @@ Based on implementation complexity and market share, platforms are prioritized a
 - [ ] **Scoop** - ❌ Missing [#58](https://github.com/jameswlane/devex/issues/58)
 
 #### Core Installation Features
-- [ ] **Theme Processing** - GNOME/KDE theme application [#5](https://github.com/jameswlane/devex/issues/5)
+- [ ] **Theme Processing** - GNOME/KDE theme application [#96](https://github.com/jameswlane/devex/issues/96)
 - [ ] **Configuration Files** - Copy and process app configs
 - [ ] **Font Installation** - System font management
 - [ ] **Shell Setup** - Zsh/Bash configuration with Oh My Zsh
@@ -82,9 +82,9 @@ Based on implementation complexity and market share, platforms are prioritized a
 - [ ] **Desktop Environment Auto-Detection** - Enhanced DE detection [#62](https://github.com/jameswlane/devex/issues/62)
 
 #### Essential Commands
-- [ ] **Uninstall Command** - Remove apps and dependencies
-- [ ] **List Command** - Show installed/available apps (`devex list installed`, `devex list available`)
-- [ ] **Status Command** - Check installation status (`devex status --app curl`)
+- [ ] **Uninstall Command** - Remove apps and dependencies [#97](https://github.com/jameswlane/devex/issues/97)
+- [ ] **List Command** - Show installed/available apps (`devex list installed`, `devex list available`) [#98](https://github.com/jameswlane/devex/issues/98)
+- [ ] **Status Command** - Check installation status (`devex status --app curl`) [#99](https://github.com/jameswlane/devex/issues/99)
 - [ ] **Update Command** - Update package lists and apps (`devex update`, `devex upgrade`)
 
 #### Database & Storage
@@ -151,7 +151,7 @@ macos:
 
 **Current Status:** 🔴 No Windows support implemented - Requires ground-up development
 
-### Package Managers Status  
+### Package Managers Status
 - [ ] **Windows Package Manager (winget)** - ❌ **MISSING** [#56](https://github.com/jameswlane/devex/issues/56) **HIGHEST PRIORITY**
 - [ ] **Chocolatey** - ❌ **MISSING** [#57](https://github.com/jameswlane/devex/issues/57) **HIGH PRIORITY**
 - [ ] **Scoop** - ❌ **MISSING** [#58](https://github.com/jameswlane/devex/issues/58) **MEDIUM PRIORITY**
@@ -205,54 +205,54 @@ windows:
 A comprehensive configuration management system that empowers users to create, customize, and manage their own development environment configurations.
 
 #### Core Commands:
-- [ ] **`devex init`** - Interactive configuration wizard
-  - Guided setup for applications, languages, themes, and system settings
-  - Platform detection and smart recommendations
-  - Configuration validation and conflict detection
-  - Custom configuration directory creation (`~/.devex/`)
-  - Template selection (web dev, mobile dev, DevOps, data science, etc.)
+- [ ] **`devex init`** - Interactive configuration wizard [#95](https://github.com/jameswlane/devex/issues/95)
+    - Guided setup for applications, languages, themes, and system settings
+    - Platform detection and smart recommendations
+    - Configuration validation and conflict detection
+    - Custom configuration directory creation (`~/.devex/`)
+    - Template selection (web dev, mobile dev, DevOps, data science, etc.)
 
 - [ ] **`devex add`** - Interactive application/tool addition
-  - Category-based addition (development, databases, optional, languages)
-  - Smart dependency resolution and conflict checking
-  - Custom install methods and commands configuration
-  - Integration with existing package managers
-  - Validation before saving to configuration
+    - Category-based addition (development, databases, optional, languages)
+    - Smart dependency resolution and conflict checking
+    - Custom install methods and commands configuration
+    - Integration with existing package managers
+    - Validation before saving to configuration
 
 - [ ] **`devex remove`** - Safe configuration removal
-  - Dependency checking before removal
-  - Automatic backup creation before modification
-  - Cascade removal options for related items
-  - Undo capability for recent changes
+    - Dependency checking before removal
+    - Automatic backup creation before modification
+    - Cascade removal options for related items
+    - Undo capability for recent changes
 
 - [ ] **`devex config`** - Configuration management utilities
-  - Edit existing configurations (`devex config edit`)
-  - View current configuration (`devex config show`)
-  - Validate configuration files (`devex config validate`)
-  - Import/export configurations (`devex config export`, `devex config import`)
-  - Merge configurations from different sources
-  - Configuration diff and comparison tools
+    - Edit existing configurations (`devex config edit`)
+    - View current configuration (`devex config show`)
+    - Validate configuration files (`devex config validate`)
+    - Import/export configurations (`devex config export`, `devex config import`)
+    - Merge configurations from different sources
+    - Configuration diff and comparison tools
 
 #### Advanced Features:
 - [ ] **Template System** - Pre-built configuration templates
-  - Web Development (React, Vue, Angular, Node.js)
-  - Mobile Development (React Native, Flutter, iOS, Android)
-  - DevOps (Docker, Kubernetes, Terraform, AWS)
-  - Data Science (Python, R, Jupyter, MLflow)
-  - Game Development (Unity, Unreal, Godot)
-  - Custom team templates
+    - Web Development (React, Vue, Angular, Node.js)
+    - Mobile Development (React Native, Flutter, iOS, Android)
+    - DevOps (Docker, Kubernetes, Terraform, AWS)
+    - Data Science (Python, R, Jupyter, MLflow)
+    - Game Development (Unity, Unreal, Godot)
+    - Custom team templates
 
 - [ ] **Configuration Inheritance** - Layered configuration system
-  - Base configurations with overrides
-  - Team/organization shared configurations
-  - Personal customizations on top of team configs
-  - Environment-specific configurations (dev, staging, prod)
+    - Base configurations with overrides
+    - Team/organization shared configurations
+    - Personal customizations on top of team configs
+    - Environment-specific configurations (dev, staging, prod)
 
 - [ ] **Interactive Wizards** - Smart configuration assistance
-  - Technology stack detection and recommendations
-  - Guided dependency resolution
-  - Conflict resolution with user choices
-  - Performance impact warnings for heavy installations
+    - Technology stack detection and recommendations
+    - Guided dependency resolution
+    - Conflict resolution with user choices
+    - Performance impact warnings for heavy installations
 
 #### Technical Implementation:
 - Interactive CLI using `bubbletea` or `survey` libraries
@@ -419,7 +419,7 @@ These are high-impact, low-effort improvements that can be implemented quickly:
 4. **Testing on Fedora/RHEL** (4-8 hours)
 
 **🟡 Priority 3: Unlock Arch Linux (Estimated: 1-2 weeks)**
-1. **Pacman installer implementation** (8-16 hours) - Core blocker  
+1. **Pacman installer implementation** (8-16 hours) - Core blocker
 2. **YAY/AUR support** (6-12 hours) - Community packages
 3. **Arch-specific handling** (2-4 hours) - Rolling release
 4. **Testing on Arch/Manjaro** (4-8 hours)
@@ -435,7 +435,7 @@ These are high-impact, low-effort improvements that can be implemented quickly:
 3. **macOS-specific features** (16-24 hours)
 4. **Testing on Intel/Apple Silicon** (8-16 hours)
 
-**🔴 Priority 6: Enable Windows (Estimated: 3-4 weeks)**  
+**🔴 Priority 6: Enable Windows (Estimated: 3-4 weeks)**
 1. **winget installer** (12-20 hours) - Primary package manager
 2. **Chocolatey installer** (8-16 hours) - Community favorite
 3. **Scoop installer** (6-12 hours) - User-scope
@@ -445,7 +445,7 @@ These are high-impact, low-effort improvements that can be implemented quickly:
 
 **5-10 Minute Fixes:**
 1. Fix shell command execution bug in `pkg/installers/installers.go:127-134`
-2. Add missing directory creation before database initialization  
+2. Add missing directory creation before database initialization
 3. Improve help command descriptions and examples
 
 **30-60 Minute Fixes:**
