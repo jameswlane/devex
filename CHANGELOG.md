@@ -1,3 +1,16 @@
+## [0.15.0](https://github.com/jameswlane/devex/compare/0.14.0...0.15.0) (2025-07-31)
+
+### Features
+
+* implement comprehensive GPG key fingerprint validation and enhance security ([aa6636c](https://github.com/jameswlane/devex/commit/aa6636cf77934f60218a91cd2ce8eac228bde3c6))
+* **tui:** working on a better installer ([b461023](https://github.com/jameswlane/devex/commit/b461023f9b849a35facd953b905f377acf129757))
+* **tui:** working on a better installer ([d4c674e](https://github.com/jameswlane/devex/commit/d4c674e17d3393de00ddd35b9341474d56b0a8ab))
+
+### Bug Fixes
+
+* critical security vulnerabilities in installer and TUI ([2be1448](https://github.com/jameswlane/devex/commit/2be1448eef17921c185d7986cce2b93df3506ad0))
+* resolve all critical security vulnerabilities and code quality issues ([f446fbc](https://github.com/jameswlane/devex/commit/f446fbc7357c37a7ad05f4f4ca9ab1bf69ed2808))
+
 ## [0.14.0](https://github.com/jameswlane/devex/compare/0.13.1...0.14.0) (2025-07-29)
 
 ### Features
