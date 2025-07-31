@@ -44,16 +44,16 @@ Based on implementation complexity and market share, platforms are prioritized a
 - [x] **Snap** - ✅ Basic support (Ubuntu integration)
 
 **🟡 Priority 2: Red Hat-based Linux - CRITICAL MISSING INSTALLER**
-- [ ] **DNF (Fedora/RHEL/CentOS)** - ❌ **MISSING** - Blocks RHEL family support
+- [ ] **DNF (Fedora/RHEL/CentOS)** - ❌ **MISSING** - Blocks RHEL family support [#92](https://github.com/jameswlane/devex/issues/92)
 - [ ] **YUM (Legacy RHEL/CentOS)** - ❌ Missing
 - [ ] **RPM (Manual packages)** - ❌ Missing
 
 **🟡 Priority 3: Arch-based Linux - CRITICAL MISSING INSTALLER**  
-- [ ] **Pacman (Arch Linux/Manjaro)** - ❌ **MISSING** - Blocks Arch family support
+- [ ] **Pacman (Arch Linux/Manjaro)** - ❌ **MISSING** - Blocks Arch family support [#93](https://github.com/jameswlane/devex/issues/93)
 - [ ] **YAY (AUR helper)** - ❌ Missing (for AUR packages)
 
 **🟡 Priority 4: SUSE-based Linux - MISSING INSTALLER**
-- [ ] **Zypper (openSUSE/SLES)** - ❌ **MISSING** - Blocks SUSE family support
+- [ ] **Zypper (openSUSE/SLES)** - ❌ **MISSING** - Blocks SUSE family support [#94](https://github.com/jameswlane/devex/issues/94)
 
 **🔴 Priority 5: macOS - PARTIAL SUPPORT**
 - [x] **Homebrew** - ✅ Basic implementation (needs testing)
@@ -65,7 +65,7 @@ Based on implementation complexity and market share, platforms are prioritized a
 - [ ] **Scoop** - ❌ Missing [#58](https://github.com/jameswlane/devex/issues/58)
 
 #### Core Installation Features
-- [ ] **Theme Processing** - GNOME/KDE theme application [#5](https://github.com/jameswlane/devex/issues/5)
+- [ ] **Theme Processing** - GNOME/KDE theme application [#96](https://github.com/jameswlane/devex/issues/96)
 - [ ] **Configuration Files** - Copy and process app configs
 - [ ] **Font Installation** - System font management
 - [ ] **Shell Setup** - Zsh/Bash configuration with Oh My Zsh
@@ -82,9 +82,9 @@ Based on implementation complexity and market share, platforms are prioritized a
 - [ ] **Desktop Environment Auto-Detection** - Enhanced DE detection [#62](https://github.com/jameswlane/devex/issues/62)
 
 #### Essential Commands
-- [ ] **Uninstall Command** - Remove apps and dependencies
-- [ ] **List Command** - Show installed/available apps (`devex list installed`, `devex list available`)
-- [ ] **Status Command** - Check installation status (`devex status --app curl`)
+- [ ] **Uninstall Command** - Remove apps and dependencies [#97](https://github.com/jameswlane/devex/issues/97)
+- [ ] **List Command** - Show installed/available apps (`devex list installed`, `devex list available`) [#98](https://github.com/jameswlane/devex/issues/98)
+- [ ] **Status Command** - Check installation status (`devex status --app curl`) [#99](https://github.com/jameswlane/devex/issues/99)
 - [ ] **Update Command** - Update package lists and apps (`devex update`, `devex upgrade`)
 
 #### Database & Storage
@@ -205,7 +205,7 @@ windows:
 A comprehensive configuration management system that empowers users to create, customize, and manage their own development environment configurations.
 
 #### Core Commands:
-- [ ] **`devex init`** - Interactive configuration wizard
+- [ ] **`devex init`** - Interactive configuration wizard [#95](https://github.com/jameswlane/devex/issues/95)
   - Guided setup for applications, languages, themes, and system settings
   - Platform detection and smart recommendations
   - Configuration validation and conflict detection
