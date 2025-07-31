@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -22,13 +23,40 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
-const (
-	// Channel and timeout constants
-	channelBufferSize   = 5
-	inputTimeout        = 30 * time.Second
-	installationTimeout = 10 * time.Minute
-	initializationDelay = 500 * time.Millisecond
-)
+// InstallerConfig holds configuration constants for the installer
+type InstallerConfig struct {
+	// Channel and timeout settings
+	ChannelBufferSize   int
+	InputTimeout        time.Duration
+	InstallationTimeout time.Duration
+	InitializationDelay time.Duration
+
+	// Security limits
+	MaxGPGKeySize int64
+	MaxScriptSize int64
+	MaxLogLines   int
+
+	// HTTP settings
+	HTTPTimeout time.Duration
+
+	// Error handling
+	FailOnDatabaseErrors bool // Whether database errors should fail the installation
+}
+
+// DefaultInstallerConfig returns the default configuration
+func DefaultInstallerConfig() InstallerConfig {
+	return InstallerConfig{
+		ChannelBufferSize:    5,
+		InputTimeout:         30 * time.Second,
+		InstallationTimeout:  10 * time.Minute,
+		InitializationDelay:  500 * time.Millisecond,
+		MaxGPGKeySize:        1024 * 1024,     // 1MB for GPG keys
+		MaxScriptSize:        5 * 1024 * 1024, // Reduced to 5MB (was 10MB)
+		MaxLogLines:          1000,
+		HTTPTimeout:          30 * time.Second,
+		FailOnDatabaseErrors: false, // By default, don't fail on DB errors
+	}
+}
 
 var (
 	// trustedDomains are the only domains allowed for curl pipe installations
@@ -70,6 +98,68 @@ func validateDownloadURL(urlStr string) error {
 	return fmt.Errorf("domain %s is not in trusted domains list", hostname)
 }
 
+// validateTempPath validates that a path is safe for temporary file operations
+// SECURITY: Prevents directory traversal attacks and ensures files are created in safe locations
+func validateTempPath(path string) error {
+	if path == "" {
+		return fmt.Errorf("empty path not allowed")
+	}
+
+	// Clean the path to resolve any .. or . components
+	cleanPath := filepath.Clean(path)
+
+	// Ensure the path is absolute
+	if !filepath.IsAbs(cleanPath) {
+		return fmt.Errorf("path must be absolute: %s", path)
+	}
+
+	// Get the system temp directory
+	tempDir := os.TempDir()
+	tempDirAbs, err := filepath.Abs(tempDir)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute temp directory: %w", err)
+	}
+
+	// Ensure the path is within the temp directory
+	rel, err := filepath.Rel(tempDirAbs, cleanPath)
+	if err != nil {
+		return fmt.Errorf("failed to get relative path: %w", err)
+	}
+
+	// Check for directory traversal attempts
+	if strings.HasPrefix(rel, "..") || strings.Contains(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("directory traversal attempt detected: %s", path)
+	}
+
+	return nil
+}
+
+// createSecureTempFile creates a temporary file with security validation
+// SECURITY: Validates the resulting path and sets secure permissions
+func createSecureTempFile(dir, pattern string) (*os.File, error) {
+	// Create the temporary file
+	tmpFile, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	// Validate the resulting path
+	if err := validateTempPath(tmpFile.Name()); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return nil, fmt.Errorf("temp file path validation failed: %w", err)
+	}
+
+	// Set secure permissions (readable/writable by owner only)
+	if err := os.Chmod(tmpFile.Name(), 0600); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return nil, fmt.Errorf("failed to set secure permissions: %w", err)
+	}
+
+	return tmpFile, nil
+}
+
 // StreamingInstaller handles installation with real-time output and interaction
 type StreamingInstaller struct {
 	program  *tea.Program
@@ -78,6 +168,7 @@ type StreamingInstaller struct {
 	stdinMux sync.Mutex      // Protects stdin access from race conditions
 	ctx      context.Context
 	cancel   context.CancelFunc
+	config   InstallerConfig // Configuration settings
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -151,9 +242,7 @@ var (
 		"which":   true,
 		"whereis": true,
 		"id":      true,
-		"whoami":  true,
-		"gpg":     true, // SECURITY: Added for GPG key validation
-		"tee":     true, // SECURITY: Added for repository source addition
+		"whoami":  true, // SECURITY: Added for repository source addition
 	}
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
@@ -311,6 +400,7 @@ func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx cont
 		executor: NewDefaultCommandExecutor(), // Use default command executor
 		ctx:      instCtx,
 		cancel:   cancel,
+		config:   DefaultInstallerConfig(),
 	}
 }
 
@@ -323,6 +413,7 @@ func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Reposito
 		executor: executor,
 		ctx:      instCtx,
 		cancel:   cancel,
+		config:   DefaultInstallerConfig(),
 	}
 }
 
@@ -332,24 +423,23 @@ func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Reposito
 // Individual app failures are logged but don't stop the overall installation process, unless caused by cancellation.
 //
 // Parameters:
+//   - ctx: Context for cancellation and timeout control
 //   - apps: Slice of CrossPlatformApp configurations to install
 //   - settings: Installation settings including verbosity and dry-run flags
 //
 // Returns:
 //   - error: nil on success, context.Canceled if cancelled, or other error on critical failures
-//
-// nolint: contextcheck
-func (si *StreamingInstaller) InstallApps(apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
+func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	for _, app := range apps {
 		// Check for context cancellation before each app
 		select {
-		case <-si.ctx.Done():
+		case <-ctx.Done():
 			si.sendLog("INFO", "Installation cancelled before starting next app")
-			return si.ctx.Err()
+			return ctx.Err()
 		default:
 		}
 
-		if err := si.InstallApp(app, settings); err != nil {
+		if err := si.InstallApp(ctx, app, settings); err != nil {
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
 			if si.program != nil {
 				si.program.Send(AppCompleteMsg{
@@ -358,8 +448,8 @@ func (si *StreamingInstaller) InstallApps(apps []types.CrossPlatformApp, setting
 				})
 			}
 			// If the error is due to context cancellation, stop installation entirely
-			if errors.Is(err, context.Canceled) || si.ctx.Err() != nil {
-				return si.ctx.Err()
+			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+				return ctx.Err()
 			}
 			continue
 		}
@@ -392,7 +482,7 @@ func (si *StreamingInstaller) InstallApps(apps []types.CrossPlatformApp, setting
 //
 // Returns:
 //   - error: nil on success, or detailed error indicating which phase failed
-func (si *StreamingInstaller) InstallApp(app types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
+func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	si.sendLog("INFO", fmt.Sprintf("Starting installation of %s", app.Name))
 
 	// Get platform-specific configuration
@@ -409,30 +499,37 @@ func (si *StreamingInstaller) InstallApp(app types.CrossPlatformApp, settings co
 	// Handle pre-install commands
 	if len(osConfig.PreInstall) > 0 {
 		si.sendLog("INFO", "Executing pre-install commands...")
-		if err := si.executeCommands(osConfig.PreInstall); err != nil {
+		if err := si.executeCommands(ctx, osConfig.PreInstall); err != nil {
 			return fmt.Errorf("pre-install failed: %w", err)
 		}
 	}
 
 	// Execute main installation command
 	si.sendLog("INFO", fmt.Sprintf("Installing %s using %s...", app.Name, osConfig.InstallMethod))
-	if err := si.executeInstallCommand(app, &osConfig); err != nil {
+	if err := si.executeInstallCommand(ctx, app, &osConfig); err != nil {
 		return fmt.Errorf("installation failed: %w", err)
 	}
 
 	// Handle post-install commands
 	if len(osConfig.PostInstall) > 0 {
 		si.sendLog("INFO", "Executing post-install commands...")
-		if err := si.executeCommands(osConfig.PostInstall); err != nil {
+		if err := si.executeCommands(ctx, osConfig.PostInstall); err != nil {
 			return fmt.Errorf("post-install failed: %w", err)
 		}
 	}
 
-	// Save to repository with better error handling
+	// Save to repository with configurable error handling
 	if err := si.repo.AddApp(app.Name); err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("Failed to save app to database: %v", err))
-		// Don't fail the installation for database errors, but log them prominently
-		si.sendLog("WARN", "Installation succeeded but app tracking may be inconsistent")
+
+		if si.config.FailOnDatabaseErrors {
+			// Fail the installation if configured to do so
+			return fmt.Errorf("database operation failed: %w", err)
+		} else {
+			// Log prominently but don't fail the installation
+			si.sendLog("WARN", "Installation succeeded but app tracking may be inconsistent")
+			si.sendLog("WARN", "Consider fixing database connectivity for proper app tracking")
+		}
 	} else {
 		si.sendLog("INFO", fmt.Sprintf("App %s registered in database", app.Name))
 	}
@@ -442,22 +539,22 @@ func (si *StreamingInstaller) InstallApp(app types.CrossPlatformApp, settings co
 }
 
 // executeInstallCommand executes the main installation command
-func (si *StreamingInstaller) executeInstallCommand(app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
 	switch osConfig.InstallMethod {
 	case "apt":
-		return si.executeAptInstall(app, osConfig)
+		return si.executeAptInstall(ctx, app, osConfig)
 	case "curlpipe":
-		return si.executeCurlPipeInstall(app, osConfig)
+		return si.executeCurlPipeInstall(ctx, app, osConfig)
 	case "docker":
-		return si.executeDockerInstall(app, osConfig)
+		return si.executeDockerInstall(ctx, app, osConfig)
 	default:
 		// Generic command execution
-		return si.executeCommandStream(osConfig.InstallCommand)
+		return si.executeCommandStream(ctx, osConfig.InstallCommand)
 	}
 }
 
 // executeAptInstall handles APT package installation with GPG key validation
-func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
 	// Add APT sources with GPG key validation if needed
 	for _, source := range osConfig.AptSources {
 		si.sendLog("INFO", fmt.Sprintf("Adding APT source: %s", source.SourceName))
@@ -469,14 +566,14 @@ func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osCo
 			// Use secure GPG validation if fingerprint is provided
 			if source.KeyFingerprint != "" {
 				si.sendLog("INFO", "Using fingerprint validation for enhanced security")
-				if err := si.validateAndAddGPGKey(source.KeySource, source.KeyFingerprint); err != nil {
+				if err := si.validateAndAddGPGKey(ctx, source.KeySource, source.KeyFingerprint); err != nil {
 					return fmt.Errorf("failed to validate and add GPG key for %s: %w", source.SourceName, err)
 				}
 			} else {
 				// Fallback to basic key addition (less secure but backwards compatible)
 				si.sendLog("WARN", "No fingerprint provided - using basic key validation")
 				addKeyCmd := fmt.Sprintf("curl -fsSL %s | sudo apt-key add -", source.KeySource)
-				if err := si.executeCommandStream(addKeyCmd); err != nil {
+				if err := si.executeCommandStream(ctx, addKeyCmd); err != nil {
 					return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
 				}
 			}
@@ -486,7 +583,7 @@ func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osCo
 		if source.SourceRepo != "" {
 			addSourceCmd := fmt.Sprintf("echo '%s' | sudo tee /etc/apt/sources.list.d/%s.list",
 				source.SourceRepo, source.SourceName)
-			if err := si.executeCommandStream(addSourceCmd); err != nil {
+			if err := si.executeCommandStream(ctx, addSourceCmd); err != nil {
 				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
 			}
 		}
@@ -494,17 +591,17 @@ func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osCo
 
 	// Update package lists
 	si.sendLog("INFO", "Updating package lists...")
-	if err := si.executeCommandStream("sudo apt update"); err != nil {
+	if err := si.executeCommandStream(ctx, "sudo apt update"); err != nil {
 		return err
 	}
 
 	// Install package
-	return si.executeCommandStream(osConfig.InstallCommand)
+	return si.executeCommandStream(ctx, osConfig.InstallCommand)
 }
 
 // validateAndAddGPGKey validates a GPG key fingerprint and adds the key to APT keyring
 // SECURITY: Validates key fingerprint to prevent key substitution attacks
-func (si *StreamingInstaller) validateAndAddGPGKey(keyURL, expectedFingerprint string) error {
+func (si *StreamingInstaller) validateAndAddGPGKey(ctx context.Context, keyURL, expectedFingerprint string) error {
 	si.sendLog("INFO", "Validating and adding GPG key...")
 
 	// Validate the key URL is HTTPS
@@ -521,36 +618,30 @@ func (si *StreamingInstaller) validateAndAddGPGKey(keyURL, expectedFingerprint s
 
 	// Validate the key fingerprint if provided
 	if expectedFingerprint != "" {
-		if err := si.validateGPGKeyFingerprint(tempKeyFile, expectedFingerprint); err != nil {
+		if err := si.validateGPGKeyFingerprint(ctx, tempKeyFile, expectedFingerprint); err != nil {
 			return fmt.Errorf("GPG key fingerprint validation failed: %w", err)
 		}
 	}
 
 	// Add the key to APT keyring
 	addKeyCmd := fmt.Sprintf("sudo apt-key add %s", tempKeyFile)
-	return si.executeCommandStream(addKeyCmd)
+	return si.executeCommandStream(ctx, addKeyCmd)
 }
 
 // downloadGPGKey downloads a GPG key from URL to a temporary file
 func (si *StreamingInstaller) downloadGPGKey(keyURL string) (string, error) {
 	si.sendLog("INFO", "Downloading GPG key...")
 
-	// Create temporary file
-	tmpFile, err := os.CreateTemp("", "devex-gpg-key-*.asc")
+	// Create secure temporary file
+	tmpFile, err := createSecureTempFile("", "devex-gpg-key-*.asc")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
+		return "", err
 	}
 	defer tmpFile.Close()
 
-	// Set restrictive permissions
-	if err := os.Chmod(tmpFile.Name(), 0600); err != nil {
-		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to set permissions: %w", err)
-	}
-
 	// Create HTTP client with timeout
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: si.config.HTTPTimeout,
 	}
 
 	req, err := http.NewRequestWithContext(si.ctx, "GET", keyURL, nil)
@@ -572,8 +663,7 @@ func (si *StreamingInstaller) downloadGPGKey(keyURL string) (string, error) {
 	}
 
 	// Copy content with size limit
-	const maxKeySize = 1024 * 1024 // 1MB limit for GPG keys
-	_, err = io.CopyN(tmpFile, resp.Body, maxKeySize)
+	_, err = io.CopyN(tmpFile, resp.Body, si.config.MaxGPGKeySize)
 	if err != nil && !errors.Is(err, io.EOF) {
 		os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to write key: %w", err)
@@ -585,7 +675,7 @@ func (si *StreamingInstaller) downloadGPGKey(keyURL string) (string, error) {
 
 // validateGPGKeyFingerprint validates that a GPG key matches the expected fingerprint
 // SECURITY: Prevents key substitution attacks by validating cryptographic fingerprint
-func (si *StreamingInstaller) validateGPGKeyFingerprint(keyFile, expectedFingerprint string) error {
+func (si *StreamingInstaller) validateGPGKeyFingerprint(ctx context.Context, keyFile, expectedFingerprint string) error {
 	si.sendLog("INFO", "Validating GPG key fingerprint...")
 
 	// Clean and normalize expected fingerprint (remove spaces, convert to uppercase)
@@ -593,7 +683,7 @@ func (si *StreamingInstaller) validateGPGKeyFingerprint(keyFile, expectedFingerp
 
 	// Use gpg to get the key fingerprint
 	getFingerprintCmd := fmt.Sprintf("gpg --with-fingerprint --import-options show-only --import %s", keyFile)
-	cmd, err := si.executor.ExecuteCommand(context.Background(), getFingerprintCmd)
+	cmd, err := si.executor.ExecuteCommand(ctx, getFingerprintCmd)
 	if err != nil {
 		return fmt.Errorf("failed to execute GPG command: %w", err)
 	}
@@ -626,7 +716,7 @@ func (si *StreamingInstaller) validateGPGKeyFingerprint(keyFile, expectedFingerp
 
 // executeCurlPipeInstall handles curl pipe installations with security validation
 // SECURITY: Now validates URLs against trusted domains before execution
-func (si *StreamingInstaller) executeCurlPipeInstall(app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+func (si *StreamingInstaller) executeCurlPipeInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
 	// SECURITY: Validate URL before attempting download
 	if err := validateDownloadURL(osConfig.DownloadURL); err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("URL validation failed for %s: %v", app.Name, err))
@@ -636,12 +726,12 @@ func (si *StreamingInstaller) executeCurlPipeInstall(app types.CrossPlatformApp,
 	si.sendLog("INFO", fmt.Sprintf("Downloading from validated URL: %s", osConfig.DownloadURL))
 
 	// SECURITY ENHANCEMENT: Download-validate-execute pattern instead of direct pipe
-	return si.downloadValidateExecute(app.Name, osConfig.DownloadURL)
+	return si.downloadValidateExecute(ctx, app.Name, osConfig.DownloadURL)
 }
 
 // downloadValidateExecute implements a safer alternative to curl pipe
 // SECURITY: Downloads script first, validates content, then executes
-func (si *StreamingInstaller) downloadValidateExecute(appName, downloadURL string) error {
+func (si *StreamingInstaller) downloadValidateExecute(ctx context.Context, appName, downloadURL string) error {
 	// Create temporary file for script
 	tmpFile, err := si.createTempScript()
 	if err != nil {
@@ -665,25 +755,26 @@ func (si *StreamingInstaller) downloadValidateExecute(appName, downloadURL strin
 	// Execute validated script
 	si.sendLog("INFO", fmt.Sprintf("Executing validated script for %s", appName))
 	command := fmt.Sprintf("bash %s", tmpFile)
-	return si.executeCommandStream(command)
+	return si.executeCommandStream(ctx, command)
 }
 
 // createTempScript creates a temporary script file with proper permissions
 func (si *StreamingInstaller) createTempScript() (string, error) {
-	tmpFile, err := os.CreateTemp("", "devex-install-*.sh")
+	tmpFile, err := createSecureTempFile("", "devex-install-*.sh")
 	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
+		return "", err
 	}
 
-	// Set execute permissions
+	// Set execute permissions (in addition to the secure 0600 already set)
 	if err := os.Chmod(tmpFile.Name(), 0700); err != nil {
 		tmpFile.Close()
 		os.Remove(tmpFile.Name())
-		return "", fmt.Errorf("failed to set permissions: %w", err)
+		return "", fmt.Errorf("failed to set execute permissions: %w", err)
 	}
 
+	fileName := tmpFile.Name()
 	tmpFile.Close()
-	return tmpFile.Name(), nil
+	return fileName, nil
 }
 
 // downloadScript downloads a script from URL to a file
@@ -692,7 +783,7 @@ func (si *StreamingInstaller) downloadScript(downloadURL, filepath string) error
 
 	// Create HTTP client with timeout
 	client := &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: si.config.HTTPTimeout,
 	}
 
 	req, err := http.NewRequestWithContext(si.ctx, "GET", downloadURL, nil)
@@ -718,8 +809,7 @@ func (si *StreamingInstaller) downloadScript(downloadURL, filepath string) error
 	defer file.Close()
 
 	// Copy content with size limit (prevent DoS)
-	const maxScriptSize = 10 * 1024 * 1024 // 10MB limit
-	_, err = io.CopyN(file, resp.Body, maxScriptSize)
+	_, err = io.CopyN(file, resp.Body, si.config.MaxScriptSize)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("failed to write script: %w", err)
 	}
@@ -772,8 +862,8 @@ func (si *StreamingInstaller) validateScriptContent(filepath string) error {
 		return fmt.Errorf("script is empty")
 	}
 
-	if len(content) > 10*1024*1024 { // 10MB limit
-		return fmt.Errorf("script is too large: %d bytes", len(content))
+	if int64(len(content)) > si.config.MaxScriptSize {
+		return fmt.Errorf("script is too large: %d bytes (max: %d)", len(content), si.config.MaxScriptSize)
 	}
 
 	// Check for shebang (optional but good practice)
@@ -799,32 +889,32 @@ func (si *StreamingInstaller) cleanupTempScript(filepath string) {
 }
 
 // executeDockerInstall handles Docker container installations
-func (si *StreamingInstaller) executeDockerInstall(app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+func (si *StreamingInstaller) executeDockerInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
 	si.sendLog("INFO", fmt.Sprintf("Starting Docker installation for %s", app.Name))
-	return si.executeCommandStream(osConfig.InstallCommand)
+	return si.executeCommandStream(ctx, osConfig.InstallCommand)
 }
 
 // executeCommands executes a list of install commands with context cancellation support
-func (si *StreamingInstaller) executeCommands(commands []types.InstallCommand) error {
+func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand) error {
 	for _, cmd := range commands {
 		// Check for context cancellation before each command
 		select {
-		case <-si.ctx.Done():
+		case <-ctx.Done():
 			si.sendLog("INFO", "Command execution cancelled")
-			return si.ctx.Err()
+			return ctx.Err()
 		default:
 		}
 
 		if cmd.Command != "" {
 			si.sendLog("INFO", fmt.Sprintf("Executing: %s", cmd.Command))
-			if err := si.executeCommandStream(cmd.Command); err != nil {
+			if err := si.executeCommandStream(ctx, cmd.Command); err != nil {
 				return err
 			}
 		}
 
 		if cmd.Shell != "" {
 			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", cmd.Shell))
-			if err := si.executeCommandStream(cmd.Shell); err != nil {
+			if err := si.executeCommandStream(ctx, cmd.Shell); err != nil {
 				return err
 			}
 		}
@@ -838,8 +928,8 @@ func (si *StreamingInstaller) executeCommands(commands []types.InstallCommand) e
 			si.sendLog("INFO", fmt.Sprintf("Sleeping for %d seconds", cmd.Sleep))
 			// Use context-aware sleep
 			select {
-			case <-si.ctx.Done():
-				return si.ctx.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			case <-time.After(time.Duration(cmd.Sleep) * time.Second):
 				// Sleep completed normally
 			}
@@ -849,8 +939,8 @@ func (si *StreamingInstaller) executeCommands(commands []types.InstallCommand) e
 }
 
 // executeCommandStream executes a command with streaming output
-func (si *StreamingInstaller) executeCommandStream(command string) error {
-	ctx, cancel := context.WithTimeout(si.ctx, installationTimeout)
+func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command string) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, si.config.InstallationTimeout)
 	defer cancel()
 
 	// Validate and parse command safely
@@ -859,7 +949,7 @@ func (si *StreamingInstaller) executeCommandStream(command string) error {
 	}
 
 	// Execute command using the pluggable executor interface
-	cmd, err := si.executor.ExecuteCommand(ctx, command)
+	cmd, err := si.executor.ExecuteCommand(timeoutCtx, command)
 	if err != nil {
 		return err
 	}
@@ -869,20 +959,32 @@ func (si *StreamingInstaller) executeCommandStream(command string) error {
 	if err != nil {
 		return err
 	}
-	defer stdout.Close()
+	defer func() {
+		if stdout != nil {
+			stdout.Close()
+		}
+	}()
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return err
 	}
-	defer stderr.Close()
+	defer func() {
+		if stderr != nil {
+			stderr.Close()
+		}
+	}()
 
 	// Create pipe for stdin (for password prompts)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
-	defer stdin.Close()
+	defer func() {
+		if stdin != nil {
+			stdin.Close()
+		}
+	}()
 
 	// Start command
 	if err := cmd.Start(); err != nil {
@@ -962,18 +1064,24 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 			response := make(chan *SecureString, 1)
 			var closeOnce sync.Once // SECURITY: Prevent panic from closing channel multiple times
 
-			// Send input request with timeout protection
-			select {
-			case <-si.ctx.Done():
-				// Context was cancelled, abort password prompt
-				si.sendLog("INFO", "Password prompt cancelled due to context cancellation")
-				return
-			default:
-				si.program.Send(InputRequestMsg{
-					Prompt:   line,
-					Response: response,
-				})
+			// Send input request with non-blocking send to prevent deadlock
+			inputMsg := InputRequestMsg{
+				Prompt:   line,
+				Response: response,
 			}
+
+			// Non-blocking send with timeout to prevent deadlock
+			go func() {
+				select {
+				case <-si.ctx.Done():
+					// Context was cancelled, abort password prompt
+					si.sendLog("INFO", "Password prompt cancelled due to context cancellation")
+					closeOnce.Do(func() { close(response) })
+					return
+				default:
+					si.program.Send(inputMsg)
+				}
+			}()
 
 			// Wait for user response with multiple timeout mechanisms
 			select {
@@ -997,7 +1105,7 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 				// SECURITY FIX: Safely close channel only once to prevent panic
 				closeOnce.Do(func() { close(response) })
 				return
-			case <-time.After(inputTimeout):
+			case <-time.After(si.config.InputTimeout):
 				si.sendLog("ERROR", "Input timeout - no response received")
 				// SECURITY FIX: Safely close channel only once to prevent panic
 				closeOnce.Do(func() { close(response) })
@@ -1060,9 +1168,9 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 			// Installation was cancelled
 			installer.sendLog("INFO", "Installation cancelled by user")
 			return
-		case <-time.After(initializationDelay):
+		case <-time.After(installer.config.InitializationDelay):
 			// Let TUI initialize before starting installation
-			if err := installer.InstallApps(apps, settings); err != nil {
+			if err := installer.InstallApps(ctx, apps, settings); err != nil {
 				installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
 			}
 		}
@@ -1073,5 +1181,9 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 
 	// Cancel any ongoing installation when TUI exits
 	cancel()
+
+	// SECURITY: Clean up channels to prevent memory leaks
+	m.CleanupChannels()
+
 	return err
 }

@@ -2,6 +2,8 @@ package apt
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/jameswlane/devex/pkg/log"
@@ -43,8 +45,37 @@ func containsValidKeywords(repo string) bool {
 }
 
 func containsValidURL(repo string) bool {
-	// Check for basic URL structure
-	return strings.Contains(repo, "://") && !strings.Contains(repo, " ://") && !strings.Contains(repo, ":// ")
+	// Extract URL from APT repository string using regex
+	// APT repo format: "deb [options] http://example.com/ubuntu focal main"
+	urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+	matches := urlRegex.FindAllString(repo, -1)
+
+	if len(matches) == 0 {
+		return false
+	}
+
+	// Validate each URL found in the repository string
+	for _, urlStr := range matches {
+		if _, err := url.Parse(urlStr); err != nil {
+			log.Warn("Invalid URL found in repository string", "url", urlStr, "error", err)
+			return false
+		}
+
+		// Additional validation: ensure URL has proper scheme and host
+		parsedURL, _ := url.Parse(urlStr)
+		if parsedURL.Scheme == "" || parsedURL.Host == "" {
+			log.Warn("URL missing scheme or host", "url", urlStr)
+			return false
+		}
+
+		// Only allow HTTP and HTTPS
+		if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+			log.Warn("URL uses unsupported scheme", "url", urlStr, "scheme", parsedURL.Scheme)
+			return false
+		}
+	}
+
+	return true
 }
 
 func containsSuspiciousContent(repo string) bool {
