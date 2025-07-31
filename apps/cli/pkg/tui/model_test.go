@@ -53,7 +53,7 @@ func TestModel_WindowSizeUpdate(t *testing.T) {
 	updatedModel, cmd := model.Update(msg)
 
 	// Verify model is updated correctly
-	m := updatedModel.(Model)
+	m := updatedModel.(*Model)
 	assert.Equal(t, 100, m.width)
 	assert.Equal(t, 50, m.height)
 	assert.True(t, m.ready)
@@ -76,7 +76,7 @@ func TestModel_LogMessages(t *testing.T) {
 	// Initialize viewport with proper dimensions
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	testLogs := []LogMsg{
 		{Message: "First log message", Level: "INFO", Timestamp: time.Now()},
@@ -87,7 +87,7 @@ func TestModel_LogMessages(t *testing.T) {
 	// Send log messages
 	for _, logMsg := range testLogs {
 		updatedModel, cmd := model.Update(logMsg)
-		model = updatedModel.(Model)
+		model = updatedModel.(*Model)
 		assert.Nil(t, cmd)
 	}
 
@@ -114,7 +114,7 @@ func TestModel_LogRotation(t *testing.T) {
 	// Initialize viewport with proper dimensions
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// Add more logs than maxLogLines
 	for i := 0; i < maxLogLines+10; i++ {
@@ -124,7 +124,7 @@ func TestModel_LogRotation(t *testing.T) {
 			Timestamp: time.Now(),
 		}
 		updatedModel, _ := model.Update(logMsg)
-		model = updatedModel.(Model)
+		model = updatedModel.(*Model)
 	}
 
 	// Verify log rotation occurred (circular buffer should be at capacity)
@@ -154,7 +154,7 @@ func TestModel_InputRequest(t *testing.T) {
 
 	// Send input request
 	updatedModel, cmd := model.Update(inputRequest)
-	m := updatedModel.(Model)
+	m := updatedModel.(*Model)
 
 	// Verify input state
 	assert.True(t, m.needsInput)
@@ -187,7 +187,7 @@ func TestModel_PasswordInputDetection(t *testing.T) {
 			}
 
 			updatedModel, _ := model.Update(inputRequest)
-			m := updatedModel.(Model)
+			m := updatedModel.(*Model)
 
 			// Check echo mode based on password detection
 			if tc.shouldBePassword {
@@ -216,7 +216,7 @@ func TestModel_InputSubmission(t *testing.T) {
 	// Send enter key
 	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
 	updatedModel, cmd := model.Update(keyMsg)
-	m := updatedModel.(Model)
+	m := updatedModel.(*Model)
 
 	// Verify input was submitted
 	assert.False(t, m.needsInput)
@@ -246,7 +246,7 @@ func TestModel_AppCompletion(t *testing.T) {
 	}
 
 	updatedModel, cmd := model.Update(successMsg)
-	m := updatedModel.(Model)
+	m := updatedModel.(*Model)
 
 	assert.Equal(t, "Successfully installed test-app-1", m.status)
 	assert.Equal(t, int64(1), m.completedApps) // Use atomic counter
@@ -259,7 +259,7 @@ func TestModel_AppCompletion(t *testing.T) {
 	}
 
 	updatedModel, _ = m.Update(errorMsg)
-	m = updatedModel.(Model)
+	m = updatedModel.(*Model)
 
 	assert.Contains(t, m.status, "Error installing test-app-2")
 	assert.Contains(t, m.status, "installation failed")
@@ -277,7 +277,7 @@ func TestModel_AllAppsCompleted(t *testing.T) {
 			Error:   nil,
 		}
 		updatedModel, _ := model.Update(successMsg)
-		model = updatedModel.(Model)
+		model = updatedModel.(*Model)
 	}
 
 	// Verify completion status
@@ -329,7 +329,7 @@ func TestModel_ViewRendering(t *testing.T) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// Test view when ready
 	view = model.View()
@@ -345,7 +345,7 @@ func TestModel_ProgressCalculation(t *testing.T) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// Initial progress should be 0
 	view := model.View()
@@ -369,7 +369,7 @@ func TestModel_CurrentAppDisplay(t *testing.T) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// Should show first app initially
 	view := model.View()
@@ -395,7 +395,7 @@ func TestModel_InputPromptDisplay(t *testing.T) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// No input prompt initially
 	view := model.View()
@@ -456,7 +456,7 @@ func BenchmarkModel_LogProcessing(b *testing.B) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	logMsg := LogMsg{
 		Message:   "Benchmark log message",
@@ -476,7 +476,7 @@ func BenchmarkModel_ViewRendering(b *testing.B) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// Add some logs for more realistic rendering
 	for i := 0; i < 10; i++ {
@@ -486,7 +486,7 @@ func BenchmarkModel_ViewRendering(b *testing.B) {
 			Timestamp: time.Now(),
 		}
 		updatedModel, _ := model.Update(logMsg)
-		model = updatedModel.(Model)
+		model = updatedModel.(*Model)
 	}
 
 	b.ResetTimer()
@@ -501,7 +501,7 @@ func BenchmarkModel_LargeLogRotation(b *testing.B) {
 	// Initialize viewport properly
 	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
 	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(Model)
+	model = updatedModel.(*Model)
 
 	// Fill up to maxLogLines
 	for i := 0; i < maxLogLines; i++ {
@@ -511,7 +511,7 @@ func BenchmarkModel_LargeLogRotation(b *testing.B) {
 			Timestamp: time.Now(),
 		}
 		updatedModel, _ := model.Update(logMsg)
-		model = updatedModel.(Model)
+		model = updatedModel.(*Model)
 	}
 
 	newLogMsg := LogMsg{

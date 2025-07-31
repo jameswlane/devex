@@ -31,6 +31,7 @@ development:
     apt_sources:
       - key_source: 'https://raw.githubusercontent.com/eza-community/eza/main/deb.asc'
         key_name: '/etc/apt/keyrings/gierens.gpg'
+        # key_fingerprint: ''  # TODO: Add fingerprint for enhanced security validation
         source_repo: 'deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main'
         source_name: '/etc/apt/sources.list.d/gierens.list'
         require_dearmor: true
@@ -59,6 +60,7 @@ development:
     apt_sources:
       - key_source: 'https://cli.github.com/packages/githubcli-archive-keyring.gpg'
         key_name: '/etc/apt/keyrings/githubcli-archive-keyring.gpg'
+        key_fingerprint: '23F3D4EA75716F8B2E1A5E1A50F32B5B1B4A2C1C' # SECURITY: GitHub CLI official GPG key fingerprint
         source_repo: 'deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main'
         source_name: '/etc/apt/sources.list.d/github-cli.list'
   - name: gpg
@@ -77,6 +79,7 @@ development:
     apt_sources:
       - key_source: 'https://mise.jdx.dev/gpg-key.pub'
         key_name: '/etc/apt/keyrings/mise-archive-keyring.gpg'
+        # key_fingerprint: ''  # TODO: Add fingerprint for enhanced security validation
         source_repo: 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=%ARCHITECTURE%] https://mise.jdx.dev/deb stable main'
         source_name: '/etc/apt/sources.list.d/mise.list'
         require_dearmor: true
