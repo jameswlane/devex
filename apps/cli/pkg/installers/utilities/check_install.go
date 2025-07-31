@@ -94,10 +94,13 @@ func isDockerInstalled(containerName string) bool {
 
 func isAppImageInstalled(binaryPath string) bool {
 	if _, err := os.Stat(binaryPath); err == nil {
-		log.Warn("Failed to check AppImage binary", "binaryPath", binaryPath, "error", err)
+		log.Info("AppImage binary found", "binaryPath", binaryPath)
 		return true
 	} else if os.IsNotExist(err) {
+		log.Info("AppImage binary not found", "binaryPath", binaryPath)
+		return false
+	} else {
+		log.Warn("Failed to check AppImage binary", "binaryPath", binaryPath, "error", err)
 		return false
 	}
-	return false
 }
