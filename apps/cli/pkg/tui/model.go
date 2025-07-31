@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,8 +16,23 @@ import (
 )
 
 const (
-	maxLogLines = 1000 // Maximum number of log lines to keep in memory
+	defaultMaxLogLines = 1000 // Default maximum number of log lines to keep in memory
 )
+
+var (
+	// maxLogLines is configurable to allow customization of memory usage
+	maxLogLines = defaultMaxLogLines
+)
+
+// SetMaxLogLines configures the maximum number of log lines to keep in memory
+// PERFORMANCE: Lower values reduce memory usage, higher values preserve more history
+func SetMaxLogLines(max int) {
+	if max <= 0 {
+		maxLogLines = defaultMaxLogLines
+	} else {
+		maxLogLines = max
+	}
+}
 
 // CircularBuffer implements an efficient circular buffer for log storage
 // PERFORMANCE: Avoids memory allocations during log rotation
@@ -85,7 +101,7 @@ type Model struct {
 	completedApps int64 // Atomic counter for completed apps to prevent race conditions
 	status        string
 	logs          *CircularBuffer // PERFORMANCE: Use circular buffer for efficient log storage
-	appStatus     map[string]bool // Track which apps have completed to prevent double-counting
+	appStatus     sync.Map        // SECURITY: Thread-safe map for concurrent app status tracking
 
 	// Installation state
 	needsInput    bool
@@ -144,7 +160,7 @@ type AppCompleteMsg struct {
 // NewModel creates and initializes a new TUI model with the provided list of
 // applications to install. It sets up the progress bar, text input, and viewport
 // components with appropriate styling and buffer sizes.
-func NewModel(apps []types.CrossPlatformApp) Model {
+func NewModel(apps []types.CrossPlatformApp) *Model {
 	// Initialize progress bar
 	prog := progress.New(progress.WithDefaultGradient())
 	prog.Width = 25
@@ -161,7 +177,7 @@ func NewModel(apps []types.CrossPlatformApp) Model {
 		BorderStyle(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("62"))
 
-	return Model{
+	return &Model{
 		progress:      prog,
 		textInput:     ti,
 		viewport:      vp,
@@ -169,8 +185,8 @@ func NewModel(apps []types.CrossPlatformApp) Model {
 		currentApp:    0,
 		completedApps: 0,
 		status:        "Ready to install applications",
-		logs:          NewCircularBuffer(maxLogLines), // PERFORMANCE: Use circular buffer
-		appStatus:     make(map[string]bool),
+		logs:          NewCircularBuffer(maxLogLines), // PERFORMANCE: Use circular buffer with configurable size
+		appStatus:     sync.Map{},                     // SECURITY: Thread-safe concurrent map
 		needsInput:    false,
 		inputResponse: make(chan *SecureString, channelBufferSize), // Prevent deadlocks
 	}
@@ -182,7 +198,7 @@ func NewModel(apps []types.CrossPlatformApp) Model {
 //
 // Returns:
 //   - tea.Cmd: Batch command containing text input blink command and installation starter
-func (m Model) Init() tea.Cmd {
+func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
 		m.startInstallation(),
@@ -192,7 +208,7 @@ func (m Model) Init() tea.Cmd {
 // Update handles incoming Bubble Tea messages and updates the model state accordingly.
 // It processes window resize events, keyboard input, log messages, input requests,
 // and application completion notifications.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
@@ -272,14 +288,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case AppCompleteMsg:
 		// App installation completed
-		// Prevent double-counting by checking if this app has already been processed
-		if _, alreadyProcessed := m.appStatus[msg.AppName]; alreadyProcessed {
+		// SECURITY: Prevent double-counting using thread-safe sync.Map
+		if _, alreadyProcessed := m.appStatus.LoadOrStore(msg.AppName, true); alreadyProcessed {
 			// App already processed, ignore duplicate message
 			break
 		}
-
-		// Mark app as processed
-		m.appStatus[msg.AppName] = true
 
 		if msg.Error != nil {
 			m.status = fmt.Sprintf("Error installing %s: %v", msg.AppName, msg.Error)
@@ -316,7 +329,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the complete TUI interface with a 30/70 split layout.
 // The left pane shows installation progress and status, while the right pane
 // displays real-time terminal output from installation commands.
-func (m Model) View() string {
+func (m *Model) View() string {
 	if !m.ready {
 		return "Initializing..."
 	}
@@ -340,7 +353,7 @@ func (m Model) View() string {
 }
 
 // renderLeftPane renders the status/progress pane
-func (m Model) renderLeftPane(width int) string {
+func (m *Model) renderLeftPane(width int) string {
 	leftStyle := lipgloss.NewStyle().
 		Width(width).
 		Height(m.height).
@@ -418,7 +431,7 @@ func (m Model) renderLeftPane(width int) string {
 }
 
 // renderRightPane renders the terminal output pane
-func (m Model) renderRightPane(width int) string {
+func (m *Model) renderRightPane(width int) string {
 	rightStyle := lipgloss.NewStyle().
 		Width(width).
 		Height(m.height).
@@ -442,7 +455,7 @@ func (m Model) renderRightPane(width int) string {
 }
 
 // startInstallation begins the installation process
-func (m Model) startInstallation() tea.Cmd {
+func (m *Model) startInstallation() tea.Cmd {
 	return func() tea.Msg {
 		return LogMsg{
 			Message:   "Starting DevEx installation...",

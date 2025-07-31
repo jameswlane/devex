@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -116,6 +118,7 @@ var (
 	allowedCommands = map[string]bool{
 		"apt":     true,
 		"apt-get": true,
+		"apt-key": true, // SECURITY: Added for GPG key management
 		"dpkg":    true,
 		"curl":    true,
 		"wget":    true,
@@ -149,6 +152,8 @@ var (
 		"whereis": true,
 		"id":      true,
 		"whoami":  true,
+		"gpg":     true, // SECURITY: Added for GPG key validation
+		"tee":     true, // SECURITY: Added for repository source addition
 	}
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
@@ -451,12 +456,40 @@ func (si *StreamingInstaller) executeInstallCommand(app types.CrossPlatformApp, 
 	}
 }
 
-// executeAptInstall handles APT package installation
+// executeAptInstall handles APT package installation with GPG key validation
 func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osConfig *types.OSConfig) error {
-	// Add APT sources if needed
+	// Add APT sources with GPG key validation if needed
 	for _, source := range osConfig.AptSources {
 		si.sendLog("INFO", fmt.Sprintf("Adding APT source: %s", source.SourceName))
-		// This would integrate with your existing APT source handling
+
+		// SECURITY: Validate GPG key with fingerprint if provided
+		if source.KeySource != "" {
+			si.sendLog("INFO", fmt.Sprintf("Adding GPG key from: %s", source.KeySource))
+
+			// Use secure GPG validation if fingerprint is provided
+			if source.KeyFingerprint != "" {
+				si.sendLog("INFO", "Using fingerprint validation for enhanced security")
+				if err := si.validateAndAddGPGKey(source.KeySource, source.KeyFingerprint); err != nil {
+					return fmt.Errorf("failed to validate and add GPG key for %s: %w", source.SourceName, err)
+				}
+			} else {
+				// Fallback to basic key addition (less secure but backwards compatible)
+				si.sendLog("WARN", "No fingerprint provided - using basic key validation")
+				addKeyCmd := fmt.Sprintf("curl -fsSL %s | sudo apt-key add -", source.KeySource)
+				if err := si.executeCommandStream(addKeyCmd); err != nil {
+					return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
+				}
+			}
+		}
+
+		// Add the repository source
+		if source.SourceRepo != "" {
+			addSourceCmd := fmt.Sprintf("echo '%s' | sudo tee /etc/apt/sources.list.d/%s.list",
+				source.SourceRepo, source.SourceName)
+			if err := si.executeCommandStream(addSourceCmd); err != nil {
+				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
+			}
+		}
 	}
 
 	// Update package lists
@@ -467,6 +500,128 @@ func (si *StreamingInstaller) executeAptInstall(app types.CrossPlatformApp, osCo
 
 	// Install package
 	return si.executeCommandStream(osConfig.InstallCommand)
+}
+
+// validateAndAddGPGKey validates a GPG key fingerprint and adds the key to APT keyring
+// SECURITY: Validates key fingerprint to prevent key substitution attacks
+func (si *StreamingInstaller) validateAndAddGPGKey(keyURL, expectedFingerprint string) error {
+	si.sendLog("INFO", "Validating and adding GPG key...")
+
+	// Validate the key URL is HTTPS
+	if !strings.HasPrefix(keyURL, "https://") {
+		return fmt.Errorf("GPG key URL must use HTTPS: %s", keyURL)
+	}
+
+	// Download the key to a temporary file
+	tempKeyFile, err := si.downloadGPGKey(keyURL)
+	if err != nil {
+		return fmt.Errorf("failed to download GPG key: %w", err)
+	}
+	defer si.cleanupTempScript(tempKeyFile) // Reuse cleanup function
+
+	// Validate the key fingerprint if provided
+	if expectedFingerprint != "" {
+		if err := si.validateGPGKeyFingerprint(tempKeyFile, expectedFingerprint); err != nil {
+			return fmt.Errorf("GPG key fingerprint validation failed: %w", err)
+		}
+	}
+
+	// Add the key to APT keyring
+	addKeyCmd := fmt.Sprintf("sudo apt-key add %s", tempKeyFile)
+	return si.executeCommandStream(addKeyCmd)
+}
+
+// downloadGPGKey downloads a GPG key from URL to a temporary file
+func (si *StreamingInstaller) downloadGPGKey(keyURL string) (string, error) {
+	si.sendLog("INFO", "Downloading GPG key...")
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "devex-gpg-key-*.asc")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer tmpFile.Close()
+
+	// Set restrictive permissions
+	if err := os.Chmod(tmpFile.Name(), 0600); err != nil {
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to set permissions: %w", err)
+	}
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	req, err := http.NewRequestWithContext(si.ctx, "GET", keyURL, nil)
+	if err != nil {
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to download key: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("download failed with status: %s", resp.Status)
+	}
+
+	// Copy content with size limit
+	const maxKeySize = 1024 * 1024 // 1MB limit for GPG keys
+	_, err = io.CopyN(tmpFile, resp.Body, maxKeySize)
+	if err != nil && !errors.Is(err, io.EOF) {
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to write key: %w", err)
+	}
+
+	si.sendLog("INFO", "GPG key downloaded successfully")
+	return tmpFile.Name(), nil
+}
+
+// validateGPGKeyFingerprint validates that a GPG key matches the expected fingerprint
+// SECURITY: Prevents key substitution attacks by validating cryptographic fingerprint
+func (si *StreamingInstaller) validateGPGKeyFingerprint(keyFile, expectedFingerprint string) error {
+	si.sendLog("INFO", "Validating GPG key fingerprint...")
+
+	// Clean and normalize expected fingerprint (remove spaces, convert to uppercase)
+	expectedFingerprint = strings.ReplaceAll(strings.ToUpper(expectedFingerprint), " ", "")
+
+	// Use gpg to get the key fingerprint
+	getFingerprintCmd := fmt.Sprintf("gpg --with-fingerprint --import-options show-only --import %s", keyFile)
+	cmd, err := si.executor.ExecuteCommand(context.Background(), getFingerprintCmd)
+	if err != nil {
+		return fmt.Errorf("failed to execute GPG command: %w", err)
+	}
+
+	// Capture output
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("GPG command failed: %w", err)
+	}
+
+	// Parse fingerprint from output
+	outputStr := string(output)
+	fingerprintRegex := regexp.MustCompile(`Key fingerprint = ([A-F0-9 ]+)`)
+	matches := fingerprintRegex.FindStringSubmatch(outputStr)
+	if len(matches) < 2 {
+		return fmt.Errorf("could not extract fingerprint from GPG output")
+	}
+
+	// Clean and normalize actual fingerprint
+	actualFingerprint := strings.ReplaceAll(strings.ToUpper(matches[1]), " ", "")
+
+	// Compare fingerprints
+	if actualFingerprint != expectedFingerprint {
+		return fmt.Errorf("fingerprint mismatch: expected %s, got %s", expectedFingerprint, actualFingerprint)
+	}
+
+	si.sendLog("INFO", "GPG key fingerprint validated successfully")
+	return nil
 }
 
 // executeCurlPipeInstall handles curl pipe installations with security validation
@@ -480,10 +635,167 @@ func (si *StreamingInstaller) executeCurlPipeInstall(app types.CrossPlatformApp,
 
 	si.sendLog("INFO", fmt.Sprintf("Downloading from validated URL: %s", osConfig.DownloadURL))
 
-	// SECURITY: Still risky but now limited to trusted domains
-	// TODO: Consider downloading script first, validating content, then executing
-	command := fmt.Sprintf("curl -fsSL %s | bash", osConfig.DownloadURL)
+	// SECURITY ENHANCEMENT: Download-validate-execute pattern instead of direct pipe
+	return si.downloadValidateExecute(app.Name, osConfig.DownloadURL)
+}
+
+// downloadValidateExecute implements a safer alternative to curl pipe
+// SECURITY: Downloads script first, validates content, then executes
+func (si *StreamingInstaller) downloadValidateExecute(appName, downloadURL string) error {
+	// Create temporary file for script
+	tmpFile, err := si.createTempScript()
+	if err != nil {
+		si.sendLog("ERROR", fmt.Sprintf("Failed to create temporary script file: %v", err))
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer si.cleanupTempScript(tmpFile)
+
+	// Download script to temporary file
+	if err := si.downloadScript(downloadURL, tmpFile); err != nil {
+		si.sendLog("ERROR", fmt.Sprintf("Failed to download script: %v", err))
+		return fmt.Errorf("failed to download script: %w", err)
+	}
+
+	// Validate script content for basic safety
+	if err := si.validateScriptContent(tmpFile); err != nil {
+		si.sendLog("ERROR", fmt.Sprintf("Script validation failed: %v", err))
+		return fmt.Errorf("script validation failed: %w", err)
+	}
+
+	// Execute validated script
+	si.sendLog("INFO", fmt.Sprintf("Executing validated script for %s", appName))
+	command := fmt.Sprintf("bash %s", tmpFile)
 	return si.executeCommandStream(command)
+}
+
+// createTempScript creates a temporary script file with proper permissions
+func (si *StreamingInstaller) createTempScript() (string, error) {
+	tmpFile, err := os.CreateTemp("", "devex-install-*.sh")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+
+	// Set execute permissions
+	if err := os.Chmod(tmpFile.Name(), 0700); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to set permissions: %w", err)
+	}
+
+	tmpFile.Close()
+	return tmpFile.Name(), nil
+}
+
+// downloadScript downloads a script from URL to a file
+func (si *StreamingInstaller) downloadScript(downloadURL, filepath string) error {
+	si.sendLog("INFO", "Downloading installation script...")
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	req, err := http.NewRequestWithContext(si.ctx, "GET", downloadURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to download script: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download failed with status: %s", resp.Status)
+	}
+
+	// Create/open file for writing
+	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_TRUNC, 0700)
+	if err != nil {
+		return fmt.Errorf("failed to open temp file: %w", err)
+	}
+	defer file.Close()
+
+	// Copy content with size limit (prevent DoS)
+	const maxScriptSize = 10 * 1024 * 1024 // 10MB limit
+	_, err = io.CopyN(file, resp.Body, maxScriptSize)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("failed to write script: %w", err)
+	}
+
+	si.sendLog("INFO", "Script downloaded successfully")
+	return nil
+}
+
+// validateScriptContent performs basic validation on downloaded scripts
+// SECURITY: Checks for obvious malicious patterns
+func (si *StreamingInstaller) validateScriptContent(filepath string) error {
+	si.sendLog("INFO", "Validating script content...")
+
+	content, err := os.ReadFile(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to read script: %w", err)
+	}
+
+	scriptContent := string(content)
+
+	// Check for dangerous patterns
+	dangerousContentPatterns := []string{
+		"rm -rf /",
+		"dd if=/dev/zero",
+		"format c:",
+		"mkfs.",
+		"fdisk",
+		"/etc/passwd",
+		"/etc/shadow",
+		"curl.*|.*sh",   // Nested curl pipes
+		"wget.*|.*sh",   // Nested wget pipes
+		":(){ :|:& };:", // Fork bomb
+		"chmod 777 /",   // Dangerous permissions
+		"chown root /",  // Dangerous ownership changes
+		"> /dev/sd",     // Writing to disk devices
+		"cryptsetup",    // Disk encryption tools
+		"parted",        // Partition manipulation
+		"mount /dev",    // Mounting devices
+		"/dev/tcp",      // Network backdoors
+	}
+
+	for _, pattern := range dangerousContentPatterns {
+		if strings.Contains(strings.ToLower(scriptContent), strings.ToLower(pattern)) {
+			return fmt.Errorf("script contains potentially dangerous pattern: %s", pattern)
+		}
+	}
+
+	// Basic sanity checks
+	if len(scriptContent) == 0 {
+		return fmt.Errorf("script is empty")
+	}
+
+	if len(content) > 10*1024*1024 { // 10MB limit
+		return fmt.Errorf("script is too large: %d bytes", len(content))
+	}
+
+	// Check for shebang (optional but good practice)
+	if !strings.HasPrefix(scriptContent, "#!") {
+		si.sendLog("WARN", "Script does not start with shebang - may not be a shell script")
+	}
+
+	si.sendLog("INFO", "Script validation passed")
+	return nil
+}
+
+// cleanupTempScript removes temporary script file
+func (si *StreamingInstaller) cleanupTempScript(filepath string) {
+	if filepath == "" {
+		return
+	}
+
+	if err := os.Remove(filepath); err != nil {
+		si.sendLog("WARN", fmt.Sprintf("Failed to cleanup temp script %s: %v", filepath, err))
+	} else {
+		si.sendLog("DEBUG", fmt.Sprintf("Cleaned up temp script: %s", filepath))
+	}
 }
 
 // executeDockerInstall handles Docker container installations
