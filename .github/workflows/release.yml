@@ -13,28 +13,23 @@ permissions:
   pull-requests: write
   id-token: write
 jobs:
-  build:
-    strategy:
-      matrix:
-        go-version: [1.24.5]
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  # Lint and test only on Linux - Go code is platform agnostic
+  test:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Fetch all tags
-        run: git fetch --tags
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('apps/cli/**/go.sum') }}
-      - name: Install Go ${{ matrix.go-version }}
+      - name: Install Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: 1.24.5
       - name: Lint
         uses: golangci/golangci-lint-action@v8
         with:
@@ -45,9 +40,7 @@ jobs:
       - name: Test
         working-directory: apps/cli
         run: ginkgo -r
-      - name: Build
-        working-directory: apps/cli
-        run: go build -ldflags="-s -w -X main.version=$(git describe --tags)" -o ./bin/devex ./cmd/main.go
+  # Build web apps on Linux
   web:
     runs-on: ubuntu-latest
     steps:
@@ -69,9 +62,9 @@ jobs:
         run: pnpm turbo run build --filter=web
       - name: Build docs
         run: pnpm turbo run build --filter=docs
+  # Release with cross-compilation via GoReleaser
   release:
-    needs: [build, web]
-    name: Release
+    needs: [test, web]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -96,7 +89,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm run semantic-release
-      - name: Set up Go 1.x
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: 1.24.5
