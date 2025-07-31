@@ -104,9 +104,11 @@ type Model struct {
 	appStatus     sync.Map        // SECURITY: Thread-safe map for concurrent app status tracking
 
 	// Installation state
-	needsInput    bool
-	inputPrompt   string
-	inputResponse chan *SecureString // Changed to SecureString
+	needsInput     bool
+	inputPrompt    string
+	inputResponse  chan *SecureString // Changed to SecureString
+	channelCleaned bool               // Track channel cleanup to prevent memory leaks
+	cleanupMux     sync.Mutex         // Protect cleanup operations
 
 	// Layout
 	width  int
@@ -178,17 +180,18 @@ func NewModel(apps []types.CrossPlatformApp) *Model {
 		BorderForeground(lipgloss.Color("62"))
 
 	return &Model{
-		progress:      prog,
-		textInput:     ti,
-		viewport:      vp,
-		apps:          apps,
-		currentApp:    0,
-		completedApps: 0,
-		status:        "Ready to install applications",
-		logs:          NewCircularBuffer(maxLogLines), // PERFORMANCE: Use circular buffer with configurable size
-		appStatus:     sync.Map{},                     // SECURITY: Thread-safe concurrent map
-		needsInput:    false,
-		inputResponse: make(chan *SecureString, channelBufferSize), // Prevent deadlocks
+		progress:       prog,
+		textInput:      ti,
+		viewport:       vp,
+		apps:           apps,
+		currentApp:     0,
+		completedApps:  0,
+		status:         "Ready to install applications",
+		logs:           NewCircularBuffer(maxLogLines), // PERFORMANCE: Use circular buffer with configurable size
+		appStatus:      sync.Map{},                     // SECURITY: Thread-safe concurrent map
+		needsInput:     false,
+		inputResponse:  make(chan *SecureString, 5), // Default channel buffer size to prevent deadlocks
+		channelCleaned: false,
 	}
 }
 
@@ -300,10 +303,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Successfully installed %s", msg.AppName)
 		}
 
-		// Atomically increment completed app counter
-		completed := atomic.AddInt64(&m.completedApps, 1)
+		// Count completed apps by iterating over the sync.Map
+		completed := int64(0)
+		m.appStatus.Range(func(key, value interface{}) bool {
+			completed++
+			return true
+		})
 
-		// Use atomic counter for progress tracking instead of currentApp
+		// Store the count atomically for thread-safe access
+		atomic.StoreInt64(&m.completedApps, completed)
+
+		// Use the count for progress tracking
 		if int(completed) < len(m.apps) {
 			// More apps to install - but don't start next app here to avoid race conditions
 			// The installer handles sequential installation
@@ -324,6 +334,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+// CleanupChannels safely closes and cleans up channels to prevent memory leaks
+// SECURITY: Prevents memory leaks from abandoned channels during context cancellation
+func (m *Model) CleanupChannels() {
+	m.cleanupMux.Lock()
+	defer m.cleanupMux.Unlock()
+
+	if !m.channelCleaned && m.inputResponse != nil {
+		// Drain any pending messages before closing
+		select {
+		case response := <-m.inputResponse:
+			if response != nil {
+				response.Clear() // Clean up any secure strings
+			}
+		default:
+			// No pending messages
+		}
+
+		close(m.inputResponse)
+		m.channelCleaned = true
+	}
 }
 
 // View renders the complete TUI interface with a 30/70 split layout.

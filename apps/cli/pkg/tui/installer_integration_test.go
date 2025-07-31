@@ -173,7 +173,7 @@ func TestStreamingInstaller_Integration(t *testing.T) {
 	}
 
 	// Test successful installation
-	err := installer.InstallApps(apps, settings)
+	err := installer.InstallApps(context.Background(), apps, settings)
 	assert.NoError(t, err)
 
 	// Verify apps were added to repository
@@ -203,7 +203,7 @@ func TestStreamingInstaller_CommandValidationIntegration(t *testing.T) {
 	settings := config.CrossPlatformSettings{}
 
 	// Should succeed overall (InstallApps continues despite individual failures)
-	err := installer.InstallApps(dangerousApps, settings)
+	err := installer.InstallApps(context.Background(), dangerousApps, settings)
 	assert.NoError(t, err)
 
 	// Verify app was not added to repository
@@ -241,7 +241,7 @@ func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
 	var installErr error
 	done := make(chan bool)
 	go func() {
-		installErr = installer.InstallApps(apps, settings)
+		installErr = installer.InstallApps(ctx, apps, settings)
 		done <- true
 	}()
 
@@ -281,7 +281,7 @@ func TestStreamingInstaller_RepositoryError(t *testing.T) {
 	settings := config.CrossPlatformSettings{}
 
 	// Should succeed even with repository error (only logs warning)
-	err := installer.InstallApps(apps, settings)
+	err := installer.InstallApps(context.Background(), apps, settings)
 	assert.NoError(t, err)
 }
 
@@ -311,7 +311,7 @@ func TestStreamingInstaller_PrePostInstallCommands(t *testing.T) {
 
 	settings := config.CrossPlatformSettings{}
 
-	err := installer.InstallApps(apps, settings)
+	err := installer.InstallApps(context.Background(), apps, settings)
 	assert.NoError(t, err)
 
 	// Verify app was installed
@@ -345,7 +345,7 @@ func TestStreamingInstaller_SleepCommand(t *testing.T) {
 	settings := config.CrossPlatformSettings{}
 
 	start := time.Now()
-	err := installer.InstallApps(apps, settings)
+	err := installer.InstallApps(context.Background(), apps, settings)
 	duration := time.Since(start)
 
 	assert.NoError(t, err)
@@ -384,7 +384,7 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 	var installErr error
 	done := make(chan bool)
 	go func() {
-		installErr = installer.InstallApps(apps, settings)
+		installErr = installer.InstallApps(ctx, apps, settings)
 		done <- true
 	}()
 
@@ -437,7 +437,7 @@ func TestStreamingInstaller_MultipleAppsWithErrors(t *testing.T) {
 	settings := config.CrossPlatformSettings{}
 
 	// Should continue with other apps even if one fails
-	err := installer.InstallApps(apps, settings)
+	err := installer.InstallApps(context.Background(), apps, settings)
 	assert.NoError(t, err)
 
 	// Verify good apps were installed, bad app was not
@@ -503,7 +503,7 @@ func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
 			}
 
 			settings := config.CrossPlatformSettings{}
-			results[index] = installer.InstallApps(apps, settings)
+			results[index] = installer.InstallApps(ctx, apps, settings)
 		}(i)
 	}
 
@@ -538,7 +538,7 @@ func TestStreamingInstaller_LargeNumberOfApps(t *testing.T) {
 
 	// Should handle large number of apps without issues
 	start := time.Now()
-	err := installer.InstallApps(apps, settings)
+	err := installer.InstallApps(context.Background(), apps, settings)
 	duration := time.Since(start)
 
 	assert.NoError(t, err)
@@ -574,7 +574,7 @@ func BenchmarkStreamingInstaller_SingleApp(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		mockRepo := &MockRepository{}
 		installer := NewStreamingInstaller(nil, mockRepo, ctx)
-		_ = installer.InstallApps(apps, settings)
+		_ = installer.InstallApps(context.Background(), apps, settings)
 	}
 }
 
@@ -599,6 +599,6 @@ func BenchmarkStreamingInstaller_MultipleApps(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		mockRepo := &MockRepository{}
 		installer := NewStreamingInstaller(nil, mockRepo, ctx)
-		_ = installer.InstallApps(apps, settings)
+		_ = installer.InstallApps(context.Background(), apps, settings)
 	}
 }
