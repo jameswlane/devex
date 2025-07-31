@@ -84,6 +84,7 @@ func (d *DockerOptions) Validate() error {
 type AptSource struct {
 	KeySource      string `mapstructure:"key_source" yaml:"key_source"`
 	KeyName        string `mapstructure:"key_name" yaml:"key_name"`
+	KeyFingerprint string `mapstructure:"key_fingerprint" yaml:"key_fingerprint"` // SECURITY: GPG key fingerprint for validation
 	SourceRepo     string `mapstructure:"source_repo" yaml:"source_repo"`
 	SourceName     string `mapstructure:"source_name" yaml:"source_name"`
 	RequireDearmor bool   `mapstructure:"require_dearmor" yaml:"require_dearmor"`
