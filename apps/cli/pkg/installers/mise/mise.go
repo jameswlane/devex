@@ -39,8 +39,9 @@ func (m *MiseInstaller) Install(command string, repo types.Repository) error {
 		return nil
 	}
 
-	// Run `mise use --global` command
-	installCommand := fmt.Sprintf("mise use --global %s", command)
+	// Run `mise use --global` command with proper PATH and activation
+	// Try different paths where mise might be installed
+	installCommand := fmt.Sprintf(`bash -c 'export PATH="$HOME/.local/bin:$PATH" && if command -v mise >/dev/null 2>&1; then mise use --global %s; else echo "mise not found in PATH"; exit 1; fi'`, command)
 	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
 		log.Error("Failed to install language via Mise", err, "language", command, "command", installCommand)
 		return fmt.Errorf("failed to install language via Mise '%s': %w", command, err)
