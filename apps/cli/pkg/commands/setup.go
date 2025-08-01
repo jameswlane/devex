@@ -1010,18 +1010,18 @@ func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 		Description: "Development environment manager for programming languages",
 		Linux: types.OSConfig{
 			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run/zsh",
-			InstallCommand: "curl https://mise.run/zsh | sh",
+			DownloadURL:    "https://mise.run",
+			InstallCommand: "curl https://mise.run | sh",
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run/zsh",
-			InstallCommand: "curl https://mise.run/zsh | sh",
+			DownloadURL:    "https://mise.run",
+			InstallCommand: "curl https://mise.run | sh",
 		},
 		Windows: types.OSConfig{
 			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run/zsh",
-			InstallCommand: "curl https://mise.run/zsh | sh",
+			DownloadURL:    "https://mise.run",
+			InstallCommand: "curl https://mise.run | sh",
 		},
 	}
 }
@@ -1048,16 +1048,16 @@ func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 				Name:        fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(lang, " ", "-"))),
 				Description: fmt.Sprintf("Install %s via mise", lang),
 				Linux: types.OSConfig{
-					InstallMethod:  "curlpipe",
-					InstallCommand: fmt.Sprintf("mise install %s && mise use -g %s", packageName, packageName),
+					InstallMethod:  "mise",
+					InstallCommand: packageName,
 				},
 				MacOS: types.OSConfig{
-					InstallMethod:  "curlpipe",
-					InstallCommand: fmt.Sprintf("mise install %s && mise use -g %s", packageName, packageName),
+					InstallMethod:  "mise",
+					InstallCommand: packageName,
 				},
 				Windows: types.OSConfig{
-					InstallMethod:  "curlpipe",
-					InstallCommand: fmt.Sprintf("mise install %s && mise use -g %s", packageName, packageName),
+					InstallMethod:  "mise",
+					InstallCommand: packageName,
 				},
 			}
 			apps = append(apps, app)
@@ -1073,16 +1073,16 @@ func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
 		Name:        "docker",
 		Description: "Container platform for databases and services",
 		Linux: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "echo 'Docker installation handled by dedicated installer'",
+			InstallMethod:  "apt",
+			InstallCommand: "docker.io",
 		},
 		MacOS: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "echo 'Docker installation handled by dedicated installer'",
+			InstallMethod:  "brew",
+			InstallCommand: "docker",
 		},
 		Windows: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "echo 'Docker installation handled by dedicated installer'",
+			InstallMethod:  "winget",
+			InstallCommand: "Docker.DockerDesktop",
 		},
 	}
 }
