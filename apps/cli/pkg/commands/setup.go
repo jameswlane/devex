@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/gitconfig"
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
@@ -57,33 +58,38 @@ The setup process includes:
 
 // SetupModel represents the state of our guided setup UI
 type SetupModel struct {
-	step          int
-	shells        []string
-	languages     []string
-	databases     []string
-	desktopApps   []string
-	selectedShell int
-	selectedLangs map[int]bool
-	selectedDBs   map[int]bool
-	selectedApps  map[int]bool
-	cursor        int
-	installing    bool
-	installStatus string
-	progress      float64
-	installErrors []string
-	hasErrors     bool
-	shellSwitched bool
-	repo          types.Repository
-	settings      config.CrossPlatformSettings
+	step             int
+	shells           []string
+	languages        []string
+	databases        []string
+	desktopApps      []string
+	selectedShell    int
+	selectedLangs    map[int]bool
+	selectedDBs      map[int]bool
+	selectedApps     map[int]bool
+	gitFullName      string
+	gitEmail         string
+	cursor           int
+	installing       bool
+	installStatus    string
+	progress         float64
+	installErrors    []string
+	hasErrors        bool
+	shellSwitched    bool
+	hasDesktop       bool
+	detectedPlatform platform.Platform
+	repo             types.Repository
+	settings         config.CrossPlatformSettings
 }
 
 // setupSteps defines the guided setup process
 const (
-	StepWelcome = iota
-	StepShellSelection
+	StepWelcome     = iota
+	StepDesktopApps // Only if desktop detected & non-default apps available
 	StepLanguages
 	StepDatabases
-	StepDesktopApps
+	StepShell     // Only for compatible systems (Linux/macOS)
+	StepGitConfig // Full name & email for git configuration
 	StepConfirmation
 	StepInstalling
 	StepComplete
@@ -105,18 +111,23 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		return
 	}
 
+	// Detect platform and desktop environment first
+	plat := platform.DetectPlatform()
+
 	// Initialize the setup model
 	model := &SetupModel{
-		step:          StepWelcome,
-		selectedShell: 0, // Default to zsh (first option)
-		selectedLangs: make(map[int]bool),
-		selectedDBs:   make(map[int]bool),
-		selectedApps:  make(map[int]bool),
-		installErrors: make([]string, 0),
-		hasErrors:     false,
-		shellSwitched: false,
-		repo:          repo,
-		settings:      settings,
+		step:             StepWelcome,
+		selectedShell:    0, // Default to zsh (first option)
+		selectedLangs:    make(map[int]bool),
+		selectedDBs:      make(map[int]bool),
+		selectedApps:     make(map[int]bool),
+		installErrors:    make([]string, 0),
+		hasErrors:        false,
+		shellSwitched:    false,
+		hasDesktop:       plat.DesktopEnv != "none",
+		detectedPlatform: plat,
+		repo:             repo,
+		settings:         settings,
 		shells: []string{
 			"zsh",
 			"bash",
@@ -139,14 +150,9 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		},
 	}
 
-	// Detect desktop environment and set desktop apps accordingly
-	plat := platform.DetectPlatform()
-	if plat.DesktopEnv != "none" {
-		model.desktopApps = []string{
-			"Neovim",
-			"Typora",
-			"Ulauncher",
-		}
+	// Set desktop apps based on platform and config (non-default apps only)
+	if model.hasDesktop {
+		model.desktopApps = model.getAvailableDesktopApps()
 	}
 
 	// Start the Bubble Tea program
@@ -244,38 +250,33 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Press Enter to continue, or 'q' to quit."
 
-	case StepShellSelection:
-		s = titleStyle.Render("🐚 Select Your Shell")
+	case StepDesktopApps:
+		if len(m.desktopApps) == 0 {
+			// Skip desktop apps if none available, go to next step
+			newModel, _ := m.nextStep()
+			return newModel.View()
+		}
+		s = titleStyle.Render("🖥️  Select Desktop Applications")
 		s += "\n\n"
-		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
+		s += subtitleStyle.Render("Choose additional desktop applications (optional):")
 		s += "\n\n"
 
-		for i, shell := range m.shells {
+		for i, app := range m.desktopApps {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			selected := " "
-			if m.selectedShell == i {
-				selected = selectedStyle.Render("●")
+			if m.selectedApps[i] {
+				selected = selectedStyle.Render("✓")
 			}
 
-			description := ""
-			switch shell {
-			case "zsh":
-				description = " (recommended - modern features, plugins, themes)"
-			case "bash":
-				description = " (classic - widely compatible)"
-			case "fish":
-				description = " (user-friendly - smart completions)"
-			}
-
-			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)
+			s += fmt.Sprintf("%s [%s] %s\n", cursor, selected, app)
 		}
 
 		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
 
 	case StepLanguages:
 		s = titleStyle.Render("📝 Select Programming Languages")
@@ -323,33 +324,55 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
 
-	case StepDesktopApps:
-		if len(m.desktopApps) == 0 {
+	case StepShell:
+		// Only show shell selection on compatible systems (Linux/macOS)
+		if m.detectedPlatform.OS == "windows" {
 			newModel, _ := m.nextStep()
 			return newModel.View()
 		}
 
-		s = titleStyle.Render("🖥️  Select Desktop Applications")
+		s = titleStyle.Render("🐚 Select Your Shell")
 		s += "\n\n"
-		s += subtitleStyle.Render("Choose desktop applications to install:")
+		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
 		s += "\n\n"
 
-		for i, app := range m.desktopApps {
+		for i, shell := range m.shells {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
-			checked := " "
-			if m.selectedApps[i] {
-				checked = selectedStyle.Render("✓")
+			selected := " "
+			if m.selectedShell == i {
+				selected = selectedStyle.Render("●")
 			}
 
-			s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, app)
+			description := ""
+			switch shell {
+			case "zsh":
+				description = " (recommended - modern features, plugins, themes)"
+			case "bash":
+				description = " (classic - widely compatible)"
+			case "fish":
+				description = " (user-friendly - smart completions)"
+			}
+
+			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)
 		}
 
 		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
+		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+
+	case StepGitConfig:
+		s = titleStyle.Render("🔧 Git Configuration")
+		s += "\n\n"
+		s += subtitleStyle.Render("Enter your git configuration details:")
+		s += "\n\n"
+
+		s += fmt.Sprintf("Full Name: %s\n", m.gitFullName)
+		s += fmt.Sprintf("Email: %s\n", m.gitEmail)
+		s += "\n\n"
+		s += "Type your information and press Enter to continue"
 
 	case StepConfirmation:
 		s = titleStyle.Render("✅ Confirm Installation")
@@ -462,7 +485,7 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepWelcome:
 		return m.nextStep()
-	case StepShellSelection, StepLanguages, StepDatabases, StepDesktopApps:
+	case StepDesktopApps, StepLanguages, StepDatabases, StepShell, StepGitConfig:
 		return m.nextStep()
 	case StepConfirmation:
 		m.step = StepInstalling
@@ -476,16 +499,16 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 	var maxItems int
 	switch m.step {
-	case StepShellSelection:
-		maxItems = len(m.shells)
+	case StepDesktopApps:
+		maxItems = len(m.desktopApps)
 	case StepLanguages:
 		maxItems = len(m.languages)
 	case StepDatabases:
 		maxItems = len(m.databases)
-	case StepDesktopApps:
-		maxItems = len(m.desktopApps)
+	case StepShell:
+		maxItems = len(m.shells)
 	default:
-		panic("unhandled default case")
+		return m, nil // No navigation needed for other steps
 	}
 
 	if m.cursor < maxItems-1 {
@@ -496,16 +519,16 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 
 func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 	switch m.step {
-	case StepShellSelection:
-		m.selectedShell = m.cursor
+	case StepDesktopApps:
+		m.selectedApps[m.cursor] = !m.selectedApps[m.cursor]
 	case StepLanguages:
 		m.selectedLangs[m.cursor] = !m.selectedLangs[m.cursor]
 	case StepDatabases:
 		m.selectedDBs[m.cursor] = !m.selectedDBs[m.cursor]
-	case StepDesktopApps:
-		m.selectedApps[m.cursor] = !m.selectedApps[m.cursor]
+	case StepShell:
+		m.selectedShell = m.cursor
 	default:
-		panic("unhandled default case")
+		return m, nil // No selection needed for other steps
 	}
 	return m, nil
 }
@@ -514,19 +537,29 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
 	case StepWelcome:
-		m.step = StepShellSelection
-	case StepShellSelection:
+		// Check if we have desktop apps to show first
+		if m.hasDesktop && len(m.desktopApps) > 0 {
+			m.step = StepDesktopApps
+		} else {
+			m.step = StepLanguages
+		}
+	case StepDesktopApps:
 		m.step = StepLanguages
 	case StepLanguages:
 		m.step = StepDatabases
 	case StepDatabases:
-		if len(m.desktopApps) > 0 {
-			m.step = StepDesktopApps
+		// Only show shell selection on compatible systems
+		if m.detectedPlatform.OS != "windows" {
+			m.step = StepShell
 		} else {
-			m.step = StepConfirmation
+			m.step = StepGitConfig
 		}
-	case StepDesktopApps:
+	case StepShell:
+		m.step = StepGitConfig
+	case StepGitConfig:
 		m.step = StepConfirmation
+	case StepConfirmation:
+		m.step = StepInstalling
 	default:
 		panic("unhandled default case")
 	}
@@ -536,18 +569,26 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
+	case StepDesktopApps:
+		m.step = StepWelcome
 	case StepLanguages:
-		m.step = StepShellSelection
+		if m.hasDesktop && len(m.desktopApps) > 0 {
+			m.step = StepDesktopApps
+		} else {
+			m.step = StepWelcome
+		}
 	case StepDatabases:
 		m.step = StepLanguages
-	case StepDesktopApps:
+	case StepShell:
 		m.step = StepDatabases
-	case StepConfirmation:
-		if len(m.desktopApps) > 0 {
-			m.step = StepDesktopApps
+	case StepGitConfig:
+		if m.detectedPlatform.OS != "windows" {
+			m.step = StepShell
 		} else {
 			m.step = StepDatabases
 		}
+	case StepConfirmation:
+		m.step = StepGitConfig
 	default:
 		panic("unhandled default case")
 	}
@@ -659,6 +700,24 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// Copy shell configuration files
 	if err := m.copyShellConfiguration(selectedShell); err != nil {
 		log.Error("Failed to copy shell configuration", err, "shell", selectedShell)
+		return err
+	}
+
+	// Copy theme files and configurations
+	if err := m.copyThemeFiles(); err != nil {
+		log.Error("Failed to copy theme files", err)
+		return err
+	}
+
+	// Copy application configuration files
+	if err := m.copyAppConfigFiles(); err != nil {
+		log.Error("Failed to copy application configuration files", err)
+		return err
+	}
+
+	// Setup git configuration with user's name and email
+	if err := m.setupGitConfiguration(); err != nil {
+		log.Error("Failed to setup git configuration", err)
 		return err
 	}
 
@@ -919,6 +978,200 @@ func isToolAvailable(tool string) bool {
 	return err == nil
 }
 
+// copyThemeFiles copies theme assets including backgrounds, neovim colorschemes, and application themes
+func (m *SetupModel) copyThemeFiles() error {
+	log.Info("Copying theme files and configurations")
+
+	homeDir := os.Getenv("HOME")
+	devexDir := homeDir + "/.local/share/devex"
+	assetsDir := devexDir + "/assets"
+
+	// Create necessary directories
+	if err := os.MkdirAll(homeDir+"/.config", 0755); err != nil {
+		return fmt.Errorf("failed to create .config directory: %w", err)
+	}
+
+	// Copy background images
+	if err := m.copyThemeDirectory(assetsDir+"/themes/backgrounds", homeDir+"/.local/share/backgrounds"); err != nil {
+		log.Warn("Failed to copy background images", "error", err)
+	}
+
+	// Copy Alacritty themes
+	alacrittyConfigDir := homeDir + "/.config/alacritty"
+	if err := os.MkdirAll(alacrittyConfigDir, 0755); err == nil {
+		if err := m.copyThemeDirectory(assetsDir+"/themes/alacritty", alacrittyConfigDir+"/themes"); err != nil {
+			log.Warn("Failed to copy Alacritty themes", "error", err)
+		}
+	}
+
+	// Copy Neovim colorschemes
+	neovimConfigDir := homeDir + "/.config/nvim"
+	if err := os.MkdirAll(neovimConfigDir+"/colors", 0755); err == nil {
+		if err := m.copyThemeDirectory(assetsDir+"/themes/neovim", neovimConfigDir+"/colors"); err != nil {
+			log.Warn("Failed to copy Neovim colorschemes", "error", err)
+		}
+	}
+
+	// Copy Zellij themes
+	zellijConfigDir := homeDir + "/.config/zellij"
+	if err := os.MkdirAll(zellijConfigDir+"/themes", 0755); err == nil {
+		if err := m.copyThemeDirectory(assetsDir+"/themes/zellij", zellijConfigDir+"/themes"); err != nil {
+			log.Warn("Failed to copy Zellij themes", "error", err)
+		}
+	}
+
+	// Copy Oh My Posh themes
+	ompConfigDir := homeDir + "/.config/oh-my-posh"
+	if err := os.MkdirAll(ompConfigDir+"/themes", 0755); err == nil {
+		if err := m.copyThemeDirectory(assetsDir+"/themes/oh-my-posh", ompConfigDir+"/themes"); err != nil {
+			log.Warn("Failed to copy Oh My Posh themes", "error", err)
+		}
+	}
+
+	// Copy Typora themes
+	typoraThemeDir := homeDir + "/.config/Typora/themes"
+	if err := os.MkdirAll(typoraThemeDir, 0755); err == nil {
+		if err := m.copyThemeDirectory(assetsDir+"/themes/typora", typoraThemeDir); err != nil {
+			log.Warn("Failed to copy Typora themes", "error", err)
+		}
+	}
+
+	// Copy GNOME theme scripts (make them executable)
+	gnomeScriptDir := devexDir + "/themes/gnome"
+	if err := os.MkdirAll(gnomeScriptDir, 0755); err == nil {
+		if err := m.copyThemeDirectory(assetsDir+"/themes/gnome", gnomeScriptDir); err != nil {
+			log.Warn("Failed to copy GNOME theme scripts", "error", err)
+		} else {
+			// Make scripts executable
+			m.makeScriptsExecutable(gnomeScriptDir)
+		}
+	}
+
+	log.Info("Theme files copied successfully")
+	return nil
+}
+
+// copyAppConfigFiles copies application configuration files and defaults
+func (m *SetupModel) copyAppConfigFiles() error {
+	log.Info("Copying application configuration files")
+
+	homeDir := os.Getenv("HOME")
+	devexDir := homeDir + "/.local/share/devex"
+	assetsDir := devexDir + "/assets"
+
+	// Create defaults directory in devex
+	defaultsDir := devexDir + "/defaults"
+	if err := os.MkdirAll(defaultsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create defaults directory: %w", err)
+	}
+
+	// Copy default application configurations
+	if err := m.copyThemeDirectory(assetsDir+"/defaults", defaultsDir); err != nil {
+		log.Warn("Failed to copy default application configurations", "error", err)
+	}
+
+	// Copy XCompose file for special characters
+	xcomposeFile := assetsDir + "/defaults/xcompose"
+	if err := m.copyFile(xcomposeFile, homeDir+"/.XCompose"); err != nil {
+		log.Warn("Failed to copy .XCompose file", "error", err)
+	}
+
+	log.Info("Application configuration files copied successfully")
+	return nil
+}
+
+// setupGitConfiguration applies git configuration using user's name and email
+func (m *SetupModel) setupGitConfiguration() error {
+	log.Info("Setting up git configuration", "name", m.gitFullName, "email", m.gitEmail)
+
+	// Set git user name
+	if m.gitFullName != "" {
+		if _, err := exec.Command("git", "config", "--global", "user.name", m.gitFullName).CombinedOutput(); err != nil {
+			log.Warn("Failed to set git user name", "error", err)
+		} else {
+			log.Info("Git user name set successfully", "name", m.gitFullName)
+		}
+	}
+
+	// Set git user email
+	if m.gitEmail != "" {
+		if _, err := exec.Command("git", "config", "--global", "user.email", m.gitEmail).CombinedOutput(); err != nil {
+			log.Warn("Failed to set git user email", "error", err)
+		} else {
+			log.Info("Git user email set successfully", "email", m.gitEmail)
+		}
+	}
+
+	// Apply additional git configuration from system.yaml
+	homeDir := os.Getenv("HOME")
+	devexDir := homeDir + "/.local/share/devex"
+	systemConfigPath := devexDir + "/config/system.yaml"
+
+	// Load and apply git config if the file exists
+	if gitConfig, err := gitconfig.LoadGitConfig(systemConfigPath); err != nil {
+		log.Warn("Failed to load git configuration from system.yaml", "error", err)
+	} else {
+		if err := gitconfig.ApplyGitConfig(gitConfig); err != nil {
+			log.Warn("Failed to apply git configuration", "error", err)
+		} else {
+			log.Info("Additional git configuration applied successfully")
+		}
+	}
+
+	return nil
+}
+
+// copyThemeDirectory copies all files from source directory to destination directory
+func (m *SetupModel) copyThemeDirectory(srcDir, dstDir string) error {
+	// Check if source directory exists
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		return fmt.Errorf("source directory does not exist: %s", srcDir)
+	}
+
+	// Create destination directory
+	if err := os.MkdirAll(dstDir, 0755); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w", err)
+	}
+
+	// Read source directory
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("failed to read source directory: %w", err)
+	}
+
+	// Copy each file
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			srcPath := filepath.Join(srcDir, entry.Name())
+			dstPath := filepath.Join(dstDir, entry.Name())
+
+			if err := m.copyFile(srcPath, dstPath); err != nil {
+				log.Warn("Failed to copy theme file", "src", srcPath, "dst", dstPath, "error", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// makeScriptsExecutable makes shell scripts executable
+func (m *SetupModel) makeScriptsExecutable(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		log.Warn("Failed to read directory for making scripts executable", "dir", dir, "error", err)
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sh") {
+			scriptPath := filepath.Join(dir, entry.Name())
+			if err := os.Chmod(scriptPath, 0755); err != nil {
+				log.Warn("Failed to make script executable", "script", scriptPath, "error", err)
+			}
+		}
+	}
+}
+
 // Error tracking and validation methods
 func (m *SetupModel) addError(component, message string) {
 	errorMsg := fmt.Sprintf("%s: %s", component, message)
@@ -927,82 +1180,71 @@ func (m *SetupModel) addError(component, message string) {
 	log.Error("Installation error", fmt.Errorf("%s", errorMsg), "component", component, "message", message)
 }
 
-// buildAppList converts user selections into CrossPlatformApp objects for the streaming installer
+// buildAppList converts user selections into a structured installation plan
 func (m *SetupModel) buildAppList() []types.CrossPlatformApp {
 	var apps []types.CrossPlatformApp
 
-	// Always include essential tools first
-	essentialApps := m.getEssentialApps()
-	apps = append(apps, essentialApps...)
+	// Step 1: System update/upgrade - handled separately in installation process
+	// This will be called before installing any apps
 
-	// Add a selected shell
-	selectedShell := m.getSelectedShell()
-	if shellApp := m.getShellApp(selectedShell); shellApp != nil {
-		apps = append(apps, *shellApp)
-	}
+	// Step 2: Default terminal apps (all apps with default: true)
+	defaultApps := m.getDefaultApps()
+	apps = append(apps, defaultApps...)
 
-	// Add mise for language management if languages are selected
+	// Step 3: Setup languages via Mise
 	if len(m.getSelectedLanguages()) > 0 {
+		// First add mise itself
 		if miseApp := m.getMiseApp(); miseApp != nil {
 			apps = append(apps, *miseApp)
 		}
-
-		// Add language-specific apps
+		// Then add language-specific apps
 		languageApps := m.getLanguageApps()
 		apps = append(apps, languageApps...)
 	}
 
-	// Add Docker if databases are selected
+	// Step 4: Setup databases via Docker
 	if len(m.getSelectedDatabases()) > 0 {
+		// First add Docker itself
 		if dockerApp := m.getDockerApp(); dockerApp != nil {
 			apps = append(apps, *dockerApp)
 		}
-
-		// Add database apps
+		// Then add database containers
 		databaseApps := m.getDatabaseApps()
 		apps = append(apps, databaseApps...)
 	}
 
-	// Add selected desktop applications
-	desktopApps := m.getSelectedDesktopApps()
-	for _, appName := range desktopApps {
-		if app := m.getDesktopAppByName(appName); app != nil {
-			apps = append(apps, *app)
-		}
-	}
-
-	return apps
-}
-
-// getEssentialApps returns essential development tools
-func (m *SetupModel) getEssentialApps() []types.CrossPlatformApp {
-	allApps := m.settings.GetAllApps()
-	var essential []types.CrossPlatformApp
-
-	essentialNames := []string{"git", "curl", "wget", "bat", "Eza", "fzf", "ripgrep"}
-	for _, app := range allApps {
-		for _, name := range essentialNames {
-			if app.Name == name {
-				essential = append(essential, app)
-				break
+	// Step 5: Desktop apps (if desktop detected and selected)
+	if m.hasDesktop {
+		desktopApps := m.getSelectedDesktopApps()
+		for _, appName := range desktopApps {
+			if app := m.getDesktopAppByName(appName); app != nil {
+				apps = append(apps, *app)
 			}
 		}
 	}
 
-	return essential
+	// Step 6: Shell configuration (handled after app installation)
+	// Step 7: Themes and shell files copying (handled after app installation)
+	// Step 8: Git configuration (handled after app installation)
+
+	return apps
+}
+
+// getDefaultApps returns all apps marked as default in configuration
+func (m *SetupModel) getDefaultApps() []types.CrossPlatformApp {
+	allApps := m.settings.GetAllApps()
+	var defaultApps []types.CrossPlatformApp
+
+	for _, app := range allApps {
+		if app.Default {
+			defaultApps = append(defaultApps, app)
+		}
+	}
+
+	return defaultApps
 }
 
 // getShellApp returns the CrossPlatformApp for the selected shell
-func (m *SetupModel) getShellApp(shell string) *types.CrossPlatformApp {
-	allApps := m.settings.GetAllApps()
-	for _, app := range allApps {
-		if app.Name == shell {
-			return &app
-		}
-	}
-	return nil
-}
-
 // getMiseApp returns a CrossPlatformApp for mise installation
 func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
@@ -1272,4 +1514,64 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 	}
 
 	return nil
+}
+
+// getAvailableDesktopApps returns non-default desktop apps compatible with the detected desktop environment
+func (m *SetupModel) getAvailableDesktopApps() []string {
+	allApps := m.settings.GetAllApps()
+	var desktopApps []string
+
+	for _, app := range allApps {
+		// Include apps that are:
+		// 1. Not default (user should choose)
+		// 2. Desktop/GUI applications
+		// 3. Compatible with current platform
+		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) {
+			desktopApps = append(desktopApps, app.Name)
+		}
+	}
+
+	return desktopApps
+}
+
+// isDesktopApp determines if an app is a desktop/GUI application
+func (m *SetupModel) isDesktopApp(app types.CrossPlatformApp) bool {
+	desktopCategories := []string{
+		"Text Editors", "IDEs", "Browsers", "Communication",
+		"Media", "Graphics", "Productivity", "Utility",
+	}
+
+	for _, category := range desktopCategories {
+		if app.Category == category {
+			return true
+		}
+	}
+
+	// Also check for known desktop apps by name
+	desktopApps := []string{
+		"Visual Studio Code", "IntelliJ IDEA", "Firefox", "Chrome",
+		"Discord", "Slack", "VLC", "GIMP", "Typora", "Ulauncher",
+	}
+
+	for _, desktopApp := range desktopApps {
+		if app.Name == desktopApp {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isCompatibleWithPlatform checks if an app is available for the current platform
+func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
+	switch m.detectedPlatform.OS {
+	case "linux":
+		return app.Linux.InstallCommand != ""
+	case "darwin":
+		return app.MacOS.InstallCommand != ""
+	case "windows":
+		return app.Windows.InstallCommand != ""
+	default:
+		return false
+	}
 }
