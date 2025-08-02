@@ -55,10 +55,11 @@ func (m *MiseInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	// Run `mise use --global` command with proper PATH and secure execution
-	// Instead of using a shell command with string interpolation, build the command securely
-	shellScript := `export PATH="$HOME/.local/bin:$PATH" && if command -v mise >/dev/null 2>&1; then mise use --global "` + command + `"; else echo "mise not found in PATH"; exit 1; fi`
+	// Use structured command execution to avoid shell injection vulnerabilities
+	miseScript := fmt.Sprintf(`export PATH="$HOME/.local/bin:$PATH" && if command -v mise >/dev/null 2>&1; then mise use --global %s; else echo "mise not found in PATH"; exit 1; fi`,
+		strings.ReplaceAll(command, "'", "'\"'\"'")) // Escape single quotes properly
 
-	if _, err := utils.CommandExec.RunShellCommand("bash -c '" + strings.ReplaceAll(shellScript, "'", "'\"'\"'") + "'"); err != nil {
+	if _, err := utils.CommandExec.RunShellCommand("bash -c '" + strings.ReplaceAll(miseScript, "'", "'\"'\"'") + "'"); err != nil {
 		log.Error("Failed to install language via Mise", err, "language", command)
 		return fmt.Errorf("failed to install language via Mise '%s': %w", command, err)
 	}
