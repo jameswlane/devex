@@ -1,3 +1,11 @@
+## [0.16.2](https://github.com/jameswlane/devex/compare/0.16.1...0.16.2) (2025-08-02)
+
+### Bug Fixes
+
+* implement automatic Docker service setup and permission handling ([5648975](https://github.com/jameswlane/devex/commit/5648975f791fc431c5fd6b40bbaebebd9b90fd15))
+* improve interactive mode detection for guided setup ([af41bf8](https://github.com/jameswlane/devex/commit/af41bf831e3c11fe91da9e76e4ae87c98ad2dde5))
+* improve interactive mode detection for guided setup ([62a991c](https://github.com/jameswlane/devex/commit/62a991c35be4e2b876609107dd114f1728ecf59c))
+
 ## [0.16.1](https://github.com/jameswlane/devex/compare/0.16.0...0.16.1) (2025-08-02)
 
 ### Bug Fixes
