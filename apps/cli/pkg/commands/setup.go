@@ -17,7 +17,6 @@ import (
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
-	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -774,13 +773,24 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 			fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
 
-			// Use the new streaming installer TUI for actual installation
-			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
-				log.Error("Streaming installer failed", err)
+			// Try simpler installation first to isolate the issue
+			log.Info("Attempting fallback to direct installer to avoid TUI panic")
+
+			// Use direct installer instead of TUI to avoid panic issues temporarily
+			if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
+				log.Error("Direct installer failed", err)
 				fmt.Printf("\n❌ Installation failed: %v\n", err)
 				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
 				return
 			}
+
+			// TODO: Re-enable streaming installer once panic issue is resolved
+			// if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
+			//	log.Error("Streaming installer failed", err)
+			//	fmt.Printf("\n❌ Installation failed: %v\n", err)
+			//	fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
+			//	return
+			// }
 
 			// Installation completed successfully
 			log.Info("Installation completed successfully")
