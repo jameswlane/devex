@@ -2,6 +2,7 @@ package apt
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -81,6 +82,12 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 			return fmt.Errorf("package installation verification failed for: %s (hint: docker.io may install as 'docker' package - check with 'dpkg -l | grep docker')", command)
 		}
 		return fmt.Errorf("package installation verification failed for: %s", command)
+	}
+
+	// Perform post-installation setup for specific packages
+	if err := performPostInstallationSetup(command); err != nil {
+		log.Warn("Post-installation setup failed", "package", command, "error", err)
+		// Don't fail the installation, just warn
 	}
 
 	// Add the package to the repository
@@ -169,5 +176,65 @@ func validatePackageAvailability(packageName string) error {
 	}
 
 	log.Info("Package availability validated", "package", packageName)
+	return nil
+}
+
+// performPostInstallationSetup handles package-specific post-installation configuration
+func performPostInstallationSetup(packageName string) error {
+	switch packageName {
+	case "docker.io":
+		return setupDockerService()
+	default:
+		// No special setup required
+		return nil
+	}
+}
+
+// setupDockerService configures Docker service and user permissions
+func setupDockerService() error {
+	log.Info("Configuring Docker service and permissions")
+
+	// Enable Docker service to start on boot
+	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable docker"); err != nil {
+		log.Warn("Failed to enable Docker service", "error", err)
+		// Continue anyway
+	} else {
+		log.Info("Docker service enabled for automatic startup")
+	}
+
+	// Start Docker service
+	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start docker"); err != nil {
+		log.Warn("Failed to start Docker service", "error", err)
+		// Continue anyway, user can start manually
+	} else {
+		log.Info("Docker service started successfully")
+	}
+
+	// Add current user to docker group
+	currentUser := os.Getenv("USER")
+	if currentUser == "" {
+		log.Warn("Unable to determine current user, skipping docker group addition")
+		return nil
+	}
+
+	addUserCmd := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
+	if _, err := utils.CommandExec.RunShellCommand(addUserCmd); err != nil {
+		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err)
+		log.Info("You may need to manually add your user to the docker group", "command", fmt.Sprintf("sudo usermod -aG docker %s", currentUser))
+	} else {
+		log.Info("User added to docker group", "user", currentUser)
+		log.Info("Note: You may need to log out and log back in for docker group changes to take effect")
+	}
+
+	// Wait a moment for service to fully start
+	time.Sleep(2 * time.Second)
+
+	// Verify Docker daemon is accessible
+	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
+		log.Info("Docker daemon is running and accessible")
+	} else {
+		log.Warn("Docker daemon may not be fully ready yet", "hint", "Try running 'sudo systemctl status docker' to check service status")
+	}
+
 	return nil
 }
