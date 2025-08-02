@@ -730,7 +730,7 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	}
 
 	// Setup git configuration with user's name and email
-	if err := m.setupGitConfiguration(); err != nil {
+	if err := m.setupGitConfiguration(ctx); err != nil {
 		log.Error("Failed to setup git configuration", err)
 		return err
 	}
