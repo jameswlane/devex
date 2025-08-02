@@ -52,8 +52,8 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 		return nil
 	}
 
-	// Run the Docker command
-	if _, err := utils.CommandExec.RunShellCommand(command); err != nil {
+	// Run the Docker command (try with and without sudo as needed)
+	if err := executeDockerCommand(command); err != nil {
 		log.Error("Failed to execute Docker command", err, "command", command)
 		return fmt.Errorf("failed to execute Docker command: %w", err)
 	}
@@ -87,10 +87,36 @@ func validateDockerService() error {
 		return fmt.Errorf("docker command not found: %w", err)
 	}
 
-	// Check if Docker daemon is running by attempting to get version
-	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err != nil {
-		return fmt.Errorf("docker daemon not running or not accessible: %w (hint: try 'sudo systemctl start docker' or add user to docker group)", err)
+	// First try regular docker command (if user is in docker group)
+	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
+		log.Info("Docker daemon is accessible via user permissions")
+		return nil
 	}
 
+	// If regular access fails, try with sudo (service might be running but user not in group)
+	if _, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
+		log.Info("Docker daemon is running but requires sudo access")
+		log.Warn("User may not be in docker group or needs to refresh session", "hint", "Try logging out and back in, or run 'newgrp docker'")
+		return nil // Allow installation to proceed with sudo
+	} else {
+		return fmt.Errorf("docker daemon not running or not accessible: %w (hint: try 'sudo systemctl start docker' or add user to docker group)", err)
+	}
+}
+
+// executeDockerCommand runs a Docker command, using sudo if necessary
+func executeDockerCommand(command string) error {
+	// First try without sudo
+	if _, err := utils.CommandExec.RunShellCommand(command); err == nil {
+		log.Info("Docker command executed with user permissions")
+		return nil
+	}
+
+	// If that fails, try with sudo
+	sudoCommand := "sudo " + command
+	if _, err := utils.CommandExec.RunShellCommand(sudoCommand); err != nil {
+		return fmt.Errorf("docker command failed even with sudo: %w", err)
+	}
+
+	log.Info("Docker command executed with sudo (user may need to refresh docker group membership)")
 	return nil
 }
