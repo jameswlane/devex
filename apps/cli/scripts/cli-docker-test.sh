@@ -120,10 +120,11 @@ inspect_logs() {
     echo -e "${YELLOW}📋 Inspecting logs in Docker container (${DISTRO})...${NC}"
 
     docker run -it --rm \
+        --user testuser \
         --privileged \
         -v /var/run/docker.sock:/var/run/docker.sock \
         "$DOCKER_IMAGE:$DISTRO" \
-        bash -c "find /home/devex -name '*.log' -exec cat {} \;"
+        bash -c "find /home/testuser/.local/share/devex -name '*.log' -exec cat {} \;"
 }
 
 clean_up() {
