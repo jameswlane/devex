@@ -19,6 +19,11 @@ func New() *DockerInstaller {
 func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Docker Installer: Starting installation", "command", command)
 
+	// Check if Docker is available and running
+	if err := validateDockerService(); err != nil {
+		return fmt.Errorf("docker service validation failed: %w", err)
+	}
+
 	// Extract container name from the command
 	containerName := extractContainerName(command)
 	if containerName == "" {
@@ -73,4 +78,19 @@ func extractContainerName(command string) string {
 		}
 	}
 	return ""
+}
+
+// validateDockerService checks if Docker is installed and the daemon is running
+func validateDockerService() error {
+	// Check if docker command is available
+	if _, err := utils.CommandExec.RunShellCommand("which docker"); err != nil {
+		return fmt.Errorf("docker command not found: %w", err)
+	}
+
+	// Check if Docker daemon is running by attempting to get version
+	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err != nil {
+		return fmt.Errorf("docker daemon not running or not accessible: %w (hint: try 'sudo systemctl start docker' or add user to docker group)", err)
+	}
+
+	return nil
 }
