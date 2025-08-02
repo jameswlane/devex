@@ -1,22 +1,23 @@
-FROM debian:12
+FROM registry.access.redhat.com/ubi8/ubi:8.8
 
 ENV TERM=xterm-256color
 
-# Install basic dependencies required to enable the CLI to operate
-RUN apt-get update && apt-get install -y \
+# Install only essential utilities present on a fresh Red Hat-based installation
+RUN dnf -y update && \
+    dnf -y install \
     curl \
     wget \
     git \
     unzip \
     sudo \
-    && rm -rf /var/lib/apt/lists/*
+    && dnf clean all
 
-# Create a non-root user for testing
-RUN useradd -m -s /bin/bash -G sudo testuser && \
+# Add a non-root user for testing purposes
+RUN useradd -m -s /bin/bash -G wheel testuser && \
     echo 'testuser:testpass' | chpasswd && \
     echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-# Switch to the test user
+# Switch to the non-root user
 USER testuser
 WORKDIR /home/testuser
 
@@ -29,5 +30,5 @@ RUN mkdir -p ~/.local/share/devex/assets \
 # Ensure ~/.local/share/devex/bin is in PATH
 RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc
 
-# Set container entrypoint for an interactive shell
+# Set default command for the container
 CMD ["/bin/bash"]
