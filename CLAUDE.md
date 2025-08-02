@@ -142,6 +142,14 @@ go tool cover -html=coverage.out
 - **Windows support**: winget, chocolatey, scoop (planned)
 - **Installer priority system**: Automatically selects best installer for current platform
 - Each installer implements the `Installer` interface from `apps/cli/pkg/types/types.go`
+- **Security features**: Input validation, shell injection prevention, context-aware execution
+- **Error resilience**: Multiple verification methods, fallback mechanisms, service validation
+
+**Validation System**: `apps/cli/pkg/commands/validation.go`
+- **Exported validation functions**: `ValidateDockerConfig`, `ValidatePath`, `ValidateShellCommand`, `ExecuteSecureShellChange`
+- **Security validation**: Directory traversal prevention, shell injection detection, input sanitization
+- **Comprehensive testing**: 59+ test cases covering security scenarios and edge cases
+- **Context-aware execution**: All command execution uses `exec.CommandContext` for proper cancellation
 
 ### Key Configuration Files
 
@@ -192,6 +200,36 @@ SQLite database with migration system:
 
 ## Development Guidelines
 
+### Coding Standards & Quality
+
+**Security Requirements**:
+- Use `exec.CommandContext` instead of `exec.Command` for all command execution
+- Validate all user inputs with regex patterns and sanitization
+- Prevent directory traversal attacks in file operations
+- Escape shell metacharacters in dynamic command construction
+- Use structured command building over string concatenation
+
+**Error Handling Standards**:
+- Provide actionable error messages with specific guidance
+- Implement fallback mechanisms for critical operations (e.g., APT package verification)
+- Include hints for common resolution steps in error messages
+- Log errors with structured context using the log package
+- Validate system requirements before attempting operations
+
+**Testing Requirements**:
+- All exported validation functions must have comprehensive tests
+- Use Ginkgo BDD tests for complex behavior scenarios
+- Include edge cases and security validation in test suites
+- Test both dry-run and actual execution modes
+- Achieve meaningful test coverage for critical paths
+
+**Code Quality**:
+- All code must pass `golangci-lint` with zero issues
+- Follow Go naming conventions and documentation standards
+- Use dependency injection for better testability
+- Implement robust input validation for all public functions
+- Structure error messages following Go conventions (lowercase, no capitalization)
+
 ### Working with the Monorepo
 1. Always change to the appropriate app directory before development
 2. Use `pnpm` for workspace-level commands
@@ -202,7 +240,18 @@ SQLite database with migration system:
 1. Create new installer in `apps/cli/pkg/installers/[method]/`
 2. Implement `Installer` interface from `apps/cli/pkg/types/types.go`
 3. Register in `apps/cli/pkg/installers/installers.go`
-4. Add tests following existing patterns
+4. Add robust error handling with actionable messages
+5. Implement service/dependency validation before operations
+6. Add fallback verification mechanisms for installation checks
+7. Include specific guidance for common setup issues
+8. Add comprehensive tests covering success and failure scenarios
+
+**Installer Error Handling Patterns**:
+- Validate system requirements before attempting installation
+- Check service availability for tools requiring daemons (e.g., Docker)
+- Provide multiple verification methods with fallbacks
+- Include specific resolution steps in error messages
+- Log structured error context for debugging
 
 ### CLI Configuration Changes
 1. Update type definitions in `apps/cli/pkg/types/types.go`
@@ -225,7 +274,7 @@ When changes affect multiple apps:
 
 ## Project Status & Roadmap
 
-### Recent Major Changes (2025-01)
+### Recent Major Changes (2025-01/08)
 
 1. **Configuration Consolidation**: Reduced from 11 separate config files to 4 structured files
 2. **Cross-Platform Architecture**: Modern type system supporting Linux, macOS, and Windows
@@ -233,6 +282,10 @@ When changes affect multiple apps:
 4. **Code Cleanup**: Removed dead code, obsolete test files, and improved maintainability
 5. **Enhanced CLI**: Added uninstall command and comprehensive dry-run support
 6. **One-Line Installer**: `wget -qO- https://devex.sh/install | bash` for quick setup
+7. **Security Hardening**: Improved shell script construction, input validation, and context-aware command execution
+8. **Robust Error Handling**: Enhanced Docker installation error handling with fallback mechanisms
+9. **Test Coverage Expansion**: Added comprehensive validation tests with 59+ test cases
+10. **Quality Standards**: Implemented golangci-lint compliance and security best practices
 
 ### Platform Priorities
 
@@ -249,7 +302,27 @@ Development priority order (as per ROADMAP.md):
 - **DNF installer implementation** for Red Hat-based systems
 - **Enhanced platform detection** and automatic installer selection
 - **Configuration validation improvements**
-- **Installation error handling and recovery**
+- **Installation error handling and recovery** ✅ *Recently completed*
+
+### Completed Security & Quality Improvements (2025-08)
+
+**Security Hardening**:
+- ✅ Replaced `exec.Command` with `exec.CommandContext` throughout codebase
+- ✅ Enhanced shell script construction in mise installer with proper escaping
+- ✅ Added comprehensive input validation with regex patterns
+- ✅ Implemented directory traversal prevention in file operations
+
+**Error Handling & Resilience**:
+- ✅ Enhanced Docker installation with service validation
+- ✅ Added APT package verification fallback mechanisms  
+- ✅ Improved error messages with actionable guidance
+- ✅ Implemented Docker daemon availability checking
+
+**Testing & Quality**:
+- ✅ Exported validation functions for better testability
+- ✅ Added comprehensive validation test suite (59+ test cases)
+- ✅ Achieved zero golangci-lint issues
+- ✅ Enhanced test coverage for critical security functions
 
 ## Quick Start for New Contributors
 
@@ -271,6 +344,16 @@ task install
 3. **Installers**: `apps/cli/pkg/installers/` - Package manager implementations
 4. **Commands**: `apps/cli/pkg/commands/` - CLI command handlers
 5. **Platform**: `apps/cli/pkg/platform/platform.go` - OS/distribution detection
+6. **Validation**: `apps/cli/pkg/commands/validation.go` - Security validation functions
+7. **Installation Utilities**: `apps/cli/pkg/installers/utilities/check_install.go` - Installation verification
+8. **Theme Management**: `apps/cli/pkg/commands/theme_manager.go` - Theme and config file management
+
+### Critical Security Files
+- `apps/cli/pkg/commands/validation.go` - Exported validation functions with comprehensive tests
+- `apps/cli/pkg/installers/utilities/check_install.go` - Installation verification with fallback methods
+- `apps/cli/pkg/installers/docker/docker.go` - Docker service validation and error handling
+- `apps/cli/pkg/installers/apt/apt.go` - APT package management with enhanced verification
+- `apps/cli/pkg/installers/mise/mise.go` - Secure shell script construction for language management
 
 ### Documentation Resources
 - **Main docs**: https://docs.devex.sh/
