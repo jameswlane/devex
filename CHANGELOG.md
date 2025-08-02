@@ -1,3 +1,16 @@
+## [0.16.0](https://github.com/jameswlane/devex/compare/0.15.1...0.16.0) (2025-08-02)
+
+### Features
+
+* implement comprehensive installer restructuring with theme management ([52fdc34](https://github.com/jameswlane/devex/commit/52fdc34b1a498f48d37ab05ff09a04aa77d7f9ba))
+* implement comprehensive security hardening and test coverage ([0b04422](https://github.com/jameswlane/devex/commit/0b044222a913230dec6bfd9f41172a60cc4848d0))
+
+### Bug Fixes
+
+* resolve golangci-lint noctx violations in theme_manager.go ([8381e5e](https://github.com/jameswlane/devex/commit/8381e5e4c19328322a127f525db12921c4b08a2d))
+* resolve installer issues in automated setup ([d20f11f](https://github.com/jameswlane/devex/commit/d20f11faf6e1766909794eae535c77acb294cfd2))
+* resolve test failures and Ginkgo suite conflicts ([fd45267](https://github.com/jameswlane/devex/commit/fd45267a7c9f6f7ef6b2f88836f5a98ef26c4146))
+
 ## [0.15.1](https://github.com/jameswlane/devex/compare/0.15.0...0.15.1) (2025-07-31)
 
 ### Bug Fixes
