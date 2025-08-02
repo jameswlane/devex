@@ -44,11 +44,20 @@ The setup process includes:
   devex setup
 
   # Run setup with verbose output
-  devex setup --verbose`,
+  devex setup --verbose
+  
+  # Run non-interactive setup with defaults
+  devex setup --non-interactive`,
 		Run: func(cmd *cobra.Command, args []string) {
 			runGuidedSetup(repo, settings)
 		},
 	}
+
+	// Add flags
+	cmd.Flags().Bool("non-interactive", false, "Run automated setup without user interaction")
+
+	// Bind flags to viper
+	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
 
 	return cmd
 }
@@ -121,9 +130,9 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 
 	log.Info("Starting guided setup process", "verbose", settings.Verbose, "logFile", log.GetLogFile())
 
-	// Check if we're running in an interactive terminal
-	if !isInteractiveTerminal() {
-		log.Info("Non-interactive terminal detected, running automated setup")
+	// Check if we should run in interactive mode (default: yes)
+	if !isInteractiveMode() {
+		log.Info("Non-interactive mode requested, running automated setup")
 		if err := runAutomatedSetup(repo, settings); err != nil {
 			log.Error("Automated setup failed", err)
 			os.Exit(1) // or handle appropriately
@@ -973,22 +982,26 @@ func printAutomatedSetupCompletion(model *SetupModel) {
 	}
 }
 
-// isInteractiveTerminal checks if we're running in an interactive terminal environment
-func isInteractiveTerminal() bool {
-	// Check if stdin is a terminal
-	if fileInfo, err := os.Stdin.Stat(); err == nil {
-		// If it's a character device (terminal) and not a pipe/redirect
-		if (fileInfo.Mode() & os.ModeCharDevice) != 0 {
-			return true
-		}
-	}
-
-	// Additional checks for common non-interactive environments
-	if os.Getenv("CI") != "" || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
+// isInteractiveMode checks if we should run in interactive mode (default: yes)
+// Only goes non-interactive if explicitly requested or in CI environments
+func isInteractiveMode() bool {
+	// Check for explicit non-interactive request (like Homebrew)
+	if os.Getenv("DEVEX_NONINTERACTIVE") == "1" || viper.GetBool("non-interactive") {
 		return false
 	}
 
-	return false
+	// Check for known CI environments
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GITLAB_CI") != "" {
+		return false
+	}
+
+	// Check for explicitly non-interactive terminals
+	if os.Getenv("TERM") == "dumb" {
+		return false
+	}
+
+	// Default to interactive for better user experience
+	return true
 }
 
 // runAutomatedSetup runs a non-interactive setup with sensible defaults
