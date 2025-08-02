@@ -1,22 +1,22 @@
-FROM debian:12
+FROM opensuse/leap:15.5
 
 ENV TERM=xterm-256color
 
-# Install basic dependencies required to enable the CLI to operate
-RUN apt-get update && apt-get install -y \
+# Install only essential utilities for a fresh openSUSE environment
+RUN zypper refresh && zypper install -y \
     curl \
     wget \
     git \
     unzip \
     sudo \
-    && rm -rf /var/lib/apt/lists/*
+    && zypper clean
 
 # Create a non-root user for testing
-RUN useradd -m -s /bin/bash -G sudo testuser && \
+RUN useradd -m -s /bin/bash -G users,wheel testuser && \
     echo 'testuser:testpass' | chpasswd && \
     echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-# Switch to the test user
+# Switch to the non-root user
 USER testuser
 WORKDIR /home/testuser
 
@@ -29,5 +29,5 @@ RUN mkdir -p ~/.local/share/devex/assets \
 # Ensure ~/.local/share/devex/bin is in PATH
 RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc
 
-# Set container entrypoint for an interactive shell
+# Set default command to bash
 CMD ["/bin/bash"]
