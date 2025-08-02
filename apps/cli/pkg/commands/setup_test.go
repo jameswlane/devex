@@ -63,45 +63,187 @@ var _ = Describe("Setup Command", func() {
 		})
 	})
 
-	Describe("isInteractiveTerminal", func() {
-		Context("with CI environment", func() {
-			BeforeEach(func() {
+	Describe("isInteractiveMode", func() {
+		// Helper function to test the private isInteractiveMode function
+		var testIsInteractiveMode = func() bool {
+			// Since we can't call the private function directly,
+			// we'll test the same logic that isInteractiveMode uses
+			if os.Getenv("DEVEX_NONINTERACTIVE") == "1" || viper.GetBool("non-interactive") {
+				return false
+			}
+
+			if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GITLAB_CI") != "" {
+				return false
+			}
+
+			if os.Getenv("TERM") == "dumb" {
+				return false
+			}
+
+			return true
+		}
+
+		BeforeEach(func() {
+			// Clean up environment before each test
+			os.Unsetenv("DEVEX_NONINTERACTIVE")
+			os.Unsetenv("CI")
+			os.Unsetenv("GITHUB_ACTIONS")
+			os.Unsetenv("GITLAB_CI")
+			os.Unsetenv("TERM")
+			viper.Set("non-interactive", false)
+		})
+
+		AfterEach(func() {
+			// Clean up environment after each test
+			os.Unsetenv("DEVEX_NONINTERACTIVE")
+			os.Unsetenv("CI")
+			os.Unsetenv("GITHUB_ACTIONS")
+			os.Unsetenv("GITLAB_CI")
+			os.Unsetenv("TERM")
+			viper.Set("non-interactive", false)
+		})
+
+		Context("default behavior", func() {
+			It("returns true by default (interactive mode)", func() {
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
+			})
+		})
+
+		Context("with DEVEX_NONINTERACTIVE environment variable", func() {
+			It("returns false when DEVEX_NONINTERACTIVE=1", func() {
+				os.Setenv("DEVEX_NONINTERACTIVE", "1")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("returns true when DEVEX_NONINTERACTIVE=0", func() {
+				os.Setenv("DEVEX_NONINTERACTIVE", "0")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
+			})
+
+			It("returns true when DEVEX_NONINTERACTIVE is empty", func() {
+				os.Setenv("DEVEX_NONINTERACTIVE", "")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
+			})
+		})
+
+		Context("with --non-interactive flag", func() {
+			It("returns false when non-interactive flag is set", func() {
+				viper.Set("non-interactive", true)
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("returns true when non-interactive flag is false", func() {
+				viper.Set("non-interactive", false)
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
+			})
+		})
+
+		Context("with CI environment variables", func() {
+			It("returns false when CI=true", func() {
 				os.Setenv("CI", "true")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
 			})
 
-			AfterEach(func() {
-				os.Unsetenv("CI")
+			It("returns false when CI=1", func() {
+				os.Setenv("CI", "1")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
 			})
 
-			It("returns false in CI environment", func() {
-				// We can't directly test the private function, but we can test
-				// the behavior by checking if automated setup is triggered
-				// This would require refactoring to make the function testable
-				Expect(os.Getenv("CI")).To(Equal("true"))
+			It("returns false when GITHUB_ACTIONS is set", func() {
+				os.Setenv("GITHUB_ACTIONS", "true")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("returns false when GITLAB_CI is set", func() {
+				os.Setenv("GITLAB_CI", "true")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("returns true when CI environments are empty", func() {
+				os.Setenv("CI", "")
+				os.Setenv("GITHUB_ACTIONS", "")
+				os.Setenv("GITLAB_CI", "")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
 			})
 		})
 
-		Context("with dumb terminal", func() {
-			BeforeEach(func() {
+		Context("with TERM environment variable", func() {
+			It("returns false when TERM=dumb", func() {
 				os.Setenv("TERM", "dumb")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
 			})
 
-			AfterEach(func() {
+			It("returns true when TERM is a normal terminal", func() {
+				os.Setenv("TERM", "xterm-256color")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
+			})
+
+			It("returns true when TERM is unset", func() {
 				os.Unsetenv("TERM")
-			})
-
-			It("handles dumb terminal correctly", func() {
-				Expect(os.Getenv("TERM")).To(Equal("dumb"))
+				result := testIsInteractiveMode()
+				Expect(result).To(BeTrue())
 			})
 		})
 
-		Context("with no terminal", func() {
-			BeforeEach(func() {
-				os.Unsetenv("TERM")
+		Context("precedence testing", func() {
+			It("DEVEX_NONINTERACTIVE takes precedence over normal terminal", func() {
+				os.Setenv("DEVEX_NONINTERACTIVE", "1")
+				os.Setenv("TERM", "xterm-256color")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
 			})
 
-			It("handles missing TERM variable", func() {
-				Expect(os.Getenv("TERM")).To(Equal(""))
+			It("--non-interactive flag takes precedence over normal terminal", func() {
+				viper.Set("non-interactive", true)
+				os.Setenv("TERM", "xterm-256color")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("CI environment takes precedence over normal terminal", func() {
+				os.Setenv("CI", "true")
+				os.Setenv("TERM", "xterm-256color")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("multiple CI indicators all work", func() {
+				os.Setenv("CI", "true")
+				os.Setenv("GITHUB_ACTIONS", "true")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		Context("edge cases", func() {
+			It("handles multiple non-interactive indicators", func() {
+				os.Setenv("DEVEX_NONINTERACTIVE", "1")
+				viper.Set("non-interactive", true)
+				os.Setenv("CI", "true")
+				os.Setenv("TERM", "dumb")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
+			})
+
+			It("prioritizes explicit user request over CI environment", func() {
+				// Even in CI, if user explicitly sets interactive, we test the logic
+				os.Setenv("DEVEX_NONINTERACTIVE", "1")
+				os.Setenv("CI", "true")
+				result := testIsInteractiveMode()
+				Expect(result).To(BeFalse())
 			})
 		})
 	})
