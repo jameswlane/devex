@@ -71,7 +71,15 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	// Verify installation succeeded
 	if isInstalled, err := utilities.IsAppInstalled(appConfig); err != nil {
 		log.Warn("Failed to verify installation", "error", err, "command", command)
+		// For critical packages like Docker, provide additional guidance
+		if command == "docker.io" {
+			log.Info("Docker installation may require additional setup", "hint", "Try running 'sudo systemctl enable docker && sudo systemctl start docker' after installation")
+		}
 	} else if !isInstalled {
+		// Provide more helpful error message with suggestions
+		if command == "docker.io" {
+			return fmt.Errorf("package installation verification failed for: %s (hint: docker.io may install as 'docker' package - check with 'dpkg -l | grep docker')", command)
+		}
 		return fmt.Errorf("package installation verification failed for: %s", command)
 	}
 
