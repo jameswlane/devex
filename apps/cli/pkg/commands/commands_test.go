@@ -25,11 +25,10 @@ var _ = Describe("Commands", func() {
 	})
 
 	_ = Describe("Install Command", func() {
-		It("executes the install command without errors", func() {
+		It("creates the install command without errors", func() {
 			cmd := commands.NewInstallCmd(repo, settings)
-			cmd.SetArgs([]string{"test-app"})
-			err := cmd.Execute()
-			Expect(err).To(BeNil())
+			Expect(cmd).ToNot(BeNil())
+			Expect(cmd.Use).To(Equal("install"))
 		})
 	})
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
-	"github.com/jameswlane/devex/pkg/utils"
 )
 
 func init() {
@@ -57,36 +55,64 @@ The setup process includes:
 
 // SetupModel represents the state of our guided setup UI
 type SetupModel struct {
-	step          int
-	shells        []string
-	languages     []string
-	databases     []string
-	desktopApps   []string
-	selectedShell int
-	selectedLangs map[int]bool
-	selectedDBs   map[int]bool
-	selectedApps  map[int]bool
-	cursor        int
-	installing    bool
-	installStatus string
-	progress      float64
-	installErrors []string
-	hasErrors     bool
-	shellSwitched bool
-	repo          types.Repository
-	settings      config.CrossPlatformSettings
+	step             int
+	shells           []string
+	languages        []string
+	databases        []string
+	desktopApps      []string
+	selectedShell    int
+	selectedLangs    map[int]bool
+	selectedDBs      map[int]bool
+	selectedApps     map[int]bool
+	gitFullName      string
+	gitEmail         string
+	cursor           int
+	installing       bool
+	installStatus    string
+	progress         float64
+	installErrors    []string
+	hasErrors        bool
+	shellSwitched    bool
+	hasDesktop       bool
+	detectedPlatform platform.Platform
+	repo             types.Repository
+	settings         config.CrossPlatformSettings
 }
 
 // setupSteps defines the guided setup process
 const (
-	StepWelcome = iota
-	StepShellSelection
+	StepWelcome     = iota
+	StepDesktopApps // Only if desktop detected & non-default apps available
 	StepLanguages
 	StepDatabases
-	StepDesktopApps
+	StepShell     // Only for compatible systems (Linux/macOS)
+	StepGitConfig // Full name & email for git configuration
 	StepConfirmation
 	StepInstalling
 	StepComplete
+)
+
+// Constants for setup configuration
+const (
+	// UI Constants
+	ProgressBarWidth     = 50
+	WaitActivityInterval = 100 // milliseconds
+
+	// Default selections for automated setup
+	DefaultShellIndex      = 0 // zsh (first option)
+	DefaultNodeJSIndex     = 0 // Node.js
+	DefaultPythonIndex     = 1 // Python
+	DefaultPostgreSQLIndex = 0 // PostgreSQL
+
+	// File permissions
+	DirectoryPermissions   = 0755
+	ExecutablePermissions  = 0755
+	RegularFilePermissions = 0644
+
+	// Database configuration
+	PostgreSQLPort = "5432:5432"
+	MySQLPort      = "3306:3306"
+	RedisPort      = "6379:6379"
 )
 
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
@@ -105,18 +131,23 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		return
 	}
 
+	// Detect platform and desktop environment first
+	plat := platform.DetectPlatform()
+
 	// Initialize the setup model
 	model := &SetupModel{
-		step:          StepWelcome,
-		selectedShell: 0, // Default to zsh (first option)
-		selectedLangs: make(map[int]bool),
-		selectedDBs:   make(map[int]bool),
-		selectedApps:  make(map[int]bool),
-		installErrors: make([]string, 0),
-		hasErrors:     false,
-		shellSwitched: false,
-		repo:          repo,
-		settings:      settings,
+		step:             StepWelcome,
+		selectedShell:    DefaultShellIndex, // Default to zsh (first option)
+		selectedLangs:    make(map[int]bool),
+		selectedDBs:      make(map[int]bool),
+		selectedApps:     make(map[int]bool),
+		installErrors:    make([]string, 0),
+		hasErrors:        false,
+		shellSwitched:    false,
+		hasDesktop:       plat.DesktopEnv != "none",
+		detectedPlatform: plat,
+		repo:             repo,
+		settings:         settings,
 		shells: []string{
 			"zsh",
 			"bash",
@@ -139,14 +170,9 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		},
 	}
 
-	// Detect desktop environment and set desktop apps accordingly
-	plat := platform.DetectPlatform()
-	if plat.DesktopEnv != "none" {
-		model.desktopApps = []string{
-			"Neovim",
-			"Typora",
-			"Ulauncher",
-		}
+	// Set desktop apps based on platform and config (non-default apps only)
+	if model.hasDesktop {
+		model.desktopApps = model.getAvailableDesktopApps()
 	}
 
 	// Start the Bubble Tea program
@@ -244,38 +270,33 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Press Enter to continue, or 'q' to quit."
 
-	case StepShellSelection:
-		s = titleStyle.Render("🐚 Select Your Shell")
+	case StepDesktopApps:
+		if len(m.desktopApps) == 0 {
+			// Skip desktop apps if none available, go to next step
+			newModel, _ := m.nextStep()
+			return newModel.View()
+		}
+		s = titleStyle.Render("🖥️  Select Desktop Applications")
 		s += "\n\n"
-		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
+		s += subtitleStyle.Render("Choose additional desktop applications (optional):")
 		s += "\n\n"
 
-		for i, shell := range m.shells {
+		for i, app := range m.desktopApps {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			selected := " "
-			if m.selectedShell == i {
-				selected = selectedStyle.Render("●")
+			if m.selectedApps[i] {
+				selected = selectedStyle.Render("✓")
 			}
 
-			description := ""
-			switch shell {
-			case "zsh":
-				description = " (recommended - modern features, plugins, themes)"
-			case "bash":
-				description = " (classic - widely compatible)"
-			case "fish":
-				description = " (user-friendly - smart completions)"
-			}
-
-			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)
+			s += fmt.Sprintf("%s [%s] %s\n", cursor, selected, app)
 		}
 
 		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
 
 	case StepLanguages:
 		s = titleStyle.Render("📝 Select Programming Languages")
@@ -323,33 +344,55 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
 
-	case StepDesktopApps:
-		if len(m.desktopApps) == 0 {
+	case StepShell:
+		// Only show shell selection on compatible systems (Linux/macOS)
+		if m.detectedPlatform.OS == "windows" {
 			newModel, _ := m.nextStep()
 			return newModel.View()
 		}
 
-		s = titleStyle.Render("🖥️  Select Desktop Applications")
+		s = titleStyle.Render("🐚 Select Your Shell")
 		s += "\n\n"
-		s += subtitleStyle.Render("Choose desktop applications to install:")
+		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
 		s += "\n\n"
 
-		for i, app := range m.desktopApps {
+		for i, shell := range m.shells {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
-			checked := " "
-			if m.selectedApps[i] {
-				checked = selectedStyle.Render("✓")
+			selected := " "
+			if m.selectedShell == i {
+				selected = selectedStyle.Render("●")
 			}
 
-			s += fmt.Sprintf("%s [%s] %s\n", cursor, checked, app)
+			description := ""
+			switch shell {
+			case "zsh":
+				description = " (recommended - modern features, plugins, themes)"
+			case "bash":
+				description = " (classic - widely compatible)"
+			case "fish":
+				description = " (user-friendly - smart completions)"
+			}
+
+			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)
 		}
 
 		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
+		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+
+	case StepGitConfig:
+		s = titleStyle.Render("🔧 Git Configuration")
+		s += "\n\n"
+		s += subtitleStyle.Render("Enter your git configuration details:")
+		s += "\n\n"
+
+		s += fmt.Sprintf("Full Name: %s\n", m.gitFullName)
+		s += fmt.Sprintf("Email: %s\n", m.gitEmail)
+		s += "\n\n"
+		s += "Type your information and press Enter to continue"
 
 	case StepConfirmation:
 		s = titleStyle.Render("✅ Confirm Installation")
@@ -462,7 +505,7 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepWelcome:
 		return m.nextStep()
-	case StepShellSelection, StepLanguages, StepDatabases, StepDesktopApps:
+	case StepDesktopApps, StepLanguages, StepDatabases, StepShell, StepGitConfig:
 		return m.nextStep()
 	case StepConfirmation:
 		m.step = StepInstalling
@@ -476,16 +519,16 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 	var maxItems int
 	switch m.step {
-	case StepShellSelection:
-		maxItems = len(m.shells)
+	case StepDesktopApps:
+		maxItems = len(m.desktopApps)
 	case StepLanguages:
 		maxItems = len(m.languages)
 	case StepDatabases:
 		maxItems = len(m.databases)
-	case StepDesktopApps:
-		maxItems = len(m.desktopApps)
+	case StepShell:
+		maxItems = len(m.shells)
 	default:
-		panic("unhandled default case")
+		return m, nil // No navigation needed for other steps
 	}
 
 	if m.cursor < maxItems-1 {
@@ -496,16 +539,16 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 
 func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 	switch m.step {
-	case StepShellSelection:
-		m.selectedShell = m.cursor
+	case StepDesktopApps:
+		m.selectedApps[m.cursor] = !m.selectedApps[m.cursor]
 	case StepLanguages:
 		m.selectedLangs[m.cursor] = !m.selectedLangs[m.cursor]
 	case StepDatabases:
 		m.selectedDBs[m.cursor] = !m.selectedDBs[m.cursor]
-	case StepDesktopApps:
-		m.selectedApps[m.cursor] = !m.selectedApps[m.cursor]
+	case StepShell:
+		m.selectedShell = m.cursor
 	default:
-		panic("unhandled default case")
+		return m, nil // No selection needed for other steps
 	}
 	return m, nil
 }
@@ -514,19 +557,29 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
 	case StepWelcome:
-		m.step = StepShellSelection
-	case StepShellSelection:
+		// Check if we have desktop apps to show first
+		if m.hasDesktop && len(m.desktopApps) > 0 {
+			m.step = StepDesktopApps
+		} else {
+			m.step = StepLanguages
+		}
+	case StepDesktopApps:
 		m.step = StepLanguages
 	case StepLanguages:
 		m.step = StepDatabases
 	case StepDatabases:
-		if len(m.desktopApps) > 0 {
-			m.step = StepDesktopApps
+		// Only show shell selection on compatible systems
+		if m.detectedPlatform.OS != "windows" {
+			m.step = StepShell
 		} else {
-			m.step = StepConfirmation
+			m.step = StepGitConfig
 		}
-	case StepDesktopApps:
+	case StepShell:
+		m.step = StepGitConfig
+	case StepGitConfig:
 		m.step = StepConfirmation
+	case StepConfirmation:
+		m.step = StepInstalling
 	default:
 		panic("unhandled default case")
 	}
@@ -536,18 +589,26 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
+	case StepDesktopApps:
+		m.step = StepWelcome
 	case StepLanguages:
-		m.step = StepShellSelection
+		if m.hasDesktop && len(m.desktopApps) > 0 {
+			m.step = StepDesktopApps
+		} else {
+			m.step = StepWelcome
+		}
 	case StepDatabases:
 		m.step = StepLanguages
-	case StepDesktopApps:
+	case StepShell:
 		m.step = StepDatabases
-	case StepConfirmation:
-		if len(m.desktopApps) > 0 {
-			m.step = StepDesktopApps
+	case StepGitConfig:
+		if m.detectedPlatform.OS != "windows" {
+			m.step = StepShell
 		} else {
 			m.step = StepDatabases
 		}
+	case StepConfirmation:
+		m.step = StepGitConfig
 	default:
 		panic("unhandled default case")
 	}
@@ -555,28 +616,12 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 }
 
 // Helper methods for getting selected items
-func (m *SetupModel) getSelectedShell() string {
-	if m.selectedShell >= 0 && m.selectedShell < len(m.shells) {
-		return m.shells[m.selectedShell]
-	}
-	return m.shells[0] // Default to zsh
-}
 
 func (m *SetupModel) getSelectedLanguages() []string {
 	var selected []string
 	for i, lang := range m.languages {
 		if m.selectedLangs[i] {
 			selected = append(selected, lang)
-		}
-	}
-	return selected
-}
-
-func (m *SetupModel) getSelectedDatabases() []string {
-	var selected []string
-	for i, db := range m.databases {
-		if m.selectedDBs[i] {
-			selected = append(selected, db)
 		}
 	}
 	return selected
@@ -593,7 +638,7 @@ func (m *SetupModel) getSelectedDesktopApps() []string {
 }
 
 func (m *SetupModel) renderProgressBar() string {
-	width := 50
+	width := ProgressBarWidth
 	filled := int(m.progress * float64(width))
 	bar := ""
 
@@ -620,6 +665,13 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 	return func() tea.Msg {
 		// Exit the current TUI and start the streaming installer TUI
 		go func() {
+			defer func() {
+				// Ensure any panics in the goroutine are recovered
+				if r := recover(); r != nil {
+					log.Error("Panic in installation goroutine", fmt.Errorf("panic: %v", r))
+				}
+			}()
+
 			// Convert selections to CrossPlatformApp objects
 			apps := m.buildAppList()
 
@@ -629,10 +681,13 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
 				log.Error("Streaming installer failed", err)
 				m.addError("Streaming installer", err.Error())
+				// Return gracefully instead of calling os.Exit
+				return
 			}
 
-			// After the streaming installer completes, exit the program
-			os.Exit(0)
+			// Installation completed successfully
+			log.Info("Installation completed successfully")
+			// Let the main program handle termination gracefully
 		}()
 
 		return tea.Quit // Exit the guided setup TUI
@@ -641,7 +696,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 func (m *SetupModel) waitForActivity() tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * WaitActivityInterval)
 		return InstallProgressMsg{Status: m.installStatus, Progress: m.progress}
 	}
 }
@@ -662,6 +717,24 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 		return err
 	}
 
+	// Copy theme files and configurations
+	if err := m.copyThemeFiles(); err != nil {
+		log.Error("Failed to copy theme files", err)
+		return err
+	}
+
+	// Copy application configuration files
+	if err := m.copyAppConfigFiles(); err != nil {
+		log.Error("Failed to copy application configuration files", err)
+		return err
+	}
+
+	// Setup git configuration with user's name and email
+	if err := m.setupGitConfiguration(); err != nil {
+		log.Error("Failed to setup git configuration", err)
+		return err
+	}
+
 	// Switch to the selected shell
 	if err := m.switchToShell(ctx, selectedShell); err != nil {
 		log.Warn("Failed to switch shell", "error", err, "shell", selectedShell)
@@ -674,251 +747,6 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	return nil
 }
 
-func (m *SetupModel) ensureShellInstalled(ctx context.Context, shell string) error {
-	if isToolAvailable(shell) {
-		log.Info("Shell already available", "shell", shell)
-		return nil
-	}
-
-	log.Info("Installing shell", "shell", shell)
-
-	// Get shell app from configuration
-	allApps := m.settings.GetAllApps()
-	for _, app := range allApps {
-		if app.Name == shell {
-			return installers.InstallCrossPlatformApp(app, m.settings, m.repo)
-		}
-	}
-
-	log.Warn("Shell not found in configuration, installing via system package manager", "shell", shell)
-
-	// Fallback to system package manager
-	installCmd := fmt.Sprintf("sudo apt-get update && sudo apt-get install -y %s", shell)
-	output, err := exec.CommandContext(ctx, "bash", "-c", installCmd).CombinedOutput()
-	if err != nil {
-		log.Error("Failed to install shell via apt", err, "shell", shell, "output", string(output))
-		return fmt.Errorf("failed to install %s: %w", shell, err)
-	}
-
-	return nil
-}
-
-func (m *SetupModel) copyShellConfiguration(shell string) error {
-	homeDir := os.Getenv("HOME")
-	devexDir := homeDir + "/.local/share/devex"
-
-	switch shell {
-	case "zsh":
-		return m.copyZshConfiguration(homeDir, devexDir)
-	case "bash":
-		return m.copyBashConfiguration(homeDir, devexDir)
-	case "fish":
-		return m.copyFishConfiguration(homeDir, devexDir)
-	default:
-		log.Warn("No specific configuration available for shell", "shell", shell)
-		return nil
-	}
-}
-
-func (m *SetupModel) copyZshConfiguration(homeDir, devexDir string) error {
-	log.Info("Copying zsh configuration files")
-
-	// Copy main zshrc
-	srcZshrc := devexDir + "/assets/zsh/zshrc"
-	dstZshrc := homeDir + "/.zshrc"
-
-	if err := m.copyFile(srcZshrc, dstZshrc); err != nil {
-		return fmt.Errorf("failed to copy .zshrc: %w", err)
-	}
-
-	// Create a destination directory for zsh config modules
-	zshConfigDir := devexDir + "/defaults/zsh"
-	if err := os.MkdirAll(zshConfigDir, 0755); err != nil {
-		return fmt.Errorf("failed to create zsh config directory: %w", err)
-	}
-
-	// Copy zsh configuration modules
-	zshFiles := []string{"aliases", "extra", "init", "oh-my-zsh", "prompt", "rc", "shell", "zplug"}
-	for _, file := range zshFiles {
-		src := devexDir + "/assets/zsh/zsh/" + file
-		dst := zshConfigDir + "/" + file
-		if err := m.copyFile(src, dst); err != nil {
-			log.Warn("Failed to copy zsh config file", "file", file, "error", err)
-		}
-	}
-
-	// Copy inputrc
-	inputrcSrc := devexDir + "/assets/zsh/inputrc"
-	inputrcDst := homeDir + "/.inputrc"
-	if err := m.copyFile(inputrcSrc, inputrcDst); err != nil {
-		log.Warn("Failed to copy .inputrc", "error", err)
-	}
-
-	return nil
-}
-
-func (m *SetupModel) copyBashConfiguration(homeDir, devexDir string) error {
-	log.Info("Copying bash configuration files")
-
-	// Copy main bashrc
-	srcBashrc := devexDir + "/assets/bash/bashrc"
-	dstBashrc := homeDir + "/.bashrc"
-
-	if err := m.copyFile(srcBashrc, dstBashrc); err != nil {
-		return fmt.Errorf("failed to copy .bashrc: %w", err)
-	}
-
-	// Create a destination directory for bash config modules
-	bashConfigDir := devexDir + "/defaults/bash"
-	if err := os.MkdirAll(bashConfigDir, 0755); err != nil {
-		return fmt.Errorf("failed to create bash config directory: %w", err)
-	}
-
-	// Copy bash configuration modules
-	bashFiles := []string{"aliases", "extra", "init", "oh-my-bash", "prompt", "rc", "shell"}
-	for _, file := range bashFiles {
-		src := devexDir + "/assets/bash/bash/" + file
-		dst := bashConfigDir + "/" + file
-		if err := m.copyFile(src, dst); err != nil {
-			log.Warn("Failed to copy bash config file", "file", file, "error", err)
-		}
-	}
-
-	// Copy inputrc
-	inputrcSrc := devexDir + "/assets/bash/inputrc"
-	inputrcDst := homeDir + "/.inputrc"
-	if err := m.copyFile(inputrcSrc, inputrcDst); err != nil {
-		log.Warn("Failed to copy .inputrc", "error", err)
-	}
-
-	// Copy bash_profile if it exists
-	bashProfileSrc := devexDir + "/assets/bash/bash_profile"
-	bashProfileDst := homeDir + "/.bash_profile"
-	if err := m.copyFile(bashProfileSrc, bashProfileDst); err != nil {
-		log.Warn("Failed to copy .bash_profile", "error", err)
-	}
-
-	return nil
-}
-
-func (m *SetupModel) copyFishConfiguration(homeDir, devexDir string) error {
-	log.Info("Copying fish configuration files")
-
-	// Create fish config directory
-	fishConfigDir := homeDir + "/.config/fish"
-	if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
-		return fmt.Errorf("failed to create fish config directory: %w", err)
-	}
-
-	// Copy main config.fish
-	srcConfig := devexDir + "/assets/fish/config.fish"
-	dstConfig := fishConfigDir + "/config.fish"
-
-	if err := m.copyFile(srcConfig, dstConfig); err != nil {
-		return fmt.Errorf("failed to copy config.fish: %w", err)
-	}
-
-	// Create a destination directory for fish config modules
-	fishDefaultsDir := devexDir + "/defaults/fish"
-	if err := os.MkdirAll(fishDefaultsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create fish defaults directory: %w", err)
-	}
-
-	// Copy fish configuration modules
-	fishFiles := []string{"aliases", "shell", "init", "prompt"}
-	for _, file := range fishFiles {
-		src := devexDir + "/assets/fish/" + file
-		dst := fishDefaultsDir + "/" + file
-		if err := m.copyFile(src, dst); err != nil {
-			log.Warn("Failed to copy fish config file", "file", file, "error", err)
-		}
-	}
-
-	// Copy fish modules from the fish subdirectory if they exist
-	fishSubFiles := []string{"extra", "oh-my-fish"}
-	for _, file := range fishSubFiles {
-		src := devexDir + "/assets/fish/fish/" + file
-		dst := fishDefaultsDir + "/" + file
-		if err := m.copyFile(src, dst); err != nil {
-			log.Warn("Failed to copy fish config file", "file", file, "error", err)
-		}
-	}
-
-	return nil
-}
-
-func (m *SetupModel) switchToShell(ctx context.Context, shell string) error {
-	shellPath, err := exec.LookPath(shell)
-	if err != nil {
-		return fmt.Errorf("%s not found: %w", shell, err)
-	}
-
-	currentUser := os.Getenv("USER")
-	if currentUser == "" {
-		return fmt.Errorf("unable to determine current user")
-	}
-
-	// Get current shell for comparison
-	currentShell, err := utils.GetUserShell(currentUser)
-	if err != nil {
-		log.Warn("Could not detect current shell", "error", err, "user", currentUser)
-	} else {
-		// Check if the current shell matches the desired shell (compare shell names, not full paths)
-		currentShellName := filepath.Base(currentShell)
-		selectedShellName := filepath.Base(shellPath)
-
-		if currentShellName == selectedShellName {
-			log.Info("User is already using the selected shell", "shell", shell, "currentPath", currentShell, "selectedPath", shellPath, "user", currentUser)
-			m.shellSwitched = false // No switch occurred
-			return nil
-		}
-		log.Info("Current shell differs from selected", "current", currentShell, "selected", shellPath, "user", currentUser)
-	}
-
-	log.Info("Switching to shell", "shell", shell, "path", shellPath, "user", currentUser)
-
-	chshCmd := fmt.Sprintf("chsh -s %s %s", shellPath, currentUser)
-	output, err := exec.CommandContext(ctx, "bash", "-c", chshCmd).CombinedOutput()
-	if err != nil {
-		m.shellSwitched = false // Switch failed
-		return fmt.Errorf("failed to change shell: %w (output: %s)", err, string(output))
-	}
-
-	m.shellSwitched = true // Switch succeeded
-	log.Info("Successfully switched shell", "shell", shell)
-	return nil
-}
-
-func (m *SetupModel) copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("failed to open source file %s: %w", src, err)
-	}
-	defer func(sourceFile *os.File) {
-		_ = sourceFile.Close()
-	}(sourceFile)
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file %s: %w", dst, err)
-	}
-	defer func(destFile *os.File) {
-		_ = destFile.Close()
-	}(destFile)
-
-	_, err = sourceFile.WriteTo(destFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file content: %w", err)
-	}
-
-	return nil
-}
-
-func isToolAvailable(tool string) bool {
-	_, err := exec.LookPath(tool)
-	return err == nil
-}
-
 // Error tracking and validation methods
 func (m *SetupModel) addError(component, message string) {
 	errorMsg := fmt.Sprintf("%s: %s", component, message)
@@ -927,82 +755,71 @@ func (m *SetupModel) addError(component, message string) {
 	log.Error("Installation error", fmt.Errorf("%s", errorMsg), "component", component, "message", message)
 }
 
-// buildAppList converts user selections into CrossPlatformApp objects for the streaming installer
+// buildAppList converts user selections into a structured installation plan
 func (m *SetupModel) buildAppList() []types.CrossPlatformApp {
 	var apps []types.CrossPlatformApp
 
-	// Always include essential tools first
-	essentialApps := m.getEssentialApps()
-	apps = append(apps, essentialApps...)
+	// Step 1: System update/upgrade - handled separately in installation process
+	// This will be called before installing any apps
 
-	// Add a selected shell
-	selectedShell := m.getSelectedShell()
-	if shellApp := m.getShellApp(selectedShell); shellApp != nil {
-		apps = append(apps, *shellApp)
-	}
+	// Step 2: Default terminal apps (all apps with default: true)
+	defaultApps := m.getDefaultApps()
+	apps = append(apps, defaultApps...)
 
-	// Add mise for language management if languages are selected
+	// Step 3: Setup languages via Mise
 	if len(m.getSelectedLanguages()) > 0 {
+		// First add mise itself
 		if miseApp := m.getMiseApp(); miseApp != nil {
 			apps = append(apps, *miseApp)
 		}
-
-		// Add language-specific apps
+		// Then add language-specific apps
 		languageApps := m.getLanguageApps()
 		apps = append(apps, languageApps...)
 	}
 
-	// Add Docker if databases are selected
+	// Step 4: Setup databases via Docker
 	if len(m.getSelectedDatabases()) > 0 {
+		// First add Docker itself
 		if dockerApp := m.getDockerApp(); dockerApp != nil {
 			apps = append(apps, *dockerApp)
 		}
-
-		// Add database apps
+		// Then add database containers
 		databaseApps := m.getDatabaseApps()
 		apps = append(apps, databaseApps...)
 	}
 
-	// Add selected desktop applications
-	desktopApps := m.getSelectedDesktopApps()
-	for _, appName := range desktopApps {
-		if app := m.getDesktopAppByName(appName); app != nil {
-			apps = append(apps, *app)
-		}
-	}
-
-	return apps
-}
-
-// getEssentialApps returns essential development tools
-func (m *SetupModel) getEssentialApps() []types.CrossPlatformApp {
-	allApps := m.settings.GetAllApps()
-	var essential []types.CrossPlatformApp
-
-	essentialNames := []string{"git", "curl", "wget", "bat", "Eza", "fzf", "ripgrep"}
-	for _, app := range allApps {
-		for _, name := range essentialNames {
-			if app.Name == name {
-				essential = append(essential, app)
-				break
+	// Step 5: Desktop apps (if desktop detected and selected)
+	if m.hasDesktop {
+		desktopApps := m.getSelectedDesktopApps()
+		for _, appName := range desktopApps {
+			if app := m.getDesktopAppByName(appName); app != nil {
+				apps = append(apps, *app)
 			}
 		}
 	}
 
-	return essential
+	// Step 6: Shell configuration (handled after app installation)
+	// Step 7: Themes and shell files copying (handled after app installation)
+	// Step 8: Git configuration (handled after app installation)
+
+	return apps
+}
+
+// getDefaultApps returns all apps marked as default in configuration
+func (m *SetupModel) getDefaultApps() []types.CrossPlatformApp {
+	allApps := m.settings.GetAllApps()
+	var defaultApps []types.CrossPlatformApp
+
+	for _, app := range allApps {
+		if app.Default {
+			defaultApps = append(defaultApps, app)
+		}
+	}
+
+	return defaultApps
 }
 
 // getShellApp returns the CrossPlatformApp for the selected shell
-func (m *SetupModel) getShellApp(shell string) *types.CrossPlatformApp {
-	allApps := m.settings.GetAllApps()
-	for _, app := range allApps {
-		if app.Name == shell {
-			return &app
-		}
-	}
-	return nil
-}
-
 // getMiseApp returns a CrossPlatformApp for mise installation
 func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
@@ -1010,18 +827,18 @@ func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 		Description: "Development environment manager for programming languages",
 		Linux: types.OSConfig{
 			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run/zsh",
-			InstallCommand: "curl https://mise.run/zsh | sh",
+			DownloadURL:    "https://mise.run",
+			InstallCommand: "curl https://mise.run | sh",
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run/zsh",
-			InstallCommand: "curl https://mise.run/zsh | sh",
+			DownloadURL:    "https://mise.run",
+			InstallCommand: "curl https://mise.run | sh",
 		},
 		Windows: types.OSConfig{
 			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run/zsh",
-			InstallCommand: "curl https://mise.run/zsh | sh",
+			DownloadURL:    "https://mise.run",
+			InstallCommand: "curl https://mise.run | sh",
 		},
 	}
 }
@@ -1048,96 +865,16 @@ func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 				Name:        fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(lang, " ", "-"))),
 				Description: fmt.Sprintf("Install %s via mise", lang),
 				Linux: types.OSConfig{
-					InstallMethod:  "curlpipe",
-					InstallCommand: fmt.Sprintf("mise install %s && mise use -g %s", packageName, packageName),
+					InstallMethod:  "mise",
+					InstallCommand: packageName,
 				},
 				MacOS: types.OSConfig{
-					InstallMethod:  "curlpipe",
-					InstallCommand: fmt.Sprintf("mise install %s && mise use -g %s", packageName, packageName),
+					InstallMethod:  "mise",
+					InstallCommand: packageName,
 				},
 				Windows: types.OSConfig{
-					InstallMethod:  "curlpipe",
-					InstallCommand: fmt.Sprintf("mise install %s && mise use -g %s", packageName, packageName),
-				},
-			}
-			apps = append(apps, app)
-		}
-	}
-
-	return apps
-}
-
-// getDockerApp returns a CrossPlatformApp for Docker installation
-func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
-	return &types.CrossPlatformApp{
-		Name:        "docker",
-		Description: "Container platform for databases and services",
-		Linux: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "echo 'Docker installation handled by dedicated installer'",
-		},
-		MacOS: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "echo 'Docker installation handled by dedicated installer'",
-		},
-		Windows: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "echo 'Docker installation handled by dedicated installer'",
-		},
-	}
-}
-
-// getDatabaseApps creates pseudo-apps for database installations via Docker
-func (m *SetupModel) getDatabaseApps() []types.CrossPlatformApp {
-	var apps []types.CrossPlatformApp
-	selectedDBs := m.getSelectedDatabases()
-
-	dbConfigs := map[string]map[string]string{
-		"PostgreSQL": {
-			"image":     "postgres:16",
-			"container": "postgres16",
-			"port":      "5432:5432",
-			"env":       "POSTGRES_HOST_AUTH_METHOD=trust",
-		},
-		"MySQL": {
-			"image":     "mysql:8.4",
-			"container": "mysql8",
-			"port":      "3306:3306",
-			"env":       "MYSQL_ALLOW_EMPTY_PASSWORD=true",
-		},
-		"Redis": {
-			"image":     "redis:7",
-			"container": "redis",
-			"port":      "6379:6379",
-			"env":       "",
-		},
-	}
-
-	for _, db := range selectedDBs {
-		if dbConfig, exists := dbConfigs[db]; exists {
-			dockerCmd := fmt.Sprintf("docker run -d --name %s --restart unless-stopped -p 127.0.0.1:%s",
-				dbConfig["container"], dbConfig["port"])
-
-			if dbConfig["env"] != "" {
-				dockerCmd += fmt.Sprintf(" -e %s", dbConfig["env"])
-			}
-
-			dockerCmd += fmt.Sprintf(" %s", dbConfig["image"])
-
-			app := types.CrossPlatformApp{
-				Name:        fmt.Sprintf("docker-%s", strings.ToLower(db)),
-				Description: fmt.Sprintf("Install %s database via Docker", db),
-				Linux: types.OSConfig{
-					InstallMethod:  "docker",
-					InstallCommand: dockerCmd,
-				},
-				MacOS: types.OSConfig{
-					InstallMethod:  "docker",
-					InstallCommand: dockerCmd,
-				},
-				Windows: types.OSConfig{
-					InstallMethod:  "docker",
-					InstallCommand: dockerCmd,
+					InstallMethod:  "mise",
+					InstallCommand: packageName,
 				},
 			}
 			apps = append(apps, app)
@@ -1158,37 +895,16 @@ func (m *SetupModel) getDesktopAppByName(name string) *types.CrossPlatformApp {
 	return nil
 }
 
-// isInteractiveTerminal checks if we're running in an interactive terminal environment
-func isInteractiveTerminal() bool {
-	// Check if stdin is a terminal
-	if fileInfo, err := os.Stdin.Stat(); err == nil {
-		// If it's a character device (terminal) and not a pipe/redirect
-		if (fileInfo.Mode() & os.ModeCharDevice) != 0 {
-			return true
-		}
-	}
-
-	// Additional checks for common non-interactive environments
-	if os.Getenv("CI") != "" || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
-		return false
-	}
-
-	return false
-}
-
-// runAutomatedSetup runs a non-interactive setup with sensible defaults
-func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSettings) error {
-	log.Info("Running automated setup with default selections")
-
-	// Create a minimal setup model with default selections for automation
-	model := &SetupModel{
-		selectedShell: 0, // Default to zsh (first option)
+// createAutomatedSetupModel creates a SetupModel with default selections for automated setup
+func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) *SetupModel {
+	return &SetupModel{
+		selectedShell: DefaultShellIndex, // Default to zsh (first option)
 		selectedLangs: map[int]bool{
-			0: true, // Node.js
-			1: true, // Python
+			DefaultNodeJSIndex: true, // Node.js
+			DefaultPythonIndex: true, // Python
 		},
 		selectedDBs: map[int]bool{
-			0: true, // PostgreSQL
+			DefaultPostgreSQLIndex: true, // PostgreSQL
 		},
 		selectedApps:  make(map[int]bool), // No desktop apps for automated setup
 		installErrors: make([]string, 0),
@@ -1217,14 +933,10 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 			"Redis",
 		},
 	}
+}
 
-	// Convert default selections to CrossPlatformApp objects
-	apps := model.buildAppList()
-
-	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", "zsh", "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
-
-	// For automated setup, show the selections but skip the streaming TUI
-	// run the installations directly using the existing installer system
+// printAutomatedSetupPlan displays the planned installation to the user
+func printAutomatedSetupPlan() {
 	fmt.Println("🚀 Starting automated DevEx setup...")
 	fmt.Println("Selected for installation:")
 	fmt.Println("  • zsh shell with DevEx configuration")
@@ -1232,23 +944,12 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 	fmt.Println("  • Programming languages: Node.js, Python")
 	fmt.Println("  • Database: PostgreSQL")
 	fmt.Println()
+}
 
-	// Use the regular installer system for non-interactive mode
-	if err := installers.InstallCrossPlatformApps(apps, settings, repo); err != nil {
-		log.Error("Automated installation failed", err)
-		fmt.Printf("⚠️  Installation failed: %v\n", err)
-		return err
-	}
-
-	// Handle shell configuration and switching
+// printAutomatedSetupCompletion displays the completion message and next steps
+func printAutomatedSetupCompletion(model *SetupModel) {
 	selectedShell := model.getSelectedShell()
-	ctx := context.Background()
-	if err := model.finalizeSetup(ctx); err != nil {
-		log.Warn("Shell setup had issues", "error", err)
-		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
-	}
 
-	// Print completion message
 	fmt.Printf("\n🎉 Automated setup complete!\n")
 	fmt.Printf("Your development environment has been set up with:\n")
 	fmt.Printf("  • %s shell with DevEx configuration\n", selectedShell)
@@ -1270,6 +971,117 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 		fmt.Printf("\n📋 Installation logs: %s\n", logFile)
 		fmt.Printf("   (Submit this file for debugging if you encounter issues)\n")
 	}
+}
+
+// isInteractiveTerminal checks if we're running in an interactive terminal environment
+func isInteractiveTerminal() bool {
+	// Check if stdin is a terminal
+	if fileInfo, err := os.Stdin.Stat(); err == nil {
+		// If it's a character device (terminal) and not a pipe/redirect
+		if (fileInfo.Mode() & os.ModeCharDevice) != 0 {
+			return true
+		}
+	}
+
+	// Additional checks for common non-interactive environments
+	if os.Getenv("CI") != "" || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+
+	return false
+}
+
+// runAutomatedSetup runs a non-interactive setup with sensible defaults
+func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSettings) error {
+	log.Info("Running automated setup with default selections")
+
+	// Create a minimal setup model with default selections for automation
+	model := createAutomatedSetupModel(repo, settings)
+
+	// Convert default selections to CrossPlatformApp objects
+	apps := model.buildAppList()
+
+	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", "zsh", "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
+
+	// Display the planned installation to the user
+	printAutomatedSetupPlan()
+
+	// Use the regular installer system for non-interactive mode
+	if err := installers.InstallCrossPlatformApps(apps, settings, repo); err != nil {
+		log.Error("Automated installation failed", err)
+		fmt.Printf("⚠️  Installation failed: %v\n", err)
+		return err
+	}
+
+	// Handle shell configuration and switching
+	ctx := context.Background()
+	if err := model.finalizeSetup(ctx); err != nil {
+		log.Warn("Shell setup had issues", "error", err)
+		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
+	}
+
+	// Display completion message and next steps
+	printAutomatedSetupCompletion(model)
 
 	return nil
+}
+
+// getAvailableDesktopApps returns non-default desktop apps compatible with the detected desktop environment
+func (m *SetupModel) getAvailableDesktopApps() []string {
+	allApps := m.settings.GetAllApps()
+	var desktopApps []string
+
+	for _, app := range allApps {
+		// Include apps that are:
+		// 1. Not default (user should choose)
+		// 2. Desktop/GUI applications
+		// 3. Compatible with current platform
+		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) {
+			desktopApps = append(desktopApps, app.Name)
+		}
+	}
+
+	return desktopApps
+}
+
+// isDesktopApp determines if an app is a desktop/GUI application
+func (m *SetupModel) isDesktopApp(app types.CrossPlatformApp) bool {
+	desktopCategories := []string{
+		"Text Editors", "IDEs", "Browsers", "Communication",
+		"Media", "Graphics", "Productivity", "Utility",
+	}
+
+	for _, category := range desktopCategories {
+		if app.Category == category {
+			return true
+		}
+	}
+
+	// Also check for known desktop apps by name
+	desktopApps := []string{
+		"Visual Studio Code", "IntelliJ IDEA", "Firefox", "Chrome",
+		"Discord", "Slack", "VLC", "GIMP", "Typora", "Ulauncher",
+	}
+
+	for _, desktopApp := range desktopApps {
+		if app.Name == desktopApp {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isCompatibleWithPlatform checks if an app is available for the current platform
+func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
+	switch m.detectedPlatform.OS {
+	case "linux":
+		return app.Linux.InstallCommand != ""
+	case "darwin":
+		return app.MacOS.InstallCommand != ""
+	case "windows":
+		return app.Windows.InstallCommand != ""
+	default:
+		return false
+	}
 }
