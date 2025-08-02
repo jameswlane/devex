@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -1144,6 +1145,15 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 // Returns:
 //   - error: nil on successful TUI completion, or error from TUI framework or installation
 func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
+	// Add recovery mechanism to prevent panics from hanging the application
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("\n❌ Streaming installer panic: %v\n", r)
+			// Print stack trace for debugging
+			fmt.Printf("Stack trace: %s\n", string(debug.Stack()))
+		}
+	}()
+
 	// Create context for cancellation support
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1160,6 +1170,12 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 
 	// Start installation in background with context cancellation
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				installer.sendLog("ERROR", fmt.Sprintf("Installation goroutine panic: %v", r))
+			}
+		}()
+
 		select {
 		case <-ctx.Done():
 			// Installation was cancelled

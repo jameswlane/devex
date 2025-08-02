@@ -1,0 +1,56 @@
+# Dockerfile for DevEx CLI development testing
+FROM ubuntu:22.04
+
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install essential packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    sudo \
+    ca-certificates \
+    lsb-release \
+    gnupg \
+    software-properties-common \
+    apt-transport-https \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Docker (for testing Docker installation features)
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
+    && apt-get update \
+    && apt-get install -y docker-ce docker-ce-cli containerd.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a non-root user for testing
+RUN useradd -m -s /bin/bash -G sudo,docker devex \
+    && echo 'devex ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Set up workspace
+WORKDIR /workspace
+
+# Copy DevEx CLI binary and configs
+COPY bin/devex /usr/local/bin/devex
+COPY config/ /usr/local/share/devex/config/
+COPY assets/ /usr/local/share/devex/assets/
+
+# Make devex executable
+RUN chmod +x /usr/local/bin/devex
+
+# Switch to devex user
+USER devex
+
+# Set up environment
+ENV HOME=/home/devex
+ENV USER=devex
+ENV TERM=xterm-256color
+ENV PATH=/usr/local/bin:$PATH
+
+# Set working directory to user home
+WORKDIR /home/devex
+
+# Default command starts an interactive bash shell
+CMD ["/bin/bash"]
