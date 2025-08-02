@@ -1,3 +1,9 @@
+## [0.16.1](https://github.com/jameswlane/devex/compare/0.16.0...0.16.1) (2025-08-02)
+
+### Bug Fixes
+
+* improve Docker installation error handling and APT verification ([a8ec52d](https://github.com/jameswlane/devex/commit/a8ec52de2197c235cb94a4bc66a447bd62668279))
+
 ## [0.16.0](https://github.com/jameswlane/devex/compare/0.15.1...0.16.0) (2025-08-02)
 
 ### Features
