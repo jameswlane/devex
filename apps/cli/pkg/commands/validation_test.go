@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -190,8 +189,3 @@ var _ = Describe("Validation Functions", func() {
 		})
 	})
 })
-
-func TestValidation(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Validation Suite")
-}
