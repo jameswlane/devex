@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -95,6 +96,45 @@ const (
 	StepComplete
 )
 
+// Constants for setup configuration
+const (
+	// UI Constants
+	ProgressBarWidth     = 50
+	WaitActivityInterval = 100 // milliseconds
+
+	// Default selections for automated setup
+	DefaultShellIndex      = 0 // zsh (first option)
+	DefaultNodeJSIndex     = 0 // Node.js
+	DefaultPythonIndex     = 1 // Python
+	DefaultPostgreSQLIndex = 0 // PostgreSQL
+
+	// File permissions
+	DirectoryPermissions   = 0755
+	ExecutablePermissions  = 0755
+	RegularFilePermissions = 0644
+
+	// Database configuration
+	PostgreSQLPort = "5432:5432"
+	MySQLPort      = "3306:3306"
+	RedisPort      = "6379:6379"
+)
+
+// Security validation patterns
+var (
+	// validContainerName ensures container names only contain safe characters
+	validContainerName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+	// validDockerImage ensures image names follow Docker naming conventions
+	validDockerImage = regexp.MustCompile(`^[a-z0-9]([a-z0-9._/-]*[a-z0-9])?:?[a-zA-Z0-9._-]*$`)
+	// validPortMapping ensures port mappings follow expected format
+	validPortMapping = regexp.MustCompile(`^[0-9]+:[0-9]+$`)
+	// validEnvVar ensures environment variables are safe
+	validEnvVar = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*=[a-zA-Z0-9_.-]*$`)
+	// validShellPath ensures shell paths are absolute and contain safe characters
+	validShellPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.-]+$`)
+	// validUsername ensures usernames contain only safe characters
+	validUsername = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+)
+
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
@@ -117,7 +157,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	// Initialize the setup model
 	model := &SetupModel{
 		step:             StepWelcome,
-		selectedShell:    0, // Default to zsh (first option)
+		selectedShell:    DefaultShellIndex, // Default to zsh (first option)
 		selectedLangs:    make(map[int]bool),
 		selectedDBs:      make(map[int]bool),
 		selectedApps:     make(map[int]bool),
@@ -634,7 +674,7 @@ func (m *SetupModel) getSelectedDesktopApps() []string {
 }
 
 func (m *SetupModel) renderProgressBar() string {
-	width := 50
+	width := ProgressBarWidth
 	filled := int(m.progress * float64(width))
 	bar := ""
 
@@ -661,6 +701,13 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 	return func() tea.Msg {
 		// Exit the current TUI and start the streaming installer TUI
 		go func() {
+			defer func() {
+				// Ensure any panics in the goroutine are recovered
+				if r := recover(); r != nil {
+					log.Error("Panic in installation goroutine", fmt.Errorf("panic: %v", r))
+				}
+			}()
+
 			// Convert selections to CrossPlatformApp objects
 			apps := m.buildAppList()
 
@@ -670,10 +717,13 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
 				log.Error("Streaming installer failed", err)
 				m.addError("Streaming installer", err.Error())
+				// Return gracefully instead of calling os.Exit
+				return
 			}
 
-			// After the streaming installer completes, exit the program
-			os.Exit(0)
+			// Installation completed successfully
+			log.Info("Installation completed successfully")
+			// Let the main program handle termination gracefully
 		}()
 
 		return tea.Quit // Exit the guided setup TUI
@@ -682,7 +732,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 func (m *SetupModel) waitForActivity() tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * WaitActivityInterval)
 		return InstallProgressMsg{Status: m.installStatus, Progress: m.progress}
 	}
 }
@@ -792,7 +842,7 @@ func (m *SetupModel) copyZshConfiguration(homeDir, devexDir string) error {
 
 	// Create a destination directory for zsh config modules
 	zshConfigDir := devexDir + "/defaults/zsh"
-	if err := os.MkdirAll(zshConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(zshConfigDir, DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create zsh config directory: %w", err)
 	}
 
@@ -829,7 +879,7 @@ func (m *SetupModel) copyBashConfiguration(homeDir, devexDir string) error {
 
 	// Create a destination directory for bash config modules
 	bashConfigDir := devexDir + "/defaults/bash"
-	if err := os.MkdirAll(bashConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(bashConfigDir, DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create bash config directory: %w", err)
 	}
 
@@ -865,7 +915,7 @@ func (m *SetupModel) copyFishConfiguration(homeDir, devexDir string) error {
 
 	// Create fish config directory
 	fishConfigDir := homeDir + "/.config/fish"
-	if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
+	if err := os.MkdirAll(fishConfigDir, DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create fish config directory: %w", err)
 	}
 
@@ -879,7 +929,7 @@ func (m *SetupModel) copyFishConfiguration(homeDir, devexDir string) error {
 
 	// Create a destination directory for fish config modules
 	fishDefaultsDir := devexDir + "/defaults/fish"
-	if err := os.MkdirAll(fishDefaultsDir, 0755); err != nil {
+	if err := os.MkdirAll(fishDefaultsDir, DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create fish defaults directory: %w", err)
 	}
 
@@ -936,11 +986,10 @@ func (m *SetupModel) switchToShell(ctx context.Context, shell string) error {
 
 	log.Info("Switching to shell", "shell", shell, "path", shellPath, "user", currentUser)
 
-	chshCmd := fmt.Sprintf("chsh -s %s %s", shellPath, currentUser)
-	output, err := exec.CommandContext(ctx, "bash", "-c", chshCmd).CombinedOutput()
-	if err != nil {
+	// Use secure shell change execution with proper validation
+	if err := executeSecureShellChange(ctx, shellPath, currentUser); err != nil {
 		m.shellSwitched = false // Switch failed
-		return fmt.Errorf("failed to change shell: %w (output: %s)", err, string(output))
+		return err
 	}
 
 	m.shellSwitched = true // Switch succeeded
@@ -949,6 +998,20 @@ func (m *SetupModel) switchToShell(ctx context.Context, shell string) error {
 }
 
 func (m *SetupModel) copyFile(src, dst string) error {
+	// Validate paths to prevent directory traversal
+	homeDir := os.Getenv("HOME")
+	devexDir := homeDir + "/.local/share/devex"
+
+	// Validate source path is within devex assets directory
+	if err := validatePath(src, devexDir); err != nil {
+		return fmt.Errorf("invalid source path: %w", err)
+	}
+
+	// Validate destination path is within home directory
+	if err := validatePath(dst, homeDir); err != nil {
+		return fmt.Errorf("invalid destination path: %w", err)
+	}
+
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return fmt.Errorf("failed to open source file %s: %w", src, err)
@@ -987,7 +1050,7 @@ func (m *SetupModel) copyThemeFiles() error {
 	assetsDir := devexDir + "/assets"
 
 	// Create necessary directories
-	if err := os.MkdirAll(homeDir+"/.config", 0755); err != nil {
+	if err := os.MkdirAll(homeDir+"/.config", DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create .config directory: %w", err)
 	}
 
@@ -998,7 +1061,9 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	// Copy Alacritty themes
 	alacrittyConfigDir := homeDir + "/.config/alacritty"
-	if err := os.MkdirAll(alacrittyConfigDir, 0755); err == nil {
+	if err := os.MkdirAll(alacrittyConfigDir, DirectoryPermissions); err != nil {
+		log.Warn("Failed to create Alacritty config directory", "error", err)
+	} else {
 		if err := m.copyThemeDirectory(assetsDir+"/themes/alacritty", alacrittyConfigDir+"/themes"); err != nil {
 			log.Warn("Failed to copy Alacritty themes", "error", err)
 		}
@@ -1006,7 +1071,9 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	// Copy Neovim colorschemes
 	neovimConfigDir := homeDir + "/.config/nvim"
-	if err := os.MkdirAll(neovimConfigDir+"/colors", 0755); err == nil {
+	if err := os.MkdirAll(neovimConfigDir+"/colors", DirectoryPermissions); err != nil {
+		log.Warn("Failed to create Neovim config directory", "error", err)
+	} else {
 		if err := m.copyThemeDirectory(assetsDir+"/themes/neovim", neovimConfigDir+"/colors"); err != nil {
 			log.Warn("Failed to copy Neovim colorschemes", "error", err)
 		}
@@ -1014,7 +1081,9 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	// Copy Zellij themes
 	zellijConfigDir := homeDir + "/.config/zellij"
-	if err := os.MkdirAll(zellijConfigDir+"/themes", 0755); err == nil {
+	if err := os.MkdirAll(zellijConfigDir+"/themes", DirectoryPermissions); err != nil {
+		log.Warn("Failed to create Zellij config directory", "error", err)
+	} else {
 		if err := m.copyThemeDirectory(assetsDir+"/themes/zellij", zellijConfigDir+"/themes"); err != nil {
 			log.Warn("Failed to copy Zellij themes", "error", err)
 		}
@@ -1022,7 +1091,9 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	// Copy Oh My Posh themes
 	ompConfigDir := homeDir + "/.config/oh-my-posh"
-	if err := os.MkdirAll(ompConfigDir+"/themes", 0755); err == nil {
+	if err := os.MkdirAll(ompConfigDir+"/themes", DirectoryPermissions); err != nil {
+		log.Warn("Failed to create Oh My Posh config directory", "error", err)
+	} else {
 		if err := m.copyThemeDirectory(assetsDir+"/themes/oh-my-posh", ompConfigDir+"/themes"); err != nil {
 			log.Warn("Failed to copy Oh My Posh themes", "error", err)
 		}
@@ -1030,7 +1101,9 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	// Copy Typora themes
 	typoraThemeDir := homeDir + "/.config/Typora/themes"
-	if err := os.MkdirAll(typoraThemeDir, 0755); err == nil {
+	if err := os.MkdirAll(typoraThemeDir, DirectoryPermissions); err != nil {
+		log.Warn("Failed to create Typora themes directory", "error", err)
+	} else {
 		if err := m.copyThemeDirectory(assetsDir+"/themes/typora", typoraThemeDir); err != nil {
 			log.Warn("Failed to copy Typora themes", "error", err)
 		}
@@ -1038,7 +1111,9 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	// Copy GNOME theme scripts (make them executable)
 	gnomeScriptDir := devexDir + "/themes/gnome"
-	if err := os.MkdirAll(gnomeScriptDir, 0755); err == nil {
+	if err := os.MkdirAll(gnomeScriptDir, DirectoryPermissions); err != nil {
+		log.Warn("Failed to create GNOME scripts directory", "error", err)
+	} else {
 		if err := m.copyThemeDirectory(assetsDir+"/themes/gnome", gnomeScriptDir); err != nil {
 			log.Warn("Failed to copy GNOME theme scripts", "error", err)
 		} else {
@@ -1061,7 +1136,7 @@ func (m *SetupModel) copyAppConfigFiles() error {
 
 	// Create defaults directory in devex
 	defaultsDir := devexDir + "/defaults"
-	if err := os.MkdirAll(defaultsDir, 0755); err != nil {
+	if err := os.MkdirAll(defaultsDir, DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create defaults directory: %w", err)
 	}
 
@@ -1123,13 +1198,27 @@ func (m *SetupModel) setupGitConfiguration() error {
 
 // copyThemeDirectory copies all files from source directory to destination directory
 func (m *SetupModel) copyThemeDirectory(srcDir, dstDir string) error {
+	// Validate paths to prevent directory traversal
+	homeDir := os.Getenv("HOME")
+	devexDir := homeDir + "/.local/share/devex"
+
+	// Validate source directory is within devex assets directory
+	if err := validatePath(srcDir, devexDir); err != nil {
+		return fmt.Errorf("invalid source directory: %w", err)
+	}
+
+	// Validate destination directory is within home directory
+	if err := validatePath(dstDir, homeDir); err != nil {
+		return fmt.Errorf("invalid destination directory: %w", err)
+	}
+
 	// Check if source directory exists
 	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
 		return fmt.Errorf("source directory does not exist: %s", srcDir)
 	}
 
 	// Create destination directory
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := os.MkdirAll(dstDir, DirectoryPermissions); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
@@ -1142,8 +1231,15 @@ func (m *SetupModel) copyThemeDirectory(srcDir, dstDir string) error {
 	// Copy each file
 	for _, entry := range entries {
 		if !entry.IsDir() {
-			srcPath := filepath.Join(srcDir, entry.Name())
-			dstPath := filepath.Join(dstDir, entry.Name())
+			// Validate filename to prevent malicious filenames
+			filename := entry.Name()
+			if strings.Contains(filename, "..") || strings.Contains(filename, "/") || strings.Contains(filename, "\\") {
+				log.Warn("Skipping file with invalid name", "filename", filename)
+				continue
+			}
+
+			srcPath := filepath.Join(srcDir, filename)
+			dstPath := filepath.Join(dstDir, filename)
 
 			if err := m.copyFile(srcPath, dstPath); err != nil {
 				log.Warn("Failed to copy theme file", "src", srcPath, "dst", dstPath, "error", err)
@@ -1165,7 +1261,7 @@ func (m *SetupModel) makeScriptsExecutable(dir string) {
 	for _, entry := range entries {
 		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sh") {
 			scriptPath := filepath.Join(dir, entry.Name())
-			if err := os.Chmod(scriptPath, 0755); err != nil {
+			if err := os.Chmod(scriptPath, ExecutablePermissions); err != nil {
 				log.Warn("Failed to make script executable", "script", scriptPath, "error", err)
 			}
 		}
@@ -1338,33 +1434,36 @@ func (m *SetupModel) getDatabaseApps() []types.CrossPlatformApp {
 		"PostgreSQL": {
 			"image":     "postgres:16",
 			"container": "postgres16",
-			"port":      "5432:5432",
+			"port":      PostgreSQLPort,
 			"env":       "POSTGRES_HOST_AUTH_METHOD=trust",
 		},
 		"MySQL": {
 			"image":     "mysql:8.4",
 			"container": "mysql8",
-			"port":      "3306:3306",
+			"port":      MySQLPort,
 			"env":       "MYSQL_ALLOW_EMPTY_PASSWORD=true",
 		},
 		"Redis": {
 			"image":     "redis:7",
 			"container": "redis",
-			"port":      "6379:6379",
+			"port":      RedisPort,
 			"env":       "",
 		},
 	}
 
 	for _, db := range selectedDBs {
 		if dbConfig, exists := dbConfigs[db]; exists {
-			dockerCmd := fmt.Sprintf("docker run -d --name %s --restart unless-stopped -p 127.0.0.1:%s",
-				dbConfig["container"], dbConfig["port"])
-
-			if dbConfig["env"] != "" {
-				dockerCmd += fmt.Sprintf(" -e %s", dbConfig["env"])
+			// Build Docker command securely with validation
+			dockerCmd, err := buildSecureDockerCommand(
+				dbConfig["container"],
+				dbConfig["image"],
+				dbConfig["port"],
+				dbConfig["env"],
+			)
+			if err != nil {
+				log.Error("Invalid Docker configuration for database", err, "database", db)
+				continue // Skip this database if configuration is invalid
 			}
-
-			dockerCmd += fmt.Sprintf(" %s", dbConfig["image"])
 
 			app := types.CrossPlatformApp{
 				Name:        fmt.Sprintf("docker-%s", strings.ToLower(db)),
@@ -1400,37 +1499,16 @@ func (m *SetupModel) getDesktopAppByName(name string) *types.CrossPlatformApp {
 	return nil
 }
 
-// isInteractiveTerminal checks if we're running in an interactive terminal environment
-func isInteractiveTerminal() bool {
-	// Check if stdin is a terminal
-	if fileInfo, err := os.Stdin.Stat(); err == nil {
-		// If it's a character device (terminal) and not a pipe/redirect
-		if (fileInfo.Mode() & os.ModeCharDevice) != 0 {
-			return true
-		}
-	}
-
-	// Additional checks for common non-interactive environments
-	if os.Getenv("CI") != "" || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
-		return false
-	}
-
-	return false
-}
-
-// runAutomatedSetup runs a non-interactive setup with sensible defaults
-func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSettings) error {
-	log.Info("Running automated setup with default selections")
-
-	// Create a minimal setup model with default selections for automation
-	model := &SetupModel{
-		selectedShell: 0, // Default to zsh (first option)
+// createAutomatedSetupModel creates a SetupModel with default selections for automated setup
+func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) *SetupModel {
+	return &SetupModel{
+		selectedShell: DefaultShellIndex, // Default to zsh (first option)
 		selectedLangs: map[int]bool{
-			0: true, // Node.js
-			1: true, // Python
+			DefaultNodeJSIndex: true, // Node.js
+			DefaultPythonIndex: true, // Python
 		},
 		selectedDBs: map[int]bool{
-			0: true, // PostgreSQL
+			DefaultPostgreSQLIndex: true, // PostgreSQL
 		},
 		selectedApps:  make(map[int]bool), // No desktop apps for automated setup
 		installErrors: make([]string, 0),
@@ -1459,14 +1537,10 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 			"Redis",
 		},
 	}
+}
 
-	// Convert default selections to CrossPlatformApp objects
-	apps := model.buildAppList()
-
-	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", "zsh", "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
-
-	// For automated setup, show the selections but skip the streaming TUI
-	// run the installations directly using the existing installer system
+// printAutomatedSetupPlan displays the planned installation to the user
+func printAutomatedSetupPlan() {
 	fmt.Println("🚀 Starting automated DevEx setup...")
 	fmt.Println("Selected for installation:")
 	fmt.Println("  • zsh shell with DevEx configuration")
@@ -1474,23 +1548,106 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 	fmt.Println("  • Programming languages: Node.js, Python")
 	fmt.Println("  • Database: PostgreSQL")
 	fmt.Println()
+}
 
-	// Use the regular installer system for non-interactive mode
-	if err := installers.InstallCrossPlatformApps(apps, settings, repo); err != nil {
-		log.Error("Automated installation failed", err)
-		fmt.Printf("⚠️  Installation failed: %v\n", err)
+// validateDockerConfig validates Docker configuration parameters for security
+func validateDockerConfig(containerName, image, portMapping, envVar string) error {
+	if !validContainerName.MatchString(containerName) {
+		return fmt.Errorf("invalid container name: %s", containerName)
+	}
+	if !validDockerImage.MatchString(image) {
+		return fmt.Errorf("invalid Docker image: %s", image)
+	}
+	if !validPortMapping.MatchString(portMapping) {
+		return fmt.Errorf("invalid port mapping: %s", portMapping)
+	}
+	if envVar != "" && !validEnvVar.MatchString(envVar) {
+		return fmt.Errorf("invalid environment variable: %s", envVar)
+	}
+	return nil
+}
+
+// buildSecureDockerCommand constructs a Docker command with proper validation and escaping
+func buildSecureDockerCommand(containerName, image, portMapping, envVar string) (string, error) {
+	// Validate all inputs first
+	if err := validateDockerConfig(containerName, image, portMapping, envVar); err != nil {
+		return "", err
+	}
+
+	// Build command using safe string concatenation (not fmt.Sprintf with user input)
+	var cmdParts []string
+	cmdParts = append(cmdParts, "docker", "run", "-d")
+	cmdParts = append(cmdParts, "--name", containerName)
+	cmdParts = append(cmdParts, "--restart", "unless-stopped")
+	cmdParts = append(cmdParts, "-p", "127.0.0.1:"+portMapping)
+
+	if envVar != "" {
+		cmdParts = append(cmdParts, "-e", envVar)
+	}
+
+	cmdParts = append(cmdParts, image)
+
+	// Join with spaces - this is safe since all parts are validated
+	return strings.Join(cmdParts, " "), nil
+}
+
+// validatePath validates a file path to prevent directory traversal attacks
+func validatePath(path, baseDir string) error {
+	// Clean the path to resolve any .. or . components
+	cleanPath := filepath.Clean(path)
+	cleanBase := filepath.Clean(baseDir)
+
+	// Ensure the path is absolute or convert relative paths
+	if !filepath.IsAbs(cleanPath) {
+		cleanPath = filepath.Join(cleanBase, cleanPath)
+	}
+
+	// Check if the cleaned path is within the base directory
+	relPath, err := filepath.Rel(cleanBase, cleanPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Ensure the relative path doesn't start with .. (directory traversal)
+	if strings.HasPrefix(relPath, "..") || strings.Contains(relPath, "/../") {
+		return fmt.Errorf("path traversal detected: %s", path)
+	}
+
+	return nil
+}
+
+// validateShellCommand validates parameters for shell command execution
+func validateShellCommand(shellPath, username string) error {
+	if !validShellPath.MatchString(shellPath) {
+		return fmt.Errorf("invalid shell path: %s", shellPath)
+	}
+	if !validUsername.MatchString(username) {
+		return fmt.Errorf("invalid username: %s", username)
+	}
+	return nil
+}
+
+// executeSecureShellChange executes chsh command with proper validation and argument separation
+func executeSecureShellChange(ctx context.Context, shellPath, username string) error {
+	// Validate inputs
+	if err := validateShellCommand(shellPath, username); err != nil {
 		return err
 	}
 
-	// Handle shell configuration and switching
-	selectedShell := model.getSelectedShell()
-	ctx := context.Background()
-	if err := model.finalizeSetup(ctx); err != nil {
-		log.Warn("Shell setup had issues", "error", err)
-		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
+	// Use exec.Command with separate arguments instead of shell string
+	cmd := exec.CommandContext(ctx, "chsh", "-s", shellPath, username)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to change shell: %w (output: %s)", err, string(output))
 	}
 
-	// Print completion message
+	return nil
+}
+
+// printAutomatedSetupCompletion displays the completion message and next steps
+func printAutomatedSetupCompletion(model *SetupModel) {
+	selectedShell := model.getSelectedShell()
+
 	fmt.Printf("\n🎉 Automated setup complete!\n")
 	fmt.Printf("Your development environment has been set up with:\n")
 	fmt.Printf("  • %s shell with DevEx configuration\n", selectedShell)
@@ -1512,6 +1669,57 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 		fmt.Printf("\n📋 Installation logs: %s\n", logFile)
 		fmt.Printf("   (Submit this file for debugging if you encounter issues)\n")
 	}
+}
+
+// isInteractiveTerminal checks if we're running in an interactive terminal environment
+func isInteractiveTerminal() bool {
+	// Check if stdin is a terminal
+	if fileInfo, err := os.Stdin.Stat(); err == nil {
+		// If it's a character device (terminal) and not a pipe/redirect
+		if (fileInfo.Mode() & os.ModeCharDevice) != 0 {
+			return true
+		}
+	}
+
+	// Additional checks for common non-interactive environments
+	if os.Getenv("CI") != "" || os.Getenv("TERM") == "" || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+
+	return false
+}
+
+// runAutomatedSetup runs a non-interactive setup with sensible defaults
+func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSettings) error {
+	log.Info("Running automated setup with default selections")
+
+	// Create a minimal setup model with default selections for automation
+	model := createAutomatedSetupModel(repo, settings)
+
+	// Convert default selections to CrossPlatformApp objects
+	apps := model.buildAppList()
+
+	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", "zsh", "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
+
+	// Display the planned installation to the user
+	printAutomatedSetupPlan()
+
+	// Use the regular installer system for non-interactive mode
+	if err := installers.InstallCrossPlatformApps(apps, settings, repo); err != nil {
+		log.Error("Automated installation failed", err)
+		fmt.Printf("⚠️  Installation failed: %v\n", err)
+		return err
+	}
+
+	// Handle shell configuration and switching
+	ctx := context.Background()
+	if err := model.finalizeSetup(ctx); err != nil {
+		log.Warn("Shell setup had issues", "error", err)
+		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
+	}
+
+	// Display completion message and next steps
+	printAutomatedSetupCompletion(model)
 
 	return nil
 }
