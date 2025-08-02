@@ -6,6 +6,35 @@ import (
 	"strings"
 )
 
+// RuntimeProvider interface for runtime information
+type RuntimeProvider interface {
+	GOOS() string
+	GOARCH() string
+}
+
+// DefaultRuntimeProvider implements RuntimeProvider using the actual runtime
+type DefaultRuntimeProvider struct{}
+
+func (d DefaultRuntimeProvider) GOOS() string   { return runtime.GOOS }
+func (d DefaultRuntimeProvider) GOARCH() string { return runtime.GOARCH }
+
+// FileSystemProvider interface for file system operations
+type FileSystemProvider interface {
+	ReadFile(filename string) ([]byte, error)
+	Stat(name string) (os.FileInfo, error)
+}
+
+// DefaultFileSystemProvider implements FileSystemProvider using os package
+type DefaultFileSystemProvider struct{}
+
+func (d DefaultFileSystemProvider) ReadFile(filename string) ([]byte, error) {
+	return os.ReadFile(filename)
+}
+
+func (d DefaultFileSystemProvider) Stat(name string) (os.FileInfo, error) {
+	return os.Stat(name)
+}
+
 // Platform represents the operating system and desktop environment
 type Platform struct {
 	OS           string
@@ -15,21 +44,49 @@ type Platform struct {
 	Architecture string
 }
 
+// PlatformDetector handles platform detection with configurable dependencies
+type PlatformDetector struct {
+	runtime RuntimeProvider
+	fs      FileSystemProvider
+}
+
+// NewPlatformDetector creates a new platform detector with default providers
+func NewPlatformDetector() *PlatformDetector {
+	return &PlatformDetector{
+		runtime: DefaultRuntimeProvider{},
+		fs:      DefaultFileSystemProvider{},
+	}
+}
+
+// NewPlatformDetectorWithProviders creates a platform detector with custom providers
+func NewPlatformDetectorWithProviders(runtime RuntimeProvider, fs FileSystemProvider) *PlatformDetector {
+	return &PlatformDetector{
+		runtime: runtime,
+		fs:      fs,
+	}
+}
+
 // DetectPlatform detects the current platform information
 func DetectPlatform() Platform {
+	detector := NewPlatformDetector()
+	return detector.Detect()
+}
+
+// Detect performs platform detection using the configured providers
+func (pd *PlatformDetector) Detect() Platform {
 	return Platform{
-		OS:           runtime.GOOS,
-		DesktopEnv:   detectDesktopEnvironment(),
-		Distribution: detectDistribution(),
-		Version:      detectVersion(),
-		Architecture: runtime.GOARCH,
+		OS:           pd.runtime.GOOS(),
+		DesktopEnv:   pd.detectDesktopEnvironment(),
+		Distribution: pd.detectDistribution(),
+		Version:      pd.detectVersion(),
+		Architecture: pd.runtime.GOARCH(),
 	}
 }
 
 // detectDesktopEnvironment detects the desktop environment on Linux
-func detectDesktopEnvironment() string {
-	if runtime.GOOS != "linux" {
-		return runtime.GOOS // "darwin" or "windows"
+func (pd *PlatformDetector) detectDesktopEnvironment() string {
+	if pd.runtime.GOOS() != "linux" {
+		return pd.runtime.GOOS() // "darwin" or "windows"
 	}
 
 	// Check environment variables for desktop environment
@@ -59,13 +116,13 @@ func detectDesktopEnvironment() string {
 }
 
 // detectDistribution detects the Linux distribution
-func detectDistribution() string {
-	if runtime.GOOS != "linux" {
+func (pd *PlatformDetector) detectDistribution() string {
+	if pd.runtime.GOOS() != "linux" {
 		return ""
 	}
 
 	// Try to read /etc/os-release
-	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+	if data, err := pd.fs.ReadFile("/etc/os-release"); err == nil {
 		content := string(data)
 		for _, line := range strings.Split(content, "\n") {
 			if strings.HasPrefix(line, "ID=") {
@@ -86,7 +143,7 @@ func detectDistribution() string {
 	}
 
 	for file, distro := range distributions {
-		if _, err := os.Stat(file); err == nil {
+		if _, err := pd.fs.Stat(file); err == nil {
 			return distro
 		}
 	}
@@ -95,13 +152,13 @@ func detectDistribution() string {
 }
 
 // detectVersion detects the OS version
-func detectVersion() string {
-	if runtime.GOOS != "linux" {
+func (pd *PlatformDetector) detectVersion() string {
+	if pd.runtime.GOOS() != "linux" {
 		return ""
 	}
 
 	// Try to read version from /etc/os-release
-	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+	if data, err := pd.fs.ReadFile("/etc/os-release"); err == nil {
 		content := string(data)
 		for _, line := range strings.Split(content, "\n") {
 			if strings.HasPrefix(line, "VERSION_ID=") {
@@ -115,7 +172,13 @@ func detectVersion() string {
 
 // IsSupportedPlatform checks if the current platform is supported
 func IsSupportedPlatform() bool {
-	switch runtime.GOOS {
+	detector := NewPlatformDetector()
+	return detector.IsSupported()
+}
+
+// IsSupported checks if the platform is supported
+func (pd *PlatformDetector) IsSupported() bool {
+	switch pd.runtime.GOOS() {
 	case "linux", "darwin", "windows":
 		return true
 	default:
@@ -125,10 +188,16 @@ func IsSupportedPlatform() bool {
 
 // GetInstallerPriority returns the preferred installer order for the current platform
 func GetInstallerPriority() []string {
-	switch runtime.GOOS {
+	detector := NewPlatformDetector()
+	return detector.GetInstallerPriority()
+}
+
+// GetInstallerPriority returns the installer priority for this platform
+func (pd *PlatformDetector) GetInstallerPriority() []string {
+	switch pd.runtime.GOOS() {
 	case "linux":
 		// Check distribution for package manager preference
-		distro := detectDistribution()
+		distro := pd.detectDistribution()
 		switch distro {
 		case "ubuntu", "debian":
 			return []string{"apt", "flatpak", "snap", "mise", "curlpipe", "download"}
@@ -150,9 +219,15 @@ func GetInstallerPriority() []string {
 
 // GetSystemPackageManager returns the default system package manager
 func GetSystemPackageManager() string {
-	switch runtime.GOOS {
+	detector := NewPlatformDetector()
+	return detector.GetSystemPackageManager()
+}
+
+// GetSystemPackageManager returns the system package manager for this platform
+func (pd *PlatformDetector) GetSystemPackageManager() string {
+	switch pd.runtime.GOOS() {
 	case "linux":
-		distro := detectDistribution()
+		distro := pd.detectDistribution()
 		switch distro {
 		case "ubuntu", "debian":
 			return "apt"

@@ -129,7 +129,7 @@ development:
   - name: Typora
     description: 'A minimal and configurable markdown editor'
     category: 'Text Editors'
-    default: true
+    default: false
     install_method: 'apt'
     install_command: 'typora'
     apt_sources:
@@ -178,7 +178,7 @@ development:
   - name: zsh
     description: 'A powerful shell with many features'
     category: 'System Utilities'
-    default: true
+    default: false
     install_method: 'apt'
     install_command: 'zsh'
   - name: Fastfetch
@@ -234,7 +234,7 @@ databases:
     category: 'Databases'
     install_method: 'docker'
     install_command: 'redis:7'
-    default: true
+    default: false
     docker_options:
       ports:
         - '127.0.0.1:6379:6379'
@@ -245,7 +245,7 @@ databases:
     category: 'Databases'
     install_method: 'docker'
     install_command: 'postgres:16'
-    default: true
+    default: false
     docker_options:
       ports:
         - '127.0.0.1:5432:5432'

@@ -13,7 +13,7 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
-// Legacy Settings struct for backward compatibility
+// Settings Legacy Settings struct for backward compatibility
 type Settings struct {
 	DebugMode       bool                   `mapstructure:"debug_mode"`
 	HomeDir         string                 `mapstructure:"home_dir"`
@@ -43,7 +43,7 @@ type CrossPlatformSettings struct {
 	System       SystemConfig       `mapstructure:"system"`
 }
 
-// ApplicationsConfig represents the applications configuration
+// ApplicationsConfig represents the application configuration
 type ApplicationsConfig struct {
 	Development []types.CrossPlatformApp `mapstructure:"development"`
 	Databases   []types.CrossPlatformApp `mapstructure:"databases"`
@@ -136,7 +136,7 @@ func LoadSettings(homeDir string) (Settings, error) {
 	viper.AutomaticEnv() // Enable environment variable overrides
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	// Unmarshal into Settings struct
+	// Unmarshal into the Settings struct
 	var settings Settings
 	if err := viper.Unmarshal(&settings); err != nil {
 		log.Error("Failed to unmarshal settings", err)
@@ -207,7 +207,7 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 		}
 	}
 
-	// Apply overrides from ~/.devex directory
+	// Apply overrides from the ~/.devex directory
 	for _, file := range CrossPlatformFiles {
 		overridePath := filepath.Join(overrideConfigPath, file)
 		if exists, err := fs.Stat(overridePath); err == nil && exists != nil {
