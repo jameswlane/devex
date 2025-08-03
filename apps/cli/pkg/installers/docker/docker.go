@@ -100,7 +100,7 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 			Name: containerName,
 		},
 		InstallMethod:  "docker",
-		InstallCommand: command,
+		InstallCommand: containerName, // For Docker, just use the container name for installation checking
 	}
 
 	// Check if the container is already running
