@@ -55,7 +55,7 @@ func runInstall(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
 
-	log.Info("Starting installation process", "verbose", settings.Verbose)
+	log.Debug("Starting installation process", "verbose", settings.Verbose)
 
 	// Get default apps for installation
 	defaultApps := settings.GetDefaultApps()

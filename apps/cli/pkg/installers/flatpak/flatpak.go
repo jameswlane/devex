@@ -16,7 +16,7 @@ func New() *FlatpakInstaller {
 }
 
 func (f *FlatpakInstaller) Install(command string, repo types.Repository) error {
-	log.Info("Flatpak Installer: Starting installation", "appID", command)
+	log.Debug("Flatpak Installer: Starting installation", "appID", command)
 
 	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
@@ -46,7 +46,7 @@ func (f *FlatpakInstaller) Install(command string, repo types.Repository) error 
 		return fmt.Errorf("failed to install Flatpak app '%s': %w", command, err)
 	}
 
-	log.Info("Flatpak app installed successfully", "appID", command)
+	log.Debug("Flatpak app installed successfully", "appID", command)
 
 	// Add the app to the repository
 	if err := repo.AddApp(command); err != nil {
@@ -54,6 +54,6 @@ func (f *FlatpakInstaller) Install(command string, repo types.Repository) error 
 		return fmt.Errorf("failed to add Flatpak app '%s' to repository: %w", command, err)
 	}
 
-	log.Info("Flatpak app added to repository successfully", "appID", command)
+	log.Debug("Flatpak app added to repository successfully", "appID", command)
 	return nil
 }
