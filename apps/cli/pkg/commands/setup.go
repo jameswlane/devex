@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
@@ -70,10 +71,12 @@ type SetupModel struct {
 	languages        []string
 	databases        []string
 	desktopApps      []string
+	themes           []string
 	selectedShell    int
 	selectedLangs    map[int]bool
 	selectedDBs      map[int]bool
 	selectedApps     map[int]bool
+	selectedTheme    int
 	gitFullName      string
 	gitEmail         string
 	gitInputField    int  // 0 = full name, 1 = email
@@ -98,6 +101,7 @@ const (
 	StepLanguages
 	StepDatabases
 	StepShell     // Only for compatible systems (Linux/macOS)
+	StepTheme     // Theme selection after shell
 	StepGitConfig // Full name & email for git configuration
 	StepConfirmation
 	StepInstalling
@@ -179,6 +183,14 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 			"PostgreSQL",
 			"MySQL",
 			"Redis",
+		},
+		themes: []string{
+			"Tokyo Night",
+			"Catppuccin",
+			"Dracula",
+			"Nord",
+			"One Dark",
+			"Gruvbox",
 		},
 	}
 
@@ -400,6 +412,34 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
 
+	case StepTheme:
+		s = titleStyle.Render("🎨 Select Your Theme")
+		s += "\n\n"
+		s += subtitleStyle.Render("Choose a theme for your applications:")
+		s += "\n\n"
+
+		for i, theme := range m.themes {
+			cursor := " "
+			if m.cursor == i {
+				cursor = cursorStyle.Render(">")
+			}
+
+			selected := " "
+			if m.selectedTheme == i {
+				selected = selectedStyle.Render("●")
+			}
+
+			themeName := theme
+			if len(themeName) > 30 {
+				themeName = themeName[:27] + "..."
+			}
+
+			s += fmt.Sprintf("%s %s %s\n", cursor, selected, themeName)
+		}
+
+		s += "\n\n"
+		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+
 	case StepGitConfig:
 		s = titleStyle.Render("🔧 Git Configuration")
 		s += "\n\n"
@@ -616,6 +656,8 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 		maxItems = len(m.databases)
 	case StepShell:
 		maxItems = len(m.shells)
+	case StepTheme:
+		maxItems = len(m.themes)
 	case StepGitConfig:
 		maxItems = 2 // Full name and email
 	default:
@@ -638,6 +680,8 @@ func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 		m.selectedDBs[m.cursor] = !m.selectedDBs[m.cursor]
 	case StepShell:
 		m.selectedShell = m.cursor
+	case StepTheme:
+		m.selectedTheme = m.cursor
 	default:
 		return m, nil // No selection needed for other steps
 	}
@@ -663,9 +707,11 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		if m.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 		} else {
-			m.step = StepGitConfig
+			m.step = StepTheme // Windows gets theme selection without shell
 		}
 	case StepShell:
+		m.step = StepTheme
+	case StepTheme:
 		m.step = StepGitConfig
 	case StepGitConfig:
 		// Only proceed if both fields are filled
@@ -702,12 +748,14 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 		m.step = StepLanguages
 	case StepShell:
 		m.step = StepDatabases
-	case StepGitConfig:
+	case StepTheme:
 		if m.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 		} else {
 			m.step = StepDatabases
 		}
+	case StepGitConfig:
+		m.step = StepTheme
 	case StepConfirmation:
 		m.step = StepGitConfig
 	case StepInstalling:
@@ -861,6 +909,12 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// Setup git configuration with user's name and email
 	if err := m.setupGitConfiguration(ctx); err != nil {
 		log.Error("Failed to setup git configuration", err)
+		return err
+	}
+
+	// Save selected theme preference
+	if err := m.saveThemePreference(); err != nil {
+		log.Error("Failed to save theme preference", err)
 		return err
 	}
 
@@ -1211,4 +1265,25 @@ func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
 	default:
 		return false
 	}
+}
+
+// saveThemePreference saves the user's selected theme as the global preference
+func (m *SetupModel) saveThemePreference() error {
+	log.Info("Saving theme preference", "theme", m.themes[m.selectedTheme])
+
+	// Create theme repository using the system repository
+	systemRepo, ok := m.repo.(types.SystemRepository)
+	if !ok {
+		return fmt.Errorf("repository does not implement SystemRepository interface")
+	}
+	themeRepo := repository.NewThemeRepository(systemRepo)
+
+	// Save the selected theme as global preference
+	selectedTheme := m.themes[m.selectedTheme]
+	if err := themeRepo.SetGlobalTheme(selectedTheme); err != nil {
+		return fmt.Errorf("failed to save global theme preference: %w", err)
+	}
+
+	log.Info("Theme preference saved successfully", "theme", selectedTheme)
+	return nil
 }
