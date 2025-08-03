@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type MockCommandExecutor struct {
@@ -20,6 +21,50 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 	if command == m.FailingCommand {
 		return "", fmt.Errorf("mock shell command failed: %s", command)
 	}
+
+	// Handle specific command patterns for realistic mock responses
+	if strings.Contains(command, "apt-cache policy") {
+		if strings.Contains(command, "failing-package") {
+			// Return output indicating package is not available
+			return `N: Unable to locate package failing-package`, nil
+		}
+		// Return mock apt-cache policy output that indicates package is available
+		return `test-package:
+  Installed: (none)
+  Candidate: 1.0.0
+  Version table:
+     1.0.0 500
+        500 http://archive.ubuntu.com/ubuntu focal/main amd64 Packages`, nil
+	}
+
+	if strings.Contains(command, "which") {
+		// Most which commands should succeed
+		return "/usr/bin/command", nil
+	}
+
+	if strings.Contains(command, "dpkg --version") {
+		return "Debian dpkg package management program version 1.20.5", nil
+	}
+
+	if command == "whoami" {
+		return "testuser", nil
+	}
+
+	if strings.Contains(command, "systemctl") {
+		// Mock systemctl commands for Docker setup
+		return "mock systemctl output", nil
+	}
+
+	if strings.Contains(command, "docker.io") && strings.Contains(command, "apt-cache policy") {
+		// Return mock apt-cache policy output for docker.io package
+		return `docker.io:
+  Installed: (none)
+  Candidate: 20.10.12-0ubuntu2~20.04.1
+  Version table:
+     20.10.12-0ubuntu2~20.04.1 500
+        500 http://archive.ubuntu.com/ubuntu focal-updates/universe amd64 Packages`, nil
+	}
+
 	return "mock output", nil
 }
 

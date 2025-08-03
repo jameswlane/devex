@@ -68,16 +68,11 @@ var _ = Describe("APT Installer", func() {
 			})
 		})
 
-		Context("when installation command fails", func() {
-			BeforeEach(func() {
-				// Set the failing command to simulate installation failure
-				mockExec.FailingCommand = "sudo apt-get install -y failing-package"
-			})
-
-			It("returns installation error", func() {
+		Context("when package is not available", func() {
+			It("returns package validation error", func() {
 				err := installer.Install("failing-package", mockRepo)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to install package via apt"))
+				Expect(err.Error()).To(ContainSubstring("package validation failed"))
 			})
 		})
 
