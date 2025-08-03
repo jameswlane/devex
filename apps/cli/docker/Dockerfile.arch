@@ -1,15 +1,15 @@
-FROM debian:12
+FROM archlinux:latest
 
 ENV TERM=xterm-256color
 
-# Install basic dependencies required to enable the CLI to operate
-RUN apt-get update && apt-get install -y \
+# Install basic dependencies
+RUN pacman -Syu --noconfirm && pacman -S --noconfirm \
     curl \
     wget \
     git \
     unzip \
     sudo \
-    && rm -rf /var/lib/apt/lists/*
+    && pacman -Scc --noconfirm
 
 # Create a non-root user for testing
 RUN useradd -m -s /bin/bash -G sudo testuser && \

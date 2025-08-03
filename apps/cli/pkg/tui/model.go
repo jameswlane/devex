@@ -152,6 +152,12 @@ type InputRequestMsg struct {
 	Response chan *SecureString
 }
 
+// AppStartedMsg indicates that an application installation has started
+type AppStartedMsg struct {
+	AppName  string
+	AppIndex int
+}
+
 // AppCompleteMsg indicates that an application installation has completed,
 // either successfully or with an error.
 type AppCompleteMsg struct {
@@ -270,10 +276,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		allLogs := m.logs.GetAll()
 		if allLogs != nil {
 			m.viewport.SetContent(strings.Join(allLogs, "\n"))
+			// Only go to bottom if viewport is ready and has content
+			if m.ready && len(allLogs) > 0 {
+				m.viewport.GotoBottom()
+			}
 		} else {
 			m.viewport.SetContent("")
 		}
-		m.viewport.GotoBottom()
 
 	case InputRequestMsg:
 		// Request user input
@@ -288,6 +297,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.textInput.EchoMode = textinput.EchoNormal
 		}
+
+	case AppStartedMsg:
+		// App installation started - update current app display
+		m.currentApp = msg.AppIndex
+		m.status = fmt.Sprintf("Installing %s...", msg.AppName)
 
 	case AppCompleteMsg:
 		// App installation completed
@@ -318,7 +332,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// More apps to install - but don't start next app here to avoid race conditions
 			// The installer handles sequential installation
 		} else {
+			// All apps completed - update display
 			m.status = "All applications installed successfully!"
+			m.currentApp = len(m.apps) // Hide current app display
 		}
 
 	case progress.FrameMsg:

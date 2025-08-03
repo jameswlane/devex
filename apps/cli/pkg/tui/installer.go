@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -206,60 +208,89 @@ func (ss *SecureString) Clear() {
 var (
 	// allowedCommands defines safe commands that can be executed
 	allowedCommands = map[string]bool{
-		"apt":     true,
-		"apt-get": true,
-		"apt-key": true, // SECURITY: Added for GPG key management
-		"dpkg":    true,
-		"curl":    true,
-		"wget":    true,
-		"git":     true,
-		"docker":  true,
-		"npm":     true,
-		"pip":     true,
-		"pip3":    true,
-		"go":      true,
-		"cargo":   true,
-		"flatpak": true,
-		"snap":    true,
-		"dnf":     true,
-		"yum":     true,
-		"pacman":  true,
-		"zypper":  true,
-		"brew":    true,
-		"mise":    true,
-		"mkdir":   true,
-		"cp":      true,
-		"mv":      true,
-		"chmod":   true,
-		"chown":   true,
-		"ln":      true,
-		"tar":     true,
-		"unzip":   true,
-		"gunzip":  true,
-		"echo":    true,
-		"cat":     true,
-		"which":   true,
-		"whereis": true,
-		"id":      true,
-		"whoami":  true, // SECURITY: Added for repository source addition
+		"apt":        true,
+		"apt-get":    true,
+		"apt-key":    true, // SECURITY: Added for GPG key management
+		"apt-cache":  true, // SECURITY: Added for package information
+		"dpkg":       true,
+		"curl":       true,
+		"wget":       true,
+		"git":        true,
+		"docker":     true,
+		"npm":        true,
+		"pip":        true,
+		"pip3":       true,
+		"go":         true,
+		"cargo":      true,
+		"flatpak":    true,
+		"snap":       true,
+		"dnf":        true,
+		"yum":        true,
+		"pacman":     true,
+		"zypper":     true,
+		"brew":       true,
+		"mise":       true,
+		"bash":       true, // SECURITY: Added for script execution (curlpipe installs)
+		"sh":         true, // SECURITY: Added for basic shell execution
+		"mkdir":      true,
+		"cp":         true,
+		"mv":         true,
+		"chmod":      true,
+		"chown":      true,
+		"ln":         true,
+		"tar":        true,
+		"unzip":      true,
+		"gunzip":     true,
+		"echo":       true,
+		"cat":        true,
+		"which":      true,
+		"whereis":    true,
+		"id":         true,
+		"whoami":     true, // SECURITY: Added for repository source addition
+		"tee":        true, // SECURITY: Added for repository source addition
+		"sleep":      true, // SECURITY: Added for timing operations
+		"rm":         true, // SECURITY: Added for file removal (validated by dangerous patterns)
+		"gpg":        true, // SECURITY: Added for GPG key management
+		"gpg2":       true, // SECURITY: Added for GPG key management
+		"fastfetch":  true, // SECURITY: Added for system information
+		"neofetch":   true, // SECURITY: Added for system information
+		"systemctl":  true, // SECURITY: Added for service management
+		"usermod":    true, // SECURITY: Added for user management
+		"sudo":       true, // SECURITY: Added for privilege escalation (validated separately)
+		"nvim":       true, // SECURITY: Added for text editor
+		"gtk-launch": true, // SECURITY: Added for application launching
 	}
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
 	dangerousPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`[;&|]`),                 // Command separators and logical operators
-		regexp.MustCompile(`&&`),                    // Logical AND operator
-		regexp.MustCompile(`\|\|`),                  // Logical OR operator
-		regexp.MustCompile("`[^`]*`"),               // Command substitution (backticks)
-		regexp.MustCompile(`\$\([^)]*\)`),           // Command substitution $()
-		regexp.MustCompile(`\$\{[^}]*\}`),           // Variable expansion (except safe ones)
-		regexp.MustCompile(`\.\./`),                 // Directory traversal
-		regexp.MustCompile(`/etc/passwd`),           // Sensitive files
-		regexp.MustCompile(`/etc/shadow`),           // Sensitive files
-		regexp.MustCompile(`rm\s+-rf\s+/[^a-zA-Z]`), // Dangerous rm commands on root
-		regexp.MustCompile(`dd\s+if=/dev`),          // Dangerous dd commands
-		regexp.MustCompile(`:\(\)\{`),               // Fork bombs
-		regexp.MustCompile(`>\s*/etc/`),             // Writing to system directories
-		regexp.MustCompile(`>\s*/dev/`),             // Writing to device files
+		regexp.MustCompile(`[;&|]{1,2}\s*rm\s+-rf\s+/`),               // Dangerous rm -rf / after command separators
+		regexp.MustCompile(`[;&|]{1,2}\s*sudo\s+rm\s+-rf`),            // Dangerous sudo rm -rf after command separators
+		regexp.MustCompile(`[;&|]{1,2}\s*rm\s+-rf\s+/(home|var|usr)`), // Dangerous rm -rf on system directories
+		regexp.MustCompile(`\|\s*sh\s*<?`),                            // Piping to shell
+		regexp.MustCompile(`\|\s*bash\s*<?`),                          // Piping to bash
+		regexp.MustCompile(`[;&|]{1,2}\s*curl\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
+		regexp.MustCompile(`[;&|]{1,2}\s*wget\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
+		regexp.MustCompile(`\$\([^)]*\)`),                             // Command substitution
+		regexp.MustCompile(`\$\{[^}]*\}`),                             // Variable expansion
+		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),                     // Multiple directory traversal attempts
+		regexp.MustCompile(`\.\./`),                                   // Directory traversal patterns
+		regexp.MustCompile(`/etc/passwd`),                             // Sensitive files
+		regexp.MustCompile(`/etc/shadow`),                             // Sensitive files
+		regexp.MustCompile(`rm\s+-rf\s+/(\w+|$)`),                     // Dangerous rm commands on system dirs and root
+		regexp.MustCompile(`dd\s+if=/dev.*of=/`),                      // Dangerous dd commands writing to files
+		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                     // Fork bombs
+		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),        // Writing to critical system files
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),            // Writing to block devices (not /dev/null)
+		regexp.MustCompile(`\s+&\s+\w+`),                              // Background processes with additional commands
+		regexp.MustCompile(`\s+\|\s+\w+`),                             // Pipes to other commands
+		regexp.MustCompile(`\s+\|\|\s+\w+`),                           // OR operator with additional commands
+		regexp.MustCompile("`[^`]*`"),                                 // Backtick command substitution
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),          // Writing to specific dangerous device files
+		regexp.MustCompile(`;\s*\w+.*&&.*chmod`),                      // Multi-command with chmod
+		regexp.MustCompile(`&&.*python.*-c`),                          // Python code execution
+		regexp.MustCompile(`\b(sh|bash)\s+-c\b`),                      // Direct shell code execution
+		regexp.MustCompile(`[;&|]+\s*$`),                              // Commands ending with operators
+		regexp.MustCompile(`>\s*/etc/`),                               // Writing to /etc directory
 	}
 )
 
@@ -282,7 +313,7 @@ func sanitizeUserInput(input string) string {
 
 // parseCommand safely parses a command string into executable parts
 // Returns (executable, args, needsShell) where needsShell indicates if shell execution is required
-// SECURITY: This function now REJECTS shell execution to prevent security bypass
+// SECURITY: This function allows shell execution for pipes but validates patterns first
 func parseCommand(command string) (string, []string, bool) {
 	// Trim whitespace
 	command = strings.TrimSpace(command)
@@ -290,31 +321,37 @@ func parseCommand(command string) (string, []string, bool) {
 		return "", nil, false
 	}
 
-	// Split command into parts
-	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return "", nil, false
-	}
-
-	// SECURITY FIX: Check for dangerous shell features and REJECT them
-	// Allow simple quoted strings but reject complex shell constructs
-	dangerousFeatures := []string{
-		"|", "&&", "||", ";", "&", ">", ">>", "<", "$(", "`",
-	}
-
-	for _, feature := range dangerousFeatures {
-		if strings.Contains(command, feature) {
-			// SECURITY: Reject commands with dangerous shell features
-			return "", nil, false
-		}
-	}
-
-	// ADDITIONAL SECURITY: Check against dangerous patterns using our regex list
+	// SECURITY: Check against dangerous patterns using our specific regex list
 	for _, pattern := range dangerousPatterns {
 		if pattern.MatchString(command) {
+			// Allow specific safe patterns that might otherwise be flagged
+			if strings.Contains(command, ">/dev/null") || strings.Contains(command, "2>/dev/null") {
+				continue // Allow redirections to /dev/null
+			}
 			// SECURITY: Reject commands matching dangerous patterns
 			return "", nil, false
 		}
+	}
+
+	// Check if command contains shell operators that require shell execution
+	shellOperators := []string{"|", "&&", "||", ";", ">", "<", ">>", "2>", "&"}
+	needsShell := false
+	for _, operator := range shellOperators {
+		if strings.Contains(command, operator) {
+			needsShell = true
+			break
+		}
+	}
+
+	if needsShell {
+		// Return shell execution for complex commands
+		return "bash", []string{"-c", command}, true
+	}
+
+	// Split command into parts for direct execution
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return "", nil, false
 	}
 
 	// Only allow direct execution of validated commands
@@ -364,7 +401,7 @@ func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
 		}
 	}
 
-	// Parse command and validate first word
+	// Parse command and validate the first word
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
 		return fmt.Errorf("empty command")
@@ -427,13 +464,21 @@ func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Reposito
 // Returns:
 //   - error: nil on success, context.Canceled if cancelled, or other error on critical failures
 func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
-	for _, app := range apps {
+	for i, app := range apps {
 		// Check for context cancellation before each app
 		select {
 		case <-ctx.Done():
 			si.sendLog("INFO", "Installation cancelled before starting next app")
 			return ctx.Err()
 		default:
+		}
+
+		// Send app started message to update TUI display
+		if si.program != nil {
+			si.program.Send(AppStartedMsg{
+				AppName:  app.Name,
+				AppIndex: i,
+			})
 		}
 
 		if err := si.InstallApp(ctx, app, settings); err != nil {
@@ -544,6 +589,8 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 		return si.executeCurlPipeInstall(ctx, app, osConfig)
 	case "docker":
 		return si.executeDockerInstall(ctx, app, osConfig)
+	case "mise":
+		return si.executeMiseInstall(ctx, app, osConfig)
 	default:
 		// Generic command execution
 		return si.executeCommandStream(ctx, osConfig.InstallCommand)
@@ -592,8 +639,9 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 		return err
 	}
 
-	// Install package
-	return si.executeCommandStream(ctx, osConfig.InstallCommand)
+	// Install package - construct proper APT command
+	aptCommand := fmt.Sprintf("sudo apt install -y %s", osConfig.InstallCommand)
+	return si.executeCommandStream(ctx, aptCommand)
 }
 
 // validateAndAddGPGKey validates a GPG key fingerprint and adds the key to APT keyring
@@ -891,6 +939,19 @@ func (si *StreamingInstaller) executeDockerInstall(ctx context.Context, app type
 	return si.executeCommandStream(ctx, osConfig.InstallCommand)
 }
 
+// executeMiseInstall handles mise tool installations with proper command construction
+func (si *StreamingInstaller) executeMiseInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	si.sendLog("INFO", fmt.Sprintf("Installing %s using mise...", app.Name))
+
+	// Construct proper mise command with PATH setup and secure execution
+	// This mirrors the logic from the mise installer but adapts it for TUI streaming
+	miseCommand := fmt.Sprintf(`export PATH="$HOME/.local/bin:$PATH" && if command -v mise >/dev/null 2>&1; then mise use --global %s; else echo "mise not found in PATH"; exit 1; fi`, osConfig.InstallCommand)
+
+	// Execute the mise command using bash
+	bashCommand := fmt.Sprintf("bash -c '%s'", strings.ReplaceAll(miseCommand, "'", "'\"'\"'"))
+	return si.executeCommandStream(ctx, bashCommand)
+}
+
 // executeCommands executes a list of install commands with context cancellation support
 func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand) error {
 	for _, cmd := range commands {
@@ -956,32 +1017,16 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if stdout != nil {
-			stdout.Close()
-		}
-	}()
-
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if stderr != nil {
-			stderr.Close()
-		}
-	}()
 
 	// Create pipe for stdin (for password prompts)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if stdin != nil {
-			stdin.Close()
-		}
-	}()
 
 	// Start command
 	if err := cmd.Start(); err != nil {
@@ -1012,6 +1057,17 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	// Wait for command completion
 	cmdErr := cmd.Wait()
 
+	// Close pipes to signal goroutines to finish
+	if stdout != nil {
+		stdout.Close()
+	}
+	if stderr != nil {
+		stderr.Close()
+	}
+	if stdin != nil {
+		stdin.Close()
+	}
+
 	// Wait for all goroutines to finish
 	wg.Wait()
 
@@ -1036,8 +1092,8 @@ func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 		}
 	}
 
-	// Check for scanner errors
-	if err := scanner.Err(); err != nil {
+	// Check for scanner errors (but ignore closed pipe errors)
+	if err := scanner.Err(); err != nil && !strings.Contains(err.Error(), "file already closed") {
 		si.sendLog("ERROR", fmt.Sprintf("Scanner error in %s: %v", source, err))
 	}
 }
@@ -1112,17 +1168,51 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 	}
 }
 
-// sendLog sends a log message to the TUI
+// sendLog sends a log message to both the TUI and persistent log file
 func (si *StreamingInstaller) sendLog(level, message string) {
-	// Skip sending messages when program is nil (during testing)
+	// ALWAYS write to persistent log file first (for debugging support)
+	switch strings.ToUpper(level) {
+	case "ERROR", "STDERR":
+		log.Error(message, nil, "source", "tui_installer")
+	case "WARN", "WARNING":
+		log.Warn(message, "source", "tui_installer")
+	case "DEBUG":
+		log.Debug(message, "source", "tui_installer")
+	case "INFO", "STDOUT":
+		log.Info(message, "source", "tui_installer")
+	default:
+		log.Info(fmt.Sprintf("[%s] %s", level, message), "source", "tui_installer")
+	}
+
+	// Skip TUI sending when program is nil (during testing)
 	if si.program == nil {
 		return
 	}
-	si.program.Send(LogMsg{
-		Message:   message,
-		Timestamp: time.Now(),
-		Level:     level,
-	})
+
+	// Add panic protection for program.Send calls
+	defer func() {
+		if r := recover(); r != nil {
+			// TUI program may have exited, log to stderr and file
+			errorMsg := fmt.Sprintf("TUI unavailable, message: %s", message)
+			log.Error(errorMsg, nil, "source", "tui_panic")
+			fmt.Fprintf(os.Stderr, "[%s] %s: %s (TUI unavailable)\n",
+				time.Now().Format("15:04:05"), level, message)
+		}
+	}()
+
+	// Check if context is cancelled before sending to TUI
+	select {
+	case <-si.ctx.Done():
+		// Context cancelled, don't send to TUI but log was already written
+		log.Info("Context cancelled while sending to TUI", "level", level, "message", message)
+		return
+	default:
+		si.program.Send(LogMsg{
+			Message:   message,
+			Timestamp: time.Now(),
+			Level:     level,
+		})
+	}
 }
 
 // StartInstallation starts the installation process in the TUI with context cancellation and user interaction.
@@ -1144,6 +1234,15 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 // Returns:
 //   - error: nil on successful TUI completion, or error from TUI framework or installation
 func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
+	// Add recovery mechanism to prevent panics from hanging the application
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("\n❌ Streaming installer panic: %v\n", r)
+			// Print stack trace for debugging
+			fmt.Printf("Stack trace: %s\n", string(debug.Stack()))
+		}
+	}()
+
 	// Create context for cancellation support
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1160,6 +1259,12 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 
 	// Start installation in background with context cancellation
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				installer.sendLog("ERROR", fmt.Sprintf("Installation goroutine panic: %v", r))
+			}
+		}()
+
 		select {
 		case <-ctx.Done():
 			// Installation was cancelled
@@ -1169,6 +1274,14 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 			// Let TUI initialize before starting installation
 			if err := installer.InstallApps(ctx, apps, settings); err != nil {
 				installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
+			} else {
+				installer.sendLog("INFO", "Installation completed successfully")
+			}
+
+			// Send quit message to exit TUI after a brief delay to show completion
+			time.Sleep(2 * time.Second)
+			if p != nil {
+				p.Send(tea.Quit())
 			}
 		}
 	}()

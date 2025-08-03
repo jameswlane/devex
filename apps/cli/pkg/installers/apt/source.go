@@ -21,7 +21,7 @@ func AddAptSource(keySource, keyName, sourceRepo, sourceName string, dearmor boo
 
 	// Download and optionally dearmor the GPG key
 	if keySource != "" {
-		if err := DownloadGPGKey(keySource, sourceName+".gpg", dearmor); err != nil {
+		if err := DownloadGPGKey(keySource, keyName, dearmor); err != nil {
 			log.Error("Failed to download GPG key", err, "keySource", keySource)
 			return fmt.Errorf("failed to download GPG key: %w", err)
 		}

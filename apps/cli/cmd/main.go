@@ -41,7 +41,7 @@ func main() {
 		"distribution", plat.Distribution,
 		"architecture", plat.Architecture)
 
-	// Check if platform is supported
+	// Check if a platform is supported
 	if !platform.IsSupportedPlatform() {
 		log.Fatal("Unsupported platform", fmt.Errorf("platform: %s", plat.OS))
 	}
@@ -67,7 +67,7 @@ func main() {
 
 	log.Info("Starting DevEx CLI")
 
-	// Initialize database with proper directory creation
+	// Initialize a database with proper directory creation
 	repo := initializeDatabase(homeDir)
 
 	// Load cross-platform configuration

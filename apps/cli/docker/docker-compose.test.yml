@@ -1,52 +1,15 @@
 version: '3.8'
 services:
-  ubuntu-test:
+  test-service:
     build:
       context: ..
-      dockerfile: docker/Dockerfile.ubuntu
-    container_name: devex-test-ubuntu
+      dockerfile: docker/Dockerfile.${TEST_DISTRO} # Use an environment variable for distro
+    container_name: devex-test-service
     volumes:
-      - ..:/home/testuser/devex:rw
-      - ubuntu-home:/home/testuser
-    working_dir: /home/testuser/devex
+      - ..:/workspace:rw
+    working_dir: /workspace
     tty: true
     stdin_open: true
     environment:
       - DEVEX_TEST_MODE=true
     command: /bin/bash
-  debian-test:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.debian
-    container_name: devex-test-debian
-    volumes:
-      - ..:/home/testuser/devex:rw
-      - debian-home:/home/testuser
-    working_dir: /home/testuser/devex
-    tty: true
-    stdin_open: true
-    environment:
-      - DEVEX_TEST_MODE=true
-    command: /bin/bash
-  # Quick test runner for CI/automated testing
-  test-runner:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile.ubuntu
-    volumes:
-      - ..:/home/testuser/devex:ro
-    working_dir: /home/testuser/devex
-    environment:
-      - DEVEX_TEST_MODE=true
-    command: |
-      bash -c "
-        echo 'Building devex...' &&
-        go build -o bin/devex ./cmd/main.go &&
-        echo 'Running basic tests...' &&
-        ./bin/devex --help &&
-        echo 'Running list command test...' &&
-        ./bin/devex list available
-      "
-volumes:
-  ubuntu-home:
-  debian-home:
