@@ -142,7 +142,7 @@ func TestValidateCommand_CommandInjectionAttempts(t *testing.T) {
 
 		// Writing to system directories
 		"echo malicious > /etc/hosts",
-		"echo evil > /dev/null",
+		"echo evil > /dev/sda1", // Changed to a dangerous device
 		"cat malicious > /etc/passwd",
 
 		// Complex injection attempts

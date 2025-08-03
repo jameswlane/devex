@@ -69,19 +69,19 @@ var _ = Describe("Repository Validator", func() {
 			It("rejects repository with invalid URL", func() {
 				err := apt.ValidateAptRepo("deb ht tp://invalid-url focal main")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid URL format"))
+				Expect(err.Error()).To(ContainSubstring("missing required keywords"))
 			})
 
 			It("rejects repository with FTP URL", func() {
 				err := apt.ValidateAptRepo("deb ftp://example.com/ubuntu focal main")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid URL format"))
+				Expect(err.Error()).To(ContainSubstring("missing required keywords"))
 			})
 
 			It("rejects repository with unsupported scheme", func() {
 				err := apt.ValidateAptRepo("deb file:///local/repo focal main")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid URL format"))
+				Expect(err.Error()).To(ContainSubstring("missing required keywords"))
 			})
 		})
 

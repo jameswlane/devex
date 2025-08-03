@@ -263,20 +263,34 @@ var (
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
 	dangerousPatterns = []*regexp.Regexp{
-		regexp.MustCompile(`;\s*rm\s+-rf\s+/`),                 // Dangerous rm -rf / after semicolon
-		regexp.MustCompile(`;\s*sudo\s+rm\s+-rf`),              // Dangerous sudo rm -rf after semicolon
-		regexp.MustCompile(`\|\s*sh\s*<`),                      // Piping to shell with input redirection
-		regexp.MustCompile(`\|\s*bash\s*<`),                    // Piping to bash with input redirection
-		regexp.MustCompile(`\$\([^)]*rm\s+-rf[^)]*\)`),         // Command substitution with dangerous rm
-		regexp.MustCompile(`\$\{[^}]*\.\./[^}]*\}`),            // Variable expansion with directory traversal
-		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),              // Multiple directory traversal attempts
-		regexp.MustCompile(`/etc/passwd`),                      // Sensitive files
-		regexp.MustCompile(`/etc/shadow`),                      // Sensitive files
-		regexp.MustCompile(`rm\s+-rf\s+/[^a-zA-Z0-9]`),         // Dangerous rm commands on root (but allow /home, /tmp)
-		regexp.MustCompile(`dd\s+if=/dev.*of=/`),               // Dangerous dd commands writing to files
-		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),              // Fork bombs
-		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`), // Writing to critical system files
-		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),     // Writing to block devices (not /dev/null)
+		regexp.MustCompile(`[;&|]{1,2}\s*rm\s+-rf\s+/`),               // Dangerous rm -rf / after command separators
+		regexp.MustCompile(`[;&|]{1,2}\s*sudo\s+rm\s+-rf`),            // Dangerous sudo rm -rf after command separators
+		regexp.MustCompile(`[;&|]{1,2}\s*rm\s+-rf\s+/(home|var|usr)`), // Dangerous rm -rf on system directories
+		regexp.MustCompile(`\|\s*sh\s*<?`),                            // Piping to shell
+		regexp.MustCompile(`\|\s*bash\s*<?`),                          // Piping to bash
+		regexp.MustCompile(`[;&|]{1,2}\s*curl\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
+		regexp.MustCompile(`[;&|]{1,2}\s*wget\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
+		regexp.MustCompile(`\$\([^)]*\)`),                             // Command substitution
+		regexp.MustCompile(`\$\{[^}]*\}`),                             // Variable expansion
+		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),                     // Multiple directory traversal attempts
+		regexp.MustCompile(`\.\./`),                                   // Directory traversal patterns
+		regexp.MustCompile(`/etc/passwd`),                             // Sensitive files
+		regexp.MustCompile(`/etc/shadow`),                             // Sensitive files
+		regexp.MustCompile(`rm\s+-rf\s+/(\w+|$)`),                     // Dangerous rm commands on system dirs and root
+		regexp.MustCompile(`dd\s+if=/dev.*of=/`),                      // Dangerous dd commands writing to files
+		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                     // Fork bombs
+		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),        // Writing to critical system files
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),            // Writing to block devices (not /dev/null)
+		regexp.MustCompile(`\s+&\s+\w+`),                              // Background processes with additional commands
+		regexp.MustCompile(`\s+\|\s+\w+`),                             // Pipes to other commands
+		regexp.MustCompile(`\s+\|\|\s+\w+`),                           // OR operator with additional commands
+		regexp.MustCompile("`[^`]*`"),                                 // Backtick command substitution
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),          // Writing to specific dangerous device files
+		regexp.MustCompile(`;\s*\w+.*&&.*chmod`),                      // Multi-command with chmod
+		regexp.MustCompile(`&&.*python.*-c`),                          // Python code execution
+		regexp.MustCompile(`\b(sh|bash)\s+-c\b`),                      // Direct shell code execution
+		regexp.MustCompile(`[;&|]+\s*$`),                              // Commands ending with operators
+		regexp.MustCompile(`>\s*/etc/`),                               // Writing to /etc directory
 	}
 )
 
