@@ -41,8 +41,12 @@ var _ = Describe("GPG Processor Functions", func() {
 				tempFile := "/tmp/test-key.asc"
 				destination := "/tmp/test-key.gpg"
 
-				// Create a valid temp file
-				keyContent := "-----BEGIN PGP PUBLIC KEY BLOCK-----\ntest key content\n-----END PGP PUBLIC KEY BLOCK-----"
+				// Create a valid temp file with realistic GPG key content
+				keyContent := `-----BEGIN PGP PUBLIC KEY BLOCK-----
+mQINBGIvU2sBEAC0YWnm/eLkdOMiuKBi5j2g2k+U+a5KaP3t7qmwrFYZ8mIj9k2y
+Test GPG key content for testing purposes - this needs to be at least 100 bytes long
+to pass the file size validation that checks for reasonable GPG key file sizes.
+-----END PGP PUBLIC KEY BLOCK-----`
 				err := fs.WriteFile(tempFile, []byte(keyContent), 0644)
 				Expect(err).NotTo(HaveOccurred())
 
@@ -115,8 +119,12 @@ var _ = Describe("GPG Processor Functions", func() {
 				tempFile := "/tmp/test-key.asc"
 				destination := "/tmp/test-key.gpg"
 
-				// Create a valid temp file
-				keyContent := "-----BEGIN PGP PUBLIC KEY BLOCK-----\ntest key content\n-----END PGP PUBLIC KEY BLOCK-----"
+				// Create a valid temp file with realistic GPG key content
+				keyContent := `-----BEGIN PGP PUBLIC KEY BLOCK-----
+mQINBGIvU2sBEAC0YWnm/eLkdOMiuKBi5j2g2k+U+a5KaP3t7qmwrFYZ8mIj9k2y
+Test GPG key content for testing purposes - this needs to be at least 100 bytes long
+to pass the file size validation that checks for reasonable GPG key file sizes.
+-----END PGP PUBLIC KEY BLOCK-----`
 				err := fs.WriteFile(tempFile, []byte(keyContent), 0644)
 				Expect(err).NotTo(HaveOccurred())
 
