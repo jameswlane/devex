@@ -66,7 +66,7 @@ func attemptDockerDaemonStartup() error {
 		return fmt.Errorf("unable to start Docker daemon in container")
 	}
 
-	log.Info("Attempted to start Docker daemon in container")
+	log.Debug("Attempted to start Docker daemon in container")
 
 	// Give Docker time to start and verify it's accessible
 	if _, err := utils.CommandExec.RunShellCommand("sleep 5"); err == nil {
@@ -80,7 +80,7 @@ func attemptDockerDaemonStartup() error {
 }
 
 func (d *DockerInstaller) Install(command string, repo types.Repository) error {
-	log.Info("Docker Installer: Starting installation", "command", command)
+	log.Debug("Docker Installer: Starting installation", "command", command)
 
 	// Check if Docker is available and running
 	if err := validateDockerService(); err != nil {
@@ -121,7 +121,7 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to execute Docker command: %w", err)
 	}
 
-	log.Info("Docker command executed successfully", "command", command)
+	log.Debug("Docker command executed successfully", "command", command)
 
 	// Add the container to the repository
 	if err := repo.AddApp(containerName); err != nil {
@@ -129,7 +129,7 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to add Docker container to repository: %w", err)
 	}
 
-	log.Info("Docker container added to repository successfully", "containerName", containerName)
+	log.Debug("Docker container added to repository successfully", "containerName", containerName)
 	return nil
 }
 
@@ -152,7 +152,7 @@ func validateDockerService() error {
 
 	// Try regular docker access first (user in docker group)
 	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Info("Docker daemon is accessible via user permissions")
+		log.Debug("Docker daemon is accessible via user permissions")
 		return nil
 	}
 
@@ -177,7 +177,7 @@ func validateDockerService() error {
 func executeDockerCommand(command string) error {
 	// First try without sudo
 	if _, err := utils.CommandExec.RunShellCommand(command); err == nil {
-		log.Info("Docker command executed with user permissions")
+		log.Debug("Docker command executed with user permissions")
 		return nil
 	}
 
@@ -187,6 +187,6 @@ func executeDockerCommand(command string) error {
 		return fmt.Errorf("docker command failed even with sudo: %w", err)
 	}
 
-	log.Info("Docker command executed with sudo (user may need to refresh docker group membership)")
+	log.Debug("Docker command executed with sudo (user may need to refresh docker group membership)")
 	return nil
 }
