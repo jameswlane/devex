@@ -1,3 +1,18 @@
+## [0.16.3](https://github.com/jameswlane/devex/compare/0.16.2...0.16.3) (2025-08-03)
+
+### Bug Fixes
+
+* add fallback to direct installer to bypass TUI panic ([bb5eeca](https://github.com/jameswlane/devex/commit/bb5eeca0b1650b42e628bef55f905268dfc17d46))
+* add git input handling and panic recovery for streaming installer ([1b79b1f](https://github.com/jameswlane/devex/commit/1b79b1f3ed407fed5fd7e22ff9cb982f2ed10d29))
+* correct GPG key download path in APT source installer ([7392e51](https://github.com/jameswlane/devex/commit/7392e518a5e8209a8405d7c160dc225fc7136779))
+* correct log inspection path in Docker test script ([9a6db76](https://github.com/jameswlane/devex/commit/9a6db769644d37e254aa3f30bd45753d55306448))
+* docs missing DocsLayout component ([c10307b](https://github.com/jameswlane/devex/commit/c10307bfc6a3a7a38978fc67f2ff3b29a44db9b5))
+* docs missing DocsLayout component ([3dcaaca](https://github.com/jameswlane/devex/commit/3dcaaca4cd596a2dc471bb47836af615ef5252eb))
+* fix test ([eba0d02](https://github.com/jameswlane/devex/commit/eba0d02e76eeddbae550016e8712cf2b0b6792b1))
+* improve Docker installation and user detection in containers ([93d7d6a](https://github.com/jameswlane/devex/commit/93d7d6acdf799705227e80239523fd12b9a3cbc1))
+* resolve multiple TUI installer issues and panics ([eb07a0b](https://github.com/jameswlane/devex/commit/eb07a0b7bedbfda5f66ca8480cff99e3e67f30e8))
+* resolve streaming installer panic and git input issues ([8edaaa6](https://github.com/jameswlane/devex/commit/8edaaa6e840657733ee2ac0447e241a79f5b585a))
+
 ## [0.16.2](https://github.com/jameswlane/devex/compare/0.16.1...0.16.2) (2025-08-02)
 
 ### Bug Fixes
