@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/pkg/tui"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -17,7 +19,6 @@ import (
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
-	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -45,7 +46,7 @@ The setup process includes:
 
   # Run setup with verbose output
   devex setup --verbose
-  
+
   # Run non-interactive setup with defaults
   devex setup --non-interactive`,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -75,6 +76,8 @@ type SetupModel struct {
 	selectedApps     map[int]bool
 	gitFullName      string
 	gitEmail         string
+	gitInputField    int  // 0 = full name, 1 = email
+	gitInputActive   bool // true when editing a field
 	cursor           int
 	installing       bool
 	installStatus    string
@@ -201,6 +204,11 @@ func (m *SetupModel) Init() tea.Cmd {
 func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Special handling for git configuration text input
+		if m.step == StepGitConfig && m.gitInputActive {
+			return m.handleGitInput(msg)
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -398,10 +406,34 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Enter your git configuration details:")
 		s += "\n\n"
 
-		s += fmt.Sprintf("Full Name: %s\n", m.gitFullName)
-		s += fmt.Sprintf("Email: %s\n", m.gitEmail)
+		// Full Name field
+		cursor := " "
+		if m.cursor == 0 {
+			cursor = cursorStyle.Render(">")
+		}
+		nameValue := m.gitFullName
+		if m.gitInputActive && m.gitInputField == 0 {
+			nameValue += "_" // Show cursor
+		}
+		s += fmt.Sprintf("%s Full Name: %s\n", cursor, nameValue)
+
+		// Email field
+		cursor = " "
+		if m.cursor == 1 {
+			cursor = cursorStyle.Render(">")
+		}
+		emailValue := m.gitEmail
+		if m.gitInputActive && m.gitInputField == 1 {
+			emailValue += "_" // Show cursor
+		}
+		s += fmt.Sprintf("%s Email: %s\n", cursor, emailValue)
+
 		s += "\n\n"
-		s += "Type your information and press Enter to continue"
+		if m.gitInputActive {
+			s += "Type your information and press Enter to confirm, Escape to cancel editing"
+		} else {
+			s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue when both fields are filled"
+		}
 
 	case StepConfirmation:
 		s = titleStyle.Render("✅ Confirm Installation")
@@ -514,14 +546,62 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepWelcome:
 		return m.nextStep()
-	case StepDesktopApps, StepLanguages, StepDatabases, StepShell, StepGitConfig:
+	case StepDesktopApps, StepLanguages, StepDatabases, StepShell:
 		return m.nextStep()
+	case StepGitConfig:
+		if !m.gitInputActive {
+			// Start editing the selected field
+			m.gitInputActive = true
+			m.gitInputField = m.cursor
+		}
+		return m, nil
 	case StepConfirmation:
 		m.step = StepInstalling
 		m.installing = true
 		return m, m.startInstallation()
+	case StepInstalling:
+		// During installation, Enter key should not do anything
+		return m, nil
+	case StepComplete:
+		// Installation complete, Enter key exits
+		return m, tea.Quit
 	default:
-		panic("unhandled default case")
+		// Log unhandled case instead of panicking
+		return m, nil
+	}
+}
+
+// handleGitInput handles text input for git configuration fields
+func (m *SetupModel) handleGitInput(msg tea.KeyMsg) (*SetupModel, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		// Finish editing current field
+		m.gitInputActive = false
+		return m, nil
+	case "escape":
+		// Cancel editing
+		m.gitInputActive = false
+		return m, nil
+	case "backspace":
+		// Remove last character
+		if m.gitInputField == 0 && len(m.gitFullName) > 0 {
+			m.gitFullName = m.gitFullName[:len(m.gitFullName)-1]
+		} else if m.gitInputField == 1 && len(m.gitEmail) > 0 {
+			m.gitEmail = m.gitEmail[:len(m.gitEmail)-1]
+		}
+		return m, nil
+	default:
+		// Add character to current field
+		if len(msg.Runes) > 0 {
+			char := msg.Runes[0]
+			switch m.gitInputField {
+			case 0:
+				m.gitFullName += string(char)
+			case 1:
+				m.gitEmail += string(char)
+			}
+		}
+		return m, nil
 	}
 }
 
@@ -536,6 +616,8 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 		maxItems = len(m.databases)
 	case StepShell:
 		maxItems = len(m.shells)
+	case StepGitConfig:
+		maxItems = 2 // Full name and email
 	default:
 		return m, nil // No navigation needed for other steps
 	}
@@ -586,11 +668,21 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	case StepShell:
 		m.step = StepGitConfig
 	case StepGitConfig:
-		m.step = StepConfirmation
+		// Only proceed if both fields are filled
+		if strings.TrimSpace(m.gitFullName) != "" && strings.TrimSpace(m.gitEmail) != "" {
+			m.step = StepConfirmation
+		}
+		// If fields are empty, stay on git config step
 	case StepConfirmation:
 		m.step = StepInstalling
+	case StepInstalling:
+		m.step = StepComplete
+	case StepComplete:
+		// Already at final step, no next step
+		return m, nil
 	default:
-		panic("unhandled default case")
+		// Unknown step, stay at current step
+		return m, nil
 	}
 	return m, nil
 }
@@ -618,8 +710,15 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 		}
 	case StepConfirmation:
 		m.step = StepGitConfig
+	case StepInstalling:
+		// During installation, don't allow going back
+		return m, nil
+	case StepComplete:
+		// After completion, don't allow going back
+		return m, nil
 	default:
-		panic("unhandled default case")
+		// Unknown step, stay at current step
+		return m, nil
 	}
 	return m, nil
 }
@@ -678,6 +777,9 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 				// Ensure any panics in the goroutine are recovered
 				if r := recover(); r != nil {
 					log.Error("Panic in installation goroutine", fmt.Errorf("panic: %v", r))
+					fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
+					fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
+					fmt.Printf("Error: %v\n", r)
 				}
 			}()
 
@@ -686,17 +788,35 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 			log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
 
-			// Use the new streaming installer TUI for actual installation
+			// Add debug logging for each app being installed
+			for i, app := range apps {
+				log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+			}
+
+			fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
+
+			// Start streaming installation with enhanced panic protection
+			log.Info("Starting streaming installer with enhanced panic protection")
+
 			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
 				log.Error("Streaming installer failed", err)
-				m.addError("Streaming installer", err.Error())
-				// Return gracefully instead of calling os.Exit
-				return
+				fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
+
+				// Fallback to direct installer if TUI fails
+				log.Info("Falling back to direct installer")
+				fmt.Printf("Attempting direct installation as fallback...\n")
+
+				if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
+					log.Error("Direct installer also failed", err)
+					fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
+					fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
+					return
+				}
 			}
 
 			// Installation completed successfully
 			log.Info("Installation completed successfully")
-			// Let the main program handle termination gracefully
+			fmt.Printf("\n✅ Installation completed successfully!\n")
 		}()
 
 		return tea.Quit // Exit the guided setup TUI
@@ -757,12 +877,6 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 }
 
 // Error tracking and validation methods
-func (m *SetupModel) addError(component, message string) {
-	errorMsg := fmt.Sprintf("%s: %s", component, message)
-	m.installErrors = append(m.installErrors, errorMsg)
-	m.hasErrors = true
-	log.Error("Installation error", fmt.Errorf("%s", errorMsg), "component", component, "message", message)
-}
 
 // buildAppList converts user selections into a structured installation plan
 func (m *SetupModel) buildAppList() []types.CrossPlatformApp {

@@ -3,7 +3,6 @@ package fs
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -97,16 +96,6 @@ func ReadDir(dirname string) ([]os.FileInfo, error) {
 	return afero.ReadDir(AppFs, dirname)
 }
 
-func IsDir(path string) (bool, error) {
-	ensureInitialized()
-	return afero.IsDir(AppFs, path)
-}
-
-func IsEmpty(path string) (bool, error) {
-	ensureInitialized()
-	return afero.IsEmpty(AppFs, path)
-}
-
 func Exists(path string) (bool, error) {
 	ensureInitialized()
 	return AppAfero.Exists(path)
@@ -123,11 +112,6 @@ func Open(name string) (afero.File, error) {
 	return AppFs.Open(name)
 }
 
-func OpenFile(name string, flag int, perm os.FileMode) (afero.File, error) {
-	ensureInitialized()
-	return AppFs.OpenFile(name, flag, perm)
-}
-
 func WriteFile(filename string, data []byte, perm os.FileMode) error {
 	ensureInitialized()
 	return AppAfero.WriteFile(filename, data, perm)
@@ -136,27 +120,6 @@ func WriteFile(filename string, data []byte, perm os.FileMode) error {
 func ReadFile(filename string) ([]byte, error) {
 	ensureInitialized()
 	return AppAfero.ReadFile(filename)
-}
-
-func FileContainsBytes(filename string, subslice []byte) (bool, error) {
-	ensureInitialized()
-	return afero.FileContainsBytes(AppFs, filename, subslice)
-}
-
-func WriteReader(path string, r io.Reader) error {
-	ensureInitialized()
-	return afero.WriteReader(AppFs, path, r)
-}
-
-func SafeWriteReader(path string, r io.Reader) error {
-	ensureInitialized()
-	return afero.SafeWriteReader(AppFs, path, r)
-}
-
-// Temporary Files and Directories
-func TempDir(dir, prefix string) (string, error) {
-	ensureInitialized()
-	return afero.TempDir(AppFs, dir, prefix)
 }
 
 func TempFile(dir, prefix string) (afero.File, error) {
@@ -210,11 +173,6 @@ func ReadFileIfExists(path string) ([]byte, error) {
 		return nil, nil
 	}
 	return ReadFile(path)
-}
-
-func WriteStringToFile(path, content string, perm os.FileMode) error {
-	ensureInitialized()
-	return AppAfero.WriteFile(path, []byte(content), perm)
 }
 
 // MockFsWithErrors is a mock filesystem that can simulate errors for testing.
