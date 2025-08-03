@@ -1,0 +1,26 @@
+package curlpipe
+
+import (
+	"testing"
+
+	"github.com/jameswlane/devex/pkg/utils"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
+
+func TestCurlPipe(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "CurlPipe Installer Suite")
+}
+
+var originalExec utils.Interface
+
+var _ = BeforeSuite(func() {
+	// Store the original command executor
+	originalExec = utils.CommandExec
+})
+
+var _ = AfterSuite(func() {
+	// Restore the original command executor
+	utils.CommandExec = originalExec
+})
