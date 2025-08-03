@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/pkg/tui"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -44,7 +46,7 @@ The setup process includes:
 
   # Run setup with verbose output
   devex setup --verbose
-  
+
   # Run non-interactive setup with defaults
   devex setup --non-interactive`,
 		Run: func(cmd *cobra.Command, args []string) {
@@ -557,8 +559,15 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		m.step = StepInstalling
 		m.installing = true
 		return m, m.startInstallation()
+	case StepInstalling:
+		// During installation, Enter key should not do anything
+		return m, nil
+	case StepComplete:
+		// Installation complete, Enter key exits
+		return m, tea.Quit
 	default:
-		panic("unhandled default case")
+		// Log unhandled case instead of panicking
+		return m, nil
 	}
 }
 
@@ -666,8 +675,14 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		// If fields are empty, stay on git config step
 	case StepConfirmation:
 		m.step = StepInstalling
+	case StepInstalling:
+		m.step = StepComplete
+	case StepComplete:
+		// Already at final step, no next step
+		return m, nil
 	default:
-		panic("unhandled default case")
+		// Unknown step, stay at current step
+		return m, nil
 	}
 	return m, nil
 }
@@ -695,8 +710,15 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 		}
 	case StepConfirmation:
 		m.step = StepGitConfig
+	case StepInstalling:
+		// During installation, don't allow going back
+		return m, nil
+	case StepComplete:
+		// After completion, don't allow going back
+		return m, nil
 	default:
-		panic("unhandled default case")
+		// Unknown step, stay at current step
+		return m, nil
 	}
 	return m, nil
 }
@@ -773,24 +795,24 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 			fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
 
-			// Try simpler installation first to isolate the issue
-			log.Info("Attempting fallback to direct installer to avoid TUI panic")
+			// Start streaming installation with enhanced panic protection
+			log.Info("Starting streaming installer with enhanced panic protection")
 
-			// Use direct installer instead of TUI to avoid panic issues temporarily
-			if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
-				log.Error("Direct installer failed", err)
-				fmt.Printf("\n❌ Installation failed: %v\n", err)
-				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
-				return
+			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
+				log.Error("Streaming installer failed", err)
+				fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
+
+				// Fallback to direct installer if TUI fails
+				log.Info("Falling back to direct installer")
+				fmt.Printf("Attempting direct installation as fallback...\n")
+
+				if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
+					log.Error("Direct installer also failed", err)
+					fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
+					fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
+					return
+				}
 			}
-
-			// TODO: Re-enable streaming installer once panic issue is resolved
-			// if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
-			//	log.Error("Streaming installer failed", err)
-			//	fmt.Printf("\n❌ Installation failed: %v\n", err)
-			//	fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
-			//	return
-			// }
 
 			// Installation completed successfully
 			log.Info("Installation completed successfully")
