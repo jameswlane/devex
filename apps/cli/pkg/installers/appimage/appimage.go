@@ -25,7 +25,7 @@ func New() *AppImageInstaller {
 }
 
 func (a *AppImageInstaller) Install(command string, repo types.Repository) error {
-	log.Info("AppImage Installer: Starting installation", "command", command)
+	log.Debug("AppImage Installer: Starting installation", "command", command)
 
 	// Parse command to extract download URL and binary name
 	downloadURL, binaryName := parseAppImageCommand(command)
@@ -58,7 +58,7 @@ func (a *AppImageInstaller) Install(command string, repo types.Repository) error
 		return fmt.Errorf("failed to install AppImage: %w", err)
 	}
 
-	log.Info("AppImage installed successfully", "binaryName", binaryName)
+	log.Debug("AppImage installed successfully", "binaryName", binaryName)
 
 	// Add the binary to the repository
 	if err := repo.AddApp(binaryName); err != nil {
@@ -66,7 +66,7 @@ func (a *AppImageInstaller) Install(command string, repo types.Repository) error
 		return fmt.Errorf("failed to add AppImage to repository: %w", err)
 	}
 
-	log.Info("AppImage added to repository", "binaryName", binaryName)
+	log.Debug("AppImage added to repository", "binaryName", binaryName)
 	return nil
 }
 
@@ -82,22 +82,22 @@ func installAppImage(downloadURL, binaryName string) error {
 	tarballPath := fmt.Sprintf("/tmp/%s.tar.gz", binaryName)
 	binaryPath := fmt.Sprintf("/usr/local/bin/%s", binaryName)
 
-	log.Info("Downloading AppImage", "url", downloadURL, "destination", tarballPath)
+	log.Debug("Downloading AppImage", "url", downloadURL, "destination", tarballPath)
 	if err := utils.DownloadFile(downloadURL, tarballPath); err != nil {
 		return fmt.Errorf("failed to download AppImage: %w", err)
 	}
 
-	log.Info("Extracting AppImage tarball", "tarballPath", tarballPath)
+	log.Debug("Extracting AppImage tarball", "tarballPath", tarballPath)
 	if err := extractTarball(tarballPath, "/tmp"); err != nil {
 		return fmt.Errorf("failed to extract AppImage: %w", err)
 	}
 
-	log.Info("Moving AppImage binary to final location", "binaryPath", binaryPath)
+	log.Debug("Moving AppImage binary to final location", "binaryPath", binaryPath)
 	if err := fs.Rename(filepath.Join("/tmp", binaryName), binaryPath); err != nil {
 		return fmt.Errorf("failed to move AppImage binary: %w", err)
 	}
 
-	log.Info("Setting executable permissions on binary", "binaryPath", binaryPath)
+	log.Debug("Setting executable permissions on binary", "binaryPath", binaryPath)
 	if err := fs.Chmod(binaryPath, 0o755); err != nil {
 		return fmt.Errorf("failed to set permissions on AppImage binary: %w", err)
 	}
@@ -106,7 +106,7 @@ func installAppImage(downloadURL, binaryName string) error {
 }
 
 func extractTarball(tarballPath, destDir string) error {
-	log.Info("Extracting tarball", "tarballPath", tarballPath, "destDir", destDir)
+	log.Debug("Extracting tarball", "tarballPath", tarballPath, "destDir", destDir)
 
 	file, err := fs.Open(tarballPath)
 	if err != nil {
@@ -151,7 +151,7 @@ func extractTarball(tarballPath, destDir string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			log.Info("Creating directory from tarball", "target", target)
+			log.Debug("Creating directory from tarball", "target", target)
 			if err := fs.MkdirAll(target, 0o755); err != nil {
 				log.Error("Failed to create directory from tarball", err, "target", target)
 				return fmt.Errorf("failed to create directory: %w", err)
