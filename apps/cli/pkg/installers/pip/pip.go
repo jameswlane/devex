@@ -16,7 +16,7 @@ func New() *PIPInstaller {
 }
 
 func (p *PIPInstaller) Install(command string, repo types.Repository) error {
-	log.Info("PIP Installer: Starting installation", "package", command)
+	log.Debug("PIP Installer: Starting installation", "package", command)
 
 	// Wrap the command into a types.AppConfig object
 	appConfig := types.AppConfig{
@@ -46,7 +46,7 @@ func (p *PIPInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to install package via pip '%s': %w", command, err)
 	}
 
-	log.Info("Pip package installed successfully", "package", command)
+	log.Debug("Pip package installed successfully", "package", command)
 
 	// Add the package to the repository
 	if err := repo.AddApp(command); err != nil {
@@ -54,6 +54,6 @@ func (p *PIPInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to add pip package '%s' to repository: %w", command, err)
 	}
 
-	log.Info("Pip package added to repository successfully", "package", command)
+	log.Debug("Pip package added to repository successfully", "package", command)
 	return nil
 }

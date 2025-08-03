@@ -21,7 +21,7 @@ func New() *MiseInstaller {
 }
 
 func (m *MiseInstaller) Install(command string, repo types.Repository) error {
-	log.Info("Mise Installer: Starting installation", "language", command)
+	log.Debug("Mise Installer: Starting installation", "language", command)
 
 	// Validate command to prevent injection attacks
 	if !validMiseCommand.MatchString(command) {
@@ -64,7 +64,7 @@ func (m *MiseInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to install language via Mise '%s': %w", command, err)
 	}
 
-	log.Info("Language installed successfully via Mise", "language", command)
+	log.Debug("Language installed successfully via Mise", "language", command)
 
 	// Add the language to the repository
 	if err := repo.AddApp(command); err != nil {
@@ -72,6 +72,6 @@ func (m *MiseInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to add language '%s' to repository: %w", command, err)
 	}
 
-	log.Info("Language added to repository successfully", "language", command)
+	log.Debug("Language added to repository successfully", "language", command)
 	return nil
 }

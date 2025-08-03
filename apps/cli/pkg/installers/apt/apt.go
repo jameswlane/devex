@@ -50,7 +50,7 @@ func New() *APTInstaller {
 }
 
 func (a *APTInstaller) Install(command string, repo types.Repository) error {
-	log.Info("APT Installer: Starting installation", "command", command)
+	log.Debug("APT Installer: Starting installation", "command", command)
 
 	// Validate apt availability
 	if err := validateAptSystem(); err != nil {
@@ -96,7 +96,7 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to install package via apt: %w", err)
 	}
 
-	log.Info("APT package installed successfully", "command", command)
+	log.Debug("APT package installed successfully", "command", command)
 
 	// Verify installation succeeded
 	if isInstalled, err := utilities.IsAppInstalled(appConfig); err != nil {
@@ -125,16 +125,16 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("failed to add package to repository: %w", err)
 	}
 
-	log.Info("Package added to repository successfully", "command", command)
+	log.Debug("Package added to repository successfully", "command", command)
 	return nil
 }
 
 func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
-	log.Info("Starting APT update", "forceUpdate", forceUpdate)
+	log.Debug("Starting APT update", "forceUpdate", forceUpdate)
 
 	// Check if update is required
 	if !forceUpdate && time.Since(lastAptUpdateTime) < 24*time.Hour {
-		log.Info("APT update skipped (cached)")
+		log.Debug("APT update skipped (cached)")
 		return nil
 	}
 
@@ -151,7 +151,7 @@ func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
 		log.Warn("Failed to store last update time in repository", err)
 	}
 
-	log.Info("APT update completed successfully")
+	log.Debug("APT update completed successfully")
 	return nil
 }
 
@@ -179,7 +179,7 @@ func validateAptSystem() error {
 func ensurePackageListsUpdated(repo types.Repository) error {
 	// Check if we need to update (more than 6 hours old)
 	if time.Since(lastAptUpdateTime) > 6*time.Hour {
-		log.Info("Package lists are stale, updating")
+		log.Debug("Package lists are stale, updating")
 		return RunAptUpdate(false, repo)
 	}
 	return nil
@@ -204,7 +204,7 @@ func validatePackageAvailability(packageName string) error {
 		return fmt.Errorf("no installable candidate found for package '%s'", packageName)
 	}
 
-	log.Info("Package availability validated", "package", packageName)
+	log.Debug("Package availability validated", "package", packageName)
 	return nil
 }
 
@@ -221,7 +221,7 @@ func performPostInstallationSetup(packageName string) error {
 
 // setupDockerService configures Docker service and user permissions
 func setupDockerService() error {
-	log.Info("Configuring Docker service and permissions")
+	log.Debug("Configuring Docker service and permissions")
 
 	// Enable Docker service to start on boot
 	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable docker"); err != nil {

@@ -16,7 +16,7 @@ func New() *CurlPipeInstaller {
 }
 
 func (c *CurlPipeInstaller) Install(command string, repo types.Repository) error {
-	log.Info("CurlPipe Installer: Starting installation", "command", command)
+	log.Debug("CurlPipe Installer: Starting installation", "command", command)
 
 	// Execute the curl | sh command
 	_, err := utils.CommandExec.RunShellCommand(command)
@@ -25,7 +25,7 @@ func (c *CurlPipeInstaller) Install(command string, repo types.Repository) error
 		return fmt.Errorf("failed to execute curl command '%s': %w", command, err)
 	}
 
-	log.Info("Curl command executed successfully", "command", command)
+	log.Debug("Curl command executed successfully", "command", command)
 
 	// Extract app name from the command
 	appName := extractNameFromCurlCommand(command)
@@ -40,7 +40,7 @@ func (c *CurlPipeInstaller) Install(command string, repo types.Repository) error
 		return fmt.Errorf("failed to add app '%s' to repository: %w", appName, err)
 	}
 
-	log.Info("App added to repository successfully", "appName", appName)
+	log.Debug("App added to repository successfully", "appName", appName)
 	return nil
 }
 
