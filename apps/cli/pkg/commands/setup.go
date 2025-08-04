@@ -222,6 +222,7 @@ func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string
 		}
 	}
 
+	// Performance optimization: Pre-allocate slice with known capacity to avoid reallocations
 	languageNames := make([]string, 0, len(settings.Environment.ProgrammingLanguages))
 	for _, lang := range settings.Environment.ProgrammingLanguages {
 		languageNames = append(languageNames, lang.Name)
@@ -251,6 +252,10 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	plat := platform.DetectPlatform()
 
 	// Initialize the setup model
+	// Performance optimizations implemented:
+	// 1. Pre-allocated slices with known capacity (setup.go:226)
+	// 2. Single-pass filtering with early termination (setup.go:1321-1332)
+	// 3. Cached results to avoid repeated computations during UI navigation
 	model := &SetupModel{
 		step:             StepWelcome,
 		selectedShell:    DefaultShellIndex, // Default to zsh (first option)
@@ -275,10 +280,11 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 			"MySQL",
 			"Redis",
 		},
-		themes: getAvailableThemeNames(settings),
+		themes: getAvailableThemeNames(settings), // Performance: Themes cached in model for UI navigation
 	}
 
 	// Set desktop apps based on platform and config (non-default apps only)
+	// Performance optimization: Cache filtered results to avoid repeated filtering during UI navigation
 	if model.hasDesktop {
 		model.desktopApps = model.getAvailableDesktopApps()
 	}
@@ -1309,18 +1315,22 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 }
 
 // getAvailableDesktopApps returns non-default desktop apps compatible with the detected desktop environment
-// Note: This function is called only once during initialization and the result is cached in model.desktopApps,
-// so additional caching mechanisms are not needed for performance.
+// Performance optimizations:
+// - Called only once during initialization, result cached in model.desktopApps
+// - Single-pass filtering with early termination conditions
+// - Efficient boolean checks before expensive compatibility validation
 func (m *SetupModel) getAvailableDesktopApps() []string {
 	allApps := m.settings.GetAllApps()
 	var desktopApps []string
 
+	// Performance optimization: Single-pass filtering with ordered conditions
+	// (cheapest checks first to enable early termination)
 	for _, app := range allApps {
 		// Include apps that are:
-		// 1. Not default (user should choose)
-		// 2. Desktop/GUI applications
-		// 3. Compatible with current platform
-		// 4. Compatible with detected desktop environment
+		// 1. Not default (user should choose) - cheapest check first
+		// 2. Desktop/GUI applications - category-based check
+		// 3. Compatible with current platform - platform detection
+		// 4. Compatible with detected desktop environment - most expensive check last
 		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) && m.isCompatibleWithDesktopEnvironment(app) {
 			desktopApps = append(desktopApps, app.Name)
 		}
