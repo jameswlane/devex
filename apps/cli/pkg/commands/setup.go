@@ -16,9 +16,11 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/datastore/repository"
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
+	"github.com/jameswlane/devex/pkg/themes"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -70,10 +72,12 @@ type SetupModel struct {
 	languages        []string
 	databases        []string
 	desktopApps      []string
+	themes           []string
 	selectedShell    int
 	selectedLangs    map[int]bool
 	selectedDBs      map[int]bool
 	selectedApps     map[int]bool
+	selectedTheme    int
 	gitFullName      string
 	gitEmail         string
 	gitInputField    int  // 0 = full name, 1 = email
@@ -98,6 +102,7 @@ const (
 	StepLanguages
 	StepDatabases
 	StepShell     // Only for compatible systems (Linux/macOS)
+	StepTheme     // Theme selection after shell
 	StepGitConfig // Full name & email for git configuration
 	StepConfirmation
 	StepInstalling
@@ -126,6 +131,75 @@ const (
 	MySQLPort      = "3306:3306"
 	RedisPort      = "6379:6379"
 )
+
+// getAvailableThemeNames extracts theme names from application configurations
+func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
+	log.Debug("Loading available themes from application configurations")
+
+	// Get all applications from all categories in settings
+	var allApps []interface{}
+
+	// Collect applications from all categories
+	appCategories := [][]types.CrossPlatformApp{
+		settings.Applications.Development,
+		settings.Applications.Databases,
+		settings.Applications.SystemTools,
+		settings.Applications.Optional,
+	}
+
+	// Convert CrossPlatformApp slice to interface{} slice for GetAvailableThemes
+	for _, category := range appCategories {
+		for _, app := range category {
+			// Get themes from the appropriate OS config
+			osConfig := app.GetOSConfig()
+			if len(osConfig.Themes) > 0 {
+				allApps = append(allApps, map[string]interface{}{
+					"name":   app.Name,
+					"themes": convertThemesToInterface(osConfig.Themes),
+				})
+			}
+		}
+	}
+
+	// Get unique themes from all applications
+	availableThemes := themes.GetAvailableThemes(allApps)
+
+	// Extract theme names
+	themeNames := make([]string, len(availableThemes))
+	for i, theme := range availableThemes {
+		themeNames[i] = theme.Name
+	}
+
+	log.Debug("Loaded themes from configurations", "count", len(themeNames), "themes", themeNames)
+
+	// Fallback to default themes if none found in configurations
+	if len(themeNames) == 0 {
+		log.Warn("No themes found in application configurations, using fallback themes")
+		return []string{
+			"Tokyo Night",
+			"Catppuccin",
+			"Dracula",
+			"Nord",
+			"One Dark",
+			"Gruvbox",
+		}
+	}
+
+	return themeNames
+}
+
+// convertThemesToInterface converts []types.Theme to []interface{} for GetAvailableThemes
+func convertThemesToInterface(themes []types.Theme) []interface{} {
+	result := make([]interface{}, len(themes))
+	for i, theme := range themes {
+		result[i] = map[string]interface{}{
+			"name":             theme.Name,
+			"theme_color":      theme.ThemeColor,
+			"theme_background": theme.ThemeBackground,
+		}
+	}
+	return result
+}
 
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
@@ -180,6 +254,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 			"MySQL",
 			"Redis",
 		},
+		themes: getAvailableThemeNames(settings),
 	}
 
 	// Set desktop apps based on platform and config (non-default apps only)
@@ -244,7 +319,14 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InstallCompleteMsg:
 		m.step = StepComplete
-		return m, nil
+		// Schedule quit after brief delay to show completion message
+		return m, tea.Sequence(
+			tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+				return InstallQuitMsg{}
+			}),
+		)
+	case InstallQuitMsg:
+		return m, tea.Quit
 	}
 
 	return m, nil
@@ -395,6 +477,34 @@ func (m *SetupModel) View() string {
 			}
 
 			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)
+		}
+
+		s += "\n\n"
+		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+
+	case StepTheme:
+		s = titleStyle.Render("🎨 Select Your Theme")
+		s += "\n\n"
+		s += subtitleStyle.Render("Choose a theme for your applications:")
+		s += "\n\n"
+
+		for i, theme := range m.themes {
+			cursor := " "
+			if m.cursor == i {
+				cursor = cursorStyle.Render(">")
+			}
+
+			selected := " "
+			if m.selectedTheme == i {
+				selected = selectedStyle.Render("●")
+			}
+
+			themeName := theme
+			if len(themeName) > 30 {
+				themeName = themeName[:27] + "..."
+			}
+
+			s += fmt.Sprintf("%s %s %s\n", cursor, selected, themeName)
 		}
 
 		s += "\n\n"
@@ -616,6 +726,8 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 		maxItems = len(m.databases)
 	case StepShell:
 		maxItems = len(m.shells)
+	case StepTheme:
+		maxItems = len(m.themes)
 	case StepGitConfig:
 		maxItems = 2 // Full name and email
 	default:
@@ -638,6 +750,8 @@ func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 		m.selectedDBs[m.cursor] = !m.selectedDBs[m.cursor]
 	case StepShell:
 		m.selectedShell = m.cursor
+	case StepTheme:
+		m.selectedTheme = m.cursor
 	default:
 		return m, nil // No selection needed for other steps
 	}
@@ -663,9 +777,11 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		if m.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 		} else {
-			m.step = StepGitConfig
+			m.step = StepTheme // Windows gets theme selection without shell
 		}
 	case StepShell:
+		m.step = StepTheme
+	case StepTheme:
 		m.step = StepGitConfig
 	case StepGitConfig:
 		// Only proceed if both fields are filled
@@ -702,12 +818,14 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 		m.step = StepLanguages
 	case StepShell:
 		m.step = StepDatabases
-	case StepGitConfig:
+	case StepTheme:
 		if m.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 		} else {
 			m.step = StepDatabases
 		}
+	case StepGitConfig:
+		m.step = StepTheme
 	case StepConfirmation:
 		m.step = StepGitConfig
 	case StepInstalling:
@@ -769,57 +887,57 @@ type InstallProgressMsg struct {
 
 type InstallCompleteMsg struct{}
 
+// InstallQuitMsg signals that the setup should exit after installation
+type InstallQuitMsg struct{}
+
 func (m *SetupModel) startInstallation() tea.Cmd {
 	return func() tea.Msg {
-		// Exit the current TUI and start the streaming installer TUI
-		go func() {
-			defer func() {
-				// Ensure any panics in the goroutine are recovered
-				if r := recover(); r != nil {
-					log.Error("Panic in installation goroutine", fmt.Errorf("panic: %v", r))
-					fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
-					fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
-					fmt.Printf("Error: %v\n", r)
-				}
-			}()
+		// Convert selections to CrossPlatformApp objects
+		apps := m.buildAppList()
 
-			// Convert selections to CrossPlatformApp objects
-			apps := m.buildAppList()
+		log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
 
-			log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
+		// Add debug logging for each app being installed
+		for i, app := range apps {
+			log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+		}
 
-			// Add debug logging for each app being installed
-			for i, app := range apps {
-				log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+		fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
+
+		// Start streaming installation with enhanced panic protection
+		log.Info("Starting streaming installer with enhanced panic protection")
+
+		// Use synchronous execution to prevent race conditions
+		defer func() {
+			// Ensure any panics in the installation are recovered
+			if r := recover(); r != nil {
+				log.Error("Panic in installation process", fmt.Errorf("panic: %v", r))
+				fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
+				fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
+				fmt.Printf("Error: %v\n", r)
 			}
-
-			fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
-
-			// Start streaming installation with enhanced panic protection
-			log.Info("Starting streaming installer with enhanced panic protection")
-
-			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
-				log.Error("Streaming installer failed", err)
-				fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
-
-				// Fallback to direct installer if TUI fails
-				log.Info("Falling back to direct installer")
-				fmt.Printf("Attempting direct installation as fallback...\n")
-
-				if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
-					log.Error("Direct installer also failed", err)
-					fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
-					fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
-					return
-				}
-			}
-
-			// Installation completed successfully
-			log.Info("Installation completed successfully")
-			fmt.Printf("\n✅ Installation completed successfully!\n")
 		}()
 
-		return tea.Quit // Exit the guided setup TUI
+		if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
+			log.Error("Streaming installer failed", err)
+			fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
+
+			// Fallback to direct installer if TUI fails
+			log.Info("Falling back to direct installer")
+			fmt.Printf("Attempting direct installation as fallback...\n")
+
+			if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
+				log.Error("Direct installer also failed", err)
+				fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
+				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
+				return InstallCompleteMsg{} // Signal completion even on failure
+			}
+		}
+
+		// Installation completed successfully
+		log.Info("Installation completed successfully")
+		fmt.Printf("\n✅ Installation completed successfully!\n")
+		return InstallCompleteMsg{} // Signal successful completion
 	}
 }
 
@@ -861,6 +979,12 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// Setup git configuration with user's name and email
 	if err := m.setupGitConfiguration(ctx); err != nil {
 		log.Error("Failed to setup git configuration", err)
+		return err
+	}
+
+	// Save selected theme preference
+	if err := m.saveThemePreference(); err != nil {
+		log.Error("Failed to save theme preference", err)
 		return err
 	}
 
@@ -1211,4 +1335,25 @@ func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
 	default:
 		return false
 	}
+}
+
+// saveThemePreference saves the user's selected theme as the global preference
+func (m *SetupModel) saveThemePreference() error {
+	log.Info("Saving theme preference", "theme", m.themes[m.selectedTheme])
+
+	// Create theme repository using the system repository
+	systemRepo, ok := m.repo.(types.SystemRepository)
+	if !ok {
+		return fmt.Errorf("repository does not implement SystemRepository interface")
+	}
+	themeRepo := repository.NewThemeRepository(systemRepo)
+
+	// Save the selected theme as global preference
+	selectedTheme := m.themes[m.selectedTheme]
+	if err := themeRepo.SetGlobalTheme(selectedTheme); err != nil {
+		return fmt.Errorf("failed to save global theme preference: %w", err)
+	}
+
+	log.Info("Theme preference saved successfully", "theme", selectedTheme)
+	return nil
 }

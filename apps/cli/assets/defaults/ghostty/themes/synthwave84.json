@@ -1,0 +1,29 @@
+{
+	"name": "Synthwave '84",
+	"foreground": "#ffffff",
+	"background": "#2a2139",
+	"selection-foreground": "#ffffff",
+	"selection-background": "#463465",
+	"cursor": "#f92aad",
+	"cursor-text": "#2a2139",
+	"ansi": [
+		"#241b2f",
+		"#fe4450",
+		"#72f1b8",
+		"#fede5d",
+		"#34d3fb",
+		"#ff7edb",
+		"#36f9f6",
+		"#ffffff"
+	],
+	"bright-ansi": [
+		"#848bbd",
+		"#fe4450",
+		"#72f1b8",
+		"#fede5d",
+		"#34d3fb",
+		"#ff7edb",
+		"#36f9f6",
+		"#ffffff"
+	]
+}
