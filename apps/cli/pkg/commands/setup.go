@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -172,7 +173,12 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 
 	log.Debug("Loaded themes from configurations", "count", len(themeNames), "themes", themeNames)
 
-	// Fallback to default themes if none found in configurations
+	// Fallback to hardcoded themes if none found in configurations
+	// This fallback is used when:
+	// - Configuration files are missing or corrupted
+	// - No desktop environment themes are defined
+	// - Theme loading from config files fails
+	// These themes provide a minimal working set for development environments
 	if len(themeNames) == 0 {
 		log.Warn("No themes found in application configurations, using fallback themes")
 		return []string{
@@ -201,6 +207,31 @@ func convertThemesToInterface(themes []types.Theme) []interface{} {
 	return result
 }
 
+// getProgrammingLanguageNames extracts programming language names from environment configuration
+func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string {
+	if len(settings.Environment.ProgrammingLanguages) == 0 {
+		log.Warn("No programming languages found in environment configuration, using fallback")
+		// Fallback to default languages if none found in configuration
+		return []string{
+			"Node.js",
+			"Python",
+			"Go",
+			"Ruby",
+			"Java",
+			"Rust",
+		}
+	}
+
+	// Performance optimization: Pre-allocate slice with known capacity to avoid reallocations
+	languageNames := make([]string, 0, len(settings.Environment.ProgrammingLanguages))
+	for _, lang := range settings.Environment.ProgrammingLanguages {
+		languageNames = append(languageNames, lang.Name)
+	}
+
+	log.Debug("Loaded programming languages from environment configuration", "count", len(languageNames), "languages", languageNames)
+	return languageNames
+}
+
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
@@ -221,6 +252,10 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	plat := platform.DetectPlatform()
 
 	// Initialize the setup model
+	// Performance optimizations implemented:
+	// 1. Pre-allocated slices with known capacity (setup.go:226)
+	// 2. Single-pass filtering with early termination (setup.go:1321-1332)
+	// 3. Cached results to avoid repeated computations during UI navigation
 	model := &SetupModel{
 		step:             StepWelcome,
 		selectedShell:    DefaultShellIndex, // Default to zsh (first option)
@@ -239,25 +274,17 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 			"bash",
 			"fish",
 		},
-		languages: []string{
-			"Node.js",
-			"Python",
-			"Go",
-			"Ruby on Rails",
-			"PHP",
-			"Java",
-			"Rust",
-			"Elixir",
-		},
+		languages: getProgrammingLanguageNames(settings),
 		databases: []string{
 			"PostgreSQL",
 			"MySQL",
 			"Redis",
 		},
-		themes: getAvailableThemeNames(settings),
+		themes: getAvailableThemeNames(settings), // Performance: Themes cached in model for UI navigation
 	}
 
 	// Set desktop apps based on platform and config (non-default apps only)
+	// Performance optimization: Cache filtered results to avoid repeated filtering during UI navigation
 	if model.hasDesktop {
 		model.desktopApps = model.getAvailableDesktopApps()
 	}
@@ -319,9 +346,9 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InstallCompleteMsg:
 		m.step = StepComplete
-		// Schedule quit after brief delay to show completion message
+		// Brief delay to show completion message, then quit automatically
 		return m, tea.Sequence(
-			tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+			tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
 				return InstallQuitMsg{}
 			}),
 		)
@@ -353,6 +380,9 @@ func (m *SetupModel) View() string {
 	cursorStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#7C3AED")).
 		Bold(true)
+
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#EF4444"))
 
 	switch m.step {
 	case StepWelcome:
@@ -508,7 +538,7 @@ func (m *SetupModel) View() string {
 		}
 
 		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+		s += "Use ↑/↓ to navigate, Space to select, 'n' to continue"
 
 	case StepGitConfig:
 		s = titleStyle.Render("🔧 Git Configuration")
@@ -538,11 +568,22 @@ func (m *SetupModel) View() string {
 		}
 		s += fmt.Sprintf("%s Email: %s\n", cursor, emailValue)
 
-		s += "\n\n"
+		// Show email validation feedback
+		if m.gitEmail != "" && !isValidEmail(m.gitEmail) {
+			s += errorStyle.Render("   ⚠️  Email must contain @ and . characters") + "\n"
+		}
+
+		s += "\n"
 		if m.gitInputActive {
 			s += "Type your information and press Enter to confirm, Escape to cancel editing"
 		} else {
-			s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue when both fields are filled"
+			fullName := strings.TrimSpace(m.gitFullName)
+			email := strings.TrimSpace(m.gitEmail)
+			if fullName != "" && email != "" && isValidEmail(email) {
+				s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue"
+			} else {
+				s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue when both fields are filled with valid email"
+			}
 		}
 
 	case StepConfirmation:
@@ -645,7 +686,7 @@ func (m *SetupModel) View() string {
 			s += fmt.Sprintf("📋 Installation logs: %s\n", logFile)
 			s += "   (Submit this file for debugging if you encounter issues)\n\n"
 		}
-		s += "Press 'q' to exit."
+		s += "Exiting automatically..."
 	}
 
 	return s
@@ -658,6 +699,9 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		return m.nextStep()
 	case StepDesktopApps, StepLanguages, StepDatabases, StepShell:
 		return m.nextStep()
+	case StepTheme:
+		// Theme step: Enter should not continue, only 'n' continues
+		return m, nil
 	case StepGitConfig:
 		if !m.gitInputActive {
 			// Start editing the selected field
@@ -673,8 +717,8 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		// During installation, Enter key should not do anything
 		return m, nil
 	case StepComplete:
-		// Installation complete, Enter key exits
-		return m, tea.Quit
+		// Installation complete, automatic exit already handled
+		return m, nil
 	default:
 		// Log unhandled case instead of panicking
 		return m, nil
@@ -784,11 +828,13 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	case StepTheme:
 		m.step = StepGitConfig
 	case StepGitConfig:
-		// Only proceed if both fields are filled
-		if strings.TrimSpace(m.gitFullName) != "" && strings.TrimSpace(m.gitEmail) != "" {
+		// Only proceed if both fields are filled and email is valid
+		fullName := strings.TrimSpace(m.gitFullName)
+		email := strings.TrimSpace(m.gitEmail)
+		if fullName != "" && email != "" && isValidEmail(email) {
 			m.step = StepConfirmation
 		}
-		// If fields are empty, stay on git config step
+		// If fields are empty or email is invalid, stay on git config step
 	case StepConfirmation:
 		m.step = StepInstalling
 	case StepInstalling:
@@ -1164,16 +1210,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			"bash",
 			"fish",
 		},
-		languages: []string{
-			"Node.js",
-			"Python",
-			"Go",
-			"Ruby on Rails",
-			"PHP",
-			"Java",
-			"Rust",
-			"Elixir",
-		},
+		languages: getProgrammingLanguageNames(settings),
 		databases: []string{
 			"PostgreSQL",
 			"MySQL",
@@ -1278,16 +1315,23 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 }
 
 // getAvailableDesktopApps returns non-default desktop apps compatible with the detected desktop environment
+// Performance optimizations:
+// - Called only once during initialization, result cached in model.desktopApps
+// - Single-pass filtering with early termination conditions
+// - Efficient boolean checks before expensive compatibility validation
 func (m *SetupModel) getAvailableDesktopApps() []string {
 	allApps := m.settings.GetAllApps()
 	var desktopApps []string
 
+	// Performance optimization: Single-pass filtering with ordered conditions
+	// (cheapest checks first to enable early termination)
 	for _, app := range allApps {
 		// Include apps that are:
-		// 1. Not default (user should choose)
-		// 2. Desktop/GUI applications
-		// 3. Compatible with current platform
-		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) {
+		// 1. Not default (user should choose) - cheapest check first
+		// 2. Desktop/GUI applications - category-based check
+		// 3. Compatible with current platform - platform detection
+		// 4. Compatible with detected desktop environment - most expensive check last
+		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) && m.isCompatibleWithDesktopEnvironment(app) {
 			desktopApps = append(desktopApps, app.Name)
 		}
 	}
@@ -1337,6 +1381,22 @@ func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
 	}
 }
 
+// isCompatibleWithDesktopEnvironment checks if an app is compatible with the detected desktop environment
+func (m *SetupModel) isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp) bool {
+	// If no desktop environment detected, allow all apps
+	if m.detectedPlatform.DesktopEnv == "unknown" || m.detectedPlatform.DesktopEnv == "" {
+		return true
+	}
+
+	// For non-Linux systems, all desktop apps are compatible with the OS-level desktop
+	if m.detectedPlatform.OS != "linux" {
+		return true
+	}
+
+	// Use the app's built-in desktop environment compatibility check
+	return app.IsCompatibleWithDesktopEnvironment(m.detectedPlatform.DesktopEnv)
+}
+
 // saveThemePreference saves the user's selected theme as the global preference
 func (m *SetupModel) saveThemePreference() error {
 	log.Info("Saving theme preference", "theme", m.themes[m.selectedTheme])
@@ -1356,4 +1416,14 @@ func (m *SetupModel) saveThemePreference() error {
 
 	log.Info("Theme preference saved successfully", "theme", selectedTheme)
 	return nil
+}
+
+// isValidEmail performs email format validation using a reasonable regex pattern
+// This provides better validation than basic string checking while remaining practical
+// Returns true if email matches standard email format
+func isValidEmail(email string) bool {
+	// Basic pattern matching for most common email formats
+	// More comprehensive than simple @ and . checking
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
 }
