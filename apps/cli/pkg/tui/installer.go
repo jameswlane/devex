@@ -582,18 +582,25 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	err := si.repo.AddApp(app.Name)
 	si.repoMutex.Unlock()
 	if err != nil {
-		si.sendLog("ERROR", fmt.Sprintf("Failed to save app to database: %v", err))
+		// Enhanced error context with specific details
+		osConfig := app.GetOSConfig()
+		errorContext := fmt.Sprintf("Failed to save app '%s' to database (method: %s, installer: %s): %v",
+			app.Name, osConfig.InstallMethod, si.getInstallerType(), err)
+		si.sendLog("ERROR", errorContext)
 
 		if si.config.FailOnDatabaseErrors {
-			// Fail the installation if configured to do so
-			return fmt.Errorf("database operation failed: %w", err)
+			// Fail the installation if configured to do so with enhanced context
+			return fmt.Errorf("database operation failed for app '%s' using %s installer: %w",
+				app.Name, si.getInstallerType(), err)
 		} else {
-			// Log prominently but don't fail the installation
-			si.sendLog("WARN", "Installation succeeded but app tracking may be inconsistent")
+			// Log prominently but don't fail the installation with specific guidance
+			si.sendLog("WARN", fmt.Sprintf("Installation of %s succeeded but app tracking may be inconsistent", app.Name))
 			si.sendLog("WARN", "Consider fixing database connectivity for proper app tracking")
+			si.sendLog("WARN", "This may affect 'devex uninstall' and installation status queries")
 		}
 	} else {
-		si.sendLog("INFO", fmt.Sprintf("App %s registered in database", app.Name))
+		si.sendLog("INFO", fmt.Sprintf("App %s (via %s) registered in database successfully",
+			app.Name, si.getInstallerType()))
 	}
 
 	si.sendLog("INFO", fmt.Sprintf("Successfully installed %s", app.Name))
@@ -1444,6 +1451,11 @@ func (si *StreamingInstaller) createDirectoryForFile(ctx context.Context, filePa
 
 	cmd := fmt.Sprintf("mkdir -p '%s'", dir)
 	return si.executeCommandStream(ctx, cmd)
+}
+
+// getInstallerType returns a human-readable description of the current installer context
+func (si *StreamingInstaller) getInstallerType() string {
+	return "StreamingInstaller"
 }
 
 // expandPath expands tilde (~) in file paths to the user's home directory

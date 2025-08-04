@@ -329,8 +329,11 @@ func TestEmailValidation(t *testing.T) {
 			{"user@", false},           // only @
 			{"user.", false},           // only .
 			{"", false},                // empty
-			{"@example.com", true},     // edge case: starts with @
-			{"user@.com", true},        // edge case: domain starts with .
+			{"@example.com", false},    // invalid: starts with @
+			{"user@.com", false},       // invalid: domain starts with .
+			{"user@domain", false},     // invalid: no TLD
+			{"user@domain.", false},    // invalid: TLD too short
+			{"user@domain.c", false},   // invalid: TLD too short
 		}
 
 		for _, tc := range testCases {
