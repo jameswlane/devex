@@ -1325,39 +1325,51 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 	return err
 }
 
-// handleThemeSelection displays the theme selector and stores the user's choice
+// handleThemeSelection uses the global theme preference instead of prompting for individual apps
 func (si *StreamingInstaller) handleThemeSelection(ctx context.Context, appName string, themes []types.Theme) error {
-	// Skip theme selection during testing or if program is nil
-	if si.program == nil {
-		si.sendLog("INFO", fmt.Sprintf("Skipping theme selection for %s (no TUI available)", appName))
+	si.sendLog("INFO", fmt.Sprintf("Using global theme preference for %s", appName))
+
+	// Get the global theme preference that was set during setup
+	if si.repo == nil {
+		si.sendLog("INFO", fmt.Sprintf("No repository available, skipping theme selection for %s", appName))
 		return nil
 	}
 
-	si.sendLog("INFO", fmt.Sprintf("Showing theme selector for %s", appName))
+	si.repoMutex.RLock()
+	globalTheme, err := si.repo.Get("global_theme")
+	si.repoMutex.RUnlock()
 
-	// Create a temporary TUI program for theme selection
-	// Note: This temporarily pauses the current TUI to show the theme selector
-	selectedTheme, err := ShowThemeSelector(appName, themes)
-	if err != nil {
-		si.sendLog("WARN", fmt.Sprintf("Theme selection cancelled or failed for %s: %v", appName, err))
-		// Don't fail the installation if theme selection is cancelled
+	if err != nil || globalTheme == "" {
+		si.sendLog("INFO", fmt.Sprintf("No global theme preference found, skipping theme selection for %s", appName))
 		return nil
 	}
 
-	si.sendLog("INFO", fmt.Sprintf("User selected theme '%s' for %s", selectedTheme.Name, appName))
-
-	// Store theme preference using the repository's system settings
-	if si.repo != nil {
-		themeKey := fmt.Sprintf("app_theme_%s", appName)
-		si.repoMutex.Lock()
-		err := si.repo.Set(themeKey, selectedTheme.Name)
-		si.repoMutex.Unlock()
-		if err != nil {
-			si.sendLog("WARN", fmt.Sprintf("Failed to store theme preference for %s: %v", appName, err))
-			// Don't fail installation if theme preference storage fails
-		} else {
-			si.sendLog("INFO", fmt.Sprintf("Theme preference stored: %s -> %s", appName, selectedTheme.Name))
+	// Find the global theme in the app's available themes
+	var selectedTheme *types.Theme
+	for _, theme := range themes {
+		if theme.Name == globalTheme {
+			selectedTheme = &theme
+			break
 		}
+	}
+
+	if selectedTheme == nil {
+		si.sendLog("WARN", fmt.Sprintf("Global theme '%s' not found in available themes for %s, skipping", globalTheme, appName))
+		return nil
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Using global theme '%s' for %s", selectedTheme.Name, appName))
+
+	// Store app-specific theme preference using the global theme
+	themeKey := fmt.Sprintf("app_theme_%s", appName)
+	si.repoMutex.Lock()
+	err = si.repo.Set(themeKey, selectedTheme.Name)
+	si.repoMutex.Unlock()
+	if err != nil {
+		si.sendLog("WARN", fmt.Sprintf("Failed to store theme preference for %s: %v", appName, err))
+		// Don't fail installation if theme preference storage fails
+	} else {
+		si.sendLog("INFO", fmt.Sprintf("Theme preference stored: %s -> %s", appName, selectedTheme.Name))
 	}
 
 	return nil

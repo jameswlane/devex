@@ -340,14 +340,15 @@ type OSConfig struct {
 
 // CrossPlatformApp defines an application with OS-specific installation methods
 type CrossPlatformApp struct {
-	Name         string   `mapstructure:"name" yaml:"name"`
-	Description  string   `mapstructure:"description" yaml:"description"`
-	Category     string   `mapstructure:"category" yaml:"category"`
-	Default      bool     `mapstructure:"default" yaml:"default"`
-	Linux        OSConfig `mapstructure:"linux" yaml:"linux,omitempty"`
-	MacOS        OSConfig `mapstructure:"macos" yaml:"macos,omitempty"`
-	Windows      OSConfig `mapstructure:"windows" yaml:"windows,omitempty"`
-	AllPlatforms OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
+	Name                string   `mapstructure:"name" yaml:"name"`
+	Description         string   `mapstructure:"description" yaml:"description"`
+	Category            string   `mapstructure:"category" yaml:"category"`
+	Default             bool     `mapstructure:"default" yaml:"default"`
+	DesktopEnvironments []string `mapstructure:"desktop_environments" yaml:"desktop_environments,omitempty"`
+	Linux               OSConfig `mapstructure:"linux" yaml:"linux,omitempty"`
+	MacOS               OSConfig `mapstructure:"macos" yaml:"macos,omitempty"`
+	Windows             OSConfig `mapstructure:"windows" yaml:"windows,omitempty"`
+	AllPlatforms        OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
 }
 
 // GetOSConfig returns the appropriate OS configuration for the current platform
@@ -374,6 +375,30 @@ func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 func (app *CrossPlatformApp) IsSupported() bool {
 	config := app.GetOSConfig()
 	return config.InstallMethod != ""
+}
+
+// IsCompatibleWithDesktopEnvironment checks if the app is compatible with the specified desktop environment
+func (app *CrossPlatformApp) IsCompatibleWithDesktopEnvironment(desktopEnv string) bool {
+	// If no desktop environments specified, assume compatible with all
+	if len(app.DesktopEnvironments) == 0 {
+		return true
+	}
+
+	// Check if the desktop environment is in the compatibility list
+	for _, env := range app.DesktopEnvironments {
+		if env == desktopEnv {
+			return true
+		}
+		// Handle special cases for desktop environment families
+		if env == "gnome-family" && (desktopEnv == "gnome" || desktopEnv == "unity" || desktopEnv == "cinnamon") {
+			return true
+		}
+		if env == "all" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Validate checks if the CrossPlatformApp configuration is valid

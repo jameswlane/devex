@@ -201,6 +201,30 @@ func convertThemesToInterface(themes []types.Theme) []interface{} {
 	return result
 }
 
+// getProgrammingLanguageNames extracts programming language names from environment configuration
+func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string {
+	if len(settings.Environment.ProgrammingLanguages) == 0 {
+		log.Warn("No programming languages found in environment configuration, using fallback")
+		// Fallback to default languages if none found in configuration
+		return []string{
+			"Node.js",
+			"Python",
+			"Go",
+			"Ruby",
+			"Java",
+			"Rust",
+		}
+	}
+
+	languageNames := make([]string, 0, len(settings.Environment.ProgrammingLanguages))
+	for _, lang := range settings.Environment.ProgrammingLanguages {
+		languageNames = append(languageNames, lang.Name)
+	}
+
+	log.Debug("Loaded programming languages from environment configuration", "count", len(languageNames), "languages", languageNames)
+	return languageNames
+}
+
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
@@ -239,16 +263,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 			"bash",
 			"fish",
 		},
-		languages: []string{
-			"Node.js",
-			"Python",
-			"Go",
-			"Ruby on Rails",
-			"PHP",
-			"Java",
-			"Rust",
-			"Elixir",
-		},
+		languages: getProgrammingLanguageNames(settings),
 		databases: []string{
 			"PostgreSQL",
 			"MySQL",
@@ -319,9 +334,9 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InstallCompleteMsg:
 		m.step = StepComplete
-		// Schedule quit after brief delay to show completion message
+		// Brief delay to show completion message, then quit automatically
 		return m, tea.Sequence(
-			tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+			tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
 				return InstallQuitMsg{}
 			}),
 		)
@@ -508,7 +523,7 @@ func (m *SetupModel) View() string {
 		}
 
 		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
+		s += "Use ↑/↓ to navigate, Space to select, 'n' to continue"
 
 	case StepGitConfig:
 		s = titleStyle.Render("🔧 Git Configuration")
@@ -645,7 +660,7 @@ func (m *SetupModel) View() string {
 			s += fmt.Sprintf("📋 Installation logs: %s\n", logFile)
 			s += "   (Submit this file for debugging if you encounter issues)\n\n"
 		}
-		s += "Press 'q' to exit."
+		s += "Exiting automatically..."
 	}
 
 	return s
@@ -658,6 +673,9 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		return m.nextStep()
 	case StepDesktopApps, StepLanguages, StepDatabases, StepShell:
 		return m.nextStep()
+	case StepTheme:
+		// Theme step: Enter should not continue, only 'n' continues
+		return m, nil
 	case StepGitConfig:
 		if !m.gitInputActive {
 			// Start editing the selected field
@@ -673,8 +691,8 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		// During installation, Enter key should not do anything
 		return m, nil
 	case StepComplete:
-		// Installation complete, Enter key exits
-		return m, tea.Quit
+		// Installation complete, automatic exit already handled
+		return m, nil
 	default:
 		// Log unhandled case instead of panicking
 		return m, nil
@@ -1164,16 +1182,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			"bash",
 			"fish",
 		},
-		languages: []string{
-			"Node.js",
-			"Python",
-			"Go",
-			"Ruby on Rails",
-			"PHP",
-			"Java",
-			"Rust",
-			"Elixir",
-		},
+		languages: getProgrammingLanguageNames(settings),
 		databases: []string{
 			"PostgreSQL",
 			"MySQL",
@@ -1287,7 +1296,8 @@ func (m *SetupModel) getAvailableDesktopApps() []string {
 		// 1. Not default (user should choose)
 		// 2. Desktop/GUI applications
 		// 3. Compatible with current platform
-		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) {
+		// 4. Compatible with detected desktop environment
+		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) && m.isCompatibleWithDesktopEnvironment(app) {
 			desktopApps = append(desktopApps, app.Name)
 		}
 	}
@@ -1335,6 +1345,22 @@ func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
 	default:
 		return false
 	}
+}
+
+// isCompatibleWithDesktopEnvironment checks if an app is compatible with the detected desktop environment
+func (m *SetupModel) isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp) bool {
+	// If no desktop environment detected, allow all apps
+	if m.detectedPlatform.DesktopEnv == "unknown" || m.detectedPlatform.DesktopEnv == "" {
+		return true
+	}
+
+	// For non-Linux systems, all desktop apps are compatible with the OS-level desktop
+	if m.detectedPlatform.OS != "linux" {
+		return true
+	}
+
+	// Use the app's built-in desktop environment compatibility check
+	return app.IsCompatibleWithDesktopEnvironment(m.detectedPlatform.DesktopEnv)
 }
 
 // saveThemePreference saves the user's selected theme as the global preference
