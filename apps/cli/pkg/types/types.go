@@ -235,6 +235,21 @@ type SystemRepository interface {
 	GetAll() (map[string]string, error)
 }
 
+// ThemePreferences stores user theme preferences
+type ThemePreferences struct {
+	GlobalTheme string            `json:"global_theme"`
+	AppThemes   map[string]string `json:"app_themes"`
+}
+
+// ThemeRepository handles theme preference storage
+type ThemeRepository interface {
+	GetGlobalTheme() (string, error)
+	SetGlobalTheme(theme string) error
+	GetAppTheme(appName string) (string, error)
+	SetAppTheme(appName, theme string) error
+	GetAllThemePreferences() (*ThemePreferences, error)
+}
+
 type BaseInstaller interface {
 	Install(command string, repo Repository) error
 }
@@ -318,6 +333,7 @@ type OSConfig struct {
 	PostInstall      []InstallCommand `mapstructure:"post_install" yaml:"post_install,omitempty"`
 	Alternatives     []OSConfig       `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
 	ConfigFiles      []ConfigFile     `mapstructure:"config_files" yaml:"config_files,omitempty"`
+	Themes           []Theme          `mapstructure:"themes" yaml:"themes,omitempty"`
 	CleanupFiles     []string         `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
 	Conflicts        []string         `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
 }

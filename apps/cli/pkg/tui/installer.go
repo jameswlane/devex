@@ -163,13 +163,14 @@ func createSecureTempFile(dir, pattern string) (*os.File, error) {
 
 // StreamingInstaller handles installation with real-time output and interaction
 type StreamingInstaller struct {
-	program  *tea.Program
-	repo     types.Repository
-	executor CommandExecutor // Pluggable command executor for better testability
-	stdinMux sync.Mutex      // Protects stdin access from race conditions
-	ctx      context.Context
-	cancel   context.CancelFunc
-	config   InstallerConfig // Configuration settings
+	program   *tea.Program
+	repo      types.Repository
+	executor  CommandExecutor // Pluggable command executor for better testability
+	stdinMux  sync.Mutex      // Protects stdin access from race conditions
+	repoMutex sync.RWMutex    // Protects repository access from race conditions
+	ctx       context.Context
+	cancel    context.CancelFunc
+	config    InstallerConfig // Configuration settings
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -538,6 +539,14 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		return fmt.Errorf("app validation failed: %w", err)
 	}
 
+	// Handle theme selection if app has themes
+	if len(osConfig.Themes) > 0 {
+		si.sendLog("INFO", fmt.Sprintf("App %s has %d themes available, prompting user for selection", app.Name, len(osConfig.Themes)))
+		if err := si.handleThemeSelection(ctx, app.Name, osConfig.Themes); err != nil {
+			return fmt.Errorf("theme selection failed: %w", err)
+		}
+	}
+
 	// Handle pre-install commands
 	if len(osConfig.PreInstall) > 0 {
 		si.sendLog("INFO", "Executing pre-install commands...")
@@ -560,8 +569,19 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		}
 	}
 
+	// Apply selected theme if user made a choice and themes are available
+	if len(osConfig.Themes) > 0 {
+		if err := si.applySelectedTheme(ctx, app.Name, osConfig.Themes); err != nil {
+			si.sendLog("WARN", fmt.Sprintf("Failed to apply theme for %s: %v", app.Name, err))
+			// Don't fail installation if theme application fails
+		}
+	}
+
 	// Save to repository with configurable error handling
-	if err := si.repo.AddApp(app.Name); err != nil {
+	si.repoMutex.Lock()
+	err := si.repo.AddApp(app.Name)
+	si.repoMutex.Unlock()
+	if err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("Failed to save app to database: %v", err))
 
 		if si.config.FailOnDatabaseErrors {
@@ -1253,6 +1273,13 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 	// Create program
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
+	// Ensure proper cleanup even if Run() panics
+	defer func() {
+		if p != nil {
+			p.Kill()
+		}
+	}()
+
 	// Create streaming installer with context
 	installer := NewStreamingInstaller(p, repo, ctx)
 	defer installer.cancel() // Ensure cleanup
@@ -1296,4 +1323,122 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 	m.CleanupChannels()
 
 	return err
+}
+
+// handleThemeSelection displays the theme selector and stores the user's choice
+func (si *StreamingInstaller) handleThemeSelection(ctx context.Context, appName string, themes []types.Theme) error {
+	// Skip theme selection during testing or if program is nil
+	if si.program == nil {
+		si.sendLog("INFO", fmt.Sprintf("Skipping theme selection for %s (no TUI available)", appName))
+		return nil
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Showing theme selector for %s", appName))
+
+	// Create a temporary TUI program for theme selection
+	// Note: This temporarily pauses the current TUI to show the theme selector
+	selectedTheme, err := ShowThemeSelector(appName, themes)
+	if err != nil {
+		si.sendLog("WARN", fmt.Sprintf("Theme selection cancelled or failed for %s: %v", appName, err))
+		// Don't fail the installation if theme selection is cancelled
+		return nil
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("User selected theme '%s' for %s", selectedTheme.Name, appName))
+
+	// Store theme preference using the repository's system settings
+	if si.repo != nil {
+		themeKey := fmt.Sprintf("app_theme_%s", appName)
+		si.repoMutex.Lock()
+		err := si.repo.Set(themeKey, selectedTheme.Name)
+		si.repoMutex.Unlock()
+		if err != nil {
+			si.sendLog("WARN", fmt.Sprintf("Failed to store theme preference for %s: %v", appName, err))
+			// Don't fail installation if theme preference storage fails
+		} else {
+			si.sendLog("INFO", fmt.Sprintf("Theme preference stored: %s -> %s", appName, selectedTheme.Name))
+		}
+	}
+
+	return nil
+}
+
+// applySelectedTheme applies the selected theme files for a specific app
+func (si *StreamingInstaller) applySelectedTheme(ctx context.Context, appName string, themes []types.Theme) error {
+	// Get the selected theme preference from repository
+	if si.repo == nil {
+		si.sendLog("INFO", fmt.Sprintf("No repository available, skipping theme application for %s", appName))
+		return nil
+	}
+
+	themeKey := fmt.Sprintf("app_theme_%s", appName)
+	si.repoMutex.RLock()
+	selectedThemeName, err := si.repo.Get(themeKey)
+	si.repoMutex.RUnlock()
+	if err != nil {
+		si.sendLog("INFO", fmt.Sprintf("No theme preference found for %s, skipping theme application", appName))
+		return nil
+	}
+
+	// Find the selected theme in the available themes
+	var selectedTheme *types.Theme
+	for _, theme := range themes {
+		if theme.Name == selectedThemeName {
+			selectedTheme = &theme
+			break
+		}
+	}
+
+	if selectedTheme == nil {
+		si.sendLog("WARN", fmt.Sprintf("Selected theme '%s' not found for %s", selectedThemeName, appName))
+		return nil
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Applying theme '%s' for %s", selectedTheme.Name, appName))
+
+	// Apply theme files by copying them to their destinations
+	for _, configFile := range selectedTheme.Files {
+		si.sendLog("INFO", fmt.Sprintf("Copying theme file from %s to %s", configFile.Source, configFile.Destination))
+
+		// Expand tilde in paths
+		source := expandPath(configFile.Source)
+		destination := expandPath(configFile.Destination)
+
+		// Create destination directory if it doesn't exist
+		if err := si.createDirectoryForFile(ctx, destination); err != nil {
+			si.sendLog("WARN", fmt.Sprintf("Failed to create directory for %s: %v", destination, err))
+			continue
+		}
+
+		// Copy the theme file
+		copyCmd := fmt.Sprintf("cp '%s' '%s'", source, destination)
+		if err := si.executeCommandStream(ctx, copyCmd); err != nil {
+			si.sendLog("WARN", fmt.Sprintf("Failed to copy theme file from %s to %s: %v", source, destination, err))
+		} else {
+			si.sendLog("INFO", fmt.Sprintf("Successfully copied theme file to %s", destination))
+		}
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Theme '%s' applied successfully for %s", selectedTheme.Name, appName))
+	return nil
+}
+
+// createDirectoryForFile creates the parent directory for a file path
+func (si *StreamingInstaller) createDirectoryForFile(ctx context.Context, filePath string) error {
+	dir := filepath.Dir(filePath)
+	if dir == "." || dir == "/" {
+		return nil
+	}
+
+	cmd := fmt.Sprintf("mkdir -p '%s'", dir)
+	return si.executeCommandStream(ctx, cmd)
+}
+
+// expandPath expands tilde (~) in file paths to the user's home directory
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		homeDir := os.Getenv("HOME")
+		return strings.Replace(path, "~", homeDir, 1)
+	}
+	return path
 }
