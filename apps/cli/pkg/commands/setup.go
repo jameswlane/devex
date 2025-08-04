@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 
@@ -1407,8 +1408,12 @@ func (m *SetupModel) saveThemePreference() error {
 	return nil
 }
 
-// isValidEmail performs basic email format validation
-// Returns true if email contains both "@" and "." characters
+// isValidEmail performs email format validation using a reasonable regex pattern
+// This provides better validation than basic string checking while remaining practical
+// Returns true if email matches standard email format
 func isValidEmail(email string) bool {
-	return strings.Contains(email, "@") && strings.Contains(email, ".")
+	// Basic pattern matching for most common email formats
+	// More comprehensive than simple @ and . checking
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	return emailRegex.MatchString(email)
 }
