@@ -319,7 +319,14 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InstallCompleteMsg:
 		m.step = StepComplete
-		return m, nil
+		// Schedule quit after brief delay to show completion message
+		return m, tea.Sequence(
+			tea.Tick(time.Second*2, func(t time.Time) tea.Msg {
+				return InstallQuitMsg{}
+			}),
+		)
+	case InstallQuitMsg:
+		return m, tea.Quit
 	}
 
 	return m, nil
@@ -880,57 +887,57 @@ type InstallProgressMsg struct {
 
 type InstallCompleteMsg struct{}
 
+// InstallQuitMsg signals that the setup should exit after installation
+type InstallQuitMsg struct{}
+
 func (m *SetupModel) startInstallation() tea.Cmd {
 	return func() tea.Msg {
-		// Exit the current TUI and start the streaming installer TUI
-		go func() {
-			defer func() {
-				// Ensure any panics in the goroutine are recovered
-				if r := recover(); r != nil {
-					log.Error("Panic in installation goroutine", fmt.Errorf("panic: %v", r))
-					fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
-					fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
-					fmt.Printf("Error: %v\n", r)
-				}
-			}()
+		// Convert selections to CrossPlatformApp objects
+		apps := m.buildAppList()
 
-			// Convert selections to CrossPlatformApp objects
-			apps := m.buildAppList()
+		log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
 
-			log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
+		// Add debug logging for each app being installed
+		for i, app := range apps {
+			log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+		}
 
-			// Add debug logging for each app being installed
-			for i, app := range apps {
-				log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+		fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
+
+		// Start streaming installation with enhanced panic protection
+		log.Info("Starting streaming installer with enhanced panic protection")
+
+		// Use synchronous execution to prevent race conditions
+		defer func() {
+			// Ensure any panics in the installation are recovered
+			if r := recover(); r != nil {
+				log.Error("Panic in installation process", fmt.Errorf("panic: %v", r))
+				fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
+				fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
+				fmt.Printf("Error: %v\n", r)
 			}
-
-			fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
-
-			// Start streaming installation with enhanced panic protection
-			log.Info("Starting streaming installer with enhanced panic protection")
-
-			if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
-				log.Error("Streaming installer failed", err)
-				fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
-
-				// Fallback to direct installer if TUI fails
-				log.Info("Falling back to direct installer")
-				fmt.Printf("Attempting direct installation as fallback...\n")
-
-				if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
-					log.Error("Direct installer also failed", err)
-					fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
-					fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
-					return
-				}
-			}
-
-			// Installation completed successfully
-			log.Info("Installation completed successfully")
-			fmt.Printf("\n✅ Installation completed successfully!\n")
 		}()
 
-		return tea.Quit // Exit the guided setup TUI
+		if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
+			log.Error("Streaming installer failed", err)
+			fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
+
+			// Fallback to direct installer if TUI fails
+			log.Info("Falling back to direct installer")
+			fmt.Printf("Attempting direct installation as fallback...\n")
+
+			if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
+				log.Error("Direct installer also failed", err)
+				fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
+				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
+				return InstallCompleteMsg{} // Signal completion even on failure
+			}
+		}
+
+		// Installation completed successfully
+		log.Info("Installation completed successfully")
+		fmt.Printf("\n✅ Installation completed successfully!\n")
+		return InstallCompleteMsg{} // Signal successful completion
 	}
 }
 
