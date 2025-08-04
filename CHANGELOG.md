@@ -1,3 +1,15 @@
+## [0.17.0](https://github.com/jameswlane/devex/compare/0.16.3...0.17.0) (2025-08-04)
+
+### Features
+
+* add comprehensive theme system test coverage and fix critical issues ([8b78d8a](https://github.com/jameswlane/devex/commit/8b78d8adcf4730637d57edcd647bf2c38bf71eb6))
+* implement comprehensive theme system with dynamic selection ([4e2293b](https://github.com/jameswlane/devex/commit/4e2293b0eafafb45feea54dd9a5158bab5f50d75))
+* implement comprehensive theme system with dynamic selection ([2eef4a4](https://github.com/jameswlane/devex/commit/2eef4a4d989dc19d3f5c35afacc02b29b7f3c439))
+
+### Bug Fixes
+
+* critical race condition in setup flow installation process ([542e3e4](https://github.com/jameswlane/devex/commit/542e3e4b453433974a430ec3f6d89d17fdf35cbd))
+
 ## [0.16.3](https://github.com/jameswlane/devex/compare/0.16.2...0.16.3) (2025-08-03)
 
 ### Bug Fixes
