@@ -1,3 +1,15 @@
+# Desktop Environment Compatibility Guide:
+# - Use 'desktop_environments' field to specify which desktop environments an app supports
+# - Available values: 'gnome', 'kde', 'xfce', 'cinnamon', 'unity', 'gnome-family', 'all'
+# - 'gnome-family' includes: gnome, unity, cinnamon
+# - 'all' means compatible with any desktop environment
+# - If field is omitted, app is assumed compatible with all environments
+# - Examples:
+#   desktop_environments: ['gnome']           # GNOME-only app (GNOME Tweaks)
+#   desktop_environments: ['kde']             # KDE-only app (Dolphin File Manager)
+#   desktop_environments: ['kde', 'gnome']    # Works well with both KDE and GNOME
+#   desktop_environments: ['gnome-family']   # Works with GNOME-based DEs
+#   desktop_environments: ['all']            # Universal compatibility
 applications:
   development:
     - name: bat
@@ -263,6 +275,7 @@ applications:
     - name: 'Proton Mail'
       description: 'Secure email app by Proton'
       category: 'Optional Apps'
+      desktop_environments: ['all'] # Compatible with all desktop environments
       linux:
         install_method: 'deb'
         install_command: 'wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb'
@@ -272,6 +285,7 @@ applications:
     - name: 'Proton VPN'
       description: 'VPN service by Proton'
       category: 'Optional Apps'
+      desktop_environments: ['gnome-family'] # Optimized for GNOME-based environments
       linux:
         install_method: 'script'
         install_command: |
@@ -284,6 +298,7 @@ applications:
     - name: 'Proton Pass'
       description: 'Password manager by Proton'
       category: 'Optional Apps'
+      desktop_environments: ['all'] # Compatible with all desktop environments
       linux:
         install_method: 'deb'
         install_command: 'wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb && sudo apt install ./proton-pass_1.23.1_amd64.deb'
@@ -293,9 +308,42 @@ applications:
     - name: 'Zen Browser'
       description: 'A secure and private browser'
       category: 'Optional Apps'
+      desktop_environments: ['all'] # Compatible with all desktop environments
       linux:
         install_method: 'flatpak'
         install_command: 'flatpak install flathub io.github.zen_browser.zen'
         uninstall_command: 'flatpak remove io.github.zen_browser.zen'
         dependencies:
           - 'flatpak'
+    - name: 'GNOME Tweaks'
+      description: 'Advanced GNOME 3 settings'
+      category: 'Optional Apps'
+      desktop_environments: ['gnome'] # GNOME-specific application
+      linux:
+        install_method: 'apt'
+        install_command: 'gnome-tweaks'
+        uninstall_command: 'gnome-tweaks'
+    - name: 'GNOME Extensions'
+      description: 'Browser extension for managing GNOME Shell extensions'
+      category: 'Optional Apps'
+      desktop_environments: ['gnome'] # GNOME-only
+      linux:
+        install_method: 'apt'
+        install_command: 'chrome-gnome-shell'
+        uninstall_command: 'chrome-gnome-shell'
+    - name: 'KDE Connect'
+      description: 'Integrate Android/iOS devices with your desktop'
+      category: 'Optional Apps'
+      desktop_environments: ['kde', 'gnome', 'xfce'] # Works well with KDE, good integration with GNOME and XFCE
+      linux:
+        install_method: 'apt'
+        install_command: 'kdeconnect'
+        uninstall_command: 'kdeconnect'
+    - name: 'Dolphin File Manager'
+      description: 'KDE file manager'
+      category: 'Optional Apps'
+      desktop_environments: ['kde'] # KDE-specific file manager
+      linux:
+        install_method: 'apt'
+        install_command: 'dolphin'
+        uninstall_command: 'dolphin'

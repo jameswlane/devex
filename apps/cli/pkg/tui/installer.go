@@ -582,18 +582,25 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	err := si.repo.AddApp(app.Name)
 	si.repoMutex.Unlock()
 	if err != nil {
-		si.sendLog("ERROR", fmt.Sprintf("Failed to save app to database: %v", err))
+		// Enhanced error context with specific details
+		osConfig := app.GetOSConfig()
+		errorContext := fmt.Sprintf("Failed to save app '%s' to database (method: %s, installer: %s): %v",
+			app.Name, osConfig.InstallMethod, si.getInstallerType(), err)
+		si.sendLog("ERROR", errorContext)
 
 		if si.config.FailOnDatabaseErrors {
-			// Fail the installation if configured to do so
-			return fmt.Errorf("database operation failed: %w", err)
+			// Fail the installation if configured to do so with enhanced context
+			return fmt.Errorf("database operation failed for app '%s' using %s installer: %w",
+				app.Name, si.getInstallerType(), err)
 		} else {
-			// Log prominently but don't fail the installation
-			si.sendLog("WARN", "Installation succeeded but app tracking may be inconsistent")
+			// Log prominently but don't fail the installation with specific guidance
+			si.sendLog("WARN", fmt.Sprintf("Installation of %s succeeded but app tracking may be inconsistent", app.Name))
 			si.sendLog("WARN", "Consider fixing database connectivity for proper app tracking")
+			si.sendLog("WARN", "This may affect 'devex uninstall' and installation status queries")
 		}
 	} else {
-		si.sendLog("INFO", fmt.Sprintf("App %s registered in database", app.Name))
+		si.sendLog("INFO", fmt.Sprintf("App %s (via %s) registered in database successfully",
+			app.Name, si.getInstallerType()))
 	}
 
 	si.sendLog("INFO", fmt.Sprintf("Successfully installed %s", app.Name))
@@ -1325,39 +1332,51 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 	return err
 }
 
-// handleThemeSelection displays the theme selector and stores the user's choice
+// handleThemeSelection uses the global theme preference instead of prompting for individual apps
 func (si *StreamingInstaller) handleThemeSelection(ctx context.Context, appName string, themes []types.Theme) error {
-	// Skip theme selection during testing or if program is nil
-	if si.program == nil {
-		si.sendLog("INFO", fmt.Sprintf("Skipping theme selection for %s (no TUI available)", appName))
+	si.sendLog("INFO", fmt.Sprintf("Using global theme preference for %s", appName))
+
+	// Get the global theme preference that was set during setup
+	if si.repo == nil {
+		si.sendLog("INFO", fmt.Sprintf("No repository available, skipping theme selection for %s", appName))
 		return nil
 	}
 
-	si.sendLog("INFO", fmt.Sprintf("Showing theme selector for %s", appName))
+	si.repoMutex.RLock()
+	globalTheme, err := si.repo.Get("global_theme")
+	si.repoMutex.RUnlock()
 
-	// Create a temporary TUI program for theme selection
-	// Note: This temporarily pauses the current TUI to show the theme selector
-	selectedTheme, err := ShowThemeSelector(appName, themes)
-	if err != nil {
-		si.sendLog("WARN", fmt.Sprintf("Theme selection cancelled or failed for %s: %v", appName, err))
-		// Don't fail the installation if theme selection is cancelled
+	if err != nil || globalTheme == "" {
+		si.sendLog("INFO", fmt.Sprintf("No global theme preference found, skipping theme selection for %s", appName))
 		return nil
 	}
 
-	si.sendLog("INFO", fmt.Sprintf("User selected theme '%s' for %s", selectedTheme.Name, appName))
-
-	// Store theme preference using the repository's system settings
-	if si.repo != nil {
-		themeKey := fmt.Sprintf("app_theme_%s", appName)
-		si.repoMutex.Lock()
-		err := si.repo.Set(themeKey, selectedTheme.Name)
-		si.repoMutex.Unlock()
-		if err != nil {
-			si.sendLog("WARN", fmt.Sprintf("Failed to store theme preference for %s: %v", appName, err))
-			// Don't fail installation if theme preference storage fails
-		} else {
-			si.sendLog("INFO", fmt.Sprintf("Theme preference stored: %s -> %s", appName, selectedTheme.Name))
+	// Find the global theme in the app's available themes
+	var selectedTheme *types.Theme
+	for _, theme := range themes {
+		if theme.Name == globalTheme {
+			selectedTheme = &theme
+			break
 		}
+	}
+
+	if selectedTheme == nil {
+		si.sendLog("WARN", fmt.Sprintf("Global theme '%s' not found in available themes for %s, skipping", globalTheme, appName))
+		return nil
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Using global theme '%s' for %s", selectedTheme.Name, appName))
+
+	// Store app-specific theme preference using the global theme
+	themeKey := fmt.Sprintf("app_theme_%s", appName)
+	si.repoMutex.Lock()
+	err = si.repo.Set(themeKey, selectedTheme.Name)
+	si.repoMutex.Unlock()
+	if err != nil {
+		si.sendLog("WARN", fmt.Sprintf("Failed to store theme preference for %s: %v", appName, err))
+		// Don't fail installation if theme preference storage fails
+	} else {
+		si.sendLog("INFO", fmt.Sprintf("Theme preference stored: %s -> %s", appName, selectedTheme.Name))
 	}
 
 	return nil
@@ -1432,6 +1451,11 @@ func (si *StreamingInstaller) createDirectoryForFile(ctx context.Context, filePa
 
 	cmd := fmt.Sprintf("mkdir -p '%s'", dir)
 	return si.executeCommandStream(ctx, cmd)
+}
+
+// getInstallerType returns a human-readable description of the current installer context
+func (si *StreamingInstaller) getInstallerType() string {
+	return "StreamingInstaller"
 }
 
 // expandPath expands tilde (~) in file paths to the user's home directory
