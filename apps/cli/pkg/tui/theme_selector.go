@@ -129,6 +129,13 @@ func ShowThemeSelector(appName string, themes []types.Theme) (types.Theme, error
 	selector := NewThemeSelector(appName, themes)
 	program := tea.NewProgram(selector)
 
+	// Ensure proper cleanup even if Run() panics
+	defer func() {
+		if program != nil {
+			program.Kill()
+		}
+	}()
+
 	finalModel, err := program.Run()
 	if err != nil {
 		return types.Theme{}, fmt.Errorf("theme selection failed: %w", err)

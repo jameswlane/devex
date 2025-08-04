@@ -54,11 +54,11 @@ func GetAvailableThemes(apps []interface{}) []Theme {
 			if themesInterface, exists := appMap["themes"]; exists {
 				if themes, ok := themesInterface.([]interface{}); ok {
 					for _, themeInterface := range themes {
-						if themeMap, ok := themeInterface.(map[string]interface{}); ok {
+						if themeData, ok := themeInterface.(map[string]interface{}); ok {
 							theme := Theme{
-								Name:            getString(themeMap, "name"),
-								ThemeColor:      getString(themeMap, "theme_color"),
-								ThemeBackground: getString(themeMap, "theme_background"),
+								Name:            getString(themeData, "name"),
+								ThemeColor:      getString(themeData, "theme_color"),
+								ThemeBackground: getString(themeData, "theme_background"),
 							}
 							if theme.Name != "" {
 								themeMap[theme.Name] = theme

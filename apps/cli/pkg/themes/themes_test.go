@@ -32,11 +32,11 @@ themes:
 			}
 		}(filePath)
 
-		themes, err := themes.LoadThemes(filePath)
+		loadedThemes, err := themes.LoadThemes(filePath)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(themes).To(HaveLen(2))
-		Expect(themes[0].Name).To(Equal("Solarized Dark"))
-		Expect(themes[1].Name).To(Equal("Gruvbox"))
+		Expect(loadedThemes).To(HaveLen(2))
+		Expect(loadedThemes[0].Name).To(Equal("Solarized Dark"))
+		Expect(loadedThemes[1].Name).To(Equal("Gruvbox"))
 	})
 
 	It("returns an error for an invalid YAML file", func() {
@@ -74,8 +74,182 @@ themes:
 			}
 		}(filePath)
 
-		themes, err := themes.LoadThemes(filePath)
+		loadedThemes, err := themes.LoadThemes(filePath)
 		Expect(err).ToNot(HaveOccurred())
-		Expect(themes).To(HaveLen(0))
+		Expect(loadedThemes).To(HaveLen(0))
+	})
+})
+
+var _ = Describe("GetAvailableThemes", func() {
+	It("extracts themes from apps with theme support", func() {
+		apps := []interface{}{
+			map[string]interface{}{
+				"name": "neovim",
+				"themes": []interface{}{
+					map[string]interface{}{
+						"name":             "Tokyo Night",
+						"theme_color":      "#1A1B26",
+						"theme_background": "dark",
+					},
+					map[string]interface{}{
+						"name":             "Kanagawa",
+						"theme_color":      "#16161D",
+						"theme_background": "dark",
+					},
+				},
+			},
+			map[string]interface{}{
+				"name": "typora",
+				"themes": []interface{}{
+					map[string]interface{}{
+						"name":             "Standard Theme",
+						"theme_color":      "",
+						"theme_background": "light",
+					},
+				},
+			},
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+
+		Expect(themesList).To(HaveLen(3))
+
+		themeNames := make([]string, len(themesList))
+		for i, theme := range themesList {
+			themeNames[i] = theme.Name
+		}
+
+		Expect(themeNames).To(ContainElement("Tokyo Night"))
+		Expect(themeNames).To(ContainElement("Kanagawa"))
+		Expect(themeNames).To(ContainElement("Standard Theme"))
+	})
+
+	It("handles apps without themes", func() {
+		apps := []interface{}{
+			map[string]interface{}{
+				"name": "git",
+				// No themes field
+			},
+			map[string]interface{}{
+				"name":   "docker",
+				"themes": []interface{}{}, // Empty themes
+			},
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(0))
+	})
+
+	It("handles empty apps list", func() {
+		apps := []interface{}{}
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(0))
+	})
+
+	It("deduplicates themes with same name", func() {
+		apps := []interface{}{
+			map[string]interface{}{
+				"name": "app1",
+				"themes": []interface{}{
+					map[string]interface{}{
+						"name":             "Dark Theme",
+						"theme_color":      "#000000",
+						"theme_background": "dark",
+					},
+				},
+			},
+			map[string]interface{}{
+				"name": "app2",
+				"themes": []interface{}{
+					map[string]interface{}{
+						"name":             "Dark Theme", // Duplicate name
+						"theme_color":      "#111111",    // Different color
+						"theme_background": "dark",
+					},
+				},
+			},
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(1))
+		Expect(themesList[0].Name).To(Equal("Dark Theme"))
+	})
+
+	It("handles malformed theme data gracefully", func() {
+		apps := []interface{}{
+			map[string]interface{}{
+				"name": "malformed-app",
+				"themes": []interface{}{
+					map[string]interface{}{
+						// Missing name field
+						"theme_color":      "#000000",
+						"theme_background": "dark",
+					},
+					map[string]interface{}{
+						"name":             "Valid Theme",
+						"theme_color":      "#FFFFFF",
+						"theme_background": "light",
+					},
+					"invalid-theme-data", // Not a map
+				},
+			},
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(1))
+		Expect(themesList[0].Name).To(Equal("Valid Theme"))
+	})
+
+	It("handles mixed valid and invalid apps", func() {
+		apps := []interface{}{
+			"invalid-app-data", // Not a map
+			map[string]interface{}{
+				"name": "valid-app",
+				"themes": []interface{}{
+					map[string]interface{}{
+						"name":             "Valid Theme",
+						"theme_color":      "#FFFFFF",
+						"theme_background": "light",
+					},
+				},
+			},
+			nil, // Nil app
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(1))
+		Expect(themesList[0].Name).To(Equal("Valid Theme"))
+	})
+
+	It("handles themes with missing optional fields", func() {
+		apps := []interface{}{
+			map[string]interface{}{
+				"name": "minimal-app",
+				"themes": []interface{}{
+					map[string]interface{}{
+						"name": "Minimal Theme",
+						// Missing theme_color and theme_background
+					},
+				},
+			},
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(1))
+		Expect(themesList[0].Name).To(Equal("Minimal Theme"))
+		Expect(themesList[0].ThemeColor).To(Equal(""))
+		Expect(themesList[0].ThemeBackground).To(Equal(""))
+	})
+
+	It("handles nil themes array", func() {
+		apps := []interface{}{
+			map[string]interface{}{
+				"name":   "app-with-nil-themes",
+				"themes": nil,
+			},
+		}
+
+		themesList := themes.GetAvailableThemes(apps)
+		Expect(themesList).To(HaveLen(0))
 	})
 })

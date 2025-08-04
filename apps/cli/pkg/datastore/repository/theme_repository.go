@@ -2,6 +2,7 @@ package repository
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
@@ -11,6 +12,15 @@ const (
 	globalThemeKey = "global_theme"
 	appThemePrefix = "app_theme_"
 )
+
+// isNotFoundError checks if the error indicates a key was not found
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for the standard "not found" error message pattern
+	return strings.Contains(err.Error(), "not found")
+}
 
 type themeRepository struct {
 	systemRepo types.SystemRepository
@@ -25,8 +35,13 @@ func (r *themeRepository) GetGlobalTheme() (string, error) {
 
 	theme, err := r.systemRepo.Get(globalThemeKey)
 	if err != nil {
-		log.Debug("No global theme preference found, using default")
-		return "", nil // Return empty string if no preference set
+		if isNotFoundError(err) {
+			log.Debug("No global theme preference found, using default")
+			return "", nil // Return empty string if no preference set
+		}
+		// Actual database error - propagate it
+		log.Error("Database error retrieving global theme preference", err)
+		return "", fmt.Errorf("failed to retrieve global theme preference: %w", err)
 	}
 
 	log.Debug("Global theme preference retrieved", "theme", theme)
@@ -51,8 +66,13 @@ func (r *themeRepository) GetAppTheme(appName string) (string, error) {
 	key := appThemePrefix + appName
 	theme, err := r.systemRepo.Get(key)
 	if err != nil {
-		log.Debug("No app theme preference found, using global theme", "app", appName)
-		return r.GetGlobalTheme() // Fall back to global theme
+		if isNotFoundError(err) {
+			log.Debug("No app theme preference found, using global theme", "app", appName)
+			return r.GetGlobalTheme() // Fall back to global theme
+		}
+		// Actual database error - propagate it
+		log.Error("Database error retrieving app theme preference", err, "app", appName)
+		return "", fmt.Errorf("failed to retrieve app theme preference for %s: %w", appName, err)
 	}
 
 	log.Debug("App theme preference retrieved", "app", appName, "theme", theme)

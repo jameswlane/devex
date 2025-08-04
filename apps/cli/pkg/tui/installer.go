@@ -163,13 +163,14 @@ func createSecureTempFile(dir, pattern string) (*os.File, error) {
 
 // StreamingInstaller handles installation with real-time output and interaction
 type StreamingInstaller struct {
-	program  *tea.Program
-	repo     types.Repository
-	executor CommandExecutor // Pluggable command executor for better testability
-	stdinMux sync.Mutex      // Protects stdin access from race conditions
-	ctx      context.Context
-	cancel   context.CancelFunc
-	config   InstallerConfig // Configuration settings
+	program   *tea.Program
+	repo      types.Repository
+	executor  CommandExecutor // Pluggable command executor for better testability
+	stdinMux  sync.Mutex      // Protects stdin access from race conditions
+	repoMutex sync.RWMutex    // Protects repository access from race conditions
+	ctx       context.Context
+	cancel    context.CancelFunc
+	config    InstallerConfig // Configuration settings
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -577,7 +578,10 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	}
 
 	// Save to repository with configurable error handling
-	if err := si.repo.AddApp(app.Name); err != nil {
+	si.repoMutex.Lock()
+	err := si.repo.AddApp(app.Name)
+	si.repoMutex.Unlock()
+	if err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("Failed to save app to database: %v", err))
 
 		if si.config.FailOnDatabaseErrors {
@@ -1269,6 +1273,13 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 	// Create program
 	p := tea.NewProgram(m, tea.WithAltScreen())
 
+	// Ensure proper cleanup even if Run() panics
+	defer func() {
+		if p != nil {
+			p.Kill()
+		}
+	}()
+
 	// Create streaming installer with context
 	installer := NewStreamingInstaller(p, repo, ctx)
 	defer installer.cancel() // Ensure cleanup
@@ -1338,7 +1349,10 @@ func (si *StreamingInstaller) handleThemeSelection(ctx context.Context, appName 
 	// Store theme preference using the repository's system settings
 	if si.repo != nil {
 		themeKey := fmt.Sprintf("app_theme_%s", appName)
-		if err := si.repo.Set(themeKey, selectedTheme.Name); err != nil {
+		si.repoMutex.Lock()
+		err := si.repo.Set(themeKey, selectedTheme.Name)
+		si.repoMutex.Unlock()
+		if err != nil {
 			si.sendLog("WARN", fmt.Sprintf("Failed to store theme preference for %s: %v", appName, err))
 			// Don't fail installation if theme preference storage fails
 		} else {
@@ -1358,7 +1372,9 @@ func (si *StreamingInstaller) applySelectedTheme(ctx context.Context, appName st
 	}
 
 	themeKey := fmt.Sprintf("app_theme_%s", appName)
+	si.repoMutex.RLock()
 	selectedThemeName, err := si.repo.Get(themeKey)
+	si.repoMutex.RUnlock()
 	if err != nil {
 		si.sendLog("INFO", fmt.Sprintf("No theme preference found for %s, skipping theme application", appName))
 		return nil
