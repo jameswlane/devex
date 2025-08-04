@@ -172,7 +172,12 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 
 	log.Debug("Loaded themes from configurations", "count", len(themeNames), "themes", themeNames)
 
-	// Fallback to default themes if none found in configurations
+	// Fallback to hardcoded themes if none found in configurations
+	// This fallback is used when:
+	// - Configuration files are missing or corrupted
+	// - No desktop environment themes are defined
+	// - Theme loading from config files fails
+	// These themes provide a minimal working set for development environments
 	if len(themeNames) == 0 {
 		log.Warn("No themes found in application configurations, using fallback themes")
 		return []string{
@@ -369,6 +374,9 @@ func (m *SetupModel) View() string {
 		Foreground(lipgloss.Color("#7C3AED")).
 		Bold(true)
 
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#EF4444"))
+
 	switch m.step {
 	case StepWelcome:
 		s = titleStyle.Render("🚀 Welcome to DevEx Setup!")
@@ -553,11 +561,22 @@ func (m *SetupModel) View() string {
 		}
 		s += fmt.Sprintf("%s Email: %s\n", cursor, emailValue)
 
-		s += "\n\n"
+		// Show email validation feedback
+		if m.gitEmail != "" && !isValidEmail(m.gitEmail) {
+			s += errorStyle.Render("   ⚠️  Email must contain @ and . characters") + "\n"
+		}
+
+		s += "\n"
 		if m.gitInputActive {
 			s += "Type your information and press Enter to confirm, Escape to cancel editing"
 		} else {
-			s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue when both fields are filled"
+			fullName := strings.TrimSpace(m.gitFullName)
+			email := strings.TrimSpace(m.gitEmail)
+			if fullName != "" && email != "" && isValidEmail(email) {
+				s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue"
+			} else {
+				s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue when both fields are filled with valid email"
+			}
 		}
 
 	case StepConfirmation:
@@ -802,11 +821,13 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	case StepTheme:
 		m.step = StepGitConfig
 	case StepGitConfig:
-		// Only proceed if both fields are filled
-		if strings.TrimSpace(m.gitFullName) != "" && strings.TrimSpace(m.gitEmail) != "" {
+		// Only proceed if both fields are filled and email is valid
+		fullName := strings.TrimSpace(m.gitFullName)
+		email := strings.TrimSpace(m.gitEmail)
+		if fullName != "" && email != "" && isValidEmail(email) {
 			m.step = StepConfirmation
 		}
-		// If fields are empty, stay on git config step
+		// If fields are empty or email is invalid, stay on git config step
 	case StepConfirmation:
 		m.step = StepInstalling
 	case StepInstalling:
@@ -1287,6 +1308,8 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 }
 
 // getAvailableDesktopApps returns non-default desktop apps compatible with the detected desktop environment
+// Note: This function is called only once during initialization and the result is cached in model.desktopApps,
+// so additional caching mechanisms are not needed for performance.
 func (m *SetupModel) getAvailableDesktopApps() []string {
 	allApps := m.settings.GetAllApps()
 	var desktopApps []string
@@ -1382,4 +1405,10 @@ func (m *SetupModel) saveThemePreference() error {
 
 	log.Info("Theme preference saved successfully", "theme", selectedTheme)
 	return nil
+}
+
+// isValidEmail performs basic email format validation
+// Returns true if email contains both "@" and "." characters
+func isValidEmail(email string) bool {
+	return strings.Contains(email, "@") && strings.Contains(email, ".")
 }

@@ -184,7 +184,7 @@ func TestGitConfigValidation(t *testing.T) {
 
 		assert.Contains(t, view, "Full Name: John Doe", "Should display full name")
 		assert.Contains(t, view, "Email: john@example.com", "Should display email")
-		assert.Contains(t, view, "'n' to continue when both fields are filled",
+		assert.Contains(t, view, "'n' to continue",
 			"Should show instruction for continuing")
 	})
 
@@ -223,19 +223,24 @@ func TestGitConfigValidation(t *testing.T) {
 		assert.Contains(t, view, "Enter to edit field", "Should show edit instruction")
 	})
 
-	t.Run("should handle email validation edge cases", func(t *testing.T) {
-		// Note: The current implementation doesn't validate email format,
-		// but we test that various email formats are accepted
+	t.Run("should validate email format", func(t *testing.T) {
 		testCases := []struct {
-			name  string
-			email string
+			name          string
+			email         string
+			shouldAdvance bool
 		}{
-			{"simple email", "user@example.com"},
-			{"email with subdomain", "user@mail.example.com"},
-			{"email with plus", "user+tag@example.com"},
-			{"email with dots", "user.name@example.com"},
-			{"email with dashes", "user@ex-ample.com"},
-			{"short domain", "user@ex.co"},
+			{"valid simple email", "user@example.com", true},
+			{"valid email with subdomain", "user@mail.example.com", true},
+			{"valid email with plus", "user+tag@example.com", true},
+			{"valid email with dots", "user.name@example.com", true},
+			{"valid email with dashes", "user@ex-ample.com", true},
+			{"valid short domain", "user@ex.co", true},
+			{"invalid missing @", "userexample.com", false},
+			{"invalid missing .", "user@example", false},
+			{"invalid missing both", "userexample", false},
+			{"invalid only @", "user@", false},
+			{"invalid only .", "user.", false},
+			{"invalid empty", "", false},
 		}
 
 		for _, tc := range testCases {
@@ -246,9 +251,13 @@ func TestGitConfigValidation(t *testing.T) {
 
 				updatedModel, _ := model.nextStep()
 
-				// Should advance with any email format (no validation currently)
-				assert.Equal(t, StepConfirmation, updatedModel.step,
-					"Should accept email format: %s", tc.email)
+				if tc.shouldAdvance {
+					assert.Equal(t, StepConfirmation, updatedModel.step,
+						"Should advance with valid email: %s", tc.email)
+				} else {
+					assert.Equal(t, StepGitConfig, updatedModel.step,
+						"Should not advance with invalid email: %s", tc.email)
+				}
 			})
 		}
 	})
@@ -302,5 +311,34 @@ func TestGitConfigValidation(t *testing.T) {
 
 		assert.Equal(t, "John Doe", prevModel.gitFullName, "Should preserve full name")
 		assert.Equal(t, "john@example.com", prevModel.gitEmail, "Should preserve email")
+	})
+}
+
+func TestEmailValidation(t *testing.T) {
+	t.Run("isValidEmail should validate correctly", func(t *testing.T) {
+		testCases := []struct {
+			email    string
+			expected bool
+		}{
+			{"user@example.com", true},
+			{"test.email+tag@domain.co.uk", true},
+			{"user@sub.domain.com", true},
+			{"userexample.com", false}, // missing @
+			{"user@example", false},    // missing .
+			{"userexample", false},     // missing both
+			{"user@", false},           // only @
+			{"user.", false},           // only .
+			{"", false},                // empty
+			{"@example.com", true},     // edge case: starts with @
+			{"user@.com", true},        // edge case: domain starts with .
+		}
+
+		for _, tc := range testCases {
+			t.Run("email: "+tc.email, func(t *testing.T) {
+				result := isValidEmail(tc.email)
+				assert.Equal(t, tc.expected, result,
+					"Email validation failed for: %s", tc.email)
+			})
+		}
 	})
 }
