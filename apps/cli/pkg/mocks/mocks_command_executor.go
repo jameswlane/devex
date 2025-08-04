@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -329,6 +330,36 @@ func (m *MockCommandExecutor) DownloadFileWithContext(ctx context.Context, url, 
 		// Create a mock GPG key content to satisfy file size checks
 		_ = "-----BEGIN PGP PUBLIC KEY BLOCK-----\nMock GPG key content for testing\n-----END PGP PUBLIC KEY BLOCK-----"
 		// We don't actually write to filesystem in tests but this simulates success
+	}
+
+	return nil
+}
+
+// ExecuteCommand implements CommandExecutor.ExecuteCommand
+func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	m.Commands = append(m.Commands, command)
+
+	// Check if this command should fail
+	if command == m.FailingCommand || m.FailingCommands[command] {
+		return nil, fmt.Errorf("mock command execution failed: %s", command)
+	}
+
+	// Return a mock command that will not actually execute
+	// This is safe for testing as we're not running real commands
+	cmd := exec.CommandContext(ctx, "echo", "mock-execution")
+	return cmd, nil
+}
+
+// ValidateCommand implements CommandExecutor.ValidateCommand
+func (m *MockCommandExecutor) ValidateCommand(command string) error {
+	// Basic validation - reject empty commands
+	if strings.TrimSpace(command) == "" {
+		return fmt.Errorf("empty command")
+	}
+
+	// For testing purposes, allow most commands but reject ones marked as failing
+	if command == m.FailingCommand || m.FailingCommands[command] {
+		return fmt.Errorf("mock command validation failed: %s", command)
 	}
 
 	return nil

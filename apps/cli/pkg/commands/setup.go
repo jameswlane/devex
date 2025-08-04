@@ -20,6 +20,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
+	"github.com/jameswlane/devex/pkg/themes"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -131,6 +132,75 @@ const (
 	RedisPort      = "6379:6379"
 )
 
+// getAvailableThemeNames extracts theme names from application configurations
+func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
+	log.Debug("Loading available themes from application configurations")
+
+	// Get all applications from all categories in settings
+	var allApps []interface{}
+
+	// Collect applications from all categories
+	appCategories := [][]types.CrossPlatformApp{
+		settings.Applications.Development,
+		settings.Applications.Databases,
+		settings.Applications.SystemTools,
+		settings.Applications.Optional,
+	}
+
+	// Convert CrossPlatformApp slice to interface{} slice for GetAvailableThemes
+	for _, category := range appCategories {
+		for _, app := range category {
+			// Get themes from the appropriate OS config
+			osConfig := app.GetOSConfig()
+			if len(osConfig.Themes) > 0 {
+				allApps = append(allApps, map[string]interface{}{
+					"name":   app.Name,
+					"themes": convertThemesToInterface(osConfig.Themes),
+				})
+			}
+		}
+	}
+
+	// Get unique themes from all applications
+	availableThemes := themes.GetAvailableThemes(allApps)
+
+	// Extract theme names
+	themeNames := make([]string, len(availableThemes))
+	for i, theme := range availableThemes {
+		themeNames[i] = theme.Name
+	}
+
+	log.Debug("Loaded themes from configurations", "count", len(themeNames), "themes", themeNames)
+
+	// Fallback to default themes if none found in configurations
+	if len(themeNames) == 0 {
+		log.Warn("No themes found in application configurations, using fallback themes")
+		return []string{
+			"Tokyo Night",
+			"Catppuccin",
+			"Dracula",
+			"Nord",
+			"One Dark",
+			"Gruvbox",
+		}
+	}
+
+	return themeNames
+}
+
+// convertThemesToInterface converts []types.Theme to []interface{} for GetAvailableThemes
+func convertThemesToInterface(themes []types.Theme) []interface{} {
+	result := make([]interface{}, len(themes))
+	for i, theme := range themes {
+		result[i] = map[string]interface{}{
+			"name":             theme.Name,
+			"theme_color":      theme.ThemeColor,
+			"theme_background": theme.ThemeBackground,
+		}
+	}
+	return result
+}
+
 func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
@@ -184,14 +254,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 			"MySQL",
 			"Redis",
 		},
-		themes: []string{
-			"Tokyo Night",
-			"Catppuccin",
-			"Dracula",
-			"Nord",
-			"One Dark",
-			"Gruvbox",
-		},
+		themes: getAvailableThemeNames(settings),
 	}
 
 	// Set desktop apps based on platform and config (non-default apps only)
