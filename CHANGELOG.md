@@ -1,3 +1,11 @@
+## [0.18.0](https://github.com/jameswlane/devex/compare/0.17.0...0.18.0) (2025-08-04)
+
+### Features
+
+* add email validation and improve code documentation ([04fc33c](https://github.com/jameswlane/devex/commit/04fc33c953696381868004e7b0fe22eda96f7c88))
+* enhance TUI flow and theme system with comprehensive improvements ([5d195ac](https://github.com/jameswlane/devex/commit/5d195ac2a8ecc2a25fb8382871987dba05e0385d))
+* enhance TUI flow and theme system with comprehensive improvements ([4620424](https://github.com/jameswlane/devex/commit/46204245f54d257073e4f24dd934dae8b7ca1619))
+
 ## [0.17.0](https://github.com/jameswlane/devex/compare/0.16.3...0.17.0) (2025-08-04)
 
 ### Features
