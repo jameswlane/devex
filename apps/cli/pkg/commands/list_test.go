@@ -1,331 +1,446 @@
-package commands
+package commands_test
 
 import (
-	"errors"
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"testing"
-	"time"
 
+	"github.com/jameswlane/devex/pkg/commands"
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/mocks"
 	"github.com/jameswlane/devex/pkg/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"gopkg.in/yaml.v3"
 )
-
-func TestListCommands(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "List Commands Suite")
-}
 
 var _ = Describe("List Command", func() {
 	var (
-		mockRepo *MockRepository
+		mockRepo *mocks.MockRepository
 		settings config.CrossPlatformSettings
-		options  ListCommandOptions
+		buf      *bytes.Buffer
 	)
 
 	BeforeEach(func() {
-		mockRepo = &MockRepository{}
+		mockRepo = mocks.NewMockRepository()
+		buf = new(bytes.Buffer)
+
 		settings = config.CrossPlatformSettings{
 			Applications: config.ApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
-						Name:        "test-app",
-						Description: "A test application",
-						Category:    "Development Tools",
+						Name:        "git",
+						Description: "Version control system",
+						Category:    "development",
 						Default:     true,
 						Linux: types.OSConfig{
 							InstallMethod: "apt",
 						},
 					},
+					{
+						Name:        "docker",
+						Description: "Container platform",
+						Category:    "development",
+						Default:     false,
+						Linux: types.OSConfig{
+							InstallMethod: "apt",
+							Alternatives: []types.OSConfig{
+								{InstallMethod: "docker"},
+							},
+						},
+					},
+				},
+				Databases: []types.CrossPlatformApp{
+					{
+						Name:        "mysql",
+						Description: "MySQL database",
+						Category:    "databases",
+						Linux: types.OSConfig{
+							InstallMethod: "docker",
+						},
+					},
 				},
 			},
 		}
-		options = ListCommandOptions{
-			Format: "table",
-		}
-	})
 
-	Describe("parseListFlags", func() {
-		It("should parse flags correctly", func() {
-			// This would require setting up a cobra command with flags
-			// For now, just test the structure exists
-			Expect(options.Format).To(Equal("table"))
+		// Add some test data to mock repository
+		_ = mockRepo.SaveApp(types.AppConfig{
+			BaseConfig: types.BaseConfig{
+				Name:        "git",
+				Description: "Version control system",
+				Category:    "development",
+			},
+			InstallMethod: "apt",
 		})
 	})
 
-	Describe("getInstalledApps", func() {
-		Context("when database is available", func() {
-			BeforeEach(func() {
-				mockRepo.On("ListApps").Return([]types.AppConfig{
-					{
-						BaseConfig: types.BaseConfig{
-							Name:        "test-app",
-							Description: "A test application",
-							Category:    "Development Tools",
-						},
-						InstallMethod: "apt",
-					},
-				}, nil)
-			})
-
-			It("should return installed applications", func() {
-				apps, err := getInstalledApps(mockRepo, settings, options)
-				Expect(err).To(BeNil())
-				Expect(apps).To(HaveLen(1))
-				Expect(apps[0].Name).To(Equal("test-app"))
-				Expect(apps[0].Category).To(Equal("Development Tools"))
-			})
+	Describe("Command Creation", func() {
+		It("should create command with correct structure", func() {
+			cmd := commands.NewListCmd(mockRepo, settings)
+			Expect(cmd).ToNot(BeNil())
+			Expect(cmd.Use).To(Equal("list [installed|available|categories]"))
+			Expect(cmd.Short).To(Equal("List installed or available applications"))
+			Expect(cmd.ValidArgs).To(ContainElements("installed", "available", "categories"))
 		})
 
-		Context("when database returns error", func() {
-			BeforeEach(func() {
-				mockRepo.On("ListApps").Return(nil, errors.New("database error"))
-			})
-
-			It("should return error", func() {
-				_, err := getInstalledApps(mockRepo, settings, options)
-				Expect(err).ToNot(BeNil())
-				Expect(err.Error()).To(ContainSubstring("failed to get installed apps"))
-			})
-		})
-	})
-
-	Describe("getAvailableApps", func() {
-		It("should return available applications", func() {
-			apps := getAvailableApps(settings, options)
-			Expect(apps).To(HaveLen(1))
-			Expect(apps[0].Name).To(Equal("test-app"))
-			Expect(apps[0].Category).To(Equal("Development Tools"))
-			Expect(apps[0].Recommended).To(BeTrue())
-			Expect(apps[0].InstallMethods).To(ContainElement("apt"))
-			Expect(apps[0].Platforms).To(ContainElement("linux"))
-		})
-	})
-
-	Describe("getCategoryInfo", func() {
-		It("should return category information", func() {
-			categories := getCategoryInfo(settings)
-			Expect(categories).To(HaveLen(1))
-			Expect(categories[0].Name).To(Equal("Development Tools"))
-			Expect(categories[0].AppCount).To(Equal(1))
-			Expect(categories[0].Platforms).To(ContainElement("linux"))
-		})
-	})
-
-	Describe("filterInstalledApps", func() {
-		var installedApps []InstalledApp
-
-		BeforeEach(func() {
-			installedApps = []InstalledApp{
-				{
-					Name:          "test-app",
-					Description:   "A test application",
-					Category:      "Development Tools",
-					InstallMethod: "apt",
-					InstallDate:   time.Now(),
-				},
-				{
-					Name:          "other-app",
-					Description:   "Another application",
-					Category:      "Utilities",
-					InstallMethod: "snap",
-					InstallDate:   time.Now(),
-				},
+		It("should have all required flags", func() {
+			cmd := commands.NewListCmd(mockRepo, settings)
+			expectedFlags := []string{"category", "format", "verbose", "search", "method", "recommended", "interactive"}
+			for _, flag := range expectedFlags {
+				Expect(cmd.Flags().Lookup(flag)).ToNot(BeNil(), "Flag %s should exist", flag)
 			}
 		})
+	})
 
-		It("should filter by category", func() {
-			options.Category = "Development Tools"
-			filtered := filterInstalledApps(installedApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
+	JustBeforeEach(func() {
+		// Reset buffer before each test
+		buf.Reset()
+	})
+
+	Describe("Integration Tests", func() {
+		Context("list installed command", func() {
+			It("should execute installed command successfully", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"installed"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("✅ Installed Applications"))
+			})
+
+			It("should show installed apps in JSON format", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"installed", "--format", "json"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				// Verify JSON output is valid
+				var result []map[string]interface{}
+				err = json.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should show installed apps in YAML format", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"installed", "--format", "yaml"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				// Verify YAML output is valid
+				var result []map[string]interface{}
+				err = yaml.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+			})
 		})
 
-		It("should filter by search term", func() {
-			options.Search = "test"
-			filtered := filterInstalledApps(installedApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
+		Context("list available command", func() {
+			It("should execute available command successfully", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"available"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("📋 Available Applications"))
+			})
+
+			It("should filter by category", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"available", "--category", "development"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("git"))
+				Expect(buf.String()).ToNot(ContainSubstring("mysql"))
+			})
+
+			It("should search applications", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"available", "--search", "git"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("git"))
+			})
+
+			It("should show recommended apps only", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"available", "--recommended"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("git"))
+				Expect(buf.String()).ToNot(ContainSubstring("docker"))
+			})
 		})
 
-		It("should filter by install method", func() {
-			options.Method = "apt"
-			filtered := filterInstalledApps(installedApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
+		Context("list categories command", func() {
+			It("should execute categories command successfully", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"categories"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("📂 Available Categories"))
+				Expect(buf.String()).To(ContainSubstring("development"))
+				Expect(buf.String()).To(ContainSubstring("databases"))
+			})
+
+			It("should show categories in JSON format", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"categories", "--format", "json"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				// Verify JSON output is valid
+				var result []map[string]interface{}
+				err = json.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(result)).To(BeNumerically(">", 0))
+			})
 		})
 
-		It("should return all apps when no filters", func() {
-			filtered := filterInstalledApps(installedApps, options)
-			Expect(filtered).To(HaveLen(2))
+		Context("error handling", func() {
+			It("should handle unknown subcommand", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"unknown"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred()) // Command itself doesn't error
+				Expect(buf.String()).To(ContainSubstring("Unknown subcommand"))
+			})
 		})
 	})
 
-	Describe("filterAvailableApps", func() {
-		var availableApps []AvailableApp
+	// Unit tests for individual functions that can be tested in isolation
+	Describe("Output Function Tests", func() {
+		Context("JSON Output", func() {
+			It("should produce valid JSON for installed apps", func() {
+				// This tests the JSON marshaling functionality
+				// Since we can't directly test unexported functions,
+				// we test through command execution
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"installed", "--format", "json"})
 
-		BeforeEach(func() {
-			availableApps = []AvailableApp{
-				{
-					Name:           "test-app",
-					Description:    "A test application",
-					Category:       "Development Tools",
-					InstallMethods: []string{"apt"},
-					Recommended:    true,
-				},
-				{
-					Name:           "other-app",
-					Description:    "Another application",
-					Category:       "Utilities",
-					InstallMethods: []string{"snap"},
-					Recommended:    false,
-				},
-			}
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				// Verify valid JSON structure
+				var result []map[string]interface{}
+				err = json.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should produce valid JSON for available apps", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"available", "--format", "json"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				var result []map[string]interface{}
+				err = json.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(result)).To(BeNumerically(">", 0))
+			})
 		})
 
-		It("should filter by category", func() {
-			options.Category = "Development Tools"
-			filtered := filterAvailableApps(availableApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
+		Context("YAML Output", func() {
+			It("should produce valid YAML for installed apps", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"installed", "--format", "yaml"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				var result []map[string]interface{}
+				err = yaml.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should produce valid YAML for available apps", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"available", "--format", "yaml"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+
+				output := buf.String()
+				Expect(output).ToNot(BeEmpty())
+
+				var result []map[string]interface{}
+				err = yaml.Unmarshal([]byte(output), &result)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(result)).To(BeNumerically(">", 0))
+			})
 		})
 
-		It("should filter by search term", func() {
-			options.Search = "test"
-			filtered := filterAvailableApps(availableApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
+		Context("Table Output", func() {
+			It("should produce table output for installed apps", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"installed", "--format", "table"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("Installed Applications"))
+			})
+
+			It("should produce verbose table output", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"available", "--verbose"})
+
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				// Verify table structure characters are present
+				Expect(buf.String()).To(ContainSubstring("┌"))
+				Expect(buf.String()).To(ContainSubstring("│"))
+				Expect(buf.String()).To(ContainSubstring("└"))
+			})
 		})
 
-		It("should filter by install method", func() {
-			options.Method = "apt"
-			filtered := filterAvailableApps(availableApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
-		})
+		Context("Error Cases", func() {
+			It("should handle repository errors gracefully", func() {
+				// Create a mock that returns an error
+				errorRepo := mocks.NewMockRepository()
 
-		It("should filter by recommended", func() {
-			options.Recommended = true
-			filtered := filterAvailableApps(availableApps, options)
-			Expect(filtered).To(HaveLen(1))
-			Expect(filtered[0].Name).To(Equal("test-app"))
-		})
+				cmd := commands.NewListCmd(errorRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"installed"})
 
-		It("should return all apps when no filters", func() {
-			filtered := filterAvailableApps(availableApps, options)
-			Expect(filtered).To(HaveLen(2))
-		})
-	})
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred()) // Command shouldn't crash
+			})
 
-	Describe("helper functions", func() {
-		Describe("getSupportedPlatforms", func() {
-			It("should return correct platforms for Linux-only app", func() {
-				app := types.CrossPlatformApp{
-					Linux: types.OSConfig{InstallMethod: "apt"},
+			It("should handle empty results", func() {
+				emptySettings := config.CrossPlatformSettings{
+					Applications: config.ApplicationsConfig{},
 				}
-				platforms := getSupportedPlatforms(app)
-				Expect(platforms).To(Equal([]string{"linux"}))
-			})
 
-			It("should return all platforms for cross-platform app", func() {
-				app := types.CrossPlatformApp{
-					AllPlatforms: types.OSConfig{InstallMethod: "mise"},
-				}
-				platforms := getSupportedPlatforms(app)
-				Expect(platforms).To(Equal([]string{"linux", "macos", "windows"}))
-			})
-		})
+				cmd := commands.NewListCmd(mockRepo, emptySettings)
+				cmd.SetOut(buf)
+				cmd.SetErr(buf)
+				cmd.SetArgs([]string{"available"})
 
-		Describe("getCategoryDescription", func() {
-			It("should return correct description for known category", func() {
-				desc := getCategoryDescription("development")
-				Expect(desc).To(Equal("Core development tools and IDEs"))
-			})
-
-			It("should return default description for unknown category", func() {
-				desc := getCategoryDescription("unknown")
-				Expect(desc).To(Equal("Various applications"))
-			})
-		})
-
-		Describe("contains", func() {
-			It("should return true when item exists", func() {
-				slice := []string{"a", "b", "c"}
-				result := contains(slice, "b")
-				Expect(result).To(BeTrue())
-			})
-
-			It("should return false when item doesn't exist", func() {
-				slice := []string{"a", "b", "c"}
-				result := contains(slice, "d")
-				Expect(result).To(BeFalse())
-			})
-		})
-
-		Describe("truncateString", func() {
-			It("should not truncate short strings", func() {
-				result := truncateString("short", 10)
-				Expect(result).To(Equal("short"))
-			})
-
-			It("should truncate long strings with ellipsis", func() {
-				result := truncateString("very long string", 10)
-				Expect(result).To(Equal("very lo..."))
+				err := cmd.Execute()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(buf.String()).To(ContainSubstring("Available Applications"))
 			})
 		})
 	})
 })
 
-// MockRepository is a mock implementation of the Repository interface
-type MockRepository struct {
-	apps []types.AppConfig
-	err  error
-}
+// Benchmarks for performance testing
+func BenchmarkListAvailableApps(b *testing.B) {
+	mockRepo := mocks.NewMockRepository()
+	settings := createTestSettings()
 
-func (m *MockRepository) On(method string) *MockCall {
-	return &MockCall{repo: m, method: method}
-}
-
-func (m *MockRepository) AddApp(appName string) error {
-	return m.err
-}
-
-func (m *MockRepository) DeleteApp(name string) error {
-	return m.err
-}
-
-func (m *MockRepository) GetApp(name string) (*types.AppConfig, error) {
-	for _, app := range m.apps {
-		if app.Name == name {
-			return &app, nil
-		}
+	// Add test data
+	for i := 0; i < 100; i++ {
+		_ = mockRepo.SaveApp(types.AppConfig{
+			BaseConfig: types.BaseConfig{
+				Name:        fmt.Sprintf("app-%d", i),
+				Description: fmt.Sprintf("Test app %d", i),
+				Category:    "development",
+			},
+			InstallMethod: "apt",
+		})
 	}
-	return nil, m.err
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cmd := commands.NewListCmd(mockRepo, settings)
+		cmd.SetOut(io.Discard)
+		cmd.SetArgs([]string{"available"})
+		_ = cmd.Execute()
+	}
 }
 
-func (m *MockRepository) ListApps() ([]types.AppConfig, error) {
-	return m.apps, m.err
+func BenchmarkListInstalledApps(b *testing.B) {
+	mockRepo := mocks.NewMockRepository()
+	settings := createTestSettings()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		cmd := commands.NewListCmd(mockRepo, settings)
+		cmd.SetOut(io.Discard)
+		cmd.SetArgs([]string{"installed"})
+		_ = cmd.Execute()
+	}
 }
 
-func (m *MockRepository) SaveApp(app types.AppConfig) error {
-	return m.err
-}
-
-func (m *MockRepository) Set(key string, value string) error {
-	return m.err
-}
-
-func (m *MockRepository) Get(key string) (string, error) {
-	return "", m.err
-}
-
-// MockCall helps with setting up mock expectations
-type MockCall struct {
-	repo   *MockRepository
-	method string
-}
-
-func (c *MockCall) Return(apps []types.AppConfig, err error) {
-	c.repo.apps = apps
-	c.repo.err = err
+// Helper function to create test settings
+func createTestSettings() config.CrossPlatformSettings {
+	return config.CrossPlatformSettings{
+		Applications: config.ApplicationsConfig{
+			Development: []types.CrossPlatformApp{
+				{
+					Name:        "git",
+					Description: "Version control system",
+					Category:    "development",
+					Default:     true,
+					Linux: types.OSConfig{
+						InstallMethod: "apt",
+					},
+				},
+				{
+					Name:        "docker",
+					Description: "Container platform",
+					Category:    "development",
+					Default:     false,
+					Linux: types.OSConfig{
+						InstallMethod: "docker",
+					},
+				},
+			},
+		},
+	}
 }

@@ -278,26 +278,31 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 }
 
 // getAvailableApps retrieves all available applications with installation status
+// Optimized to pre-filter supported apps and cache database calls for better performance
 func getAvailableApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) []AvailableApp {
 	allApps := settings.GetAllApps()
-	availableApps := make([]AvailableApp, 0, len(allApps))
 
-	// Get installed apps to check status
-	installedApps := make(map[string]bool)
-	if repo != nil {
-		if dbApps, err := repo.ListApps(); err == nil {
-			for _, dbApp := range dbApps {
-				installedApps[dbApp.Name] = true
-			}
+	// Pre-filter supported apps to avoid processing unsupported ones
+	supportedApps := make([]types.CrossPlatformApp, 0, len(allApps))
+	for _, app := range allApps {
+		if app.IsSupported() {
+			supportedApps = append(supportedApps, app)
 		}
 	}
-	for _, app := range allApps {
-		if !app.IsSupported() {
-			continue
-		}
 
+	// Pre-allocate with exact capacity for better memory efficiency
+	availableApps := make([]AvailableApp, 0, len(supportedApps))
+
+	// Cache installed apps lookup once to avoid repeated database calls
+	installedApps := getInstalledAppsCache(repo)
+
+	// Process only supported apps
+	for _, app := range supportedApps {
 		osConfig := app.GetOSConfig()
-		installMethods := []string{}
+
+		// Pre-allocate install methods slice with estimated capacity
+		installMethods := make([]string, 0, 1+len(osConfig.Alternatives))
+
 		if osConfig.InstallMethod != "" {
 			installMethods = append(installMethods, osConfig.InstallMethod)
 		}
@@ -325,7 +330,29 @@ func getAvailableApps(repo types.Repository, settings config.CrossPlatformSettin
 	return availableApps
 }
 
+// getInstalledAppsCache creates a map of installed app names for quick lookup
+// This avoids repeated database calls when checking installation status
+func getInstalledAppsCache(repo types.Repository) map[string]bool {
+	installedApps := make(map[string]bool)
+
+	if repo == nil {
+		return installedApps
+	}
+
+	dbApps, err := repo.ListApps()
+	if err != nil {
+		return installedApps
+	}
+
+	for _, app := range dbApps {
+		installedApps[app.Name] = true
+	}
+
+	return installedApps
+}
+
 // getCategoryInfo retrieves category information
+// Optimized to use a map for platform deduplication for better performance
 func getCategoryInfo(settings config.CrossPlatformSettings) []CategoryInfo {
 	categories := make(map[string]*CategoryInfo)
 
@@ -333,7 +360,7 @@ func getCategoryInfo(settings config.CrossPlatformSettings) []CategoryInfo {
 	for _, app := range allApps {
 		category := app.Category
 		if category == "" {
-			category = "Other"
+			category = DefaultCategory
 		}
 
 		if _, exists := categories[category]; !exists {
@@ -346,11 +373,16 @@ func getCategoryInfo(settings config.CrossPlatformSettings) []CategoryInfo {
 		}
 
 		categories[category].AppCount++
-		// Add supported platforms
+		// Add supported platforms using a map for efficient deduplication
 		platforms := getSupportedPlatforms(app)
+		platformMap := make(map[string]bool)
+		for _, platform := range categories[category].Platforms {
+			platformMap[platform] = true
+		}
 		for _, platform := range platforms {
-			if !contains(categories[category].Platforms, platform) {
+			if !platformMap[platform] {
 				categories[category].Platforms = append(categories[category].Platforms, platform)
+				platformMap[platform] = true
 			}
 		}
 	}
@@ -401,15 +433,6 @@ func getCategoryDescription(category string) string {
 		return desc
 	}
 	return "Various applications"
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }
 
 // Filter functions
@@ -767,6 +790,7 @@ func getSortedCategories(categories map[string][]AvailableApp) []string {
 }
 
 // renderCategorizedApps renders apps grouped by category and returns counts
+// Optimized to calculate counts in a single pass for better performance
 func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategories []string) (int, int) {
 	recommendedCount := 0
 	installedCount := 0
