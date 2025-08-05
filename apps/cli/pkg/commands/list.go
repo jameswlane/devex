@@ -14,6 +14,29 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Table formatting constants
+const (
+	// Column widths for installed apps table
+	InstalledAppNameWidth     = 15
+	InstalledDescriptionWidth = 31
+	InstalledCategoryWidth    = 11
+	InstalledMethodWidth      = 11
+
+	// Column widths for available apps table
+	AvailableAppNameWidth        = 15
+	AvailableDescriptionWidth    = 35
+	AvailableInstallMethodsWidth = 15
+	AvailableCategoryWidth       = 11
+	AvailableStatusWidth         = 8
+
+	// Status icons
+	InstalledIcon = "✅"
+	AvailableIcon = "📦"
+
+	// Default category for uncategorized apps
+	DefaultCategory = "Other"
+)
+
 func init() {
 	Register(NewListCmd)
 }
@@ -239,8 +262,13 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 				Description:   configApp.Description,
 				Category:      configApp.Category,
 				InstallMethod: dbApp.InstallMethod,
-				Version:       "", // TODO: Add version tracking
-				Dependencies:  configApp.GetOSConfig().Dependencies,
+				// Note: Version tracking is not implemented yet as the database schema
+				// doesn't store version information. This would require:
+				// 1. Database migration to add version column
+				// 2. Version detection logic for different package managers
+				// 3. Integration with installation tracking
+				Version:      "",
+				Dependencies: configApp.GetOSConfig().Dependencies,
 			}
 			installedApps = append(installedApps, installedApp)
 		}
@@ -498,24 +526,9 @@ func outputInstalledTable(apps []InstalledApp, options ListCommandOptions) {
 	}
 
 	if options.Verbose {
-		// Detailed table output
-		fmt.Printf("┌─────────────────┬─────────────────────────────────┬─────────────┬─────────────┐\n")
-		fmt.Printf("│ %-15s │ %-31s │ %-11s │ %-11s │\n", "Application", "Description", "Category", "Method")
-		fmt.Printf("├─────────────────┼─────────────────────────────────┼─────────────┼─────────────┤\n")
-
-		for _, app := range apps {
-			fmt.Printf("│ %-15s │ %-31s │ %-11s │ %-11s │\n",
-				truncateString(app.Name, 15),
-				truncateString(app.Description, 31),
-				truncateString(app.Category, 11),
-				truncateString(app.InstallMethod, 11))
-		}
-		fmt.Printf("└─────────────────┴─────────────────────────────────┴─────────────┴─────────────┘\n")
+		renderInstalledAppsTable(apps)
 	} else {
-		// Simple list output
-		for _, app := range apps {
-			fmt.Printf("  • %s - %s\n", app.Name, app.Description)
-		}
+		renderInstalledAppsList(apps)
 	}
 
 	fmt.Printf("\nTotal installed: %d applications\n", len(apps))
@@ -550,70 +563,9 @@ func outputAvailableTable(apps []AvailableApp, options ListCommandOptions) {
 	}
 
 	if options.Verbose {
-		// Detailed table output
-		fmt.Printf("┌─────────────────┬───────────────────────────────────┬─────────────────┬─────────────┐\n")
-		fmt.Printf("│ %-15s │ %-35s │ %-15s │ %-11s │\n", "Application", "Description", "Install Methods", "Category")
-		fmt.Printf("├─────────────────┼───────────────────────────────────┼─────────────────┼─────────────┤\n")
-
-		for _, app := range apps {
-			methods := strings.Join(app.InstallMethods, ", ")
-			recommendedMarker := ""
-			if app.Recommended {
-				recommendedMarker = " ⭐"
-			}
-			fmt.Printf("│ %-15s │ %-35s │ %-15s │ %-11s │\n",
-				truncateString(app.Name+recommendedMarker, 15),
-				truncateString(app.Description, 35),
-				truncateString(methods, 15),
-				truncateString(app.Category, 11))
-		}
-		fmt.Printf("└─────────────────┴───────────────────────────────────┴─────────────────┴─────────────┘\n")
+		renderAvailableAppsTable(apps)
 	} else {
-		// Group by category
-		categories := make(map[string][]AvailableApp)
-		for _, app := range apps {
-			category := app.Category
-			if category == "" {
-				category = "Other"
-			}
-			categories[category] = append(categories[category], app)
-		}
-
-		// Sort categories
-		sortedCategories := make([]string, 0, len(categories))
-		for category := range categories {
-			sortedCategories = append(sortedCategories, category)
-		}
-		sort.Strings(sortedCategories)
-
-		recommendedCount := 0
-		installedCount := 0
-		for _, category := range sortedCategories {
-			categoryApps := categories[category]
-			if len(categoryApps) == 0 {
-				continue
-			}
-
-			fmt.Printf("\n🏷️  %s:\n", category)
-
-			for _, app := range categoryApps {
-				recommendedMarker := ""
-				if app.Recommended {
-					recommendedMarker = " (recommended)"
-					recommendedCount++
-				}
-				if app.Installed {
-					installedCount++
-				}
-				statusIcon := "📦"
-				if app.Installed {
-					statusIcon = "✅"
-				}
-				fmt.Printf("  %s %s - %s%s\n", statusIcon, app.Name, app.Description, recommendedMarker)
-			}
-		}
-
-		fmt.Printf("\nTotal available: %d applications (%d recommended, %d installed)\n", len(apps), recommendedCount, installedCount)
+		renderAvailableAppsList(apps)
 	}
 
 	fmt.Println()
@@ -675,10 +627,176 @@ func outputCategoriesTable(categories []CategoryInfo, options ListCommandOptions
 	fmt.Println("💡 Tip: Use 'devex list available --category <name>' to view apps in a specific category")
 }
 
-// Utility function
+// Utility functions
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// renderInstalledAppsTable displays installed apps in a detailed table format
+func renderInstalledAppsTable(apps []InstalledApp) {
+	// Create table header
+	headerFormat := fmt.Sprintf("│ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │\n",
+		InstalledAppNameWidth, InstalledDescriptionWidth, InstalledCategoryWidth, InstalledMethodWidth)
+
+	// Print table borders and header
+	fmt.Printf("┌%s┬%s┬%s┬%s┐\n",
+		strings.Repeat("─", InstalledAppNameWidth+2),
+		strings.Repeat("─", InstalledDescriptionWidth+2),
+		strings.Repeat("─", InstalledCategoryWidth+2),
+		strings.Repeat("─", InstalledMethodWidth+2))
+
+	fmt.Printf(headerFormat, "Application", "Description", "Category", "Method")
+
+	fmt.Printf("├%s┼%s┼%s┼%s┤\n",
+		strings.Repeat("─", InstalledAppNameWidth+2),
+		strings.Repeat("─", InstalledDescriptionWidth+2),
+		strings.Repeat("─", InstalledCategoryWidth+2),
+		strings.Repeat("─", InstalledMethodWidth+2))
+
+	// Print table rows
+	for _, app := range apps {
+		fmt.Printf(headerFormat,
+			truncateString(app.Name, InstalledAppNameWidth),
+			truncateString(app.Description, InstalledDescriptionWidth),
+			truncateString(app.Category, InstalledCategoryWidth),
+			truncateString(app.InstallMethod, InstalledMethodWidth))
+	}
+
+	// Print table footer
+	fmt.Printf("└%s┴%s┴%s┴%s┘\n",
+		strings.Repeat("─", InstalledAppNameWidth+2),
+		strings.Repeat("─", InstalledDescriptionWidth+2),
+		strings.Repeat("─", InstalledCategoryWidth+2),
+		strings.Repeat("─", InstalledMethodWidth+2))
+}
+
+// renderInstalledAppsList displays installed apps in a simple list format
+func renderInstalledAppsList(apps []InstalledApp) {
+	for _, app := range apps {
+		fmt.Printf("• %s (%s) - %s\n", app.Name, app.InstallMethod, app.Category)
+	}
+}
+
+// renderAvailableAppsTable displays available apps in a detailed table format
+func renderAvailableAppsTable(apps []AvailableApp) {
+	// Create table header format
+	headerFormat := fmt.Sprintf("│ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │\n",
+		AvailableAppNameWidth, AvailableDescriptionWidth, AvailableInstallMethodsWidth,
+		AvailableCategoryWidth, AvailableStatusWidth)
+
+	// Print table borders and header
+	fmt.Printf("┌%s┬%s┬%s┬%s┬%s┐\n",
+		strings.Repeat("─", AvailableAppNameWidth+2),
+		strings.Repeat("─", AvailableDescriptionWidth+2),
+		strings.Repeat("─", AvailableInstallMethodsWidth+2),
+		strings.Repeat("─", AvailableCategoryWidth+2),
+		strings.Repeat("─", AvailableStatusWidth+2))
+
+	fmt.Printf(headerFormat, "Application", "Description", "Install Methods", "Category", "Status")
+
+	fmt.Printf("├%s┼%s┼%s┼%s┼%s┤\n",
+		strings.Repeat("─", AvailableAppNameWidth+2),
+		strings.Repeat("─", AvailableDescriptionWidth+2),
+		strings.Repeat("─", AvailableInstallMethodsWidth+2),
+		strings.Repeat("─", AvailableCategoryWidth+2),
+		strings.Repeat("─", AvailableStatusWidth+2))
+
+	// Print table rows
+	for _, app := range apps {
+		methods := strings.Join(app.InstallMethods, ", ")
+		recommendedMarker := ""
+		if app.Recommended {
+			recommendedMarker = " ⭐"
+		}
+		statusIcon := AvailableIcon
+		if app.Installed {
+			statusIcon = InstalledIcon
+		}
+
+		fmt.Printf(headerFormat,
+			truncateString(app.Name+recommendedMarker, AvailableAppNameWidth),
+			truncateString(app.Description, AvailableDescriptionWidth),
+			truncateString(methods, AvailableInstallMethodsWidth),
+			truncateString(app.Category, AvailableCategoryWidth),
+			statusIcon)
+	}
+
+	// Print table footer
+	fmt.Printf("└%s┴%s┴%s┴%s┴%s┘\n",
+		strings.Repeat("─", AvailableAppNameWidth+2),
+		strings.Repeat("─", AvailableDescriptionWidth+2),
+		strings.Repeat("─", AvailableInstallMethodsWidth+2),
+		strings.Repeat("─", AvailableCategoryWidth+2),
+		strings.Repeat("─", AvailableStatusWidth+2))
+}
+
+// renderAvailableAppsList displays available apps grouped by category
+func renderAvailableAppsList(apps []AvailableApp) {
+	categories := groupAppsByCategory(apps)
+	sortedCategories := getSortedCategories(categories)
+	recommendedCount, installedCount := renderCategorizedApps(categories, sortedCategories)
+
+	fmt.Printf("\nTotal available: %d applications (%d recommended, %d installed)\n",
+		len(apps), recommendedCount, installedCount)
+}
+
+// groupAppsByCategory groups apps by their category
+func groupAppsByCategory(apps []AvailableApp) map[string][]AvailableApp {
+	categories := make(map[string][]AvailableApp)
+	for _, app := range apps {
+		category := app.Category
+		if category == "" {
+			category = DefaultCategory
+		}
+		categories[category] = append(categories[category], app)
+	}
+	return categories
+}
+
+// getSortedCategories returns sorted category names
+func getSortedCategories(categories map[string][]AvailableApp) []string {
+	sortedCategories := make([]string, 0, len(categories))
+	for category := range categories {
+		sortedCategories = append(sortedCategories, category)
+	}
+	sort.Strings(sortedCategories)
+	return sortedCategories
+}
+
+// renderCategorizedApps renders apps grouped by category and returns counts
+func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategories []string) (int, int) {
+	recommendedCount := 0
+	installedCount := 0
+
+	for _, category := range sortedCategories {
+		categoryApps := categories[category]
+		if len(categoryApps) == 0 {
+			continue
+		}
+
+		fmt.Printf("\n🏷️  %s:\n", category)
+
+		for _, app := range categoryApps {
+			recommendedMarker := ""
+			if app.Recommended {
+				recommendedMarker = " (recommended)"
+				recommendedCount++
+			}
+			if app.Installed {
+				installedCount++
+			}
+
+			statusIcon := AvailableIcon
+			if app.Installed {
+				statusIcon = InstalledIcon
+			}
+
+			fmt.Printf("  %s %s - %s%s\n", statusIcon, app.Name, app.Description, recommendedMarker)
+		}
+	}
+
+	return recommendedCount, installedCount
 }
