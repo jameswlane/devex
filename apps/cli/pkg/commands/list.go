@@ -6,7 +6,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/log"
@@ -21,13 +20,12 @@ func init() {
 
 // InstalledApp represents an installed application with additional metadata
 type InstalledApp struct {
-	Name          string    `json:"name" yaml:"name"`
-	Description   string    `json:"description" yaml:"description"`
-	Category      string    `json:"category" yaml:"category"`
-	InstallMethod string    `json:"install_method" yaml:"install_method"`
-	InstallDate   time.Time `json:"install_date" yaml:"install_date"`
-	Version       string    `json:"version,omitempty" yaml:"version,omitempty"`
-	Dependencies  []string  `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
+	Name          string   `json:"name" yaml:"name"`
+	Description   string   `json:"description" yaml:"description"`
+	Category      string   `json:"category" yaml:"category"`
+	InstallMethod string   `json:"install_method" yaml:"install_method"`
+	Version       string   `json:"version,omitempty" yaml:"version,omitempty"`
+	Dependencies  []string `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
 }
 
 // AvailableApp represents an available application with platform information
@@ -241,8 +239,7 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 				Description:   configApp.Description,
 				Category:      configApp.Category,
 				InstallMethod: dbApp.InstallMethod,
-				InstallDate:   time.Now(), // TODO: Add install date to database
-				Version:       "",         // TODO: Add version tracking
+				Version:       "", // TODO: Add version tracking
 				Dependencies:  configApp.GetOSConfig().Dependencies,
 			}
 			installedApps = append(installedApps, installedApp)
@@ -492,19 +489,18 @@ func outputInstalledTable(apps []InstalledApp, options ListCommandOptions) {
 
 	if options.Verbose {
 		// Detailed table output
-		fmt.Printf("┌─────────────────┬─────────────┬─────────────┬─────────────────┐\n")
-		fmt.Printf("│ %-15s │ %-11s │ %-11s │ %-15s │\n", "Application", "Category", "Method", "Install Date")
-		fmt.Printf("├─────────────────┼─────────────┼─────────────┼─────────────────┤\n")
+		fmt.Printf("┌─────────────────┬─────────────────────────────────┬─────────────┬─────────────┐\n")
+		fmt.Printf("│ %-15s │ %-31s │ %-11s │ %-11s │\n", "Application", "Description", "Category", "Method")
+		fmt.Printf("├─────────────────┼─────────────────────────────────┼─────────────┼─────────────┤\n")
 
 		for _, app := range apps {
-			installDate := app.InstallDate.Format("2006-01-02")
-			fmt.Printf("│ %-15s │ %-11s │ %-11s │ %-15s │\n",
+			fmt.Printf("│ %-15s │ %-31s │ %-11s │ %-11s │\n",
 				truncateString(app.Name, 15),
+				truncateString(app.Description, 31),
 				truncateString(app.Category, 11),
-				truncateString(app.InstallMethod, 11),
-				installDate)
+				truncateString(app.InstallMethod, 11))
 		}
-		fmt.Printf("└─────────────────┴─────────────┴─────────────┴─────────────────┘\n")
+		fmt.Printf("└─────────────────┴─────────────────────────────────┴─────────────┴─────────────┘\n")
 	} else {
 		// Simple list output
 		for _, app := range apps {
