@@ -1,0 +1,558 @@
+---
+title: Configuration
+description: Advanced configuration options for customizing DevEx to your specific needs
+---
+
+# Configuration
+
+DevEx uses a flexible YAML-based configuration system that allows you to customize every aspect of your development environment setup.
+
+## Configuration Architecture
+
+DevEx uses a two-tier configuration system:
+
+1. **Default Configurations**: Shipped with DevEx in `~/.local/share/devex/config/`
+2. **User Overrides**: Optional customizations in `~/.devex/`
+
+### Configuration Priority
+
+When loading configurations, DevEx follows this priority order:
+
+1. User overrides (`~/.devex/`)
+2. Default configurations (`~/.local/share/devex/config/`)
+3. Built-in fallbacks
+
+### Environment Variables
+
+Override default paths using environment variables:
+
+```bash
+# Override default config directory
+export DEVEX_CONFIG_DIR="/custom/path/to/config"
+
+# Override user config directory  
+export DEVEX_USER_CONFIG_DIR="/custom/user/config"
+
+# Set global log level
+export DEVEX_LOG_LEVEL="debug"
+
+# Enable dry-run mode globally
+export DEVEX_DRY_RUN="true"
+```
+
+## Configuration Files
+
+### applications.yaml
+
+Defines all applications that can be installed, organized by category.
+
+#### Structure
+
+```yaml
+categories:
+  development:
+    git:
+      description: "Distributed version control system"
+      linux:
+        apt: "git"
+        dnf: "git"
+        pacman: "git"
+      mac:
+        brew: "git"
+      windows:
+        winget: "Git.Git"
+        chocolatey: "git"
+      verify:
+        command: "git --version"
+        
+    vscode:
+      description: "Visual Studio Code editor"
+      linux:
+        method: "vscode"  # Special installer
+        flatpak: "com.visualstudio.code"
+        snap: "code --classic"
+      mac:
+        brew: "visual-studio-code --cask"
+      windows:
+        winget: "Microsoft.VisualStudioCode"
+```
+
+#### Application Definition Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `description` | No | Human-readable description |
+| `linux` | No | Linux installation methods |
+| `mac` | No | macOS installation methods |
+| `windows` | No | Windows installation methods |
+| `verify` | No | Command to verify installation |
+| `dependencies` | No | Other apps that must be installed first |
+| `post_install` | No | Commands to run after installation |
+
+#### Installation Methods
+
+| Method | Description | Platform |
+|--------|-------------|----------|
+| `apt` | APT package name | Debian/Ubuntu |
+| `dnf` | DNF package name | Fedora/RHEL |
+| `pacman` | Pacman package name | Arch Linux |
+| `flatpak` | Flatpak application ID | Linux |
+| `snap` | Snap package name | Linux |
+| `brew` | Homebrew formula/cask | macOS |
+| `mas` | Mac App Store ID | macOS |
+| `winget` | Windows Package Manager ID | Windows |
+| `chocolatey` | Chocolatey package name | Windows |
+| `scoop` | Scoop package name | Windows |
+| `method` | Custom installer method | Cross-platform |
+
+#### Custom Installation Methods
+
+For applications requiring special handling:
+
+```yaml
+docker:
+  description: "Container platform"
+  linux:
+    method: "docker"  # Uses apps/cli/pkg/installers/docker/
+  mac:
+    method: "docker"
+  windows:
+    method: "docker"
+  verify:
+    command: "docker --version"
+  post_install:
+    - "sudo usermod -aG docker $USER"
+    - "systemctl enable docker"
+```
+
+#### Categories
+
+| Category | Purpose | Example Apps |
+|----------|---------|--------------|
+| `development` | Core development tools | Git, VS Code, Docker |
+| `languages` | Programming languages | Node.js, Python, Go, Rust |
+| `databases` | Database systems | PostgreSQL, MySQL, Redis |
+| `system` | System utilities | htop, curl, wget, jq |
+| `optional` | Productivity apps | Slack, Discord, Spotify |
+
+### environment.yaml
+
+Configures programming languages, fonts, and shell settings.
+
+#### Structure
+
+```yaml
+languages:
+  nodejs:
+    version: "20"
+    global_packages:
+      - "yarn"
+      - "pnpm" 
+      - "@vue/cli"
+      - "create-react-app"
+    env_vars:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      
+  python:
+    version: "3.11"
+    global_packages:
+      - "pip"
+      - "pipenv"
+      - "black"
+      - "flake8"
+    env_vars:
+      PYTHONPATH: "/usr/local/lib/python3.11/site-packages"
+      
+  go:
+    version: "1.21"
+    env_vars:
+      GOPROXY: "https://proxy.golang.org"
+      GOPATH: "$HOME/go"
+      
+  rust:
+    version: "stable"
+    components:
+      - "rustfmt"
+      - "clippy"
+      - "rust-analyzer"
+
+fonts:
+  - name: "JetBrains Mono"
+    type: "monospace"
+    url: "https://github.com/JetBrains/JetBrainsMono"
+  - name: "Fira Code"
+    type: "monospace" 
+    url: "https://github.com/tonsky/FiraCode"
+  - name: "Source Code Pro"
+    type: "monospace"
+    url: "https://github.com/adobe-fonts/source-code-pro"
+
+shell:
+  default: "zsh"
+  oh_my_zsh:
+    enabled: true
+    theme: "robbyrussell"
+    plugins:
+      - "git"
+      - "docker"
+      - "kubectl"
+      - "node"
+      - "python"
+  aliases:
+    ll: "ls -la"
+    la: "ls -A"
+    l: "ls -CF"
+    grep: "grep --color=auto"
+```
+
+#### Language Configuration Fields
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `version` | Language version to install | `"20"`, `"3.11"`, `"stable"` |
+| `global_packages` | Packages to install globally | `["yarn", "pnpm"]` |
+| `env_vars` | Environment variables to set | `NODE_OPTIONS: "--max-old-space-size=4096"` |
+| `components` | Language-specific components | `["rustfmt", "clippy"]` |
+
+### desktop.yaml
+
+Desktop environment and GUI application settings.
+
+#### Structure
+
+```yaml
+gnome:
+  extensions:
+    - "user-themes@gnome-shell-extensions.gcampax.github.com"
+    - "dash-to-dock@micxgx.gmail.com"
+    - "workspace-indicator@gnome-shell-extensions.gcampax.github.com"
+  settings:
+    theme: "Adwaita-dark"
+    icon_theme: "Papirus-Dark"
+    cursor_theme: "Adwaita"
+    font_name: "Ubuntu 11"
+    monospace_font: "JetBrains Mono 10"
+  keybindings:
+    terminal: "<Super>Return"
+    launcher: "<Super>d"
+    
+kde:
+  plasma_theme: "breeze-dark"
+  icon_theme: "breeze-dark"
+  window_decorations: "breeze"
+  shortcuts:
+    terminal: "Meta+Return"
+    launcher: "Meta+Space"
+    
+macos:
+  dock:
+    autohide: true
+    position: "bottom"
+    size: 36
+  finder:
+    show_hidden_files: true
+    show_path_bar: true
+  menubar:
+    autohide: false
+  shortcuts:
+    terminal: "Cmd+Space t"
+    
+windows:
+  taskbar:
+    position: "bottom"
+    auto_hide: false
+  explorer:
+    show_hidden_files: true
+    show_file_extensions: true
+  theme: "dark"
+```
+
+### system.yaml
+
+Git configuration, SSH settings, and terminal preferences.
+
+#### Structure
+
+```yaml
+git:
+  name: "Your Name"
+  email: "your.email@example.com"
+  default_branch: "main"
+  editor: "code --wait"
+  aliases:
+    co: "checkout"
+    br: "branch"
+    ci: "commit"
+    st: "status"
+    unstage: "reset HEAD --"
+    last: "log -1 HEAD"
+  config:
+    core.autocrlf: "input"
+    pull.rebase: "false"
+    init.defaultBranch: "main"
+    
+ssh:
+  generate_key: true
+  key_type: "ed25519"
+  key_comment: "Generated by DevEx"
+  key_passphrase: ""  # Empty for no passphrase
+  add_to_agent: true
+  config:
+    - host: "github.com"
+      hostname: "github.com"
+      user: "git"
+      identity_file: "~/.ssh/id_ed25519"
+      
+terminal:
+  font: "JetBrains Mono"
+  font_size: 12
+  theme: "dark"
+  cursor:
+    style: "block"
+    blink: false
+  scrollback: 10000
+  profiles:
+    - name: "Default"
+      background: "#1e1e1e"
+      foreground: "#ffffff"
+      colors:
+        black: "#000000"
+        red: "#ff5555"
+        green: "#50fa7b"
+        yellow: "#f1fa8c"
+        blue: "#bd93f9"
+        magenta: "#ff79c6"
+        cyan: "#8be9fd"
+        white: "#ffffff"
+```
+
+### Advanced Configuration Examples
+
+#### Custom Application with Dependencies
+
+```yaml
+categories:
+  development:
+    kubernetes-tools:
+      description: "Kubernetes development tools"
+      dependencies:
+        - "docker"
+        - "curl"
+      linux:
+        method: "kubernetes"
+      mac:
+        method: "kubernetes"
+      windows:
+        method: "kubernetes"
+      post_install:
+        - "kubectl completion bash > ~/.kubectl-completion"
+        - "echo 'source ~/.kubectl-completion' >> ~/.bashrc"
+      verify:
+        command: "kubectl version --client"
+```
+
+#### Platform-Specific Overrides
+
+```yaml
+# Different configurations per platform
+categories:
+  databases:
+    postgresql:
+      linux:
+        apt: "postgresql postgresql-contrib"
+        dnf: "postgresql postgresql-server postgresql-contrib"
+        pacman: "postgresql"
+        post_install:
+          - "sudo systemctl enable postgresql"
+          - "sudo systemctl start postgresql"
+      mac:
+        brew: "postgresql"
+        post_install:
+          - "brew services start postgresql"
+      windows:
+        winget: "PostgreSQL.PostgreSQL"
+        post_install:
+          - "pg_ctl -D /usr/local/var/postgres start"
+```
+
+#### Conditional Installation
+
+```yaml
+categories:
+  development:
+    android-studio:
+      description: "Android development IDE"
+      condition: "platform == 'linux' && arch == 'amd64'"
+      linux:
+        method: "android_studio"
+        flatpak: "com.google.AndroidStudio"
+      mac:
+        brew: "android-studio --cask"
+      verify:
+        command: "which android-studio"
+```
+
+## Configuration Validation
+
+DevEx validates all configuration files on startup:
+
+### Validation Rules
+
+1. **YAML Syntax**: Must be valid YAML
+2. **Required Fields**: Category names, application definitions
+3. **Platform Support**: At least one platform must be defined per app
+4. **Dependencies**: Referenced apps must exist
+5. **Commands**: Verification commands must be valid shell commands
+
+### Validation Commands
+
+```bash
+# Validate configuration syntax
+devex install --dry-run
+
+# Check specific configuration file
+devex config validate ~/.devex/applications.yaml
+
+# Verbose validation with detailed errors
+devex config validate --verbose
+```
+
+## Configuration Management
+
+### Backup and Restore
+
+```bash
+# Backup current configuration
+tar -czf devex-config-backup.tar.gz ~/.devex/
+
+# Restore configuration
+tar -xzf devex-config-backup.tar.gz -C ~/
+```
+
+### Version Control
+
+```bash
+# Initialize configuration repository
+cd ~/.devex/
+git init
+git add .
+git commit -m "Initial DevEx configuration"
+
+# Track changes
+git add applications.yaml
+git commit -m "Add custom applications"
+```
+
+### Team Sharing
+
+```bash
+# Export team configuration
+devex config export --output team-config.yaml
+
+# Import team configuration
+devex config import team-config.yaml
+```
+
+## Environment-Specific Configurations
+
+### Development Environment
+
+```yaml
+# ~/.devex/environments/development.yaml
+categories:
+  development:
+    enabled: true
+  languages:
+    enabled: true
+  databases:
+    enabled: true
+  optional:
+    enabled: false
+```
+
+### CI/CD Environment
+
+```yaml
+# ~/.devex/environments/ci.yaml
+categories:
+  development:
+    git: true
+    docker: true
+    vscode: false  # Not needed in CI
+  languages:
+    nodejs: true
+    python: true
+  system:
+    curl: true
+    jq: true
+```
+
+### Production Environment
+
+```yaml
+# ~/.devex/environments/production.yaml
+categories:
+  system:
+    htop: true
+    curl: true
+    wget: true
+  databases:
+    postgresql: true
+    redis: true
+  development:
+    git: true
+    docker: true
+    vscode: false
+```
+
+Load specific environment:
+
+```bash
+devex install --config ~/.devex/environments/development.yaml
+```
+
+## Troubleshooting Configuration
+
+### Common Issues
+
+#### Invalid YAML Syntax
+```bash
+# Check YAML syntax
+yamllint ~/.devex/applications.yaml
+
+# Fix common issues
+# - Ensure proper indentation (spaces, not tabs)
+# - Quote strings with special characters
+# - Use consistent list formatting
+```
+
+#### Missing Dependencies
+```bash
+# Show dependency tree
+devex install --dry-run --verbose
+
+# Install dependencies manually
+devex install git docker  # Install deps first
+devex install kubernetes-tools  # Then install dependent app
+```
+
+#### Platform Detection Issues
+```bash
+# Check detected platform
+devex info platform
+
+# Override platform detection
+DEVEX_PLATFORM=linux devex install
+```
+
+### Debug Configuration Loading
+
+```bash
+# Show configuration loading process
+DEVEX_LOG_LEVEL=debug devex install --dry-run
+
+# Show final merged configuration
+devex config show
+```
+
+For more troubleshooting information, see the [Troubleshooting Guide](/troubleshooting).
