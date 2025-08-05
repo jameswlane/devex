@@ -1,0 +1,781 @@
+---
+title: Customization
+description: Advanced customization techniques for tailoring DevEx to your specific workflow and requirements
+---
+
+# Customization
+
+DevEx is designed to be highly customizable, allowing you to tailor every aspect of your development environment to your specific needs and preferences.
+
+## Customization Philosophy
+
+DevEx follows a "configuration over convention" approach while maintaining sensible defaults:
+
+- **Defaults First**: Start with proven defaults that work for most developers
+- **Override Selectively**: Customize only what you need to change
+- **Team Consistency**: Share configurations across teams and projects
+- **Platform Awareness**: Adapt automatically to different operating systems
+
+## Configuration Hierarchy
+
+Understanding the configuration hierarchy helps you customize effectively:
+
+```
+1. Environment Variables (highest priority)
+2. Command-line flags
+3. User overrides (~/.devex/)
+4. Default configurations (~/.local/share/devex/config/)
+5. Built-in fallbacks (lowest priority)
+```
+
+## Creating Custom Application Definitions
+
+### Basic Custom Application
+
+Create `~/.devex/applications.yaml` to add or override applications:
+
+```yaml
+categories:
+  development:
+    # Add a new application
+    neovim:
+      description: "Modern Vim-based text editor"
+      linux:
+        apt: "neovim"
+        dnf: "neovim"
+        pacman: "neovim"
+        flatpak: "io.neovim.nvim"
+      mac:
+        brew: "neovim"
+      windows:
+        winget: "Neovim.Neovim"
+        chocolatey: "neovim"
+        scoop: "neovim"
+      verify:
+        command: "nvim --version"
+      post_install:
+        - "mkdir -p ~/.config/nvim"
+        - "echo 'set number' > ~/.config/nvim/init.vim"
+```
+
+### Application with Complex Installation
+
+```yaml
+categories:
+  development:
+    jetbrains-toolbox:
+      description: "JetBrains IDEs management tool"
+      linux:
+        method: "jetbrains_toolbox"  # Custom installer
+      mac:
+        method: "jetbrains_toolbox"
+      windows:
+        method: "jetbrains_toolbox"
+      verify:
+        command: "jetbrains-toolbox --version"
+        alternative: "ls ~/.local/share/JetBrains/Toolbox"
+      dependencies:
+        - "curl"
+        - "tar"
+      post_install:
+        - "jetbrains-toolbox --install-desktop-entry"
+      config:
+        install_path: "~/.local/share/JetBrains/Toolbox"
+        auto_update: true
+```
+
+### Custom Installer Implementation
+
+Create a custom installer for complex applications:
+
+```go
+// apps/cli/pkg/installers/jetbrains/jetbrains.go
+package jetbrains
+
+import (
+    "context"
+    "fmt"
+    "os/exec"
+    
+    "github.com/jameswlane/devex/pkg/types"
+)
+
+type JetBrainsInstaller struct {
+    dryRun bool
+    logger types.Logger
+}
+
+func NewJetBrainsInstaller(dryRun bool, logger types.Logger) *JetBrainsInstaller {
+    return &JetBrainsInstaller{
+        dryRun: dryRun,
+        logger: logger,
+    }
+}
+
+func (j *JetBrainsInstaller) Install(ctx context.Context, app types.Application) error {
+    if j.dryRun {
+        j.logger.Info("Would install JetBrains Toolbox")
+        return nil
+    }
+    
+    // Download and install JetBrains Toolbox
+    downloadURL := "https://download.jetbrains.com/toolbox/jetbrains-toolbox.tar.gz"
+    
+    cmd := exec.CommandContext(ctx, "curl", "-L", downloadURL, "-o", "/tmp/jetbrains-toolbox.tar.gz")
+    if err := cmd.Run(); err != nil {
+        return fmt.Errorf("failed to download JetBrains Toolbox: %w", err)
+    }
+    
+    // Extract and install
+    cmd = exec.CommandContext(ctx, "tar", "-xzf", "/tmp/jetbrains-toolbox.tar.gz", "-C", "/tmp")
+    if err := cmd.Run(); err != nil {
+        return fmt.Errorf("failed to extract JetBrains Toolbox: %w", err)
+    }
+    
+    // Move to installation directory
+    // ... implementation details
+    
+    return nil
+}
+
+func (j *JetBrainsInstaller) IsInstalled(ctx context.Context, app types.Application) (bool, error) {
+    cmd := exec.CommandContext(ctx, "jetbrains-toolbox", "--version")
+    return cmd.Run() == nil, nil
+}
+
+func (j *JetBrainsInstaller) Uninstall(ctx context.Context, app types.Application) error {
+    // Uninstall implementation
+    return nil
+}
+```
+
+## Custom Categories
+
+### Creating New Categories
+
+```yaml
+categories:
+  # Standard categories
+  development:
+    # ... existing apps
+    
+  # Custom category for your specific needs
+  data_science:
+    jupyter:
+      description: "Interactive computing environment"
+      linux:
+        pip: "jupyter"
+      mac:
+        pip: "jupyter"
+      windows:
+        pip: "jupyter"
+      verify:
+        command: "jupyter --version"
+        
+    r:
+      description: "Statistical computing language"
+      linux:
+        apt: "r-base"
+        dnf: "R"
+      mac:
+        brew: "r"
+      windows:
+        winget: "RProject.R"
+        
+    rstudio:
+      description: "R IDE"
+      linux:
+        method: "rstudio"
+      mac:
+        brew: "rstudio --cask"
+      windows:
+        winget: "RStudio.RStudio"
+        
+  # Gaming development tools
+  game_dev:
+    godot:
+      description: "Open source game engine"
+      linux:
+        flatpak: "org.godotengine.Godot"
+        snap: "godot"
+      mac:
+        brew: "godot --cask"
+      windows:
+        winget: "GodotEngine.Godot"
+        
+    blender:
+      description: "3D creation suite"
+      linux:
+        flatpak: "org.blender.Blender"
+        snap: "blender --classic"
+      mac:
+        brew: "blender --cask"
+      windows:
+        winget: "BlenderFoundation.Blender"
+```
+
+### Install Custom Categories
+
+```bash
+# Install your custom categories
+devex install data_science game_dev
+
+# Mix standard and custom categories
+devex install development data_science
+```
+
+## Environment Customization
+
+### Language Version Management
+
+```yaml
+# ~/.devex/environment.yaml
+languages:
+  nodejs:
+    version: "18.17.0"  # Specific version
+    global_packages:
+      - "yarn@1.22.19"  # Specific package versions
+      - "typescript@5.0.0"
+      - "@angular/cli@16.0.0"
+    npm_config:
+      registry: "https://registry.npmjs.org/"
+      save_exact: true
+      
+  python:
+    version: "3.11.4"
+    virtual_env: true
+    global_packages:
+      - "poetry==1.5.1"
+      - "black==23.7.0"
+      - "pytest==7.4.0"
+    pip_config:
+      index_url: "https://pypi.org/simple/"
+      trusted_host: "pypi.org"
+      
+  go:
+    version: "1.20.6"
+    workspace: "~/go-workspace"
+    env_vars:
+      GOPATH: "~/go-workspace"
+      GOPROXY: "https://proxy.golang.org,direct"
+      GOSUMDB: "sum.golang.org"
+    tools:
+      - "golang.org/x/tools/gopls@latest"
+      - "github.com/golangci/golangci-lint/cmd/golangci-lint@latest"
+      
+  rust:
+    version: "1.71.0"
+    components:
+      - "rustfmt"
+      - "clippy"
+      - "rust-analyzer"
+      - "rust-src"
+    targets:
+      - "wasm32-unknown-unknown"
+      - "x86_64-pc-windows-gnu"
+```
+
+### Custom Shell Configuration
+
+```yaml
+shell:
+  default: "zsh"
+  
+  # Oh My Zsh customization
+  oh_my_zsh:
+    enabled: true
+    custom_dir: "~/.oh-my-zsh/custom"
+    theme: "powerlevel10k/powerlevel10k"
+    plugins:
+      - "git"
+      - "docker"
+      - "kubectl"
+      - "node"
+      - "python"
+      - "rust"
+      - "zsh-autosuggestions"
+      - "zsh-syntax-highlighting"
+    custom_plugins:
+      - name: "zsh-autosuggestions"
+        repo: "https://github.com/zsh-users/zsh-autosuggestions"
+      - name: "zsh-syntax-highlighting"
+        repo: "https://github.com/zsh-users/zsh-syntax-highlighting"
+        
+  # Custom aliases
+  aliases:
+    # Git shortcuts
+    g: "git"
+    gs: "git status"
+    ga: "git add"
+    gc: "git commit"
+    gp: "git push"
+    gl: "git pull"
+    gd: "git diff"
+    
+    # Docker shortcuts
+    d: "docker"
+    dc: "docker-compose"
+    dk: "docker kill"
+    dr: "docker run"
+    
+    # Development shortcuts
+    c: "code"
+    v: "nvim"
+    ll: "ls -la"
+    la: "ls -A"
+    
+  # Environment variables
+  env_vars:
+    EDITOR: "code --wait"
+    BROWSER: "firefox"
+    TERMINAL: "gnome-terminal"
+    
+  # Custom functions
+  functions:
+    mkcd: |
+      mkdir -p "$1" && cd "$1"
+    extract: |
+      if [ -f $1 ] ; then
+        case $1 in
+          *.tar.bz2)   tar xjf $1     ;;
+          *.tar.gz)    tar xzf $1     ;;
+          *.bz2)       bunzip2 $1     ;;
+          *.rar)       unrar e $1     ;;
+          *.gz)        gunzip $1      ;;
+          *.tar)       tar xf $1      ;;
+          *.tbz2)      tar xjf $1     ;;
+          *.tgz)       tar xzf $1     ;;
+          *.zip)       unzip $1       ;;
+          *.Z)         uncompress $1  ;;
+          *.7z)        7z x $1        ;;
+          *)     echo "'$1' cannot be extracted via extract()" ;;
+        esac
+      else
+        echo "'$1' is not a valid file"
+      fi
+```
+
+## Desktop Environment Customization
+
+### GNOME Customization
+
+```yaml
+# ~/.devex/desktop.yaml
+gnome:
+  # Shell extensions
+  extensions:
+    - id: "user-themes@gnome-shell-extensions.gcampax.github.com"
+      enabled: true
+    - id: "dash-to-dock@micxgx.gmail.com"
+      enabled: true
+      settings:
+        dock-position: "BOTTOM"
+        dock-fixed: false
+        show-apps-at-top: true
+    - id: "workspace-indicator@gnome-shell-extensions.gcampax.github.com"
+      enabled: true
+    - id: "system-monitor@paradoxxx.zero.gmail.com"
+      enabled: true
+      
+  # Theme and appearance
+  theme:
+    gtk_theme: "Adwaita-dark"
+    icon_theme: "Papirus-Dark"
+    cursor_theme: "Adwaita"
+    shell_theme: "Adwaita-dark"
+    
+  # Fonts
+  fonts:
+    interface: "Ubuntu 11"
+    document: "Ubuntu 11"
+    monospace: "JetBrains Mono 10"
+    
+  # Window manager settings
+  window_manager:
+    focus_mode: "click"
+    resize_with_right_button: true
+    button_layout: "appmenu:minimize,maximize,close"
+    
+  # Keyboard shortcuts
+  keybindings:
+    # Custom shortcuts
+    custom:
+      - name: "Terminal"
+        command: "gnome-terminal"
+        binding: "<Super>Return"
+      - name: "File Manager"
+        command: "nautilus"
+        binding: "<Super>e"
+      - name: "Screenshot"
+        command: "gnome-screenshot -i"
+        binding: "<Super>Print"
+        
+    # Override default shortcuts
+    system:
+      show-desktop: "<Super>d"
+      switch-applications: "<Alt>Tab"
+      
+  # Nautilus (file manager) settings
+  nautilus:
+    show_hidden_files: true
+    default_view: "list-view"
+    sort_directories_first: true
+```
+
+### KDE Plasma Customization
+
+```yaml
+kde:
+  # Global theme
+  theme:
+    plasma: "breeze-dark"
+    application: "breeze-dark"
+    window_decorations: "breeze"
+    icon: "breeze-dark"
+    cursor: "breeze_cursors"
+    
+  # Panel configuration
+  panels:
+    - location: "bottom"
+      height: 44
+      widgets:
+        - "org.kde.plasma.kickoff"
+        - "org.kde.plasma.pager"
+        - "org.kde.plasma.taskmanager"
+        - "org.kde.plasma.systemtray"
+        - "org.kde.plasma.digitalclock"
+        
+  # Desktop effects
+  effects:
+    blur: true
+    wobbly_windows: false
+    desktop_cube: false
+    
+  # Shortcuts
+  shortcuts:
+    global:
+      "Launch Terminal": "Meta+Return"
+      "Show Desktop": "Meta+D"
+      "Run Command": "Meta+Space"
+```
+
+## System Configuration Customization
+
+### Git Configuration
+
+```yaml
+# ~/.devex/system.yaml
+git:
+  name: "Your Name"
+  email: "your.email@example.com"
+  signing_key: "~/.ssh/id_ed25519.pub"
+  default_branch: "main"
+  editor: "code --wait"
+  
+  # Advanced Git configuration
+  config:
+    # Core settings
+    core:
+      autocrlf: "input"
+      editor: "code --wait"
+      pager: "delta"
+      
+    # Pull/push settings
+    pull:
+      rebase: "false"
+    push:
+      default: "simple"
+      followTags: true
+      
+    # Branch settings
+    branch:
+      autosetupmerge: "always"
+      autosetuprebase: "never"
+      
+    # Merge settings
+    merge:
+      tool: "vscode"
+      conflictstyle: "diff3"
+      
+    # Diff settings
+    diff:
+      tool: "vscode"
+      colorMoved: "default"
+      
+    # Init settings
+    init:
+      defaultBranch: "main"
+      
+  # Git aliases
+  aliases:
+    # Basic shortcuts
+    co: "checkout"
+    br: "branch"
+    ci: "commit"
+    st: "status"
+    
+    # Advanced aliases
+    unstage: "reset HEAD --"
+    last: "log -1 HEAD"
+    visual: "!gitk"
+    alias: "config --get-regexp ^alias\\."
+    
+    # Log aliases
+    lg: "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+    lga: "log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit --all"
+    
+    # Branch management
+    recent: "branch --sort=-committerdate"
+    cleanup: "!git branch --merged | grep -v '\\*\\|main\\|develop' | xargs -n 1 git branch -d"
+```
+
+### SSH Configuration
+
+```yaml
+ssh:
+  generate_key: true
+  key_type: "ed25519"
+  key_comment: "Generated by DevEx for $(hostname)"
+  key_passphrase: ""
+  add_to_agent: true
+  
+  # SSH client configuration
+  config:
+    - host: "github.com"
+      hostname: "github.com"
+      user: "git"
+      identity_file: "~/.ssh/id_ed25519"
+      port: 22
+      
+    - host: "gitlab.com"
+      hostname: "gitlab.com"
+      user: "git"
+      identity_file: "~/.ssh/id_ed25519"
+      port: 22
+      
+    - host: "work-server"
+      hostname: "work.example.com"
+      user: "developer"
+      identity_file: "~/.ssh/id_rsa_work"
+      port: 2222
+      forward_agent: true
+      
+    - host: "*"
+      server_alive_interval: 60
+      server_alive_count_max: 3
+      compression: true
+      
+  # SSH agent configuration
+  agent:
+    add_keys_to_agent: "yes"
+    use_keychain: true  # macOS only
+```
+
+## Project-Specific Customization
+
+### Project Configuration Files
+
+Create `.devex/` directory in your project root:
+
+```bash
+my-project/
+├── .devex/
+│   ├── applications.yaml
+│   ├── environment.yaml
+│   └── system.yaml
+├── src/
+└── package.json
+```
+
+### Project Applications
+
+```yaml
+# my-project/.devex/applications.yaml
+categories:
+  development:
+    # Project-specific tools
+    terraform: true
+    aws_cli: true
+    kubectl: true
+    
+  languages:
+    nodejs:
+      version: "18.17.0"  # Specific version for this project
+      packages:
+        - "typescript@5.0.0"
+        - "@nestjs/cli@10.0.0"
+```
+
+### Load Project Configuration
+
+```bash
+cd my-project
+
+# Install project-specific environment
+devex install --config .devex/
+
+# Or set environment variable
+export DEVEX_CONFIG_DIR="$(pwd)/.devex"
+devex install
+```
+
+## Team Customization
+
+### Shared Team Configuration
+
+Create a team configuration repository:
+
+```bash
+# Create team config repository
+mkdir devex-team-config
+cd devex-team-config
+
+# Team applications
+cat > applications.yaml << 'EOF'
+categories:
+  development:
+    git: true
+    vscode: true
+    docker: true
+    kubernetes_tools: true
+    
+  languages:
+    nodejs:
+      version: "18.17.0"
+    python:
+      version: "3.11.4"
+    go:
+      version: "1.20.6"
+      
+  databases:
+    postgresql: true
+    redis: true
+EOF
+
+# Team environment settings
+cat > environment.yaml << 'EOF'
+languages:
+  nodejs:
+    global_packages:
+      - "yarn@1.22.19"
+      - "typescript@5.0.0"
+      - "@nestjs/cli@10.0.0"
+      
+shell:
+  oh_my_zsh:
+    theme: "robbyrussell"
+    plugins:
+      - "git"
+      - "docker"
+      - "kubectl"
+      - "node"
+EOF
+
+# Version control
+git init
+git add .
+git commit -m "Initial team DevEx configuration"
+git remote add origin https://github.com/yourorg/devex-team-config.git
+git push -u origin main
+```
+
+### Team Member Setup
+
+```bash
+# Clone team configuration
+git clone https://github.com/yourorg/devex-team-config.git ~/.devex
+
+# Install team development environment
+devex install
+devex system
+
+# Stay updated with team changes
+cd ~/.devex
+git pull
+devex install
+```
+
+## Advanced Customization Techniques
+
+### Conditional Configuration
+
+```yaml
+# Platform-specific configuration
+categories:
+  development:
+    terminal:
+      linux:
+        apt: "gnome-terminal"
+        dnf: "gnome-terminal"
+      mac:
+        brew: "iterm2 --cask"
+      windows:
+        winget: "Microsoft.WindowsTerminal"
+        
+    browser:
+      condition: "desktop_environment != 'server'"
+      linux:
+        flatpak: "org.mozilla.firefox"
+      mac:
+        brew: "firefox --cask"
+      windows:
+        winget: "Mozilla.Firefox"
+```
+
+### Environment-Based Configuration
+
+```yaml
+# Different configs for different environments
+profiles:
+  development:
+    categories:
+      development: true
+      languages: true
+      databases: true
+      optional: true
+      
+  production:
+    categories:
+      system: true
+      databases: true
+      development:
+        git: true
+        docker: true
+        
+  ci:
+    categories:
+      development:
+        git: true
+        docker: true
+      languages:
+        nodejs: true
+        python: true
+```
+
+Load specific profile:
+
+```bash
+devex install --profile development
+devex install --profile production
+```
+
+### Custom Validation Rules
+
+```yaml
+# Custom validation for applications
+categories:
+  development:
+    docker:
+      validation:
+        pre_install:
+          - command: "which systemctl"
+            error: "systemd is required for Docker installation"
+        post_install:
+          - command: "docker info"
+            timeout: 30
+            retry: 3
+          - command: "docker run hello-world"
+            cleanup: "docker rmi hello-world"
+```
+
+This comprehensive customization guide provides you with the tools and techniques to tailor DevEx to your exact needs, whether you're working alone, with a team, or across multiple projects and environments.

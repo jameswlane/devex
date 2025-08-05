@@ -1,0 +1,792 @@
+---
+title: Troubleshooting
+description: Solutions for common issues and problems when using DevEx
+---
+
+# Troubleshooting
+
+This guide covers common issues you might encounter when using DevEx and provides step-by-step solutions.
+
+## General Troubleshooting Steps
+
+Before diving into specific issues, try these general troubleshooting steps:
+
+### 1. Enable Verbose Logging
+
+```bash
+# Run with verbose output to see detailed information
+devex install --verbose
+
+# Or set log level globally
+export DEVEX_LOG_LEVEL=debug
+devex install
+```
+
+### 2. Use Dry-Run Mode
+
+```bash
+# Preview what would be done without executing
+devex install --dry-run
+
+# Combine with verbose for maximum detail
+devex install --dry-run --verbose
+```
+
+### 3. Check System Information
+
+```bash
+# Check detected platform and package managers
+devex info system
+
+# Verify DevEx installation
+devex --version
+which devex
+```
+
+### 4. Reset Configuration
+
+```bash
+# Backup current configuration
+cp -r ~/.devex ~/.devex.backup
+
+# Remove user overrides to use defaults
+rm -rf ~/.devex
+
+# Test with default configuration
+devex install --dry-run
+```
+
+## Installation Issues
+
+### DevEx Installation Problems
+
+#### Issue: Command not found after installation
+
+**Symptoms:**
+```bash
+devex: command not found
+```
+
+**Solutions:**
+
+1. **Check PATH**:
+   ```bash
+   echo $PATH
+   which devex
+   ```
+
+2. **Reinstall with correct permissions**:
+   ```bash
+   # For manual installation
+   sudo chmod +x /usr/local/bin/devex
+   
+   # Verify installation location
+   ls -la /usr/local/bin/devex
+   ```
+
+3. **Update shell configuration**:
+   ```bash
+   # Add to PATH if installed in custom location
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+#### Issue: Permission denied during installation
+
+**Symptoms:**
+```bash
+Permission denied: /usr/local/bin/devex
+```
+
+**Solutions:**
+
+1. **Install with sudo**:
+   ```bash
+   sudo wget -qO- https://devex.sh/install | bash
+   ```
+
+2. **Install to user directory**:
+   ```bash
+   # Create user bin directory
+   mkdir -p ~/.local/bin
+   
+   # Download to user directory
+   curl -L https://github.com/jameswlane/devex/releases/latest/download/devex-linux-amd64 -o ~/.local/bin/devex
+   chmod +x ~/.local/bin/devex
+   
+   # Add to PATH
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+### Package Installation Problems
+
+#### Issue: Package manager not found
+
+**Symptoms:**
+```bash
+Error: no suitable package manager found
+```
+
+**Solutions:**
+
+1. **Check available package managers**:
+   ```bash
+   # Check what's available on your system
+   which apt apt-get dnf yum pacman brew
+   ```
+
+2. **Install missing package manager**:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update && sudo apt install -y apt
+   
+   # Fedora/RHEL
+   sudo dnf install -y dnf
+   
+   # macOS
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+3. **Use alternative installation methods**:
+   ```bash
+   # Try Flatpak
+   sudo apt install flatpak
+   devex install --method flatpak
+   
+   # Try Snap
+   sudo apt install snapd
+   devex install --method snap
+   ```
+
+#### Issue: Package not found in repository
+
+**Symptoms:**
+```bash
+Error: package 'example-app' not found in repository
+```
+
+**Solutions:**
+
+1. **Update package repositories**:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update
+   
+   # Fedora/RHEL
+   sudo dnf update
+   
+   # Arch Linux
+   sudo pacman -Sy
+   
+   # macOS
+   brew update
+   ```
+
+2. **Enable additional repositories**:
+   ```bash
+   # Ubuntu - enable universe repository
+   sudo add-apt-repository universe
+   sudo apt update
+   
+   # Fedora - enable RPM Fusion
+   sudo dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+   ```
+
+3. **Use alternative installation method**:
+   ```bash
+   # Try different package manager
+   devex install --method flatpak example-app
+   devex install --method snap example-app
+   ```
+
+#### Issue: Docker installation fails
+
+**Symptoms:**
+```bash
+Error: Docker daemon is not running
+Error: Cannot connect to the Docker daemon
+```
+
+**Solutions:**
+
+1. **Check Docker service status**:
+   ```bash
+   sudo systemctl status docker
+   ```
+
+2. **Start Docker service**:
+   ```bash
+   sudo systemctl start docker
+   sudo systemctl enable docker
+   ```
+
+3. **Add user to docker group**:
+   ```bash
+   sudo usermod -aG docker $USER
+   newgrp docker
+   
+   # Or logout and login again
+   ```
+
+4. **Install Docker manually**:
+   ```bash
+   # Ubuntu/Debian
+   curl -fsSL https://get.docker.com -o get-docker.sh
+   sudo sh get-docker.sh
+   
+   # Start Docker
+   sudo systemctl start docker
+   ```
+
+## Configuration Issues
+
+### YAML Configuration Problems
+
+#### Issue: Invalid YAML syntax
+
+**Symptoms:**
+```bash
+Error: failed to parse configuration file
+yaml: line 10: mapping values are not allowed in this context
+```
+
+**Solutions:**
+
+1. **Validate YAML syntax**:
+   ```bash
+   # Install yamllint
+   pip install yamllint
+   
+   # Check configuration files
+   yamllint ~/.devex/applications.yaml
+   yamllint ~/.devex/environment.yaml
+   ```
+
+2. **Common YAML fixes**:
+   ```yaml
+   # ❌ Incorrect - mixing tabs and spaces
+   categories:
+   	development:    # Tab used here
+       git: true     # Spaces used here
+   
+   # ✅ Correct - consistent indentation
+   categories:
+     development:    # Consistent spaces
+       git: true     # Consistent spaces
+   ```
+
+3. **Quote special characters**:
+   ```yaml
+   # ❌ Incorrect
+   git:
+     name: John O'Connor
+   
+   # ✅ Correct
+   git:
+     name: "John O'Connor"
+   ```
+
+#### Issue: Configuration not loading
+
+**Symptoms:**
+```bash
+Using default configuration (user config not found)
+```
+
+**Solutions:**
+
+1. **Check configuration file paths**:
+   ```bash
+   ls -la ~/.devex/
+   ls -la ~/.local/share/devex/config/
+   ```
+
+2. **Verify file permissions**:
+   ```bash
+   chmod 644 ~/.devex/*.yaml
+   ```
+
+3. **Check environment variables**:
+   ```bash
+   echo $DEVEX_CONFIG_DIR
+   echo $DEVEX_USER_CONFIG_DIR
+   ```
+
+4. **Debug configuration loading**:
+   ```bash
+   DEVEX_LOG_LEVEL=debug devex install --dry-run
+   ```
+
+### Application Definition Issues
+
+#### Issue: Application not found in configuration
+
+**Symptoms:**
+```bash
+Error: application 'myapp' not found in any category
+```
+
+**Solutions:**
+
+1. **Check application name**:
+   ```bash
+   # List all available applications
+   devex list apps
+   
+   # Search for application
+   devex list apps | grep myapp
+   ```
+
+2. **Add application to configuration**:
+   ```yaml
+   # ~/.devex/applications.yaml
+   categories:
+     development:
+       myapp:
+         description: "My custom application"
+         linux:
+           apt: "myapp"
+         mac:
+           brew: "myapp"
+   ```
+
+3. **Check category structure**:
+   ```bash
+   devex config show | grep -A 10 categories
+   ```
+
+## Platform-Specific Issues
+
+### Linux Issues
+
+#### Issue: APT package conflicts
+
+**Symptoms:**
+```bash
+The following packages have unmet dependencies:
+  example-app : Depends: libexample but it is not installable
+```
+
+**Solutions:**
+
+1. **Update package lists**:
+   ```bash
+   sudo apt update
+   sudo apt upgrade
+   ```
+
+2. **Fix broken dependencies**:
+   ```bash
+   sudo apt --fix-broken install
+   sudo apt autoremove
+   sudo apt autoclean
+   ```
+
+3. **Use alternative repository**:
+   ```bash
+   # Add official repository
+   wget -qO - https://example.com/key.asc | sudo apt-key add -
+   echo "deb https://example.com/repo stable main" | sudo tee /etc/apt/sources.list.d/example.list
+   sudo apt update
+   ```
+
+#### Issue: Snap package installation fails
+
+**Symptoms:**
+```bash
+error: cannot install "example": snap not found
+```
+
+**Solutions:**
+
+1. **Update snap**:
+   ```bash
+   sudo snap refresh
+   ```
+
+2. **Search for correct package name**:
+   ```bash
+   snap find example
+   ```
+
+3. **Install from different channel**:
+   ```bash
+   sudo snap install example --beta
+   sudo snap install example --edge
+   ```
+
+### macOS Issues
+
+#### Issue: Homebrew not found
+
+**Symptoms:**
+```bash
+Error: brew command not found
+```
+
+**Solutions:**
+
+1. **Install Homebrew**:
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+2. **Add Homebrew to PATH**:
+   ```bash
+   # For Apple Silicon Macs
+   echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zprofile
+   eval "$(/opt/homebrew/bin/brew shellenv)"
+   
+   # For Intel Macs
+   echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zprofile
+   eval "$(/usr/local/bin/brew shellenv)"
+   ```
+
+#### Issue: Mac App Store authentication
+
+**Symptoms:**
+```bash
+Error: Not signed in to Mac App Store
+```
+
+**Solutions:**
+
+1. **Sign in to Mac App Store**:
+   ```bash
+   # Open Mac App Store and sign in
+   open -a "App Store"
+   ```
+
+2. **Use mas command line tool**:
+   ```bash
+   # Install mas if not present
+   brew install mas
+   
+   # Sign in via command line
+   mas signin your.email@example.com
+   ```
+
+### Windows Issues
+
+#### Issue: winget not available
+
+**Symptoms:**
+```bash
+'winget' is not recognized as an internal or external command
+```
+
+**Solutions:**
+
+1. **Update Windows**:
+   ```powershell
+   # Check Windows version
+   winver
+   
+   # Update to Windows 10 version 1809 or later
+   ```
+
+2. **Install App Installer**:
+   - Open Microsoft Store
+   - Search for "App Installer"
+   - Install or update
+
+3. **Install winget manually**:
+   ```powershell
+   # Download from GitHub releases
+   Invoke-WebRequest -Uri "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle" -OutFile "winget.msixbundle"
+   Add-AppxPackage "winget.msixbundle"
+   ```
+
+## Network and Connectivity Issues
+
+### Download Failures
+
+#### Issue: Network timeouts during installation
+
+**Symptoms:**
+```bash
+Error: timeout downloading package
+curl: (28) Operation timed out
+```
+
+**Solutions:**
+
+1. **Check network connectivity**:
+   ```bash
+   ping google.com
+   curl -I https://github.com
+   ```
+
+2. **Use different mirror/repository**:
+   ```bash
+   # For APT, change to local mirror
+   sudo sed -i 's/archive.ubuntu.com/mirror.local.com/g' /etc/apt/sources.list
+   
+   # For Homebrew, use different bottle source
+   export HOMEBREW_BOTTLE_DOMAIN=https://mirrors.ustc.edu.cn/homebrew-bottles
+   ```
+
+3. **Configure proxy if needed**:
+   ```bash
+   export http_proxy=http://proxy.company.com:8080
+   export https_proxy=http://proxy.company.com:8080
+   ```
+
+4. **Retry with increased timeout**:
+   ```bash
+   devex install --timeout 300  # 5 minutes
+   ```
+
+### SSL/TLS Certificate Issues
+
+#### Issue: SSL certificate verification failed
+
+**Symptoms:**
+```bash
+SSL certificate problem: unable to get local issuer certificate
+```
+
+**Solutions:**
+
+1. **Update CA certificates**:
+   ```bash
+   # Ubuntu/Debian
+   sudo apt update && sudo apt install ca-certificates
+   
+   # Fedora/RHEL
+   sudo dnf update ca-certificates
+   
+   # macOS
+   brew install ca-certificates
+   ```
+
+2. **Configure corporate certificates**:
+   ```bash
+   # Add corporate CA certificate
+   sudo cp corporate-ca.crt /usr/local/share/ca-certificates/
+   sudo update-ca-certificates
+   ```
+
+3. **Temporary workaround (not recommended)**:
+   ```bash
+   # Only use for testing
+   export CURL_CA_BUNDLE=""
+   git config --global http.sslverify false
+   ```
+
+## Performance Issues
+
+### Slow Installation
+
+#### Issue: Package installation takes too long
+
+**Solutions:**
+
+1. **Use faster mirrors**:
+   ```bash
+   # Ubuntu - use local mirror
+   sudo sed -i 's/archive.ubuntu.com/mirror.local.edu/g' /etc/apt/sources.list
+   
+   # Fedora - use fastest mirror
+   sudo dnf install dnf-plugins-core
+   sudo dnf config-manager --set-enabled fastestmirror
+   ```
+
+2. **Parallel installations**:
+   ```bash
+   # Install categories in parallel (DevEx does this automatically)
+   devex install development &
+   devex install languages &
+   wait
+   ```
+
+3. **Skip optional components**:
+   ```yaml
+   # ~/.devex/applications.yaml
+   categories:
+     optional:
+       enabled: false  # Skip optional applications
+   ```
+
+### High Memory Usage
+
+#### Issue: System runs out of memory during installation
+
+**Solutions:**
+
+1. **Monitor memory usage**:
+   ```bash
+   # During installation
+   watch -n 1 'free -h && ps aux --sort=-%mem | head -10'
+   ```
+
+2. **Install in smaller batches**:
+   ```bash
+   devex install development
+   devex install languages
+   devex install databases
+   ```
+
+3. **Increase swap space**:
+   ```bash
+   # Create swap file
+   sudo fallocate -l 2G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   ```
+
+## Database and State Issues
+
+### SQLite Database Problems
+
+#### Issue: Database corruption
+
+**Symptoms:**
+```bash
+Error: database disk image is malformed
+```
+
+**Solutions:**
+
+1. **Backup and recreate database**:
+   ```bash
+   # Backup current database
+   cp ~/.local/share/devex/devex.db ~/.local/share/devex/devex.db.backup
+   
+   # Remove corrupted database
+   rm ~/.local/share/devex/devex.db
+   
+   # Reinitialize database
+   devex install --dry-run
+   ```
+
+2. **Repair database**:
+   ```bash
+   sqlite3 ~/.local/share/devex/devex.db "PRAGMA integrity_check;"
+   sqlite3 ~/.local/share/devex/devex.db ".recover" | sqlite3 ~/.local/share/devex/devex_recovered.db
+   mv ~/.local/share/devex/devex_recovered.db ~/.local/share/devex/devex.db
+   ```
+
+#### Issue: Permission denied accessing database
+
+**Symptoms:**
+```bash
+Error: unable to open database file
+```
+
+**Solutions:**
+
+1. **Check file permissions**:
+   ```bash
+   ls -la ~/.local/share/devex/devex.db
+   chmod 644 ~/.local/share/devex/devex.db
+   ```
+
+2. **Check directory permissions**:
+   ```bash
+   ls -la ~/.local/share/devex/
+   chmod 755 ~/.local/share/devex/
+   ```
+
+## Environment and Shell Issues
+
+### Shell Configuration Problems
+
+#### Issue: Shell changes not taking effect
+
+**Solutions:**
+
+1. **Reload shell configuration**:
+   ```bash
+   # For bash
+   source ~/.bashrc
+   
+   # For zsh
+   source ~/.zshrc
+   
+   # Or start new shell session
+   exec $SHELL -l
+   ```
+
+2. **Check configuration file location**:
+   ```bash
+   echo $SHELL
+   echo $0
+   
+   # Make sure editing correct file
+   ls -la ~/.bashrc ~/.zshrc ~/.profile
+   ```
+
+### Environment Variables Not Set
+
+#### Issue: Environment variables from DevEx not available
+
+**Solutions:**
+
+1. **Check where variables are set**:
+   ```bash
+   grep -r "DEVEX" ~/.bashrc ~/.zshrc ~/.profile
+   ```
+
+2. **Manually source environment**:
+   ```bash
+   source ~/.local/share/devex/env.sh
+   ```
+
+3. **Debug environment loading**:
+   ```bash
+   env | grep DEVEX
+   echo $PATH | tr ':' '\n' | grep devex
+   ```
+
+## Getting Help
+
+### Log Files
+
+DevEx creates log files that can help diagnose issues:
+
+```bash
+# View recent logs
+tail -f ~/.local/share/devex/logs/devex.log
+
+# View specific error logs
+grep -i error ~/.local/share/devex/logs/devex.log
+
+# View verbose logs
+DEVEX_LOG_LEVEL=debug devex install 2>&1 | tee debug.log
+```
+
+### System Information
+
+Collect system information for bug reports:
+
+```bash
+# Create system report
+cat > devex-system-report.txt << EOF
+DevEx Version: $(devex --version)
+Operating System: $(uname -a)
+Shell: $SHELL
+Package Managers: $(which apt dnf pacman brew winget 2>/dev/null | tr '\n' ' ')
+Configuration Directory: $(ls -la ~/.devex/ 2>/dev/null || echo "Not found")
+Error Logs:
+$(tail -20 ~/.local/share/devex/logs/devex.log 2>/dev/null || echo "No logs found")
+EOF
+```
+
+### Community Support
+
+1. **GitHub Issues**: [Report bugs and request features](https://github.com/jameswlane/devex/issues)
+2. **Discussions**: [Community discussions and Q&A](https://github.com/jameswlane/devex/discussions)
+3. **Documentation**: [Complete documentation](https://docs.devex.sh/)
+
+### Before Reporting Issues
+
+1. Try the troubleshooting steps above
+2. Search existing issues on GitHub
+3. Include system information and logs
+4. Provide minimal reproduction steps
+5. Use verbose mode output when relevant
+
+Most issues can be resolved by following the troubleshooting steps in this guide. If you continue to experience problems, the community is ready to help!

@@ -1,4 +1,13 @@
 {
 	"title": "Documentation",
-	"pages": ["index", "installation", "examples"]
+	"pages": [
+		"index",
+		"installation",
+		"cli-reference",
+		"guided-setup",
+		"configuration",
+		"customization",
+		"troubleshooting",
+		"examples"
+	]
 }

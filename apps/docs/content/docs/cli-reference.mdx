@@ -1,0 +1,315 @@
+---
+title: CLI Reference
+description: Complete reference for all DevEx CLI commands, options, and usage patterns
+---
+
+# CLI Reference
+
+This page provides a comprehensive reference for all DevEx CLI commands, options, and usage patterns.
+
+## Global Options
+
+All DevEx commands support these global options:
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--verbose` | `-v` | Enable verbose logging output | `false` |
+| `--dry-run` | `-d` | Show what would be done without executing | `false` |
+| `--help` | `-h` | Display help information | - |
+
+## Commands Overview
+
+| Command | Description |
+|---------|-------------|
+| [`devex install`](#install-command) | Install applications and configure environment |
+| [`devex uninstall`](#uninstall-command) | Remove installed applications |
+| [`devex system`](#system-command) | Configure system settings and desktop environment |
+| [`devex completion`](#completion-command) | Generate shell completion scripts |
+
+## Install Command
+
+Install applications, programming languages, and configure your development environment.
+
+### Syntax
+
+```bash
+devex install [flags] [category...]
+```
+
+### Categories
+
+| Category | Description | Example Apps |
+|----------|-------------|--------------|
+| `development` | Development tools and IDEs | VS Code, Git, Docker |
+| `languages` | Programming languages and runtimes | Node.js, Python, Go, Rust |
+| `databases` | Database systems | PostgreSQL, MySQL, Redis |
+| `system` | System utilities and tools | htop, curl, wget, jq |
+| `optional` | Optional productivity apps | Slack, Discord, Spotify |
+
+### Examples
+
+```bash
+# Install all configured applications
+devex install
+
+# Install only development tools
+devex install development
+
+# Install development tools and languages
+devex install development languages
+
+# Dry run to see what would be installed
+devex install --dry-run
+
+# Verbose installation with detailed output
+devex install --verbose development
+```
+
+### Configuration Files
+
+The install command uses these configuration files (in order of precedence):
+
+1. `~/.devex/applications.yaml` (user overrides)
+2. `~/.local/share/devex/config/applications.yaml` (defaults)
+
+#### Application Configuration Structure
+
+```yaml
+categories:
+  development:
+    git:
+      linux:
+        apt: git
+        dnf: git
+      mac:
+        brew: git
+      windows:
+        winget: Git.Git
+    docker:
+      linux:
+        method: docker
+      mac:
+        brew: docker
+      windows:
+        winget: Docker.DockerDesktop
+```
+
+## Uninstall Command
+
+Remove applications that were installed via DevEx.
+
+### Syntax
+
+```bash
+devex uninstall [flags] [application...]
+```
+
+### Examples
+
+```bash
+# List all installed applications
+devex uninstall
+
+# Uninstall specific applications
+devex uninstall git docker
+
+# Dry run to see what would be uninstalled
+devex uninstall --dry-run git
+
+# Verbose uninstallation
+devex uninstall --verbose docker
+```
+
+## System Command
+
+Configure system settings, desktop environment, and shell preferences.
+
+### Syntax
+
+```bash
+devex system [flags]
+```
+
+### Configuration Areas
+
+- **Git Configuration**: User name, email, default branch
+- **SSH Settings**: Key generation and configuration  
+- **Desktop Environment**: GNOME, KDE, macOS settings
+- **Shell Configuration**: Bash, Zsh, Fish setup
+- **Terminal Preferences**: Font, theme, behavior
+
+### Examples
+
+```bash
+# Configure all system settings
+devex system
+
+# Dry run system configuration
+devex system --dry-run
+
+# Verbose system setup
+devex system --verbose
+```
+
+### Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `system.yaml` | Git, SSH, terminal settings |
+| `desktop.yaml` | Desktop environment specific settings |
+| `environment.yaml` | Programming languages, fonts, shell config |
+
+## Completion Command
+
+Generate shell completion scripts for enhanced CLI experience.
+
+### Syntax
+
+```bash
+devex completion [shell]
+```
+
+### Supported Shells
+
+- `bash`
+- `zsh` 
+- `fish`
+- `powershell`
+
+### Setup Examples
+
+#### Bash
+```bash
+# Generate completion script
+devex completion bash > ~/.devex-completion.bash
+
+# Add to .bashrc
+echo 'source ~/.devex-completion.bash' >> ~/.bashrc
+```
+
+#### Zsh
+```bash
+# Generate completion script
+devex completion zsh > ~/.devex-completion.zsh
+
+# Add to .zshrc
+echo 'source ~/.devex-completion.zsh' >> ~/.zshrc
+```
+
+#### Fish
+```bash
+# Generate and install completion
+devex completion fish > ~/.config/fish/completions/devex.fish
+```
+
+## Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | General error |
+| `2` | Configuration error |
+| `3` | Installation error |
+| `4` | Permission error |
+| `5` | Network error |
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEVEX_CONFIG_DIR` | Override default config directory | `~/.local/share/devex/config` |
+| `DEVEX_USER_CONFIG_DIR` | Override user config directory | `~/.devex` |
+| `DEVEX_LOG_LEVEL` | Set log level (debug, info, warn, error) | `info` |
+| `DEVEX_DRY_RUN` | Enable dry-run mode globally | `false` |
+
+## Common Patterns
+
+### Team Setup
+```bash
+# Clone team configuration repository
+git clone https://github.com/yourorg/devex-config.git ~/.devex
+
+# Install team's development stack
+devex install
+```
+
+### CI/CD Integration
+```bash
+# Install minimal development environment
+devex install --dry-run development | grep -q "docker" && devex install development
+
+# Non-interactive system setup
+DEVEX_LOG_LEVEL=error devex system --dry-run
+```
+
+### Maintenance Workflows
+```bash
+# Check what would be updated
+devex install --dry-run
+
+# Update all applications
+devex install
+
+# Verify installation status
+devex uninstall
+```
+
+## Platform Support
+
+DevEx supports multiple platforms with automatic installer selection:
+
+### Linux
+- **Debian/Ubuntu**: APT package manager
+- **Fedora/RHEL**: DNF package manager  
+- **Arch Linux**: Pacman package manager
+- **Universal**: Flatpak, Snap, mise (language versions)
+
+### macOS
+- **Homebrew**: Primary package manager
+- **Mac App Store**: Via `mas` command-line tool
+
+### Windows
+- **Windows Package Manager**: winget (primary)
+- **Chocolatey**: Alternative package manager
+- **Scoop**: Developer-focused package manager
+
+## Security Features
+
+- **Input Validation**: All user inputs are validated and sanitized
+- **Shell Injection Prevention**: Commands are constructed securely
+- **Directory Traversal Protection**: File operations are restricted
+- **Context-Aware Execution**: All commands use proper cancellation contexts
+- **Dry-Run Mode**: Preview operations before execution
+
+## Troubleshooting
+
+### Common Issues
+
+#### Permission Errors
+```bash
+# Check if running with appropriate permissions
+sudo devex install development
+
+# Or configure package managers for user access
+```
+
+#### Network Issues
+```bash
+# Test connectivity
+curl -I https://devex.sh
+
+# Use verbose mode for debugging
+devex install --verbose
+```
+
+#### Configuration Errors
+```bash
+# Validate configuration syntax
+devex install --dry-run
+
+# Check configuration file locations
+ls -la ~/.devex/
+ls -la ~/.local/share/devex/config/
+```
+
+For more troubleshooting information, see the [Troubleshooting Guide](/troubleshooting).
