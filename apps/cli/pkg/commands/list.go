@@ -110,7 +110,7 @@ func runListCommand(cmd *cobra.Command, args []string, repo types.Repository, se
 
 		showInstalledApps(repo, settings, options)
 		fmt.Println()
-		showAvailableApps(settings, options)
+		showAvailableApps(repo, settings, options)
 		return
 	}
 
@@ -118,7 +118,7 @@ func runListCommand(cmd *cobra.Command, args []string, repo types.Repository, se
 	case "installed":
 		showInstalledApps(repo, settings, options)
 	case "available":
-		showAvailableApps(settings, options)
+		showAvailableApps(repo, settings, options)
 	case "categories":
 		showCategories(settings, options)
 	default:
@@ -178,11 +178,11 @@ func showInstalledApps(repo types.Repository, settings config.CrossPlatformSetti
 	}
 }
 
-func showAvailableApps(settings config.CrossPlatformSettings, options ListCommandOptions) {
+func showAvailableApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) {
 	log.Info("Listing available applications")
 
 	// Get available applications
-	availableApps := getAvailableApps(settings, options)
+	availableApps := getAvailableApps(repo, settings, options)
 
 	// Apply filters
 	availableApps = filterAvailableApps(availableApps, options)
@@ -249,10 +249,20 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 	return installedApps, nil
 }
 
-// getAvailableApps retrieves all available applications
-func getAvailableApps(settings config.CrossPlatformSettings, options ListCommandOptions) []AvailableApp {
+// getAvailableApps retrieves all available applications with installation status
+func getAvailableApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) []AvailableApp {
 	allApps := settings.GetAllApps()
 	availableApps := make([]AvailableApp, 0, len(allApps))
+
+	// Get installed apps to check status
+	installedApps := make(map[string]bool)
+	if repo != nil {
+		if dbApps, err := repo.ListApps(); err == nil {
+			for _, dbApp := range dbApps {
+				installedApps[dbApp.Name] = true
+			}
+		}
+	}
 	for _, app := range allApps {
 		if !app.IsSupported() {
 			continue
@@ -279,7 +289,7 @@ func getAvailableApps(settings config.CrossPlatformSettings, options ListCommand
 			Platforms:      getSupportedPlatforms(app),
 			Recommended:    app.Default,
 			Dependencies:   osConfig.Dependencies,
-			Installed:      false, // TODO: Check if installed
+			Installed:      installedApps[app.Name],
 		}
 		availableApps = append(availableApps, availableApp)
 	}
@@ -577,6 +587,7 @@ func outputAvailableTable(apps []AvailableApp, options ListCommandOptions) {
 		sort.Strings(sortedCategories)
 
 		recommendedCount := 0
+		installedCount := 0
 		for _, category := range sortedCategories {
 			categoryApps := categories[category]
 			if len(categoryApps) == 0 {
@@ -591,11 +602,18 @@ func outputAvailableTable(apps []AvailableApp, options ListCommandOptions) {
 					recommendedMarker = " (recommended)"
 					recommendedCount++
 				}
-				fmt.Printf("  • %s - %s%s\n", app.Name, app.Description, recommendedMarker)
+				if app.Installed {
+					installedCount++
+				}
+				statusIcon := "📦"
+				if app.Installed {
+					statusIcon = "✅"
+				}
+				fmt.Printf("  %s %s - %s%s\n", statusIcon, app.Name, app.Description, recommendedMarker)
 			}
 		}
 
-		fmt.Printf("\nTotal available: %d applications (%d recommended)\n", len(apps), recommendedCount)
+		fmt.Printf("\nTotal available: %d applications (%d recommended, %d installed)\n", len(apps), recommendedCount, installedCount)
 	}
 
 	fmt.Println()
