@@ -1,3 +1,24 @@
+## [0.19.0](https://github.com/jameswlane/devex/compare/0.18.0...0.19.0) (2025-08-06)
+
+### Features
+
+* implement comprehensive list commands with filtering and multip… ([6f053ad](https://github.com/jameswlane/devex/commit/6f053ade6f115df5d4127dee0ca76784808e5b4e))
+* implement comprehensive list commands with filtering and multiple output formats ([d656004](https://github.com/jameswlane/devex/commit/d6560042f8044a9fa7a376ac28afd5a671b56efb)), closes [#98](https://github.com/jameswlane/devex/issues/98)
+
+### Bug Fixes
+
+* enhance error handling by using RunE instead of Run ([a1a77f6](https://github.com/jameswlane/devex/commit/a1a77f650c069a9d49e648ff6770fc9078b8c138))
+* enhance error handling by using RunE instead of Run ([530207f](https://github.com/jameswlane/devex/commit/530207fdb5a4e6d56eec9ddbaccacaedb7413a0e))
+* implement proper installation status checking in list command ([349c991](https://github.com/jameswlane/devex/commit/349c991e30da70c3e9b3f5d36e95152d13c65876))
+* remove hardcoded install date from list command ([690ac6e](https://github.com/jameswlane/devex/commit/690ac6e85ddb94321bcec3c7b28c53929bc34997))
+* resolve test failures by preventing installation execution during tests ([74aa919](https://github.com/jameswlane/devex/commit/74aa91993b9a793c2d572f13c23330d2f104b315))
+* use cmd.OutOrStdout() in completion command for testable output ([3305502](https://github.com/jameswlane/devex/commit/33055024aed364053cd8eaf499c15fff8c552ca7))
+
+### Performance Improvements
+
+* enhance error handling, performance, and code organization ([353192a](https://github.com/jameswlane/devex/commit/353192ad4c606068aeeeac386de9f088f0365c2e))
+* optimize list command performance and add comprehensive test coverage ([48b87ce](https://github.com/jameswlane/devex/commit/48b87ce0ce8f102b55d9105725822696c2019bf2))
+
 ## [0.18.0](https://github.com/jameswlane/devex/compare/0.17.0...0.18.0) (2025-08-04)
 
 ### Features
