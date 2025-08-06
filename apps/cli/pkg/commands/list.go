@@ -2,169 +2,167 @@ package commands
 
 import (
 	"fmt"
-	"os"
-	"sort"
+	"io"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/log"
-	"github.com/jameswlane/devex/pkg/types"
 	"github.com/spf13/cobra"
+
+	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
 func init() {
 	Register(NewListCmd)
 }
 
-// NewListCmd creates the list command
+// NewListCmd creates the list command with comprehensive subcommand support
 func NewListCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list [installed|available]",
-		Short: "List installed or available applications",
+		Use:       "list [installed|available|categories]",
+		Short:     "List applications in your DevEx configuration",
+		ValidArgs: []string{"installed", "available", "categories"},
 		Long: `List applications in your DevEx configuration.
 
 Available subcommands:
-  installed  - Show applications that are currently installed
-  available  - Show all applications available for installation
+  installed   - Show applications that are currently installed
+  available   - Show all applications available for installation
+  categories  - Show all available categories
 
 Examples:
-  devex list installed    # Show installed apps
-  devex list available    # Show all available apps
-  devex list             # Show both installed and available`,
-		ValidArgs: []string{"installed", "available"},
-		Run: func(cmd *cobra.Command, args []string) {
-			runListCommand(cmd, args, repo, settings)
+  devex list installed                    # Show installed apps
+  devex list available                    # Show all available apps
+  devex list available --category development  # Show development tools
+  devex list installed --format json     # JSON output
+  devex list available --search docker   # Search for Docker-related apps
+  devex list categories                   # Show all categories`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runListCommandWithError(cmd, args, repo, settings)
 		},
 	}
+
+	// Add flags
+	cmd.Flags().StringP("format", "f", "table", "Output format (table, json, yaml)")
+	cmd.Flags().StringP("category", "c", "", "Filter by category")
+	cmd.Flags().StringP("search", "s", "", "Search applications by name or description")
+	cmd.Flags().String("method", "", "Filter by installation method")
+	cmd.Flags().Bool("recommended", false, "Show only recommended applications")
+	cmd.Flags().Bool("interactive", false, "Interactive selection mode")
+	cmd.Flags().BoolP("verbose", "v", false, "Show detailed information")
 
 	return cmd
 }
 
-func runListCommand(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings) {
+// runListCommandWithError handles the main execution logic for list commands and returns errors
+func runListCommandWithError(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings) error {
+	options := parseListFlags(cmd)
+	return executeListCommand(cmd, args, repo, settings, options)
+}
+
+// executeListCommand executes the appropriate list subcommand with error handling
+func executeListCommand(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) error {
+	writer := cmd.OutOrStdout()
+
 	if len(args) == 0 {
-		// Show both installed and available
-		fmt.Println("📦 DevEx Application Status")
-		fmt.Println("=" + strings.Repeat("=", 25))
-		fmt.Println()
-
-		showInstalled(repo, settings)
-		fmt.Println()
-		showAvailable(settings)
-		return
+		return cmd.Help()
 	}
 
-	switch args[0] {
+	subcommand := args[0]
+	validArgs := []string{"installed", "available", "categories"}
+
+	switch subcommand {
 	case "installed":
-		showInstalled(repo, settings)
+		return showInstalledApps(repo, settings, options, writer)
 	case "available":
-		showAvailable(settings)
+		return showAvailableApps(repo, settings, options, writer)
+	case "categories":
+		return showCategories(settings, options, writer)
 	default:
-		fmt.Printf("Error: Unknown subcommand '%s'\n", args[0])
-		fmt.Println("Available subcommands: installed, available")
-		os.Exit(1)
-	}
-}
-
-func showInstalled(repo types.Repository, settings config.CrossPlatformSettings) {
-	log.Info("Listing installed applications")
-
-	fmt.Println("✅ Installed Applications")
-	fmt.Println("-" + strings.Repeat("-", 23))
-
-	if repo == nil {
-		fmt.Println("❌ Database not available - cannot check installation status")
-		return
-	}
-
-	// Get all available apps
-	allApps := settings.GetAllApps()
-	if len(allApps) == 0 {
-		fmt.Println("No applications configured")
-		return
-	}
-
-	installedCount := 0
-	var installedApps []string
-
-	// Check each app's installation status
-	for _, app := range allApps {
-		// Try to get installation record from database
-		if installedApp, err := repo.GetApp(app.Name); err == nil && installedApp != nil {
-			installedApps = append(installedApps, fmt.Sprintf("  • %s - %s", app.Name, app.Description))
-			installedCount++
-		}
-	}
-
-	if installedCount == 0 {
-		fmt.Println("No applications currently installed via DevEx")
-		fmt.Println()
-		fmt.Println("💡 Tip: Run 'devex install' or 'devex setup' to install applications")
-	} else {
-		sort.Strings(installedApps)
-		for _, app := range installedApps {
-			fmt.Println(app)
-		}
-		fmt.Printf("\nTotal installed: %d applications\n", installedCount)
-	}
-}
-
-func showAvailable(settings config.CrossPlatformSettings) {
-	log.Info("Listing available applications")
-
-	fmt.Println("📋 Available Applications")
-	fmt.Println("-" + strings.Repeat("-", 23))
-
-	allApps := settings.GetAllApps()
-	if len(allApps) == 0 {
-		fmt.Println("No applications configured")
-		return
-	}
-
-	// Group apps by category
-	categories := make(map[string][]types.CrossPlatformApp)
-	for _, app := range allApps {
-		category := app.Category
-		if category == "" {
-			category = "Other"
-		}
-		categories[category] = append(categories[category], app)
-	}
-
-	// Sort categories
-	sortedCategories := make([]string, 0, len(categories))
-	for category := range categories {
-		sortedCategories = append(sortedCategories, category)
-	}
-	sort.Strings(sortedCategories)
-
-	totalCount := 0
-	defaultCount := 0
-
-	for _, category := range sortedCategories {
-		apps := categories[category]
-		if len(apps) == 0 {
-			continue
-		}
-
-		fmt.Printf("\n🏷️  %s:\n", category)
-
-		// Sort apps within category
-		sort.Slice(apps, func(i, j int) bool {
-			return apps[i].Name < apps[j].Name
-		})
-
-		for _, app := range apps {
-			defaultMarker := ""
-			if app.Default {
-				defaultMarker = " (default)"
-				defaultCount++
+		// Check if it's a similar command and suggest corrections
+		var suggestions []string
+		for _, valid := range validArgs {
+			if strings.Contains(valid, subcommand) || strings.Contains(subcommand, valid) {
+				suggestions = append(suggestions, valid)
 			}
-			fmt.Printf("  • %s - %s%s\n", app.Name, app.Description, defaultMarker)
-			totalCount++
 		}
+
+		if len(suggestions) > 0 {
+			return fmt.Errorf("unknown subcommand '%s': did you mean '%s'? Available options: %s",
+				subcommand, suggestions[0], strings.Join(validArgs, ", "))
+		}
+
+		return fmt.Errorf("unknown subcommand '%s': available options are: %s",
+			subcommand, strings.Join(validArgs, ", "))
+	}
+}
+
+// parseListFlags extracts and validates command flags into options struct
+func parseListFlags(cmd *cobra.Command) ListCommandOptions {
+	format, _ := cmd.Flags().GetString("format")
+	category, _ := cmd.Flags().GetString("category")
+	search, _ := cmd.Flags().GetString("search")
+	method, _ := cmd.Flags().GetString("method")
+	recommended, _ := cmd.Flags().GetBool("recommended")
+	interactive, _ := cmd.Flags().GetBool("interactive")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+
+	return ListCommandOptions{
+		Format:      format,
+		Category:    category,
+		Search:      search,
+		Method:      method,
+		Recommended: recommended,
+		Interactive: interactive,
+		Verbose:     verbose,
+	}
+}
+
+// showInstalledApps displays installed applications based on options
+func showInstalledApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions, writer io.Writer) error {
+	apps, err := getInstalledApps(repo, settings, options)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve installed applications: %w", err)
 	}
 
-	fmt.Printf("\nTotal available: %d applications (%d marked as default)\n", totalCount, defaultCount)
-	fmt.Println()
-	fmt.Println("💡 Tip: Use 'devex install' to install default apps or 'devex setup' for guided installation")
+	switch strings.ToLower(options.Format) {
+	case "json":
+		return outputInstalledJSON(apps, writer)
+	case "yaml":
+		return outputInstalledYAML(apps, writer)
+	case "table":
+		return outputInstalledTable(apps, options, writer)
+	default:
+		return fmt.Errorf("unsupported format '%s': supported formats are table, json, yaml", options.Format)
+	}
+}
+
+// showAvailableApps displays available applications based on options
+func showAvailableApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions, writer io.Writer) error {
+	apps := getAvailableApps(repo, settings, options)
+
+	switch strings.ToLower(options.Format) {
+	case "json":
+		return outputAvailableJSON(apps, writer)
+	case "yaml":
+		return outputAvailableYAML(apps, writer)
+	case "table":
+		return outputAvailableTable(apps, options, writer)
+	default:
+		return fmt.Errorf("unsupported format '%s': supported formats are table, json, yaml", options.Format)
+	}
+}
+
+// showCategories displays category information based on options
+func showCategories(settings config.CrossPlatformSettings, options ListCommandOptions, writer io.Writer) error {
+	categories := getCategoryInfo(settings)
+
+	switch strings.ToLower(options.Format) {
+	case "json":
+		return outputCategoriesJSON(categories, writer)
+	case "yaml":
+		return outputCategoriesYAML(categories, writer)
+	case "table":
+		return outputCategoriesTable(categories, options, writer)
+	default:
+		return fmt.Errorf("unsupported format '%s': supported formats are table, json, yaml", options.Format)
+	}
 }
