@@ -136,90 +136,77 @@ applications:
         install_method: 'apt'
         install_command: 'ripgrep'
         uninstall_command: 'ripgrep'
-    # Ghostty Terminal Emulator - Comprehensive Multi-Platform Configuration
     - name: 'Ghostty'
       description: 'GPU-accelerated cross-platform terminal emulator with rich features'
       category: 'Terminal Emulators'
       default: false
       desktop_environments: ['all']
-      # macOS Support (Community maintained Homebrew cask)
       macos:
         install_method: 'brew'
         install_command: 'ghostty'
         uninstall_command: 'ghostty'
         brew_cask: true
         official_support: false
-      # Linux Support with comprehensive package manager coverage
       linux:
         install_method: 'apt'
         install_command: 'ghostty'
         uninstall_command: 'ghostty'
         official_support: false
         alternatives:
-          # Alpine Linux (Official)
           - install_method: 'apk'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'alpine'
-          # Arch Linux (Official)
           - install_method: 'pacman'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'arch'
-          # Arch Linux AUR (Official)
           - install_method: 'yay'
             install_command: 'ghostty-git'
             uninstall_command: 'ghostty-git'
             official_support: true
             platform_requirements:
               - os: 'arch'
-          # Gentoo (Official)
           - install_method: 'emerge'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'gentoo'
-          # NixOS (Official)
           - install_method: 'nixpkgs'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'nixos'
-          # Nix Flake (Officially maintained by Ghostty project)
           - install_method: 'nixflake'
             install_command: 'github:ghostty-org/ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'nixos'
-          # openSUSE (Official)
           - install_method: 'zypper'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'opensuse'
-          # Solus (Official)
           - install_method: 'eopkg'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'solus'
-          # Void Linux (Official)
           - install_method: 'xbps'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
             official_support: true
             platform_requirements:
               - os: 'void'
-          # Debian/Ubuntu Community Repository (Smart Platform Detection)
           - install_method: 'apt'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
@@ -235,7 +222,6 @@ applications:
                 source_repo: 'deb http://download.opensuse.org/repositories/home:/clayrisser:/bookworm/Debian_12/ /'
                 source_name: '/etc/apt/sources.list.d/home:clayrisser:bookworm.list'
                 require_dearmor: true
-          # Fedora COPR (Community)
           - install_method: 'dnf'
             install_command: 'ghostty'
             uninstall_command: 'ghostty'
@@ -244,12 +230,10 @@ applications:
               - os: 'fedora'
             pre_install:
               - shell: 'dnf copr enable scottames/ghostty'
-          # Snap (Community maintained but official build scripts)
           - install_method: 'snap'
             install_command: 'ghostty --classic'
             uninstall_command: 'ghostty'
             official_support: false
-          # Universal AppImage (Community)
           - install_method: 'appimage'
             install_command: 'Ghostty.AppImage'
             uninstall_command: 'Ghostty.AppImage'
@@ -397,7 +381,7 @@ applications:
     - name: 'Proton Mail'
       description: 'Secure email app by Proton'
       category: 'Optional Apps'
-      desktop_environments: ['all'] # Compatible with all desktop environments
+      desktop_environments: ['all']
       linux:
         install_method: 'deb'
         install_command: 'wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb'
@@ -407,7 +391,7 @@ applications:
     - name: 'Proton VPN'
       description: 'VPN service by Proton'
       category: 'Optional Apps'
-      desktop_environments: ['gnome-family'] # Optimized for GNOME-based environments
+      desktop_environments: ['gnome-family']
       linux:
         install_method: 'script'
         install_command: |
@@ -420,7 +404,7 @@ applications:
     - name: 'Proton Pass'
       description: 'Password manager by Proton'
       category: 'Optional Apps'
-      desktop_environments: ['all'] # Compatible with all desktop environments
+      desktop_environments: ['all']
       linux:
         install_method: 'deb'
         install_command: 'wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb && sudo apt install ./proton-pass_1.23.1_amd64.deb'
@@ -430,7 +414,7 @@ applications:
     - name: 'Zen Browser'
       description: 'A secure and private browser'
       category: 'Optional Apps'
-      desktop_environments: ['all'] # Compatible with all desktop environments
+      desktop_environments: ['all']
       linux:
         install_method: 'flatpak'
         install_command: 'flatpak install flathub io.github.zen_browser.zen'
@@ -440,7 +424,7 @@ applications:
     - name: 'GNOME Tweaks'
       description: 'Advanced GNOME 3 settings'
       category: 'Optional Apps'
-      desktop_environments: ['gnome'] # GNOME-specific application
+      desktop_environments: ['gnome']
       linux:
         install_method: 'apt'
         install_command: 'gnome-tweaks'
@@ -448,7 +432,7 @@ applications:
     - name: 'GNOME Extensions'
       description: 'Browser extension for managing GNOME Shell extensions'
       category: 'Optional Apps'
-      desktop_environments: ['gnome'] # GNOME-only
+      desktop_environments: ['gnome']
       linux:
         install_method: 'apt'
         install_command: 'chrome-gnome-shell'
@@ -456,7 +440,7 @@ applications:
     - name: 'KDE Connect'
       description: 'Integrate Android/iOS devices with your desktop'
       category: 'Optional Apps'
-      desktop_environments: ['kde', 'gnome', 'xfce'] # Works well with KDE, good integration with GNOME and XFCE
+      desktop_environments: ['kde', 'gnome', 'xfce']
       linux:
         install_method: 'apt'
         install_command: 'kdeconnect'
@@ -464,7 +448,7 @@ applications:
     - name: 'Dolphin File Manager'
       description: 'KDE file manager'
       category: 'Optional Apps'
-      desktop_environments: ['kde'] # KDE-specific file manager
+      desktop_environments: ['kde']
       linux:
         install_method: 'apt'
         install_command: 'dolphin'
