@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -14,28 +15,130 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Table formatting constants
+// Table formatting constants and configuration
 const (
-	// Column widths for installed apps table
-	InstalledAppNameWidth     = 15
-	InstalledDescriptionWidth = 31
-	InstalledCategoryWidth    = 11
-	InstalledMethodWidth      = 11
-
-	// Column widths for available apps table
-	AvailableAppNameWidth        = 15
-	AvailableDescriptionWidth    = 35
-	AvailableInstallMethodsWidth = 15
-	AvailableCategoryWidth       = 11
-	AvailableStatusWidth         = 8
-
 	// Status icons
 	InstalledIcon = "✅"
 	AvailableIcon = "📦"
 
 	// Default category for uncategorized apps
 	DefaultCategory = "Other"
+
+	// Default column widths (fallback values)
+	defaultMinNameWidth        = 12
+	defaultMinDescriptionWidth = 30
+	defaultMinCategoryWidth    = 10
+	defaultMinMethodWidth      = 8
+	defaultMinStatusWidth      = 6
+
+	// Maximum column widths to prevent overly wide tables
+	maxNameWidth        = 25
+	maxDescriptionWidth = 50
+	maxCategoryWidth    = 20
+	maxMethodWidth      = 20
 )
+
+// TableConfig represents table formatting configuration with dynamic sizing
+type TableConfig struct {
+	NameWidth        int
+	DescriptionWidth int
+	CategoryWidth    int
+	MethodWidth      int
+	StatusWidth      int
+}
+
+// NewInstalledAppTableConfig creates a table configuration optimized for installed apps
+func NewInstalledAppTableConfig(apps []InstalledApp) *TableConfig {
+	tc := &TableConfig{
+		NameWidth:        defaultMinNameWidth,
+		DescriptionWidth: defaultMinDescriptionWidth,
+		CategoryWidth:    defaultMinCategoryWidth,
+		MethodWidth:      defaultMinMethodWidth,
+		StatusWidth:      defaultMinStatusWidth,
+	}
+
+	tc.calculateInstalledAppWidths(apps)
+	return tc
+}
+
+// NewAvailableAppTableConfig creates a table configuration optimized for available apps
+func NewAvailableAppTableConfig(apps []AvailableApp) *TableConfig {
+	tc := &TableConfig{
+		NameWidth:        defaultMinNameWidth,
+		DescriptionWidth: defaultMinDescriptionWidth,
+		CategoryWidth:    defaultMinCategoryWidth,
+		MethodWidth:      defaultMinMethodWidth,
+		StatusWidth:      defaultMinStatusWidth,
+	}
+
+	tc.calculateAvailableAppWidths(apps)
+	return tc
+}
+
+// calculateInstalledAppWidths dynamically calculates optimal column widths based on actual data
+func (tc *TableConfig) calculateInstalledAppWidths(apps []InstalledApp) {
+	if len(apps) == 0 {
+		return
+	}
+
+	for _, app := range apps {
+		// Calculate optimal width for each column based on content
+		nameLen := len(app.Name)
+		if nameLen > tc.NameWidth && nameLen <= maxNameWidth {
+			tc.NameWidth = nameLen
+		}
+
+		descLen := len(app.Description)
+		if descLen > tc.DescriptionWidth && descLen <= maxDescriptionWidth {
+			tc.DescriptionWidth = descLen
+		}
+
+		catLen := len(app.Category)
+		if catLen > tc.CategoryWidth && catLen <= maxCategoryWidth {
+			tc.CategoryWidth = catLen
+		}
+
+		methodLen := len(app.InstallMethod)
+		if methodLen > tc.MethodWidth && methodLen <= maxMethodWidth {
+			tc.MethodWidth = methodLen
+		}
+	}
+}
+
+// calculateAvailableAppWidths dynamically calculates optimal column widths for available apps
+func (tc *TableConfig) calculateAvailableAppWidths(apps []AvailableApp) {
+	if len(apps) == 0 {
+		return
+	}
+
+	for _, app := range apps {
+		// Account for recommended marker in name width
+		nameLen := len(app.Name)
+		if app.Recommended {
+			nameLen += 2 // " ⭐"
+		}
+		if nameLen > tc.NameWidth && nameLen <= maxNameWidth {
+			tc.NameWidth = nameLen
+		}
+
+		descLen := len(app.Description)
+		if descLen > tc.DescriptionWidth && descLen <= maxDescriptionWidth {
+			tc.DescriptionWidth = descLen
+		}
+
+		catLen := len(app.Category)
+		if catLen > tc.CategoryWidth && catLen <= maxCategoryWidth {
+			tc.CategoryWidth = catLen
+		}
+
+		// Calculate method width based on joined methods
+		methodsStr := strings.Join(app.InstallMethods, ", ")
+		methodLen := len(methodsStr)
+		if methodLen > tc.MethodWidth && methodLen <= maxMethodWidth {
+			tc.MethodWidth = methodLen
+		}
+	}
+}
 
 func init() {
 	Register(NewListCmd)
@@ -125,29 +228,40 @@ func runListCommand(cmd *cobra.Command, args []string, repo types.Repository, se
 	// Parse flags
 	options := parseListFlags(cmd)
 
+	if err := executeListCommand(cmd, args, repo, settings, options); err != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func executeListCommand(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) error {
 	if len(args) == 0 {
 		// Show both installed and available
-		fmt.Println("📦 DevEx Application Status")
-		fmt.Println("=" + strings.Repeat("=", 25))
-		fmt.Println()
+		fmt.Fprintln(cmd.OutOrStdout(), "📦 DevEx Application Status")
+		fmt.Fprintln(cmd.OutOrStdout(), "="+strings.Repeat("=", 25))
+		fmt.Fprintln(cmd.OutOrStdout())
 
-		showInstalledApps(repo, settings, options)
-		fmt.Println()
-		showAvailableApps(repo, settings, options)
-		return
+		if err := showInstalledApps(repo, settings, options, cmd.OutOrStdout()); err != nil {
+			return fmt.Errorf("failed to show installed apps: %w", err)
+		}
+		fmt.Fprintln(cmd.OutOrStdout())
+		if err := showAvailableApps(repo, settings, options, cmd.OutOrStdout()); err != nil {
+			return fmt.Errorf("failed to show available apps: %w", err)
+		}
+		return nil
 	}
 
+	validArgs := []string{"installed", "available", "categories"}
 	switch args[0] {
 	case "installed":
-		showInstalledApps(repo, settings, options)
+		return showInstalledApps(repo, settings, options, cmd.OutOrStdout())
 	case "available":
-		showAvailableApps(repo, settings, options)
+		return showAvailableApps(repo, settings, options, cmd.OutOrStdout())
 	case "categories":
-		showCategories(settings, options)
+		return showCategories(settings, options, cmd.OutOrStdout())
 	default:
-		fmt.Printf("Error: Unknown subcommand '%s'\n", args[0])
-		fmt.Println("Available subcommands: installed, available, categories")
-		os.Exit(1)
+		return fmt.Errorf("unknown subcommand '%s': available options are: %s",
+			args[0], strings.Join(validArgs, ", "))
 	}
 }
 
@@ -172,19 +286,19 @@ func parseListFlags(cmd *cobra.Command) ListCommandOptions {
 	}
 }
 
-func showInstalledApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) {
+func showInstalledApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions, writer io.Writer) error {
 	log.Info("Listing installed applications")
 
 	if repo == nil {
-		fmt.Println("❌ Database not available - cannot check installation status")
-		return
+		fmt.Fprintln(writer, "❌ Database not available - cannot check installation status")
+		return nil
 	}
 
 	// Get installed applications from database
 	installedApps, err := getInstalledApps(repo, settings, options)
 	if err != nil {
-		fmt.Printf("❌ Error retrieving installed applications: %v\n", err)
-		return
+		fmt.Fprintf(writer, "❌ Error retrieving installed applications: %v\n", err)
+		return err
 	}
 
 	// Apply filters
@@ -193,15 +307,15 @@ func showInstalledApps(repo types.Repository, settings config.CrossPlatformSetti
 	// Output based on format
 	switch options.Format {
 	case "json":
-		outputInstalledJSON(installedApps)
+		return outputInstalledJSON(installedApps, writer)
 	case "yaml":
-		outputInstalledYAML(installedApps)
+		return outputInstalledYAML(installedApps, writer)
 	default:
-		outputInstalledTable(installedApps, options)
+		return outputInstalledTable(installedApps, options, writer)
 	}
 }
 
-func showAvailableApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions) {
+func showAvailableApps(repo types.Repository, settings config.CrossPlatformSettings, options ListCommandOptions, writer io.Writer) error {
 	log.Info("Listing available applications")
 
 	// Get available applications
@@ -213,15 +327,15 @@ func showAvailableApps(repo types.Repository, settings config.CrossPlatformSetti
 	// Output based on format
 	switch options.Format {
 	case "json":
-		outputAvailableJSON(availableApps)
+		return outputAvailableJSON(availableApps, writer)
 	case "yaml":
-		outputAvailableYAML(availableApps)
+		return outputAvailableYAML(availableApps, writer)
 	default:
-		outputAvailableTable(availableApps, options)
+		return outputAvailableTable(availableApps, options, writer)
 	}
 }
 
-func showCategories(settings config.CrossPlatformSettings, options ListCommandOptions) {
+func showCategories(settings config.CrossPlatformSettings, options ListCommandOptions, writer io.Writer) error {
 	log.Info("Listing categories")
 
 	// Get category information
@@ -230,11 +344,11 @@ func showCategories(settings config.CrossPlatformSettings, options ListCommandOp
 	// Output based on format
 	switch options.Format {
 	case "json":
-		outputCategoriesJSON(categories)
+		return outputCategoriesJSON(categories, writer)
 	case "yaml":
-		outputCategoriesYAML(categories)
+		return outputCategoriesYAML(categories, writer)
 	default:
-		outputCategoriesTable(categories, options)
+		return outputCategoriesTable(categories, options, writer)
 	}
 }
 
@@ -373,17 +487,24 @@ func getCategoryInfo(settings config.CrossPlatformSettings) []CategoryInfo {
 		}
 
 		categories[category].AppCount++
-		// Add supported platforms using a map for efficient deduplication
+		// Add supported platforms using map[string]struct{} for O(1) deduplication
 		platforms := getSupportedPlatforms(app)
-		platformMap := make(map[string]bool)
+		platformSet := make(map[string]struct{})
+
+		// Add existing platforms to set
 		for _, platform := range categories[category].Platforms {
-			platformMap[platform] = true
+			platformSet[platform] = struct{}{}
 		}
+
+		// Add new platforms to set
 		for _, platform := range platforms {
-			if !platformMap[platform] {
-				categories[category].Platforms = append(categories[category].Platforms, platform)
-				platformMap[platform] = true
-			}
+			platformSet[platform] = struct{}{}
+		}
+
+		// Rebuild platforms slice from set
+		categories[category].Platforms = make([]string, 0, len(platformSet))
+		for platform := range platformSet {
+			categories[category].Platforms = append(categories[category].Platforms, platform)
 		}
 	}
 
@@ -519,135 +640,193 @@ func filterAvailableApps(apps []AvailableApp, options ListCommandOptions) []Avai
 }
 
 // Output functions for installed apps
-func outputInstalledJSON(apps []InstalledApp) {
+func outputInstalledJSON(apps []InstalledApp, writer io.Writer) error {
 	data, err := json.MarshalIndent(apps, "", "  ")
 	if err != nil {
-		fmt.Printf("Error formatting JSON: %v\n", err)
-		return
+		return fmt.Errorf("error formatting JSON: %w", err)
 	}
-	fmt.Println(string(data))
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
-func outputInstalledYAML(apps []InstalledApp) {
+func outputInstalledYAML(apps []InstalledApp, writer io.Writer) error {
 	data, err := yaml.Marshal(apps)
 	if err != nil {
-		fmt.Printf("Error formatting YAML: %v\n", err)
-		return
+		return fmt.Errorf("error formatting YAML: %w", err)
 	}
-	fmt.Println(string(data))
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
-func outputInstalledTable(apps []InstalledApp, options ListCommandOptions) {
-	fmt.Println("✅ Installed Applications")
-	fmt.Println("-" + strings.Repeat("-", 23))
+func outputInstalledTable(apps []InstalledApp, options ListCommandOptions, writer io.Writer) error {
+	fmt.Fprintln(writer, "✅ Installed Applications")
+	fmt.Fprintln(writer, "-"+strings.Repeat("-", 23))
 
 	if len(apps) == 0 {
-		fmt.Println("No applications currently installed via DevEx")
-		fmt.Println()
-		fmt.Println("💡 Tip: Run 'devex install' or 'devex setup' to install applications")
-		return
+		fmt.Fprintln(writer, "No applications currently installed via DevEx")
+		fmt.Fprintln(writer)
+		fmt.Fprintln(writer, "💡 Tip: Run 'devex install' or 'devex setup' to install applications")
+		return nil
 	}
 
+	config := NewInstalledAppTableConfig(apps)
 	if options.Verbose {
-		renderInstalledAppsTable(apps)
+		if err := renderInstalledAppsTable(apps, config, writer); err != nil {
+			return err
+		}
 	} else {
-		renderInstalledAppsList(apps)
+		if err := renderInstalledAppsList(apps, writer); err != nil {
+			return err
+		}
 	}
 
-	fmt.Printf("\nTotal installed: %d applications\n", len(apps))
+	_, err := fmt.Fprintf(writer, "\nTotal installed: %d applications\n", len(apps))
+	return err
 }
 
 // Output functions for available apps
-func outputAvailableJSON(apps []AvailableApp) {
+func outputAvailableJSON(apps []AvailableApp, writer io.Writer) error {
 	data, err := json.MarshalIndent(apps, "", "  ")
 	if err != nil {
-		fmt.Printf("Error formatting JSON: %v\n", err)
-		return
+		return fmt.Errorf("error formatting JSON: %w", err)
 	}
-	fmt.Println(string(data))
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
-func outputAvailableYAML(apps []AvailableApp) {
+func outputAvailableYAML(apps []AvailableApp, writer io.Writer) error {
 	data, err := yaml.Marshal(apps)
 	if err != nil {
-		fmt.Printf("Error formatting YAML: %v\n", err)
-		return
+		return fmt.Errorf("error formatting YAML: %w", err)
 	}
-	fmt.Println(string(data))
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
-func outputAvailableTable(apps []AvailableApp, options ListCommandOptions) {
-	fmt.Println("📋 Available Applications")
-	fmt.Println("-" + strings.Repeat("-", 23))
+func outputAvailableTable(apps []AvailableApp, options ListCommandOptions, writer io.Writer) error {
+	fmt.Fprintln(writer, "📋 Available Applications")
+	fmt.Fprintln(writer, "-"+strings.Repeat("-", 23))
 
 	if len(apps) == 0 {
-		fmt.Println("No applications available for your platform")
-		return
+		fmt.Fprintln(writer, "No applications available for your platform")
+		return nil
 	}
 
+	config := NewAvailableAppTableConfig(apps)
 	if options.Verbose {
-		renderAvailableAppsTable(apps)
+		if err := renderAvailableAppsTable(apps, config, writer); err != nil {
+			return err
+		}
 	} else {
-		renderAvailableAppsList(apps)
+		if err := renderAvailableAppsList(apps, writer); err != nil {
+			return err
+		}
 	}
 
-	fmt.Println()
-	fmt.Println("💡 Tip: Use 'devex install --app <name>' to install applications")
+	fmt.Fprintln(writer)
+	_, err := fmt.Fprintln(writer, "💡 Tip: Use 'devex install --app <name>' to install applications")
+	return err
 }
 
 // Output functions for categories
-func outputCategoriesJSON(categories []CategoryInfo) {
+func outputCategoriesJSON(categories []CategoryInfo, writer io.Writer) error {
 	data, err := json.MarshalIndent(categories, "", "  ")
 	if err != nil {
-		fmt.Printf("Error formatting JSON: %v\n", err)
-		return
+		return fmt.Errorf("error formatting JSON: %w", err)
 	}
-	fmt.Println(string(data))
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
-func outputCategoriesYAML(categories []CategoryInfo) {
+func outputCategoriesYAML(categories []CategoryInfo, writer io.Writer) error {
 	data, err := yaml.Marshal(categories)
 	if err != nil {
-		fmt.Printf("Error formatting YAML: %v\n", err)
-		return
+		return fmt.Errorf("error formatting YAML: %w", err)
 	}
-	fmt.Println(string(data))
+	_, err = fmt.Fprintln(writer, string(data))
+	return err
 }
 
-func outputCategoriesTable(categories []CategoryInfo, options ListCommandOptions) {
-	fmt.Println("📂 Available Categories")
-	fmt.Println("-" + strings.Repeat("-", 21))
+func outputCategoriesTable(categories []CategoryInfo, options ListCommandOptions, writer io.Writer) error {
+	fmt.Fprintln(writer, "📂 Available Categories")
+	fmt.Fprintln(writer, "-"+strings.Repeat("-", 21))
 
 	if len(categories) == 0 {
-		fmt.Println("No categories available")
-		return
+		fmt.Fprintln(writer, "No categories available")
+		return nil
 	}
 
 	if options.Verbose {
-		// Detailed table output
-		fmt.Printf("┌───────────────────────┬───────────────────────────────────┬───────┬─────────────────┐\n")
-		fmt.Printf("│ %-19s │ %-35s │ %-5s │ %-15s │\n", "Category", "Description", "Apps", "Platforms")
-		fmt.Printf("├───────────────────────┼───────────────────────────────────┼───────┼─────────────────┤\n")
+		// Detailed table output with dynamic widths
+		config := &TableConfig{
+			NameWidth:        19,
+			DescriptionWidth: 35,
+			CategoryWidth:    5,  // for "Apps" column
+			MethodWidth:      15, // for "Platforms" column
+		}
 
+		// Calculate optimal widths
+		for _, cat := range categories {
+			nameLen := len(cat.Name)
+			if nameLen > config.NameWidth && nameLen <= 25 {
+				config.NameWidth = nameLen
+			}
+
+			descLen := len(cat.Description)
+			if descLen > config.DescriptionWidth && descLen <= 40 {
+				config.DescriptionWidth = descLen
+			}
+
+			platformsStr := strings.Join(cat.Platforms, ", ")
+			platformLen := len(platformsStr)
+			if platformLen > config.MethodWidth && platformLen <= 20 {
+				config.MethodWidth = platformLen
+			}
+		}
+
+		// Print table header
+		fmt.Fprintf(writer, "┌%s┬%s┬───────┬%s┐\n",
+			strings.Repeat("─", config.NameWidth+2),
+			strings.Repeat("─", config.DescriptionWidth+2),
+			strings.Repeat("─", config.MethodWidth+2))
+
+		fmt.Fprintf(writer, "│ %-*s │ %-*s │ %-5s │ %-*s │\n",
+			config.NameWidth, "Category",
+			config.DescriptionWidth, "Description",
+			"Apps",
+			config.MethodWidth, "Platforms")
+
+		fmt.Fprintf(writer, "├%s┼%s┼───────┼%s┤\n",
+			strings.Repeat("─", config.NameWidth+2),
+			strings.Repeat("─", config.DescriptionWidth+2),
+			strings.Repeat("─", config.MethodWidth+2))
+
+		// Print table rows
 		for _, cat := range categories {
 			platforms := strings.Join(cat.Platforms, ", ")
-			fmt.Printf("│ %-19s │ %-35s │ %-5d │ %-15s │\n",
-				truncateString(cat.Name, 19),
-				truncateString(cat.Description, 35),
+			fmt.Fprintf(writer, "│ %-*s │ %-*s │ %-5d │ %-*s │\n",
+				config.NameWidth, truncateString(cat.Name, config.NameWidth),
+				config.DescriptionWidth, truncateString(cat.Description, config.DescriptionWidth),
 				cat.AppCount,
-				truncateString(platforms, 15))
+				config.MethodWidth, truncateString(platforms, config.MethodWidth))
 		}
-		fmt.Printf("└───────────────────────┴───────────────────────────────────┴───────┴─────────────────┘\n")
+
+		// Print table footer
+		fmt.Fprintf(writer, "└%s┴%s┴───────┴%s┘\n",
+			strings.Repeat("─", config.NameWidth+2),
+			strings.Repeat("─", config.DescriptionWidth+2),
+			strings.Repeat("─", config.MethodWidth+2))
 	} else {
 		// Simple list output
 		for _, cat := range categories {
-			fmt.Printf("  • %s - %s (%d apps)\n", cat.Name, cat.Description, cat.AppCount)
+			fmt.Fprintf(writer, "  • %s - %s (%d apps)\n", cat.Name, cat.Description, cat.AppCount)
 		}
 	}
 
-	fmt.Printf("\nTotal categories: %d\n", len(categories))
-	fmt.Println()
-	fmt.Println("💡 Tip: Use 'devex list available --category <name>' to view apps in a specific category")
+	fmt.Fprintf(writer, "\nTotal categories: %d\n", len(categories))
+	fmt.Fprintln(writer)
+	_, err := fmt.Fprintln(writer, "💡 Tip: Use 'devex list available --category <name>' to view apps in a specific category")
+	return err
 }
 
 // Utility functions
@@ -659,73 +838,78 @@ func truncateString(s string, maxLen int) string {
 }
 
 // renderInstalledAppsTable displays installed apps in a detailed table format
-func renderInstalledAppsTable(apps []InstalledApp) {
-	// Create table header
+func renderInstalledAppsTable(apps []InstalledApp, config *TableConfig, writer io.Writer) error {
+	// Create table header format
 	headerFormat := fmt.Sprintf("│ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │\n",
-		InstalledAppNameWidth, InstalledDescriptionWidth, InstalledCategoryWidth, InstalledMethodWidth)
+		config.NameWidth, config.DescriptionWidth, config.CategoryWidth, config.MethodWidth)
 
 	// Print table borders and header
-	fmt.Printf("┌%s┬%s┬%s┬%s┐\n",
-		strings.Repeat("─", InstalledAppNameWidth+2),
-		strings.Repeat("─", InstalledDescriptionWidth+2),
-		strings.Repeat("─", InstalledCategoryWidth+2),
-		strings.Repeat("─", InstalledMethodWidth+2))
+	fmt.Fprintf(writer, "┌%s┬%s┬%s┬%s┐\n",
+		strings.Repeat("─", config.NameWidth+2),
+		strings.Repeat("─", config.DescriptionWidth+2),
+		strings.Repeat("─", config.CategoryWidth+2),
+		strings.Repeat("─", config.MethodWidth+2))
 
-	fmt.Printf(headerFormat, "Application", "Description", "Category", "Method")
+	fmt.Fprintf(writer, headerFormat, "Application", "Description", "Category", "Method")
 
-	fmt.Printf("├%s┼%s┼%s┼%s┤\n",
-		strings.Repeat("─", InstalledAppNameWidth+2),
-		strings.Repeat("─", InstalledDescriptionWidth+2),
-		strings.Repeat("─", InstalledCategoryWidth+2),
-		strings.Repeat("─", InstalledMethodWidth+2))
+	fmt.Fprintf(writer, "├%s┼%s┼%s┼%s┤\n",
+		strings.Repeat("─", config.NameWidth+2),
+		strings.Repeat("─", config.DescriptionWidth+2),
+		strings.Repeat("─", config.CategoryWidth+2),
+		strings.Repeat("─", config.MethodWidth+2))
 
 	// Print table rows
 	for _, app := range apps {
-		fmt.Printf(headerFormat,
-			truncateString(app.Name, InstalledAppNameWidth),
-			truncateString(app.Description, InstalledDescriptionWidth),
-			truncateString(app.Category, InstalledCategoryWidth),
-			truncateString(app.InstallMethod, InstalledMethodWidth))
+		fmt.Fprintf(writer, headerFormat,
+			truncateString(app.Name, config.NameWidth),
+			truncateString(app.Description, config.DescriptionWidth),
+			truncateString(app.Category, config.CategoryWidth),
+			truncateString(app.InstallMethod, config.MethodWidth))
 	}
 
 	// Print table footer
-	fmt.Printf("└%s┴%s┴%s┴%s┘\n",
-		strings.Repeat("─", InstalledAppNameWidth+2),
-		strings.Repeat("─", InstalledDescriptionWidth+2),
-		strings.Repeat("─", InstalledCategoryWidth+2),
-		strings.Repeat("─", InstalledMethodWidth+2))
+	_, err := fmt.Fprintf(writer, "└%s┴%s┴%s┴%s┘\n",
+		strings.Repeat("─", config.NameWidth+2),
+		strings.Repeat("─", config.DescriptionWidth+2),
+		strings.Repeat("─", config.CategoryWidth+2),
+		strings.Repeat("─", config.MethodWidth+2))
+
+	return err
 }
 
 // renderInstalledAppsList displays installed apps in a simple list format
-func renderInstalledAppsList(apps []InstalledApp) {
+func renderInstalledAppsList(apps []InstalledApp, writer io.Writer) error {
 	for _, app := range apps {
-		fmt.Printf("• %s (%s) - %s\n", app.Name, app.InstallMethod, app.Category)
+		if _, err := fmt.Fprintf(writer, "• %s (%s) - %s\n", app.Name, app.InstallMethod, app.Category); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-// renderAvailableAppsTable displays available apps in a detailed table format
-func renderAvailableAppsTable(apps []AvailableApp) {
+// renderAvailableAppsTable displays available apps in a detailed table format with dynamic sizing
+func renderAvailableAppsTable(apps []AvailableApp, config *TableConfig, writer io.Writer) error {
 	// Create table header format
 	headerFormat := fmt.Sprintf("│ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │\n",
-		AvailableAppNameWidth, AvailableDescriptionWidth, AvailableInstallMethodsWidth,
-		AvailableCategoryWidth, AvailableStatusWidth)
+		config.NameWidth, config.DescriptionWidth, config.MethodWidth,
+		config.CategoryWidth, config.StatusWidth)
 
 	// Print table borders and header
-	fmt.Printf("┌%s┬%s┬%s┬%s┬%s┐\n",
-		strings.Repeat("─", AvailableAppNameWidth+2),
-		strings.Repeat("─", AvailableDescriptionWidth+2),
-		strings.Repeat("─", AvailableInstallMethodsWidth+2),
-		strings.Repeat("─", AvailableCategoryWidth+2),
-		strings.Repeat("─", AvailableStatusWidth+2))
+	fmt.Fprintf(writer, "┌%s┬%s┬%s┬%s┬%s┐\n",
+		strings.Repeat("─", config.NameWidth+2),
+		strings.Repeat("─", config.DescriptionWidth+2),
+		strings.Repeat("─", config.MethodWidth+2),
+		strings.Repeat("─", config.CategoryWidth+2),
+		strings.Repeat("─", config.StatusWidth+2))
 
-	fmt.Printf(headerFormat, "Application", "Description", "Install Methods", "Category", "Status")
+	fmt.Fprintf(writer, headerFormat, "Application", "Description", "Install Methods", "Category", "Status")
 
-	fmt.Printf("├%s┼%s┼%s┼%s┼%s┤\n",
-		strings.Repeat("─", AvailableAppNameWidth+2),
-		strings.Repeat("─", AvailableDescriptionWidth+2),
-		strings.Repeat("─", AvailableInstallMethodsWidth+2),
-		strings.Repeat("─", AvailableCategoryWidth+2),
-		strings.Repeat("─", AvailableStatusWidth+2))
+	fmt.Fprintf(writer, "├%s┼%s┼%s┼%s┼%s┤\n",
+		strings.Repeat("─", config.NameWidth+2),
+		strings.Repeat("─", config.DescriptionWidth+2),
+		strings.Repeat("─", config.MethodWidth+2),
+		strings.Repeat("─", config.CategoryWidth+2),
+		strings.Repeat("─", config.StatusWidth+2))
 
 	// Print table rows
 	for _, app := range apps {
@@ -739,31 +923,37 @@ func renderAvailableAppsTable(apps []AvailableApp) {
 			statusIcon = InstalledIcon
 		}
 
-		fmt.Printf(headerFormat,
-			truncateString(app.Name+recommendedMarker, AvailableAppNameWidth),
-			truncateString(app.Description, AvailableDescriptionWidth),
-			truncateString(methods, AvailableInstallMethodsWidth),
-			truncateString(app.Category, AvailableCategoryWidth),
+		fmt.Fprintf(writer, headerFormat,
+			truncateString(app.Name+recommendedMarker, config.NameWidth),
+			truncateString(app.Description, config.DescriptionWidth),
+			truncateString(methods, config.MethodWidth),
+			truncateString(app.Category, config.CategoryWidth),
 			statusIcon)
 	}
 
 	// Print table footer
-	fmt.Printf("└%s┴%s┴%s┴%s┴%s┘\n",
-		strings.Repeat("─", AvailableAppNameWidth+2),
-		strings.Repeat("─", AvailableDescriptionWidth+2),
-		strings.Repeat("─", AvailableInstallMethodsWidth+2),
-		strings.Repeat("─", AvailableCategoryWidth+2),
-		strings.Repeat("─", AvailableStatusWidth+2))
+	_, err := fmt.Fprintf(writer, "└%s┴%s┴%s┴%s┴%s┘\n",
+		strings.Repeat("─", config.NameWidth+2),
+		strings.Repeat("─", config.DescriptionWidth+2),
+		strings.Repeat("─", config.MethodWidth+2),
+		strings.Repeat("─", config.CategoryWidth+2),
+		strings.Repeat("─", config.StatusWidth+2))
+
+	return err
 }
 
 // renderAvailableAppsList displays available apps grouped by category
-func renderAvailableAppsList(apps []AvailableApp) {
+func renderAvailableAppsList(apps []AvailableApp, writer io.Writer) error {
 	categories := groupAppsByCategory(apps)
 	sortedCategories := getSortedCategories(categories)
-	recommendedCount, installedCount := renderCategorizedApps(categories, sortedCategories)
+	recommendedCount, installedCount, err := renderCategorizedApps(categories, sortedCategories, writer)
+	if err != nil {
+		return err
+	}
 
-	fmt.Printf("\nTotal available: %d applications (%d recommended, %d installed)\n",
+	_, err = fmt.Fprintf(writer, "\nTotal available: %d applications (%d recommended, %d installed)\n",
 		len(apps), recommendedCount, installedCount)
+	return err
 }
 
 // groupAppsByCategory groups apps by their category
@@ -791,7 +981,7 @@ func getSortedCategories(categories map[string][]AvailableApp) []string {
 
 // renderCategorizedApps renders apps grouped by category and returns counts
 // Optimized to calculate counts in a single pass for better performance
-func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategories []string) (int, int) {
+func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategories []string, writer io.Writer) (int, int, error) {
 	recommendedCount := 0
 	installedCount := 0
 
@@ -801,7 +991,10 @@ func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategorie
 			continue
 		}
 
-		fmt.Printf("\n🏷️  %s:\n", category)
+		_, err := fmt.Fprintf(writer, "\n🏷️  %s:\n", category)
+		if err != nil {
+			return 0, 0, err
+		}
 
 		for _, app := range categoryApps {
 			recommendedMarker := ""
@@ -818,9 +1011,12 @@ func renderCategorizedApps(categories map[string][]AvailableApp, sortedCategorie
 				statusIcon = InstalledIcon
 			}
 
-			fmt.Printf("  %s %s - %s%s\n", statusIcon, app.Name, app.Description, recommendedMarker)
+			_, err := fmt.Fprintf(writer, "  %s %s - %s%s\n", statusIcon, app.Name, app.Description, recommendedMarker)
+			if err != nil {
+				return 0, 0, err
+			}
 		}
 	}
 
-	return recommendedCount, installedCount
+	return recommendedCount, installedCount, nil
 }
