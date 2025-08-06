@@ -18,8 +18,9 @@ func init() {
 // NewListCmd creates the list command with comprehensive subcommand support
 func NewListCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list [installed|available|categories]",
-		Short: "List applications in your DevEx configuration",
+		Use:       "list [installed|available|categories]",
+		Short:     "List applications in your DevEx configuration",
+		ValidArgs: []string{"installed", "available", "categories"},
 		Long: `List applications in your DevEx configuration.
 
 Available subcommands:
@@ -34,8 +35,8 @@ Examples:
   devex list installed --format json     # JSON output
   devex list available --search docker   # Search for Docker-related apps
   devex list categories                   # Show all categories`,
-		Run: func(cmd *cobra.Command, args []string) {
-			runListCommand(cmd, args, repo, settings)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runListCommandWithError(cmd, args, repo, settings)
 		},
 	}
 
@@ -51,14 +52,10 @@ Examples:
 	return cmd
 }
 
-// runListCommand handles the main execution logic for list commands
-func runListCommand(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings) {
+// runListCommandWithError handles the main execution logic for list commands and returns errors
+func runListCommandWithError(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings) error {
 	options := parseListFlags(cmd)
-
-	if err := executeListCommand(cmd, args, repo, settings, options); err != nil {
-		fmt.Fprintf(cmd.OutOrStderr(), "Error: %v\n", err)
-		return
-	}
+	return executeListCommand(cmd, args, repo, settings, options)
 }
 
 // executeListCommand executes the appropriate list subcommand with error handling
