@@ -24,6 +24,19 @@ const (
 	// Default category for uncategorized apps
 	DefaultCategory = "Other"
 
+	// Table drawing characters
+	TableTopLeft     = "┌"
+	TableTopRight    = "┐"
+	TableBottomLeft  = "└"
+	TableBottomRight = "┘"
+	TableCross       = "┼"
+	TableTeeDown     = "┬"
+	TableTeeUp       = "┴"
+	TableTeeRight    = "├"
+	TableTeeLeft     = "┤"
+	TableVertical    = "│"
+	TableHorizontal  = "─"
+
 	// Default column widths (fallback values)
 	defaultMinNameWidth        = 12
 	defaultMinDescriptionWidth = 30
@@ -455,6 +468,7 @@ func getInstalledAppsCache(repo types.Repository) map[string]bool {
 
 	dbApps, err := repo.ListApps()
 	if err != nil {
+		log.Warn("Failed to retrieve installed apps from database: %v", err)
 		return installedApps
 	}
 
@@ -560,17 +574,23 @@ func getCategoryDescription(category string) string {
 func filterInstalledApps(apps []InstalledApp, options ListCommandOptions) []InstalledApp {
 	filtered := make([]InstalledApp, 0, len(apps))
 
+	// Pre-compute lowercase search term once for better performance
+	var searchLower string
+	if options.Search != "" {
+		searchLower = strings.ToLower(options.Search)
+	}
+
 	for _, app := range apps {
 		// Category filter
 		if options.Category != "" && !strings.EqualFold(app.Category, options.Category) {
 			continue
 		}
 
-		// Search filter
-		if options.Search != "" {
-			search := strings.ToLower(options.Search)
-			if !strings.Contains(strings.ToLower(app.Name), search) &&
-				!strings.Contains(strings.ToLower(app.Description), search) {
+		// Search filter with optimized string operations
+		if searchLower != "" {
+			appNameLower := strings.ToLower(app.Name)
+			appDescLower := strings.ToLower(app.Description)
+			if !strings.Contains(appNameLower, searchLower) && !strings.Contains(appDescLower, searchLower) {
 				continue
 			}
 		}
@@ -594,17 +614,23 @@ func filterInstalledApps(apps []InstalledApp, options ListCommandOptions) []Inst
 func filterAvailableApps(apps []AvailableApp, options ListCommandOptions) []AvailableApp {
 	filtered := make([]AvailableApp, 0, len(apps))
 
+	// Pre-compute lowercase search term once for better performance
+	var searchLower string
+	if options.Search != "" {
+		searchLower = strings.ToLower(options.Search)
+	}
+
 	for _, app := range apps {
 		// Category filter
 		if options.Category != "" && !strings.EqualFold(app.Category, options.Category) {
 			continue
 		}
 
-		// Search filter
-		if options.Search != "" {
-			search := strings.ToLower(options.Search)
-			if !strings.Contains(strings.ToLower(app.Name), search) &&
-				!strings.Contains(strings.ToLower(app.Description), search) {
+		// Search filter with optimized string operations
+		if searchLower != "" {
+			appNameLower := strings.ToLower(app.Name)
+			appDescLower := strings.ToLower(app.Description)
+			if !strings.Contains(appNameLower, searchLower) && !strings.Contains(appDescLower, searchLower) {
 				continue
 			}
 		}
@@ -643,7 +669,7 @@ func filterAvailableApps(apps []AvailableApp, options ListCommandOptions) []Avai
 func outputInstalledJSON(apps []InstalledApp, writer io.Writer) error {
 	data, err := json.MarshalIndent(apps, "", "  ")
 	if err != nil {
-		return fmt.Errorf("error formatting JSON: %w", err)
+		return fmt.Errorf("failed to serialize %d installed apps to JSON: %w", len(apps), err)
 	}
 	_, err = fmt.Fprintln(writer, string(data))
 	return err
@@ -652,7 +678,7 @@ func outputInstalledJSON(apps []InstalledApp, writer io.Writer) error {
 func outputInstalledYAML(apps []InstalledApp, writer io.Writer) error {
 	data, err := yaml.Marshal(apps)
 	if err != nil {
-		return fmt.Errorf("error formatting YAML: %w", err)
+		return fmt.Errorf("failed to serialize %d installed apps to YAML: %w", len(apps), err)
 	}
 	_, err = fmt.Fprintln(writer, string(data))
 	return err
@@ -688,7 +714,7 @@ func outputInstalledTable(apps []InstalledApp, options ListCommandOptions, write
 func outputAvailableJSON(apps []AvailableApp, writer io.Writer) error {
 	data, err := json.MarshalIndent(apps, "", "  ")
 	if err != nil {
-		return fmt.Errorf("error formatting JSON: %w", err)
+		return fmt.Errorf("failed to serialize %d available apps to JSON: %w", len(apps), err)
 	}
 	_, err = fmt.Fprintln(writer, string(data))
 	return err
@@ -697,7 +723,7 @@ func outputAvailableJSON(apps []AvailableApp, writer io.Writer) error {
 func outputAvailableYAML(apps []AvailableApp, writer io.Writer) error {
 	data, err := yaml.Marshal(apps)
 	if err != nil {
-		return fmt.Errorf("error formatting YAML: %w", err)
+		return fmt.Errorf("failed to serialize %d available apps to YAML: %w", len(apps), err)
 	}
 	_, err = fmt.Fprintln(writer, string(data))
 	return err
@@ -732,7 +758,7 @@ func outputAvailableTable(apps []AvailableApp, options ListCommandOptions, write
 func outputCategoriesJSON(categories []CategoryInfo, writer io.Writer) error {
 	data, err := json.MarshalIndent(categories, "", "  ")
 	if err != nil {
-		return fmt.Errorf("error formatting JSON: %w", err)
+		return fmt.Errorf("failed to serialize %d categories to JSON: %w", len(categories), err)
 	}
 	_, err = fmt.Fprintln(writer, string(data))
 	return err
@@ -741,7 +767,7 @@ func outputCategoriesJSON(categories []CategoryInfo, writer io.Writer) error {
 func outputCategoriesYAML(categories []CategoryInfo, writer io.Writer) error {
 	data, err := yaml.Marshal(categories)
 	if err != nil {
-		return fmt.Errorf("error formatting YAML: %w", err)
+		return fmt.Errorf("failed to serialize %d categories to YAML: %w", len(categories), err)
 	}
 	_, err = fmt.Fprintln(writer, string(data))
 	return err
@@ -843,20 +869,16 @@ func renderInstalledAppsTable(apps []InstalledApp, config *TableConfig, writer i
 	headerFormat := fmt.Sprintf("│ %%-%ds │ %%-%ds │ %%-%ds │ %%-%ds │\n",
 		config.NameWidth, config.DescriptionWidth, config.CategoryWidth, config.MethodWidth)
 
+	// Pre-compute repeated strings for better performance
+	nameSep := strings.Repeat("─", config.NameWidth+2)
+	descSep := strings.Repeat("─", config.DescriptionWidth+2)
+	catSep := strings.Repeat("─", config.CategoryWidth+2)
+	methodSep := strings.Repeat("─", config.MethodWidth+2)
+
 	// Print table borders and header
-	fmt.Fprintf(writer, "┌%s┬%s┬%s┬%s┐\n",
-		strings.Repeat("─", config.NameWidth+2),
-		strings.Repeat("─", config.DescriptionWidth+2),
-		strings.Repeat("─", config.CategoryWidth+2),
-		strings.Repeat("─", config.MethodWidth+2))
-
+	fmt.Fprintf(writer, "┌%s┬%s┬%s┬%s┐\n", nameSep, descSep, catSep, methodSep)
 	fmt.Fprintf(writer, headerFormat, "Application", "Description", "Category", "Method")
-
-	fmt.Fprintf(writer, "├%s┼%s┼%s┼%s┤\n",
-		strings.Repeat("─", config.NameWidth+2),
-		strings.Repeat("─", config.DescriptionWidth+2),
-		strings.Repeat("─", config.CategoryWidth+2),
-		strings.Repeat("─", config.MethodWidth+2))
+	fmt.Fprintf(writer, "├%s┼%s┼%s┼%s┤\n", nameSep, descSep, catSep, methodSep)
 
 	// Print table rows
 	for _, app := range apps {
@@ -868,12 +890,7 @@ func renderInstalledAppsTable(apps []InstalledApp, config *TableConfig, writer i
 	}
 
 	// Print table footer
-	_, err := fmt.Fprintf(writer, "└%s┴%s┴%s┴%s┘\n",
-		strings.Repeat("─", config.NameWidth+2),
-		strings.Repeat("─", config.DescriptionWidth+2),
-		strings.Repeat("─", config.CategoryWidth+2),
-		strings.Repeat("─", config.MethodWidth+2))
-
+	_, err := fmt.Fprintf(writer, "└%s┴%s┴%s┴%s┘\n", nameSep, descSep, catSep, methodSep)
 	return err
 }
 
@@ -894,22 +911,17 @@ func renderAvailableAppsTable(apps []AvailableApp, config *TableConfig, writer i
 		config.NameWidth, config.DescriptionWidth, config.MethodWidth,
 		config.CategoryWidth, config.StatusWidth)
 
+	// Pre-compute repeated strings for better performance
+	nameSep := strings.Repeat("─", config.NameWidth+2)
+	descSep := strings.Repeat("─", config.DescriptionWidth+2)
+	methodSep := strings.Repeat("─", config.MethodWidth+2)
+	catSep := strings.Repeat("─", config.CategoryWidth+2)
+	statusSep := strings.Repeat("─", config.StatusWidth+2)
+
 	// Print table borders and header
-	fmt.Fprintf(writer, "┌%s┬%s┬%s┬%s┬%s┐\n",
-		strings.Repeat("─", config.NameWidth+2),
-		strings.Repeat("─", config.DescriptionWidth+2),
-		strings.Repeat("─", config.MethodWidth+2),
-		strings.Repeat("─", config.CategoryWidth+2),
-		strings.Repeat("─", config.StatusWidth+2))
-
+	fmt.Fprintf(writer, "┌%s┬%s┬%s┬%s┬%s┐\n", nameSep, descSep, methodSep, catSep, statusSep)
 	fmt.Fprintf(writer, headerFormat, "Application", "Description", "Install Methods", "Category", "Status")
-
-	fmt.Fprintf(writer, "├%s┼%s┼%s┼%s┼%s┤\n",
-		strings.Repeat("─", config.NameWidth+2),
-		strings.Repeat("─", config.DescriptionWidth+2),
-		strings.Repeat("─", config.MethodWidth+2),
-		strings.Repeat("─", config.CategoryWidth+2),
-		strings.Repeat("─", config.StatusWidth+2))
+	fmt.Fprintf(writer, "├%s┼%s┼%s┼%s┼%s┤\n", nameSep, descSep, methodSep, catSep, statusSep)
 
 	// Print table rows
 	for _, app := range apps {
@@ -932,13 +944,7 @@ func renderAvailableAppsTable(apps []AvailableApp, config *TableConfig, writer i
 	}
 
 	// Print table footer
-	_, err := fmt.Fprintf(writer, "└%s┴%s┴%s┴%s┴%s┘\n",
-		strings.Repeat("─", config.NameWidth+2),
-		strings.Repeat("─", config.DescriptionWidth+2),
-		strings.Repeat("─", config.MethodWidth+2),
-		strings.Repeat("─", config.CategoryWidth+2),
-		strings.Repeat("─", config.StatusWidth+2))
-
+	_, err := fmt.Fprintf(writer, "└%s┴%s┴%s┴%s┴%s┘\n", nameSep, descSep, methodSep, catSep, statusSep)
 	return err
 }
 
