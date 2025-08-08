@@ -1,9 +1,8 @@
 package apt
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"os/user"
 	"strings"
 	"time"
 
@@ -17,32 +16,8 @@ type APTInstaller struct{}
 
 var lastAptUpdateTime time.Time
 
-// getCurrentUser attempts to determine the current user through multiple methods
 func getCurrentUser() string {
-	// Method 1: Try USER environment variable
-	if username := os.Getenv("USER"); username != "" {
-		return username
-	}
-
-	// Method 2: Try LOGNAME environment variable
-	if username := os.Getenv("LOGNAME"); username != "" {
-		return username
-	}
-
-	// Method 3: Use os/user package
-	if currentUser, err := user.Current(); err == nil && currentUser.Username != "" {
-		return currentUser.Username
-	}
-
-	// Method 4: Try whoami command as fallback
-	if output, err := utils.CommandExec.RunShellCommand("whoami"); err == nil {
-		username := strings.TrimSpace(output)
-		if username != "" {
-			return username
-		}
-	}
-
-	return ""
+	return utilities.GetCurrentUser()
 }
 
 func New() *APTInstaller {
@@ -52,9 +27,14 @@ func New() *APTInstaller {
 func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("APT Installer: Starting installation", "command", command)
 
-	// Validate apt availability
-	if err := validateAptSystem(); err != nil {
-		return fmt.Errorf("apt system validation failed: %w", err)
+	// Run background validation for better performance
+	validator := utilities.NewBackgroundValidator(30 * time.Second)
+	validator.AddSuite(utilities.CreateSystemValidationSuite("apt"))
+	validator.AddSuite(utilities.CreateNetworkValidationSuite())
+
+	ctx := context.Background()
+	if err := validator.RunValidations(ctx); err != nil {
+		return utilities.WrapError(err, utilities.ErrorTypeSystem, "install", command, "apt")
 	}
 
 	// Wrap the command into a types.AppConfig object
@@ -155,26 +135,6 @@ func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
 	return nil
 }
 
-// validateAptSystem checks if apt is available and functional
-func validateAptSystem() error {
-	// Check if apt-get is available
-	if _, err := utils.CommandExec.RunShellCommand("which apt-get"); err != nil {
-		return fmt.Errorf("apt-get not found: %w", err)
-	}
-
-	// Check if dpkg is available (needed for checking installation status)
-	if _, err := utils.CommandExec.RunShellCommand("which dpkg"); err != nil {
-		return fmt.Errorf("dpkg not found: %w", err)
-	}
-
-	// Check if we can access the dpkg database
-	if _, err := utils.CommandExec.RunShellCommand("dpkg --version"); err != nil {
-		return fmt.Errorf("dpkg not functional: %w", err)
-	}
-
-	return nil
-}
-
 // ensurePackageListsUpdated updates package lists if they're stale
 func ensurePackageListsUpdated(repo types.Repository) error {
 	// Check if we need to update (more than 6 hours old)
@@ -266,4 +226,53 @@ func setupDockerService() error {
 	}
 
 	return nil
+}
+
+// Uninstall removes packages using apt
+func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Debug("APT Installer: Starting uninstallation", "command", command)
+
+	// Check if the package is installed
+	isInstalled, err := a.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if package is installed", err, "command", command)
+		return fmt.Errorf("failed to check if package is installed: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("Package not installed, skipping uninstallation", "command", command)
+		return nil
+	}
+
+	// Run apt remove command
+	uninstallCommand := fmt.Sprintf("sudo apt-get remove -y %s", command)
+	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
+		log.Error("Failed to uninstall package via apt", err, "command", command)
+		return fmt.Errorf("failed to uninstall package via apt: %w", err)
+	}
+
+	log.Debug("APT package uninstalled successfully", "command", command)
+
+	// Remove the package from the repository
+	if err := repo.DeleteApp(command); err != nil {
+		log.Error("Failed to remove package from repository", err, "command", command)
+		return fmt.Errorf("failed to remove package from repository: %w", err)
+	}
+
+	log.Debug("Package removed from repository successfully", "command", command)
+	return nil
+}
+
+// IsInstalled checks if a package is installed using dpkg-query
+func (a *APTInstaller) IsInstalled(command string) (bool, error) {
+	// Use dpkg-query to check if package is installed
+	checkCommand := fmt.Sprintf("dpkg-query -W -f='${Status}' %s 2>/dev/null", command)
+	output, err := utils.CommandExec.RunShellCommand(checkCommand)
+	if err != nil {
+		// dpkg-query returns non-zero exit code if package is not installed
+		return false, nil
+	}
+
+	// Check if the package is installed and configured properly
+	return strings.Contains(output, "install ok installed"), nil
 }

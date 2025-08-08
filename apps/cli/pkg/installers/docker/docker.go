@@ -133,6 +133,84 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	return nil
 }
 
+// Uninstall removes Docker containers
+func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Debug("Docker Installer: Starting uninstallation", "command", command)
+
+	// Check if Docker is available and running
+	if err := validateDockerService(); err != nil {
+		return fmt.Errorf("docker service validation failed: %w", err)
+	}
+
+	// Extract container name from the command
+	containerName := extractContainerName(command)
+	if containerName == "" {
+		log.Error("Failed to extract container name from command", fmt.Errorf("command: %s", command))
+		return fmt.Errorf("failed to extract container name from command")
+	}
+
+	// Check if the container is running
+	isInstalled, err := d.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if Docker container is running", err, "containerName", containerName)
+		return fmt.Errorf("failed to check if Docker container is running: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("Docker container not running, skipping uninstallation", "containerName", containerName)
+		return nil
+	}
+
+	// Stop and remove the Docker container
+	stopCommand := fmt.Sprintf("docker stop %s", containerName)
+	if err := executeDockerCommand(stopCommand); err != nil {
+		log.Warn("Failed to stop Docker container", "containerName", containerName, "error", err)
+		// Continue with removal attempt even if stop failed
+	}
+
+	removeCommand := fmt.Sprintf("docker rm %s", containerName)
+	if err := executeDockerCommand(removeCommand); err != nil {
+		log.Error("Failed to remove Docker container", err, "containerName", containerName)
+		return fmt.Errorf("failed to remove Docker container: %w", err)
+	}
+
+	log.Debug("Docker container removed successfully", "containerName", containerName)
+
+	// Remove the container from the repository
+	if err := repo.DeleteApp(containerName); err != nil {
+		log.Error("Failed to remove Docker container from repository", err, "containerName", containerName)
+		return fmt.Errorf("failed to remove Docker container from repository: %w", err)
+	}
+
+	log.Debug("Docker container removed from repository successfully", "containerName", containerName)
+	return nil
+}
+
+// IsInstalled checks if a Docker container is running
+func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
+	// Extract container name from the command
+	containerName := extractContainerName(command)
+	if containerName == "" {
+		return false, fmt.Errorf("failed to extract container name from command: %s", command)
+	}
+
+	// Check if the container is running using docker ps
+	checkCommand := fmt.Sprintf("docker ps --filter \"name=%s\" --filter \"status=running\" --format \"{{.Names}}\"", containerName)
+	output, err := utils.CommandExec.RunShellCommand(checkCommand)
+	if err != nil {
+		// Try with sudo if regular command failed
+		sudoCheckCommand := "sudo " + checkCommand
+		output, err = utils.CommandExec.RunShellCommand(sudoCheckCommand)
+		if err != nil {
+			// If both fail, container is likely not running or Docker is not available
+			return false, nil
+		}
+	}
+
+	// Check if the container name appears in the output
+	return strings.Contains(output, containerName), nil
+}
+
 func extractContainerName(command string) string {
 	parts := strings.Fields(command)
 	for i, part := range parts {

@@ -252,6 +252,8 @@ type ThemeRepository interface {
 
 type BaseInstaller interface {
 	Install(command string, repo Repository) error
+	Uninstall(command string, repo Repository) error
+	IsInstalled(command string) (bool, error)
 }
 
 type CommandExecutor interface {
@@ -318,24 +320,33 @@ type ShellConfig interface {
 // Cross-Platform Configuration Types
 
 // OSConfig defines OS-specific installation configuration
+// PlatformRequirement defines OS and version requirements for an installation method
+type PlatformRequirement struct {
+	OS      string `mapstructure:"os" yaml:"os"`
+	Version string `mapstructure:"version" yaml:"version,omitempty"`
+	Arch    string `mapstructure:"arch" yaml:"arch,omitempty"`
+}
+
 type OSConfig struct {
-	InstallMethod    string           `mapstructure:"install_method" yaml:"install_method"`
-	InstallCommand   string           `mapstructure:"install_command" yaml:"install_command"`
-	UninstallCommand string           `mapstructure:"uninstall_command" yaml:"uninstall_command"`
-	AptSources       []AptSource      `mapstructure:"apt_sources" yaml:"apt_sources,omitempty"`
-	BrewCask         bool             `mapstructure:"brew_cask" yaml:"brew_cask,omitempty"`
-	BrewTap          string           `mapstructure:"brew_tap" yaml:"brew_tap,omitempty"`
-	DownloadURL      string           `mapstructure:"download_url" yaml:"download_url,omitempty"`
-	ExtractPath      string           `mapstructure:"extract_path" yaml:"extract_path,omitempty"`
-	Destination      string           `mapstructure:"destination" yaml:"destination,omitempty"`
-	Dependencies     []string         `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
-	PreInstall       []InstallCommand `mapstructure:"pre_install" yaml:"pre_install,omitempty"`
-	PostInstall      []InstallCommand `mapstructure:"post_install" yaml:"post_install,omitempty"`
-	Alternatives     []OSConfig       `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
-	ConfigFiles      []ConfigFile     `mapstructure:"config_files" yaml:"config_files,omitempty"`
-	Themes           []Theme          `mapstructure:"themes" yaml:"themes,omitempty"`
-	CleanupFiles     []string         `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
-	Conflicts        []string         `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
+	InstallMethod        string                `mapstructure:"install_method" yaml:"install_method"`
+	InstallCommand       string                `mapstructure:"install_command" yaml:"install_command"`
+	UninstallCommand     string                `mapstructure:"uninstall_command" yaml:"uninstall_command"`
+	OfficialSupport      bool                  `mapstructure:"official_support" yaml:"official_support,omitempty"`
+	PlatformRequirements []PlatformRequirement `mapstructure:"platform_requirements" yaml:"platform_requirements,omitempty"`
+	AptSources           []AptSource           `mapstructure:"apt_sources" yaml:"apt_sources,omitempty"`
+	BrewCask             bool                  `mapstructure:"brew_cask" yaml:"brew_cask,omitempty"`
+	BrewTap              string                `mapstructure:"brew_tap" yaml:"brew_tap,omitempty"`
+	DownloadURL          string                `mapstructure:"download_url" yaml:"download_url,omitempty"`
+	ExtractPath          string                `mapstructure:"extract_path" yaml:"extract_path,omitempty"`
+	Destination          string                `mapstructure:"destination" yaml:"destination,omitempty"`
+	Dependencies         []string              `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
+	PreInstall           []InstallCommand      `mapstructure:"pre_install" yaml:"pre_install,omitempty"`
+	PostInstall          []InstallCommand      `mapstructure:"post_install" yaml:"post_install,omitempty"`
+	Alternatives         []OSConfig            `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
+	ConfigFiles          []ConfigFile          `mapstructure:"config_files" yaml:"config_files,omitempty"`
+	Themes               []Theme               `mapstructure:"themes" yaml:"themes,omitempty"`
+	CleanupFiles         []string              `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
+	Conflicts            []string              `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
 }
 
 // CrossPlatformApp defines an application with OS-specific installation methods
@@ -399,6 +410,54 @@ func (app *CrossPlatformApp) IsCompatibleWithDesktopEnvironment(desktopEnv strin
 	}
 
 	return false
+}
+
+// IsPlatformSupported checks if the current platform meets the requirements
+func (config *OSConfig) IsPlatformSupported() bool {
+	// If no platform requirements specified, assume supported
+	if len(config.PlatformRequirements) == 0 {
+		return true
+	}
+
+	// Get current platform info
+	currentOS := runtime.GOOS
+	// TODO: Add platform detection for version and arch
+	// For now, we'll implement basic OS matching
+
+	for _, req := range config.PlatformRequirements {
+		if req.OS == currentOS {
+			// For now, if OS matches, we consider it supported
+			// Later we can add version checking logic
+			return true
+		}
+		// Handle Linux distribution mapping
+		if currentOS == "linux" && (req.OS == "debian" || req.OS == "ubuntu" || req.OS == "fedora" || req.OS == "arch" || req.OS == "gentoo" || req.OS == "opensuse" || req.OS == "void" || req.OS == "alpine") {
+			// TODO: Add actual distribution detection
+			// For now, assume any Linux matches any Linux distro requirement
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetBestOSConfig returns the best matching OS configuration based on platform requirements
+func (app *CrossPlatformApp) GetBestOSConfig() OSConfig {
+	// First try the default OS config
+	defaultConfig := app.GetOSConfig()
+	if defaultConfig.IsPlatformSupported() {
+		return defaultConfig
+	}
+
+	// Check alternatives for platform-specific matches
+	for _, alt := range defaultConfig.Alternatives {
+		if alt.IsPlatformSupported() {
+			return alt
+		}
+	}
+
+	// Return default if no better match found
+	return defaultConfig
 }
 
 // Validate checks if the CrossPlatformApp configuration is valid

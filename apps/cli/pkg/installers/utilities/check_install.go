@@ -37,6 +37,11 @@ func IsAppInstalled(app types.AppConfig) (bool, error) {
 				log.Info("Docker container not found", "container", cmd)
 				return false, nil
 			}
+		case "dnf":
+			if !isDnfInstalled(cmd) {
+				log.Info("DNF package not installed", "package", cmd)
+				return false, nil
+			}
 		case "appimage":
 			if !isAppImageInstalled(cmd) {
 				log.Info("AppImage not found", "binary", cmd)
@@ -74,6 +79,23 @@ func isAptInstalledAlternative(packageName string) bool {
 	}
 	// Look for lines starting with 'ii' which indicates installed packages
 	return strings.Contains(output, "ii  "+packageName)
+}
+
+func isDnfInstalled(packageName string) bool {
+	// Use rpm to check if package is installed (both DNF and YUM use RPM backend)
+	command := "rpm -q " + packageName
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// rpm -q returns non-zero exit code if package is not installed
+		if strings.Contains(output, "not installed") || strings.Contains(output, "is not installed") {
+			return false
+		}
+		// For other errors, log and return false
+		log.Warn("Failed to check DNF/RPM package", "package", packageName, "error", err)
+		return false
+	}
+	// If rpm -q succeeds, package is installed
+	return true
 }
 
 func isPipInstalled(packageName string) bool {
