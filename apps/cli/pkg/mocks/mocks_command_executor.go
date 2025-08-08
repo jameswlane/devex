@@ -306,6 +306,77 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		return "Successfully installed package", nil
 	}
 
+	// Handle DNF/YUM commands
+	if strings.Contains(command, "rpm -q") {
+		// Extract package name from rpm -q command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2] // "rpm -q package-name"
+			if m.InstallationState[packageName] {
+				return fmt.Sprintf("%s-1.0-1.x86_64", packageName), nil
+			}
+		}
+		// For packages not in installation state, return error (package not installed)
+		return "", fmt.Errorf("package not installed")
+	}
+
+	// Handle DNF install commands - mark package as installed
+	if strings.Contains(command, "sudo dnf install -y") || strings.Contains(command, "sudo yum install -y") {
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			packageName := parts[len(parts)-1] // Last argument is the package name
+			m.InstallationState[packageName] = true
+		}
+		return "Package installed successfully", nil
+	}
+
+	// Handle DNF group install commands
+	if strings.Contains(command, "sudo dnf group install -y") || strings.Contains(command, "sudo yum groupinstall -y") {
+		// Extract group name (it's in quotes, so we need to handle that)
+		start := strings.Index(command, "'")
+		end := strings.LastIndex(command, "'")
+		if start != -1 && end != -1 && start != end {
+			groupName := command[start+1 : end]
+			m.InstallationState[groupName] = true
+		}
+		return "Group installed successfully", nil
+	}
+
+	// Handle DNF/YUM info commands
+	if strings.Contains(command, "dnf info") || strings.Contains(command, "yum info") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2]
+			// For known packages, return package info
+			if !strings.Contains(packageName, "nonexistent") && !strings.Contains(packageName, "failing") {
+				return fmt.Sprintf("Name        : %s\nAvailable Packages", packageName), nil
+			}
+		}
+		return "No matching packages to list", fmt.Errorf("no matching packages")
+	}
+
+	// Handle DNF/YUM check-update commands
+	if strings.Contains(command, "sudo dnf check-update") || strings.Contains(command, "sudo yum check-update") {
+		// Mock successful check-update
+		return "Checking for updates...", nil
+	}
+
+	// Handle rpm --version
+	if strings.Contains(command, "rpm --version") {
+		return "RPM version 4.16.0", nil
+	}
+
+	// Handle repository commands
+	if strings.Contains(command, "tee /etc/yum.repos.d/") {
+		return "Repository configuration written", nil
+	}
+
+	// Handle EPEL install commands
+	if strings.Contains(command, "epel-release") {
+		m.InstallationState["epel-release"] = true
+		return "EPEL repository enabled", nil
+	}
+
 	return "mock output", nil
 }
 
