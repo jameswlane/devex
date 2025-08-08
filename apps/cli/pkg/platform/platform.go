@@ -133,13 +133,19 @@ func (pd *PlatformDetector) detectDistribution() string {
 
 	// Fallback to checking specific files
 	distributions := map[string]string{
-		"/etc/ubuntu-release":  "ubuntu",
-		"/etc/debian_version":  "debian",
-		"/etc/redhat-release":  "rhel",
-		"/etc/centos-release":  "centos",
-		"/etc/fedora-release":  "fedora",
-		"/etc/arch-release":    "arch",
-		"/etc/manjaro-release": "manjaro",
+		"/etc/ubuntu-release":      "ubuntu",
+		"/etc/debian_version":      "debian",
+		"/etc/redhat-release":      "rhel",
+		"/etc/centos-release":      "centos",
+		"/etc/fedora-release":      "fedora",
+		"/etc/arch-release":        "arch",
+		"/etc/manjaro-release":     "manjaro",
+		"/etc/endeavouros-release": "endeavouros",
+		"/etc/arcolinux-release":   "arcolinux",
+		"/etc/garuda-release":      "garuda",
+		"/etc/SUSE-release":        "opensuse",
+		"/etc/SuSE-release":        "opensuse",
+		"/usr/lib/os-release":      "opensuse", // Modern openSUSE systems
 	}
 
 	for file, distro := range distributions {
@@ -203,8 +209,10 @@ func (pd *PlatformDetector) GetInstallerPriority() []string {
 			return []string{"apt", "flatpak", "snap", "mise", "curlpipe", "download"}
 		case "fedora", "rhel", "centos":
 			return []string{"dnf", "rpm", "flatpak", "mise", "curlpipe", "download"}
-		case "arch", "manjaro":
+		case "arch", "manjaro", "endeavouros", "arcolinux", "garuda":
 			return []string{"pacman", "yay", "flatpak", "mise", "curlpipe", "download"}
+		case "opensuse", "sles", "sled", "opensuse-leap", "opensuse-tumbleweed":
+			return []string{"zypper", "flatpak", "mise", "curlpipe", "download"}
 		default:
 			return []string{"flatpak", "mise", "curlpipe", "download"}
 		}
@@ -233,8 +241,10 @@ func (pd *PlatformDetector) GetSystemPackageManager() string {
 			return "apt"
 		case "fedora", "rhel", "centos":
 			return "dnf"
-		case "arch", "manjaro":
+		case "arch", "manjaro", "endeavouros", "arcolinux", "garuda":
 			return "pacman"
+		case "opensuse", "sles", "sled", "opensuse-leap", "opensuse-tumbleweed":
+			return "zypper"
 		default:
 			return "unknown"
 		}

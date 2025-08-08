@@ -1,6 +1,8 @@
 package dnf_test
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -172,19 +174,40 @@ var _ = Describe("DNF Installer", func() {
 	})
 
 	Describe("AddRepository", func() {
-		It("adds a repository successfully", func() {
+		It("adds a repository successfully with valid inputs", func() {
 			err := installer.AddRepository("test-repo", "https://example.com/repo", "https://example.com/key.gpg")
 
 			Expect(err).ToNot(HaveOccurred())
-			// Verify a tee command was executed to create the repo file
-			var foundTeeCommand bool
+			// Verify secure file creation commands were executed
+			var foundPrintfCmd, foundMoveCmd bool
 			for _, cmd := range mockExec.Commands {
-				if cmd == "echo '[test-repo]\nname=test-repo\nbaseurl=https://example.com/repo\nenabled=1\ngpgcheck=1\ngpgkey=https://example.com/key.gpg\n' | sudo tee /etc/yum.repos.d/test-repo.repo" {
-					foundTeeCommand = true
-					break
+				if strings.Contains(cmd, "printf %s") && strings.Contains(cmd, "/tmp/repo-config-") {
+					foundPrintfCmd = true
+				}
+				if strings.Contains(cmd, "sudo mv") && strings.Contains(cmd, "/etc/yum.repos.d/test-repo.repo") {
+					foundMoveCmd = true
 				}
 			}
-			Expect(foundTeeCommand).To(BeTrue())
+			Expect(foundPrintfCmd).To(BeTrue(), "Should create temporary file with printf")
+			Expect(foundMoveCmd).To(BeTrue(), "Should move file to final location with sudo")
+		})
+
+		It("rejects invalid repository names", func() {
+			err := installer.AddRepository("test/repo", "https://example.com/repo", "https://example.com/key.gpg")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid repository name"))
+		})
+
+		It("rejects invalid URLs", func() {
+			err := installer.AddRepository("test-repo", "ftp://example.com/repo", "https://example.com/key.gpg")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid baseurl"))
+		})
+
+		It("rejects URLs with shell metacharacters", func() {
+			err := installer.AddRepository("test-repo", "https://example.com/repo'; rm -rf /", "https://example.com/key.gpg")
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid baseurl"))
 		})
 	})
 
