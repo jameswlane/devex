@@ -1,6 +1,7 @@
 package apt
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -26,9 +27,14 @@ func New() *APTInstaller {
 func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("APT Installer: Starting installation", "command", command)
 
-	// Validate apt availability
-	if err := validateAptSystem(); err != nil {
-		return fmt.Errorf("apt system validation failed: %w", err)
+	// Run background validation for better performance
+	validator := utilities.NewBackgroundValidator(30 * time.Second)
+	validator.AddSuite(utilities.CreateSystemValidationSuite("apt"))
+	validator.AddSuite(utilities.CreateNetworkValidationSuite())
+
+	ctx := context.Background()
+	if err := validator.RunValidations(ctx); err != nil {
+		return utilities.WrapError(err, utilities.ErrorTypeSystem, "install", command, "apt")
 	}
 
 	// Wrap the command into a types.AppConfig object
@@ -126,26 +132,6 @@ func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
 	}
 
 	log.Debug("APT update completed successfully")
-	return nil
-}
-
-// validateAptSystem checks if apt is available and functional
-func validateAptSystem() error {
-	// Check if apt-get is available
-	if _, err := utils.CommandExec.RunShellCommand("which apt-get"); err != nil {
-		return fmt.Errorf("apt-get not found: %w", err)
-	}
-
-	// Check if dpkg is available (needed for checking installation status)
-	if _, err := utils.CommandExec.RunShellCommand("which dpkg"); err != nil {
-		return fmt.Errorf("dpkg not found: %w", err)
-	}
-
-	// Check if we can access the dpkg database
-	if _, err := utils.CommandExec.RunShellCommand("dpkg --version"); err != nil {
-		return fmt.Errorf("dpkg not functional: %w", err)
-	}
-
 	return nil
 }
 

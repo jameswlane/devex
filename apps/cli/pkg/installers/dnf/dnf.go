@@ -1,6 +1,7 @@
 package dnf
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -22,9 +23,14 @@ func NewDnfInstaller() *DnfInstaller {
 func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("DNF Installer: Starting installation", "command", command)
 
-	// Validate DNF system availability
-	if err := validateDnfSystem(); err != nil {
-		return fmt.Errorf("dnf system validation failed: %w", err)
+	// Run background validation for better performance
+	validator := utilities.NewBackgroundValidator(30 * time.Second)
+	validator.AddSuite(utilities.CreateSystemValidationSuite("dnf"))
+	validator.AddSuite(utilities.CreateNetworkValidationSuite())
+
+	ctx := context.Background()
+	if err := validator.RunValidations(ctx); err != nil {
+		return utilities.WrapError(err, utilities.ErrorTypeSystem, "install", command, "dnf")
 	}
 
 	// Wrap the command into a types.AppConfig object
@@ -43,31 +49,32 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 		isInstalled, err = d.isPackageInstalled(command)
 		if err != nil {
 			log.Error("Failed to check if package is installed", err, "command", command)
-			return fmt.Errorf("failed to check if package is installed via dnf: %w", err)
+			return utilities.NewPackageError("install-check", command, "dnf", err)
 		}
 	}
 
 	if isInstalled {
 		log.Info("Package already installed, skipping installation", "command", command)
-		return nil
+		return nil // Already installed is a success condition
 	}
 
 	// Ensure package metadata is up to date if it's stale
 	if err := ensurePackageMetadataUpdated(repo); err != nil {
 		log.Warn("Failed to update package metadata", "error", err)
 		// Continue anyway, as the installation might still work
+		// This is not a critical error, just log it
 	}
 
 	// Check if package is available in repositories
 	if err := validatePackageAvailability(command); err != nil {
-		return fmt.Errorf("package validation failed: %w", err)
+		return utilities.NewPackageError("availability-check", command, "dnf", err)
 	}
 
 	// Run dnf/yum install command with automatic fallback
 	installCommand, packageManager := getDnfInstallCommand(command)
 	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
 		log.Error("Failed to install package", err, "command", command, "package_manager", packageManager)
-		return fmt.Errorf("failed to install package via %s: %w", packageManager, err)
+		return utilities.NewPackageError("install", command, packageManager, err)
 	}
 
 	log.Debug("Package installed successfully", "command", command, "package_manager", packageManager)
@@ -76,7 +83,7 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 	if isInstalled, err := d.isPackageInstalled(command); err != nil {
 		log.Warn("Failed to verify installation", "error", err, "command", command)
 	} else if !isInstalled {
-		return fmt.Errorf("package installation verification failed for: %s", command)
+		return utilities.NewPackageError("verification", command, "dnf", utilities.ErrVerificationFailed)
 	}
 
 	// Perform post-installation setup for specific packages using registry pattern
@@ -88,7 +95,7 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 	// Add the package to the repository
 	if err := repo.AddApp(command); err != nil {
 		log.Error("Failed to add package to repository", err, "command", command)
-		return fmt.Errorf("failed to add package to repository: %w", err)
+		return utilities.NewRepositoryError("add", command, "dnf", err)
 	}
 
 	log.Debug("Package added to repository successfully", "command", command)
@@ -99,28 +106,32 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 func (d *DnfInstaller) Uninstall(command string, repo types.Repository) error {
 	log.Debug("DNF Installer: Starting uninstallation", "command", command)
 
-	// Validate DNF system availability
-	if err := validateDnfSystem(); err != nil {
-		return fmt.Errorf("dnf system validation failed: %w", err)
+	// Run background validation for system availability
+	validator := utilities.NewBackgroundValidator(15 * time.Second) // Shorter timeout for uninstall
+	validator.AddSuite(utilities.CreateSystemValidationSuite("dnf"))
+
+	ctx := context.Background()
+	if err := validator.RunValidations(ctx); err != nil {
+		return utilities.WrapError(err, utilities.ErrorTypeSystem, "uninstall", command, "dnf")
 	}
 
 	// Check if the package is installed
 	isInstalled, err := d.IsInstalled(command)
 	if err != nil {
 		log.Error("Failed to check if package is installed", err, "command", command)
-		return fmt.Errorf("failed to check if package is installed: %w", err)
+		return utilities.NewPackageError("uninstall-check", command, "dnf", err)
 	}
 
 	if !isInstalled {
 		log.Info("Package not installed, skipping uninstallation", "command", command)
-		return nil
+		return nil // Not installed is success for uninstall
 	}
 
 	// Run dnf/yum remove command
 	uninstallCommand, packageManager := getDnfUninstallCommand(command)
 	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
 		log.Error("Failed to uninstall package", err, "command", command, "package_manager", packageManager)
-		return fmt.Errorf("failed to uninstall package via %s: %w", packageManager, err)
+		return utilities.NewPackageError("uninstall", command, packageManager, err)
 	}
 
 	log.Debug("Package uninstalled successfully", "command", command, "package_manager", packageManager)
@@ -128,7 +139,7 @@ func (d *DnfInstaller) Uninstall(command string, repo types.Repository) error {
 	// Remove the package from the repository
 	if err := repo.DeleteApp(command); err != nil {
 		log.Error("Failed to remove package from repository", err, "command", command)
-		return fmt.Errorf("failed to remove package from repository: %w", err)
+		return utilities.NewRepositoryError("remove", command, "dnf", err)
 	}
 
 	log.Debug("Package removed from repository successfully", "command", command)
@@ -150,8 +161,8 @@ func (d *DnfInstaller) isPackageInstalled(packageName string) (bool, error) {
 		if strings.Contains(output, "not installed") || strings.Contains(output, "is not installed") {
 			return false, nil
 		}
-		// For other errors, return the error
-		return false, fmt.Errorf("failed to check package installation status: %w", err)
+		// For other errors, wrap with structured error
+		return false, utilities.WrapError(err, utilities.ErrorTypePackage, "installation-check", packageName, "rpm")
 	}
 
 	// If rpm -q succeeds, package is installed
