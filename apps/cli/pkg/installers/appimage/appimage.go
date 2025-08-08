@@ -70,6 +70,65 @@ func (a *AppImageInstaller) Install(command string, repo types.Repository) error
 	return nil
 }
 
+// Uninstall removes AppImages
+func (a *AppImageInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Debug("AppImage Installer: Starting uninstallation", "command", command)
+
+	// Parse command to extract binary name
+	_, binaryName := parseAppImageCommand(command)
+	if binaryName == "" {
+		return fmt.Errorf("invalid command format for AppImage uninstaller")
+	}
+
+	// Check if the AppImage is installed
+	isInstalled, err := a.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if AppImage is installed", err, "binaryName", binaryName)
+		return fmt.Errorf("failed to check if AppImage is installed: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("AppImage not installed, skipping uninstallation", "binaryName", binaryName)
+		return nil
+	}
+
+	// Remove the AppImage binary
+	binaryPath := fmt.Sprintf("/usr/local/bin/%s", binaryName)
+	if err := fs.Remove(binaryPath); err != nil {
+		log.Error("Failed to remove AppImage binary", err, "binaryPath", binaryPath)
+		return fmt.Errorf("failed to remove AppImage binary: %w", err)
+	}
+
+	log.Debug("AppImage binary removed successfully", "binaryName", binaryName)
+
+	// Remove from repository
+	if err := repo.DeleteApp(binaryName); err != nil {
+		log.Error("Failed to remove AppImage from repository", err, "binaryName", binaryName)
+		return fmt.Errorf("failed to remove AppImage from repository: %w", err)
+	}
+
+	log.Debug("AppImage removed from repository successfully", "binaryName", binaryName)
+	return nil
+}
+
+// IsInstalled checks if an AppImage is installed
+func (a *AppImageInstaller) IsInstalled(command string) (bool, error) {
+	// Parse command to extract binary name
+	_, binaryName := parseAppImageCommand(command)
+	if binaryName == "" {
+		return false, fmt.Errorf("invalid command format for AppImage installer")
+	}
+
+	// Check if the binary exists in /usr/local/bin
+	binaryPath := fmt.Sprintf("/usr/local/bin/%s", binaryName)
+	exists, err := fs.Exists(binaryPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if AppImage exists: %w", err)
+	}
+
+	return exists, nil
+}
+
 func parseAppImageCommand(command string) (string, string) {
 	parts := strings.Fields(command)
 	if len(parts) != 2 {

@@ -21,3 +21,16 @@ func (r *RpmInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Would run: rpm -i %s", command)
 	return fmt.Errorf("rpm installer not yet implemented")
 }
+
+// Uninstall removes packages using rpm
+func (r *RpmInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Info("RPM uninstaller not yet implemented")
+	log.Info("Would run: rpm -e %s", command)
+	return fmt.Errorf("rpm uninstaller not yet implemented")
+}
+
+// IsInstalled checks if a package is installed using rpm
+func (r *RpmInstaller) IsInstalled(command string) (bool, error) {
+	log.Info("RPM IsInstalled not yet implemented")
+	return false, fmt.Errorf("rpm IsInstalled not yet implemented")
+}

@@ -84,3 +84,66 @@ func (d *DebInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Package added to repository successfully", "app", appConfig.Name)
 	return nil
 }
+
+// Uninstall removes packages using dpkg
+func (d *DebInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Info("Deb Installer: Starting uninstallation", "installCommand", command)
+
+	// Retrieve the app configuration
+	appConfig, err := config.GetAppInfo(command)
+	if err != nil {
+		log.Error("App configuration not found", err, "installCommand", command)
+		return fmt.Errorf("app configuration not found: %w", err)
+	}
+
+	// Check if the package is installed
+	isInstalled, err := d.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if package is installed", err, "app", appConfig.Name)
+		return fmt.Errorf("failed to check if package is installed: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("Package not installed, skipping uninstallation", "app", appConfig.Name)
+		return nil
+	}
+
+	// Run dpkg --remove command
+	uninstallCommand := fmt.Sprintf("sudo dpkg --remove %s", appConfig.Name)
+	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
+		log.Error("Failed to uninstall package", err, "app", appConfig.Name, "command", uninstallCommand)
+		return fmt.Errorf("failed to uninstall .deb package '%s': %w", appConfig.Name, err)
+	}
+
+	log.Info("Deb package uninstalled successfully", "app", appConfig.Name)
+
+	// Remove from repository
+	if err := repo.DeleteApp(appConfig.Name); err != nil {
+		log.Error("Failed to remove package from repository", err, "app", appConfig.Name)
+		return fmt.Errorf("failed to remove package from repository: %w", err)
+	}
+
+	log.Info("Package removed from repository successfully", "app", appConfig.Name)
+	return nil
+}
+
+// IsInstalled checks if a package is installed using dpkg
+func (d *DebInstaller) IsInstalled(command string) (bool, error) {
+	// Retrieve the app configuration to get the actual package name
+	appConfig, err := config.GetAppInfo(command)
+	if err != nil {
+		log.Error("App configuration not found", err, "installCommand", command)
+		return false, fmt.Errorf("app configuration not found: %w", err)
+	}
+
+	// Use dpkg-query to check if package is installed
+	checkCommand := fmt.Sprintf("dpkg-query -W -f='${Status}' %s 2>/dev/null", appConfig.Name)
+	output, err := utils.CommandExec.RunShellCommand(checkCommand)
+	if err != nil {
+		// dpkg-query returns non-zero exit code if package is not installed
+		return false, nil
+	}
+
+	// Check if the package is installed and configured properly
+	return strings.Contains(output, "install ok installed"), nil
+}

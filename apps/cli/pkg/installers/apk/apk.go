@@ -21,3 +21,16 @@ func (a *ApkInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Would run: apk add %s", command)
 	return fmt.Errorf("apk installer not yet implemented")
 }
+
+// Uninstall removes packages using apk
+func (a *ApkInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Info("APK uninstaller not yet implemented")
+	log.Info("Would run: apk del %s", command)
+	return fmt.Errorf("apk uninstaller not yet implemented")
+}
+
+// IsInstalled checks if a package is installed using apk
+func (a *ApkInstaller) IsInstalled(command string) (bool, error) {
+	log.Info("APK IsInstalled not yet implemented")
+	return false, fmt.Errorf("apk IsInstalled not yet implemented")
+}

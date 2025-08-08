@@ -21,3 +21,16 @@ func (e *EopkgInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Would run: eopkg install %s", command)
 	return fmt.Errorf("eopkg installer not yet implemented")
 }
+
+// Uninstall removes packages using eopkg
+func (e *EopkgInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Info("Eopkg uninstaller not yet implemented")
+	log.Info("Would run: eopkg remove %s", command)
+	return fmt.Errorf("eopkg uninstaller not yet implemented")
+}
+
+// IsInstalled checks if a package is installed using eopkg
+func (e *EopkgInstaller) IsInstalled(command string) (bool, error) {
+	log.Info("Eopkg IsInstalled not yet implemented")
+	return false, fmt.Errorf("eopkg IsInstalled not yet implemented")
+}

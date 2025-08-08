@@ -267,3 +267,52 @@ func setupDockerService() error {
 
 	return nil
 }
+
+// Uninstall removes packages using apt
+func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Debug("APT Installer: Starting uninstallation", "command", command)
+
+	// Check if the package is installed
+	isInstalled, err := a.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if package is installed", err, "command", command)
+		return fmt.Errorf("failed to check if package is installed: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("Package not installed, skipping uninstallation", "command", command)
+		return nil
+	}
+
+	// Run apt remove command
+	uninstallCommand := fmt.Sprintf("sudo apt-get remove -y %s", command)
+	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
+		log.Error("Failed to uninstall package via apt", err, "command", command)
+		return fmt.Errorf("failed to uninstall package via apt: %w", err)
+	}
+
+	log.Debug("APT package uninstalled successfully", "command", command)
+
+	// Remove the package from the repository
+	if err := repo.DeleteApp(command); err != nil {
+		log.Error("Failed to remove package from repository", err, "command", command)
+		return fmt.Errorf("failed to remove package from repository: %w", err)
+	}
+
+	log.Debug("Package removed from repository successfully", "command", command)
+	return nil
+}
+
+// IsInstalled checks if a package is installed using dpkg-query
+func (a *APTInstaller) IsInstalled(command string) (bool, error) {
+	// Use dpkg-query to check if package is installed
+	checkCommand := fmt.Sprintf("dpkg-query -W -f='${Status}' %s 2>/dev/null", command)
+	output, err := utils.CommandExec.RunShellCommand(checkCommand)
+	if err != nil {
+		// dpkg-query returns non-zero exit code if package is not installed
+		return false, nil
+	}
+
+	// Check if the package is installed and configured properly
+	return strings.Contains(output, "install ok installed"), nil
+}
