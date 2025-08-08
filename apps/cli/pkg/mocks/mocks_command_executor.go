@@ -306,6 +306,210 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		return "Successfully installed package", nil
 	}
 
+	// Handle DNF/YUM commands and zypper rpm -q commands
+	if strings.Contains(command, "rpm -q") {
+		// Extract package name from rpm -q command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2] // "rpm -q package-name"
+
+			// Handle patterns and products - strip prefixes for lookup
+			lookupName := packageName
+			if strings.HasPrefix(packageName, "pattern:") {
+				lookupName = strings.TrimPrefix(packageName, "pattern:")
+			} else if strings.HasPrefix(packageName, "product:") {
+				lookupName = strings.TrimPrefix(packageName, "product:")
+			}
+
+			if m.InstallationState[lookupName] || m.InstallationState[packageName] {
+				return fmt.Sprintf("%s-1.0-1.x86_64", packageName), nil
+			}
+		}
+		// For packages not in installation state, return error (package not installed)
+		return "package not installed", fmt.Errorf("package not installed")
+	}
+
+	// Handle DNF install commands - mark package as installed
+	if strings.Contains(command, "sudo dnf install -y") || strings.Contains(command, "sudo yum install -y") {
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			packageName := parts[len(parts)-1] // Last argument is the package name
+			m.InstallationState[packageName] = true
+		}
+		return "Package installed successfully", nil
+	}
+
+	// Handle DNF group install commands
+	if strings.Contains(command, "sudo dnf group install -y") || strings.Contains(command, "sudo yum groupinstall -y") {
+		// Extract group name (it's in quotes, so we need to handle that)
+		start := strings.Index(command, "'")
+		end := strings.LastIndex(command, "'")
+		if start != -1 && end != -1 && start != end {
+			groupName := command[start+1 : end]
+			m.InstallationState[groupName] = true
+		}
+		return "Group installed successfully", nil
+	}
+
+	// Handle DNF/YUM info commands
+	if strings.Contains(command, "dnf info") || strings.Contains(command, "yum info") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2]
+			// For known packages, return package info
+			if !strings.Contains(packageName, "nonexistent") && !strings.Contains(packageName, "failing") {
+				return fmt.Sprintf("Name        : %s\nAvailable Packages", packageName), nil
+			}
+		}
+		return "No matching packages to list", fmt.Errorf("no matching packages")
+	}
+
+	// Handle DNF/YUM check-update commands
+	if strings.Contains(command, "sudo dnf check-update") || strings.Contains(command, "sudo yum check-update") {
+		// Mock successful check-update
+		return "Checking for updates...", nil
+	}
+
+	// Handle rpm --version
+	if strings.Contains(command, "rpm --version") {
+		return "RPM version 4.16.0", nil
+	}
+
+	// Handle repository commands
+	if strings.Contains(command, "tee /etc/yum.repos.d/") {
+		return "Repository configuration written", nil
+	}
+
+	// Handle EPEL install commands
+	if strings.Contains(command, "epel-release") {
+		m.InstallationState["epel-release"] = true
+		return "EPEL repository enabled", nil
+	}
+
+	// Handle Zypper commands (SUSE package manager)
+	if strings.Contains(command, "sudo zypper install --non-interactive") {
+		// Handle zypper install commands - mark package as installed
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			// Handle different package types
+			switch {
+			case strings.Contains(command, "-t pattern"):
+				// Pattern installation: sudo zypper install --non-interactive -t pattern patternname
+				for i, part := range parts {
+					if part == "pattern" && i+1 < len(parts) {
+						patternName := parts[i+1]
+						m.InstallationState[patternName] = true
+						break
+					}
+				}
+			case strings.Contains(command, "-t product"):
+				// Product installation: sudo zypper install --non-interactive -t product productname
+				for i, part := range parts {
+					if part == "product" && i+1 < len(parts) {
+						productName := parts[i+1]
+						m.InstallationState[productName] = true
+						break
+					}
+				}
+			default:
+				// Regular package installation
+				packageName := parts[len(parts)-1]
+				m.InstallationState[packageName] = true
+			}
+		}
+		return "Package installed successfully", nil
+	}
+
+	// Handle zypper remove commands - mark package as uninstalled
+	if strings.Contains(command, "sudo zypper remove --non-interactive") {
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			packageName := parts[len(parts)-1]
+			m.InstallationState[packageName] = false
+		}
+		return "Package removed successfully", nil
+	}
+
+	// Handle zypper info commands for package availability checking
+	if strings.Contains(command, "zypper info --non-interactive") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[len(parts)-1]
+			// Simulate package not found for certain test packages
+			if strings.Contains(packageName, "test-unavailable") || strings.Contains(packageName, "nonexistent") {
+				return "package 'test-unavailable' not found", fmt.Errorf("package not found")
+			}
+			// For other packages, return mock package info
+			return fmt.Sprintf("Information for package %s:\nRepository     : Main Repository\nName           : %s", packageName, packageName), nil
+		}
+	}
+
+	// Handle zypper refresh commands
+	if strings.Contains(command, "sudo zypper refresh --non-interactive") {
+		return "Repository metadata refreshed", nil
+	}
+
+	// Handle zypper update/upgrade commands
+	if strings.Contains(command, "sudo zypper update --non-interactive") {
+		return "System updated successfully", nil
+	}
+
+	if strings.Contains(command, "sudo zypper dup --non-interactive") {
+		return "Distribution upgrade completed", nil
+	}
+
+	// Handle zypper clean commands
+	if strings.Contains(command, "sudo zypper clean --all") {
+		return "All caches cleaned", nil
+	}
+
+	// Handle zypper search commands
+	if strings.Contains(command, "zypper search --installed-only --type package") {
+		// Return installed packages
+		var installedPackages []string
+		for pkg, installed := range m.InstallationState {
+			if installed {
+				installedPackages = append(installedPackages, fmt.Sprintf("i | %s | Test package", pkg))
+			}
+		}
+		return strings.Join(installedPackages, "\n"), nil
+	}
+
+	if strings.Contains(command, "zypper search --type package") || strings.Contains(command, "zypper search --type pattern") {
+		// Extract search query
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			query := parts[len(parts)-1]
+			if strings.Contains(command, "--type pattern") {
+				return fmt.Sprintf("v | %s | Pattern description", query), nil
+			}
+			return fmt.Sprintf("v | %s | Package description", query), nil
+		}
+	}
+
+	// Handle zypper repository management commands
+	if strings.Contains(command, "sudo zypper addrepo --refresh") {
+		return "Repository added successfully", nil
+	}
+
+	if strings.Contains(command, "sudo zypper removerepo") {
+		return "Repository removed successfully", nil
+	}
+
+	// Handle zypper lock/unlock commands
+	if strings.Contains(command, "sudo zypper addlock") {
+		return "Package locked successfully", nil
+	}
+
+	if strings.Contains(command, "sudo zypper removelock") {
+		return "Package unlocked successfully", nil
+	}
+
+	// Handle rpm --import for GPG keys
+	if strings.Contains(command, "sudo rpm --import") {
+		return "GPG key imported successfully", nil
+	}
+
 	return "mock output", nil
 }
 

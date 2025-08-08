@@ -9,15 +9,27 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/installers/apk"
 	"github.com/jameswlane/devex/pkg/installers/appimage"
 	"github.com/jameswlane/devex/pkg/installers/apt"
 	"github.com/jameswlane/devex/pkg/installers/brew"
 	"github.com/jameswlane/devex/pkg/installers/curlpipe"
 	"github.com/jameswlane/devex/pkg/installers/deb"
+	"github.com/jameswlane/devex/pkg/installers/dnf"
 	"github.com/jameswlane/devex/pkg/installers/docker"
+	"github.com/jameswlane/devex/pkg/installers/emerge"
+	"github.com/jameswlane/devex/pkg/installers/eopkg"
 	"github.com/jameswlane/devex/pkg/installers/flatpak"
 	"github.com/jameswlane/devex/pkg/installers/mise"
+	"github.com/jameswlane/devex/pkg/installers/nixflake"
+	"github.com/jameswlane/devex/pkg/installers/nixpkgs"
+	"github.com/jameswlane/devex/pkg/installers/pacman"
 	"github.com/jameswlane/devex/pkg/installers/pip"
+	"github.com/jameswlane/devex/pkg/installers/rpm"
+	"github.com/jameswlane/devex/pkg/installers/snap"
+	"github.com/jameswlane/devex/pkg/installers/xbps"
+	"github.com/jameswlane/devex/pkg/installers/yay"
+	"github.com/jameswlane/devex/pkg/installers/zypper"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
@@ -42,21 +54,34 @@ func initializeInstallers() {
 	case "linux":
 		// Linux package managers
 		installerRegistry["apt"] = apt.New()
+		installerRegistry["apk"] = apk.NewApkInstaller()
+		installerRegistry["dnf"] = dnf.NewDnfInstaller()
+		installerRegistry["emerge"] = emerge.NewEmergeInstaller()
+		installerRegistry["eopkg"] = eopkg.NewEopkgInstaller()
+		installerRegistry["nixflake"] = nixflake.NewNixFlakeInstaller()
+		installerRegistry["nixpkgs"] = nixpkgs.NewNixpkgsInstaller()
+		installerRegistry["pacman"] = pacman.NewPacmanInstaller()
+		installerRegistry["rpm"] = rpm.NewRpmInstaller()
+		installerRegistry["snap"] = snap.NewSnapInstaller()
+		installerRegistry["xbps"] = xbps.NewXbpsInstaller()
+		installerRegistry["yay"] = yay.NewYayInstaller()
+		installerRegistry["zypper"] = zypper.NewZypperInstaller()
 		installerRegistry["flatpak"] = flatpak.New()
 		installerRegistry["deb"] = deb.New()
 		installerRegistry["appimage"] = appimage.New()
-		// Note: Could add dnf, pacman, etc. based on distribution detection
 
 	case "darwin":
 		// macOS package managers
 		installerRegistry["brew"] = brew.New()
+		// Note: brew is available on macOS, but we may add mas (Mac App Store) later
 
 	case "windows":
 		// Windows package managers - will be implemented in future releases
 		log.Warn("Windows installers not yet implemented")
+		// Future: winget, chocolatey, scoop
 	}
 
-	log.Info("Initialized installers for platform", "platform", runtime.GOOS, "count", len(installerRegistry))
+	log.Debug("Initialized installers for platform", "platform", runtime.GOOS, "count", len(installerRegistry))
 }
 
 // GetAvailableInstallers returns a list of available installer methods for the current platform
@@ -73,6 +98,15 @@ func GetAvailableInstallers() []string {
 func IsInstallerSupported(method string) bool {
 	_, exists := installerRegistry[method]
 	return exists
+}
+
+// GetInstaller returns the installer instance for the given method, or nil if not found
+func GetInstaller(method string) types.BaseInstaller {
+	installer, exists := installerRegistry[method]
+	if !exists {
+		return nil
+	}
+	return installer
 }
 
 func executeInstallCommand(app types.AppConfig, repo types.Repository) error {
