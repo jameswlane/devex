@@ -2,8 +2,6 @@ package dnf
 
 import (
 	"fmt"
-	"os"
-	"os/user"
 	"strings"
 	"time"
 
@@ -16,34 +14,6 @@ import (
 type DnfInstaller struct{}
 
 var lastDnfUpdateTime time.Time
-
-// getCurrentUser attempts to determine the current user through multiple methods
-func getCurrentUser() string {
-	// Method 1: Try USER environment variable
-	if username := os.Getenv("USER"); username != "" {
-		return username
-	}
-
-	// Method 2: Try LOGNAME environment variable
-	if username := os.Getenv("LOGNAME"); username != "" {
-		return username
-	}
-
-	// Method 3: Use os/user package
-	if currentUser, err := user.Current(); err == nil && currentUser.Username != "" {
-		return currentUser.Username
-	}
-
-	// Method 4: Try whoami command as fallback
-	if output, err := utils.CommandExec.RunShellCommand("whoami"); err == nil {
-		username := strings.TrimSpace(output)
-		if username != "" {
-			return username
-		}
-	}
-
-	return ""
-}
 
 func NewDnfInstaller() *DnfInstaller {
 	return &DnfInstaller{}
@@ -109,8 +79,8 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("package installation verification failed for: %s", command)
 	}
 
-	// Perform post-installation setup for specific packages
-	if err := performPostInstallationSetup(command); err != nil {
+	// Perform post-installation setup for specific packages using registry pattern
+	if err := utilities.ExecutePostInstallHandler(command); err != nil {
 		log.Warn("Post-installation setup failed", "package", command, "error", err)
 		// Don't fail the installation, just warn
 	}
@@ -310,106 +280,9 @@ func validatePackageAvailability(packageName string) error {
 	return nil
 }
 
-// performPostInstallationSetup handles package-specific post-installation configuration
-func performPostInstallationSetup(packageName string) error {
-	switch packageName {
-	case "docker", "docker-ce":
-		return setupDockerService()
-	case "nginx":
-		return setupNginxService()
-	case "httpd":
-		return setupHttpdService()
-	default:
-		// No special setup required
-		return nil
-	}
-}
-
-// setupDockerService configures Docker service and user permissions
-func setupDockerService() error {
-	log.Debug("Configuring Docker service and permissions")
-
-	// Enable Docker service to start on boot
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable docker"); err != nil {
-		log.Warn("Failed to enable Docker service", "error", err)
-	} else {
-		log.Info("Docker service enabled for automatic startup")
-	}
-
-	// Start Docker service
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start docker"); err != nil {
-		log.Warn("Failed to start Docker service", "error", err)
-	} else {
-		log.Info("Docker service started successfully")
-	}
-
-	// Add current user to docker group
-	currentUser := getCurrentUser()
-	if currentUser == "" {
-		log.Warn("Unable to determine current user, skipping docker group addition")
-		return nil
-	}
-
-	addUserCmd := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
-	if _, err := utils.CommandExec.RunShellCommand(addUserCmd); err != nil {
-		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err)
-	} else {
-		log.Info("User added to docker group", "user", currentUser)
-		log.Info("Note: You may need to log out and log back in for docker group changes to take effect")
-	}
-
-	// Wait a moment for service to fully start
-	time.Sleep(2 * time.Second)
-
-	// Verify Docker daemon is accessible
-	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Info("Docker daemon is running and accessible")
-	} else {
-		log.Warn("Docker daemon may not be fully ready yet", "hint", "Try running 'sudo systemctl status docker' to check service status")
-	}
-
-	return nil
-}
-
-// setupNginxService configures Nginx service
-func setupNginxService() error {
-	log.Debug("Configuring Nginx service")
-
-	// Enable Nginx service to start on boot
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable nginx"); err != nil {
-		log.Warn("Failed to enable Nginx service", "error", err)
-		return err
-	}
-
-	// Start Nginx service
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start nginx"); err != nil {
-		log.Warn("Failed to start Nginx service", "error", err)
-		return err
-	}
-
-	log.Info("Nginx service configured and started successfully")
-	return nil
-}
-
-// setupHttpdService configures Apache HTTP Server service
-func setupHttpdService() error {
-	log.Debug("Configuring Apache HTTP Server service")
-
-	// Enable httpd service to start on boot
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable httpd"); err != nil {
-		log.Warn("Failed to enable httpd service", "error", err)
-		return err
-	}
-
-	// Start httpd service
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start httpd"); err != nil {
-		log.Warn("Failed to start httpd service", "error", err)
-		return err
-	}
-
-	log.Info("Apache HTTP Server service configured and started successfully")
-	return nil
-}
+// Post-installation setup is now handled by the registry pattern in utilities.ExecutePostInstallHandler()
+// This provides a more flexible and maintainable approach for package-specific configuration.
+// See pkg/installers/utilities/handlers.go for handler implementations.
 
 // Repository Management Functions
 
@@ -432,7 +305,8 @@ gpgkey=%s
 	}
 
 	// Write repository file safely using temporary file approach
-	repoFile := fmt.Sprintf("/etc/yum.repos.d/%s.repo", name)
+	systemPaths := utilities.GetSystemPaths()
+	repoFile := systemPaths.GetRepositoryFilePath("dnf", name)
 	if err := writeRepositoryFile(repoFile, repoConfig); err != nil {
 		return fmt.Errorf("failed to create repository file: %w", err)
 	}

@@ -100,6 +100,15 @@ func IsInstallerSupported(method string) bool {
 	return exists
 }
 
+// GetInstaller returns the installer instance for the given method, or nil if not found
+func GetInstaller(method string) types.BaseInstaller {
+	installer, exists := installerRegistry[method]
+	if !exists {
+		return nil
+	}
+	return installer
+}
+
 func executeInstallCommand(app types.AppConfig, repo types.Repository) error {
 	installer, exists := installerRegistry[app.InstallMethod]
 	if !exists {
