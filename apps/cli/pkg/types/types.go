@@ -252,6 +252,8 @@ type ThemeRepository interface {
 
 type BaseInstaller interface {
 	Install(command string, repo Repository) error
+	Uninstall(command string, repo Repository) error
+	IsInstalled(command string) (bool, error)
 }
 
 type CommandExecutor interface {

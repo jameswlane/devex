@@ -371,11 +371,14 @@ gpgcheck=1
 gpgkey=%s
 `, name, name, baseurl, gpgkey)
 
-	// Write repository file
-	repoFile := fmt.Sprintf("/etc/yum.repos.d/%s.repo", name)
-	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s", repoConfig, repoFile)
+	// Validate inputs to prevent directory traversal and injection
+	if err := validateRepositoryInputs(name, baseurl, gpgkey); err != nil {
+		return fmt.Errorf("invalid repository parameters: %w", err)
+	}
 
-	if _, err := utils.CommandExec.RunShellCommand(writeCmd); err != nil {
+	// Write repository file safely using temporary file approach
+	repoFile := fmt.Sprintf("/etc/yum.repos.d/%s.repo", name)
+	if err := writeRepositoryFile(repoFile, repoConfig); err != nil {
 		return fmt.Errorf("failed to create repository file: %w", err)
 	}
 
@@ -440,4 +443,103 @@ func (d *DnfInstaller) EnableEPEL() error {
 
 	log.Info("EPEL repository enabled successfully")
 	return nil
+}
+
+// validateRepositoryInputs validates repository parameters to prevent injection attacks
+func validateRepositoryInputs(name, baseurl, gpgkey string) error {
+	// Validate repository name - only alphanumeric, dash, underscore
+	if !isValidRepositoryName(name) {
+		return fmt.Errorf("invalid repository name: must contain only letters, numbers, dashes, and underscores")
+	}
+
+	// Validate URLs
+	if !isValidURL(baseurl) {
+		return fmt.Errorf("invalid baseurl: must be a valid HTTP/HTTPS URL")
+	}
+
+	if !isValidURL(gpgkey) {
+		return fmt.Errorf("invalid gpgkey: must be a valid HTTP/HTTPS URL")
+	}
+
+	return nil
+}
+
+// isValidRepositoryName checks if repository name is safe for filesystem
+func isValidRepositoryName(name string) bool {
+	if len(name) == 0 || len(name) > 64 {
+		return false
+	}
+
+	for _, char := range name {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '-' && char != '_' {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidURL checks if URL is valid and uses safe schemes
+func isValidURL(urlStr string) bool {
+	if len(urlStr) == 0 || len(urlStr) > 2048 {
+		return false
+	}
+
+	// Must start with http:// or https://
+	if !strings.HasPrefix(urlStr, "http://") && !strings.HasPrefix(urlStr, "https://") {
+		return false
+	}
+
+	// Basic validation - no shell metacharacters
+	dangerousChars := []string{"'", "\"", "`", "$", ";", "&", "|", "(", ")", "<", ">", "\n", "\r", "\t"}
+	for _, char := range dangerousChars {
+		if strings.Contains(urlStr, char) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// writeRepositoryFile safely writes repository configuration to file
+func writeRepositoryFile(repoFile, repoConfig string) error {
+	// Use a more secure approach with temporary file creation
+	tempFile := fmt.Sprintf("/tmp/repo-config-%d.tmp", time.Now().UnixNano())
+
+	// Create temp file with config content
+	writeCmd := fmt.Sprintf("printf %%s %s > %s",
+		escapeShellArg(repoConfig),
+		escapeShellArg(tempFile))
+
+	if _, err := utils.CommandExec.RunShellCommand(writeCmd); err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+
+	// Move temp file to final location with sudo
+	moveCmd := fmt.Sprintf("sudo mv %s %s",
+		escapeShellArg(tempFile),
+		escapeShellArg(repoFile))
+
+	if _, err := utils.CommandExec.RunShellCommand(moveCmd); err != nil {
+		// Clean up temp file on error
+		_, _ = utils.CommandExec.RunShellCommand(fmt.Sprintf("rm -f %s", escapeShellArg(tempFile)))
+		return fmt.Errorf("failed to move repository file: %w", err)
+	}
+
+	// Set appropriate permissions
+	chmodCmd := fmt.Sprintf("sudo chmod 644 %s", escapeShellArg(repoFile))
+	if _, err := utils.CommandExec.RunShellCommand(chmodCmd); err != nil {
+		log.Warn("Failed to set repository file permissions", "file", repoFile, "error", err)
+		// Not a fatal error, continue
+	}
+
+	return nil
+}
+
+// escapeShellArg safely escapes shell arguments
+func escapeShellArg(arg string) string {
+	// Use single quotes and escape any single quotes in the argument
+	return "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
 }
