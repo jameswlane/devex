@@ -2,9 +2,12 @@ package nixflake
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/jameswlane/devex/pkg/common"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 // NixFlakeInstaller implements the Installer interface for Nix Flakes
@@ -17,20 +20,130 @@ func NewNixFlakeInstaller() *NixFlakeInstaller {
 
 // Install installs packages using nix flake
 func (n *NixFlakeInstaller) Install(command string, repo types.Repository) error {
-	log.Info("Nix Flake installer not yet implemented")
-	log.Info("Would run: nix profile install %s", command)
-	return fmt.Errorf("nix flake installer not yet implemented")
+	if err := validateNixSystem(); err != nil {
+		if _, cmdErr := utils.CommandExec.RunShellCommand("which nix"); cmdErr != nil {
+			return common.NewInstallerErrorWithSuggestions(
+				common.ErrorTypeSystemNotFound,
+				"nix-flake", command,
+				[]string{
+					"Install Nix package manager: curl -L https://nixos.org/nix/install | sh",
+					"Enable flakes: echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf",
+					"Manual installation: nix profile install " + command,
+				})
+		}
+		return common.NewInstallerError(
+			common.ErrorTypeValidationFailed,
+			"nix-flake", command, err)
+	}
+
+	log.Warn("Nix Flake installer is not fully implemented yet")
+	log.Info("To manually install this package, run: nix profile install %s", command)
+	log.Info("Ensure flakes are enabled in your Nix configuration")
+
+	return common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"nix-flake", command,
+		[]string{
+			"Manual installation: nix profile install " + command,
+			"Enable flakes: echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf",
+			"Search flake: nix search nixpkgs " + command,
+			"Show flake info: nix flake show " + command,
+		})
 }
 
 // Uninstall removes packages using nix profile
 func (n *NixFlakeInstaller) Uninstall(command string, repo types.Repository) error {
-	log.Info("Nix Flake uninstaller not yet implemented")
-	log.Info("Would run: nix profile remove %s", command)
-	return fmt.Errorf("nix flake uninstaller not yet implemented")
+	if err := validateNixSystem(); err != nil {
+		if _, cmdErr := utils.CommandExec.RunShellCommand("which nix"); cmdErr != nil {
+			return common.NewInstallerErrorWithSuggestions(
+				common.ErrorTypeSystemNotFound,
+				"nix-flake", command,
+				[]string{
+					"Install Nix package manager: curl -L https://nixos.org/nix/install | sh",
+					"Manual removal: nix profile remove " + command,
+				})
+		}
+		return common.NewInstallerError(
+			common.ErrorTypeValidationFailed,
+			"nix-flake", command, err)
+	}
+
+	log.Warn("Nix Flake uninstaller is not fully implemented yet")
+	log.Info("To manually remove this package, run: nix profile remove %s", command)
+	log.Info("List installed packages: nix profile list")
+
+	return common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"nix-flake", command,
+		[]string{
+			"Manual removal: nix profile remove " + command,
+			"List installed: nix profile list",
+			"Remove by index: nix profile remove <index>",
+			"Cleanup old generations: nix profile wipe-history",
+		})
 }
 
 // IsInstalled checks if a package is installed using nix profile
 func (n *NixFlakeInstaller) IsInstalled(command string) (bool, error) {
-	log.Info("Nix Flake IsInstalled not yet implemented")
-	return false, fmt.Errorf("nix flake IsInstalled not yet implemented")
+	if err := validateNixSystem(); err != nil {
+		return false, common.NewInstallerError(
+			common.ErrorTypeSystemNotFound,
+			"nix-flake", command, err)
+	}
+
+	// Check if package is installed using nix profile list
+	checkCommand := fmt.Sprintf("nix profile list | grep -q '%s'", command)
+	_, err := utils.CommandExec.RunShellCommand(checkCommand)
+	if err == nil {
+		return true, nil
+	}
+
+	// Fallback: check using which command for executables
+	// Extract package name from flake reference if needed
+	pkgName := command
+	if strings.Contains(command, "#") {
+		parts := strings.Split(command, "#")
+		if len(parts) > 1 {
+			pkgName = parts[len(parts)-1]
+		}
+	}
+
+	checkCommand = fmt.Sprintf("which %s", pkgName)
+	_, err = utils.CommandExec.RunShellCommand(checkCommand)
+	if err == nil {
+		// Double check it's from nix store
+		checkCommand = fmt.Sprintf("which %s | grep -q '/nix/store'", pkgName)
+		_, err = utils.CommandExec.RunShellCommand(checkCommand)
+		if err == nil {
+			return true, nil
+		}
+	}
+
+	// If all checks fail, assume not installed
+	return false, nil
+}
+
+// validateNixSystem validates that the Nix system is available and functional
+func validateNixSystem() error {
+	// Check if nix command exists
+	if _, err := utils.CommandExec.RunShellCommand("which nix"); err != nil {
+		return fmt.Errorf("nix command not found")
+	}
+
+	// Check if flakes are enabled
+	if output, err := utils.CommandExec.RunShellCommand("nix --version 2>&1"); err == nil {
+		if !strings.Contains(output, "flake") {
+			// Check if flakes are enabled in config
+			if _, err := utils.CommandExec.RunShellCommand("nix flake --version 2>/dev/null"); err != nil {
+				log.Debug("Nix flakes may not be enabled")
+			}
+		}
+	}
+
+	// Check if nix store is accessible
+	if _, err := utils.CommandExec.RunShellCommand("test -d /nix/store"); err != nil {
+		return fmt.Errorf("nix store not found")
+	}
+
+	return nil
 }
