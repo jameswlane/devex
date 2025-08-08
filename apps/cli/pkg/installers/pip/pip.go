@@ -57,3 +57,52 @@ func (p *PIPInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("Pip package added to repository successfully", "package", command)
 	return nil
 }
+
+// Uninstall removes packages using pip
+func (p *PIPInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Debug("PIP Installer: Starting uninstallation", "package", command)
+
+	// Check if the package is installed
+	isInstalled, err := p.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if package is installed", err, "package", command)
+		return fmt.Errorf("failed to check if package is installed: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("Package not installed, skipping uninstallation", "package", command)
+		return nil
+	}
+
+	// Run `pip uninstall` command
+	uninstallCommand := fmt.Sprintf("pip uninstall -y %s", command)
+	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
+		log.Error("Failed to uninstall package via pip", err, "package", command, "command", uninstallCommand)
+		return fmt.Errorf("failed to uninstall package via pip '%s': %w", command, err)
+	}
+
+	log.Debug("Pip package uninstalled successfully", "package", command)
+
+	// Remove the package from the repository
+	if err := repo.DeleteApp(command); err != nil {
+		log.Error("Failed to remove package from repository", err, "package", command)
+		return fmt.Errorf("failed to remove package from repository: %w", err)
+	}
+
+	log.Debug("Pip package removed from repository successfully", "package", command)
+	return nil
+}
+
+// IsInstalled checks if a package is installed using pip
+func (p *PIPInstaller) IsInstalled(command string) (bool, error) {
+	// Use pip show command to check if package is installed
+	checkCommand := fmt.Sprintf("pip show %s", command)
+	_, err := utils.CommandExec.RunShellCommand(checkCommand)
+	if err != nil {
+		// pip show returns non-zero exit code if package is not installed
+		return false, nil
+	}
+
+	// If pip show succeeds, package is installed
+	return true, nil
+}

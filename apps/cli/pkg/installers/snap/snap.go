@@ -21,3 +21,16 @@ func (s *SnapInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Would run: snap install %s", command)
 	return fmt.Errorf("snap installer not yet implemented")
 }
+
+// Uninstall removes packages using snap
+func (s *SnapInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Info("Snap uninstaller not yet implemented")
+	log.Info("Would run: snap remove %s", command)
+	return fmt.Errorf("snap uninstaller not yet implemented")
+}
+
+// IsInstalled checks if a package is installed using snap
+func (s *SnapInstaller) IsInstalled(command string) (bool, error) {
+	log.Info("Snap IsInstalled not yet implemented")
+	return false, fmt.Errorf("snap IsInstalled not yet implemented")
+}

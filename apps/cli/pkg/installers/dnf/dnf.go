@@ -125,6 +125,51 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 	return nil
 }
 
+// Uninstall removes packages using dnf/yum
+func (d *DnfInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Debug("DNF Installer: Starting uninstallation", "command", command)
+
+	// Validate DNF system availability
+	if err := validateDnfSystem(); err != nil {
+		return fmt.Errorf("dnf system validation failed: %w", err)
+	}
+
+	// Check if the package is installed
+	isInstalled, err := d.IsInstalled(command)
+	if err != nil {
+		log.Error("Failed to check if package is installed", err, "command", command)
+		return fmt.Errorf("failed to check if package is installed: %w", err)
+	}
+
+	if !isInstalled {
+		log.Info("Package not installed, skipping uninstallation", "command", command)
+		return nil
+	}
+
+	// Run dnf/yum remove command
+	uninstallCommand, packageManager := getDnfUninstallCommand(command)
+	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
+		log.Error("Failed to uninstall package", err, "command", command, "package_manager", packageManager)
+		return fmt.Errorf("failed to uninstall package via %s: %w", packageManager, err)
+	}
+
+	log.Debug("Package uninstalled successfully", "command", command, "package_manager", packageManager)
+
+	// Remove the package from the repository
+	if err := repo.DeleteApp(command); err != nil {
+		log.Error("Failed to remove package from repository", err, "command", command)
+		return fmt.Errorf("failed to remove package from repository: %w", err)
+	}
+
+	log.Debug("Package removed from repository successfully", "command", command)
+	return nil
+}
+
+// IsInstalled checks if a package is installed using dnf/yum
+func (d *DnfInstaller) IsInstalled(command string) (bool, error) {
+	return d.isPackageInstalled(command)
+}
+
 // isPackageInstalled checks if a package is installed using rpm query
 func (d *DnfInstaller) isPackageInstalled(packageName string) (bool, error) {
 	// Use rpm to check if package is installed
@@ -190,6 +235,16 @@ func getDnfUpdateCommand() (string, string) {
 	}
 	// Fall back to yum
 	return "sudo yum check-update", "yum"
+}
+
+// getDnfUninstallCommand returns the appropriate uninstall command
+func getDnfUninstallCommand(packageName string) (string, string) {
+	// Check if dnf is available
+	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
+		return fmt.Sprintf("sudo dnf remove -y %s", packageName), "dnf"
+	}
+	// Fall back to yum
+	return fmt.Sprintf("sudo yum remove -y %s", packageName), "yum"
 }
 
 // validateDnfSystem checks if DNF is available and functional

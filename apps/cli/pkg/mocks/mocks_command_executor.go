@@ -392,7 +392,8 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		parts := strings.Fields(command)
 		if len(parts) >= 4 {
 			// Handle different package types
-			if strings.Contains(command, "-t pattern") {
+			switch {
+			case strings.Contains(command, "-t pattern"):
 				// Pattern installation: sudo zypper install --non-interactive -t pattern patternname
 				for i, part := range parts {
 					if part == "pattern" && i+1 < len(parts) {
@@ -401,7 +402,7 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 						break
 					}
 				}
-			} else if strings.Contains(command, "-t product") {
+			case strings.Contains(command, "-t product"):
 				// Product installation: sudo zypper install --non-interactive -t product productname
 				for i, part := range parts {
 					if part == "product" && i+1 < len(parts) {
@@ -410,7 +411,7 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 						break
 					}
 				}
-			} else {
+			default:
 				// Regular package installation
 				packageName := parts[len(parts)-1]
 				m.InstallationState[packageName] = true
