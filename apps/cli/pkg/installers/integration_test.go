@@ -1,6 +1,7 @@
 package installers_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/jameswlane/devex/pkg/installers"
@@ -39,6 +40,19 @@ func TestInstallerPipeline(t *testing.T) {
 			// Reset mock for each test case
 			mockExec.Commands = []string{}
 			mockExec.FailingCommands = make(map[string]bool)
+			mockExec.InstallationState = make(map[string]bool)
+
+			// Configure mock to fail installation commands to simulate test environment
+			switch tc.installer {
+			case "apt":
+				mockExec.FailingCommands[fmt.Sprintf("sudo apt-get install -y %s", tc.packageName)] = true
+			case "dnf":
+				mockExec.FailingCommands[fmt.Sprintf("sudo dnf install -y %s", tc.packageName)] = true
+			case "pacman":
+				mockExec.FailingCommands[fmt.Sprintf("sudo pacman -S --noconfirm %s", tc.packageName)] = true
+			case "snap":
+				mockExec.FailingCommands[fmt.Sprintf("sudo snap install %s", tc.packageName)] = true
+			}
 
 			// Get installer instance
 			installer := installers.GetInstaller(tc.installer)
