@@ -78,6 +78,7 @@ func setupDockerService() error {
 	// Enable Docker service to start on boot
 	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable docker"); err != nil {
 		log.Warn("Failed to enable Docker service", "error", err)
+		// Don't fail the installation for service management issues
 	} else {
 		log.Info("Docker service enabled for automatic startup")
 	}
@@ -85,6 +86,7 @@ func setupDockerService() error {
 	// Start Docker service
 	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start docker"); err != nil {
 		log.Warn("Failed to start Docker service", "error", err)
+		// Don't fail the installation for service management issues
 	} else {
 		log.Info("Docker service started")
 	}
