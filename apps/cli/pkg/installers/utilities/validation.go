@@ -242,38 +242,58 @@ func (bv *BackgroundValidator) HasCriticalFailures() bool {
 
 // CreateSystemValidationSuite creates common system validation checks for installers
 func CreateSystemValidationSuite(installer string) ValidationSuite {
-	return ValidationSuite{
-		Name: fmt.Sprintf("%s-system", installer),
-		Checks: []ValidationCheck{
-			{
-				Name:        "package-manager-available",
-				Description: fmt.Sprintf("Check if %s is available in PATH", installer),
-				Validator:   createCommandAvailabilityCheck(installer),
-				Timeout:     5 * time.Second,
-				Critical:    true,
-			},
-			{
-				Name:        "package-manager-functional",
-				Description: fmt.Sprintf("Check if %s responds to version command", installer),
-				Validator:   createVersionCheck(installer),
-				Timeout:     10 * time.Second,
-				Critical:    true,
-			},
-			{
-				Name:        "system-permissions",
-				Description: "Check if user has necessary permissions",
-				Validator:   createPermissionCheck(),
-				Timeout:     5 * time.Second,
-				Critical:    false,
-			},
-			{
-				Name:        "disk-space",
-				Description: "Check available disk space",
-				Validator:   createDiskSpaceCheck(),
-				Timeout:     5 * time.Second,
-				Critical:    false,
-			},
+	checks := []ValidationCheck{
+		{
+			Name:        "package-manager-available",
+			Description: fmt.Sprintf("Check if %s is available in PATH", installer),
+			Validator:   createCommandAvailabilityCheck(installer),
+			Timeout:     5 * time.Second,
+			Critical:    true,
 		},
+		{
+			Name:        "package-manager-functional",
+			Description: fmt.Sprintf("Check if %s responds to version command", installer),
+			Validator:   createVersionCheck(installer),
+			Timeout:     10 * time.Second,
+			Critical:    true,
+		},
+		{
+			Name:        "system-permissions",
+			Description: "Check if user has necessary permissions",
+			Validator:   createPermissionCheck(),
+			Timeout:     5 * time.Second,
+			Critical:    false,
+		},
+		{
+			Name:        "disk-space",
+			Description: "Check available disk space",
+			Validator:   createDiskSpaceCheck(),
+			Timeout:     5 * time.Second,
+			Critical:    false,
+		},
+	}
+
+	// Add installer-specific checks
+	if installer == "dnf" {
+		checks = append(checks, ValidationCheck{
+			Name:        "rpm-available",
+			Description: "Check if rpm is available for package verification",
+			Validator:   createCommandAvailabilityCheck("rpm"),
+			Timeout:     5 * time.Second,
+			Critical:    true,
+		})
+		checks = append(checks, ValidationCheck{
+			Name:        "rpm-functional",
+			Description: "Check if rpm responds to version command",
+			Validator:   createVersionCheck("rpm"),
+			Timeout:     5 * time.Second,
+			Critical:    true,
+		})
+	}
+
+	return ValidationSuite{
+		Name:   fmt.Sprintf("%s-system", installer),
+		Checks: checks,
 	}
 }
 
@@ -295,6 +315,13 @@ func createVersionCheck(command string) func(ctx context.Context) error {
 			fmt.Sprintf("%s --version", command),
 			fmt.Sprintf("%s -V", command),
 			fmt.Sprintf("%s version", command),
+		}
+
+		// Special case for rpm which has different version command format
+		if command == "rpm" {
+			versionCommands = []string{
+				fmt.Sprintf("%s --version", command),
+			}
 		}
 
 		for _, cmd := range versionCommands {
