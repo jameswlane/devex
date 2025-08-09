@@ -97,7 +97,7 @@ run:
   # Use gomod for relative paths (common for Go projects)
   relative-path-mode: gomod
   # Go version
-  go: '1.24.5'
+  go: '1.24.6'
   # Set concurrency (adjust based on your CI environment)
   concurrency: 0 # 0 = auto-detect
 output:
