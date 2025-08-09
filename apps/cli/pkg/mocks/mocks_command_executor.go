@@ -70,6 +70,10 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 	}
 
 	if strings.Contains(command, "which") {
+		// Check if this specific which command should fail first
+		if command == m.FailingCommand || m.FailingCommands[command] {
+			return "", fmt.Errorf("mock shell command failed: %s", command)
+		}
 		// Most which commands should succeed
 		return "/usr/bin/command", nil
 	}
@@ -199,6 +203,23 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 
 	// Handle sleep commands
 	if strings.Contains(command, "sleep") {
+		return "", nil
+	}
+
+	// Handle network validation commands
+	if strings.Contains(command, "nslookup") {
+		// Mock successful DNS resolution
+		return "Server: 8.8.8.8\nAddress: 8.8.8.8#53\nNon-authoritative answer:\nName: google.com", nil
+	}
+
+	if strings.Contains(command, "ping -c 1 -W 3") {
+		// Mock successful ping
+		return "PING google.com (172.217.164.142) 56(84) bytes of data.\n64 bytes from lga25s57-in-f14.1e100.net (172.217.164.142): icmp_seq=1 ttl=117 time=25.4 ms", nil
+	}
+
+	// Handle permission check commands (touch and rm)
+	if strings.Contains(command, "touch /tmp/devex-permission-test-") && strings.Contains(command, "&& rm -f") {
+		// Mock successful permission check
 		return "", nil
 	}
 
