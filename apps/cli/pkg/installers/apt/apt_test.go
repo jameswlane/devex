@@ -46,9 +46,8 @@ var _ = Describe("APT Installer", func() {
 				err := installer.Install("test-package", mockRepo)
 
 				// Verify the mock captured the expected commands
-				Expect(mockExec.Commands).To(ContainElement("which apt-get"))
-				Expect(mockExec.Commands).To(ContainElement("which dpkg"))
-				Expect(mockExec.Commands).To(ContainElement("dpkg --version"))
+				Expect(mockExec.Commands).To(ContainElement("which apt"))
+				Expect(mockExec.Commands).To(ContainElement("apt --version"))
 
 				// Since we're using a simple mock, the install will succeed
 				Expect(err).NotTo(HaveOccurred())
@@ -57,14 +56,14 @@ var _ = Describe("APT Installer", func() {
 
 		Context("when apt system validation fails", func() {
 			BeforeEach(func() {
-				// Set the failing command to simulate apt-get not found
-				mockExec.FailingCommand = "which apt-get"
+				// Set the failing command to simulate apt not found
+				mockExec.FailingCommand = "which apt"
 			})
 
 			It("returns validation error", func() {
 				err := installer.Install("test-package", mockRepo)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("apt system validation failed"))
+				Expect(err.Error()).To(ContainSubstring("critical validations failed"))
 			})
 		})
 
