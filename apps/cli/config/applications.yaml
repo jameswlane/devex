@@ -109,7 +109,7 @@ applications:
           - shell: 'git clone https://github.com/LazyVim/starter ~/.config/nvim'
           - shell: 'rm -rf ~/.config/nvim/.git'
           - shell: 'mkdir -p ~/.config/nvim/plugin/after'
-          - shell: 'nvim --headless +Lazy install +qall'
+          - shell: 'echo "LazyVim starter installed. Plugins will be installed on first nvim startup."'
         config_files:
           - source: '~/.local/share/devex/assets/defaults/neovim/init.vim'
             destination: '~/.config/nvim/init.vim'

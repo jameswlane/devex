@@ -47,6 +47,11 @@ func IsAppInstalled(app types.AppConfig) (bool, error) {
 				log.Info("AppImage not found", "binary", cmd)
 				return false, nil
 			}
+		case "deb":
+			if !isDebInstalled(cmd) {
+				log.Info("Deb package not found", "command", cmd)
+				return false, nil
+			}
 		default:
 			log.Warn("Unknown install method, skipping check", "method", app.InstallMethod)
 			return false, nil
@@ -152,4 +157,25 @@ func isAppImageInstalled(binaryPath string) bool {
 		log.Warn("Failed to check AppImage binary", "binaryPath", binaryPath, "error", err)
 		return false
 	}
+}
+
+func isDebInstalled(command string) bool {
+	// For deb packages, check if the command is available in PATH
+	// This is more reliable than checking package names since .deb files
+	// might have different package names than their executable commands
+	_, err := utils.CommandExec.RunShellCommand("which " + command)
+	if err == nil {
+		log.Info("Deb package command found in PATH", "command", command)
+		return true
+	}
+
+	// Fallback: also check if the command can be executed
+	_, execErr := utils.CommandExec.RunShellCommand(command + " --version || " + command + " --help || " + command)
+	if execErr == nil {
+		log.Info("Deb package command is executable", "command", command)
+		return true
+	}
+
+	log.Info("Deb package command not found", "command", command)
+	return false
 }
