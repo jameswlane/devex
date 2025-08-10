@@ -264,11 +264,17 @@ func executeDockerCommand(command string) error {
 	currentUser, err := user.Current()
 	if err == nil && currentUser.Username != "" {
 		username := currentUser.Username
-		log.Info("Adding user to docker group", "user", username)
-		if _, groupErr := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo usermod -aG docker %s", username)); groupErr != nil {
-			log.Warn("Failed to add user to docker group", "error", groupErr, "user", username)
+
+		// Validate username for security (prevent command injection)
+		if strings.ContainsAny(username, ";&|`$()[]{}*?") {
+			log.Warn("Invalid characters in username, skipping group add", "user", username)
 		} else {
-			log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", username)
+			log.Info("Adding user to docker group", "user", username)
+			if _, groupErr := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo usermod -aG docker %s", username)); groupErr != nil {
+				log.Warn("Failed to add user to docker group", "error", groupErr, "user", username)
+			} else {
+				log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", username)
+			}
 		}
 	}
 

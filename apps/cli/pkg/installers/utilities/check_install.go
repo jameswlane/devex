@@ -169,8 +169,8 @@ func isDebInstalled(command string) bool {
 		return true
 	}
 
-	// Fallback: also check if the command can be executed
-	_, execErr := utils.CommandExec.RunShellCommand(command + " --version || " + command + " --help || " + command)
+	// Fallback: check if command supports common help flags (safer approach)
+	_, execErr := utils.CommandExec.RunShellCommand(command + " --version 2>/dev/null || " + command + " --help 2>/dev/null || false")
 	if execErr == nil {
 		log.Info("Deb package command is executable", "command", command)
 		return true
