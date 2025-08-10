@@ -7,7 +7,7 @@ git:
     settings:
       pull:
         rebase: true
-
 ssh: {}
-
 terminal: {}
+# Global theme preference for applications
+global_theme: 'Tokyo Night'

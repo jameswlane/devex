@@ -3,6 +3,7 @@ package docker
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"strings"
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
@@ -257,6 +258,18 @@ func executeDockerCommand(command string) error {
 	if _, err := utils.CommandExec.RunShellCommand(command); err == nil {
 		log.Debug("Docker command executed with user permissions")
 		return nil
+	}
+
+	// Add user to docker group if not already a member
+	currentUser, err := user.Current()
+	if err == nil && currentUser.Username != "" {
+		username := currentUser.Username
+		log.Info("Adding user to docker group", "user", username)
+		if _, groupErr := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo usermod -aG docker %s", username)); groupErr != nil {
+			log.Warn("Failed to add user to docker group", "error", groupErr, "user", username)
+		} else {
+			log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", username)
+		}
 	}
 
 	// If that fails, try with sudo
