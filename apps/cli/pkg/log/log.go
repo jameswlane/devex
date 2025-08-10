@@ -55,7 +55,7 @@ func InitFileLogger(debugMode bool) error {
 	}
 
 	logsDir := filepath.Join(homeDir, ".local", "share", "devex", "logs")
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
+	if err := os.MkdirAll(logsDir, 0750); err != nil {
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
@@ -66,7 +66,7 @@ func InitFileLogger(debugMode bool) error {
 		timestamp := time.Now().Format("20060102-150405")
 		logFile := filepath.Join(logsDir, fmt.Sprintf("devex-%s.log", timestamp))
 
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to create log file: %w", err)
 		}
@@ -85,7 +85,7 @@ func InitFileLogger(debugMode bool) error {
 		timestamp := time.Now().Format("20060102-150405")
 		logFile := filepath.Join(logsDir, fmt.Sprintf("devex-%s.log", timestamp))
 
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to create log file: %w", err)
 		}

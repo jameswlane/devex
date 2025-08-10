@@ -1,13 +1,13 @@
 # golangci-lint configuration for Go CLI project
 version: "2"
 linters:
-  # Start with standard linters for a balanced approach
+  # Default set of linters to enable
   default: standard
   # Enable specific linters for CLI projects
   enable:
     # Code quality and correctness
     - errcheck # Check for unchecked errors
-    #        - gosec         # Security issues
+    - gosec # Security issues
     - govet # Go vet issues
     - ineffassign # Detect ineffective assignments
     - staticcheck # Advanced static analysis
@@ -24,9 +24,6 @@ linters:
     - noctx # Find sending HTTP request without context.Context
     # CLI-specific useful linters
     - errname # Check that error types are of the form FooError
-    #        - rowserrcheck  # Check whether Rows.Err of database/sql is checked successfully
-    #        - sqlclosecheck # Check that sql.Rows and sql.Stmt are closed
-
     - errorlint # Find code that will cause problems with the error wrapping scheme
     - contextcheck # Check whether the function uses a non-inherited context
   # Disable linters that can be too noisy for CLI projects
