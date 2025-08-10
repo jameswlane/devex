@@ -1,3 +1,33 @@
+## [0.20.0](https://github.com/jameswlane/devex/compare/0.19.0...0.20.0) (2025-08-10)
+
+### Features
+
+* add comprehensive Ghostty terminal emulator with 12 new package managers ([1c567e4](https://github.com/jameswlane/devex/commit/1c567e4454e13a86bd3433862fe521d6342b4119))
+* added ghostty to config ([2ada47d](https://github.com/jameswlane/devex/commit/2ada47da9104b121f5cf129bcda98f8bc554d63e))
+* implement comprehensive DNF installer for Red Hat-based systems ([10a3fb0](https://github.com/jameswlane/devex/commit/10a3fb08190ec6b5b2dd7834736b380521ff5b9b))
+* implement comprehensive stub installer enhancements and structured error handling ([ff330a9](https://github.com/jameswlane/devex/commit/ff330a9c51f7635ca7eff4c9efc157b19c79f0fa))
+* implement comprehensive Zypper installer with SUSE platform support ([84e3621](https://github.com/jameswlane/devex/commit/84e3621f04758b69d024c79edc9298d99755f93b))
+* implement standardized error handling and background validation ([d368411](https://github.com/jameswlane/devex/commit/d368411599229c9d305c4d272ee74ad1d1bbf188))
+* **turbo:** configure TurboRepo for Go CLI and optimize Taskfile ([30ecb74](https://github.com/jameswlane/devex/commit/30ecb7427d4ad750b942c6af9c01ac1141eaebbb))
+
+### Bug Fixes
+
+* **ci:** prevent test hanging in CI with timeouts and progress reporting ([522304b](https://github.com/jameswlane/devex/commit/522304b917ab1630ceb449e4e054b6a082baf455))
+* **ci:** resolve Vercel deployment and test failures ([8d8a2ce](https://github.com/jameswlane/devex/commit/8d8a2ce4b7e4b12ddef0b667d9f8e15f240b5de6))
+* convert test to ginkgo ([65de7c7](https://github.com/jameswlane/devex/commit/65de7c76f48f2c6e2fa0b23738bc4679cffaec8f))
+* **deadlock:** resolve BackgroundValidator mutex deadlock in APT tests ([453475f](https://github.com/jameswlane/devex/commit/453475fed249db697563b168b4939cb011faa213))
+* **dnf:** resolve DNF installer test failures and improve YUM fallback ([409a07f](https://github.com/jameswlane/devex/commit/409a07f3f2142b73ecd85ce197dad2d8d57bc811))
+* **gitignore:** added vendor ([2305233](https://github.com/jameswlane/devex/commit/230523335963ecc06e6ce5670df5805ca1883c65))
+* implement missing BaseInstaller interface methods across all installers ([e63b019](https://github.com/jameswlane/devex/commit/e63b0197a9a1ebd59e1fb9489cf72fc51f587f4e))
+* more test fixes ([1e09f9f](https://github.com/jameswlane/devex/commit/1e09f9f5d35e4371e2786f143ec3f97794b99b44))
+* more test fixes ([efaafb2](https://github.com/jameswlane/devex/commit/efaafb2268617f1d1a47df02cf8e3a0adbcd5811))
+* remove YAML comments to prevent linting issues ([2d405cf](https://github.com/jameswlane/devex/commit/2d405cf58d0494e1f21ebcc0a886597a94dfaac0))
+* resolve all 24 golangci-lint security issues ([dacd9a8](https://github.com/jameswlane/devex/commit/dacd9a8fd6c82f00436aaced7e4911f141a824b1))
+* resolve APT installer test failures blocking release ([dee2f1e](https://github.com/jameswlane/devex/commit/dee2f1e688095dd294a1bcf2902c992cf961f289))
+* test in pipeline ([28c8373](https://github.com/jameswlane/devex/commit/28c8373e47db762911ca86ad46c9d3b7a7252a4f))
+* **test:** fixing pipeline ([4d8a3d8](https://github.com/jameswlane/devex/commit/4d8a3d85d0f91dde676846577b5bee77aa748121))
+* **test:** remove duplicate Ginkgo suite runner causing pipeline failure ([ed755f1](https://github.com/jameswlane/devex/commit/ed755f18b43ef3f8451b12743f8e3fc95718b62b))
+
 ## [0.19.0](https://github.com/jameswlane/devex/compare/0.18.0...0.19.0) (2025-08-06)
 
 ### Features
