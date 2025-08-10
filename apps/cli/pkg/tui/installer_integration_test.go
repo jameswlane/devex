@@ -141,7 +141,7 @@ func (m *MockRepository) Close() error {
 
 func TestStreamingInstaller_Integration(t *testing.T) {
 	// Create test context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	// Create mock components - use nil program to avoid TUI message sending
@@ -246,7 +246,7 @@ func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
 	}()
 
 	// Cancel after longer delay to ensure we're in the sleep phase
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 
 	// Wait for installation to complete
@@ -255,7 +255,7 @@ func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
 		// Should have been cancelled
 		assert.Error(t, installErr)
 		assert.Equal(t, context.Canceled, installErr)
-	case <-time.After(5 * time.Second):
+	case <-time.After(1 * time.Second):
 		t.Fatal("Installation did not respond to cancellation")
 	}
 }
@@ -321,7 +321,7 @@ func TestStreamingInstaller_PrePostInstallCommands(t *testing.T) {
 }
 
 func TestStreamingInstaller_SleepCommand(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	mockRepo := &MockRepository{}
@@ -389,7 +389,7 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 	}()
 
 	// Cancel after short delay
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 
 	// Should respond to cancellation quickly
@@ -397,7 +397,7 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 	case <-done:
 		assert.Error(t, installErr)
 		assert.Equal(t, context.Canceled, installErr)
-	case <-time.After(2 * time.Second):
+	case <-time.After(1 * time.Second):
 		t.Fatal("Sleep command did not respond to cancellation")
 	}
 }

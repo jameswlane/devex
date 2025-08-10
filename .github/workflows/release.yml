@@ -39,7 +39,9 @@ jobs:
         run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
       - name: Test
         working-directory: apps/cli
-        run: ginkgo -r
+        run: |
+          # Run tests with timeout and verbose output
+          timeout 10m ginkgo -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
   # Build web apps on Linux
   web:
     runs-on: ubuntu-latest
