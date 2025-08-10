@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
+	"github.com/jameswlane/devex/pkg/mocks"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 func TestHandlerRegistry(t *testing.T) {
@@ -79,17 +81,27 @@ func TestExecutePostInstallHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("handles package variations", func(t *testing.T) {
+	t.Run("handles package variations with mocked commands", func(t *testing.T) {
+		// Store original CommandExec
+		originalExec := utils.CommandExec
+		defer func() {
+			utils.CommandExec = originalExec
+		}()
+
+		// Create mock executor
+		mockExec := mocks.NewMockCommandExecutor()
+		utils.CommandExec = mockExec
+
 		// Test that docker variations work
 		if !utilities.DefaultRegistry.HasHandler("docker") {
 			t.Error("Expected docker handler to be available")
 		}
 
-		// Test execution doesn't fail (we can't easily test the actual system commands)
+		// Test execution with mocked commands
 		err := utilities.ExecutePostInstallHandler("docker")
-		// We expect this might fail in test environment, but shouldn't panic
+		// Should not fail with mocked commands
 		if err != nil {
-			t.Logf("docker handler execution returned error (expected in test env): %v", err)
+			t.Errorf("Expected no error with mocked commands, got %v", err)
 		}
 	})
 }

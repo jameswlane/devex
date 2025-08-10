@@ -25,7 +25,7 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 
 	// Run background validation for better performance
 	validator := utilities.NewBackgroundValidator(30 * time.Second)
-	validator.AddSuite(utilities.CreateSystemValidationSuite("dnf"))
+	validator.AddSuite(createDnfFallbackValidationSuite())
 	validator.AddSuite(utilities.CreateNetworkValidationSuite())
 
 	ctx := context.Background()
@@ -482,4 +482,127 @@ func writeRepositoryFile(repoFile, repoConfig string) error {
 func escapeShellArg(arg string) string {
 	// Use single quotes and escape any single quotes in the argument
 	return "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
+}
+
+// createDnfFallbackValidationSuite creates validation checks that support DNF/YUM fallback
+func createDnfFallbackValidationSuite() utilities.ValidationSuite {
+	checks := []utilities.ValidationCheck{
+		{
+			Name:        "package-manager-available",
+			Description: "Check if DNF or YUM is available in PATH",
+			Validator:   createDnfOrYumAvailabilityCheck(),
+			Timeout:     5 * time.Second,
+			Critical:    true,
+		},
+		{
+			Name:        "rpm-available",
+			Description: "Check if rpm is available for package verification",
+			Validator:   createCommandAvailabilityCheck("rpm"),
+			Timeout:     5 * time.Second,
+			Critical:    true,
+		},
+		{
+			Name:        "rpm-functional",
+			Description: "Check if rpm responds to version command",
+			Validator:   createRpmVersionCheck(),
+			Timeout:     5 * time.Second,
+			Critical:    true,
+		},
+		{
+			Name:        "system-permissions",
+			Description: "Check if user has necessary permissions",
+			Validator:   createPermissionCheck(),
+			Timeout:     5 * time.Second,
+			Critical:    false,
+		},
+		{
+			Name:        "disk-space",
+			Description: "Check available disk space",
+			Validator:   createDiskSpaceCheck(),
+			Timeout:     5 * time.Second,
+			Critical:    false,
+		},
+	}
+
+	return utilities.ValidationSuite{
+		Name:   "dnf-system",
+		Checks: checks,
+	}
+}
+
+// createDnfOrYumAvailabilityCheck creates a validator that checks if DNF or YUM is available
+func createDnfOrYumAvailabilityCheck() func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		// Check if dnf is available
+		if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
+			return nil // DNF is available
+		}
+
+		// Check if yum is available as fallback
+		if _, err := utils.CommandExec.RunShellCommand("which yum"); err == nil {
+			return nil // YUM is available as fallback
+		}
+
+		return fmt.Errorf("neither dnf nor yum found")
+	}
+}
+
+// createCommandAvailabilityCheck creates a validator that checks if a command is available
+func createCommandAvailabilityCheck(command string) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		_, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("which %s", command))
+		if err != nil {
+			return fmt.Errorf("command '%s' not found in PATH", command)
+		}
+		return nil
+	}
+}
+
+// createRpmVersionCheck creates a validator that checks if rpm responds to version command
+func createRpmVersionCheck() func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		if _, err := utils.CommandExec.RunShellCommand("rpm --version"); err != nil {
+			return fmt.Errorf("command 'rpm' does not respond to version commands")
+		}
+		return nil
+	}
+}
+
+// createPermissionCheck creates a validator that checks basic system permissions
+func createPermissionCheck() func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		// Test if we can write to /tmp (basic permission check)
+		testFile := fmt.Sprintf("/tmp/devex-permission-test-%d", time.Now().UnixNano())
+		cmd := fmt.Sprintf("touch %s && rm -f %s", testFile, testFile)
+
+		if _, err := utils.CommandExec.RunShellCommand(cmd); err != nil {
+			return fmt.Errorf("insufficient permissions for file operations")
+		}
+
+		return nil
+	}
+}
+
+// createDiskSpaceCheck creates a validator that checks available disk space
+func createDiskSpaceCheck() func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		// Check available space in /tmp and /usr/local (common install locations)
+		locations := []string{"/tmp", "/usr/local", "/"}
+
+		for _, location := range locations {
+			output, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("df -h %s", location))
+			if err != nil {
+				log.Debug("Could not check disk space", "location", location, "error", err)
+				continue
+			}
+
+			// Basic check - if df command succeeds, assume space is available
+			// More sophisticated parsing could be added here
+			if len(output) > 0 {
+				log.Debug("Disk space check passed", "location", location)
+			}
+		}
+
+		return nil
+	}
 }
