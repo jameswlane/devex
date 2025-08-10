@@ -1,3 +1,12 @@
+## [0.20.2](https://github.com/jameswlane/devex/compare/0.20.1...0.20.2) (2025-08-10)
+
+### Bug Fixes
+
+* address critical command injection vulnerabilities ([5460a95](https://github.com/jameswlane/devex/commit/5460a95540048a8ee5f4fd5fccb1db31a330b9fa))
+* resolve critical installer issues for improved reliability ([c469e26](https://github.com/jameswlane/devex/commit/c469e26ba53e86b202d57a4189f6b105828eb5d5))
+* resolve critical installer issues for improved reliability ([5159092](https://github.com/jameswlane/devex/commit/5159092a0d7c32ac1fcbc4b14c390c9300ed487a))
+* resolve Docker security test failures ([50f02a1](https://github.com/jameswlane/devex/commit/50f02a19869cf3e0e087f3cf20941afb8e01d7e0))
+
 ## [0.20.1](https://github.com/jameswlane/devex/compare/0.20.0...0.20.1) (2025-08-10)
 
 ### Bug Fixes
