@@ -186,10 +186,13 @@ go tool cover -html=coverage.out
 
 ### Testing Framework (CLI)
 
-The CLI project uses both Ginkgo and standard Go testing:
-- **Ginkgo**: BDD-style tests with `*_suite_test.go` files in `apps/cli/pkg/`
-- **Standard Go tests**: Traditional tests with `*_test.go` files
-- **Mocks**: Generated mocks in `apps/cli/pkg/mocks/` using gomock
+**IMPORTANT**: The CLI project uses Ginkgo BDD testing framework exclusively:
+- **Ginkgo Only**: All tests must use Ginkgo BDD-style tests with `*_suite_test.go` files in `apps/cli/pkg/`
+- **No Standard Go Tests**: Do not mix `testing.T` with Ginkgo - this causes suite conflicts
+- **Test Structure**: Each package should have a `*_suite_test.go` file that sets up the Ginkgo test suite
+- **Individual Tests**: Create separate `*_test.go` files with Ginkgo `Describe/Context/It` blocks
+- **Mocks**: Use mocks from `apps/cli/pkg/mocks/` within Ginkgo tests
+- **Security Tests**: All security-related tests must use Ginkgo for consistency
 
 ### Database Schema (CLI)
 
