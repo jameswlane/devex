@@ -28,7 +28,7 @@
 	"keywords": [],
 	"author": "James W Lane",
 	"license": "GPL-3.0",
-	"packageManager": "pnpm@10.12.4",
+	"packageManager": "pnpm@10.14.0",
 	"devDependencies": {
 		"@biomejs/biome": "2.1.2",
 		"@commitlint/config-conventional": "^19.8.1",

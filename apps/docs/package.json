@@ -6,6 +6,9 @@
 		"build": "next build",
 		"dev": "next dev --turbo",
 		"start": "next start",
+		"biome:format": "biome format --write",
+		"biome:lint": "biome lint --write",
+		"biome:check": "biome check --write",
 		"postinstall": "fumadocs-mdx"
 	},
 	"dependencies": {
@@ -17,6 +20,7 @@
 		"fumadocs-mdx": "11.7.1"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.1.2",
 		"@types/node": "24.1.0",
 		"@types/react": "^19.1.8",
 		"@types/react-dom": "^19.1.6",

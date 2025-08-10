@@ -42,6 +42,8 @@ importers:
         specifier: ^2.5.5
         version: 2.5.5
 
+  apps/cli: {}
+
   apps/docs:
     dependencies:
       fumadocs-core:
@@ -63,6 +65,9 @@ importers:
         specifier: ^19.1.0
         version: 19.1.0(react@19.1.0)
     devDependencies:
+      '@biomejs/biome':
+        specifier: 2.1.2
+        version: 2.1.2
       '@tailwindcss/postcss':
         specifier: ^4.1.11
         version: 4.1.11
