@@ -235,7 +235,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c", "q", "esc":
 			return m, tea.Quit
 
 		case "enter":
@@ -327,6 +327,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Store the count atomically for thread-safe access
 		atomic.StoreInt64(&m.completedApps, completed)
 
+		// Update progress model internal state for tests
+		if len(m.apps) > 0 {
+			currentProgress := float64(completed) / float64(len(m.apps))
+			m.progress.SetPercent(currentProgress)
+		}
+
 		// Use the count for progress tracking
 		if int(completed) < len(m.apps) {
 			// More apps to install - but don't start next app here to avoid race conditions
@@ -415,7 +421,7 @@ func (m *Model) renderLeftPane(width int) string {
 	content.WriteString(lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("212")).
-		Render("DevEx Installation"))
+		Render("DevEx Application Installer"))
 	content.WriteString("\n\n")
 
 	// Current status
