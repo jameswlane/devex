@@ -1,3 +1,9 @@
+## [0.20.1](https://github.com/jameswlane/devex/compare/0.20.0...0.20.1) (2025-08-10)
+
+### Bug Fixes
+
+* vercel issues ([6e0a23c](https://github.com/jameswlane/devex/commit/6e0a23c65a7c32de16a7f8f9f57759767cf82b4b))
+
 ## [0.20.0](https://github.com/jameswlane/devex/compare/0.19.0...0.20.0) (2025-08-10)
 
 ### Features
