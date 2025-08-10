@@ -59,8 +59,11 @@ var _ = Describe("DNF Installer", func() {
 
 		Context("when YUM is available but DNF is not", func() {
 			BeforeEach(func() {
-				// Make DNF unavailable
-				mockExec.FailingCommand = "which dnf"
+				// Make DNF unavailable but YUM available
+				if mockExec.FailingCommands == nil {
+					mockExec.FailingCommands = make(map[string]bool)
+				}
+				mockExec.FailingCommands["which dnf"] = true
 			})
 
 			It("installs a package successfully using YUM fallback", func() {
@@ -122,7 +125,7 @@ var _ = Describe("DNF Installer", func() {
 				err := installer.Install("nonexistent-package", mockRepo)
 
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("package validation failed"))
+				Expect(err.Error()).To(ContainSubstring("failed to check package availability"))
 			})
 		})
 
