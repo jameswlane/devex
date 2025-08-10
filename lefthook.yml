@@ -61,7 +61,7 @@ pre-push:
   commands:
     go-test:
       root: 'apps/cli/'
-      run: go test ./...
+      run: ginkgo run -r --timeout=2m
     go-vulncheck:
       root: 'apps/cli/'
       run: govulncheck ./...

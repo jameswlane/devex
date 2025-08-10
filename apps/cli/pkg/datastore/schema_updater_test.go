@@ -3,44 +3,51 @@ package datastore_test
 import (
 	"os"
 	"path/filepath"
-	"testing"
 
-	"github.com/jameswlane/devex/pkg/types"
-
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/datastore/repository"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
-func TestApplySchemaUpdates(t *testing.T) {
-	t.Parallel()
-	db := datastore.NewInMemorySQLite()
-	defer func(db types.Database) {
-		err := db.Close()
-		if err != nil {
-			panic(err)
-		}
-	}(db)
+var _ = Describe("Schema Updater", func() {
+	Describe("ApplySchemaUpdates", func() {
+		var db types.Database
+		var repo types.SchemaRepository
+		var tmpDir string
 
-	repo := repository.NewSchemaRepository(db)
+		BeforeEach(func() {
+			db = datastore.NewInMemorySQLite()
+			repo = repository.NewSchemaRepository(db)
 
-	// Create a temporary directory structure for testing
-	tmpDir, err := os.MkdirTemp("", "devex_test")
-	assert.NoError(t, err)
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		if err != nil {
-			panic(err)
-		}
-	}(tmpDir)
+			// Create a temporary directory structure for testing
+			var err error
+			tmpDir, err = os.MkdirTemp("", "devex_test")
+			Expect(err).ToNot(HaveOccurred())
 
-	// Create the expected directory structure: homeDir/.local/share/devex/migrations
-	migrationsDir := filepath.Join(tmpDir, ".local", "share", "devex", "migrations")
-	err = os.MkdirAll(migrationsDir, 0755)
-	assert.NoError(t, err)
+			// Create the expected directory structure: homeDir/.local/share/devex/migrations
+			migrationsDir := filepath.Join(tmpDir, ".local", "share", "devex", "migrations")
+			err = os.MkdirAll(migrationsDir, 0755)
+			Expect(err).ToNot(HaveOccurred())
+		})
 
-	// Test with empty migrations directory (should succeed)
-	err = datastore.ApplySchemaUpdates(repo, tmpDir)
-	assert.NoError(t, err)
-}
+		AfterEach(func() {
+			err := db.Close()
+			if err != nil {
+				panic(err)
+			}
+
+			err = os.RemoveAll(tmpDir)
+			if err != nil {
+				panic(err)
+			}
+		})
+
+		It("should succeed with empty migrations directory", func() {
+			err := datastore.ApplySchemaUpdates(repo, tmpDir)
+			Expect(err).ToNot(HaveOccurred())
+		})
+	})
+})

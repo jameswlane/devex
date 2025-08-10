@@ -87,22 +87,17 @@ func (e *EmergeInstaller) IsInstalled(command string) (bool, error) {
 			"emerge", command, err)
 	}
 
-	// Try to check installation using qlist (from portage-utils)
-	checkCommand := fmt.Sprintf("qlist -I | grep -q '^%s$'", command)
-	_, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
+	log.Warn("Emerge IsInstalled is not fully implemented yet")
+	log.Info("To manually check if this package is installed, run: qlist -I | grep %s", command)
 
-	// Fallback: check using emerge --pretend
-	checkCommand = fmt.Sprintf("emerge --pretend %s 2>&1 | grep -q 'already installed'", command)
-	_, err = utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
-
-	// If both checks fail, assume not installed
-	return false, nil
+	return false, common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"emerge", command,
+		[]string{
+			"Manual check: qlist -I | grep " + command,
+			"Search packages: emerge --search " + command,
+			"Check if installed: emerge --pretend " + command,
+		})
 }
 
 // validateEmergeSystem validates that the emerge system is available and functional

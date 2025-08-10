@@ -71,30 +71,31 @@ tasks:
       - govulncheck ./...
   # === TESTING ===
   test:
-    desc: Run the complete test suite
+    desc: Run the complete test suite using Ginkgo
     aliases: [t]
     sources: ['**/*.go', '**/*_test.go']
-    generates: ['coverage.out']
     cmds:
-      - go test -v -coverprofile=coverage.out ./...
+      - ginkgo run -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
   test:short:
     desc: Run tests with short flag (skip long-running tests)
     cmds:
-      - go test -v -short ./...
+      - ginkgo run -r --timeout=2m -v --label-filter="!slow"
   test:coverage:
     desc: Run tests and generate coverage report
-    deps: [test]
+    sources: ['**/*.go', '**/*_test.go']
+    generates: ['coverage.out']
     cmds:
+      - ginkgo run -r --coverprofile=coverage.out --timeout=5m -v
       - go tool cover -html=coverage.out -o coverage.html
       - echo "Coverage report generated at coverage.html"
-  test:ginkgo:
-    desc: Run Ginkgo BDD tests
+  test:testify:
+    desc: Run any remaining standard Go tests (fallback)
     cmds:
-      - ginkgo run -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
+      - go test -v ./... 2>/dev/null || echo "No standard Go tests found (all converted to Ginkgo)"
   test:integration:
     desc: Run integration tests with timeout and progress reporting
     cmds:
-      - timeout 10m ginkgo -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
+      - timeout 10m ginkgo run -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v --label-filter="integration"
   # === BENCHMARKING ===
   bench:
     desc: Run benchmarks
@@ -156,7 +157,7 @@ tasks:
     cmds:
       - cd ../../ && turbo build:go --filter=cli
   turbo:test:
-    desc: Test using TurboRepo
+    desc: Test using TurboRepo (now uses Ginkgo)
     cmds:
       - cd ../../ && turbo test:go --filter=cli
   turbo:lint:

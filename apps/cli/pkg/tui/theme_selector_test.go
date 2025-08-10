@@ -1,323 +1,360 @@
 package tui
 
 import (
-	"testing"
-
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/stretchr/testify/assert"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/types"
 )
 
-func TestThemeSelector_NewThemeSelector(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-		{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
-	}
+var _ = Describe("ThemeSelector", func() {
+	Describe("NewThemeSelector", func() {
+		It("should create new theme selector with default values", func() {
+			themes := []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+				{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
+			}
 
-	selector := NewThemeSelector("neovim", themes)
+			selector := NewThemeSelector("neovim", themes)
 
-	assert.Equal(t, "neovim", selector.appName)
-	assert.Equal(t, themes, selector.themes)
-	assert.Equal(t, 0, selector.cursor)
-	assert.Equal(t, 0, selector.selected)
-	assert.False(t, selector.confirmed)
-	assert.False(t, selector.cancelled)
-}
-
-func TestThemeSelector_Update_Navigation(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-		{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
-		{Name: "Light Theme", ThemeColor: "#FFFFFF", ThemeBackground: "light"},
-	}
-
-	selector := NewThemeSelector("neovim", themes)
-
-	t.Run("should move cursor down", func(t *testing.T) {
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 1, updatedSelector.cursor)
-		assert.Nil(t, cmd)
+			Expect(selector.appName).To(Equal("neovim"))
+			Expect(selector.themes).To(Equal(themes))
+			Expect(selector.cursor).To(Equal(0))
+			Expect(selector.selected).To(Equal(0))
+			Expect(selector.confirmed).To(BeFalse())
+			Expect(selector.cancelled).To(BeFalse())
+		})
 	})
 
-	t.Run("should move cursor up", func(t *testing.T) {
-		selector.cursor = 1 // Start at position 1
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+	Describe("Update Navigation", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
 
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 0, updatedSelector.cursor)
-		assert.Nil(t, cmd)
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+				{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
+				{Name: "Light Theme", ThemeColor: "#FFFFFF", ThemeBackground: "light"},
+			}
+			selector = NewThemeSelector("neovim", themes)
+		})
+
+		It("should move cursor down with j key", func() {
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(1))
+			Expect(cmd).To(BeNil())
+		})
+
+		It("should move cursor up with k key", func() {
+			selector.cursor = 1 // Start at position 1
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(0))
+			Expect(cmd).To(BeNil())
+		})
+
+		It("should not move cursor below 0", func() {
+			selector.cursor = 0
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyUp})
+
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(0))
+			Expect(cmd).To(BeNil())
+		})
+
+		It("should not move cursor above max", func() {
+			selector.cursor = 2 // Last position
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyDown})
+
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(2))
+			Expect(cmd).To(BeNil())
+		})
 	})
 
-	t.Run("should not move cursor below 0", func(t *testing.T) {
-		selector.cursor = 0
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyUp})
+	Describe("Update Selection", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
 
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 0, updatedSelector.cursor)
-		assert.Nil(t, cmd)
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+				{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
+			}
+			selector = NewThemeSelector("neovim", themes)
+			selector.cursor = 1
+		})
+
+		It("should select theme with enter", func() {
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.selected).To(Equal(1))
+			Expect(updatedSelector.confirmed).To(BeTrue())
+			Expect(updatedSelector.cancelled).To(BeFalse())
+
+			// Should return quit command
+			Expect(cmd).ToNot(BeNil())
+		})
+
+		It("should select theme with space", func() {
+			selector.confirmed = false // Reset
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.selected).To(Equal(1))
+			Expect(updatedSelector.confirmed).To(BeTrue())
+			Expect(updatedSelector.cancelled).To(BeFalse())
+
+			// Should return quit command
+			Expect(cmd).ToNot(BeNil())
+		})
 	})
 
-	t.Run("should not move cursor above max", func(t *testing.T) {
-		selector.cursor = 2 // Last position
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyDown})
+	Describe("Update Cancellation", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
 
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 2, updatedSelector.cursor)
-		assert.Nil(t, cmd)
-	})
-}
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+			}
+			selector = NewThemeSelector("neovim", themes)
+		})
 
-func TestThemeSelector_Update_Selection(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-		{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
-	}
+		It("should cancel with escape", func() {
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
-	selector := NewThemeSelector("neovim", themes)
-	selector.cursor = 1
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cancelled).To(BeTrue())
+			Expect(updatedSelector.confirmed).To(BeFalse())
 
-	t.Run("should select theme with enter", func(t *testing.T) {
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			// Should return quit command
+			Expect(cmd).ToNot(BeNil())
+		})
 
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 1, updatedSelector.selected)
-		assert.True(t, updatedSelector.confirmed)
-		assert.False(t, updatedSelector.cancelled)
+		It("should cancel with q", func() {
+			selector.cancelled = false // Reset
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 
-		// Should return quit command
-		assert.NotNil(t, cmd)
-	})
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cancelled).To(BeTrue())
+			Expect(updatedSelector.confirmed).To(BeFalse())
 
-	t.Run("should select theme with space", func(t *testing.T) {
-		selector.confirmed = false // Reset
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
-
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 1, updatedSelector.selected)
-		assert.True(t, updatedSelector.confirmed)
-		assert.False(t, updatedSelector.cancelled)
-
-		// Should return quit command
-		assert.NotNil(t, cmd)
-	})
-}
-
-func TestThemeSelector_Update_Cancellation(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-	}
-
-	selector := NewThemeSelector("neovim", themes)
-
-	t.Run("should cancel with escape", func(t *testing.T) {
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyEsc})
-
-		updatedSelector := model.(*ThemeSelector)
-		assert.True(t, updatedSelector.cancelled)
-		assert.False(t, updatedSelector.confirmed)
-
-		// Should return quit command
-		assert.NotNil(t, cmd)
+			// Should return quit command
+			Expect(cmd).ToNot(BeNil())
+		})
 	})
 
-	t.Run("should cancel with q", func(t *testing.T) {
-		selector.cancelled = false // Reset
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	Describe("GetSelectedTheme", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
 
-		updatedSelector := model.(*ThemeSelector)
-		assert.True(t, updatedSelector.cancelled)
-		assert.False(t, updatedSelector.confirmed)
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+				{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
+			}
+			selector = NewThemeSelector("neovim", themes)
+		})
 
-		// Should return quit command
-		assert.NotNil(t, cmd)
-	})
-}
+		It("should return selected theme when confirmed", func() {
+			selector.selected = 1
+			selector.confirmed = true
 
-func TestThemeSelector_GetSelectedTheme(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-		{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "dark"},
-	}
+			theme, ok := selector.GetSelectedTheme()
 
-	selector := NewThemeSelector("neovim", themes)
+			Expect(ok).To(BeTrue())
+			Expect(theme.Name).To(Equal("Kanagawa"))
+			Expect(theme.ThemeColor).To(Equal("#16161D"))
+			Expect(theme.ThemeBackground).To(Equal("dark"))
+		})
 
-	t.Run("should return selected theme when confirmed", func(t *testing.T) {
-		selector.selected = 1
-		selector.confirmed = true
+		It("should return false when not confirmed", func() {
+			selector.confirmed = false
 
-		theme, ok := selector.GetSelectedTheme()
+			theme, ok := selector.GetSelectedTheme()
 
-		assert.True(t, ok)
-		assert.Equal(t, "Kanagawa", theme.Name)
-		assert.Equal(t, "#16161D", theme.ThemeColor)
-		assert.Equal(t, "dark", theme.ThemeBackground)
-	})
+			Expect(ok).To(BeFalse())
+			Expect(theme).To(Equal(types.Theme{}))
+		})
 
-	t.Run("should return false when not confirmed", func(t *testing.T) {
-		selector.confirmed = false
+		It("should handle invalid selected index", func() {
+			selector.selected = 999 // Invalid index
+			selector.confirmed = true
 
-		theme, ok := selector.GetSelectedTheme()
+			theme, ok := selector.GetSelectedTheme()
 
-		assert.False(t, ok)
-		assert.Equal(t, types.Theme{}, theme)
-	})
-
-	t.Run("should handle invalid selected index", func(t *testing.T) {
-		selector.selected = 999 // Invalid index
-		selector.confirmed = true
-
-		theme, ok := selector.GetSelectedTheme()
-
-		assert.False(t, ok)
-		assert.Equal(t, types.Theme{}, theme)
-	})
-}
-
-func TestThemeSelector_IsCancelled(t *testing.T) {
-	selector := NewThemeSelector("neovim", []types.Theme{})
-
-	t.Run("should return false when not cancelled", func(t *testing.T) {
-		assert.False(t, selector.IsCancelled())
+			Expect(ok).To(BeFalse())
+			Expect(theme).To(Equal(types.Theme{}))
+		})
 	})
 
-	t.Run("should return true when cancelled", func(t *testing.T) {
-		selector.cancelled = true
-		assert.True(t, selector.IsCancelled())
-	})
-}
+	Describe("IsCancelled", func() {
+		var selector *ThemeSelector
 
-func TestThemeSelector_View(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-		{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "light"},
-	}
+		BeforeEach(func() {
+			selector = NewThemeSelector("neovim", []types.Theme{})
+		})
 
-	selector := NewThemeSelector("neovim", themes)
+		It("should return false when not cancelled", func() {
+			Expect(selector.IsCancelled()).To(BeFalse())
+		})
 
-	t.Run("should render view with themes", func(t *testing.T) {
-		view := selector.View()
-
-		// Should contain app name
-		assert.Contains(t, view, "neovim")
-
-		// Should contain theme names
-		assert.Contains(t, view, "Tokyo Night")
-		assert.Contains(t, view, "Kanagawa")
-
-		// Should contain background types
-		assert.Contains(t, view, "dark background")
-		assert.Contains(t, view, "light background")
-
-		// Should contain instructions
-		assert.Contains(t, view, "↑/↓ to navigate")
-		assert.Contains(t, view, "Enter/Space to select")
-		assert.Contains(t, view, "Esc to cancel")
+		It("should return true when cancelled", func() {
+			selector.cancelled = true
+			Expect(selector.IsCancelled()).To(BeTrue())
+		})
 	})
 
-	t.Run("should show cursor on current position", func(t *testing.T) {
-		selector.cursor = 1
-		view := selector.View()
+	Describe("View", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
 
-		// The view should show cursor positioning but testing exact formatting
-		// is brittle since it depends on lipgloss styling
-		assert.NotEmpty(t, view)
-	})
-}
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+				{Name: "Kanagawa", ThemeColor: "#16161D", ThemeBackground: "light"},
+			}
+			selector = NewThemeSelector("neovim", themes)
+		})
 
-func TestShowThemeSelector_EdgeCases(t *testing.T) {
-	t.Run("should handle empty themes list", func(t *testing.T) {
-		themes := []types.Theme{}
+		It("should render view with themes", func() {
+			view := selector.View()
 
-		_, err := ShowThemeSelector("neovim", themes)
+			// Should contain app name
+			Expect(view).To(ContainSubstring("neovim"))
 
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "no themes available")
-	})
+			// Should contain theme names
+			Expect(view).To(ContainSubstring("Tokyo Night"))
+			Expect(view).To(ContainSubstring("Kanagawa"))
 
-	t.Run("should handle nil themes list", func(t *testing.T) {
-		_, err := ShowThemeSelector("neovim", nil)
+			// Should contain background types
+			Expect(view).To(ContainSubstring("dark background"))
+			Expect(view).To(ContainSubstring("light background"))
 
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "no themes available")
-	})
-}
+			// Should contain instructions
+			Expect(view).To(ContainSubstring("↑/↓ to navigate"))
+			Expect(view).To(ContainSubstring("Enter/Space to select"))
+			Expect(view).To(ContainSubstring("Esc to cancel"))
+		})
 
-func TestThemeSelector_Init(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-	}
+		It("should show cursor on current position", func() {
+			selector.cursor = 1
+			view := selector.View()
 
-	selector := NewThemeSelector("neovim", themes)
-	cmd := selector.Init()
-
-	// Init should return nil
-	assert.Nil(t, cmd)
-}
-
-func TestThemeSelector_HandleUnknownMessages(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-	}
-
-	selector := NewThemeSelector("neovim", themes)
-
-	t.Run("should ignore non-key messages", func(t *testing.T) {
-		// Send a mouse message (not a KeyMsg)
-		model, cmd := selector.Update("some other message")
-
-		updatedSelector := model.(*ThemeSelector)
-		// State should remain unchanged
-		assert.Equal(t, 0, updatedSelector.cursor)
-		assert.False(t, updatedSelector.confirmed)
-		assert.False(t, updatedSelector.cancelled)
-		assert.Nil(t, cmd)
+			// The view should show cursor positioning but testing exact formatting
+			// is brittle since it depends on lipgloss styling
+			Expect(view).ToNot(BeEmpty())
+		})
 	})
 
-	t.Run("should ignore unknown key messages", func(t *testing.T) {
-		model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	Describe("ShowThemeSelector Edge Cases", func() {
+		It("should handle empty themes list", func() {
+			themes := []types.Theme{}
 
-		updatedSelector := model.(*ThemeSelector)
-		// State should remain unchanged
-		assert.Equal(t, 0, updatedSelector.cursor)
-		assert.False(t, updatedSelector.confirmed)
-		assert.False(t, updatedSelector.cancelled)
-		assert.Nil(t, cmd)
-	})
-}
+			_, err := ShowThemeSelector("neovim", themes)
 
-func TestThemeSelector_ArrowKeyNavigation(t *testing.T) {
-	themes := []types.Theme{
-		{Name: "Theme 1", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
-		{Name: "Theme 2", ThemeColor: "#16161D", ThemeBackground: "dark"},
-		{Name: "Theme 3", ThemeColor: "#FFFFFF", ThemeBackground: "light"},
-	}
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no themes available"))
+		})
 
-	selector := NewThemeSelector("test-app", themes)
+		It("should handle nil themes list", func() {
+			_, err := ShowThemeSelector("neovim", nil)
 
-	t.Run("should handle arrow key navigation", func(t *testing.T) {
-		// Test down arrow
-		model, _ := selector.Update(tea.KeyMsg{Type: tea.KeyDown})
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 1, updatedSelector.cursor)
-
-		// Test up arrow
-		model, _ = updatedSelector.Update(tea.KeyMsg{Type: tea.KeyUp})
-		updatedSelector = model.(*ThemeSelector)
-		assert.Equal(t, 0, updatedSelector.cursor)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no themes available"))
+		})
 	})
 
-	t.Run("should handle vim-style navigation", func(t *testing.T) {
-		// Test j (down)
-		model, _ := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-		updatedSelector := model.(*ThemeSelector)
-		assert.Equal(t, 1, updatedSelector.cursor)
+	Describe("Init", func() {
+		It("should return nil command", func() {
+			themes := []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+			}
 
-		// Test k (up)
-		model, _ = updatedSelector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-		updatedSelector = model.(*ThemeSelector)
-		assert.Equal(t, 0, updatedSelector.cursor)
+			selector := NewThemeSelector("neovim", themes)
+			cmd := selector.Init()
+
+			// Init should return nil
+			Expect(cmd).To(BeNil())
+		})
 	})
-}
+
+	Describe("HandleUnknownMessages", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
+
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+			}
+			selector = NewThemeSelector("neovim", themes)
+		})
+
+		It("should ignore non-key messages", func() {
+			// Send a mouse message (not a KeyMsg)
+			model, cmd := selector.Update("some other message")
+
+			updatedSelector := model.(*ThemeSelector)
+			// State should remain unchanged
+			Expect(updatedSelector.cursor).To(Equal(0))
+			Expect(updatedSelector.confirmed).To(BeFalse())
+			Expect(updatedSelector.cancelled).To(BeFalse())
+			Expect(cmd).To(BeNil())
+		})
+
+		It("should ignore unknown key messages", func() {
+			model, cmd := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+
+			updatedSelector := model.(*ThemeSelector)
+			// State should remain unchanged
+			Expect(updatedSelector.cursor).To(Equal(0))
+			Expect(updatedSelector.confirmed).To(BeFalse())
+			Expect(updatedSelector.cancelled).To(BeFalse())
+			Expect(cmd).To(BeNil())
+		})
+	})
+
+	Describe("Arrow Key Navigation", func() {
+		var themes []types.Theme
+		var selector *ThemeSelector
+
+		BeforeEach(func() {
+			themes = []types.Theme{
+				{Name: "Theme 1", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
+				{Name: "Theme 2", ThemeColor: "#16161D", ThemeBackground: "dark"},
+				{Name: "Theme 3", ThemeColor: "#FFFFFF", ThemeBackground: "light"},
+			}
+			selector = NewThemeSelector("test-app", themes)
+		})
+
+		It("should handle arrow key navigation", func() {
+			// Test down arrow
+			model, _ := selector.Update(tea.KeyMsg{Type: tea.KeyDown})
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(1))
+
+			// Test up arrow
+			model, _ = updatedSelector.Update(tea.KeyMsg{Type: tea.KeyUp})
+			updatedSelector = model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(0))
+		})
+
+		It("should handle vim-style navigation", func() {
+			// Test j (down)
+			model, _ := selector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+			updatedSelector := model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(1))
+
+			// Test k (up)
+			model, _ = updatedSelector.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
+			updatedSelector = model.(*ThemeSelector)
+			Expect(updatedSelector.cursor).To(Equal(0))
+		})
+	})
+})

@@ -89,22 +89,17 @@ func (x *XbpsInstaller) IsInstalled(command string) (bool, error) {
 			"xbps", command, err)
 	}
 
-	// Check if package is installed using xbps-query -l
-	checkCommand := fmt.Sprintf("xbps-query -l | grep -q '^ii %s-'", command)
-	_, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
+	log.Warn("XBPS IsInstalled is not fully implemented yet")
+	log.Info("To manually check if this package is installed, run: xbps-query -l | grep %s", command)
 
-	// Fallback: check using xbps-query specific package
-	checkCommand = fmt.Sprintf("xbps-query %s >/dev/null 2>&1", command)
-	_, err = utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
-
-	// If both checks fail, assume not installed
-	return false, nil
+	return false, common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"xbps", command,
+		[]string{
+			"Manual check: xbps-query -l | grep " + command,
+			"Package info: xbps-query " + command,
+			"Search packages: xbps-query -Rs " + command,
+		})
 }
 
 // validateXbpsSystem validates that the XBPS system is available and functional

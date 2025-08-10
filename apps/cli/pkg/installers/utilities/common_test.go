@@ -2,63 +2,73 @@ package utilities_test
 
 import (
 	"os"
-	"testing"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/mocks"
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
-func TestGetCurrentUser(t *testing.T) {
-	// Store original values
-	originalUser := os.Getenv("USER")
-	originalLogname := os.Getenv("LOGNAME")
-	originalExec := utils.CommandExec
+var _ = Describe("GetCurrentUser", func() {
+	var originalUser, originalLogname string
+	var originalExec utils.Interface
 
-	defer func() {
+	BeforeEach(func() {
+		// Store original values
+		originalUser = os.Getenv("USER")
+		originalLogname = os.Getenv("LOGNAME")
+		originalExec = utils.CommandExec
+	})
+
+	AfterEach(func() {
 		// Restore original values
 		os.Setenv("USER", originalUser)
 		os.Setenv("LOGNAME", originalLogname)
 		utils.CommandExec = originalExec
-	}()
-
-	t.Run("returns USER environment variable when available", func(t *testing.T) {
-		os.Setenv("USER", "testuser")
-		os.Setenv("LOGNAME", "")
-
-		user := utilities.GetCurrentUser()
-		if user != "testuser" {
-			t.Errorf("Expected 'testuser', got '%s'", user)
-		}
 	})
 
-	t.Run("falls back to LOGNAME when USER is empty", func(t *testing.T) {
-		os.Setenv("USER", "")
-		os.Setenv("LOGNAME", "loguser")
+	Context("when USER environment variable is available", func() {
+		It("should return USER environment variable", func() {
+			os.Setenv("USER", "testuser")
+			os.Setenv("LOGNAME", "")
 
-		user := utilities.GetCurrentUser()
-		if user != "loguser" {
-			t.Errorf("Expected 'loguser', got '%s'", user)
-		}
+			user := utilities.GetCurrentUser()
+			Expect(user).To(Equal("testuser"))
+		})
 	})
 
-	t.Run("falls back to whoami command when env vars are empty", func(t *testing.T) {
-		os.Setenv("USER", "")
-		os.Setenv("LOGNAME", "")
+	Context("when USER is empty but LOGNAME is available", func() {
+		It("should fall back to LOGNAME", func() {
+			os.Setenv("USER", "")
+			os.Setenv("LOGNAME", "loguser")
 
-		mockExec := mocks.NewMockCommandExecutor()
-		utils.CommandExec = mockExec
-
-		// Mock whoami command returning a user
-		// Note: The mock doesn't have AddCommand, so we'll test that it attempts the call
-		user := utilities.GetCurrentUser()
-
-		// Should attempt to run whoami (even if it fails in mock)
-		// The actual username will depend on the system user when os/user package works
-		// This test validates the function doesn't panic and returns a string
-		if user == "" {
-			// This is acceptable in test environment where all methods might fail
-			t.Log("GetCurrentUser returned empty string - acceptable in test environment")
-		}
+			user := utilities.GetCurrentUser()
+			Expect(user).To(Equal("loguser"))
+		})
 	})
-}
+
+	Context("when both environment variables are empty", func() {
+		It("should fall back to whoami command", func() {
+			os.Setenv("USER", "")
+			os.Setenv("LOGNAME", "")
+
+			mockExec := mocks.NewMockCommandExecutor()
+			utils.CommandExec = mockExec
+
+			// Mock whoami command returning a user
+			// Note: The mock doesn't have AddCommand, so we'll test that it attempts the call
+			user := utilities.GetCurrentUser()
+
+			// Should attempt to run whoami (even if it fails in mock)
+			// The actual username will depend on the system user when os/user package works
+			// This test validates the function doesn't panic and returns a string
+			if user == "" {
+				// This is acceptable in test environment where all methods might fail
+				GinkgoWriter.Println("GetCurrentUser returned empty string - acceptable in test environment")
+			}
+			Expect(user).To(BeAssignableToTypeOf(""))
+		})
+	})
+})
