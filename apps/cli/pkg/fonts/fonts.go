@@ -142,6 +142,7 @@ func UnzipAndMove(zipFile, extractPath, dest string) error {
 
 	for _, f := range reader.File {
 		// Security: prevent directory traversal attacks
+		// #nosec G305 -- Path traversal protection implemented below
 		destPath := filepath.Join(dest, f.Name)
 		if !strings.HasPrefix(destPath, filepath.Clean(dest)+string(os.PathSeparator)) {
 			log.Warn("Skipping file with invalid path", "file", f.Name)

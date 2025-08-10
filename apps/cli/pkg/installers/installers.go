@@ -457,6 +457,7 @@ func processThemes(app types.AppConfig) error {
 
 			// Set executable permissions for shell scripts
 			if strings.HasSuffix(destPath, ".sh") {
+				// #nosec G302 -- Shell scripts need execute permissions
 				if err := os.Chmod(destPath, 0700); err != nil {
 					log.Warn("Failed to set executable permissions on theme script", "error", err, "file", destPath)
 				}

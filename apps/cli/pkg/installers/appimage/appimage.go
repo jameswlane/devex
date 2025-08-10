@@ -202,6 +202,7 @@ func extractTarball(tarballPath, destDir string) error {
 			return fmt.Errorf("failed to read tarball header: %w", err)
 		}
 
+		// #nosec G305 -- Path traversal protection implemented below
 		target := filepath.Join(destDir, header.Name)
 		if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
 			log.Error("Potential directory traversal detected", fmt.Errorf("invalid entry: %s", header.Name))

@@ -146,15 +146,23 @@ func createSecureTempFile(dir, pattern string) (*os.File, error) {
 
 	// Validate the resulting path
 	if err := validateTempPath(tmpFile.Name()); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			log.Warn("Failed to close temp file during cleanup", "error", closeErr)
+		}
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return nil, fmt.Errorf("temp file path validation failed: %w", err)
 	}
 
 	// Set secure permissions (readable/writable by owner only)
 	if err := os.Chmod(tmpFile.Name(), 0600); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			log.Warn("Failed to close temp file during cleanup", "error", closeErr)
+		}
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return nil, fmt.Errorf("failed to set secure permissions: %w", err)
 	}
 
@@ -718,26 +726,34 @@ func (si *StreamingInstaller) downloadGPGKey(keyURL string) (string, error) {
 
 	req, err := http.NewRequestWithContext(si.ctx, "GET", keyURL, nil)
 	if err != nil {
-		os.Remove(tmpFile.Name())
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		os.Remove(tmpFile.Name())
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return "", fmt.Errorf("failed to download key: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		os.Remove(tmpFile.Name())
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return "", fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
 	// Copy content with size limit
 	_, err = io.CopyN(tmpFile, resp.Body, si.config.MaxGPGKeySize)
 	if err != nil && !errors.Is(err, io.EOF) {
-		os.Remove(tmpFile.Name())
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return "", fmt.Errorf("failed to write key: %w", err)
 	}
 
@@ -838,14 +854,21 @@ func (si *StreamingInstaller) createTempScript() (string, error) {
 	}
 
 	// Set execute permissions (in addition to the secure 0600 already set)
+	// #nosec G302 -- Script files need execute permissions
 	if err := os.Chmod(tmpFile.Name(), 0700); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		if closeErr := tmpFile.Close(); closeErr != nil {
+			log.Warn("Failed to close temp file during cleanup", "error", closeErr)
+		}
+		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
+			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
+		}
 		return "", fmt.Errorf("failed to set execute permissions: %w", err)
 	}
 
 	fileName := tmpFile.Name()
-	tmpFile.Close()
+	if closeErr := tmpFile.Close(); closeErr != nil {
+		log.Warn("Failed to close temp file", "error", closeErr)
+	}
 	return fileName, nil
 }
 
@@ -874,6 +897,7 @@ func (si *StreamingInstaller) downloadScript(downloadURL, filepath string) error
 	}
 
 	// Create/open file for writing
+	// #nosec G302 -- Script files need execute permissions
 	file, err := os.OpenFile(filepath, os.O_WRONLY|os.O_TRUNC, 0700)
 	if err != nil {
 		return fmt.Errorf("failed to open temp file: %w", err)
@@ -1086,13 +1110,19 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 
 	// Close pipes to signal goroutines to finish
 	if stdout != nil {
-		stdout.Close()
+		if closeErr := stdout.Close(); closeErr != nil {
+			log.Warn("Failed to close stdout pipe", "error", closeErr)
+		}
 	}
 	if stderr != nil {
-		stderr.Close()
+		if closeErr := stderr.Close(); closeErr != nil {
+			log.Warn("Failed to close stderr pipe", "error", closeErr)
+		}
 	}
 	if stdin != nil {
-		stdin.Close()
+		if closeErr := stdin.Close(); closeErr != nil {
+			log.Warn("Failed to close stdin pipe", "error", closeErr)
+		}
 	}
 
 	// Wait for all goroutines to finish

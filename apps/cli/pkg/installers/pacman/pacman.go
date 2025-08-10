@@ -270,7 +270,7 @@ func ensureYayInstalled() error {
 
 	// Create temporary directory for building yay
 	buildDir := fmt.Sprintf("%s/.cache/yay-build", homeDir)
-	if err := os.MkdirAll(buildDir, 0755); err != nil {
+	if err := os.MkdirAll(buildDir, 0750); err != nil {
 		return fmt.Errorf("failed to create build directory: %w", err)
 	}
 

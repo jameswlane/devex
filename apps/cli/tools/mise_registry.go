@@ -108,7 +108,7 @@ func GenerateMiseRegistryYAML() error {
 	})
 
 	// Ensure output directory exists
-	if err := os.MkdirAll("apps/cli/config", 0755); err != nil {
+	if err := os.MkdirAll("apps/cli/config", 0750); err != nil {
 		return fmt.Errorf("failed to ensure config dir: %w", err)
 	}
 
