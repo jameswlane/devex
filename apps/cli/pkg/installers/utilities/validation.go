@@ -98,9 +98,9 @@ func (bv *BackgroundValidator) RunValidations(ctx context.Context) error {
 	for result := range resultsChan {
 		bv.results[result.suite] = result.results
 
-		// Check for critical failures
+		// Check for critical failures (avoid nested locking by calling helper directly)
 		for _, r := range result.results {
-			if !r.Success && bv.isCriticalCheck(result.suite, r.Check) {
+			if !r.Success && bv.isCriticalCheckUnsafe(result.suite, r.Check) {
 				criticalErrors = append(criticalErrors,
 					fmt.Errorf("critical validation failed: %s.%s: %w", result.suite, r.Check, r.Error))
 			}
@@ -189,7 +189,11 @@ func (bv *BackgroundValidator) runCheck(ctx context.Context, check ValidationChe
 func (bv *BackgroundValidator) isCriticalCheck(suiteName, checkName string) bool {
 	bv.mutex.RLock()
 	defer bv.mutex.RUnlock()
+	return bv.isCriticalCheckUnsafe(suiteName, checkName)
+}
 
+// isCriticalCheckUnsafe determines if a check is marked as critical (assumes lock is already held)
+func (bv *BackgroundValidator) isCriticalCheckUnsafe(suiteName, checkName string) bool {
 	for _, suite := range bv.suites {
 		if suite.Name == suiteName {
 			for _, check := range suite.Checks {
