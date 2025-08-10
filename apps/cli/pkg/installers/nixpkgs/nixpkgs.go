@@ -90,27 +90,17 @@ func (n *NixpkgsInstaller) IsInstalled(command string) (bool, error) {
 			"nixpkgs", command, err)
 	}
 
-	// Check if package is installed using nix-env -q
-	checkCommand := fmt.Sprintf("nix-env -q | grep -q '%s'", command)
-	_, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
+	log.Warn("Nixpkgs IsInstalled is not fully implemented yet")
+	log.Info("To manually check if this package is installed, run: nix-env -q | grep %s", command)
 
-	// Fallback: check using which command for executables
-	checkCommand = fmt.Sprintf("which %s", command)
-	_, err = utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		// Double check it's from nix store
-		checkCommand = fmt.Sprintf("which %s | grep -q '/nix/store'", command)
-		_, err = utils.CommandExec.RunShellCommand(checkCommand)
-		if err == nil {
-			return true, nil
-		}
-	}
-
-	// If all checks fail, assume not installed
-	return false, nil
+	return false, common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"nixpkgs", command,
+		[]string{
+			"Manual check: nix-env -q | grep " + command,
+			"Search packages: nix-env -qaP " + command,
+			"Check store: which " + command + " | grep nix/store",
+		})
 }
 
 // validateNixpkgsSystem validates that the nix-env system is available and functional

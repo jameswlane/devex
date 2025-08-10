@@ -87,22 +87,17 @@ func (e *EopkgInstaller) IsInstalled(command string) (bool, error) {
 			"eopkg", command, err)
 	}
 
-	// Check if package is installed using eopkg list-installed
-	checkCommand := fmt.Sprintf("eopkg list-installed | grep -q '^%s '", command)
-	_, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
+	log.Warn("Eopkg IsInstalled is not fully implemented yet")
+	log.Info("To manually check if this package is installed, run: eopkg list-installed | grep %s", command)
 
-	// Fallback: check using eopkg info
-	checkCommand = fmt.Sprintf("eopkg info %s 2>&1 | grep -q 'Status.*installed'", command)
-	_, err = utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
-
-	// If both checks fail, assume not installed
-	return false, nil
+	return false, common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"eopkg", command,
+		[]string{
+			"Manual check: eopkg list-installed | grep " + command,
+			"Package info: eopkg info " + command,
+			"Search packages: eopkg search " + command,
+		})
 }
 
 // validateEopkgSystem validates that the eopkg system is available and functional

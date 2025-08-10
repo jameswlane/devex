@@ -91,36 +91,17 @@ func (n *NixFlakeInstaller) IsInstalled(command string) (bool, error) {
 			"nix-flake", command, err)
 	}
 
-	// Check if package is installed using nix profile list
-	checkCommand := fmt.Sprintf("nix profile list | grep -q '%s'", command)
-	_, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
+	log.Warn("Nix Flake IsInstalled is not fully implemented yet")
+	log.Info("To manually check if this package is installed, run: nix profile list | grep %s", command)
 
-	// Fallback: check using which command for executables
-	// Extract package name from flake reference if needed
-	pkgName := command
-	if strings.Contains(command, "#") {
-		parts := strings.Split(command, "#")
-		if len(parts) > 1 {
-			pkgName = parts[len(parts)-1]
-		}
-	}
-
-	checkCommand = fmt.Sprintf("which %s", pkgName)
-	_, err = utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		// Double check it's from nix store
-		checkCommand = fmt.Sprintf("which %s | grep -q '/nix/store'", pkgName)
-		_, err = utils.CommandExec.RunShellCommand(checkCommand)
-		if err == nil {
-			return true, nil
-		}
-	}
-
-	// If all checks fail, assume not installed
-	return false, nil
+	return false, common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"nix-flake", command,
+		[]string{
+			"Manual check: nix profile list | grep " + command,
+			"Search flakes: nix search nixpkgs " + command,
+			"Check store: which <pkg_name> | grep nix/store",
+		})
 }
 
 // validateNixSystem validates that the Nix system is available and functional

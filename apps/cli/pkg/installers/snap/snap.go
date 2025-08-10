@@ -90,15 +90,17 @@ func (s *SnapInstaller) IsInstalled(command string) (bool, error) {
 			"snap", command, err)
 	}
 
-	// Check if snap is installed using snap list
-	checkCommand := fmt.Sprintf("snap list | grep -q '^%s '", command)
-	_, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err == nil {
-		return true, nil
-	}
+	log.Warn("Snap IsInstalled is not fully implemented yet")
+	log.Info("To manually check if this package is installed, run: snap list %s", command)
 
-	// If snap list fails, assume not installed
-	return false, nil
+	return false, common.NewInstallerErrorWithSuggestions(
+		common.ErrorTypeNotImplemented,
+		"snap", command,
+		[]string{
+			"Manual check: snap list " + command,
+			"List all snaps: snap list",
+			"Search snaps: snap find " + command,
+		})
 }
 
 // validateSnapSystem validates that the snap system is available and functional

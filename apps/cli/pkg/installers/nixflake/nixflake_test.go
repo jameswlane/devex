@@ -1,38 +1,49 @@
 package nixflake_test
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/installers/nixflake"
 	"github.com/jameswlane/devex/pkg/mocks"
 )
 
-func TestNewNixFlakeInstaller(t *testing.T) {
-	installer := nixflake.NewNixFlakeInstaller()
-	if installer == nil {
-		t.Errorf("NewNixFlakeInstaller() returned nil")
-	}
-}
+var _ = Describe("NixFlake Installer", func() {
+	Describe("NewNixFlakeInstaller", func() {
+		It("should create a new installer instance", func() {
+			installer := nixflake.NewNixFlakeInstaller()
+			Expect(installer).ToNot(BeNil())
+		})
+	})
 
-func TestNixFlakeInstaller_Methods(t *testing.T) {
-	installer := nixflake.NewNixFlakeInstaller()
-	mockRepo := &mocks.MockRepository{}
+	Describe("Installer Methods", func() {
+		var installer *nixflake.NixFlakeInstaller
+		var mockRepo *mocks.MockRepository
 
-	// Test Install - should return not implemented error
-	err := installer.Install("test-package", mockRepo)
-	if err == nil {
-		t.Errorf("Install() should return an error for unimplemented installer")
-	}
+		BeforeEach(func() {
+			installer = nixflake.NewNixFlakeInstaller()
+			mockRepo = &mocks.MockRepository{}
+		})
 
-	// Test Uninstall - should return not implemented error
-	err = installer.Uninstall("test-package", mockRepo)
-	if err == nil {
-		t.Errorf("Uninstall() should return an error for unimplemented installer")
-	}
+		Context("Install", func() {
+			It("should return an error for unimplemented installer", func() {
+				err := installer.Install("test-package", mockRepo)
+				Expect(err).To(HaveOccurred())
+			})
+		})
 
-	// Test IsInstalled - should return an error for unimplemented installer
-	_, err = installer.IsInstalled("test-package")
-	if err == nil {
-		t.Errorf("IsInstalled() should return an error for unimplemented installer")
-	}
-}
+		Context("Uninstall", func() {
+			It("should return an error for unimplemented installer", func() {
+				err := installer.Uninstall("test-package", mockRepo)
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		Context("IsInstalled", func() {
+			It("should return an error for unimplemented installer", func() {
+				_, err := installer.IsInstalled("test-package")
+				Expect(err).To(HaveOccurred())
+			})
+		})
+	})
+})

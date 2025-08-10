@@ -1,107 +1,101 @@
 package utilities_test
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/mocks"
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
-func TestHandlerRegistry(t *testing.T) {
-	t.Run("creates new registry with default handlers", func(t *testing.T) {
-		registry := utilities.NewHandlerRegistry()
+var _ = Describe("Handler Registry", func() {
+	Describe("NewHandlerRegistry", func() {
+		It("should create registry with default handlers", func() {
+			registry := utilities.NewHandlerRegistry()
 
-		// Check that default Docker handlers are registered
-		if !registry.HasHandler("docker") {
-			t.Error("Expected docker handler to be registered")
-		}
-
-		if !registry.HasHandler("docker-ce") {
-			t.Error("Expected docker-ce handler to be registered")
-		}
-
-		if !registry.HasHandler("nginx") {
-			t.Error("Expected nginx handler to be registered")
-		}
+			// Check that default Docker handlers are registered
+			Expect(registry.HasHandler("docker")).To(BeTrue())
+			Expect(registry.HasHandler("docker-ce")).To(BeTrue())
+			Expect(registry.HasHandler("nginx")).To(BeTrue())
+		})
 	})
 
-	t.Run("registers and executes custom handlers", func(t *testing.T) {
-		registry := utilities.NewHandlerRegistry()
+	Describe("custom handlers", func() {
+		var registry *utilities.HandlerRegistry
+		var executed bool
+		var testHandler func() error
 
-		executed := false
-		testHandler := func() error {
-			executed = true
-			return nil
-		}
+		BeforeEach(func() {
+			registry = utilities.NewHandlerRegistry()
+			executed = false
+			testHandler = func() error {
+				executed = true
+				return nil
+			}
+		})
 
-		registry.Register("test-package", testHandler)
+		It("should register and execute custom handlers", func() {
+			registry.Register("test-package", testHandler)
 
-		if !registry.HasHandler("test-package") {
-			t.Error("Expected test-package handler to be registered")
-		}
+			Expect(registry.HasHandler("test-package")).To(BeTrue())
 
-		err := registry.Execute("test-package")
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
+			err := registry.Execute("test-package")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(executed).To(BeTrue())
+		})
 
-		if !executed {
-			t.Error("Expected handler to be executed")
-		}
+		It("should return nil for packages without handlers", func() {
+			err := registry.Execute("nonexistent-package")
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
-	t.Run("returns nil for packages without handlers", func(t *testing.T) {
-		registry := utilities.NewHandlerRegistry()
+	Describe("ExecutePostInstallHandler", func() {
+		var executed bool
+		var testHandler func() error
 
-		err := registry.Execute("nonexistent-package")
-		if err != nil {
-			t.Errorf("Expected no error for nonexistent package, got %v", err)
-		}
+		BeforeEach(func() {
+			executed = false
+			testHandler = func() error {
+				executed = true
+				return nil
+			}
+		})
+
+		It("should execute handler for registered package", func() {
+			utilities.RegisterHandler("test-registry-package", testHandler)
+
+			err := utilities.ExecutePostInstallHandler("test-registry-package")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(executed).To(BeTrue())
+		})
+
+		Context("with mocked commands", func() {
+			var originalExec utils.Interface
+
+			BeforeEach(func() {
+				// Store original CommandExec
+				originalExec = utils.CommandExec
+
+				// Create mock executor
+				mockExec := mocks.NewMockCommandExecutor()
+				utils.CommandExec = mockExec
+			})
+
+			AfterEach(func() {
+				utils.CommandExec = originalExec
+			})
+
+			It("should handle package variations", func() {
+				// Test that docker variations work
+				Expect(utilities.DefaultRegistry.HasHandler("docker")).To(BeTrue())
+
+				// Test execution with mocked commands
+				err := utilities.ExecutePostInstallHandler("docker")
+				// Should not fail with mocked commands
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
 	})
-}
-
-func TestExecutePostInstallHandler(t *testing.T) {
-	t.Run("executes handler for registered package", func(t *testing.T) {
-		executed := false
-		testHandler := func() error {
-			executed = true
-			return nil
-		}
-
-		utilities.RegisterHandler("test-registry-package", testHandler)
-
-		err := utilities.ExecutePostInstallHandler("test-registry-package")
-		if err != nil {
-			t.Errorf("Expected no error, got %v", err)
-		}
-
-		if !executed {
-			t.Error("Expected handler to be executed")
-		}
-	})
-
-	t.Run("handles package variations with mocked commands", func(t *testing.T) {
-		// Store original CommandExec
-		originalExec := utils.CommandExec
-		defer func() {
-			utils.CommandExec = originalExec
-		}()
-
-		// Create mock executor
-		mockExec := mocks.NewMockCommandExecutor()
-		utils.CommandExec = mockExec
-
-		// Test that docker variations work
-		if !utilities.DefaultRegistry.HasHandler("docker") {
-			t.Error("Expected docker handler to be available")
-		}
-
-		// Test execution with mocked commands
-		err := utilities.ExecutePostInstallHandler("docker")
-		// Should not fail with mocked commands
-		if err != nil {
-			t.Errorf("Expected no error with mocked commands, got %v", err)
-		}
-	})
-}
+})
