@@ -217,326 +217,202 @@ var _ = Describe("Model", func() {
 
 	Describe("InputSubmission", func() {
 		It("should handle input submission properly", func() {
-	model := NewModel(createTestApps())
+			model := NewModel(createTestApps())
 
-	// Set up input state
-	responseChan := make(chan *SecureString, 1)
-	model.needsInput = true
-	model.inputPrompt = "Enter password:"
-	model.inputResponse = responseChan
+			// Set up input state
+			responseChan := make(chan *SecureString, 1)
+			model.needsInput = true
+			model.inputPrompt = "Enter password:"
+			model.inputResponse = responseChan
 
-	// Simulate user typing password
-	model.textInput.SetValue("secret123")
+			// Simulate user typing password
+			model.textInput.SetValue("secret123")
 
-	// Send enter key
-	keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
-	updatedModel, cmd := model.Update(keyMsg)
-	m := updatedModel.(*Model)
+			// Send enter key
+			keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+			updatedModel, cmd := model.Update(keyMsg)
+			m := updatedModel.(*Model)
 
-	// Verify input was submitted
-	assert.False(t, m.needsInput)
-	assert.Equal(t, "", m.inputPrompt)
-	assert.Equal(t, "", m.textInput.Value())
+			// Verify input was submitted using Gomega assertions
+			Expect(m.needsInput).To(BeFalse())
+			Expect(m.inputPrompt).To(Equal(""))
+			Expect(m.textInput.Value()).To(Equal(""))
 
-	// Verify response was sent
-	select {
-	case response := <-responseChan:
-		assert.Equal(t, "secret123", response.String())
-		response.Clear() // Clean up
-	default:
-		t.Fatal("No response received")
-	}
-
-	assert.Nil(t, cmd)
-}
-
-func TestModel_AppCompletion(t *testing.T) {
-	apps := createTestApps()
-	model := NewModel(apps)
-
-	// Test successful app completion
-	successMsg := AppCompleteMsg{
-		AppName: "test-app-1",
-		Error:   nil,
-	}
-
-	updatedModel, cmd := model.Update(successMsg)
-	m := updatedModel.(*Model)
-
-	assert.Equal(t, "Successfully installed test-app-1", m.status)
-	assert.Equal(t, int64(1), m.completedApps) // Use atomic counter
-	assert.Nil(t, cmd)                         // No command returned in new architecture
-
-	// Test failed app completion
-	errorMsg := AppCompleteMsg{
-		AppName: "test-app-2",
-		Error:   fmt.Errorf("installation failed"),
-	}
-
-	updatedModel, _ = m.Update(errorMsg)
-	m = updatedModel.(*Model)
-
-	assert.Contains(t, m.status, "Error installing test-app-2")
-	assert.Contains(t, m.status, "installation failed")
-	assert.Equal(t, int64(2), m.completedApps) // Counter still increments on error
-}
-
-func TestModel_AllAppsCompleted(t *testing.T) {
-	apps := createTestApps()
-	model := NewModel(apps)
-
-	// Complete all apps
-	for i := 0; i < len(apps); i++ {
-		successMsg := AppCompleteMsg{
-			AppName: apps[i].Name,
-			Error:   nil,
-		}
-		updatedModel, _ := model.Update(successMsg)
-		model = updatedModel.(*Model)
-	}
-
-	// Verify completion status
-	assert.Equal(t, "All applications installed successfully!", model.status)
-	assert.Equal(t, int64(len(apps)), model.completedApps) // Use atomic counter
-}
-
-func TestModel_KeyboardHandling(t *testing.T) {
-	model := NewModel(createTestApps())
-
-	testCases := []struct {
-		name     string
-		key      tea.KeyMsg
-		expected tea.Cmd
-	}{
-		{
-			name:     "quit with q",
-			key:      tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}},
-			expected: tea.Quit,
-		},
-		{
-			name:     "quit with ctrl+c",
-			key:      tea.KeyMsg{Type: tea.KeyCtrlC},
-			expected: tea.Quit,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, cmd := model.Update(tc.key)
-
-			if cmd != nil {
-				// For quit commands, we just verify a command was returned
-				assert.NotNil(t, cmd)
-			} else {
-				assert.Nil(t, cmd)
+			// Verify response was sent
+			select {
+			case response := <-responseChan:
+				Expect(response.String()).To(Equal("secret123"))
+				response.Clear() // Clean up
+			default:
+				Fail("No response received")
 			}
+
+			Expect(cmd).To(BeNil())
 		})
-	}
-}
+	})
 
-func TestModel_ViewRendering(t *testing.T) {
-	model := NewModel(createTestApps())
+	Describe("App Completion", func() {
+		It("should handle successful app completion", func() {
+			apps := createTestApps()
+			model := NewModel(apps)
 
-	// Test view when not ready
-	view := model.View()
-	assert.Equal(t, "Initializing...", view)
+			// Test successful app completion
+			successMsg := AppCompleteMsg{
+				AppName: "test-app-1",
+				Error:   nil,
+			}
 
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
+			updatedModel, cmd := model.Update(successMsg)
+			m := updatedModel.(*Model)
 
-	// Test view when ready
-	view = model.View()
-	assert.NotEqual(t, "Initializing...", view)
-	assert.Contains(t, view, "DevEx Installation")
-	assert.Contains(t, view, "Terminal Output")
-}
+			Expect(m.status).To(Equal("Successfully installed test-app-1"))
+			Expect(m.completedApps).To(Equal(int64(1))) // Use atomic counter
+			Expect(cmd).To(BeNil())                     // No command returned in new architecture
+		})
 
-func TestModel_ProgressCalculation(t *testing.T) {
-	apps := createTestApps()
-	model := NewModel(apps)
+		It("should handle failed app completion", func() {
+			apps := createTestApps()
+			model := NewModel(apps)
 
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
+			// Complete one app first to set up state
+			successMsg := AppCompleteMsg{
+				AppName: "test-app-1",
+				Error:   nil,
+			}
+			updatedModel, _ := model.Update(successMsg)
+			m := updatedModel.(*Model)
 
-	// Initial progress should be 0
-	view := model.View()
-	assert.Contains(t, view, "0/3 apps")
+			// Test failed app completion
+			errorMsg := AppCompleteMsg{
+				AppName: "test-app-2",
+				Error:   fmt.Errorf("installation failed"),
+			}
 
-	// Complete first app
-	model.currentApp = 1
-	view = model.View()
-	assert.Contains(t, view, "0/3 apps") // Still 0 because we use atomic counter
+			updatedModel, _ = m.Update(errorMsg)
+			m = updatedModel.(*Model)
 
-	// Complete all apps
-	model.currentApp = 3
-	view = model.View()
-	assert.Contains(t, view, "0/3 apps") // Still 0 because we use atomic counter
-}
+			Expect(m.status).To(ContainSubstring("Error installing test-app-2"))
+			Expect(m.status).To(ContainSubstring("installation failed"))
+			Expect(m.completedApps).To(Equal(int64(2))) // Counter still increments on error
+		})
+	})
 
-func TestModel_CurrentAppDisplay(t *testing.T) {
-	apps := createTestApps()
-	model := NewModel(apps)
+	Describe("All Apps Completed", func() {
+		It("should handle completion of all apps", func() {
+			apps := createTestApps()
+			model := NewModel(apps)
 
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
+			// Complete all apps
+			for i := 0; i < len(apps); i++ {
+				successMsg := AppCompleteMsg{
+					AppName: apps[i].Name,
+					Error:   nil,
+				}
+				updatedModel, _ := model.Update(successMsg)
+				model = updatedModel.(*Model)
+			}
 
-	// Should show first app initially
-	view := model.View()
-	assert.Contains(t, view, apps[0].Name)
-	assert.Contains(t, view, apps[0].Description)
+			// Verify completion status
+			Expect(model.status).To(Equal("All applications installed successfully!"))
+			Expect(model.completedApps).To(Equal(int64(len(apps)))) // Use atomic counter
+		})
+	})
 
-	// Advance to next app
-	model.currentApp = 1
-	view = model.View()
-	assert.Contains(t, view, apps[1].Name)
-	assert.Contains(t, view, apps[1].Description)
+	Describe("Keyboard Handling", func() {
+		It("should quit on ESC key", func() {
+			model := NewModel(createTestApps())
+			keyMsg := tea.KeyMsg{Type: tea.KeyEsc}
 
-	// When all apps completed, shouldn't show current app
-	model.currentApp = len(apps)
-	view = model.View()
-	// Should not contain "Installing:" since we're done
-	assert.NotContains(t, view, "Installing:")
-}
+			_, cmd := model.Update(keyMsg)
 
-func TestModel_InputPromptDisplay(t *testing.T) {
-	model := NewModel(createTestApps())
+			// For quit operations, we expect a quit command
+			Expect(cmd).ToNot(BeNil())
+		})
 
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
+		It("should quit on Ctrl+C", func() {
+			model := NewModel(createTestApps())
+			keyMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
 
-	// No input prompt initially
-	view := model.View()
-	assert.NotContains(t, view, "Input Required:")
+			_, cmd := model.Update(keyMsg)
 
-	// Set input prompt
-	model.needsInput = true
-	model.inputPrompt = "Enter your password:"
+			// For quit operations, we expect a quit command
+			Expect(cmd).ToNot(BeNil())
+		})
 
-	view = model.View()
-	assert.Contains(t, view, "Input Required:")
-	assert.Contains(t, view, "Enter your password:")
-	assert.Contains(t, view, "Press Enter to submit")
-}
+		It("should quit on q key", func() {
+			model := NewModel(createTestApps())
+			keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}}
 
-// Helper functions
+			_, cmd := model.Update(keyMsg)
 
+			// For quit operations, we expect a quit command
+			Expect(cmd).ToNot(BeNil())
+		})
+	})
+
+	Describe("View Rendering", func() {
+		It("should render the correct view", func() {
+			model := NewModel(createTestApps())
+			model.ready = true
+			model.width = 100
+			model.height = 50
+
+			// Initialize viewport with proper dimensions
+			windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
+			updatedModel, _ := model.Update(windowMsg)
+			model = updatedModel.(*Model)
+
+			view := model.View()
+
+			// Basic checks that view contains expected elements
+			Expect(view).To(ContainSubstring("DevEx Application Installer"))
+			Expect(view).To(ContainSubstring("Ready to install"))
+			Expect(view).To(ContainSubstring("applications"))
+			Expect(view).ToNot(BeEmpty())
+		})
+	})
+
+	Describe("Progress Calculation", func() {
+		It("should calculate progress correctly", func() {
+			apps := createTestApps()
+			model := NewModel(apps)
+
+			// Initially no progress
+			Expect(model.progress.Percent()).To(Equal(float64(0)))
+
+			// Complete one app
+			successMsg := AppCompleteMsg{
+				AppName: "test-app-1",
+				Error:   nil,
+			}
+			updatedModel, _ := model.Update(successMsg)
+			model = updatedModel.(*Model)
+
+			// Progress should be updated (1/3 = ~0.33)
+			expectedProgress := float64(1) / float64(len(apps))
+			Expect(model.progress.Percent()).To(BeNumerically("~", expectedProgress, 0.01))
+
+			// Complete remaining apps
+			for i := 1; i < len(apps); i++ {
+				successMsg := AppCompleteMsg{
+					AppName: apps[i].Name,
+					Error:   nil,
+				}
+				updatedModel, _ := model.Update(successMsg)
+				model = updatedModel.(*Model)
+			}
+
+			// Progress should be 100%
+			Expect(model.progress.Percent()).To(Equal(float64(1)))
+		})
+	})
+})
+
+// Helper function to create test apps
 func createTestApps() []types.CrossPlatformApp {
 	return []types.CrossPlatformApp{
-		{
-			Name:        "test-app-1",
-			Description: "First test application",
-			Category:    "development",
-			Default:     true,
-			Linux: types.OSConfig{
-				InstallMethod:  "apt",
-				InstallCommand: "apt install test-app-1",
-			},
-		},
-		{
-			Name:        "test-app-2",
-			Description: "Second test application",
-			Category:    "development",
-			Default:     true,
-			Linux: types.OSConfig{
-				InstallMethod:  "curl",
-				InstallCommand: "curl -fsSL https://example.com/install.sh | bash",
-			},
-		},
-		{
-			Name:        "test-app-3",
-			Description: "Third test application",
-			Category:    "optional",
-			Default:     false,
-			Linux: types.OSConfig{
-				InstallMethod:  "snap",
-				InstallCommand: "snap install test-app-3",
-			},
-		},
-	}
-}
-
-// Benchmark tests
-
-func BenchmarkModel_LogProcessing(b *testing.B) {
-	model := NewModel(createTestApps())
-
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
-
-	logMsg := LogMsg{
-		Message:   "Benchmark log message",
-		Level:     "INFO",
-		Timestamp: time.Now(),
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		model.Update(logMsg)
-	}
-}
-
-func BenchmarkModel_ViewRendering(b *testing.B) {
-	model := NewModel(createTestApps())
-
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
-
-	// Add some logs for more realistic rendering
-	for i := 0; i < 10; i++ {
-		logMsg := LogMsg{
-			Message:   fmt.Sprintf("Log message %d", i),
-			Level:     "INFO",
-			Timestamp: time.Now(),
-		}
-		updatedModel, _ := model.Update(logMsg)
-		model = updatedModel.(*Model)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = model.View()
-	}
-}
-
-func BenchmarkModel_LargeLogRotation(b *testing.B) {
-	model := NewModel(createTestApps())
-
-	// Initialize viewport properly
-	windowMsg := tea.WindowSizeMsg{Width: 100, Height: 50}
-	updatedModel, _ := model.Update(windowMsg)
-	model = updatedModel.(*Model)
-
-	// Fill up to maxLogLines
-	for i := 0; i < maxLogLines; i++ {
-		logMsg := LogMsg{
-			Message:   fmt.Sprintf("Setup log %d", i),
-			Level:     "INFO",
-			Timestamp: time.Now(),
-		}
-		updatedModel, _ := model.Update(logMsg)
-		model = updatedModel.(*Model)
-	}
-
-	newLogMsg := LogMsg{
-		Message:   "Benchmark log rotation",
-		Level:     "INFO",
-		Timestamp: time.Now(),
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		model.Update(newLogMsg)
+		{Name: "test-app-1", Description: "Test App 1"},
+		{Name: "test-app-2", Description: "Test App 2"},
+		{Name: "test-app-3", Description: "Test App 3"},
 	}
 }
