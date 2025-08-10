@@ -7,7 +7,6 @@
 		"build": "mkdir -p bin && go build -o bin/devex ./cmd/main.go",
 		"build:go": "mkdir -p bin && go build -o bin/devex ./cmd/main.go",
 		"build:local": "mkdir -p bin && go build -o bin/devex -v ./cmd/main.go",
-		"postinstall": "go mod download && go mod tidy",
 		"dev": "task dev:watch",
 		"lint": "golangci-lint run",
 		"lint:go": "golangci-lint run",
