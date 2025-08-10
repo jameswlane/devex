@@ -1,16 +1,115 @@
 {
 	"$schema": "https://turborepo.com/schema.json",
+	"globalDependencies": ["**/.env.*local"],
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"outputs": [".next/**", "!.next/cache/**"]
+			"outputs": [".next/**", "!.next/cache/**", "bin/**", "out/**"],
+			"inputs": [
+				"src/**",
+				"cmd/**",
+				"pkg/**",
+				"*.go",
+				"go.mod",
+				"go.sum",
+				"Taskfile.yml"
+			]
+		},
+		"build:go": {
+			"dependsOn": ["^build:go"],
+			"outputs": ["bin/**"],
+			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"cache": true
+		},
+		"build:local": {
+			"dependsOn": [],
+			"outputs": ["bin/**"],
+			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"cache": false
 		},
 		"check-types": {
-			"dependsOn": ["^check-types"]
+			"dependsOn": ["^check-types"],
+			"inputs": ["**/*.ts", "**/*.tsx", "tsconfig.json"]
+		},
+		"lint": {
+			"dependsOn": ["^lint"],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				".golangci.yml",
+				"biome.json"
+			],
+			"cache": true
+		},
+		"lint:go": {
+			"dependsOn": [],
+			"inputs": ["**/*.go", ".golangci.yml"],
+			"cache": true
+		},
+		"lint:fix": {
+			"dependsOn": [],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				".golangci.yml",
+				"biome.json"
+			],
+			"cache": false
+		},
+		"test": {
+			"dependsOn": ["build"],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				"go.mod",
+				"go.sum",
+				"**/*_test.go"
+			],
+			"outputs": ["coverage.out", "test-results.json"],
+			"cache": true
+		},
+		"test:go": {
+			"dependsOn": ["build:go"],
+			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
+			"outputs": ["coverage.out"],
+			"cache": true
+		},
+		"test:ginkgo": {
+			"dependsOn": ["build:go"],
+			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
+			"cache": true
+		},
+		"vulncheck": {
+			"dependsOn": [],
+			"inputs": ["go.mod", "go.sum"],
+			"cache": true
+		},
+		"mod": {
+			"dependsOn": [],
+			"inputs": ["go.mod"],
+			"outputs": ["go.sum"],
+			"cache": true
+		},
+		"install": {
+			"dependsOn": ["build:go"],
+			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"cache": false
+		},
+		"clean": {
+			"cache": false
 		},
 		"dev": {
 			"persistent": true,
+			"cache": false,
+			"dependsOn": ["^build"]
+		},
+		"start": {
+			"dependsOn": ["build"],
 			"cache": false
 		}
-	}
+	},
+	"globalEnv": ["CI", "VERCEL_URL"]
 }

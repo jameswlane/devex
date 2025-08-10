@@ -1,0 +1,37 @@
+{
+	"name": "cli",
+	"version": "1.0.0",
+	"description": "DevEx CLI - Development environment setup tool",
+	"private": true,
+	"scripts": {
+		"build": "task build",
+		"build:go": "task build",
+		"build:local": "task build:local",
+		"install": "task install",
+		"dev": "task dev:watch",
+		"lint": "task lint",
+		"lint:go": "task lint",
+		"lint:fix": "task lint:fix",
+		"test": "task test",
+		"test:go": "task test",
+		"test:ginkgo": "task test:ginkgo",
+		"test:integration": "task test:integration",
+		"test:coverage": "task test:coverage",
+		"vulncheck": "task vulncheck",
+		"clean": "task clean",
+		"ci": "task ci"
+	},
+	"keywords": [
+		"cli",
+		"development",
+		"environment",
+		"setup",
+		"automation",
+		"go",
+		"linux",
+		"macos",
+		"windows"
+	],
+	"author": "James W Lane",
+	"license": "GPL-3.0"
+}
