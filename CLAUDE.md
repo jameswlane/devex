@@ -101,13 +101,7 @@ pnpm biome:check
 cd apps/cli
 
 # Run individual test suites
-go test ./pkg/datastore/...           # Test specific package
 ginkgo run ./pkg/commands/            # Run Ginkgo tests for commands
-go test -run TestSpecificFunction     # Run specific test function
-
-# Coverage
-go test -coverprofile=coverage.out ./...
-go tool cover -html=coverage.out
 ```
 
 ## Architecture
