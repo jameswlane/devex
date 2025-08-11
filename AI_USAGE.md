@@ -10,7 +10,8 @@ AI is used for:
   - Potential bugs or issues
   - Performance considerations
   - Security concerns
-  - Test coverage  
-  The AI is instructed to be constructive and helpful in its feedback.
+  - Test coverage
+    
+The AI is instructed to be constructive and helpful in its feedback.
 
 All code, documentation, and project decisions are reviewed and approved by a human before inclusion in the repository.
