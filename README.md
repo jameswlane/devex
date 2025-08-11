@@ -278,3 +278,8 @@ DevEx is licensed under the [GNU GPL v3 License](LICENSE).
 ## Security
 
 For security concerns, please refer to our [Security Policy](SECURITY.md).
+
+---
+
+**Note:** This project uses AI-assisted tools for certain tasks.  
+[Learn more about our AI usage here.](./AI_USAGE.md)
