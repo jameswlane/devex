@@ -275,8 +275,8 @@ var (
 		regexp.MustCompile(`[;&|]{1,2}\s*rm\s+-rf\s+/`),               // Dangerous rm -rf / after command separators
 		regexp.MustCompile(`[;&|]{1,2}\s*sudo\s+rm\s+-rf`),            // Dangerous sudo rm -rf after command separators
 		regexp.MustCompile(`[;&|]{1,2}\s*rm\s+-rf\s+/(home|var|usr)`), // Dangerous rm -rf on system directories
-		regexp.MustCompile(`\|\s*sh\s*<?`),                            // Piping to shell
-		regexp.MustCompile(`\|\s*bash\s*<?`),                          // Piping to bash
+		regexp.MustCompile(`\|\s*(bash|sh)\s+-c\s+.*rm`),              // Pipes to shell with rm commands
+		regexp.MustCompile(`\|\s*(bash|sh)\s+-c\s+.*>\s*/`),           // Pipes to shell writing to filesystem
 		regexp.MustCompile(`[;&|]{1,2}\s*curl\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
 		regexp.MustCompile(`[;&|]{1,2}\s*wget\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
 		regexp.MustCompile(`\$\([^)]*\)`),                             // Command substitution
@@ -290,8 +290,9 @@ var (
 		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                     // Fork bombs
 		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),        // Writing to critical system files
 		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),            // Writing to block devices (not /dev/null)
-		regexp.MustCompile(`\s+&\s+\w+`),                              // Background processes with additional commands
-		regexp.MustCompile(`\s+\|\s+\w+`),                             // Pipes to other commands
+		regexp.MustCompile(`\s+&\s+[^&]+`),                            // Background processes with additional commands (but not &&)
+		regexp.MustCompile(`\|\s*(sh|bash)\s*<?`),                     // Pipes specifically to shell interpreters (more specific)
+		regexp.MustCompile(`\|\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$`),         // Pipes to potentially malicious commands (not safe patterns)
 		regexp.MustCompile(`\s+\|\|\s+\w+`),                           // OR operator with additional commands
 		regexp.MustCompile("`[^`]*`"),                                 // Backtick command substitution
 		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),          // Writing to specific dangerous device files
@@ -403,6 +404,28 @@ func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command st
 
 // ValidateCommand implements CommandExecutor.ValidateCommand
 func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
+	// Check for safe patterns first (GPG keys and system info)
+	safePatterns := []*regexp.Regexp{
+		regexp.MustCompile(`bash\s+-c\s+'\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+'`),                                                // OS release info
+		regexp.MustCompile(`bash\s+-c\s+"\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+"`),                                                // OS release info (double quotes)
+		regexp.MustCompile(`curl\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with curl and apt-key
+		regexp.MustCompile(`wget\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with wget and apt-key
+		regexp.MustCompile(`curl\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with curl
+		regexp.MustCompile(`wget\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with wget
+		regexp.MustCompile(`bash\s+-c\s+'[^']*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^']*'`),                     // Mise PATH setup and commands (single quotes)
+		regexp.MustCompile(`bash\s+-c\s+"[^"]*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^"]*"`),                     // Mise PATH setup and commands (double quotes)
+		regexp.MustCompile(`bash\s+-c\s+'[^']*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^']*'`), // Mise conditional installation (single quotes)
+		regexp.MustCompile(`bash\s+-c\s+"[^"]*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^"]*"`), // Mise conditional installation (double quotes)
+	}
+
+	// If it matches a safe pattern, allow it
+	for _, safePattern := range safePatterns {
+		if safePattern.MatchString(command) {
+			// Still need to check the command is whitelisted
+			return ce.validateCommandWhitelist(command)
+		}
+	}
+
 	// Check for dangerous patterns
 	for _, pattern := range dangerousPatterns {
 		if pattern.MatchString(command) {
@@ -410,6 +433,11 @@ func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
 		}
 	}
 
+	return ce.validateCommandWhitelist(command)
+}
+
+// validateCommandWhitelist validates that the command is in the whitelist
+func (ce *DefaultCommandExecutor) validateCommandWhitelist(command string) error {
 	// Parse command and validate the first word
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
@@ -1108,24 +1136,10 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	// Wait for command completion
 	cmdErr := cmd.Wait()
 
-	// Close pipes to signal goroutines to finish
-	if stdout != nil {
-		if closeErr := stdout.Close(); closeErr != nil {
-			log.Warn("Failed to close stdout pipe", "error", closeErr)
-		}
-	}
-	if stderr != nil {
-		if closeErr := stderr.Close(); closeErr != nil {
-			log.Warn("Failed to close stderr pipe", "error", closeErr)
-		}
-	}
-	if stdin != nil {
-		if closeErr := stdin.Close(); closeErr != nil {
-			log.Warn("Failed to close stdin pipe", "error", closeErr)
-		}
-	}
+	// Note: cmd.Wait() automatically closes stdout, stderr, and stdin pipes
+	// so we don't need to close them manually to avoid "file already closed" errors
 
-	// Wait for all goroutines to finish
+	// Wait for all goroutines to finish processing the remaining data
 	wg.Wait()
 
 	return cmdErr

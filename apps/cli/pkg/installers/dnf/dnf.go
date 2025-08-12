@@ -72,6 +72,9 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 
 	// Run dnf/yum install command with automatic fallback
 	installCommand, packageManager := getDnfInstallCommand(command)
+	if installCommand == "" {
+		return utilities.NewPackageError("install", command, "dnf/yum", fmt.Errorf("no suitable package manager found"))
+	}
 	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
 		log.Error("Failed to install package", err, "command", command, "package_manager", packageManager)
 		return utilities.NewPackageError("install", command, packageManager, err)
@@ -204,8 +207,12 @@ func getDnfInstallCommand(packageName string) (string, string) {
 	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
 		return fmt.Sprintf("sudo dnf install -y %s", packageName), "dnf"
 	}
-	// Fall back to yum
-	return fmt.Sprintf("sudo yum install -y %s", packageName), "yum"
+	// Check if yum is available as fallback
+	if _, err := utils.CommandExec.RunShellCommand("which yum"); err == nil {
+		return fmt.Sprintf("sudo yum install -y %s", packageName), "yum"
+	}
+	// Neither available - return error case (should not happen if validation passed)
+	return "", ""
 }
 
 // getDnfUpdateCommand returns the appropriate update command
@@ -214,8 +221,12 @@ func getDnfUpdateCommand() (string, string) {
 	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
 		return "sudo dnf check-update", "dnf"
 	}
-	// Fall back to yum
-	return "sudo yum check-update", "yum"
+	// Check if yum is available as fallback
+	if _, err := utils.CommandExec.RunShellCommand("which yum"); err == nil {
+		return "sudo yum check-update", "yum"
+	}
+	// Neither available - return error case (should not happen if validation passed)
+	return "", ""
 }
 
 // getDnfUninstallCommand returns the appropriate uninstall command
@@ -224,8 +235,12 @@ func getDnfUninstallCommand(packageName string) (string, string) {
 	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
 		return fmt.Sprintf("sudo dnf remove -y %s", packageName), "dnf"
 	}
-	// Fall back to yum
-	return fmt.Sprintf("sudo yum remove -y %s", packageName), "yum"
+	// Check if yum is available as fallback
+	if _, err := utils.CommandExec.RunShellCommand("which yum"); err == nil {
+		return fmt.Sprintf("sudo yum remove -y %s", packageName), "yum"
+	}
+	// Neither available - return error case (should not happen if validation passed)
+	return "", ""
 }
 
 // validateDnfSystem checks if DNF is available and functional
