@@ -217,57 +217,58 @@ func (ss *SecureString) Clear() {
 var (
 	// allowedCommands defines safe commands that can be executed
 	allowedCommands = map[string]bool{
-		"apt":        true,
-		"apt-get":    true,
-		"apt-key":    true, // SECURITY: Added for GPG key management
-		"apt-cache":  true, // SECURITY: Added for package information
-		"dpkg":       true,
-		"curl":       true,
-		"wget":       true,
-		"git":        true,
-		"docker":     true,
-		"npm":        true,
-		"pip":        true,
-		"pip3":       true,
-		"go":         true,
-		"cargo":      true,
-		"flatpak":    true,
-		"snap":       true,
-		"dnf":        true,
-		"yum":        true,
-		"pacman":     true,
-		"zypper":     true,
-		"brew":       true,
-		"mise":       true,
-		"bash":       true, // SECURITY: Added for script execution (curlpipe installs)
-		"sh":         true, // SECURITY: Added for basic shell execution
-		"mkdir":      true,
-		"cp":         true,
-		"mv":         true,
-		"chmod":      true,
-		"chown":      true,
-		"ln":         true,
-		"tar":        true,
-		"unzip":      true,
-		"gunzip":     true,
-		"echo":       true,
-		"cat":        true,
-		"which":      true,
-		"whereis":    true,
-		"id":         true,
-		"whoami":     true, // SECURITY: Added for repository source addition
-		"tee":        true, // SECURITY: Added for repository source addition
-		"sleep":      true, // SECURITY: Added for timing operations
-		"rm":         true, // SECURITY: Added for file removal (validated by dangerous patterns)
-		"gpg":        true, // SECURITY: Added for GPG key management
-		"gpg2":       true, // SECURITY: Added for GPG key management
-		"fastfetch":  true, // SECURITY: Added for system information
-		"neofetch":   true, // SECURITY: Added for system information
-		"systemctl":  true, // SECURITY: Added for service management
-		"usermod":    true, // SECURITY: Added for user management
-		"sudo":       true, // SECURITY: Added for privilege escalation (validated separately)
-		"nvim":       true, // SECURITY: Added for text editor
-		"gtk-launch": true, // SECURITY: Added for application launching
+		"apt":                true,
+		"apt-get":            true,
+		"apt-key":            true, // SECURITY: Added for GPG key management
+		"apt-cache":          true, // SECURITY: Added for package information
+		"add-apt-repository": true, // SECURITY: Added for PPA management
+		"dpkg":               true,
+		"curl":               true,
+		"wget":               true,
+		"git":                true,
+		"docker":             true,
+		"npm":                true,
+		"pip":                true,
+		"pip3":               true,
+		"go":                 true,
+		"cargo":              true,
+		"flatpak":            true,
+		"snap":               true,
+		"dnf":                true,
+		"yum":                true,
+		"pacman":             true,
+		"zypper":             true,
+		"brew":               true,
+		"mise":               true,
+		"bash":               true, // SECURITY: Added for script execution (curlpipe installs)
+		"sh":                 true, // SECURITY: Added for basic shell execution
+		"mkdir":              true,
+		"cp":                 true,
+		"mv":                 true,
+		"chmod":              true,
+		"chown":              true,
+		"ln":                 true,
+		"tar":                true,
+		"unzip":              true,
+		"gunzip":             true,
+		"echo":               true,
+		"cat":                true,
+		"which":              true,
+		"whereis":            true,
+		"id":                 true,
+		"whoami":             true, // SECURITY: Added for repository source addition
+		"tee":                true, // SECURITY: Added for repository source addition
+		"sleep":              true, // SECURITY: Added for timing operations
+		"rm":                 true, // SECURITY: Added for file removal (validated by dangerous patterns)
+		"gpg":                true, // SECURITY: Added for GPG key management
+		"gpg2":               true, // SECURITY: Added for GPG key management
+		"fastfetch":          true, // SECURITY: Added for system information
+		"neofetch":           true, // SECURITY: Added for system information
+		"systemctl":          true, // SECURITY: Added for service management
+		"usermod":            true, // SECURITY: Added for user management
+		"sudo":               true, // SECURITY: Added for privilege escalation (validated separately)
+		"nvim":               true, // SECURITY: Added for text editor
+		"gtk-launch":         true, // SECURITY: Added for application launching
 	}
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs

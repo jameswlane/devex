@@ -7,6 +7,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/common"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -143,7 +144,7 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 					InstallMethod:  installMethod,
 					InstallCommand: installCommand,
 					DownloadURL:    downloadURL,
-					Dependencies:   ToStringSlice(candidate["dependencies"]),
+					Dependencies:   ResolvePlatformDependencies(candidate),
 					PostInstall:    toInstallCommandSlice(candidate["post_install"]),
 				}, nil
 			}
@@ -219,4 +220,65 @@ func toInstallCommandSlice(input any) []types.InstallCommand {
 
 	log.Info("Converted to install command slice", "count", len(result))
 	return result
+}
+
+// ResolvePlatformDependencies resolves dependencies for the current platform from platform_requirements
+func ResolvePlatformDependencies(candidate map[string]any) []string {
+	// First check for legacy dependencies field (backward compatibility)
+	if legacyDeps := ToStringSlice(candidate["dependencies"]); len(legacyDeps) > 0 {
+		log.Info("Using legacy dependencies field", "count", len(legacyDeps))
+		return legacyDeps
+	}
+
+	// Get current platform
+	currentPlatform := platform.DetectPlatform()
+	log.Info("Resolving platform-specific dependencies", "os", currentPlatform.OS, "distribution", currentPlatform.Distribution)
+
+	// Check platform_requirements for OS-specific dependencies
+	platformReqs, ok := candidate["platform_requirements"].([]any)
+	if !ok {
+		log.Debug("No platform_requirements found")
+		return nil
+	}
+
+	for _, req := range platformReqs {
+		requirement, ok := req.(map[string]any)
+		if !ok {
+			log.Warn("Platform requirement is not a map", "requirement", req)
+			continue
+		}
+
+		reqOS, ok := requirement["os"].(string)
+		if !ok {
+			log.Warn("Platform requirement OS is not a string", "os", requirement["os"])
+			continue
+		}
+
+		// Check if this requirement matches our current platform
+		if matchesPlatform(reqOS, currentPlatform) {
+			deps := ToStringSlice(requirement["dependencies"])
+			if len(deps) > 0 {
+				log.Info("Found platform-specific dependencies", "os", reqOS, "count", len(deps))
+				return deps
+			}
+		}
+	}
+
+	log.Debug("No platform-specific dependencies found for current platform")
+	return nil
+}
+
+// matchesPlatform checks if a platform requirement matches the current platform
+func matchesPlatform(reqOS string, currentPlatform platform.Platform) bool {
+	// Direct OS match
+	if reqOS == currentPlatform.OS {
+		return true
+	}
+
+	// Linux distribution match
+	if currentPlatform.OS == "linux" && reqOS == currentPlatform.Distribution {
+		return true
+	}
+
+	return false
 }
