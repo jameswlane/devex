@@ -17,7 +17,7 @@ func ValidateConfigFiles(homeDir string) error {
 
 	// Define required configuration files and their basic structure
 	requiredFiles := map[string]func(map[string]interface{}) error{
-		"applications.yaml": validateApplicationsConfig,
+		"applications.yaml": ValidateApplicationsConfig,
 		"environment.yaml":  validateEnvironmentConfig,
 		"desktop.yaml":      validateDesktopConfig,
 		"system.yaml":       validateSystemConfig,
@@ -64,13 +64,25 @@ func ValidateConfigFiles(homeDir string) error {
 	return nil
 }
 
-// validateApplicationsConfig validates the applications.yaml structure
-func validateApplicationsConfig(config map[string]interface{}) error {
+// ValidateApplicationsConfig validates the applications.yaml structure
+func ValidateApplicationsConfig(config map[string]interface{}) error {
+	// Check if the applications section exists
+	applications, exists := config["applications"]
+	if !exists {
+		return fmt.Errorf("missing required section: applications")
+	}
+
+	// Cast to map for further validation
+	appsMap, ok := applications.(map[interface{}]interface{})
+	if !ok {
+		return fmt.Errorf("applications section must be a map")
+	}
+
 	requiredSections := []string{"development", "databases", "system_tools", "optional"}
 
 	for _, section := range requiredSections {
-		if _, exists := config[section]; !exists {
-			return fmt.Errorf("missing required section: %s", section)
+		if _, exists := appsMap[section]; !exists {
+			return fmt.Errorf("missing required section: applications.%s", section)
 		}
 	}
 

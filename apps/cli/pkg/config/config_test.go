@@ -60,6 +60,56 @@ var _ = Describe("Config", func() {
 		})
 	})
 
+	Context("Configuration Validation", func() {
+		It("validates applications config with proper structure", func() {
+			// Create a valid applications config map
+			configMap := map[string]interface{}{
+				"applications": map[interface{}]interface{}{
+					"development":  []interface{}{},
+					"databases":    []interface{}{},
+					"system_tools": []interface{}{},
+					"optional":     []interface{}{},
+				},
+			}
+
+			err := config.ValidateApplicationsConfig(configMap)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("fails validation when applications section is missing", func() {
+			configMap := map[string]interface{}{
+				"other": map[interface{}]interface{}{},
+			}
+
+			err := config.ValidateApplicationsConfig(configMap)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("missing required section: applications"))
+		})
+
+		It("fails validation when required subsection is missing", func() {
+			configMap := map[string]interface{}{
+				"applications": map[interface{}]interface{}{
+					"development": []interface{}{},
+					// Missing databases, system_tools, optional
+				},
+			}
+
+			err := config.ValidateApplicationsConfig(configMap)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("missing required section: applications.databases"))
+		})
+
+		It("fails validation when applications is not a map", func() {
+			configMap := map[string]interface{}{
+				"applications": "invalid_structure",
+			}
+
+			err := config.ValidateApplicationsConfig(configMap)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("applications section must be a map"))
+		})
+	})
+
 	Context("Utility Functions", func() {
 		Context("ToStringSlice", func() {
 			It("converts an array of interfaces to a string slice", func() {

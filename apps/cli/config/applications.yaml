@@ -36,9 +36,31 @@ applications:
       description: 'A modern alternative to ls'
       category: 'System Utilities'
       default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'eza'
+        uninstall_command: 'eza'
+        official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'eza-community.eza'
+        uninstall_command: 'eza-community.eza'
+        official_support: true
+        alternatives:
+          - install_method: 'scoop'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+          - install_method: 'cargo'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
       linux:
         install_method: 'apt'
         install_command: 'eza'
+        uninstall_command: 'eza'
+        official_support: true
         dependencies:
           - 'curl'
           - 'gpg'
@@ -48,6 +70,62 @@ applications:
             source_repo: 'deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main'
             source_name: '/etc/apt/sources.list.d/gierens.list'
             require_dearmor: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'pacman'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+          - install_method: 'dnf'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+          - install_method: 'zypper'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'xbps'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'pkg'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'freebsd'
+          - install_method: 'pkg_add'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'openbsd'
+          - install_method: 'nixpkgs'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'cargo'
+            install_command: 'eza'
+            uninstall_command: 'eza'
+            official_support: true
     - name: fzf
       description: 'A command-line fuzzy finder'
       category: 'Utilities'
@@ -66,34 +144,136 @@ applications:
       description: 'GitHub official command line tool'
       category: 'Development Tools'
       default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'gh'
+        uninstall_command: 'gh'
+        official_support: true
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: false
+      windows:
+        install_method: 'winget'
+        install_command: 'GitHub.cli'
+        uninstall_command: 'GitHub.cli'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: false
+          - install_method: 'scoop'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: false
       linux:
         install_method: 'apt'
         install_command: 'gh'
+        uninstall_command: 'gh'
+        official_support: true
         apt_sources:
           - key_source: 'https://cli.github.com/packages/githubcli-archive-keyring.gpg'
             key_name: '/etc/apt/keyrings/githubcli-archive-keyring.gpg'
             key_fingerprint: '23F3D4EA75716F8B2E1A5E1A50F32B5B1B4A2C1C'
             source_repo: 'deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main'
             source_name: '/etc/apt/sources.list.d/github-cli.list'
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - version: '41+'
+            pre_install:
+              - shell: 'dnf install dnf5-plugins'
+              - shell: 'dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo'
+          - install_method: 'dnf'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: true
+            platform_requirements:
+              - os: 'rhel'
+                version: '9+'
+              - os: 'centos'
+                version: '9+'
+            pre_install:
+              - shell: "dnf install 'dnf-command(config-manager)'"
+              - shell: 'dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo'
+          - install_method: 'yum'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: true
+            platform_requirements:
+              - os: 'amazonlinux'
+                version: '2'
+            pre_install:
+              - shell: 'type -p yum-config-manager >/dev/null || yum install yum-utils'
+              - shell: 'yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo'
+          - install_method: 'zypper'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+              - os: 'suse'
+            pre_install:
+              - shell: 'zypper addrepo https://cli.github.com/packages/rpm/gh-cli.repo'
+              - shell: 'zypper ref'
+          - install_method: 'pacman'
+            install_command: 'github-cli'
+            uninstall_command: 'github-cli'
+            official_support: false
+            platform_requirements:
+              - os: 'arch'
+          - install_method: 'emerge'
+            install_command: 'github-cli'
+            uninstall_command: 'github-cli'
+            official_support: false
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'xbps'
+            install_command: 'github-cli'
+            uninstall_command: 'github-cli'
+            official_support: false
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'pkg'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: false
+            platform_requirements:
+              - os: 'freebsd'
+          - install_method: 'pkg_add'
+            install_command: 'github-cli'
+            uninstall_command: 'github-cli'
+            official_support: false
+            platform_requirements:
+              - os: 'openbsd'
+          - install_method: 'nixpkgs'
+            install_command: 'gh'
+            uninstall_command: 'gh'
+            official_support: false
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'apk'
+            install_command: 'github-cli'
+            uninstall_command: 'github-cli'
+            official_support: false
+            platform_requirements:
+              - os: 'alpine'
     - name: gpg
       description: 'A tool for secure communication and data storage'
       category: 'Dependency'
       linux:
         install_method: 'apt'
         install_command: 'gpg'
-    - name: Mise
-      description: 'A tool for managing multiple versions of programming languages'
-      category: 'Language Management'
-      default: true
-      linux:
-        install_method: 'apt'
-        install_command: 'mise'
-        apt_sources:
-          - key_source: 'https://mise.jdx.dev/gpg-key.pub'
-            key_name: '/etc/apt/keyrings/mise-archive-keyring.gpg'
-            source_repo: 'deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=%ARCHITECTURE%] https://mise.jdx.dev/deb stable main'
-            source_name: '/etc/apt/sources.list.d/mise.list'
-            require_dearmor: true
     - name: Neovim
       description: 'Vim-fork focused on extensibility and usability'
       category: 'Development Tools'
@@ -269,15 +449,62 @@ applications:
       description: 'A fast application launcher for Linux'
       category: 'Utility'
       default: true
+      desktop_environments: ['all']
       linux:
         install_method: 'apt'
         install_command: 'ulauncher'
-        apt_sources:
-          - key_source: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176'
-            key_name: '/usr/share/keyrings/ulauncher-archive-keyring.gpg'
-            source_repo: 'deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main'
-            source_name: '/etc/apt/sources.list.d/ulauncher-jammy.list'
-            require_dearmor: true
+        uninstall_command: 'ulauncher'
+        official_support: true
+        platform_requirements:
+          - os: 'ubuntu'
+        pre_install:
+          - shell: 'add-apt-repository universe -y'
+          - shell: 'add-apt-repository ppa:agornostal/ulauncher -y'
+          - shell: 'apt update'
+        alternatives:
+          - install_method: 'deb'
+            install_command: 'ulauncher_5.15.7_all.deb'
+            uninstall_command: 'ulauncher'
+            download_url: 'https://github.com/Ulauncher/Ulauncher/releases/download/5.15.7/ulauncher_5.15.7_all.deb'
+            official_support: true
+            platform_requirements:
+              - os: 'debian'
+              - os: 'ubuntu'
+          - install_method: 'apt'
+            install_command: 'ulauncher'
+            uninstall_command: 'ulauncher'
+            official_support: true
+            platform_requirements:
+              - os: 'debian'
+            apt_sources:
+              - key_source: 'http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176'
+                key_name: '/usr/share/keyrings/ulauncher-archive-keyring.gpg'
+                source_repo: 'deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main'
+                source_name: '/etc/apt/sources.list.d/ulauncher-jammy.list'
+                require_dearmor: true
+          - install_method: 'yay'
+            install_command: 'ulauncher'
+            uninstall_command: 'ulauncher'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+          - install_method: 'makepkg'
+            install_command: 'ulauncher'
+            uninstall_command: 'ulauncher'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+            pre_install:
+              - shell: 'git clone https://aur.archlinux.org/ulauncher.git'
+              - shell: 'cd ulauncher'
+            post_install:
+              - shell: 'makepkg -is'
+          - install_method: 'dnf'
+            install_command: 'ulauncher'
+            uninstall_command: 'ulauncher'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
         config_files:
           - source: '~/.local/share/devex/configs/ulauncher.desktop'
             destination: '~/.config/autostart/ulauncher.desktop'
@@ -303,10 +530,118 @@ applications:
       description: 'A maintained, feature-rich and performance-oriented, neofetch-like system information tool.'
       category: 'System Utilities'
       default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'fastfetch'
+        uninstall_command: 'fastfetch'
+        official_support: true
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'fastfetch'
+        uninstall_command: 'fastfetch'
+        official_support: true
+        alternatives:
+          - install_method: 'scoop'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+          - install_method: 'chocolatey'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
       linux:
         install_method: 'deb'
         install_command: 'fastfetch'
+        uninstall_command: 'fastfetch'
         download_url: 'https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-%ARCHITECTURE%.deb'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+            version: '11+'
+          - os: 'ubuntu'
+            version: '20.04+'
+        post_install:
+          - shell: 'export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r' # Refresh PATH cache
+        alternatives:
+          - install_method: 'apt'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'debian'
+                version: '13+'
+          - install_method: 'pacman'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+          - install_method: 'dnf'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+          - install_method: 'emerge'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'apk'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'zypper'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'eopkg'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'brew'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'linux' # linuxbrew fallback
+          - install_method: 'pkg'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'freebsd'
+          - install_method: 'pkg_add'
+            install_command: 'fastfetch'
+            uninstall_command: 'fastfetch'
+            official_support: true
+            platform_requirements:
+              - os: 'openbsd'
   system_tools:
   databases:
     - name: Redis Tools

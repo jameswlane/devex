@@ -163,19 +163,45 @@ func isDebInstalled(command string) bool {
 	// For deb packages, check if the command is available in PATH
 	// This is more reliable than checking package names since .deb files
 	// might have different package names than their executable commands
+
+	// First try with current PATH
 	_, err := utils.CommandExec.RunShellCommand("which " + command)
 	if err == nil {
 		log.Info("Deb package command found in PATH", "command", command)
 		return true
 	}
 
-	// Fallback: check if command supports common help flags (safer approach)
-	_, execErr := utils.CommandExec.RunShellCommand(command + " --version 2>/dev/null || " + command + " --help 2>/dev/null || false")
-	if execErr == nil {
-		log.Info("Deb package command is executable", "command", command)
+	// Try with refreshed PATH including common binary locations
+	pathCheckCommand := "export PATH=$PATH:/usr/bin:/usr/local/bin:/bin && which " + command
+	_, pathErr := utils.CommandExec.RunShellCommand(pathCheckCommand)
+	if pathErr == nil {
+		log.Info("Deb package command found in extended PATH", "command", command)
 		return true
 	}
 
-	log.Info("Deb package command not found", "command", command)
+	// Check common installation locations directly
+	commonPaths := []string{
+		"/usr/bin/" + command,
+		"/usr/local/bin/" + command,
+		"/bin/" + command,
+	}
+
+	for _, path := range commonPaths {
+		_, statErr := utils.CommandExec.RunShellCommand("test -x " + path)
+		if statErr == nil {
+			log.Info("Deb package executable found at path", "command", command, "path", path)
+			return true
+		}
+	}
+
+	// Fallback: check if command supports common help flags (safer approach)
+	versionCommand := "export PATH=$PATH:/usr/bin:/usr/local/bin:/bin && (" + command + " --version 2>/dev/null || " + command + " --help 2>/dev/null || false)"
+	_, execErr := utils.CommandExec.RunShellCommand(versionCommand)
+	if execErr == nil {
+		log.Info("Deb package command is executable with extended PATH", "command", command)
+		return true
+	}
+
+	log.Info("Deb package command not found after exhaustive search", "command", command)
 	return false
 }

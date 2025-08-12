@@ -64,6 +64,8 @@ var _ = Describe("DNF Installer", func() {
 					mockExec.FailingCommands = make(map[string]bool)
 				}
 				mockExec.FailingCommands["which dnf"] = true
+				// Also make dnf commands fail (since dnf is not available)
+				mockExec.FailingCommands["dnf info test-package"] = true
 			})
 
 			It("installs a package successfully using YUM fallback", func() {
