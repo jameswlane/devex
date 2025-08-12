@@ -6,6 +6,7 @@ import (
 	"os/user"
 	"strings"
 
+	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
@@ -88,11 +89,31 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("docker service validation failed: %w", err)
 	}
 
-	// Extract container name from the command
-	containerName := extractContainerName(command)
-	if containerName == "" {
-		log.Error("Failed to extract container name from command", fmt.Errorf("command: %s", command))
-		return fmt.Errorf("failed to extract container name from command")
+	// Try to get app configuration to check for DockerOptions
+	var finalCommand string
+	var containerName string
+
+	if appConfig, err := config.GetAppInfo(command); err == nil && appConfig.DockerOptions.ContainerName != "" {
+		// Build complete docker run command from DockerOptions
+		log.Debug("Building Docker command from DockerOptions", "app", appConfig.Name)
+
+		dockerCmd, buildErr := buildDockerRunCommand(appConfig.InstallCommand, appConfig.DockerOptions)
+		if buildErr != nil {
+			log.Error("Failed to build Docker command from options", buildErr, "app", appConfig.Name)
+			return fmt.Errorf("failed to build Docker command: %w", buildErr)
+		}
+
+		finalCommand = dockerCmd
+		containerName = appConfig.DockerOptions.ContainerName
+		log.Info("Built Docker command from configuration", "command", finalCommand, "container", containerName)
+	} else {
+		// Use command as-is (existing behavior for full docker run commands)
+		finalCommand = command
+		containerName = extractContainerName(command)
+		if containerName == "" {
+			log.Error("Failed to extract container name from command", fmt.Errorf("command: %s", command))
+			return fmt.Errorf("failed to extract container name from command")
+		}
 	}
 
 	// Wrap the command into a types.AppConfig object
@@ -117,12 +138,12 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	// Run the Docker command (try with and without sudo as needed)
-	if err := executeDockerCommand(command); err != nil {
-		log.Error("Failed to execute Docker command", err, "command", command)
+	if err := executeDockerCommand(finalCommand); err != nil {
+		log.Error("Failed to execute Docker command", err, "command", finalCommand)
 		return fmt.Errorf("failed to execute Docker command: %w", err)
 	}
 
-	log.Debug("Docker command executed successfully", "command", command)
+	log.Debug("Docker command executed successfully", "command", finalCommand)
 
 	// Add the container to the repository
 	if err := repo.AddApp(containerName); err != nil {
@@ -286,4 +307,45 @@ func executeDockerCommand(command string) error {
 
 	log.Debug("Docker command executed with sudo (user may need to refresh docker group membership)")
 	return nil
+}
+
+// buildDockerRunCommand constructs a complete docker run command from DockerOptions
+func buildDockerRunCommand(imageName string, options types.DockerOptions) (string, error) {
+	if imageName == "" {
+		return "", fmt.Errorf("image name is required")
+	}
+
+	if err := options.Validate(); err != nil {
+		return "", fmt.Errorf("invalid docker options: %w", err)
+	}
+
+	// Build command parts securely
+	var cmdParts []string
+	cmdParts = append(cmdParts, "docker", "run", "-d")
+	cmdParts = append(cmdParts, "--name", options.ContainerName)
+
+	// Add restart policy if specified
+	if options.RestartPolicy != "" {
+		cmdParts = append(cmdParts, "--restart", options.RestartPolicy)
+	}
+
+	// Add port mappings
+	for _, port := range options.Ports {
+		if port != "" {
+			cmdParts = append(cmdParts, "-p", port)
+		}
+	}
+
+	// Add environment variables
+	for _, env := range options.Environment {
+		if env != "" {
+			cmdParts = append(cmdParts, "-e", env)
+		}
+	}
+
+	// Add the image name
+	cmdParts = append(cmdParts, imageName)
+
+	// Join with spaces - this is safe since all parts are validated
+	return strings.Join(cmdParts, " "), nil
 }
