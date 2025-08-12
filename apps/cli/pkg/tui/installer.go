@@ -1108,24 +1108,10 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	// Wait for command completion
 	cmdErr := cmd.Wait()
 
-	// Close pipes to signal goroutines to finish
-	if stdout != nil {
-		if closeErr := stdout.Close(); closeErr != nil {
-			log.Warn("Failed to close stdout pipe", "error", closeErr)
-		}
-	}
-	if stderr != nil {
-		if closeErr := stderr.Close(); closeErr != nil {
-			log.Warn("Failed to close stderr pipe", "error", closeErr)
-		}
-	}
-	if stdin != nil {
-		if closeErr := stdin.Close(); closeErr != nil {
-			log.Warn("Failed to close stdin pipe", "error", closeErr)
-		}
-	}
+	// Note: cmd.Wait() automatically closes stdout, stderr, and stdin pipes
+	// so we don't need to close them manually to avoid "file already closed" errors
 
-	// Wait for all goroutines to finish
+	// Wait for all goroutines to finish processing the remaining data
 	wg.Wait()
 
 	return cmdErr
