@@ -1,3 +1,17 @@
+## [0.20.3](https://github.com/jameswlane/devex/compare/0.20.2...0.20.3) (2025-08-12)
+
+### Bug Fixes
+
+* correct applications.yaml validation to check nested structure ([fc10fdc](https://github.com/jameswlane/devex/commit/fc10fdc344d45aa8d70cd0cd062bdfd7fdf8a001))
+* improve fastfetch deb installer PATH detection ([a2cc6a7](https://github.com/jameswlane/devex/commit/a2cc6a7b71efbd7cfc4577768fa5043b1bfd919e))
+* installer workflow ([41e6f58](https://github.com/jameswlane/devex/commit/41e6f58136f817e7074ef757637bc15a5d902301))
+* remove expectation for 'which apt' command in APT installer test ([a52d739](https://github.com/jameswlane/devex/commit/a52d739b7a83eff997bb4086ddb0f3393fb7feef))
+* remove redundant pipe closing to prevent 'file already closed' warnings ([70d9684](https://github.com/jameswlane/devex/commit/70d96848ec7e85d1a6300f5ecd99b147da5b911e))
+* resolve DNF installer YUM fallback validation inconsistency ([692fe25](https://github.com/jameswlane/devex/commit/692fe250983bfb73c6b825ae1252f311a327e380))
+* resolve Docker installer command construction for DockerOptions apps ([2bab3a7](https://github.com/jameswlane/devex/commit/2bab3a7038949b5c067906f1f0af87f51ea23738))
+* resolve GPG key validation failures and expand app configurations ([7d0c345](https://github.com/jameswlane/devex/commit/7d0c3452e96474b4c911a601ca4a8683b45471dd))
+* resolve mise-go command validation failure for bash -c patterns ([3f1f2bd](https://github.com/jameswlane/devex/commit/3f1f2bd71ae1e8963ecd5eaadba2f8b1f8d1af09))
+
 ## [0.20.2](https://github.com/jameswlane/devex/compare/0.20.1...0.20.2) (2025-08-10)
 
 ### Bug Fixes
