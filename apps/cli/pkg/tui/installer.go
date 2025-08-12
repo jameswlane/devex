@@ -406,12 +406,16 @@ func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command st
 func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
 	// Check for safe patterns first (GPG keys and system info)
 	safePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`bash\s+-c\s+'\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+'`), // OS release info
-		regexp.MustCompile(`bash\s+-c\s+"\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+"`), // OS release info (double quotes)
-		regexp.MustCompile(`curl\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),              // GPG key installation with curl and apt-key
-		regexp.MustCompile(`wget\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),              // GPG key installation with wget and apt-key
-		regexp.MustCompile(`curl\s+.*\s+\|\s+gpg\s+--dearmor`),                       // GPG key dearmoring with curl
-		regexp.MustCompile(`wget\s+.*\s+\|\s+gpg\s+--dearmor`),                       // GPG key dearmoring with wget
+		regexp.MustCompile(`bash\s+-c\s+'\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+'`),                                                // OS release info
+		regexp.MustCompile(`bash\s+-c\s+"\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+"`),                                                // OS release info (double quotes)
+		regexp.MustCompile(`curl\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with curl and apt-key
+		regexp.MustCompile(`wget\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with wget and apt-key
+		regexp.MustCompile(`curl\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with curl
+		regexp.MustCompile(`wget\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with wget
+		regexp.MustCompile(`bash\s+-c\s+'[^']*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^']*'`),                     // Mise PATH setup and commands (single quotes)
+		regexp.MustCompile(`bash\s+-c\s+"[^"]*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^"]*"`),                     // Mise PATH setup and commands (double quotes)
+		regexp.MustCompile(`bash\s+-c\s+'[^']*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^']*'`), // Mise conditional installation (single quotes)
+		regexp.MustCompile(`bash\s+-c\s+"[^"]*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^"]*"`), // Mise conditional installation (double quotes)
 	}
 
 	// If it matches a safe pattern, allow it

