@@ -77,7 +77,10 @@ func (d *DebInstaller) Install(command string, repo types.Repository) error {
 
 	// Execute post-install commands if they exist
 	if err := executePostInstallCommands(*appConfig); err != nil {
-		log.Warn("Post-install commands failed", "app", appConfig.Name, "error", err)
+		log.Warn("Post-install commands failed - installation succeeded but configuration may be incomplete",
+			"app", appConfig.Name,
+			"error", err,
+			"suggestion", "Check the application configuration or run post-install commands manually")
 		// Don't fail the installation for post-install command failures
 	}
 
@@ -168,8 +171,8 @@ func executePostInstallCommands(appConfig types.AppConfig) error {
 
 		if cmd.Shell != "" {
 			if _, err := utils.CommandExec.RunShellCommand(cmd.Shell); err != nil {
-				log.Warn("Post-install shell command failed", "app", appConfig.Name, "command", cmd.Shell, "error", err)
-				return fmt.Errorf("post-install shell command failed: %w", err)
+				log.Warn("Post-install shell command failed", "app", appConfig.Name, "command", cmd.Shell, "step", i+1, "error", err)
+				return fmt.Errorf("post-install command failed at step %d/%d (command: %s): %w", i+1, len(appConfig.PostInstall), cmd.Shell, err)
 			}
 		}
 

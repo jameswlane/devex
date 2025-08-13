@@ -24,6 +24,45 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
+// Command constants for improved maintainability
+const (
+	// Package managers
+	CmdApt              = "apt"
+	CmdAptGet           = "apt-get"
+	CmdAptKey           = "apt-key"
+	CmdAptCache         = "apt-cache"
+	CmdAddAptRepository = "add-apt-repository"
+	CmdDpkg             = "dpkg"
+	CmdDnf              = "dnf"
+	CmdYum              = "yum"
+	CmdPacman           = "pacman"
+	CmdZypper           = "zypper"
+	CmdFlatpak          = "flatpak"
+	CmdSnap             = "snap"
+	CmdBrew             = "brew"
+
+	// Development tools
+	CmdGit    = "git"
+	CmdDocker = "docker"
+	CmdNpm    = "npm"
+	CmdPip    = "pip"
+	CmdPip3   = "pip3"
+	CmdGo     = "go"
+	CmdCargo  = "cargo"
+	CmdMise   = "mise"
+
+	// System utilities
+	CmdCurl  = "curl"
+	CmdWget  = "wget"
+	CmdBash  = "bash"
+	CmdSh    = "sh"
+	CmdMkdir = "mkdir"
+	CmdCp    = "cp"
+	CmdMv    = "mv"
+	CmdChmod = "chmod"
+	CmdChown = "chown"
+)
+
 // InstallerConfig holds configuration constants for the installer
 type InstallerConfig struct {
 	// Channel and timeout settings
@@ -217,58 +256,58 @@ func (ss *SecureString) Clear() {
 var (
 	// allowedCommands defines safe commands that can be executed
 	allowedCommands = map[string]bool{
-		"apt":                true,
-		"apt-get":            true,
-		"apt-key":            true, // SECURITY: Added for GPG key management
-		"apt-cache":          true, // SECURITY: Added for package information
-		"add-apt-repository": true, // SECURITY: Added for PPA management
-		"dpkg":               true,
-		"curl":               true,
-		"wget":               true,
-		"git":                true,
-		"docker":             true,
-		"npm":                true,
-		"pip":                true,
-		"pip3":               true,
-		"go":                 true,
-		"cargo":              true,
-		"flatpak":            true,
-		"snap":               true,
-		"dnf":                true,
-		"yum":                true,
-		"pacman":             true,
-		"zypper":             true,
-		"brew":               true,
-		"mise":               true,
-		"bash":               true, // SECURITY: Added for script execution (curlpipe installs)
-		"sh":                 true, // SECURITY: Added for basic shell execution
-		"mkdir":              true,
-		"cp":                 true,
-		"mv":                 true,
-		"chmod":              true,
-		"chown":              true,
-		"ln":                 true,
-		"tar":                true,
-		"unzip":              true,
-		"gunzip":             true,
-		"echo":               true,
-		"cat":                true,
-		"which":              true,
-		"whereis":            true,
-		"id":                 true,
-		"whoami":             true, // SECURITY: Added for repository source addition
-		"tee":                true, // SECURITY: Added for repository source addition
-		"sleep":              true, // SECURITY: Added for timing operations
-		"rm":                 true, // SECURITY: Added for file removal (validated by dangerous patterns)
-		"gpg":                true, // SECURITY: Added for GPG key management
-		"gpg2":               true, // SECURITY: Added for GPG key management
-		"fastfetch":          true, // SECURITY: Added for system information
-		"neofetch":           true, // SECURITY: Added for system information
-		"systemctl":          true, // SECURITY: Added for service management
-		"usermod":            true, // SECURITY: Added for user management
-		"sudo":               true, // SECURITY: Added for privilege escalation (validated separately)
-		"nvim":               true, // SECURITY: Added for text editor
-		"gtk-launch":         true, // SECURITY: Added for application launching
+		CmdApt:              true,
+		CmdAptGet:           true,
+		CmdAptKey:           true, // SECURITY: Added for GPG key management
+		CmdAptCache:         true, // SECURITY: Added for package information
+		CmdAddAptRepository: true, // SECURITY: Added for PPA management
+		CmdDpkg:             true,
+		CmdCurl:             true,
+		CmdWget:             true,
+		CmdGit:              true,
+		CmdDocker:           true,
+		CmdNpm:              true,
+		CmdPip:              true,
+		CmdPip3:             true,
+		CmdGo:               true,
+		CmdCargo:            true,
+		CmdFlatpak:          true,
+		CmdSnap:             true,
+		CmdDnf:              true,
+		CmdYum:              true,
+		CmdPacman:           true,
+		CmdZypper:           true,
+		CmdBrew:             true,
+		CmdMise:             true,
+		CmdBash:             true, // SECURITY: Added for script execution (curlpipe installs)
+		CmdSh:               true, // SECURITY: Added for basic shell execution
+		CmdMkdir:            true,
+		CmdCp:               true,
+		CmdMv:               true,
+		CmdChmod:            true,
+		CmdChown:            true,
+		"ln":                true,
+		"tar":               true,
+		"unzip":             true,
+		"gunzip":            true,
+		"echo":              true,
+		"cat":               true,
+		"which":             true,
+		"whereis":           true,
+		"id":                true,
+		"whoami":            true, // SECURITY: Added for repository source addition
+		"tee":               true, // SECURITY: Added for repository source addition
+		"sleep":             true, // SECURITY: Added for timing operations
+		"rm":                true, // SECURITY: Added for file removal (validated by dangerous patterns)
+		"gpg":               true, // SECURITY: Added for GPG key management
+		"gpg2":              true, // SECURITY: Added for GPG key management
+		"fastfetch":         true, // SECURITY: Added for system information
+		"neofetch":          true, // SECURITY: Added for system information
+		"systemctl":         true, // SECURITY: Added for service management
+		"usermod":           true, // SECURITY: Added for user management
+		"sudo":              true, // SECURITY: Added for privilege escalation (validated separately)
+		"nvim":              true, // SECURITY: Added for text editor
+		"gtk-launch":        true, // SECURITY: Added for application launching
 	}
 
 	// dangerousPatterns are regex patterns for potentially dangerous command constructs
