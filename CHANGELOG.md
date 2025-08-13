@@ -1,3 +1,9 @@
+## [0.21.0](https://github.com/jameswlane/devex/compare/0.20.4...0.21.0) (2025-08-13)
+
+### Features
+
+* implement enhanced dependency checking workflow ([#132](https://github.com/jameswlane/devex/issues/132)) ([996bfd4](https://github.com/jameswlane/devex/commit/996bfd49549fa069cb330ef8e93881d326c14359))
+
 ## [0.20.4](https://github.com/jameswlane/devex/compare/0.20.3...0.20.4) (2025-08-13)
 
 ### Bug Fixes
