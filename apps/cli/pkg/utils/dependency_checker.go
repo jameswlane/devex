@@ -28,15 +28,19 @@ type DependencyMetrics struct {
 	ValidationTime    time.Duration // Total time spent validating dependencies
 	LastInstallTime   time.Time     // Timestamp of last installation
 	PackagesInstalled int64         // Total packages installed
+	mutex             sync.RWMutex  // Protects duration and time fields
 }
 
 // GetMetrics returns a copy of the current metrics (thread-safe)
 func (dm *DependencyMetrics) GetMetrics() DependencyMetrics {
+	dm.mutex.RLock()
+	defer dm.mutex.RUnlock()
+
 	return DependencyMetrics{
 		CacheHits:         atomic.LoadInt64(&dm.CacheHits),
 		CacheMisses:       atomic.LoadInt64(&dm.CacheMisses),
 		TotalChecks:       atomic.LoadInt64(&dm.TotalChecks),
-		InstallTime:       dm.InstallTime, // Note: Duration access should be mutex-protected in production
+		InstallTime:       dm.InstallTime,
 		ValidationTime:    dm.ValidationTime,
 		LastInstallTime:   dm.LastInstallTime,
 		PackagesInstalled: atomic.LoadInt64(&dm.PackagesInstalled),
@@ -49,9 +53,33 @@ func (dm *DependencyMetrics) Reset() {
 	atomic.StoreInt64(&dm.CacheMisses, 0)
 	atomic.StoreInt64(&dm.TotalChecks, 0)
 	atomic.StoreInt64(&dm.PackagesInstalled, 0)
+
+	dm.mutex.Lock()
 	dm.InstallTime = 0
 	dm.ValidationTime = 0
 	dm.LastInstallTime = time.Time{}
+	dm.mutex.Unlock()
+}
+
+// AddValidationTime safely adds to the validation time (thread-safe)
+func (dm *DependencyMetrics) AddValidationTime(duration time.Duration) {
+	dm.mutex.Lock()
+	dm.ValidationTime += duration
+	dm.mutex.Unlock()
+}
+
+// AddInstallTime safely adds to the install time (thread-safe)
+func (dm *DependencyMetrics) AddInstallTime(duration time.Duration) {
+	dm.mutex.Lock()
+	dm.InstallTime += duration
+	dm.mutex.Unlock()
+}
+
+// SetLastInstallTime safely sets the last install time (thread-safe)
+func (dm *DependencyMetrics) SetLastInstallTime(t time.Time) {
+	dm.mutex.Lock()
+	dm.LastInstallTime = t
+	dm.mutex.Unlock()
 }
 
 // validPackageNameRegex validates package names to prevent injection attacks
@@ -220,7 +248,7 @@ func (dc *DependencyChecker) CheckAndInstallPlatformDependencies(ctx context.Con
 	startTime := time.Now()
 	defer func() {
 		validationDuration := time.Since(startTime)
-		dc.Metrics.ValidationTime += validationDuration
+		dc.Metrics.AddValidationTime(validationDuration)
 		log.Info("Platform dependency validation completed", "duration", validationDuration)
 	}()
 
@@ -268,8 +296,8 @@ func (dc *DependencyChecker) CheckAndInstallPlatformDependencies(ctx context.Con
 			return fmt.Errorf("failed to install platform dependencies %v: %w", missingDeps, err)
 		}
 		installDuration := time.Since(installStart)
-		dc.Metrics.InstallTime += installDuration
-		dc.Metrics.LastInstallTime = time.Now()
+		dc.Metrics.AddInstallTime(installDuration)
+		dc.Metrics.SetLastInstallTime(time.Now())
 		atomic.AddInt64(&dc.Metrics.PackagesInstalled, int64(len(missingDeps)))
 
 		log.Info("Successfully installed platform dependencies", "dependencies", missingDeps, "install_duration", installDuration)

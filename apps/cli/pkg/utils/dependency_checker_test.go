@@ -478,5 +478,201 @@ var _ = Describe("DependencyChecker", func() {
 				Expect(func() { depChecker.LogMetricsSummary() }).NotTo(Panic())
 			})
 		})
+
+		Context("when testing thread-safe metrics methods", func() {
+			It("should safely add validation time", func() {
+				initialMetrics := depChecker.Metrics.GetMetrics()
+				Expect(initialMetrics.ValidationTime).To(Equal(time.Duration(0)))
+
+				// Add validation time
+				testDuration := 100 * time.Millisecond
+				depChecker.Metrics.AddValidationTime(testDuration)
+
+				updatedMetrics := depChecker.Metrics.GetMetrics()
+				Expect(updatedMetrics.ValidationTime).To(Equal(testDuration))
+
+				// Add more validation time
+				depChecker.Metrics.AddValidationTime(testDuration)
+				finalMetrics := depChecker.Metrics.GetMetrics()
+				Expect(finalMetrics.ValidationTime).To(Equal(2 * testDuration))
+			})
+
+			It("should safely add install time", func() {
+				initialMetrics := depChecker.Metrics.GetMetrics()
+				Expect(initialMetrics.InstallTime).To(Equal(time.Duration(0)))
+
+				// Add install time
+				testDuration := 200 * time.Millisecond
+				depChecker.Metrics.AddInstallTime(testDuration)
+
+				updatedMetrics := depChecker.Metrics.GetMetrics()
+				Expect(updatedMetrics.InstallTime).To(Equal(testDuration))
+
+				// Add more install time
+				depChecker.Metrics.AddInstallTime(testDuration)
+				finalMetrics := depChecker.Metrics.GetMetrics()
+				Expect(finalMetrics.InstallTime).To(Equal(2 * testDuration))
+			})
+
+			It("should safely set last install time", func() {
+				initialMetrics := depChecker.Metrics.GetMetrics()
+				Expect(initialMetrics.LastInstallTime.IsZero()).To(BeTrue())
+
+				// Set last install time
+				testTime := time.Now()
+				depChecker.Metrics.SetLastInstallTime(testTime)
+
+				updatedMetrics := depChecker.Metrics.GetMetrics()
+				Expect(updatedMetrics.LastInstallTime).To(BeTemporally("~", testTime, time.Millisecond))
+
+				// Update last install time
+				newTime := testTime.Add(1 * time.Hour)
+				depChecker.Metrics.SetLastInstallTime(newTime)
+				finalMetrics := depChecker.Metrics.GetMetrics()
+				Expect(finalMetrics.LastInstallTime).To(BeTemporally("~", newTime, time.Millisecond))
+			})
+		})
+
+		Context("when testing concurrent access", func() {
+			It("should handle concurrent GetMetrics calls safely", func() {
+				const numGoroutines = 100
+				const numIterations = 10
+
+				var results = make([]utils.DependencyMetrics, numGoroutines*numIterations)
+				var completed = make(chan int, numGoroutines)
+
+				// Start multiple goroutines reading metrics concurrently
+				for i := 0; i < numGoroutines; i++ {
+					go func(goroutineID int) {
+						defer func() { completed <- goroutineID }()
+						for j := 0; j < numIterations; j++ {
+							results[goroutineID*numIterations+j] = depChecker.Metrics.GetMetrics()
+						}
+					}(i)
+				}
+
+				// Wait for all goroutines to complete
+				for i := 0; i < numGoroutines; i++ {
+					<-completed
+				}
+
+				// Verify all reads completed without panic
+				Expect(results).To(HaveLen(numGoroutines * numIterations))
+			})
+
+			It("should handle concurrent metric updates safely", func() {
+				const numGoroutines = 50
+				const numUpdatesPerGoroutine = 20
+				testDuration := 1 * time.Millisecond
+				var completed = make(chan bool, numGoroutines)
+
+				// Start multiple goroutines updating metrics concurrently
+				for i := 0; i < numGoroutines; i++ {
+					go func() {
+						defer func() { completed <- true }()
+						for j := 0; j < numUpdatesPerGoroutine; j++ {
+							depChecker.Metrics.AddValidationTime(testDuration)
+							depChecker.Metrics.AddInstallTime(testDuration)
+							depChecker.Metrics.SetLastInstallTime(time.Now())
+						}
+					}()
+				}
+
+				// Wait for all goroutines to complete
+				for i := 0; i < numGoroutines; i++ {
+					<-completed
+				}
+
+				// Verify final metrics are consistent
+				finalMetrics := depChecker.Metrics.GetMetrics()
+				expectedDuration := time.Duration(numGoroutines*numUpdatesPerGoroutine) * testDuration
+				Expect(finalMetrics.ValidationTime).To(Equal(expectedDuration))
+				Expect(finalMetrics.InstallTime).To(Equal(expectedDuration))
+				Expect(finalMetrics.LastInstallTime).NotTo(BeZero())
+			})
+
+			It("should handle concurrent reads and writes safely", func() {
+				const numReaders = 25
+				const numWriters = 25
+				const numOperations = 50
+				testDuration := 1 * time.Millisecond
+				var completed = make(chan bool, numReaders+numWriters)
+
+				// Start reader goroutines
+				for i := 0; i < numReaders; i++ {
+					go func() {
+						defer func() { completed <- true }()
+						for j := 0; j < numOperations; j++ {
+							_ = depChecker.Metrics.GetMetrics()
+						}
+					}()
+				}
+
+				// Start writer goroutines
+				for i := 0; i < numWriters; i++ {
+					go func() {
+						defer func() { completed <- true }()
+						for j := 0; j < numOperations; j++ {
+							depChecker.Metrics.AddValidationTime(testDuration)
+							depChecker.Metrics.AddInstallTime(testDuration)
+							if j%10 == 0 {
+								depChecker.Metrics.SetLastInstallTime(time.Now())
+							}
+						}
+					}()
+				}
+
+				// Wait for all goroutines to complete
+				for i := 0; i < numReaders+numWriters; i++ {
+					<-completed
+				}
+
+				// Verify operations completed successfully
+				finalMetrics := depChecker.Metrics.GetMetrics()
+				expectedDuration := time.Duration(numWriters*numOperations) * testDuration
+				Expect(finalMetrics.ValidationTime).To(Equal(expectedDuration))
+				Expect(finalMetrics.InstallTime).To(Equal(expectedDuration))
+			})
+
+			It("should handle concurrent reset operations safely", func() {
+				const numGoroutines = 20
+				const numOperations = 10
+				testDuration := 1 * time.Millisecond
+				var completed = make(chan bool, numGoroutines)
+
+				// Populate some initial metrics
+				depChecker.Metrics.AddValidationTime(100 * time.Millisecond)
+				depChecker.Metrics.AddInstallTime(100 * time.Millisecond)
+
+				// Start goroutines that reset and update metrics concurrently
+				for i := 0; i < numGoroutines; i++ {
+					go func(goroutineID int) {
+						defer func() { completed <- true }()
+						for j := 0; j < numOperations; j++ {
+							if goroutineID%2 == 0 {
+								// Even goroutines reset metrics
+								depChecker.Metrics.Reset()
+							} else {
+								// Odd goroutines update metrics
+								depChecker.Metrics.AddValidationTime(testDuration)
+								depChecker.Metrics.AddInstallTime(testDuration)
+								depChecker.Metrics.SetLastInstallTime(time.Now())
+							}
+						}
+					}(i)
+				}
+
+				// Wait for all goroutines to complete
+				for i := 0; i < numGoroutines; i++ {
+					<-completed
+				}
+
+				// Verify no panic occurred and final state is consistent
+				finalMetrics := depChecker.Metrics.GetMetrics()
+				// Values can vary due to concurrent resets and updates, but should not panic
+				Expect(finalMetrics.ValidationTime).To(BeNumerically(">=", 0))
+				Expect(finalMetrics.InstallTime).To(BeNumerically(">=", 0))
+			})
+		})
 	})
 })
