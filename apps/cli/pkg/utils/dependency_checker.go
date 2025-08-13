@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
+	"sync"
 
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
@@ -13,6 +15,23 @@ import (
 type Dependency struct {
 	Name    string
 	Command string
+}
+
+// validPackageNameRegex validates package names to prevent injection attacks
+var validPackageNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9\-\+\.\_]*$`)
+
+// validatePackageName validates a package name for security
+func validatePackageName(packageName string) error {
+	if packageName == "" {
+		return fmt.Errorf("package name cannot be empty")
+	}
+	if len(packageName) > 255 {
+		return fmt.Errorf("package name too long: %d characters (max 255)", len(packageName))
+	}
+	if !validPackageNameRegex.MatchString(packageName) {
+		return fmt.Errorf("invalid package name: %s (contains invalid characters)", packageName)
+	}
+	return nil
 }
 
 // PackageManager interface for installing dependencies
@@ -37,8 +56,7 @@ func NewDependencyChecker(pm PackageManager, plat platform.Platform) *Dependency
 }
 
 // CheckDependencies verifies the availability of required dependencies.
-func CheckDependencies(dependencies []Dependency) error {
-	ctx := context.Background()
+func CheckDependencies(ctx context.Context, dependencies []Dependency) error {
 	for _, dep := range dependencies {
 		if err := exec.CommandContext(ctx, "which", dep.Command).Run(); err != nil {
 			log.Error("Missing dependency", err, "name", dep.Name, "command", dep.Command)
@@ -72,16 +90,15 @@ func (dc *DependencyChecker) CheckAndInstallPlatformDependencies(ctx context.Con
 
 	log.Info("Platform dependencies identified", "count", len(platformDeps), "dependencies", platformDeps)
 
-	// Check which dependencies are missing
-	missingDeps := []string{}
+	// Validate all package names for security
 	for _, dep := range platformDeps {
-		if err := exec.CommandContext(ctx, "which", dep).Run(); err != nil {
-			log.Info("Missing platform dependency", "dependency", dep)
-			missingDeps = append(missingDeps, dep)
-		} else {
-			log.Info("Platform dependency available", "dependency", dep)
+		if err := validatePackageName(dep); err != nil {
+			return fmt.Errorf("invalid dependency package name: %w", err)
 		}
 	}
+
+	// Check which dependencies are missing - use parallel checking for performance
+	missingDeps := dc.checkDependenciesParallel(ctx, platformDeps)
 
 	// Install missing dependencies if any
 	if len(missingDeps) > 0 {
@@ -106,4 +123,59 @@ func (dc *DependencyChecker) CheckAndInstallPlatformDependencies(ctx context.Con
 	}
 
 	return nil
+}
+
+// checkDependenciesParallel checks multiple dependencies in parallel for better performance
+func (dc *DependencyChecker) checkDependenciesParallel(ctx context.Context, dependencies []string) []string {
+	if len(dependencies) == 0 {
+		return nil
+	}
+
+	type depResult struct {
+		dependency string
+		missing    bool
+	}
+
+	resultsChan := make(chan depResult, len(dependencies))
+	var wg sync.WaitGroup
+
+	// Start parallel checking
+	for _, dep := range dependencies {
+		wg.Add(1)
+		go func(dependency string) {
+			defer wg.Done()
+
+			// Check if dependency is available
+			err := exec.CommandContext(ctx, "which", dependency).Run()
+			isMissing := err != nil
+
+			if isMissing {
+				log.Info("Missing platform dependency", "dependency", dependency)
+			} else {
+				log.Info("Platform dependency available", "dependency", dependency)
+			}
+
+			select {
+			case resultsChan <- depResult{dependency: dependency, missing: isMissing}:
+			case <-ctx.Done():
+				return
+			}
+		}(dep)
+	}
+
+	// Close channel when all goroutines complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results
+	var missingDeps []string
+	for result := range resultsChan {
+		if result.missing {
+			missingDeps = append(missingDeps, result.dependency)
+		}
+	}
+
+	return missingDeps
 }

@@ -635,8 +635,7 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	}
 
 	// Check and install platform dependencies before main installation
-	// TODO: Add dry run support to CrossPlatformSettings
-	if err := si.checkAndInstallDependencies(ctx, osConfig, false); err != nil {
+	if err := si.checkAndInstallDependencies(ctx, osConfig); err != nil {
 		return fmt.Errorf("dependency checking failed: %w", err)
 	}
 
@@ -1561,7 +1560,7 @@ func expandPath(path string) string {
 }
 
 // checkAndInstallDependencies checks platform-specific dependencies and installs missing ones
-func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, osConfig types.OSConfig, dryRun bool) error {
+func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, osConfig types.OSConfig) error {
 	// Only check dependencies if there are platform requirements
 	if len(osConfig.PlatformRequirements) == 0 {
 		si.sendLog("INFO", "No platform requirements specified, skipping dependency check")
@@ -1602,8 +1601,8 @@ func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, o
 	// Create dependency checker
 	depChecker := utils.NewDependencyChecker(packageManager, currentPlatform)
 
-	// Check and install dependencies
-	if err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, dryRun); err != nil {
+	// Check and install dependencies (never dry-run for now)
+	if err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, false); err != nil {
 		return fmt.Errorf("failed to install platform dependencies: %w", err)
 	}
 
