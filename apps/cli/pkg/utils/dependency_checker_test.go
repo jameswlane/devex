@@ -2,6 +2,7 @@ package utils_test
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -234,6 +235,133 @@ var _ = Describe("DependencyChecker", func() {
 			err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(mockPM.installCalled).To(BeFalse())
+		})
+	})
+
+	Describe("Dependency Caching", func() {
+		Context("when checking cached dependencies", func() {
+			It("should use cached results for repeated dependency checks", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl", "git"},
+						},
+					},
+				}
+
+				// First check - should cache results
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(depChecker.Cache.Size()).To(BeNumerically(">", 0))
+
+				// Second check - should use cached results
+				initialCacheSize := depChecker.Cache.Size()
+				err = depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(depChecker.Cache.Size()).To(Equal(initialCacheSize))
+			})
+
+			It("should invalidate cache entries after installation", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"nonexistent-package-test"},
+						},
+					},
+				}
+
+				// First check should cache the missing dependency
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify cache has the entry
+				available, found := depChecker.Cache.Get("nonexistent-package-test")
+				Expect(found).To(BeTrue())
+				Expect(available).To(BeFalse()) // Should be cached as missing
+
+				// Simulate installation and cache invalidation
+				depChecker.InvalidateCacheEntries([]string{"nonexistent-package-test"})
+
+				// Verify cache entry was removed
+				_, found = depChecker.Cache.Get("nonexistent-package-test")
+				Expect(found).To(BeFalse())
+			})
+
+			It("should clear all cache entries", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl", "git", "wget"},
+						},
+					},
+				}
+
+				// Check dependencies to populate cache
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(depChecker.Cache.Size()).To(BeNumerically(">", 0))
+
+				// Clear cache
+				depChecker.ClearCache()
+				Expect(depChecker.Cache.Size()).To(Equal(0))
+			})
+		})
+
+		Context("when testing cache expiration", func() {
+			It("should create dependency checker with custom cache settings", func() {
+				customChecker := utils.NewDependencyCheckerWithCache(mockPM, testPlatform, 1*time.Second, 10)
+				Expect(customChecker).NotTo(BeNil())
+				Expect(customChecker.Cache.TTL).To(Equal(1 * time.Second))
+				Expect(customChecker.Cache.MaxEntries).To(Equal(10))
+			})
+		})
+
+		Context("when testing cache eviction", func() {
+			It("should evict oldest entries when cache is full", func() {
+				// Create checker with small cache for testing eviction
+				smallCacheChecker := utils.NewDependencyCheckerWithCache(mockPM, testPlatform, 5*time.Minute, 2)
+
+				// Add entries to fill cache
+				osConfig1 := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl"},
+						},
+					},
+				}
+				osConfig2 := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"git"},
+						},
+					},
+				}
+				osConfig3 := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"wget"},
+						},
+					},
+				}
+
+				// Fill cache to capacity
+				err := smallCacheChecker.CheckAndInstallPlatformDependencies(ctx, osConfig1, true)
+				Expect(err).NotTo(HaveOccurred())
+				err = smallCacheChecker.CheckAndInstallPlatformDependencies(ctx, osConfig2, true)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smallCacheChecker.Cache.Size()).To(Equal(2))
+
+				// Add third entry should evict oldest
+				err = smallCacheChecker.CheckAndInstallPlatformDependencies(ctx, osConfig3, true)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(smallCacheChecker.Cache.Size()).To(Equal(2))
+			})
 		})
 	})
 })
