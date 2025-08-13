@@ -274,10 +274,12 @@ ginkgo run --focus="Package Name Validation" ./pkg/utils/
 - ✅ Platform matching logic
 - ✅ Context cancellation handling
 - ✅ Dry-run mode behavior
-- ✅ Error scenarios
+- ✅ Error scenarios with enhanced error messages
 - ✅ Dependency caching (cache hits/misses, invalidation, eviction)
 - ✅ Cache expiration and TTL behavior
 - ✅ Custom cache configuration
+- ✅ Metrics collection (cache statistics, timing, package counts)
+- ✅ Metrics reset and summary functionality
 
 ### Adding New Tests
 See `pkg/utils/dependency_checker_test.go` for examples.
@@ -310,6 +312,52 @@ checker.ClearCache()
 
 // Invalidate specific entries
 checker.InvalidateCacheEntries([]string{"curl", "git"})
+```
+
+## Metrics Collection
+
+### Performance Metrics
+The dependency system now collects comprehensive metrics for monitoring and optimization:
+
+- **Cache Performance**: Hit/miss rates and cache efficiency
+- **Installation Timing**: Time spent installing packages
+- **Validation Timing**: Time spent validating dependencies
+- **Package Counts**: Total packages installed and checked
+
+### Metrics API
+```go
+// Get current metrics (thread-safe)
+metrics := checker.Metrics.GetMetrics()
+
+// Reset metrics (for testing)
+checker.Metrics.Reset()
+
+// Log detailed metrics summary
+checker.LogMetricsSummary()
+```
+
+### Metrics Structure
+```go
+type DependencyMetrics struct {
+    CacheHits         int64         // Total cache hits
+    CacheMisses       int64         // Total cache misses  
+    TotalChecks       int64         // Total dependency checks
+    InstallTime       time.Duration // Total installation time
+    ValidationTime    time.Duration // Total validation time
+    LastInstallTime   time.Time     // Last installation timestamp
+    PackagesInstalled int64         // Total packages installed
+}
+```
+
+### Enhanced Error Messages
+Error messages now provide consistent context and specific package information:
+
+```go
+// Before
+"invalid package name: test;rm -rf / (contains invalid characters)"
+
+// After  
+"dependency validation failed for package 'test;rm -rf /': contains invalid characters"
 ```
 
 ## Future Enhancements
