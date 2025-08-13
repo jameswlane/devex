@@ -248,10 +248,15 @@ If platform detection is incorrect:
 - Significant speedup for apps with many dependencies
 - Proper context handling for cancellation
 
+### Implemented Optimizations
+- **Caching**: In-memory caching of dependency check results with TTL expiration
+- **Parallel Checking**: Multiple dependencies checked simultaneously
+- **Cache Invalidation**: Automatic cache updates after installations
+
 ### Future Optimizations
-- **Caching**: Cache dependency check results within session
 - **Batch Installation**: Install multiple missing dependencies in single command
 - **Smart Ordering**: Install dependencies in optimal order
+- **Cross-Session Persistence**: Optional disk-based cache persistence
 
 ## Testing
 
@@ -270,18 +275,51 @@ ginkgo run --focus="Package Name Validation" ./pkg/utils/
 - ✅ Context cancellation handling
 - ✅ Dry-run mode behavior
 - ✅ Error scenarios
+- ✅ Dependency caching (cache hits/misses, invalidation, eviction)
+- ✅ Cache expiration and TTL behavior
+- ✅ Custom cache configuration
 
 ### Adding New Tests
 See `pkg/utils/dependency_checker_test.go` for examples.
 
+## Dependency Caching
+
+### Cache Features
+- **TTL-Based Expiration**: Default 5-minute cache lifetime
+- **LRU Eviction**: Automatic eviction of oldest entries when cache is full
+- **Thread-Safe**: Concurrent access with RWMutex protection
+- **Configurable**: Custom TTL and cache size via `NewDependencyCheckerWithCache()`
+- **Smart Invalidation**: Cache entries removed after successful installations
+
+### Cache Performance
+- **Parallel Processing**: Uncached dependencies checked concurrently
+- **Early Return**: Fully cached dependency lists return immediately
+- **Memory Efficient**: Default limit of 100 cached entries
+- **Logging**: Cache hit/miss statistics in verbose mode
+
+### Cache Management
+```go
+// Default cache (5 minutes TTL, 100 entries)
+checker := utils.NewDependencyChecker(packageManager, platform)
+
+// Custom cache settings
+checker := utils.NewDependencyCheckerWithCache(packageManager, platform, 10*time.Minute, 200)
+
+// Clear cache manually
+checker.ClearCache()
+
+// Invalidate specific entries
+checker.InvalidateCacheEntries([]string{"curl", "git"})
+```
+
 ## Future Enhancements
 
 ### Planned Features
-1. **Dependency Caching**: Cache results within session
-2. **More Package Managers**: DNF, Pacman, Homebrew support
-3. **Version Requirements**: Specify minimum package versions
-4. **Dependency Conflicts**: Handle conflicting package requirements
-5. **Rollback Capability**: Undo dependency installations if main install fails
+1. **More Package Managers**: DNF, Pacman, Homebrew support
+2. **Version Requirements**: Specify minimum package versions
+3. **Dependency Conflicts**: Handle conflicting package requirements
+4. **Rollback Capability**: Undo dependency installations if main install fails
+5. **Cross-Session Persistence**: Optional disk-based cache persistence
 
 ### Contributing
 When adding new package manager support:
