@@ -20,8 +20,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/installers/apt"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 // Command constants for improved maintainability
@@ -629,6 +632,11 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		if err := si.executeCommands(ctx, osConfig.PreInstall); err != nil {
 			return fmt.Errorf("pre-install failed: %w", err)
 		}
+	}
+
+	// Check and install platform dependencies before main installation
+	if err := si.checkAndInstallDependencies(ctx, osConfig); err != nil {
+		return fmt.Errorf("dependency checking failed: %w", err)
 	}
 
 	// Execute main installation command
@@ -1549,4 +1557,55 @@ func expandPath(path string) string {
 		return strings.Replace(path, "~", homeDir, 1)
 	}
 	return path
+}
+
+// checkAndInstallDependencies checks platform-specific dependencies and installs missing ones
+func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, osConfig types.OSConfig) error {
+	// Only check dependencies if there are platform requirements
+	if len(osConfig.PlatformRequirements) == 0 {
+		si.sendLog("INFO", "No platform requirements specified, skipping dependency check")
+		return nil
+	}
+
+	si.sendLog("INFO", "Checking platform-specific dependencies...")
+
+	// Detect current platform
+	platformDetector := platform.NewPlatformDetector()
+	currentPlatform := platformDetector.Detect()
+
+	si.sendLog("INFO", fmt.Sprintf("Detected platform: OS=%s, Distribution=%s", currentPlatform.OS, currentPlatform.Distribution))
+
+	// Create appropriate package manager based on platform
+	var packageManager utils.PackageManager
+	switch currentPlatform.OS {
+	case "linux":
+		switch currentPlatform.Distribution {
+		case "debian", "ubuntu":
+			packageManager = apt.New()
+		default:
+			si.sendLog("WARN", fmt.Sprintf("No package manager support for distribution: %s", currentPlatform.Distribution))
+			return nil
+		}
+	default:
+		si.sendLog("WARN", fmt.Sprintf("No package manager support for OS: %s", currentPlatform.OS))
+		return nil
+	}
+
+	// Verify package manager is available
+	if !packageManager.IsAvailable(ctx) {
+		return fmt.Errorf("package manager %s is not available on this system", packageManager.GetName())
+	}
+
+	si.sendLog("INFO", fmt.Sprintf("Using package manager: %s", packageManager.GetName()))
+
+	// Create dependency checker
+	depChecker := utils.NewDependencyChecker(packageManager, currentPlatform)
+
+	// Check and install dependencies (never dry-run for now)
+	if err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, false); err != nil {
+		return fmt.Errorf("failed to install platform dependencies: %w", err)
+	}
+
+	si.sendLog("INFO", "Platform dependency check completed successfully")
+	return nil
 }

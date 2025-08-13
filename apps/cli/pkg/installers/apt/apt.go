@@ -276,3 +276,47 @@ func (a *APTInstaller) IsInstalled(command string) (bool, error) {
 	// Check if the package is installed and configured properly
 	return strings.Contains(output, "install ok installed"), nil
 }
+
+// PackageManager interface implementation methods
+
+// Install installs multiple packages via APT (implements PackageManager interface)
+func (a *APTInstaller) InstallPackages(ctx context.Context, packages []string, dryRun bool) error {
+	if len(packages) == 0 {
+		return nil
+	}
+
+	log.Info("Installing packages via APT", "packages", packages, "dryRun", dryRun)
+
+	if dryRun {
+		log.Info("DRY RUN: Would install packages", "packages", packages)
+		return nil
+	}
+
+	// Update package lists first
+	updateCmd := "sudo apt-get update"
+	if _, err := utils.CommandExec.RunShellCommand(updateCmd); err != nil {
+		return fmt.Errorf("failed to update APT package lists: %w", err)
+	}
+
+	// Install all packages in one command for efficiency
+	packagesStr := strings.Join(packages, " ")
+	installCmd := fmt.Sprintf("sudo apt-get install -y %s", packagesStr)
+
+	if _, err := utils.CommandExec.RunShellCommand(installCmd); err != nil {
+		return fmt.Errorf("failed to install packages %v: %w", packages, err)
+	}
+
+	log.Info("Successfully installed packages", "packages", packages)
+	return nil
+}
+
+// IsAvailable checks if APT package manager is available
+func (a *APTInstaller) IsAvailable(ctx context.Context) bool {
+	_, err := utils.CommandExec.RunShellCommand("which apt-get")
+	return err == nil
+}
+
+// GetName returns the package manager name
+func (a *APTInstaller) GetName() string {
+	return "apt"
+}

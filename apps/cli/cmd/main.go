@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,7 +48,8 @@ func main() {
 	}
 
 	log.Info("Validating dependencies")
-	if err := utils.CheckDependencies(utils.RequiredDependencies); err != nil {
+	ctx := context.Background()
+	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
 		log.Fatal("Dependency validation failed", err)
 	}
 
