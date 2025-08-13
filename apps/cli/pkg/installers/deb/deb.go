@@ -75,6 +75,15 @@ func (d *DebInstaller) Install(command string, repo types.Repository) error {
 
 	log.Info("Deb package installed successfully", "app", appConfig.Name)
 
+	// Execute post-install commands if they exist
+	if err := executePostInstallCommands(*appConfig); err != nil {
+		log.Warn("Post-install commands failed - installation succeeded but configuration may be incomplete",
+			"app", appConfig.Name,
+			"error", err,
+			"suggestion", "Check the application configuration or run post-install commands manually")
+		// Don't fail the installation for post-install command failures
+	}
+
 	// Add to repository
 	if err := repo.AddApp(appConfig.Name); err != nil {
 		log.Error("Failed to add package to repository", err, "app", appConfig.Name)
@@ -146,4 +155,34 @@ func (d *DebInstaller) IsInstalled(command string) (bool, error) {
 
 	// Check if the package is installed and configured properly
 	return strings.Contains(output, "install ok installed"), nil
+}
+
+// executePostInstallCommands executes any post-install commands specified in the app configuration
+func executePostInstallCommands(appConfig types.AppConfig) error {
+	if len(appConfig.PostInstall) == 0 {
+		log.Debug("No post-install commands to execute", "app", appConfig.Name)
+		return nil
+	}
+
+	log.Info("Executing post-install commands", "app", appConfig.Name, "commandCount", len(appConfig.PostInstall))
+
+	for i, cmd := range appConfig.PostInstall {
+		log.Debug("Executing post-install command", "app", appConfig.Name, "step", i+1, "command", cmd.Shell)
+
+		if cmd.Shell != "" {
+			if _, err := utils.CommandExec.RunShellCommand(cmd.Shell); err != nil {
+				log.Warn("Post-install shell command failed", "app", appConfig.Name, "command", cmd.Shell, "step", i+1, "error", err)
+				return fmt.Errorf("post-install command failed at step %d/%d (command: %s): %w", i+1, len(appConfig.PostInstall), cmd.Shell, err)
+			}
+		}
+
+		if cmd.Sleep > 0 {
+			log.Debug("Post-install sleep", "app", appConfig.Name, "duration", cmd.Sleep)
+			// Note: Sleep duration should be handled by the command execution framework
+			// For now, we'll skip sleep commands in post-install
+		}
+	}
+
+	log.Info("Post-install commands completed successfully", "app", appConfig.Name)
+	return nil
 }

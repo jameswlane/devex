@@ -2,13 +2,35 @@ package config
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/common"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
 )
+
+// platformCache provides cached platform detection to avoid repeated system calls
+var (
+	platformCache      *platform.Platform
+	platformCacheMutex sync.RWMutex
+	platformCacheOnce  sync.Once
+)
+
+// getCachedPlatform returns the platform information, caching it for the session
+func getCachedPlatform() platform.Platform {
+	platformCacheOnce.Do(func() {
+		log.Debug("Detecting platform for the first time - caching result for session")
+		detected := platform.DetectPlatform()
+		platformCache = &detected
+	})
+
+	platformCacheMutex.RLock()
+	defer platformCacheMutex.RUnlock()
+	return *platformCache
+}
 
 // GetAppList retrieves the list of apps from the settings.
 func GetAppList(settings Settings) ([]types.AppConfig, error) {
@@ -32,17 +54,44 @@ func ValidateApp(app types.AppConfig) error {
 func ListAppsByCategory(settings Settings, categories []string) ([]types.AppConfig, error) {
 	log.Info("Filtering apps by categories", "categories", categories)
 
-	var filteredApps []types.AppConfig
+	// Pre-allocate slice with reasonable capacity based on app count
+	filteredApps := make([]types.AppConfig, 0, len(settings.Apps)/2)
 	for _, app := range settings.Apps {
 		for _, category := range categories {
 			if app.Category == category {
 				filteredApps = append(filteredApps, app)
+				break // Avoid duplicate matches if app matches multiple categories
 			}
 		}
 	}
 
 	log.Info("Filtered apps by categories", "count", len(filteredApps))
 	return filteredApps, nil
+}
+
+// convertToAppConfig converts a CrossPlatformApp to AppConfig format for backward compatibility
+func convertToAppConfig(app types.CrossPlatformApp) *types.AppConfig {
+	osConfig := app.GetOSConfig()
+	return &types.AppConfig{
+		BaseConfig: types.BaseConfig{
+			Name:        app.Name,
+			Description: app.Description,
+			Category:    app.Category,
+		},
+		Default:          app.Default,
+		InstallMethod:    osConfig.InstallMethod,
+		InstallCommand:   osConfig.InstallCommand,
+		UninstallCommand: osConfig.UninstallCommand,
+		Dependencies:     osConfig.Dependencies,
+		PreInstall:       osConfig.PreInstall,
+		PostInstall:      osConfig.PostInstall,
+		ConfigFiles:      osConfig.ConfigFiles,
+		AptSources:       osConfig.AptSources,
+		CleanupFiles:     osConfig.CleanupFiles,
+		Conflicts:        osConfig.Conflicts,
+		DownloadURL:      osConfig.DownloadURL,
+		InstallDir:       osConfig.Destination,
+	}
 }
 
 // FindAppByName retrieves an app by its name from the cross-platform settings.
@@ -52,30 +101,7 @@ func FindAppByName(settings CrossPlatformSettings, name string) (*types.AppConfi
 	for _, app := range settings.GetAllApps() {
 		if app.Name == name {
 			log.Info("App found", "name", name)
-
-			// Convert to AppConfig format for compatibility
-			osConfig := app.GetOSConfig()
-			appConfig := &types.AppConfig{
-				BaseConfig: types.BaseConfig{
-					Name:        app.Name,
-					Description: app.Description,
-					Category:    app.Category,
-				},
-				Default:          app.Default,
-				InstallMethod:    osConfig.InstallMethod,
-				InstallCommand:   osConfig.InstallCommand,
-				UninstallCommand: osConfig.UninstallCommand,
-				Dependencies:     osConfig.Dependencies,
-				PreInstall:       osConfig.PreInstall,
-				PostInstall:      osConfig.PostInstall,
-				ConfigFiles:      osConfig.ConfigFiles,
-				AptSources:       osConfig.AptSources,
-				CleanupFiles:     osConfig.CleanupFiles,
-				Conflicts:        osConfig.Conflicts,
-				DownloadURL:      osConfig.DownloadURL,
-				InstallDir:       osConfig.Destination,
-			}
-			return appConfig, nil
+			return convertToAppConfig(app), nil
 		}
 	}
 
@@ -143,7 +169,7 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 					InstallMethod:  installMethod,
 					InstallCommand: installCommand,
 					DownloadURL:    downloadURL,
-					Dependencies:   ToStringSlice(candidate["dependencies"]),
+					Dependencies:   ResolvePlatformDependencies(candidate),
 					PostInstall:    toInstallCommandSlice(candidate["post_install"]),
 				}, nil
 			}
@@ -219,4 +245,70 @@ func toInstallCommandSlice(input any) []types.InstallCommand {
 
 	log.Info("Converted to install command slice", "count", len(result))
 	return result
+}
+
+// ResolvePlatformDependencies resolves dependencies for the current platform from platform_requirements
+func ResolvePlatformDependencies(candidate map[string]any) []string {
+	// First check for legacy dependencies field (backward compatibility)
+	if legacyDeps := ToStringSlice(candidate["dependencies"]); len(legacyDeps) > 0 {
+		log.Info("Using legacy dependencies field", "count", len(legacyDeps))
+		return legacyDeps
+	}
+
+	// Get current platform (cached for performance)
+	currentPlatform := getCachedPlatform()
+	log.Info("Resolving platform-specific dependencies", "os", currentPlatform.OS, "distribution", currentPlatform.Distribution)
+
+	// Check platform_requirements for OS-specific dependencies
+	platformReqs, ok := candidate["platform_requirements"].([]any)
+	if !ok {
+		log.Debug("No platform_requirements found")
+		return nil
+	}
+
+	for _, req := range platformReqs {
+		requirement, ok := req.(map[string]any)
+		if !ok {
+			log.Warn("Platform requirement is not a map", "requirement", req)
+			continue
+		}
+
+		reqOS, ok := requirement["os"].(string)
+		if !ok {
+			log.Warn("Platform requirement OS is not a string", "os", requirement["os"])
+			continue
+		}
+
+		// Check if this requirement matches our current platform
+		if MatchesPlatform(reqOS, &currentPlatform) {
+			deps := ToStringSlice(requirement["dependencies"])
+			if len(deps) > 0 {
+				log.Info("Found platform-specific dependencies", "os", reqOS, "count", len(deps))
+				return deps
+			}
+		}
+	}
+
+	log.Debug("No platform-specific dependencies found for current platform")
+	return nil
+}
+
+// MatchesPlatform checks if a platform requirement matches the current platform
+func MatchesPlatform(reqOS string, currentPlatform *platform.Platform) bool {
+	if currentPlatform == nil {
+		log.Warn("Current platform is nil, cannot match platform requirements")
+		return false
+	}
+
+	// Direct OS match
+	if reqOS == currentPlatform.OS {
+		return true
+	}
+
+	// Linux distribution match
+	if currentPlatform.OS == "linux" && reqOS == currentPlatform.Distribution {
+		return true
+	}
+
+	return false
 }
