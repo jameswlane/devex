@@ -100,6 +100,7 @@ var _ = Describe("DependencyChecker", func() {
 
 				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, false)
 				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("dependency validation failed for package"))
 				Expect(err.Error()).To(ContainSubstring("package name cannot be empty"))
 			})
 
@@ -115,7 +116,8 @@ var _ = Describe("DependencyChecker", func() {
 
 				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, false)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid package name"))
+				Expect(err.Error()).To(ContainSubstring("dependency validation failed for package"))
+				Expect(err.Error()).To(ContainSubstring("contains invalid characters"))
 			})
 
 			It("should reject package names that are too long", func() {
@@ -135,6 +137,7 @@ var _ = Describe("DependencyChecker", func() {
 
 				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, false)
 				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("dependency validation failed for package"))
 				Expect(err.Error()).To(ContainSubstring("package name too long"))
 			})
 		})
@@ -361,6 +364,118 @@ var _ = Describe("DependencyChecker", func() {
 				err = smallCacheChecker.CheckAndInstallPlatformDependencies(ctx, osConfig3, true)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(smallCacheChecker.Cache.Size()).To(Equal(2))
+			})
+		})
+	})
+
+	Describe("Metrics Collection", func() {
+		Context("when tracking dependency operations", func() {
+			It("should track cache hits and misses correctly", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl", "git"},
+						},
+					},
+				}
+
+				// Initial metrics should be zero
+				initialMetrics := depChecker.Metrics.GetMetrics()
+				Expect(initialMetrics.TotalChecks).To(Equal(int64(0)))
+				Expect(initialMetrics.CacheHits).To(Equal(int64(0)))
+				Expect(initialMetrics.CacheMisses).To(Equal(int64(0)))
+
+				// First check - should result in cache misses
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+
+				firstMetrics := depChecker.Metrics.GetMetrics()
+				Expect(firstMetrics.TotalChecks).To(Equal(int64(2))) // curl + git
+				Expect(firstMetrics.CacheMisses).To(Equal(int64(2)))
+				Expect(firstMetrics.CacheHits).To(Equal(int64(0)))
+
+				// Second check - should result in cache hits
+				err = depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+
+				secondMetrics := depChecker.Metrics.GetMetrics()
+				Expect(secondMetrics.TotalChecks).To(Equal(int64(4))) // 2 + 2
+				Expect(secondMetrics.CacheHits).To(Equal(int64(2)))   // Second check hits cache
+				Expect(secondMetrics.CacheMisses).To(Equal(int64(2))) // First check missed
+			})
+
+			It("should track validation and install times", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl"},
+						},
+					},
+				}
+
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+
+				metrics := depChecker.Metrics.GetMetrics()
+				Expect(metrics.ValidationTime).To(BeNumerically(">", 0))
+				// Install time should be 0 for dry run
+				Expect(metrics.InstallTime).To(Equal(time.Duration(0)))
+				Expect(metrics.PackagesInstalled).To(Equal(int64(0)))
+			})
+
+			It("should reset metrics correctly", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl"},
+						},
+					},
+				}
+
+				// Generate some metrics
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify metrics exist
+				metrics := depChecker.Metrics.GetMetrics()
+				Expect(metrics.TotalChecks).To(BeNumerically(">", 0))
+
+				// Reset metrics
+				depChecker.Metrics.Reset()
+
+				// Verify metrics are cleared
+				resetMetrics := depChecker.Metrics.GetMetrics()
+				Expect(resetMetrics.TotalChecks).To(Equal(int64(0)))
+				Expect(resetMetrics.CacheHits).To(Equal(int64(0)))
+				Expect(resetMetrics.CacheMisses).To(Equal(int64(0)))
+				Expect(resetMetrics.ValidationTime).To(Equal(time.Duration(0)))
+				Expect(resetMetrics.InstallTime).To(Equal(time.Duration(0)))
+				Expect(resetMetrics.PackagesInstalled).To(Equal(int64(0)))
+			})
+
+			It("should provide metrics summary logging", func() {
+				osConfig := types.OSConfig{
+					PlatformRequirements: []types.PlatformRequirement{
+						{
+							OS:                   "debian",
+							PlatformDependencies: []string{"curl", "git"},
+						},
+					},
+				}
+
+				// Generate some metrics
+				err := depChecker.CheckAndInstallPlatformDependencies(ctx, osConfig, true)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Should not panic when logging metrics
+				Expect(func() { depChecker.LogMetricsSummary() }).NotTo(Panic())
+
+				// Test logging with no metrics
+				depChecker.Metrics.Reset()
+				Expect(func() { depChecker.LogMetricsSummary() }).NotTo(Panic())
 			})
 		})
 	})
