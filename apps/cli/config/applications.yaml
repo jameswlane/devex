@@ -61,9 +61,6 @@ applications:
         install_command: 'eza'
         uninstall_command: 'eza'
         official_support: true
-        dependencies:
-          - 'curl'
-          - 'gpg'
         apt_sources:
           - key_source: 'https://raw.githubusercontent.com/eza-community/eza/main/deb.asc'
             key_name: '/etc/apt/keyrings/gierens.gpg'
@@ -72,7 +69,13 @@ applications:
             require_dearmor: true
         platform_requirements:
           - os: 'debian'
+            dependencies:
+              - 'curl'
+              - 'gnupg'
           - os: 'ubuntu'
+            dependencies:
+              - 'curl'
+              - 'gnupg'
         alternatives:
           - install_method: 'pacman'
             install_command: 'eza'
@@ -182,7 +185,13 @@ applications:
             source_name: '/etc/apt/sources.list.d/github-cli.list'
         platform_requirements:
           - os: 'debian'
+            dependencies:
+              - 'curl'
+              - 'gnupg'
           - os: 'ubuntu'
+            dependencies:
+              - 'curl'
+              - 'gnupg'
         alternatives:
           - install_method: 'dnf'
             install_command: 'gh'

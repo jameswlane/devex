@@ -8,6 +8,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -121,6 +122,397 @@ var _ = Describe("Config", func() {
 			It("returns nil for nil input", func() {
 				result := config.ToStringSlice(nil)
 				Expect(result).To(BeNil())
+			})
+		})
+	})
+
+	Context("Platform Dependencies Resolution", func() {
+		Context("ResolvePlatformDependencies", func() {
+			It("returns legacy dependencies when present", func() {
+				candidate := map[string]any{
+					"dependencies": []any{"legacy-dep1", "legacy-dep2"},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(Equal([]string{"legacy-dep1", "legacy-dep2"}))
+			})
+
+			It("returns platform-specific dependencies for matching OS", func() {
+				candidate := map[string]any{
+					"platform_requirements": []any{
+						map[string]any{
+							"os":           "linux",
+							"dependencies": []any{"linux-dep1", "linux-dep2"},
+						},
+						map[string]any{
+							"os":           "darwin",
+							"dependencies": []any{"macos-dep1", "macos-dep2"},
+						},
+					},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(BeElementOf([][]string{
+					{"linux-dep1", "linux-dep2"},
+					{"macos-dep1", "macos-dep2"},
+					nil, // Windows or other OS without requirements
+				}))
+			})
+
+			It("returns platform-specific dependencies for matching distribution", func() {
+				candidate := map[string]any{
+					"platform_requirements": []any{
+						map[string]any{
+							"os":           "ubuntu", // Distribution-specific requirement
+							"dependencies": []any{"ubuntu-dep1", "ubuntu-dep2"},
+						},
+					},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				// Result depends on the actual platform, but should be valid
+				if result != nil {
+					Expect(result).To(Equal([]string{"ubuntu-dep1", "ubuntu-dep2"}))
+				}
+			})
+
+			It("returns nil when no platform requirements exist", func() {
+				candidate := map[string]any{
+					"name": "test-app",
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(BeNil())
+			})
+
+			It("returns nil when platform requirements is not a slice", func() {
+				candidate := map[string]any{
+					"platform_requirements": "invalid",
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(BeNil())
+			})
+
+			It("skips invalid platform requirement entries", func() {
+				candidate := map[string]any{
+					"platform_requirements": []any{
+						"invalid-entry",
+						map[string]any{
+							"os":           "linux",
+							"dependencies": []any{"valid-dep"},
+						},
+					},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				// Should either be nil or contain valid-dep depending on platform
+				if result != nil {
+					Expect(result).To(Equal([]string{"valid-dep"}))
+				}
+			})
+
+			It("handles missing OS field in platform requirements", func() {
+				candidate := map[string]any{
+					"platform_requirements": []any{
+						map[string]any{
+							"dependencies": []any{"no-os-dep"},
+						},
+					},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(BeNil())
+			})
+
+			It("handles non-string OS field in platform requirements", func() {
+				candidate := map[string]any{
+					"platform_requirements": []any{
+						map[string]any{
+							"os":           123, // Invalid type
+							"dependencies": []any{"invalid-os-dep"},
+						},
+					},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(BeNil())
+			})
+
+			It("prioritizes legacy dependencies over platform requirements", func() {
+				candidate := map[string]any{
+					"dependencies": []any{"legacy-dep"},
+					"platform_requirements": []any{
+						map[string]any{
+							"os":           "linux",
+							"dependencies": []any{"platform-dep"},
+						},
+					},
+				}
+
+				result := config.ResolvePlatformDependencies(candidate)
+				Expect(result).To(Equal([]string{"legacy-dep"}))
+			})
+		})
+
+		Context("MatchesPlatform", func() {
+			It("returns false when platform is nil", func() {
+				result := config.MatchesPlatform("linux", nil)
+				Expect(result).To(BeFalse())
+			})
+
+			It("matches direct OS match", func() {
+				testPlatform := &platform.Platform{
+					OS:           "linux",
+					Distribution: "ubuntu",
+				}
+
+				result := config.MatchesPlatform("linux", testPlatform)
+				Expect(result).To(BeTrue())
+			})
+
+			It("matches distribution for Linux platform", func() {
+				testPlatform := &platform.Platform{
+					OS:           "linux",
+					Distribution: "ubuntu",
+				}
+
+				result := config.MatchesPlatform("ubuntu", testPlatform)
+				Expect(result).To(BeTrue())
+			})
+
+			It("does not match distribution for non-Linux platform", func() {
+				testPlatform := &platform.Platform{
+					OS:           "darwin",
+					Distribution: "macos",
+				}
+
+				result := config.MatchesPlatform("ubuntu", testPlatform)
+				Expect(result).To(BeFalse())
+			})
+
+			It("returns false for non-matching OS", func() {
+				testPlatform := &platform.Platform{
+					OS:           "darwin",
+					Distribution: "macos",
+				}
+
+				result := config.MatchesPlatform("windows", testPlatform)
+				Expect(result).To(BeFalse())
+			})
+
+			It("returns false for non-matching distribution", func() {
+				testPlatform := &platform.Platform{
+					OS:           "linux",
+					Distribution: "fedora",
+				}
+
+				result := config.MatchesPlatform("ubuntu", testPlatform)
+				Expect(result).To(BeFalse())
+			})
+
+			It("handles empty OS requirement", func() {
+				testPlatform := &platform.Platform{
+					OS:           "linux",
+					Distribution: "ubuntu",
+				}
+
+				result := config.MatchesPlatform("", testPlatform)
+				Expect(result).To(BeFalse())
+			})
+
+			It("handles empty platform OS", func() {
+				testPlatform := &platform.Platform{
+					OS:           "",
+					Distribution: "ubuntu",
+				}
+
+				result := config.MatchesPlatform("linux", testPlatform)
+				Expect(result).To(BeFalse())
+			})
+
+			It("handles case sensitivity correctly", func() {
+				testPlatform := &platform.Platform{
+					OS:           "Linux",  // Capital L
+					Distribution: "Ubuntu", // Capital U
+				}
+
+				// Should not match due to case sensitivity
+				Expect(config.MatchesPlatform("linux", testPlatform)).To(BeFalse())
+				Expect(config.MatchesPlatform("ubuntu", testPlatform)).To(BeFalse())
+
+				// Should match exact case
+				Expect(config.MatchesPlatform("Linux", testPlatform)).To(BeTrue())
+			})
+		})
+	})
+
+	Context("Integration Tests", func() {
+		Context("Platform-specific dependency resolution workflow", func() {
+			It("resolves complete dependency chains with platform awareness", func() {
+				// Create a complex scenario with multiple platform requirements
+				candidate := map[string]any{
+					"name": "multi-platform-app",
+					"platform_requirements": []any{
+						map[string]any{
+							"os":           "linux",
+							"dependencies": []any{"build-essential", "cmake"},
+						},
+						map[string]any{
+							"os":           "darwin",
+							"dependencies": []any{"xcode-command-line-tools"},
+						},
+						map[string]any{
+							"os":           "ubuntu",
+							"dependencies": []any{"ubuntu-specific-dep", "gnupg"},
+						},
+					},
+				}
+
+				// Verify that the resolution works consistently
+				result1 := config.ResolvePlatformDependencies(candidate)
+				result2 := config.ResolvePlatformDependencies(candidate)
+
+				// Results should be consistent (testing caching)
+				Expect(result1).To(Equal(result2))
+
+				// Result should be one of the expected platform-specific dependency sets
+				if result1 != nil {
+					Expect(result1).To(BeElementOf([][]string{
+						{"build-essential", "cmake"},     // Linux
+						{"xcode-command-line-tools"},     // macOS
+						{"ubuntu-specific-dep", "gnupg"}, // Ubuntu
+					}))
+				}
+			})
+
+			It("handles mixed legacy and platform-specific configurations", func() {
+				// Test the prioritization correctly
+				candidates := []map[string]any{
+					{
+						"name":         "legacy-only",
+						"dependencies": []any{"legacy-dep1", "legacy-dep2"},
+					},
+					{
+						"name": "platform-only",
+						"platform_requirements": []any{
+							map[string]any{
+								"os":           "linux",
+								"dependencies": []any{"platform-dep1"},
+							},
+						},
+					},
+					{
+						"name":         "mixed-config",
+						"dependencies": []any{"legacy-wins"},
+						"platform_requirements": []any{
+							map[string]any{
+								"os":           "linux",
+								"dependencies": []any{"should-not-use"},
+							},
+						},
+					},
+				}
+
+				for _, candidate := range candidates {
+					result := config.ResolvePlatformDependencies(candidate)
+
+					switch candidate["name"] {
+					case "legacy-only":
+						Expect(result).To(Equal([]string{"legacy-dep1", "legacy-dep2"}))
+					case "platform-only":
+						// Result depends on actual platform
+						if result != nil {
+							Expect(result).To(Equal([]string{"platform-dep1"}))
+						}
+					case "mixed-config":
+						// Legacy should always win
+						Expect(result).To(Equal([]string{"legacy-wins"}))
+					}
+				}
+			})
+
+			It("validates platform matching logic across different scenarios", func() {
+				testCases := []struct {
+					name        string
+					reqOS       string
+					platform    platform.Platform
+					shouldMatch bool
+				}{
+					{
+						name:        "exact OS match",
+						reqOS:       "linux",
+						platform:    platform.Platform{OS: "linux", Distribution: "ubuntu"},
+						shouldMatch: true,
+					},
+					{
+						name:        "distribution match on Linux",
+						reqOS:       "ubuntu",
+						platform:    platform.Platform{OS: "linux", Distribution: "ubuntu"},
+						shouldMatch: true,
+					},
+					{
+						name:        "distribution no match on macOS",
+						reqOS:       "ubuntu",
+						platform:    platform.Platform{OS: "darwin", Distribution: "macos"},
+						shouldMatch: false,
+					},
+					{
+						name:        "case sensitive OS",
+						reqOS:       "Linux",
+						platform:    platform.Platform{OS: "linux", Distribution: "ubuntu"},
+						shouldMatch: false,
+					},
+					{
+						name:        "Windows direct match",
+						reqOS:       "windows",
+						platform:    platform.Platform{OS: "windows", Distribution: ""},
+						shouldMatch: true,
+					},
+				}
+
+				for _, tc := range testCases {
+					By(tc.name)
+					result := config.MatchesPlatform(tc.reqOS, &tc.platform)
+					if tc.shouldMatch {
+						Expect(result).To(BeTrue(), "Expected %s to match platform %+v", tc.reqOS, tc.platform)
+					} else {
+						Expect(result).To(BeFalse(), "Expected %s to NOT match platform %+v", tc.reqOS, tc.platform)
+					}
+				}
+			})
+
+			It("ensures thread safety of platform caching", func() {
+				// Test concurrent access to platform caching
+				results := make(chan []string, 10)
+				candidate := map[string]any{
+					"platform_requirements": []any{
+						map[string]any{
+							"os":           "linux",
+							"dependencies": []any{"concurrent-dep"},
+						},
+					},
+				}
+
+				// Run multiple goroutines concurrently
+				for i := 0; i < 10; i++ {
+					go func() {
+						result := config.ResolvePlatformDependencies(candidate)
+						results <- result
+					}()
+				}
+
+				// Collect results
+				var allResults [][]string
+				for i := 0; i < 10; i++ {
+					allResults = append(allResults, <-results)
+				}
+
+				// All results should be consistent
+				firstResult := allResults[0]
+				for i, result := range allResults {
+					Expect(result).To(Equal(firstResult), "Result %d should match first result", i)
+				}
 			})
 		})
 	})

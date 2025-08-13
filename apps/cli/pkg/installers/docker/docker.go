@@ -302,10 +302,11 @@ func executeDockerCommand(command string) error {
 	// If that fails, try with sudo
 	sudoCommand := "sudo " + command
 	if _, err := utils.CommandExec.RunShellCommand(sudoCommand); err != nil {
-		return fmt.Errorf("docker command failed even with sudo: %w", err)
+		log.Error("Docker command failed with both user and sudo access", err, "command", command)
+		return fmt.Errorf("docker command failed even with sudo - check if Docker daemon is running and accessible: %w", err)
 	}
 
-	log.Debug("Docker command executed with sudo (user may need to refresh docker group membership)")
+	log.Info("Docker command executed with sudo (user may need to refresh docker group membership)", "hint", "Run 'newgrp docker' or log out and back in to refresh group membership")
 	return nil
 }
 

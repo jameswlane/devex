@@ -322,9 +322,10 @@ type ShellConfig interface {
 // OSConfig defines OS-specific installation configuration
 // PlatformRequirement defines OS and version requirements for an installation method
 type PlatformRequirement struct {
-	OS      string `mapstructure:"os" yaml:"os"`
-	Version string `mapstructure:"version" yaml:"version,omitempty"`
-	Arch    string `mapstructure:"arch" yaml:"arch,omitempty"`
+	OS                   string   `mapstructure:"os" yaml:"os"`
+	Version              string   `mapstructure:"version" yaml:"version,omitempty"`
+	Arch                 string   `mapstructure:"arch" yaml:"arch,omitempty"`
+	PlatformDependencies []string `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
 }
 
 type OSConfig struct {
