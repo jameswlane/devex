@@ -1,3 +1,9 @@
+## [0.20.4](https://github.com/jameswlane/devex/compare/0.20.3...0.20.4) (2025-08-13)
+
+### Bug Fixes
+
+* resolve installer issues and implement platform-specific depende… ([#130](https://github.com/jameswlane/devex/issues/130)) ([168eb19](https://github.com/jameswlane/devex/commit/168eb19b1696f9dcc67d23e627bb45ebfcbbc26b))
+
 ## [0.20.3](https://github.com/jameswlane/devex/compare/0.20.2...0.20.3) (2025-08-12)
 
 ### Bug Fixes
