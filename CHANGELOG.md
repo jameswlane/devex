@@ -1,3 +1,9 @@
+## [0.22.0](https://github.com/jameswlane/devex/compare/0.21.0...0.22.0) (2025-08-15)
+
+### Features
+
+* implement intelligent package manager updates across all installers ([#134](https://github.com/jameswlane/devex/issues/134)) ([c6af19a](https://github.com/jameswlane/devex/commit/c6af19a4f5be52ba88ba0b19ade13a2cde49de9d))
+
 ## [0.21.0](https://github.com/jameswlane/devex/compare/0.20.4...0.21.0) (2025-08-13)
 
 ### Features
