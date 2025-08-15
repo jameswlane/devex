@@ -3,6 +3,7 @@ package utilities
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
@@ -51,12 +52,16 @@ func (pmc *PackageManagerCache) loadFromRepository() {
 			if parsedTime, err := time.Parse(time.RFC3339, timestamp); err == nil {
 				pmc.lastUpdated[pm] = parsedTime
 				log.Debug("Loaded cached update time", "packageManager", pm, "lastUpdate", parsedTime)
+			} else {
+				log.Warn("Failed to parse cached timestamp", "packageManager", pm, "timestamp", timestamp, "error", err)
 			}
+		} else {
+			log.Debug("No cached timestamp found", "packageManager", pm, "error", err)
 		}
 	}
 }
 
-// saveToRepository saves an update timestamp to the repository
+// saveToRepository saves an update timestamp to the repository (must be called with mutex held)
 func (pmc *PackageManagerCache) saveToRepository(packageManager string, timestamp time.Time) {
 	key := fmt.Sprintf("last_%s_update", packageManager)
 	if err := pmc.repo.Set(key, timestamp.Format(time.RFC3339)); err != nil {
@@ -89,8 +94,35 @@ func (pmc *PackageManagerCache) markUpdated(packageManager string) {
 	log.Debug("Marked package manager as updated", "packageManager", packageManager, "timestamp", now)
 }
 
+// validatePackageManager validates that the package manager name is safe to use in commands
+func validatePackageManager(pm string) error {
+	// Only allow alphanumeric characters, underscores, and hyphens
+	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(pm) {
+		return fmt.Errorf("invalid package manager name: %s", pm)
+	}
+
+	// Additional check: ensure it's a known package manager
+	validPackageManagers := map[string]bool{
+		"apt": true, "dnf": true, "yum": true, "pacman": true, "zypper": true,
+		"brew": true, "apk": true, "emerge": true, "eopkg": true, "flatpak": true,
+		"snap": true, "xbps": true, "yay": true, "pip": true, "deb": true,
+		"rpm": true, "appimage": true, "curlpipe": true, "docker": true, "mise": true,
+	}
+
+	if !validPackageManagers[pm] {
+		return fmt.Errorf("unknown package manager: %s", pm)
+	}
+
+	return nil
+}
+
 // EnsurePackageManagerUpdated ensures a package manager's package lists are up to date
 func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, repo types.Repository, maxAge time.Duration) error {
+	// SECURITY: Validate package manager name to prevent command injection
+	if err := validatePackageManager(packageManager); err != nil {
+		return fmt.Errorf("package manager validation failed: %w", err)
+	}
+
 	cache := GetPackageManagerCache(repo)
 
 	// Check if recently updated

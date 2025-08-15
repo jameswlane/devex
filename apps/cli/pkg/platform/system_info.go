@@ -136,6 +136,7 @@ func (info *SystemInfo) detectPackageManagers(ctx context.Context) {
 	for _, pm := range packageManagers {
 		// Try to get version with timeout
 		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel() // SECURITY: Ensure context is always cancelled
 
 		if output, err := exec.CommandContext(timeoutCtx, pm.command, pm.args...).Output(); err == nil {
 			version := strings.TrimSpace(string(output))
@@ -149,8 +150,6 @@ func (info *SystemInfo) detectPackageManagers(ctx context.Context) {
 				info.PackageManagers[pm.name] = version
 			}
 		}
-
-		cancel()
 	}
 }
 
