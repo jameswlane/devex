@@ -21,6 +21,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers/apt"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
@@ -702,6 +703,8 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 		return si.executeDockerInstall(ctx, app, osConfig)
 	case "mise":
 		return si.executeMiseInstall(ctx, app, osConfig)
+	case "dnf", "yum", "pacman", "zypper", "brew", "apk", "emerge", "eopkg", "flatpak", "snap", "xbps", "yay":
+		return si.executePackageManagerInstall(ctx, app, osConfig)
 	default:
 		// Generic command execution
 		return si.executeCommandStream(ctx, osConfig.InstallCommand)
@@ -718,25 +721,16 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 		if source.KeySource != "" {
 			si.sendLog("INFO", fmt.Sprintf("Adding GPG key from: %s", source.KeySource))
 
-			// Use secure GPG validation if fingerprint is provided
-			if source.KeyFingerprint != "" {
-				si.sendLog("INFO", "Using fingerprint validation for enhanced security")
-				if err := si.validateAndAddGPGKey(ctx, source.KeySource, source.KeyFingerprint); err != nil {
-					return fmt.Errorf("failed to validate and add GPG key for %s: %w", source.SourceName, err)
-				}
-			} else {
-				// Fallback to basic key addition (less secure but backwards compatible)
-				si.sendLog("WARN", "No fingerprint provided - using basic key validation")
-				addKeyCmd := fmt.Sprintf("curl -fsSL %s | sudo apt-key add -", source.KeySource)
-				if err := si.executeCommandStream(ctx, addKeyCmd); err != nil {
-					return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
-				}
+			// Use modern GPG keyring approach (no apt-key)
+			si.sendLog("INFO", "Using modern GPG keyring approach")
+			if err := si.addModernGPGKey(ctx, source.KeySource, source.KeyName, source.RequireDearmor); err != nil {
+				return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
 			}
 		}
 
 		// Add the repository source
 		if source.SourceRepo != "" {
-			addSourceCmd := fmt.Sprintf("echo '%s' | sudo tee /etc/apt/sources.list.d/%s.list",
+			addSourceCmd := fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null",
 				source.SourceRepo, source.SourceName)
 			if err := si.executeCommandStream(ctx, addSourceCmd); err != nil {
 				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
@@ -746,136 +740,98 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 
 	// Update package lists
 	si.sendLog("INFO", "Updating package lists...")
-	if err := si.executeCommandStream(ctx, "sudo apt update"); err != nil {
+	if err := si.executeCommandStream(ctx, "sudo apt-get update"); err != nil {
 		return err
 	}
 
 	// Install package - construct proper APT command
-	aptCommand := fmt.Sprintf("sudo apt install -y %s", osConfig.InstallCommand)
+	// Use 'apt-get' for scripted operations to avoid CLI warnings
+	aptCommand := fmt.Sprintf("sudo apt-get install -y %s", osConfig.InstallCommand)
 	return si.executeCommandStream(ctx, aptCommand)
 }
 
-// validateAndAddGPGKey validates a GPG key fingerprint and adds the key to APT keyring
-// SECURITY: Validates key fingerprint to prevent key substitution attacks
-func (si *StreamingInstaller) validateAndAddGPGKey(ctx context.Context, keyURL, expectedFingerprint string) error {
-	si.sendLog("INFO", "Validating and adding GPG key...")
+// addModernGPGKey downloads and processes a GPG key using modern keyring approach
+func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyName string, requireDearmor bool) error {
+	si.sendLog("INFO", "Downloading and processing GPG key...")
 
 	// Validate the key URL is HTTPS
 	if !strings.HasPrefix(keyURL, "https://") {
 		return fmt.Errorf("GPG key URL must use HTTPS: %s", keyURL)
 	}
 
-	// Download the key to a temporary file
-	tempKeyFile, err := si.downloadGPGKey(keyURL)
-	if err != nil {
-		return fmt.Errorf("failed to download GPG key: %w", err)
-	}
-	defer si.cleanupTempScript(tempKeyFile) // Reuse cleanup function
-
-	// Validate the key fingerprint if provided
-	if expectedFingerprint != "" {
-		if err := si.validateGPGKeyFingerprint(ctx, tempKeyFile, expectedFingerprint); err != nil {
-			return fmt.Errorf("GPG key fingerprint validation failed: %w", err)
-		}
+	// Check if the GPG key file already exists
+	checkExistsCmd := fmt.Sprintf("test -f %s", keyName)
+	if err := si.executeCommandStream(ctx, checkExistsCmd); err == nil {
+		si.sendLog("INFO", "GPG key file already exists")
+		return nil
 	}
 
-	// Add the key to APT keyring
-	addKeyCmd := fmt.Sprintf("sudo apt-key add %s", tempKeyFile)
-	return si.executeCommandStream(ctx, addKeyCmd)
+	// Ensure the keyrings directory exists
+	createDirCmd := "sudo mkdir -p /etc/apt/keyrings"
+	if err := si.executeCommandStream(ctx, createDirCmd); err != nil {
+		return fmt.Errorf("failed to create keyrings directory: %w", err)
+	}
+
+	if requireDearmor {
+		// Download and dearmor the key in one command
+		downloadAndDearmorCmd := fmt.Sprintf("curl -fsSL %s | sudo gpg --dearmor -o %s", keyURL, keyName)
+		si.sendLog("INFO", fmt.Sprintf("Downloading and dearmorying GPG key: %s", downloadAndDearmorCmd))
+		return si.executeCommandStream(ctx, downloadAndDearmorCmd)
+	} else {
+		// Download the key directly
+		downloadCmd := fmt.Sprintf("curl -fsSL %s | sudo tee %s > /dev/null", keyURL, keyName)
+		si.sendLog("INFO", fmt.Sprintf("Downloading GPG key: %s", downloadCmd))
+		return si.executeCommandStream(ctx, downloadCmd)
+	}
 }
 
-// downloadGPGKey downloads a GPG key from URL to a temporary file
-func (si *StreamingInstaller) downloadGPGKey(keyURL string) (string, error) {
-	si.sendLog("INFO", "Downloading GPG key...")
+// executePackageManagerInstall handles package manager installations with intelligent updates
+func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	packageManager := osConfig.InstallMethod
 
-	// Create secure temporary file
-	tmpFile, err := createSecureTempFile("", "devex-gpg-key-*.asc")
-	if err != nil {
-		return "", err
-	}
-	defer tmpFile.Close()
-
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: si.config.HTTPTimeout,
+	// Ensure package manager cache is updated (6 hour default)
+	si.sendLog("INFO", fmt.Sprintf("Ensuring %s package cache is up to date...", packageManager))
+	if err := utilities.EnsurePackageManagerUpdated(ctx, packageManager, si.repo, 6*time.Hour); err != nil {
+		si.sendLog("WARN", fmt.Sprintf("Failed to update %s cache, continuing with installation: %v", packageManager, err))
+		// Continue with installation anyway
+	} else {
+		si.sendLog("INFO", fmt.Sprintf("%s package cache is up to date", packageManager))
 	}
 
-	req, err := http.NewRequestWithContext(si.ctx, "GET", keyURL, nil)
-	if err != nil {
-		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
-			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
-		}
-		return "", fmt.Errorf("failed to create request: %w", err)
+	// Construct install command based on package manager
+	var installCmd string
+	switch packageManager {
+	case "dnf":
+		installCmd = fmt.Sprintf("sudo dnf install -y %s", osConfig.InstallCommand)
+	case "yum":
+		installCmd = fmt.Sprintf("sudo yum install -y %s", osConfig.InstallCommand)
+	case "pacman":
+		installCmd = fmt.Sprintf("sudo pacman -S --noconfirm %s", osConfig.InstallCommand)
+	case "zypper":
+		installCmd = fmt.Sprintf("sudo zypper install -y %s", osConfig.InstallCommand)
+	case "brew":
+		installCmd = fmt.Sprintf("brew install %s", osConfig.InstallCommand)
+	case "apk":
+		installCmd = fmt.Sprintf("sudo apk add %s", osConfig.InstallCommand)
+	case "emerge":
+		installCmd = fmt.Sprintf("sudo emerge %s", osConfig.InstallCommand)
+	case "eopkg":
+		installCmd = fmt.Sprintf("sudo eopkg install -y %s", osConfig.InstallCommand)
+	case "flatpak":
+		installCmd = fmt.Sprintf("flatpak install -y %s", osConfig.InstallCommand)
+	case "snap":
+		installCmd = fmt.Sprintf("sudo snap install %s", osConfig.InstallCommand)
+	case "xbps":
+		installCmd = fmt.Sprintf("sudo xbps-install -y %s", osConfig.InstallCommand)
+	case "yay":
+		installCmd = fmt.Sprintf("yay -S --noconfirm %s", osConfig.InstallCommand)
+	default:
+		// Fallback to the configured install command
+		installCmd = osConfig.InstallCommand
 	}
 
-	resp, err := client.Do(req)
-	if err != nil {
-		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
-			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
-		}
-		return "", fmt.Errorf("failed to download key: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
-			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
-		}
-		return "", fmt.Errorf("download failed with status: %s", resp.Status)
-	}
-
-	// Copy content with size limit
-	_, err = io.CopyN(tmpFile, resp.Body, si.config.MaxGPGKeySize)
-	if err != nil && !errors.Is(err, io.EOF) {
-		if removeErr := os.Remove(tmpFile.Name()); removeErr != nil {
-			log.Warn("Failed to remove temp file during cleanup", "error", removeErr)
-		}
-		return "", fmt.Errorf("failed to write key: %w", err)
-	}
-
-	si.sendLog("INFO", "GPG key downloaded successfully")
-	return tmpFile.Name(), nil
-}
-
-// validateGPGKeyFingerprint validates that a GPG key matches the expected fingerprint
-// SECURITY: Prevents key substitution attacks by validating cryptographic fingerprint
-func (si *StreamingInstaller) validateGPGKeyFingerprint(ctx context.Context, keyFile, expectedFingerprint string) error {
-	si.sendLog("INFO", "Validating GPG key fingerprint...")
-
-	// Clean and normalize expected fingerprint (remove spaces, convert to uppercase)
-	expectedFingerprint = strings.ReplaceAll(strings.ToUpper(expectedFingerprint), " ", "")
-
-	// Use gpg to get the key fingerprint
-	getFingerprintCmd := fmt.Sprintf("gpg --with-fingerprint --import-options show-only --import %s", keyFile)
-	cmd, err := si.executor.ExecuteCommand(ctx, getFingerprintCmd)
-	if err != nil {
-		return fmt.Errorf("failed to execute GPG command: %w", err)
-	}
-
-	// Capture output
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("GPG command failed: %w", err)
-	}
-
-	// Parse fingerprint from output
-	outputStr := string(output)
-	fingerprintRegex := regexp.MustCompile(`Key fingerprint = ([A-F0-9 ]+)`)
-	matches := fingerprintRegex.FindStringSubmatch(outputStr)
-	if len(matches) < 2 {
-		return fmt.Errorf("could not extract fingerprint from GPG output")
-	}
-
-	// Clean and normalize actual fingerprint
-	actualFingerprint := strings.ReplaceAll(strings.ToUpper(matches[1]), " ", "")
-
-	// Compare fingerprints
-	if actualFingerprint != expectedFingerprint {
-		return fmt.Errorf("fingerprint mismatch: expected %s, got %s", expectedFingerprint, actualFingerprint)
-	}
-
-	si.sendLog("INFO", "GPG key fingerprint validated successfully")
-	return nil
+	si.sendLog("INFO", fmt.Sprintf("Installing %s using %s...", app.Name, packageManager))
+	return si.executeCommandStream(ctx, installCmd)
 }
 
 // executeCurlPipeInstall handles curl pipe installations with security validation
