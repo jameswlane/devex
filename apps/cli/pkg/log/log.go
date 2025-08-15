@@ -1,10 +1,13 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -46,8 +49,11 @@ func InitDefaultLogger(w io.Writer) {
 	logger = New(w)
 }
 
-// InitFileLogger initializes a file-based logger with optional debug mode.
+// InitFileLogger initializes a file-based logger with optional debug mode and enhanced system information.
 func InitFileLogger(debugMode bool) error {
+	// Import platform package and gather system info - doing this here to avoid circular imports
+	systemInfo := gatherBasicSystemInfo()
+
 	// Create logs directory
 	homeDir := os.Getenv("HOME")
 	if homeDir == "" {
@@ -71,6 +77,13 @@ func InitFileLogger(debugMode bool) error {
 			return fmt.Errorf("failed to create log file: %w", err)
 		}
 
+		// Write enhanced header to file
+		header := fmt.Sprintf("%s\nMode: %s\n%s\n",
+			systemInfo,
+			getMode(debugMode),
+			strings.Repeat("-", 50))
+		_, _ = file.WriteString(header)
+
 		// Write to both file and stderr in debug mode
 		writer = io.MultiWriter(file, os.Stderr)
 
@@ -90,11 +103,9 @@ func InitFileLogger(debugMode bool) error {
 			return fmt.Errorf("failed to create log file: %w", err)
 		}
 
-		// Write initial header
-		header := fmt.Sprintf("DevEx Log - Started: %s\nPlatform: %s %s\nMode: %s\n%s\n",
-			time.Now().Format("2006-01-02 15:04:05"),
-			os.Getenv("USER"),
-			os.Getenv("HOSTNAME"),
+		// Write enhanced header to file
+		header := fmt.Sprintf("%s\nMode: %s\n%s\n",
+			systemInfo,
 			getMode(debugMode),
 			strings.Repeat("-", 50))
 		_, _ = file.WriteString(header)
@@ -217,4 +228,212 @@ func Debug(msg string, keyvals ...any) {
 	if logger != nil {
 		logger.logWithContext(log.DebugLevel, msg, keyvals...)
 	}
+}
+
+// gatherBasicSystemInfo collects comprehensive system information without importing platform package
+func gatherBasicSystemInfo() string {
+	var sb strings.Builder
+
+	sb.WriteString("=== DEVEX SYSTEM INFORMATION ===\n")
+	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
+
+	// Basic platform info
+	sb.WriteString("=== PLATFORM ===\n")
+	sb.WriteString(fmt.Sprintf("Operating System: %s\n", runtime.GOOS))
+	sb.WriteString(fmt.Sprintf("Architecture: %s\n", runtime.GOARCH))
+
+	// Detect Linux distribution
+	if runtime.GOOS == "linux" {
+		if distro := detectLinuxDistribution(); distro != "" {
+			sb.WriteString(fmt.Sprintf("Distribution: %s\n", distro))
+		}
+		if version := getOSVersion(); version != "" {
+			sb.WriteString(fmt.Sprintf("OS Version: %s\n", version))
+		}
+		if kernel := getKernelVersion(); kernel != "" {
+			sb.WriteString(fmt.Sprintf("Kernel Version: %s\n", kernel))
+		}
+		if desktop := getDesktopEnvironment(); desktop != "" && desktop != "unknown" {
+			sb.WriteString(fmt.Sprintf("Desktop Environment: %s\n", desktop))
+		}
+	}
+
+	// Runtime info
+	sb.WriteString("=== RUNTIME ===\n")
+	sb.WriteString(fmt.Sprintf("Go Version: %s\n", runtime.Version()))
+	sb.WriteString(fmt.Sprintf("CPU Count: %d\n", runtime.NumCPU()))
+
+	if username := os.Getenv("USER"); username != "" {
+		sb.WriteString(fmt.Sprintf("Username: %s\n", username))
+	}
+	if shell := os.Getenv("SHELL"); shell != "" {
+		sb.WriteString(fmt.Sprintf("Shell: %s\n", shell))
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		sb.WriteString(fmt.Sprintf("Home Directory: %s\n", home))
+	}
+	if pwd, err := os.Getwd(); err == nil {
+		sb.WriteString(fmt.Sprintf("Working Directory: %s\n", pwd))
+	}
+
+	// Package managers
+	sb.WriteString("=== PACKAGE MANAGERS ===\n")
+	packageManagers := detectPackageManagers()
+	if len(packageManagers) == 0 {
+		sb.WriteString("No package managers detected\n")
+	} else {
+		for pm, version := range packageManagers {
+			sb.WriteString(fmt.Sprintf("%s: %s\n", pm, version))
+		}
+	}
+
+	// Environment
+	sb.WriteString("=== ENVIRONMENT ===\n")
+	if path := os.Getenv("PATH"); path != "" {
+		if len(path) > 500 {
+			path = path[:500] + "... [truncated]"
+		}
+		sb.WriteString(fmt.Sprintf("PATH: %s\n", path))
+	}
+
+	sb.WriteString("=== END SYSTEM INFORMATION ===\n")
+	return sb.String()
+}
+
+// detectLinuxDistribution detects the Linux distribution
+func detectLinuxDistribution() string {
+	// Try to read /etc/os-release
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		content := string(data)
+		for _, line := range strings.Split(content, "\n") {
+			if strings.HasPrefix(line, "ID=") {
+				return strings.Trim(strings.TrimPrefix(line, "ID="), "\"")
+			}
+		}
+	}
+
+	// Fallback to checking specific files
+	distributions := map[string]string{
+		"/etc/ubuntu-release":  "ubuntu",
+		"/etc/debian_version":  "debian",
+		"/etc/redhat-release":  "rhel",
+		"/etc/centos-release":  "centos",
+		"/etc/fedora-release":  "fedora",
+		"/etc/arch-release":    "arch",
+		"/etc/manjaro-release": "manjaro",
+		"/etc/SUSE-release":    "opensuse",
+	}
+
+	for file, distro := range distributions {
+		if _, err := os.Stat(file); err == nil {
+			return distro
+		}
+	}
+
+	return "unknown"
+}
+
+// getOSVersion gets the OS version
+func getOSVersion() string {
+	if data, err := os.ReadFile("/etc/os-release"); err == nil {
+		content := string(data)
+		for _, line := range strings.Split(content, "\n") {
+			if strings.HasPrefix(line, "VERSION_ID=") {
+				return strings.Trim(strings.TrimPrefix(line, "VERSION_ID="), "\"")
+			}
+		}
+	}
+	return ""
+}
+
+// getKernelVersion gets the kernel version
+func getKernelVersion() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	if output, err := exec.CommandContext(ctx, "uname", "-r").Output(); err == nil {
+		return strings.TrimSpace(string(output))
+	}
+	return ""
+}
+
+// getDesktopEnvironment detects the desktop environment
+func getDesktopEnvironment() string {
+	if os.Getenv("GNOME_DESKTOP_SESSION_ID") != "" ||
+		strings.Contains(os.Getenv("XDG_CURRENT_DESKTOP"), "GNOME") {
+		return "gnome"
+	}
+
+	if os.Getenv("KDE_FULL_SESSION") != "" ||
+		strings.Contains(os.Getenv("XDG_CURRENT_DESKTOP"), "KDE") {
+		return "kde"
+	}
+
+	if strings.Contains(os.Getenv("XDG_CURRENT_DESKTOP"), "XFCE") {
+		return "xfce"
+	}
+
+	if strings.Contains(os.Getenv("XDG_CURRENT_DESKTOP"), "Unity") {
+		return "unity"
+	}
+
+	if os.Getenv("DESKTOP_SESSION") == "cinnamon" {
+		return "cinnamon"
+	}
+
+	return "unknown"
+}
+
+// detectPackageManagers detects available package managers and their versions
+func detectPackageManagers() map[string]string {
+	packageManagers := make(map[string]string)
+
+	managers := []struct {
+		name    string
+		command string
+		args    []string
+	}{
+		{"apt", "apt", []string{"--version"}},
+		{"dnf", "dnf", []string{"--version"}},
+		{"yum", "yum", []string{"--version"}},
+		{"pacman", "pacman", []string{"--version"}},
+		{"zypper", "zypper", []string{"--version"}},
+		{"emerge", "emerge", []string{"--version"}},
+		{"apk", "apk", []string{"--version"}},
+		{"flatpak", "flatpak", []string{"--version"}},
+		{"snap", "snap", []string{"--version"}},
+		{"brew", "brew", []string{"--version"}},
+		{"pip", "pip", []string{"--version"}},
+		{"pip3", "pip3", []string{"--version"}},
+		{"docker", "docker", []string{"--version"}},
+		{"mise", "mise", []string{"--version"}},
+		{"git", "git", []string{"--version"}},
+		{"curl", "curl", []string{"--version"}},
+		{"wget", "wget", []string{"--version"}},
+		{"go", "go", []string{"version"}},
+		{"python3", "python3", []string{"--version"}},
+		{"node", "node", []string{"--version"}},
+		{"npm", "npm", []string{"--version"}},
+	}
+
+	for _, pm := range managers {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+
+		if output, err := exec.CommandContext(ctx, pm.command, pm.args...).Output(); err == nil {
+			version := strings.TrimSpace(string(output))
+			// Clean up version output - take first line and limit length
+			lines := strings.Split(version, "\n")
+			if len(lines) > 0 {
+				version = lines[0]
+				if len(version) > 100 {
+					version = version[:100] + "..."
+				}
+				packageManagers[pm.name] = version
+			}
+		}
+
+		cancel()
+	}
+
+	return packageManagers
 }

@@ -3,6 +3,8 @@ package apt
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,10 +16,109 @@ import (
 
 type APTInstaller struct{}
 
-var lastAptUpdateTime time.Time
+// APT version information
+type APTVersion struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+// Cached APT version to avoid repeated detection
+var cachedAPTVersion *APTVersion
+
+// ResetVersionCache resets the cached APT version (useful for testing)
+func ResetVersionCache() {
+	cachedAPTVersion = nil
+}
 
 func getCurrentUser() string {
 	return utilities.GetCurrentUser()
+}
+
+// getAPTVersion detects the APT version
+func getAPTVersion() (*APTVersion, error) {
+	if cachedAPTVersion != nil {
+		return cachedAPTVersion, nil
+	}
+
+	// Try apt --version first (available in APT 1.0+)
+	output, err := utils.CommandExec.RunShellCommand("apt --version")
+	if err != nil {
+		// Fallback to apt-get --version
+		output, err = utils.CommandExec.RunShellCommand("apt-get --version")
+		if err != nil {
+			return nil, fmt.Errorf("failed to detect APT version: %w", err)
+		}
+	}
+
+	// Parse version from output like "apt 3.0.0 (amd64)" or "apt 1.6.12ubuntu0.2 (amd64)"
+	versionRegex := regexp.MustCompile(`apt\s+(\d+)\.(\d+)\.(\d+)`)
+	matches := versionRegex.FindStringSubmatch(output)
+	if len(matches) < 4 {
+		// Try alternate format
+		versionRegex = regexp.MustCompile(`apt\s+(\d+)\.(\d+)`)
+		matches = versionRegex.FindStringSubmatch(output)
+		if len(matches) < 3 {
+			return nil, fmt.Errorf("failed to parse APT version from output: %s", output)
+		}
+		// Default patch to 0 if not specified
+		matches = append(matches, "0")
+	}
+
+	major, _ := strconv.Atoi(matches[1])
+	minor, _ := strconv.Atoi(matches[2])
+	patch, _ := strconv.Atoi(matches[3])
+
+	cachedAPTVersion = &APTVersion{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+
+	log.Debug("Detected APT version", "version", fmt.Sprintf("%d.%d.%d", major, minor, patch))
+	return cachedAPTVersion, nil
+}
+
+// isAPT3OrNewer checks if the system has APT 3.0 or newer
+func isAPT3OrNewer() bool {
+	version, err := getAPTVersion()
+	if err != nil {
+		log.Warn("Failed to detect APT version, assuming legacy", "error", err)
+		return false
+	}
+	return version.Major >= 3
+}
+
+// getOptimalAPTCommand returns the best APT command for the current version
+func getOptimalAPTCommand(operation string) string {
+	switch operation {
+	case "update":
+		// apt-get update is still preferred for scripts per documentation
+		return "sudo apt-get update"
+	case "install":
+		// apt-get install is still preferred for scripts per documentation
+		return "sudo apt-get install -y"
+	case "remove":
+		// apt-get remove is still preferred for scripts per documentation
+		return "sudo apt-get remove -y"
+	case "search":
+		// Use apt for search operations (better user experience)
+		if isAPT3OrNewer() {
+			return "apt search"
+		}
+		return "apt-cache search"
+	case "show":
+		// Use apt for show operations (better user experience)
+		if isAPT3OrNewer() {
+			return "apt show"
+		}
+		return "apt-cache show"
+	case "policy":
+		// Always use apt-cache for policy (stable interface)
+		return "apt-cache policy"
+	default:
+		return "apt-get"
+	}
 }
 
 func New() *APTInstaller {
@@ -26,6 +127,11 @@ func New() *APTInstaller {
 
 func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("APT Installer: Starting installation", "command", command)
+
+	// Detect APT version early to ensure optimal commands are used
+	if _, err := getAPTVersion(); err != nil {
+		log.Warn("Failed to detect APT version, using defaults", "error", err)
+	}
 
 	// Run background validation for better performance
 	validator := utilities.NewBackgroundValidator(30 * time.Second)
@@ -58,8 +164,8 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 		return nil
 	}
 
-	// Ensure package lists are up to date if they're stale
-	if err := ensurePackageListsUpdated(repo); err != nil {
+	// Ensure package lists are up to date using intelligent update system
+	if err := utilities.EnsurePackageManagerUpdated(ctx, "apt", repo, 6*time.Hour); err != nil {
 		log.Warn("Failed to update package lists", "error", err)
 		// Continue anyway, as the installation might still work
 	}
@@ -69,8 +175,9 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 		return fmt.Errorf("package validation failed: %w", err)
 	}
 
-	// Run apt-get install command
-	installCommand := fmt.Sprintf("sudo apt-get install -y %s", command)
+	// Run apt install command using optimal command for the APT version
+	baseCommand := getOptimalAPTCommand("install")
+	installCommand := fmt.Sprintf("%s %s", baseCommand, command)
 	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
 		log.Error("Failed to install package via apt", err, "command", command)
 		return fmt.Errorf("failed to install package via apt: %w", err)
@@ -112,55 +219,38 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
 	log.Debug("Starting APT update", "forceUpdate", forceUpdate)
 
-	// Check if update is required
-	if !forceUpdate && time.Since(lastAptUpdateTime) < 24*time.Hour {
-		log.Debug("APT update skipped (cached)")
-		return nil
-	}
+	ctx := context.Background()
 
-	// Execute apt-get update
-	updateCommand := "sudo apt-get update"
-	if _, err := utils.CommandExec.RunShellCommand(updateCommand); err != nil {
-		log.Error("Failed to execute APT update", err, "command", updateCommand)
-		return fmt.Errorf("failed to execute APT update: %w", err)
+	if forceUpdate {
+		// Force update by using a very short max age
+		return utilities.EnsurePackageManagerUpdated(ctx, "apt", repo, 1*time.Second)
+	} else {
+		// Use standard 24-hour cache
+		return utilities.EnsurePackageManagerUpdated(ctx, "apt", repo, 24*time.Hour)
 	}
-
-	// Update the last update time cache
-	lastAptUpdateTime = time.Now()
-	if err := repo.Set("last_apt_update", lastAptUpdateTime.Format(time.RFC3339)); err != nil {
-		log.Warn("Failed to store last update time in repository", err)
-	}
-
-	log.Debug("APT update completed successfully")
-	return nil
-}
-
-// ensurePackageListsUpdated updates package lists if they're stale
-func ensurePackageListsUpdated(repo types.Repository) error {
-	// Check if we need to update (more than 6 hours old)
-	if time.Since(lastAptUpdateTime) > 6*time.Hour {
-		log.Debug("Package lists are stale, updating")
-		return RunAptUpdate(false, repo)
-	}
-	return nil
 }
 
 // validatePackageAvailability checks if a package is available in repositories
 func validatePackageAvailability(packageName string) error {
-	// Use apt-cache policy to check if package is available
-	command := fmt.Sprintf("apt-cache policy %s", packageName)
+	// Use optimal command to check if package is available
+	baseCommand := getOptimalAPTCommand("policy")
+	command := fmt.Sprintf("%s %s", baseCommand, packageName)
 	output, err := utils.CommandExec.RunShellCommand(command)
 	if err != nil {
 		return fmt.Errorf("failed to check package availability: %w", err)
 	}
 
 	// Check if the output indicates the package is available
-	if strings.Contains(output, "Unable to locate package") {
+	// Handle both legacy and APT 3.0 error messages
+	if strings.Contains(output, "Unable to locate package") ||
+		strings.Contains(output, "No packages found") ||
+		strings.Contains(output, "Package not found") {
 		return fmt.Errorf("package '%s' not found in any repository", packageName)
 	}
 
 	// Check if any installable version is available
-	if !strings.Contains(output, "Candidate:") {
+	// APT 3.0 might have slightly different output format
+	if !strings.Contains(output, "Candidate:") && !strings.Contains(output, "Version table:") {
 		return fmt.Errorf("no installable candidate found for package '%s'", packageName)
 	}
 
@@ -244,8 +334,9 @@ func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
 		return nil
 	}
 
-	// Run apt remove command
-	uninstallCommand := fmt.Sprintf("sudo apt-get remove -y %s", command)
+	// Run apt remove command using optimal command for the APT version
+	baseCommand := getOptimalAPTCommand("remove")
+	uninstallCommand := fmt.Sprintf("%s %s", baseCommand, command)
 	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
 		log.Error("Failed to uninstall package via apt", err, "command", command)
 		return fmt.Errorf("failed to uninstall package via apt: %w", err)
@@ -293,14 +384,15 @@ func (a *APTInstaller) InstallPackages(ctx context.Context, packages []string, d
 	}
 
 	// Update package lists first
-	updateCmd := "sudo apt-get update"
+	updateCmd := getOptimalAPTCommand("update")
 	if _, err := utils.CommandExec.RunShellCommand(updateCmd); err != nil {
 		return fmt.Errorf("failed to update APT package lists: %w", err)
 	}
 
 	// Install all packages in one command for efficiency
 	packagesStr := strings.Join(packages, " ")
-	installCmd := fmt.Sprintf("sudo apt-get install -y %s", packagesStr)
+	baseInstallCmd := getOptimalAPTCommand("install")
+	installCmd := fmt.Sprintf("%s %s", baseInstallCmd, packagesStr)
 
 	if _, err := utils.CommandExec.RunShellCommand(installCmd); err != nil {
 		return fmt.Errorf("failed to install packages %v: %w", packages, err)

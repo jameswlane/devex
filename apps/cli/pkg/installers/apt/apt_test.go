@@ -5,6 +5,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/installers/apt"
+	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/mocks"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -24,6 +25,12 @@ var _ = Describe("APT Installer", func() {
 		// Store original executor and replace with mock
 		originalExec = utils.CommandExec
 		utils.CommandExec = mockExec
+
+		// Reset APT version cache for consistent testing
+		apt.ResetVersionCache()
+
+		// Reset package manager cache for consistent testing
+		utilities.ResetPackageManagerCache()
 
 		installer = apt.New()
 	})
@@ -116,7 +123,7 @@ var _ = Describe("APT Installer", func() {
 			It("returns update error", func() {
 				err := apt.RunAptUpdate(true, mockRepo)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to execute APT update"))
+				Expect(err.Error()).To(ContainSubstring("failed to update apt package lists"))
 			})
 		})
 	})
