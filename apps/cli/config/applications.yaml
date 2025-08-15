@@ -15,7 +15,7 @@ applications:
     - name: bat
       description: 'A cat(1) clone with wings'
       category: 'Utilities'
-      default: true
+      default: false
       linux:
         install_method: 'apt'
         install_command: 'bat'
@@ -71,11 +71,11 @@ applications:
           - os: 'debian'
             dependencies:
               - 'curl'
-              - 'gnupg'
+              - 'gpg'
           - os: 'ubuntu'
             dependencies:
               - 'curl'
-              - 'gnupg'
+              - 'gpg'
         alternatives:
           - install_method: 'pacman'
             install_command: 'eza'
@@ -132,7 +132,7 @@ applications:
     - name: fzf
       description: 'A command-line fuzzy finder'
       category: 'Utilities'
-      default: true
+      default: false
       linux:
         install_method: 'apt'
         install_command: 'fzf'
@@ -146,7 +146,7 @@ applications:
     - name: GitHub CLI
       description: 'GitHub official command line tool'
       category: 'Development Tools'
-      default: true
+      default: false
       desktop_environments: ['all']
       macos:
         install_method: 'brew'
@@ -286,7 +286,7 @@ applications:
     - name: Neovim
       description: 'Vim-fork focused on extensibility and usability'
       category: 'Development Tools'
-      default: true
+      default: false
       linux:
         install_method: 'apt'
         install_command: 'neovim'
@@ -320,7 +320,7 @@ applications:
     - name: ripgrep
       description: 'ripgrep recursively searches directories for a regex pattern while respecting your gitignore'
       category: 'Utilities'
-      default: true
+      default: false
       linux:
         install_method: 'apt'
         install_command: 'ripgrep'
@@ -457,7 +457,7 @@ applications:
     - name: Ulauncher
       description: 'A fast application launcher for Linux'
       category: 'Utility'
-      default: true
+      default: false
       desktop_environments: ['all']
       linux:
         install_method: 'apt'
@@ -538,7 +538,7 @@ applications:
     - name: Fastfetch
       description: 'A maintained, feature-rich and performance-oriented, neofetch-like system information tool.'
       category: 'System Utilities'
-      default: true
+      default: false
       desktop_environments: ['all']
       macos:
         install_method: 'brew'
@@ -576,7 +576,7 @@ applications:
           - os: 'ubuntu'
             version: '20.04+'
         post_install:
-          - shell: 'export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r' # Refresh PATH cache
+          - shell: 'export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r'
         alternatives:
           - install_method: 'apt'
             install_command: 'fastfetch'
@@ -638,7 +638,7 @@ applications:
             uninstall_command: 'fastfetch'
             official_support: true
             platform_requirements:
-              - os: 'linux' # linuxbrew fallback
+              - os: 'linux'
           - install_method: 'pkg'
             install_command: 'fastfetch'
             uninstall_command: 'fastfetch'

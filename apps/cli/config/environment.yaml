@@ -42,7 +42,7 @@ programming_languages:
     install_method: 'mise'
     install_command: 'go@latest'
     uninstall_command: 'go'
-    default: true
+    default: false
     dependencies:
       - 'mise'
   - name: Java
@@ -60,7 +60,7 @@ programming_languages:
     install_method: 'mise'
     install_command: 'node@lts'
     uninstall_command: 'node'
-    default: true
+    default: false
     dependencies:
       - 'mise'
   - name: Python
@@ -69,7 +69,7 @@ programming_languages:
     install_method: 'mise'
     install_command: 'python@latest'
     uninstall_command: 'python'
-    default: true
+    default: false
     dependencies:
       - 'mise'
   - name: Ruby
@@ -78,7 +78,7 @@ programming_languages:
     install_method: 'mise'
     install_command: 'ruby@latest'
     uninstall_command: 'ruby'
-    default: true
+    default: false
     dependencies:
       - 'mise'
   - name: Rust

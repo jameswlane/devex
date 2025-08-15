@@ -36,18 +36,13 @@ func main() {
 
 	// Detect platform information
 	plat := platform.DetectPlatform()
-	log.Info("Platform detected",
-		"os", plat.OS,
-		"desktop", plat.DesktopEnv,
-		"distribution", plat.Distribution,
-		"architecture", plat.Architecture)
 
 	// Check if a platform is supported
 	if !platform.IsSupportedPlatform() {
 		log.Fatal("Unsupported platform", fmt.Errorf("platform: %s", plat.OS))
 	}
 
-	log.Info("Validating dependencies")
+	// Validate dependencies quietly
 	ctx := context.Background()
 	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
 		log.Fatal("Dependency validation failed", err)
@@ -58,16 +53,7 @@ func main() {
 		handleError("determining home directory", err)
 	}
 
-	// Add contextual metadata to the logger
-	log.WithContext(map[string]any{
-		"user":         os.Getenv("USER"),
-		"homeDir":      homeDir,
-		"platform":     plat.OS,
-		"desktop":      plat.DesktopEnv,
-		"distribution": plat.Distribution,
-	})
-
-	log.Info("Starting DevEx CLI")
+	log.Info("DevEx CLI started", "version", version, "platform", fmt.Sprintf("%s/%s", plat.OS, plat.Architecture))
 
 	// Initialize a database with proper directory creation
 	repo := initializeDatabase(homeDir)
@@ -78,9 +64,6 @@ func main() {
 		handleError("loading cross-platform configuration", err)
 	}
 
-	log.Info("Cross-platform configuration loaded successfully",
-		"totalApps", len(crossPlatformSettings.GetAllApps()))
-
 	// Set runtime flags
 	crossPlatformSettings.HomeDir = homeDir
 
@@ -90,8 +73,6 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		handleError("executing root command", err)
 	}
-
-	log.Info("DevEx CLI execution completed successfully")
 
 	// Close the log file if it was opened
 	if err := log.Close(); err != nil {
