@@ -56,7 +56,7 @@ func (pmc *PackageManagerCache) loadFromRepository() {
 				log.Warn("Failed to parse cached timestamp", "packageManager", pm, "timestamp", timestamp, "error", err)
 			}
 		} else {
-			log.Debug("No cached timestamp found", "packageManager", pm, "error", err)
+			log.Debug("No cached timestamp found for package manager", "packageManager", pm)
 		}
 	}
 }
@@ -65,7 +65,12 @@ func (pmc *PackageManagerCache) loadFromRepository() {
 func (pmc *PackageManagerCache) saveToRepository(packageManager string, timestamp time.Time) {
 	key := fmt.Sprintf("last_%s_update", packageManager)
 	if err := pmc.repo.Set(key, timestamp.Format(time.RFC3339)); err != nil {
-		log.Warn("Failed to save package manager update time", "packageManager", packageManager, "error", err)
+		log.Warn("Failed to save package manager update time - cache will not persist across restarts",
+			"packageManager", packageManager,
+			"error", err,
+			"hint", "Check database permissions and disk space")
+	} else {
+		log.Debug("Package manager timestamp persisted to repository", "packageManager", packageManager, "timestamp", timestamp)
 	}
 }
 
@@ -89,9 +94,11 @@ func (pmc *PackageManagerCache) markUpdated(packageManager string) {
 
 	now := time.Now()
 	pmc.lastUpdated[packageManager] = now
+
+	// Save to repository - failures are logged but don't fail the operation
 	pmc.saveToRepository(packageManager, now)
 
-	log.Debug("Marked package manager as updated", "packageManager", packageManager, "timestamp", now)
+	log.Debug("Marked package manager as updated in memory cache", "packageManager", packageManager, "timestamp", now)
 }
 
 // validatePackageManager validates that the package manager name is safe to use in commands
@@ -120,7 +127,7 @@ func validatePackageManager(pm string) error {
 func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, repo types.Repository, maxAge time.Duration) error {
 	// SECURITY: Validate package manager name to prevent command injection
 	if err := validatePackageManager(packageManager); err != nil {
-		return fmt.Errorf("package manager validation failed: %w", err)
+		return fmt.Errorf("package manager validation failed (hint: use only supported package managers like apt, dnf, yum, pacman): %w", err)
 	}
 
 	cache := GetPackageManagerCache(repo)
@@ -187,13 +194,13 @@ func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, rep
 			log.Debug("Flatpak update completed with possible warnings", "packageManager", packageManager)
 		default:
 			log.Warn("Package manager update command failed", "packageManager", packageManager, "error", err)
-			return fmt.Errorf("failed to update %s package lists: %w", packageManager, err)
+			return fmt.Errorf("failed to update %s package lists (hint: check network connectivity, repository configuration, and package manager permissions): %w", packageManager, err)
 		}
 	}
 
 	// Mark as updated
 	cache.markUpdated(packageManager)
-	log.Info("Package manager updated successfully", "packageManager", packageManager)
+	log.Info("Package manager cache updated successfully", "packageManager", packageManager)
 
 	return nil
 }

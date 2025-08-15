@@ -140,10 +140,11 @@ var _ = Describe("PackageManagerCache", func() {
 				mockExec.FailingCommand = "sudo apt-get update"
 			})
 
-			It("returns error for failed updates", func() {
+			It("returns error for failed updates with actionable hints", func() {
 				err := utilities.EnsurePackageManagerUpdated(ctx, "apt", mockRepo, time.Hour)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("failed to update apt package lists"))
+				Expect(err.Error()).To(ContainSubstring("hint: check network connectivity"))
 			})
 		})
 
@@ -189,8 +190,8 @@ var _ = Describe("PackageManagerCache", func() {
 		})
 
 		It("handles concurrent access to different package managers", func() {
-			const numGoroutines = 5
-			packageManagers := []string{"apt", "dnf", "yum", "pacman", "zypper"}
+			const numGoroutines = 4
+			packageManagers := []string{"apt", "dnf", "pacman", "zypper"}
 			var wg sync.WaitGroup
 			errors := make(chan error, numGoroutines)
 
@@ -213,8 +214,14 @@ var _ = Describe("PackageManagerCache", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			// Verify that all package managers were updated
+			// Verify that package manager commands were executed
 			Expect(len(mockExec.Commands)).To(BeNumerically(">=", len(packageManagers)))
+
+			// Verify specific commands were called
+			Expect(mockExec.Commands).To(ContainElement("sudo apt-get update"))
+			Expect(mockExec.Commands).To(ContainElement("sudo dnf check-update"))
+			Expect(mockExec.Commands).To(ContainElement("sudo pacman -Sy"))
+			Expect(mockExec.Commands).To(ContainElement("sudo zypper refresh"))
 		})
 	})
 

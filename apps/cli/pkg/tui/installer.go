@@ -792,8 +792,10 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	// Ensure package manager cache is updated (6 hour default)
 	si.sendLog("INFO", fmt.Sprintf("Ensuring %s package cache is up to date...", packageManager))
 	if err := utilities.EnsurePackageManagerUpdated(ctx, packageManager, si.repo, 6*time.Hour); err != nil {
-		si.sendLog("WARN", fmt.Sprintf("Failed to update %s cache: %v", packageManager, err))
+		si.sendLog("WARN", fmt.Sprintf("Failed to update %s cache, continuing with installation: %v", packageManager, err))
 		// Continue with installation anyway
+	} else {
+		si.sendLog("INFO", fmt.Sprintf("%s package cache is up to date", packageManager))
 	}
 
 	// Construct install command based on package manager
