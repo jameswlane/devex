@@ -216,7 +216,7 @@ applications:
     - name: GitHub CLI
       description: 'GitHub official command line tool'
       category: 'Development Tools'
-      default: false
+      default: true
       desktop_environments: ['all']
       macos:
         install_method: 'brew'
