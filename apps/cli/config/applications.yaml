@@ -15,11 +15,110 @@ applications:
     - name: bat
       description: 'A cat(1) clone with wings'
       category: 'Utilities'
-      default: false
+      default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'bat'
+        uninstall_command: 'bat'
+        official_support: true
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'sharkdp.bat'
+        uninstall_command: 'sharkdp.bat'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
       linux:
         install_method: 'apt'
         install_command: 'bat'
         uninstall_command: 'bat'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'sys-apps/bat'
+            uninstall_command: 'sys-apps/bat'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'eopkg'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'snap'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: false
+          - install_method: 'cargo'
+            install_command: 'bat'
+            uninstall_command: 'bat'
+            official_support: true
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'bat'
+        uninstall_command: 'bat'
+        official_support: true
+      openbsd:
+        install_method: 'pkg_add'
+        install_command: 'bat'
+        uninstall_command: 'bat'
+        official_support: true
     - name: btop
       description: 'A resource monitor that shows usage and stats for processor, memory, disks, network and processes'
       category: 'System Monitoring'
@@ -330,11 +429,108 @@ applications:
     - name: fzf
       description: 'A command-line fuzzy finder'
       category: 'Utilities'
-      default: false
+      default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'fzf'
+        uninstall_command: 'fzf'
+        official_support: true
+        post_install:
+          - shell: '$(brew --prefix)/opt/fzf/install --all'
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'junegunn.fzf'
+        uninstall_command: 'junegunn.fzf'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
       linux:
         install_method: 'apt'
         install_command: 'fzf'
         uninstall_command: 'fzf'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'app-shells/fzf'
+            uninstall_command: 'app-shells/fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'eopkg'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'snap'
+            install_command: 'fzf'
+            uninstall_command: 'fzf'
+            official_support: false
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'fzf'
+        uninstall_command: 'fzf'
+        official_support: true
+      openbsd:
+        install_method: 'pkg_add'
+        install_command: 'fzf'
+        uninstall_command: 'fzf'
+        official_support: true
     - name: git
       description: 'A distributed version control system'
       category: 'Dependency'
@@ -937,11 +1133,561 @@ applications:
     - name: ripgrep
       description: 'ripgrep recursively searches directories for a regex pattern while respecting your gitignore'
       category: 'Utilities'
-      default: false
+      default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'ripgrep'
+        uninstall_command: 'ripgrep'
+        official_support: true
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'BurntSushi.ripgrep.MSVC'
+        uninstall_command: 'BurntSushi.ripgrep.MSVC'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
       linux:
         install_method: 'apt'
         install_command: 'ripgrep'
         uninstall_command: 'ripgrep'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'sys-apps/ripgrep'
+            uninstall_command: 'sys-apps/ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'eopkg'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'snap'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: false
+          - install_method: 'cargo'
+            install_command: 'ripgrep'
+            uninstall_command: 'ripgrep'
+            official_support: true
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'ripgrep'
+        uninstall_command: 'ripgrep'
+        official_support: true
+      openbsd:
+        install_method: 'pkg_add'
+        install_command: 'ripgrep'
+        uninstall_command: 'ripgrep'
+        official_support: true
+    - name: zoxide
+      description: 'A smarter cd command inspired by z and autojump'
+      category: 'Utilities'
+      default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'zoxide'
+        uninstall_command: 'zoxide'
+        official_support: true
+        post_install:
+          - shell: 'echo ''eval "$(zoxide init zsh)"'' >> ~/.zshrc'
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'ajeetdsouza.zoxide'
+        uninstall_command: 'ajeetdsouza.zoxide'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+      linux:
+        install_method: 'apt'
+        install_command: 'zoxide'
+        uninstall_command: 'zoxide'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        post_install:
+          - shell: 'echo ''eval "$(zoxide init bash)"'' >> ~/.bashrc'
+          - shell: 'echo ''eval "$(zoxide init zsh)"'' >> ~/.zshrc'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'app-shells/zoxide'
+            uninstall_command: 'app-shells/zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'eopkg'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'zoxide'
+            uninstall_command: 'zoxide'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'cargo'
+            install_command: 'zoxide --locked'
+            uninstall_command: 'zoxide'
+            official_support: true
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'zoxide'
+        uninstall_command: 'zoxide'
+        official_support: true
+      openbsd:
+        install_method: 'pkg_add'
+        install_command: 'zoxide'
+        uninstall_command: 'zoxide'
+        official_support: true
+    - name: plocate
+      description: 'A much faster locate based on posting lists'
+      category: 'Utilities'
+      default: true
+      desktop_environments: ['all']
+      linux:
+        install_method: 'apt'
+        install_command: 'plocate'
+        uninstall_command: 'plocate'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        post_install:
+          - shell: 'sudo updatedb'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'plocate'
+            uninstall_command: 'plocate'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'plocate'
+            uninstall_command: 'plocate'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'plocate'
+            uninstall_command: 'plocate'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'sys-apps/plocate'
+            uninstall_command: 'sys-apps/plocate'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'xbps'
+            install_command: 'plocate'
+            uninstall_command: 'plocate'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'plocate'
+            uninstall_command: 'plocate'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'plocate'
+        uninstall_command: 'plocate'
+        official_support: true
+      macos:
+        install_method: 'brew'
+        install_command: 'plocate'
+        uninstall_command: 'plocate'
+        official_support: false
+    - name: apache2-utils
+      description: 'Apache HTTP Server utilities (htpasswd, ab, etc.)'
+      category: 'Utilities'
+      default: true
+      desktop_environments: ['all']
+      linux:
+        install_method: 'apt'
+        install_command: 'apache2-utils'
+        uninstall_command: 'apache2-utils'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'httpd-tools'
+            uninstall_command: 'httpd-tools'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'apache-tools'
+            uninstall_command: 'apache-tools'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'apache2-utils'
+            uninstall_command: 'apache2-utils'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'app-admin/apache-tools'
+            uninstall_command: 'app-admin/apache-tools'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'apk'
+            install_command: 'apache2-utils'
+            uninstall_command: 'apache2-utils'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+      macos:
+        install_method: 'brew'
+        install_command: 'httpie'
+        uninstall_command: 'httpie'
+        official_support: false
+      windows:
+        install_method: 'chocolatey'
+        install_command: 'apache-httpd'
+        uninstall_command: 'apache-httpd'
+        official_support: false
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'apache24'
+        uninstall_command: 'apache24'
+        official_support: true
+    - name: fd-find
+      description: 'A simple, fast and user-friendly alternative to find'
+      category: 'Utilities'
+      default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'fd'
+        uninstall_command: 'fd'
+        official_support: true
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'sharkdp.fd'
+        uninstall_command: 'sharkdp.fd'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+      linux:
+        install_method: 'apt'
+        install_command: 'fd-find'
+        uninstall_command: 'fd-find'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        post_install:
+          - shell: 'ln -sf $(which fdfind) ~/.local/bin/fd'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'fd-find'
+            uninstall_command: 'fd-find'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'sys-apps/fd'
+            uninstall_command: 'sys-apps/fd'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'eopkg'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'fd'
+            uninstall_command: 'fd'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'cargo'
+            install_command: 'fd-find'
+            uninstall_command: 'fd-find'
+            official_support: true
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'fd'
+        uninstall_command: 'fd'
+        official_support: true
+      openbsd:
+        install_method: 'pkg_add'
+        install_command: 'fd'
+        uninstall_command: 'fd'
+        official_support: true
+    - name: tldr
+      description: 'Simplified and community-driven man pages'
+      category: 'Utilities'
+      default: true
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: 'tldr'
+        uninstall_command: 'tldr'
+        official_support: true
+        alternatives:
+          - install_method: 'macports'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'tldr-pages.tlrc'
+        uninstall_command: 'tldr-pages.tlrc'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+      linux:
+        install_method: 'apt'
+        install_command: 'tldr'
+        uninstall_command: 'tldr'
+        official_support: true
+        platform_requirements:
+          - os: 'debian'
+          - os: 'ubuntu'
+        alternatives:
+          - install_method: 'dnf'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'fedora'
+              - os: 'centos'
+              - os: 'rhel'
+          - install_method: 'pacman'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'arch'
+              - os: 'manjaro'
+          - install_method: 'zypper'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'opensuse'
+          - install_method: 'emerge'
+            install_command: 'app-doc/tldr'
+            uninstall_command: 'app-doc/tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'gentoo'
+          - install_method: 'eopkg'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'solus'
+          - install_method: 'xbps'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'void'
+          - install_method: 'apk'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'alpine'
+          - install_method: 'nixpkgs'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+            platform_requirements:
+              - os: 'nixos'
+          - install_method: 'pip'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+          - install_method: 'npm'
+            install_command: 'tldr'
+            uninstall_command: 'tldr'
+            official_support: true
+          - install_method: 'cargo'
+            install_command: 'tealdeer'
+            uninstall_command: 'tealdeer'
+            official_support: true
+      freebsd:
+        install_method: 'pkg'
+        install_command: 'tldr'
+        uninstall_command: 'tldr'
+        official_support: true
+      openbsd:
+        install_method: 'pkg_add'
+        install_command: 'tldr'
+        uninstall_command: 'tldr'
+        official_support: true
     - name: 'Ghostty'
       description: 'GPU-accelerated cross-platform terminal emulator with rich features'
       category: 'Terminal Emulators'
