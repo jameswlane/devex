@@ -27,6 +27,14 @@ const (
 	DefaultSystemValidationCacheDuration = 1 * time.Hour
 	// DefaultCacheMaxAge is the maximum age before cache entries are considered stale
 	DefaultCacheMaxAge = 24 * time.Hour
+	// DefaultValidationTimeout is the timeout for background system validation
+	DefaultValidationTimeout = 30 * time.Second
+	// DefaultForceUpdateCacheDuration is the cache duration when force updating
+	DefaultForceUpdateCacheDuration = 1 * time.Second
+	// DefaultStandardCacheDuration is the standard cache duration for package updates
+	DefaultStandardCacheDuration = 24 * time.Hour
+	// DefaultServiceStartupDelay is the delay after starting a service
+	DefaultServiceStartupDelay = 2 * time.Second
 )
 
 // Security validation patterns
@@ -148,7 +156,7 @@ func (p *PacmanInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	// Run background validation for better performance
-	validator := utilities.NewBackgroundValidator(30 * time.Second)
+	validator := utilities.NewBackgroundValidator(DefaultValidationTimeout)
 	validator.AddSuite(utilities.CreateSystemValidationSuite("pacman"))
 	validator.AddSuite(utilities.CreateNetworkValidationSuite())
 
@@ -236,12 +244,12 @@ func (p *PacmanInstaller) installFromAUR(packageName string, repo types.Reposito
 
 	// Check if YAY is installed, install if not (with context support)
 	if err := ensureYayInstalledWithContext(context.Background()); err != nil {
-		return fmt.Errorf("failed to ensure YAY is available: %w", err)
+		return fmt.Errorf("failed to ensure YAY is available: %w (hint: check internet connection and ensure git/base-devel are installed)", err)
 	}
 
 	// Check if package is available in AUR
 	if err := validateAURPackageAvailability(packageName); err != nil {
-		return fmt.Errorf("package not available in AUR: %w", err)
+		return fmt.Errorf("package not available in AUR: %w (hint: check package name spelling or try 'yay -Ss %s' to search)", err, packageName)
 	}
 
 	// Install from AUR using YAY with secure command execution
@@ -312,10 +320,10 @@ func RunPacmanUpdate(forceUpdate bool, repo types.Repository) error {
 
 	if forceUpdate {
 		// Force update by using a very short max age
-		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, 1*time.Second)
+		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, DefaultForceUpdateCacheDuration)
 	} else {
 		// Use standard 24-hour cache
-		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, 24*time.Hour)
+		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, DefaultStandardCacheDuration)
 	}
 }
 
@@ -382,7 +390,7 @@ func validatePackageAvailability(packageName string) error {
 	if err != nil {
 		// For mock testing compatibility, check both error and output
 		if strings.Contains(output, "was not found") || strings.Contains(output, "not found") || strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("package '%s' not found in official repositories", packageName)
+			return fmt.Errorf("package '%s' not found in official repositories (hint: try 'pacman -Ss %s' to search for similar packages)", packageName, packageName)
 		}
 		return fmt.Errorf("failed to check package availability: %w", err)
 	}
@@ -404,7 +412,7 @@ func validateAURPackageAvailability(packageName string) error {
 	if err != nil {
 		// For mock testing compatibility, check both error and output
 		if strings.Contains(output, "was not found") || strings.Contains(output, "not found") || strings.Contains(err.Error(), "not found") {
-			return fmt.Errorf("package '%s' not found in AUR", packageName)
+			return fmt.Errorf("package '%s' not found in AUR (hint: ensure YAY is installed and try 'yay -Ss %s' to search)", packageName, packageName)
 		}
 		return fmt.Errorf("failed to check AUR package availability: %w", err)
 	}
@@ -464,7 +472,7 @@ func ensureYayInstalledWithContext(ctx context.Context) error {
 
 	// Build and install YAY
 	if err := buildAndInstallYay(ctx, buildDir); err != nil {
-		return fmt.Errorf("failed to build and install YAY: %w", err)
+		return fmt.Errorf("failed to build and install YAY: %w (hint: ensure makepkg dependencies are installed and you have sufficient disk space)", err)
 	}
 
 	log.Info("YAY installed successfully")
@@ -550,14 +558,14 @@ func cleanupBuildDirectory(buildDir, homeDir string) error {
 
 	if err := os.RemoveAll(buildDir); err != nil {
 		// Try to make the directory writable and remove again
-		// #nosec G302 -- Directory needs to be accessible for cleanup
-		if chmodErr := os.Chmod(buildDir, 0755); chmodErr == nil {
+		// #nosec G302 -- Directory needs owner-only access for secure cleanup
+		if chmodErr := os.Chmod(buildDir, 0700); chmodErr == nil {
 			if retryErr := os.RemoveAll(buildDir); retryErr == nil {
 				log.Debug("Build directory cleaned up after chmod fix", "dir", buildDir)
 				return nil
 			}
 		}
-		return fmt.Errorf("failed to remove build directory %s: %w", buildDir, err)
+		return fmt.Errorf("failed to remove build directory %s: %w (hint: check directory permissions or use sudo)", buildDir, err)
 	}
 
 	log.Debug("Build directory cleaned up successfully", "dir", buildDir)
@@ -646,7 +654,7 @@ func setupDockerService() error {
 	}
 
 	// Wait a moment for service to fully start
-	time.Sleep(2 * time.Second)
+	time.Sleep(DefaultServiceStartupDelay)
 
 	// Verify Docker daemon is accessible
 	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
