@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers/apk"
@@ -385,6 +384,12 @@ func processConfigFiles(app types.AppConfig) error {
 			continue
 		}
 
+		// Check if destination file already exists - skip copying if it does
+		if _, err := os.Stat(destPath); err == nil {
+			log.Info("Config file already exists, skipping copy to preserve user configuration", "app", app.Name, "dest", destPath)
+			continue
+		}
+
 		// Create destination directory if it doesn't exist
 		destDir := filepath.Dir(destPath)
 		if err := os.MkdirAll(destDir, 0750); err != nil {
@@ -549,36 +554,8 @@ func backupExistingFiles(app types.AppConfig) error {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	// Backup configuration files that will be overwritten
-	for _, configFile := range app.ConfigFiles {
-		destPath := utils.ReplacePlaceholders(configFile.Destination, map[string]string{})
-		destPath = strings.Replace(destPath, "~", homeDir, 1)
-
-		// Check if destination file exists
-		if _, err := os.Stat(destPath); err == nil {
-			log.Info("Backing up existing config file", "app", app.Name, "file", destPath)
-
-			// Create backup filename with timestamp
-			timestamp := time.Now().Format("20060102_150405")
-			backupFilename := fmt.Sprintf("%s_%s", filepath.Base(destPath), timestamp)
-			backupPath := filepath.Join(backupDir, backupFilename)
-
-			// Create backup directory structure if needed
-			backupFileDir := filepath.Dir(backupPath)
-			if err := os.MkdirAll(backupFileDir, 0750); err != nil {
-				log.Warn("Failed to create backup directory", "error", err, "dir", backupFileDir)
-				continue
-			}
-
-			// Copy file to backup location
-			if err := utils.CopyFile(destPath, backupPath); err != nil {
-				log.Warn("Failed to backup file", "error", err, "source", destPath, "backup", backupPath)
-				continue
-			}
-
-			log.Info("File backed up successfully", "app", app.Name, "original", destPath, "backup", backupPath)
-		}
-	}
+	// Note: Config files are no longer backed up since we skip copying when files already exist
+	// This preserves user configurations without creating unnecessary backups
 
 	log.Info("File backup completed", "app", app.Name, "backupDir", backupDir)
 	return nil
