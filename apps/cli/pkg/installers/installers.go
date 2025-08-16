@@ -60,7 +60,7 @@ func initializeInstallers() {
 		installerRegistry["eopkg"] = eopkg.NewEopkgInstaller()
 		installerRegistry["nixflake"] = nixflake.NewNixFlakeInstaller()
 		installerRegistry["nixpkgs"] = nixpkgs.NewNixpkgsInstaller()
-		installerRegistry["pacman"] = pacman.NewPacmanInstaller()
+		installerRegistry["pacman"] = pacman.New()
 		installerRegistry["rpm"] = rpm.NewRpmInstaller()
 		installerRegistry["snap"] = snap.NewSnapInstaller()
 		installerRegistry["xbps"] = xbps.NewXbpsInstaller()
