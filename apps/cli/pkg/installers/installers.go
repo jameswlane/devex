@@ -30,6 +30,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/yay"
 	"github.com/jameswlane/devex/pkg/installers/zypper"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/system"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -499,6 +500,47 @@ func validateSystemRequirements(app types.AppConfig) error {
 		return fmt.Errorf("installer method '%s' is not supported on this platform", app.InstallMethod)
 	}
 
+	// Validate comprehensive system requirements using new validation system
+	if hasSystemRequirements(app.SystemRequirements) {
+		log.Info("Validating comprehensive system requirements", "app", app.Name)
+
+		validator := system.NewRequirementsValidator()
+		results, err := validator.ValidateRequirements(app.Name, app.SystemRequirements)
+		if err != nil {
+			return fmt.Errorf("failed to validate system requirements: %w", err)
+		}
+
+		// Check for failures
+		if validator.HasFailures(results) {
+			failures := validator.GetFailures(results)
+			log.Error("System requirements validation failed", fmt.Errorf("validation failed"), "app", app.Name, "failures", len(failures))
+
+			// Log each failure
+			for _, failure := range failures {
+				log.Error("Requirement failed", fmt.Errorf("requirement not met"),
+					"requirement", failure.Requirement,
+					"message", failure.Message,
+					"suggestion", failure.Suggestion)
+			}
+
+			return fmt.Errorf("system requirements not met for %s: %d requirement(s) failed", app.Name, len(failures))
+		}
+
+		// Log warnings if any
+		warnings := validator.GetWarnings(results)
+		if len(warnings) > 0 {
+			log.Warn("System requirements validation has warnings", "app", app.Name, "warnings", len(warnings))
+			for _, warning := range warnings {
+				log.Warn("Requirement warning",
+					"requirement", warning.Requirement,
+					"message", warning.Message,
+					"suggestion", warning.Suggestion)
+			}
+		}
+
+		log.Info("Comprehensive system requirements validated successfully", "app", app.Name)
+	}
+
 	// Validate APT-specific requirements
 	if app.InstallMethod == "apt" {
 		// Check if apt is available
@@ -538,6 +580,25 @@ func validateSystemRequirements(app types.AppConfig) error {
 
 	log.Info("System requirements validated successfully", "app", app.Name)
 	return nil
+}
+
+// hasSystemRequirements checks if the app has any system requirements defined
+func hasSystemRequirements(requirements types.SystemRequirements) bool {
+	return requirements.MinMemoryMB > 0 ||
+		requirements.MinDiskSpaceMB > 0 ||
+		requirements.DockerVersion != "" ||
+		requirements.DockerComposeVersion != "" ||
+		requirements.GoVersion != "" ||
+		requirements.NodeVersion != "" ||
+		requirements.PythonVersion != "" ||
+		requirements.RubyVersion != "" ||
+		requirements.JavaVersion != "" ||
+		requirements.GitVersion != "" ||
+		requirements.KubectlVersion != "" ||
+		len(requirements.RequiredCommands) > 0 ||
+		len(requirements.RequiredServices) > 0 ||
+		len(requirements.RequiredPorts) > 0 ||
+		len(requirements.RequiredEnvVars) > 0
 }
 
 func backupExistingFiles(app types.AppConfig) error {

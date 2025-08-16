@@ -18,23 +18,24 @@ type BaseConfig struct {
 // AppConfig defines the configuration for an application, including its installation method, dependencies, and optional post-install steps.
 type AppConfig struct {
 	BaseConfig
-	Default          bool             `mapstructure:"default" yaml:"default"`
-	InstallMethod    string           `mapstructure:"install_method" yaml:"install_method"`
-	InstallCommand   string           `mapstructure:"install_command" yaml:"install_command"`
-	UninstallCommand string           `mapstructure:"uninstall_command" yaml:"uninstall_command"`
-	Dependencies     []string         `mapstructure:"dependencies" yaml:"dependencies"`
-	PreInstall       []InstallCommand `mapstructure:"pre_install" yaml:"pre_install"`
-	PostInstall      []InstallCommand `mapstructure:"post_install" yaml:"post_install"`
-	ConfigFiles      []ConfigFile     `mapstructure:"config_files" yaml:"config_files"`
-	Themes           []Theme          `mapstructure:"themes" yaml:"themes"`
-	AptSources       []AptSource      `mapstructure:"apt_sources" yaml:"apt_sources"`
-	CleanupFiles     []string         `mapstructure:"cleanup_files" yaml:"cleanup_files"`
-	Conflicts        []string         `mapstructure:"conflicts" yaml:"conflicts"`
-	DockerOptions    DockerOptions    `mapstructure:"docker_options" yaml:"docker_options"`
-	DownloadURL      string           `mapstructure:"download_url" yaml:"download_url"`
-	InstallDir       string           `mapstructure:"install_dir" yaml:"install_dir"`
-	Symlink          string           `mapstructure:"symlink" yaml:"symlink"`
-	ShellUpdates     []string         `mapstructure:"shell_updates" yaml:"shell_updates"`
+	Default            bool               `mapstructure:"default" yaml:"default"`
+	InstallMethod      string             `mapstructure:"install_method" yaml:"install_method"`
+	InstallCommand     string             `mapstructure:"install_command" yaml:"install_command"`
+	UninstallCommand   string             `mapstructure:"uninstall_command" yaml:"uninstall_command"`
+	Dependencies       []string           `mapstructure:"dependencies" yaml:"dependencies"`
+	SystemRequirements SystemRequirements `mapstructure:"system_requirements" yaml:"system_requirements,omitempty"`
+	PreInstall         []InstallCommand   `mapstructure:"pre_install" yaml:"pre_install"`
+	PostInstall        []InstallCommand   `mapstructure:"post_install" yaml:"post_install"`
+	ConfigFiles        []ConfigFile       `mapstructure:"config_files" yaml:"config_files"`
+	Themes             []Theme            `mapstructure:"themes" yaml:"themes"`
+	AptSources         []AptSource        `mapstructure:"apt_sources" yaml:"apt_sources"`
+	CleanupFiles       []string           `mapstructure:"cleanup_files" yaml:"cleanup_files"`
+	Conflicts          []string           `mapstructure:"conflicts" yaml:"conflicts"`
+	DockerOptions      DockerOptions      `mapstructure:"docker_options" yaml:"docker_options"`
+	DownloadURL        string             `mapstructure:"download_url" yaml:"download_url"`
+	InstallDir         string             `mapstructure:"install_dir" yaml:"install_dir"`
+	Symlink            string             `mapstructure:"symlink" yaml:"symlink"`
+	ShellUpdates       []string           `mapstructure:"shell_updates" yaml:"shell_updates"`
 }
 
 // Validate checks the validity of the AppConfig structure.
@@ -341,6 +342,7 @@ type OSConfig struct {
 	ExtractPath          string                `mapstructure:"extract_path" yaml:"extract_path,omitempty"`
 	Destination          string                `mapstructure:"destination" yaml:"destination,omitempty"`
 	Dependencies         []string              `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
+	SystemRequirements   SystemRequirements    `mapstructure:"system_requirements" yaml:"system_requirements,omitempty"`
 	PreInstall           []InstallCommand      `mapstructure:"pre_install" yaml:"pre_install,omitempty"`
 	PostInstall          []InstallCommand      `mapstructure:"post_install" yaml:"post_install,omitempty"`
 	Alternatives         []OSConfig            `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
@@ -489,18 +491,82 @@ func (app *CrossPlatformApp) ToLegacyAppConfig() AppConfig {
 			Description: app.Description,
 			Category:    app.Category,
 		},
-		Default:          app.Default,
-		InstallMethod:    osConfig.InstallMethod,
-		InstallCommand:   osConfig.InstallCommand,
-		UninstallCommand: osConfig.UninstallCommand,
-		Dependencies:     osConfig.Dependencies,
-		PreInstall:       osConfig.PreInstall,
-		PostInstall:      osConfig.PostInstall,
-		ConfigFiles:      osConfig.ConfigFiles,
-		AptSources:       osConfig.AptSources,
-		CleanupFiles:     osConfig.CleanupFiles,
-		Conflicts:        osConfig.Conflicts,
-		DownloadURL:      osConfig.DownloadURL,
-		InstallDir:       osConfig.Destination,
+		Default:            app.Default,
+		InstallMethod:      osConfig.InstallMethod,
+		InstallCommand:     osConfig.InstallCommand,
+		UninstallCommand:   osConfig.UninstallCommand,
+		Dependencies:       osConfig.Dependencies,
+		PreInstall:         osConfig.PreInstall,
+		PostInstall:        osConfig.PostInstall,
+		ConfigFiles:        osConfig.ConfigFiles,
+		AptSources:         osConfig.AptSources,
+		CleanupFiles:       osConfig.CleanupFiles,
+		Conflicts:          osConfig.Conflicts,
+		DownloadURL:        osConfig.DownloadURL,
+		InstallDir:         osConfig.Destination,
+		SystemRequirements: osConfig.SystemRequirements,
 	}
+}
+
+// SystemRequirements defines system-level requirements for an application
+type SystemRequirements struct {
+	MinMemoryMB          int      `mapstructure:"min_memory_mb" yaml:"min_memory_mb,omitempty"`
+	MinDiskSpaceMB       int      `mapstructure:"min_disk_space_mb" yaml:"min_disk_space_mb,omitempty"`
+	DockerVersion        string   `mapstructure:"docker_version" yaml:"docker_version,omitempty"`
+	DockerComposeVersion string   `mapstructure:"docker_compose_version" yaml:"docker_compose_version,omitempty"`
+	GoVersion            string   `mapstructure:"go_version" yaml:"go_version,omitempty"`
+	NodeVersion          string   `mapstructure:"node_version" yaml:"node_version,omitempty"`
+	PythonVersion        string   `mapstructure:"python_version" yaml:"python_version,omitempty"`
+	RubyVersion          string   `mapstructure:"ruby_version" yaml:"ruby_version,omitempty"`
+	JavaVersion          string   `mapstructure:"java_version" yaml:"java_version,omitempty"`
+	GitVersion           string   `mapstructure:"git_version" yaml:"git_version,omitempty"`
+	KubectlVersion       string   `mapstructure:"kubectl_version" yaml:"kubectl_version,omitempty"`
+	RequiredCommands     []string `mapstructure:"required_commands" yaml:"required_commands,omitempty"`
+	RequiredServices     []string `mapstructure:"required_services" yaml:"required_services,omitempty"`
+	RequiredPorts        []int    `mapstructure:"required_ports" yaml:"required_ports,omitempty"`
+	RequiredEnvVars      []string `mapstructure:"required_env_vars" yaml:"required_env_vars,omitempty"`
+}
+
+// Validate checks if the system requirements are valid
+func (sr *SystemRequirements) Validate() error {
+	// Basic validation for memory and disk space
+	if sr.MinMemoryMB < 0 {
+		return fmt.Errorf("minimum memory cannot be negative")
+	}
+	if sr.MinDiskSpaceMB < 0 {
+		return fmt.Errorf("minimum disk space cannot be negative")
+	}
+
+	// Validate version strings have proper format (basic check)
+	versions := map[string]string{
+		"docker":         sr.DockerVersion,
+		"docker-compose": sr.DockerComposeVersion,
+		"go":             sr.GoVersion,
+		"node":           sr.NodeVersion,
+		"python":         sr.PythonVersion,
+		"ruby":           sr.RubyVersion,
+		"java":           sr.JavaVersion,
+		"git":            sr.GitVersion,
+		"kubectl":        sr.KubectlVersion,
+	}
+
+	for tool, version := range versions {
+		if version != "" && !isValidVersionString(version) {
+			return fmt.Errorf("invalid version format for %s: %s", tool, version)
+		}
+	}
+
+	return nil
+}
+
+// isValidVersionString checks if a version string follows common patterns
+func isValidVersionString(version string) bool {
+	if version == "" {
+		return true
+	}
+	// Accept patterns like: "1.13+", ">=1.19", "^18.0.0", "~2.7.0", "1.2.3", "latest"
+	// This is a basic check - could be enhanced with regex for more strict validation
+	return len(version) > 0 && (version == "latest" ||
+		(len(version) >= 3 && (version[0] >= '0' && version[0] <= '9') ||
+			version[0] == '>' || version[0] == '<' || version[0] == '^' || version[0] == '~'))
 }
