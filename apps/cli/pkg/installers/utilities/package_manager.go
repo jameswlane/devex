@@ -207,6 +207,14 @@ func EnsurePackageManagerUpdated(ctx context.Context, packageManager string, rep
 
 // ResetPackageManagerCache resets the cache for testing purposes
 func ResetPackageManagerCache() {
+	// First clear any existing cache data
+	if globalPMCache != nil {
+		globalPMCache.mutex.Lock()
+		globalPMCache.lastUpdated = make(map[string]time.Time)
+		globalPMCache.mutex.Unlock()
+	}
+
+	// Then reset the singleton
 	cacheMutex = sync.Once{}
 	globalPMCache = nil
 }
