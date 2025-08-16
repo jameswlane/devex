@@ -1,8 +1,11 @@
 package pacman
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,23 +17,91 @@ import (
 
 type PacmanInstaller struct{}
 
-var lastPacmanUpdateTime time.Time
+// Pacman version information
+type PacmanVersion struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+// Cached Pacman version to avoid repeated detection
+var cachedPacmanVersion *PacmanVersion
+
+// ResetVersionCache resets the cached Pacman version (useful for testing)
+func ResetVersionCache() {
+	cachedPacmanVersion = nil
+}
 
 func getCurrentUser() string {
 	return utilities.GetCurrentUser()
 }
 
-func NewPacmanInstaller() *PacmanInstaller {
+func New() *PacmanInstaller {
 	return &PacmanInstaller{}
+}
+
+// NewPacmanInstaller is deprecated, use New() instead
+func NewPacmanInstaller() *PacmanInstaller {
+	return New()
+}
+
+// getPacmanVersion detects the Pacman version
+func getPacmanVersion() (*PacmanVersion, error) {
+	if cachedPacmanVersion != nil {
+		return cachedPacmanVersion, nil
+	}
+
+	// Try pacman --version
+	output, err := utils.CommandExec.RunShellCommand("pacman --version")
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect Pacman version: %w", err)
+	}
+
+	// Parse version from output like "Pacman v6.0.2 - libalpm v13.0.2"
+	versionRegex := regexp.MustCompile(`Pacman v(\d+)\.(\d+)\.(\d+)`)
+	matches := versionRegex.FindStringSubmatch(output)
+	if len(matches) < 4 {
+		// Try alternate format
+		versionRegex = regexp.MustCompile(`Pacman v(\d+)\.(\d+)`)
+		matches = versionRegex.FindStringSubmatch(output)
+		if len(matches) < 3 {
+			return nil, fmt.Errorf("failed to parse Pacman version from output: %s", output)
+		}
+		// Default patch to 0 if not specified
+		matches = append(matches, "0")
+	}
+
+	major, _ := strconv.Atoi(matches[1])
+	minor, _ := strconv.Atoi(matches[2])
+	patch, _ := strconv.Atoi(matches[3])
+
+	cachedPacmanVersion = &PacmanVersion{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+
+	log.Debug("Detected Pacman version", "version", fmt.Sprintf("%d.%d.%d", major, minor, patch))
+	return cachedPacmanVersion, nil
 }
 
 // Install installs packages using pacman (implements BaseInstaller interface)
 func (p *PacmanInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("Pacman Installer: Starting installation", "command", command)
 
-	// Validate Pacman system availability
-	if err := validatePacmanSystem(); err != nil {
-		return fmt.Errorf("pacman system validation failed: %w", err)
+	// Detect Pacman version early to ensure optimal commands are used
+	if _, err := getPacmanVersion(); err != nil {
+		log.Warn("Failed to detect Pacman version, using defaults", "error", err)
+	}
+
+	// Run background validation for better performance
+	validator := utilities.NewBackgroundValidator(30 * time.Second)
+	validator.AddSuite(utilities.CreateSystemValidationSuite("pacman"))
+	validator.AddSuite(utilities.CreateNetworkValidationSuite())
+
+	ctx := context.Background()
+	if err := validator.RunValidations(ctx); err != nil {
+		return utilities.WrapError(err, utilities.ErrorTypeSystem, "install", command, "pacman")
 	}
 
 	// Wrap the command into a types.AppConfig object
@@ -58,8 +129,8 @@ func (p *PacmanInstaller) Install(command string, repo types.Repository) error {
 		return nil
 	}
 
-	// Ensure package database is up to date if it's stale
-	if err := ensurePackageDatabaseUpdated(repo); err != nil {
+	// Ensure package database is up to date using intelligent update system
+	if err := utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, 6*time.Hour); err != nil {
 		log.Warn("Failed to update package database", "error", err)
 		// Continue anyway, as the installation might still work
 	}
@@ -158,27 +229,15 @@ func tryAURInstallation(packageName string, repo types.Repository) error {
 func RunPacmanUpdate(forceUpdate bool, repo types.Repository) error {
 	log.Debug("Starting Pacman database update", "forceUpdate", forceUpdate)
 
-	// Check if update is required
-	if !forceUpdate && time.Since(lastPacmanUpdateTime) < 24*time.Hour {
-		log.Debug("Pacman update skipped (cached)")
-		return nil
-	}
+	ctx := context.Background()
 
-	// Execute pacman -Sy to refresh package database
-	updateCommand := "sudo pacman -Sy"
-	if _, err := utils.CommandExec.RunShellCommand(updateCommand); err != nil {
-		log.Error("Failed to execute Pacman database refresh", err, "command", updateCommand)
-		return fmt.Errorf("failed to execute Pacman database refresh: %w", err)
+	if forceUpdate {
+		// Force update by using a very short max age
+		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, 1*time.Second)
+	} else {
+		// Use standard 24-hour cache
+		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, 24*time.Hour)
 	}
-
-	// Update the last update time cache
-	lastPacmanUpdateTime = time.Now()
-	if err := repo.Set("last_pacman_update", lastPacmanUpdateTime.Format(time.RFC3339)); err != nil {
-		log.Warn("Failed to store last update time in repository", err)
-	}
-
-	log.Debug("Pacman database update completed successfully")
-	return nil
 }
 
 // validatePacmanSystem checks if Pacman is available and functional
@@ -193,16 +252,6 @@ func validatePacmanSystem() error {
 		return fmt.Errorf("pacman not functional: %w", err)
 	}
 
-	return nil
-}
-
-// ensurePackageDatabaseUpdated updates package database if it's stale
-func ensurePackageDatabaseUpdated(repo types.Repository) error {
-	// Check if we need to update (more than 6 hours old)
-	if time.Since(lastPacmanUpdateTime) > 6*time.Hour {
-		log.Debug("Package database is stale, updating")
-		return RunPacmanUpdate(false, repo)
-	}
 	return nil
 }
 
@@ -640,4 +689,48 @@ func (p *PacmanInstaller) SearchPackages(query string) ([]string, error) {
 
 	log.Debug("Found packages matching query", "query", query, "count", len(packages))
 	return packages, nil
+}
+
+// PackageManager interface implementation methods
+
+// InstallPackages installs multiple packages via Pacman (implements PackageManager interface)
+func (p *PacmanInstaller) InstallPackages(ctx context.Context, packages []string, dryRun bool) error {
+	if len(packages) == 0 {
+		return nil
+	}
+
+	log.Info("Installing packages via Pacman", "packages", packages, "dryRun", dryRun)
+
+	if dryRun {
+		log.Info("DRY RUN: Would install packages", "packages", packages)
+		return nil
+	}
+
+	// Update package database first
+	updateCmd := "sudo pacman -Sy"
+	if _, err := utils.CommandExec.RunShellCommand(updateCmd); err != nil {
+		return fmt.Errorf("failed to update Pacman package database: %w", err)
+	}
+
+	// Install all packages in one command for efficiency
+	packagesStr := strings.Join(packages, " ")
+	installCmd := fmt.Sprintf("sudo pacman -S --noconfirm %s", packagesStr)
+
+	if _, err := utils.CommandExec.RunShellCommand(installCmd); err != nil {
+		return fmt.Errorf("failed to install packages %v: %w", packages, err)
+	}
+
+	log.Info("Successfully installed packages", "packages", packages)
+	return nil
+}
+
+// IsAvailable checks if Pacman package manager is available
+func (p *PacmanInstaller) IsAvailable(ctx context.Context) bool {
+	_, err := utils.CommandExec.RunShellCommand("which pacman")
+	return err == nil
+}
+
+// GetName returns the package manager name
+func (p *PacmanInstaller) GetName() string {
+	return "pacman"
 }
