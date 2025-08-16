@@ -1,8 +1,10 @@
 package utilities
 
 import (
+	"fmt"
 	"os"
 	"os/user"
+	"path/filepath"
 	"strings"
 
 	"github.com/jameswlane/devex/pkg/utils"
@@ -34,4 +36,29 @@ func GetCurrentUser() string {
 	}
 
 	return ""
+}
+
+// ValidatePath validates a file path to prevent directory traversal attacks
+func ValidatePath(path, baseDir string) error {
+	// Clean the path to resolve any .. or . components
+	cleanPath := filepath.Clean(path)
+	cleanBase := filepath.Clean(baseDir)
+
+	// Ensure the path is absolute or convert relative paths
+	if !filepath.IsAbs(cleanPath) {
+		cleanPath = filepath.Join(cleanBase, cleanPath)
+	}
+
+	// Check if the cleaned path is within the base directory
+	relPath, err := filepath.Rel(cleanBase, cleanPath)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Ensure the relative path doesn't start with .. (directory traversal)
+	if strings.HasPrefix(relPath, "..") || strings.Contains(relPath, "/../") {
+		return fmt.Errorf("path traversal detected: %s", path)
+	}
+
+	return nil
 }

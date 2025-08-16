@@ -165,6 +165,166 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		return strings.Join(containers, "\n"), nil
 	}
 
+	// Handle Pacman-specific commands
+	if strings.Contains(command, "pacman --version") {
+		return "Pacman v6.0.2 - libalpm v13.0.2", nil
+	}
+
+	// Handle pacman -Q (check if package is installed)
+	if strings.Contains(command, "pacman -Q") && !strings.Contains(command, "pacman -Qi") && !strings.Contains(command, "pacman -Qs") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2] // "pacman -Q package-name"
+			if m.InstallationState[packageName] {
+				return fmt.Sprintf("%s 1.0.0-1", packageName), nil
+			}
+		}
+		// For packages not in installation state, return error (package not found)
+		return "error: package 'test-package' was not found", fmt.Errorf("package was not found")
+	}
+
+	// Handle pacman -Si (package info from repositories)
+	if strings.Contains(command, "pacman -Si") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2]
+			if strings.Contains(packageName, "failing-package") || strings.Contains(packageName, "nonexistent") {
+				return "error: package 'failing-package' was not found", fmt.Errorf("package was not found")
+			}
+			// Return mock package info
+			return fmt.Sprintf("Repository      : core\nName            : %s\nVersion         : 1.0.0-1\nDescription     : Test package", packageName), nil
+		}
+	}
+
+	// Handle pacman install commands - mark packages as installed
+	if strings.Contains(command, "sudo pacman -S --noconfirm") {
+		// Extract package names from command
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			// All arguments after "sudo pacman -S --noconfirm" are package names
+			for i := 4; i < len(parts); i++ {
+				packageName := parts[i]
+				m.InstallationState[packageName] = true
+			}
+		}
+		return "resolving dependencies...\npackage installed successfully", nil
+	}
+
+	// Handle pacman remove commands - mark packages as uninstalled
+	if strings.Contains(command, "sudo pacman -Rs --noconfirm") {
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			packageName := parts[4] // "sudo pacman -Rs --noconfirm package-name"
+			m.InstallationState[packageName] = false
+		}
+		return "checking dependencies...\npackage removed successfully", nil
+	}
+
+	// Handle pacman database update
+	if strings.Contains(command, "sudo pacman -Sy") {
+		return "synchronizing package databases...", nil
+	}
+
+	// Handle pacman system upgrade
+	if strings.Contains(command, "sudo pacman -Syu --noconfirm") {
+		return "upgrading system...\nupgrade complete", nil
+	}
+
+	// Handle pacman cache clean
+	if strings.Contains(command, "sudo pacman -Sc --noconfirm") {
+		return "removing old packages from cache...", nil
+	}
+
+	// Handle pacman list installed packages
+	if command == "pacman -Q" {
+		var packages []string
+		for pkg, installed := range m.InstallationState {
+			if installed {
+				packages = append(packages, fmt.Sprintf("%s 1.0.0-1", pkg))
+			}
+		}
+		return strings.Join(packages, "\n"), nil
+	}
+
+	// Handle pacman search
+	if strings.Contains(command, "pacman -Ss") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			query := parts[2]
+			return fmt.Sprintf("core/%s 1.0.0-1\n    Test package matching %s", query, query), nil
+		}
+	}
+
+	// Handle YAY commands (AUR helper)
+	if strings.Contains(command, "yay -Si") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2]
+			if strings.Contains(packageName, "failing-package") {
+				return "error: package 'failing-package' was not found", fmt.Errorf("package was not found")
+			}
+			// Return mock AUR package info
+			return fmt.Sprintf("Repository      : aur\nName            : %s\nVersion         : 1.0.0-1\nDescription     : AUR package", packageName), nil
+		}
+	}
+
+	// Handle YAY version check
+	if strings.Contains(command, "yay --version") {
+		return "yay v12.1.3 - libalpm v13.0.2", nil
+	}
+
+	if strings.Contains(command, "yay -S --noconfirm") {
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			packageName := parts[3] // "yay -S --noconfirm package-name"
+			m.InstallationState[packageName] = true
+		}
+		return "building package from AUR...\npackage installed successfully", nil
+	}
+
+	if strings.Contains(command, "yay -Ss") {
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			query := parts[2]
+			return fmt.Sprintf("aur/%s-git 1.0.0-1\n    AUR package matching %s", query, query), nil
+		}
+	}
+
+	// Handle git clone for YAY installation
+	if strings.Contains(command, "git clone https://aur.archlinux.org/yay.git") {
+		return "Cloning into 'yay'...\nclone complete", nil
+	}
+
+	// Handle makepkg for building YAY
+	if strings.Contains(command, "makepkg -si --noconfirm") {
+		m.InstallationState["yay"] = true
+		return "building package...\npackage built and installed successfully", nil
+	}
+
+	// Handle git status checks in YAY build directory
+	if strings.Contains(command, "git status") && strings.Contains(command, "yay") {
+		return "On branch master\nnothing to commit, working tree clean", nil
+	}
+
+	// Handle git pull in YAY build directory
+	if strings.Contains(command, "git pull") && strings.Contains(command, "yay") {
+		return "Already up to date.", nil
+	}
+
+	// Handle base-devel group installation
+	if strings.Contains(command, "sudo pacman -S --noconfirm base-devel") {
+		m.InstallationState["base-devel"] = true
+		return "installing base-devel group...\ninstallation complete", nil
+	}
+
+	// Handle git package installation check
+	if strings.Contains(command, "pacman -Q git") {
+		if m.InstallationState["git"] {
+			return "git 2.40.1-1", nil
+		}
+		return "error: package 'git' was not found", fmt.Errorf("package was not found")
+	}
+
 	// Handle Docker run commands - mark container as installed
 	if strings.Contains(command, "docker run") && strings.Contains(command, "--name") {
 		// Extract container name from docker run command

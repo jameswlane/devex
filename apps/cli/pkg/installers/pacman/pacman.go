@@ -1,9 +1,14 @@
 package pacman
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
@@ -12,25 +17,152 @@ import (
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
+// Configuration constants
+const (
+	// DefaultPackageUpdateTimeout is the default timeout for package manager updates
+	DefaultPackageUpdateTimeout = 6 * time.Hour
+	// DefaultYAYBuildTimeout is the default timeout for building YAY from source
+	DefaultYAYBuildTimeout = 10 * time.Minute
+	// DefaultSystemValidationCacheDuration is how long to cache system validation results
+	DefaultSystemValidationCacheDuration = 1 * time.Hour
+	// DefaultCacheMaxAge is the maximum age before cache entries are considered stale
+	DefaultCacheMaxAge = 24 * time.Hour
+	// DefaultValidationTimeout is the timeout for background system validation
+	DefaultValidationTimeout = 30 * time.Second
+	// DefaultForceUpdateCacheDuration is the cache duration when force updating
+	DefaultForceUpdateCacheDuration = 1 * time.Second
+	// DefaultStandardCacheDuration is the standard cache duration for package updates
+	DefaultStandardCacheDuration = 24 * time.Hour
+	// DefaultServiceStartupDelay is the delay after starting a service
+	DefaultServiceStartupDelay = 2 * time.Second
+)
+
+// Security validation patterns
+var (
+	// validUsername ensures usernames contain only safe characters
+	validUsername = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+	// validPackageName ensures package names are safe for shell commands
+	validPackageName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._+-]*$`)
+)
+
 type PacmanInstaller struct{}
 
-var lastPacmanUpdateTime time.Time
+// Pacman version information
+type PacmanVersion struct {
+	Major int
+	Minor int
+	Patch int
+}
+
+// Cached validation state
+type systemValidationCache struct {
+	lastValidated time.Time
+	result        error
+}
+
+// Thread-safe cache for version and validation
+var (
+	cachedPacmanVersion    *PacmanVersion
+	cachedSystemValidation *systemValidationCache
+	versionMutex           sync.RWMutex
+	validationMutex        sync.RWMutex
+)
+
+// ResetVersionCache resets the cached Pacman version (useful for testing)
+func ResetVersionCache() {
+	versionMutex.Lock()
+	defer versionMutex.Unlock()
+	cachedPacmanVersion = nil
+
+	validationMutex.Lock()
+	defer validationMutex.Unlock()
+	cachedSystemValidation = nil
+}
 
 func getCurrentUser() string {
 	return utilities.GetCurrentUser()
 }
 
-func NewPacmanInstaller() *PacmanInstaller {
+func New() *PacmanInstaller {
 	return &PacmanInstaller{}
+}
+
+// getPacmanVersion detects the Pacman version with thread-safe caching
+func getPacmanVersion() (*PacmanVersion, error) {
+	// First, try to read from cache with read lock
+	versionMutex.RLock()
+	if cachedPacmanVersion != nil {
+		version := cachedPacmanVersion
+		versionMutex.RUnlock()
+		return version, nil
+	}
+	versionMutex.RUnlock()
+
+	// Need to detect version, acquire write lock
+	versionMutex.Lock()
+	defer versionMutex.Unlock()
+
+	// Double-check in case another goroutine already detected it
+	if cachedPacmanVersion != nil {
+		return cachedPacmanVersion, nil
+	}
+
+	// Try pacman --version
+	output, err := utils.CommandExec.RunShellCommand("pacman --version")
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect Pacman version: %w", err)
+	}
+
+	// Parse version from output like "Pacman v6.0.2 - libalpm v13.0.2"
+	versionRegex := regexp.MustCompile(`Pacman v(\d+)\.(\d+)\.(\d+)`)
+	matches := versionRegex.FindStringSubmatch(output)
+	if len(matches) < 4 {
+		// Try alternate format
+		versionRegex = regexp.MustCompile(`Pacman v(\d+)\.(\d+)`)
+		matches = versionRegex.FindStringSubmatch(output)
+		if len(matches) < 3 {
+			return nil, fmt.Errorf("failed to parse Pacman version from output: %s", output)
+		}
+		// Default patch to 0 if not specified
+		matches = append(matches, "0")
+	}
+
+	major, _ := strconv.Atoi(matches[1])
+	minor, _ := strconv.Atoi(matches[2])
+	patch, _ := strconv.Atoi(matches[3])
+
+	cachedPacmanVersion = &PacmanVersion{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+
+	log.Debug("Detected Pacman version", "version", fmt.Sprintf("%d.%d.%d", major, minor, patch))
+	return cachedPacmanVersion, nil
 }
 
 // Install installs packages using pacman (implements BaseInstaller interface)
 func (p *PacmanInstaller) Install(command string, repo types.Repository) error {
-	log.Debug("Pacman Installer: Starting installation", "command", command)
+	log.Debug("pacman installer: starting installation", "command", command)
 
-	// Validate Pacman system availability
-	if err := validatePacmanSystem(); err != nil {
-		return fmt.Errorf("pacman system validation failed: %w", err)
+	// Validate package name early to prevent injection
+	if !validPackageName.MatchString(command) {
+		return fmt.Errorf("invalid package name: %s", command)
+	}
+
+	// Detect Pacman version early to ensure optimal commands are used
+	if _, err := getPacmanVersion(); err != nil {
+		log.Warn("failed to detect Pacman version, using defaults", "error", err)
+	}
+
+	// Run background validation for better performance
+	validator := utilities.NewBackgroundValidator(DefaultValidationTimeout)
+	validator.AddSuite(utilities.CreateSystemValidationSuite("pacman"))
+	validator.AddSuite(utilities.CreateNetworkValidationSuite())
+
+	ctx := context.Background()
+	if err := validator.RunValidations(ctx); err != nil {
+		return utilities.WrapError(err, utilities.ErrorTypeSystem, "install", command, "pacman")
 	}
 
 	// Wrap the command into a types.AppConfig object
@@ -46,7 +178,7 @@ func (p *PacmanInstaller) Install(command string, repo types.Repository) error {
 	isInstalled, err := utilities.IsAppInstalled(appConfig)
 	if err != nil {
 		// If utilities doesn't support Pacman yet, use our own check
-		isInstalled, err = p.isPackageInstalled(command)
+		isInstalled, err = p.isPackageInstalled(context.Background(), command)
 		if err != nil {
 			log.Error("Failed to check if package is installed", err, "command", command)
 			return fmt.Errorf("failed to check if package is installed via pacman: %w", err)
@@ -54,196 +186,243 @@ func (p *PacmanInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	if isInstalled {
-		log.Info("Package already installed, skipping installation", "command", command)
+		log.Info("package already installed, skipping installation", "command", command)
 		return nil
 	}
 
-	// Ensure package database is up to date if it's stale
-	if err := ensurePackageDatabaseUpdated(repo); err != nil {
-		log.Warn("Failed to update package database", "error", err)
+	// Ensure package database is up to date using intelligent update system
+	if err := utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, DefaultPackageUpdateTimeout); err != nil {
+		log.Warn("failed to update package database", "error", err)
 		// Continue anyway, as the installation might still work
 	}
 
+	// Attempt installation from official repositories first, then AUR if needed
+	return p.installPackageWithFallback(command, repo)
+}
+
+// installPackageWithFallback attempts installation from official repos first, then AUR
+func (p *PacmanInstaller) installPackageWithFallback(packageName string, repo types.Repository) error {
 	// Check if package is available in repositories (try official repos first)
-	if err := validatePackageAvailability(command); err != nil {
+	if err := validatePackageAvailability(packageName); err != nil {
 		// Package not found in official repos, try AUR if available
-		if err := tryAURInstallation(command, repo); err != nil {
-			return fmt.Errorf("package not found in official repositories or AUR: %w", err)
-		}
-		return nil // AUR installation succeeded
+		log.Info("package not found in official repositories, attempting AUR installation", "package", packageName)
+		return p.installFromAUR(packageName, repo)
 	}
 
-	// Run pacman install command
-	installCommand := fmt.Sprintf("sudo pacman -S --noconfirm %s", command)
-	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-		log.Error("Failed to install package via pacman", err, "command", command)
+	// Install from official repositories
+	return p.installFromOfficialRepos(packageName, repo)
+}
+
+// installFromOfficialRepos installs a package from official Pacman repositories
+func (p *PacmanInstaller) installFromOfficialRepos(packageName string, repo types.Repository) error {
+	log.Debug("Installing package from official repositories", "package", packageName)
+
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(packageName) {
+		return fmt.Errorf("invalid package name: %s", packageName)
+	}
+
+	// Use secure command construction to prevent shell injection
+	command := fmt.Sprintf("sudo pacman -S --noconfirm %s", packageName)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("failed to install package via pacman", err, "package", packageName, "output", output)
 		return fmt.Errorf("failed to install package via pacman: %w", err)
 	}
 
-	log.Debug("Pacman package installed successfully", "command", command)
+	log.Debug("pacman package installed successfully", "package", packageName)
+	return p.finalizeInstallation(packageName, repo)
+}
 
+// installFromAUR installs a package from AUR with better error handling and context support
+func (p *PacmanInstaller) installFromAUR(packageName string, repo types.Repository) error {
+	log.Debug("attempting AUR installation", "package", packageName)
+
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(packageName) {
+		return fmt.Errorf("invalid package name: %s", packageName)
+	}
+
+	// Check if YAY is installed, install if not (with context support)
+	if err := ensureYayInstalledWithContext(context.Background()); err != nil {
+		return fmt.Errorf("failed to ensure YAY is available: %w (hint: check internet connection and ensure git/base-devel are installed)", err)
+	}
+
+	// Check if package is available in AUR
+	if err := validateAURPackageAvailability(packageName); err != nil {
+		return fmt.Errorf("package not available in AUR: %w (hint: check package name spelling or try 'yay -Ss %s' to search)", err, packageName)
+	}
+
+	// Install from AUR using YAY with secure command execution
+	log.Info("installing package from AUR", "package", packageName)
+	command := fmt.Sprintf("yay -S --noconfirm %s", packageName)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("failed to install package from AUR", err, "package", packageName, "output", output)
+		return fmt.Errorf("failed to install package from AUR: %w", err)
+	}
+
+	log.Info("package installed successfully from AUR", "package", packageName)
+	return p.finalizeInstallation(packageName, repo)
+}
+
+// finalizeInstallation handles post-installation tasks common to both official and AUR packages
+func (p *PacmanInstaller) finalizeInstallation(packageName string, repo types.Repository) error {
 	// Verify installation succeeded
-	if isInstalled, err := p.isPackageInstalled(command); err != nil {
-		log.Warn("Failed to verify installation", "error", err, "command", command)
+	if isInstalled, err := p.isPackageInstalled(context.Background(), packageName); err != nil {
+		log.Warn("failed to verify installation", "error", err, "package", packageName)
 	} else if !isInstalled {
-		return fmt.Errorf("package installation verification failed for: %s", command)
+		return fmt.Errorf("package installation verification failed for: %s", packageName)
 	}
 
 	// Perform post-installation setup for specific packages
-	if err := performPostInstallationSetup(command); err != nil {
-		log.Warn("Post-installation setup failed", "package", command, "error", err)
+	if err := performPostInstallationSetup(packageName); err != nil {
+		log.Warn("post-installation setup failed", "package", packageName, "error", err)
 		// Don't fail the installation, just warn
 	}
 
 	// Add the package to the repository
-	if err := repo.AddApp(command); err != nil {
-		log.Error("Failed to add package to repository", err, "command", command)
+	if err := repo.AddApp(packageName); err != nil {
+		log.Error("failed to add package to repository", err, "package", packageName)
 		return fmt.Errorf("failed to add package to repository: %w", err)
 	}
 
-	log.Debug("Package added to repository successfully", "command", command)
+	log.Debug("package added to repository successfully", "package", packageName)
 	return nil
 }
 
 // isPackageInstalled checks if a package is installed using pacman query
-func (p *PacmanInstaller) isPackageInstalled(packageName string) (bool, error) {
-	// Use pacman -Q to check if package is installed
+func (p *PacmanInstaller) isPackageInstalled(ctx context.Context, packageName string) (bool, error) {
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(packageName) {
+		return false, fmt.Errorf("invalid package name: %s", packageName)
+	}
+
+	// Use safe command construction for validation
 	command := fmt.Sprintf("pacman -Q %s", packageName)
 	output, err := utils.CommandExec.RunShellCommand(command)
 	if err != nil {
 		// pacman -Q returns non-zero exit code if package is not installed
-		if strings.Contains(output, "was not found") || strings.Contains(output, "not found") {
+		if strings.Contains(output, "was not found") || strings.Contains(output, "not found") || strings.Contains(err.Error(), "was not found") {
 			return false, nil
 		}
 		// For other errors, return the error
 		return false, fmt.Errorf("failed to check package installation status: %w", err)
 	}
 
+	log.Debug("package installation status checked", "package", packageName, "installed", true)
 	// If pacman -Q succeeds, package is installed
 	return true, nil
-}
-
-// tryAURInstallation attempts to install a package from AUR using YAY
-func tryAURInstallation(packageName string, repo types.Repository) error {
-	log.Debug("Attempting AUR installation", "package", packageName)
-
-	// Check if YAY is installed, install if not
-	if err := ensureYayInstalled(); err != nil {
-		return fmt.Errorf("failed to ensure YAY is available: %w", err)
-	}
-
-	// Check if package is available in AUR
-	if err := validateAURPackageAvailability(packageName); err != nil {
-		return fmt.Errorf("package not available in AUR: %w", err)
-	}
-
-	// Install from AUR using YAY
-	installCommand := fmt.Sprintf("yay -S --noconfirm %s", packageName)
-	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-		log.Error("Failed to install package from AUR", err, "package", packageName)
-		return fmt.Errorf("failed to install package from AUR: %w", err)
-	}
-
-	log.Info("Package installed successfully from AUR", "package", packageName)
-
-	// Add the package to the repository
-	if err := repo.AddApp(packageName); err != nil {
-		log.Error("Failed to add AUR package to repository", err, "package", packageName)
-		return fmt.Errorf("failed to add AUR package to repository: %w", err)
-	}
-
-	return nil
 }
 
 func RunPacmanUpdate(forceUpdate bool, repo types.Repository) error {
 	log.Debug("Starting Pacman database update", "forceUpdate", forceUpdate)
 
-	// Check if update is required
-	if !forceUpdate && time.Since(lastPacmanUpdateTime) < 24*time.Hour {
-		log.Debug("Pacman update skipped (cached)")
-		return nil
-	}
+	ctx := context.Background()
 
-	// Execute pacman -Sy to refresh package database
-	updateCommand := "sudo pacman -Sy"
-	if _, err := utils.CommandExec.RunShellCommand(updateCommand); err != nil {
-		log.Error("Failed to execute Pacman database refresh", err, "command", updateCommand)
-		return fmt.Errorf("failed to execute Pacman database refresh: %w", err)
+	if forceUpdate {
+		// Force update by using a very short max age
+		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, DefaultForceUpdateCacheDuration)
+	} else {
+		// Use standard 24-hour cache
+		return utilities.EnsurePackageManagerUpdated(ctx, "pacman", repo, DefaultStandardCacheDuration)
 	}
-
-	// Update the last update time cache
-	lastPacmanUpdateTime = time.Now()
-	if err := repo.Set("last_pacman_update", lastPacmanUpdateTime.Format(time.RFC3339)); err != nil {
-		log.Warn("Failed to store last update time in repository", err)
-	}
-
-	log.Debug("Pacman database update completed successfully")
-	return nil
 }
 
-// validatePacmanSystem checks if Pacman is available and functional
+// validatePacmanSystem checks if Pacman is available and functional with caching
 func validatePacmanSystem() error {
+	// Check cache first with TTL validation
+	validationMutex.RLock()
+	if cachedSystemValidation != nil {
+		cacheAge := time.Since(cachedSystemValidation.lastValidated)
+		if cacheAge < DefaultSystemValidationCacheDuration && cacheAge < DefaultCacheMaxAge {
+			result := cachedSystemValidation.result
+			validationMutex.RUnlock()
+			log.Debug("Using cached system validation", "age", cacheAge)
+			return result
+		}
+		log.Debug("System validation cache expired", "age", cacheAge)
+	}
+	validationMutex.RUnlock()
+
+	// Need to validate, acquire write lock
+	validationMutex.Lock()
+	defer validationMutex.Unlock()
+
+	// Double-check in case another goroutine already validated
+	if cachedSystemValidation != nil {
+		cacheAge := time.Since(cachedSystemValidation.lastValidated)
+		if cacheAge < DefaultSystemValidationCacheDuration && cacheAge < DefaultCacheMaxAge {
+			return cachedSystemValidation.result
+		}
+	}
+
+	// Perform actual validation
+	var validationError error
+
 	// Check if pacman is available
 	if _, err := utils.CommandExec.RunShellCommand("which pacman"); err != nil {
-		return fmt.Errorf("pacman not found: %w", err)
+		validationError = fmt.Errorf("pacman not found: %w", err)
+	} else {
+		// Check if we can access the pacman database
+		if _, err := utils.CommandExec.RunShellCommand("pacman --version"); err != nil {
+			validationError = fmt.Errorf("pacman not functional: %w", err)
+		}
 	}
 
-	// Check if we can access the pacman database
-	if _, err := utils.CommandExec.RunShellCommand("pacman --version"); err != nil {
-		return fmt.Errorf("pacman not functional: %w", err)
+	// Cache the result
+	cachedSystemValidation = &systemValidationCache{
+		lastValidated: time.Now(),
+		result:        validationError,
 	}
 
-	return nil
-}
-
-// ensurePackageDatabaseUpdated updates package database if it's stale
-func ensurePackageDatabaseUpdated(repo types.Repository) error {
-	// Check if we need to update (more than 6 hours old)
-	if time.Since(lastPacmanUpdateTime) > 6*time.Hour {
-		log.Debug("Package database is stale, updating")
-		return RunPacmanUpdate(false, repo)
-	}
-	return nil
+	return validationError
 }
 
 // validatePackageAvailability checks if a package is available in official repositories
 func validatePackageAvailability(packageName string) error {
-	// Use pacman -Si to check if package is available in repositories
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(packageName) {
+		return fmt.Errorf("invalid package name: %s", packageName)
+	}
+
+	// Use safe command construction for validation
 	command := fmt.Sprintf("pacman -Si %s", packageName)
 	output, err := utils.CommandExec.RunShellCommand(command)
 	if err != nil {
+		// For mock testing compatibility, check both error and output
+		if strings.Contains(output, "was not found") || strings.Contains(output, "not found") || strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("package '%s' not found in official repositories (hint: try 'pacman -Ss %s' to search for similar packages)", packageName, packageName)
+		}
 		return fmt.Errorf("failed to check package availability: %w", err)
 	}
 
-	// Check if the output indicates the package is available
-	if strings.Contains(output, "was not found") || strings.Contains(output, "not found") {
-		return fmt.Errorf("package '%s' not found in official repositories", packageName)
-	}
-
-	log.Debug("Package availability validated in official repos", "package", packageName)
+	log.Debug("Package availability validated in official repos", "package", packageName, "outputSize", len(output))
 	return nil
 }
 
 // validateAURPackageAvailability checks if a package is available in AUR
 func validateAURPackageAvailability(packageName string) error {
-	// Use yay -Si to check if package is available in AUR
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(packageName) {
+		return fmt.Errorf("invalid package name: %s", packageName)
+	}
+
+	// Use safe command construction for validation
 	command := fmt.Sprintf("yay -Si %s", packageName)
 	output, err := utils.CommandExec.RunShellCommand(command)
 	if err != nil {
+		// For mock testing compatibility, check both error and output
+		if strings.Contains(output, "was not found") || strings.Contains(output, "not found") || strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("package '%s' not found in AUR (hint: ensure YAY is installed and try 'yay -Ss %s' to search)", packageName, packageName)
+		}
 		return fmt.Errorf("failed to check AUR package availability: %w", err)
 	}
 
-	// Check if the output indicates the package is available
-	if strings.Contains(output, "was not found") || strings.Contains(output, "not found") {
-		return fmt.Errorf("package '%s' not found in AUR", packageName)
-	}
-
-	log.Debug("Package availability validated in AUR", "package", packageName)
+	log.Debug("Package availability validated in AUR", "package", packageName, "outputSize", len(output))
 	return nil
 }
 
-// ensureYayInstalled checks if YAY is installed and installs it if necessary
-func ensureYayInstalled() error {
+// ensureYayInstalledWithContext checks if YAY is installed and installs it if necessary with context timeout
+func ensureYayInstalledWithContext(ctx context.Context) error {
 	// Check if yay is already available
 	if _, err := utils.CommandExec.RunShellCommand("which yay"); err == nil {
 		log.Debug("YAY is already installed")
@@ -252,69 +431,172 @@ func ensureYayInstalled() error {
 
 	log.Info("YAY not found, installing from AUR")
 
+	// Create context with timeout for the entire YAY installation process
+	ctx, cancel := context.WithTimeout(ctx, DefaultYAYBuildTimeout)
+	defer cancel()
+
 	// Install base development tools if not present
-	if err := installDevelopmentTools(); err != nil {
+	if err := installDevelopmentTools(ctx); err != nil {
 		return fmt.Errorf("failed to install development tools: %w", err)
 	}
 
-	// Clone yay from AUR and build it
+	// Get and validate user information securely
 	currentUser := getCurrentUser()
-	if currentUser == "" {
-		return fmt.Errorf("unable to determine current user for YAY installation")
+	if !validUsername.MatchString(currentUser) {
+		return fmt.Errorf("invalid username detected: %s", currentUser)
 	}
 
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		return fmt.Errorf("HOME environment variable not set")
+	homeDir, err := utils.GetHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to get secure home directory: %w", err)
 	}
 
-	// Create temporary directory for building yay
-	buildDir := fmt.Sprintf("%s/.cache/yay-build", homeDir)
-	if err := os.MkdirAll(buildDir, 0750); err != nil {
-		return fmt.Errorf("failed to create build directory: %w", err)
+	// Create and validate secure build directory
+	buildDir, err := createSecureBuildDirectory(homeDir)
+	if err != nil {
+		return fmt.Errorf("failed to create secure build directory: %w", err)
 	}
 
-	// Clone yay repository
-	cloneCommand := fmt.Sprintf("cd %s && git clone https://aur.archlinux.org/yay.git", buildDir)
-	if _, err := utils.CommandExec.RunShellCommand(cloneCommand); err != nil {
-		return fmt.Errorf("failed to clone yay repository: %w", err)
+	// Ensure cleanup happens even if context is cancelled
+	defer func() {
+		if err := cleanupBuildDirectory(buildDir, homeDir); err != nil {
+			log.Error("Critical: Failed to clean up YAY build directory", err, "dir", buildDir,
+				"hint", "Please manually remove the directory to free disk space")
+		}
+	}()
+
+	// Clone YAY repository
+	if err := cloneYayRepository(ctx, buildDir); err != nil {
+		return fmt.Errorf("failed to clone YAY repository: %w", err)
 	}
 
-	// Build and install yay
-	buildCommand := fmt.Sprintf("cd %s/yay && makepkg -si --noconfirm", buildDir)
-	if _, err := utils.CommandExec.RunShellCommand(buildCommand); err != nil {
-		return fmt.Errorf("failed to build and install yay: %w", err)
-	}
-
-	// Clean up build directory
-	if err := os.RemoveAll(buildDir); err != nil {
-		log.Warn("Failed to clean up YAY build directory", "error", err, "dir", buildDir)
+	// Build and install YAY
+	if err := buildAndInstallYay(ctx, buildDir); err != nil {
+		return fmt.Errorf("failed to build and install YAY: %w (hint: ensure makepkg dependencies are installed and you have sufficient disk space)", err)
 	}
 
 	log.Info("YAY installed successfully")
 	return nil
 }
 
+// createSecureBuildDirectory creates a validated build directory
+func createSecureBuildDirectory(homeDir string) (string, error) {
+	// Validate home directory path
+	if err := utilities.ValidatePath(homeDir, "/"); err != nil {
+		return "", fmt.Errorf("invalid home directory: %w", err)
+	}
+
+	// Create secure build path
+	buildDir := filepath.Join(homeDir, ".cache", "yay-build")
+
+	// Validate the build directory path
+	if err := utilities.ValidatePath(buildDir, homeDir); err != nil {
+		return "", fmt.Errorf("build directory validation failed: %w", err)
+	}
+
+	// Create directory with secure permissions
+	if err := os.MkdirAll(buildDir, 0750); err != nil {
+		return "", fmt.Errorf("failed to create build directory: %w", err)
+	}
+
+	return buildDir, nil
+}
+
+// cloneYayRepository clones the YAY repository from AUR
+func cloneYayRepository(ctx context.Context, buildDir string) error {
+	log.Info("Cloning YAY repository from AUR...")
+
+	// Clone YAY repository using secure command execution
+	command := fmt.Sprintf("cd %s && git clone https://aur.archlinux.org/yay.git", buildDir)
+
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		return fmt.Errorf("git clone failed: %w (output: %s)", err, output)
+	}
+
+	return nil
+}
+
+// buildAndInstallYay builds and installs YAY from source
+func buildAndInstallYay(ctx context.Context, buildDir string) error {
+	// Check context before proceeding to build
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("YAY installation cancelled: %w", ctx.Err())
+	default:
+	}
+
+	log.Info("Building YAY from source (this may take several minutes)...")
+
+	// Build and install YAY using secure command execution
+	yayBuildDir := filepath.Join(buildDir, "yay")
+	command := fmt.Sprintf("cd %s && makepkg -si --noconfirm", yayBuildDir)
+
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		return fmt.Errorf("makepkg failed: %w (output: %s)", err, output)
+	}
+
+	return nil
+}
+
+// cleanupBuildDirectory safely removes the build directory with better error handling and security validation
+func cleanupBuildDirectory(buildDir, homeDir string) error {
+	// Validate build directory path to prevent directory traversal
+	if err := utilities.ValidatePath(buildDir, homeDir); err != nil {
+		return fmt.Errorf("cleanup validation failed: %w", err)
+	}
+
+	// Additional safety checks
+	if buildDir == "" || buildDir == "/" || buildDir == homeDir {
+		return fmt.Errorf("refusing to remove unsafe directory: %s", buildDir)
+	}
+
+	// Ensure directory is within expected cache location
+	expectedPrefix := filepath.Join(homeDir, ".cache")
+	if !strings.HasPrefix(buildDir, expectedPrefix) {
+		return fmt.Errorf("refusing to remove directory outside cache: %s", buildDir)
+	}
+
+	if err := os.RemoveAll(buildDir); err != nil {
+		// Try to make the directory writable and remove again
+		// #nosec G302 -- Directory needs owner-only access for secure cleanup
+		if chmodErr := os.Chmod(buildDir, 0700); chmodErr == nil {
+			if retryErr := os.RemoveAll(buildDir); retryErr == nil {
+				log.Debug("Build directory cleaned up after chmod fix", "dir", buildDir)
+				return nil
+			}
+		}
+		return fmt.Errorf("failed to remove build directory %s: %w (hint: check directory permissions or use sudo)", buildDir, err)
+	}
+
+	log.Debug("Build directory cleaned up successfully", "dir", buildDir)
+	return nil
+}
+
 // installDevelopmentTools installs base development tools needed for AUR
-func installDevelopmentTools() error {
-	log.Debug("Installing base development tools")
+func installDevelopmentTools(ctx context.Context) error {
+	log.Debug("installing base development tools")
 
 	// Install base-devel group and git if not present
 	devTools := []string{"base-devel", "git"}
 
 	for _, tool := range devTools {
+		// Validate tool name
+		if !validPackageName.MatchString(tool) {
+			return fmt.Errorf("invalid development tool name: %s", tool)
+		}
+
 		// Check if already installed
-		if installed, err := (&PacmanInstaller{}).isPackageInstalled(tool); err == nil && installed {
-			log.Debug("Development tool already installed", "tool", tool)
+		if installed, err := (&PacmanInstaller{}).isPackageInstalled(ctx, tool); err == nil && installed {
+			log.Debug("development tool already installed", "tool", tool)
 			continue
 		}
 
-		// Install the tool
-		installCommand := fmt.Sprintf("sudo pacman -S --noconfirm %s", tool)
-		if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-			return fmt.Errorf("failed to install %s: %w", tool, err)
+		// Install the tool using secure command execution
+		command := fmt.Sprintf("sudo pacman -S --noconfirm %s", tool)
+		if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+			return fmt.Errorf("failed to install %s: %w (output: %s)", tool, err, output)
 		}
-		log.Debug("Development tool installed", "tool", tool)
+		log.Debug("development tool installed", "tool", tool)
 	}
 
 	return nil
@@ -355,23 +637,24 @@ func setupDockerService() error {
 		log.Info("Docker service started successfully")
 	}
 
-	// Add current user to docker group
+	// Add current user to docker group with validation
 	currentUser := getCurrentUser()
-	if currentUser == "" {
-		log.Warn("Unable to determine current user, skipping docker group addition")
+	if !validUsername.MatchString(currentUser) {
+		log.Warn("Invalid username detected, skipping docker group addition", "user", currentUser)
 		return nil
 	}
 
-	addUserCmd := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
-	if _, err := utils.CommandExec.RunShellCommand(addUserCmd); err != nil {
-		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err)
+	// Add user to docker group using secure command execution
+	command := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err, "output", output)
 	} else {
 		log.Info("User added to docker group", "user", currentUser)
 		log.Info("Note: You may need to log out and log back in for docker group changes to take effect")
 	}
 
 	// Wait a moment for service to fully start
-	time.Sleep(2 * time.Second)
+	time.Sleep(DefaultServiceStartupDelay)
 
 	// Verify Docker daemon is accessible
 	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
@@ -451,7 +734,12 @@ func setupRedisService() error {
 
 // Uninstall removes packages using pacman
 func (p *PacmanInstaller) Uninstall(command string, repo types.Repository) error {
-	log.Debug("Pacman Installer: Starting uninstallation", "command", command)
+	log.Debug("pacman installer: starting uninstallation", "command", command)
+
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(command) {
+		return fmt.Errorf("invalid package name: %s", command)
+	}
 
 	// Validate Pacman system availability
 	if err := validatePacmanSystem(); err != nil {
@@ -459,25 +747,25 @@ func (p *PacmanInstaller) Uninstall(command string, repo types.Repository) error
 	}
 
 	// Check if the package is installed
-	isInstalled, err := p.isPackageInstalled(command)
+	isInstalled, err := p.isPackageInstalled(context.Background(), command)
 	if err != nil {
 		log.Error("Failed to check if package is installed", err, "command", command)
 		return fmt.Errorf("failed to check if package is installed: %w", err)
 	}
 
 	if !isInstalled {
-		log.Info("Package not installed, skipping uninstallation", "command", command)
+		log.Info("package not installed, skipping uninstallation", "command", command)
 		return nil
 	}
 
-	// Run pacman remove command
-	uninstallCommand := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", command)
-	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
-		log.Error("Failed to uninstall package via pacman", err, "command", command)
+	// Run pacman remove command using secure execution
+	commandStr := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", command)
+	if output, err := utils.CommandExec.RunShellCommand(commandStr); err != nil {
+		log.Error("failed to uninstall package via pacman", err, "command", command, "output", output)
 		return fmt.Errorf("failed to uninstall package via pacman: %w", err)
 	}
 
-	log.Debug("Pacman package uninstalled successfully", "command", command)
+	log.Debug("pacman package uninstalled successfully", "command", command)
 
 	// Remove the package from the repository
 	if err := repo.DeleteApp(command); err != nil {
@@ -491,7 +779,7 @@ func (p *PacmanInstaller) Uninstall(command string, repo types.Repository) error
 
 // IsInstalled checks if a package is installed using pacman
 func (p *PacmanInstaller) IsInstalled(command string) (bool, error) {
-	return p.isPackageInstalled(command)
+	return p.isPackageInstalled(context.Background(), command)
 }
 
 // InstallGroup installs a Pacman package group
@@ -640,4 +928,48 @@ func (p *PacmanInstaller) SearchPackages(query string) ([]string, error) {
 
 	log.Debug("Found packages matching query", "query", query, "count", len(packages))
 	return packages, nil
+}
+
+// PackageManager interface implementation methods
+
+// InstallPackages installs multiple packages via Pacman (implements PackageManager interface)
+func (p *PacmanInstaller) InstallPackages(ctx context.Context, packages []string, dryRun bool) error {
+	if len(packages) == 0 {
+		return nil
+	}
+
+	log.Info("Installing packages via Pacman", "packages", packages, "dryRun", dryRun)
+
+	if dryRun {
+		log.Info("DRY RUN: Would install packages", "packages", packages)
+		return nil
+	}
+
+	// Update package database first
+	updateCmd := "sudo pacman -Sy"
+	if _, err := utils.CommandExec.RunShellCommand(updateCmd); err != nil {
+		return fmt.Errorf("failed to update Pacman package database: %w", err)
+	}
+
+	// Install all packages in one command for efficiency
+	packagesStr := strings.Join(packages, " ")
+	installCmd := fmt.Sprintf("sudo pacman -S --noconfirm %s", packagesStr)
+
+	if _, err := utils.CommandExec.RunShellCommand(installCmd); err != nil {
+		return fmt.Errorf("failed to install packages %v: %w", packages, err)
+	}
+
+	log.Info("Successfully installed packages", "packages", packages)
+	return nil
+}
+
+// IsAvailable checks if Pacman package manager is available
+func (p *PacmanInstaller) IsAvailable(ctx context.Context) bool {
+	_, err := utils.CommandExec.RunShellCommand("which pacman")
+	return err == nil
+}
+
+// GetName returns the package manager name
+func (p *PacmanInstaller) GetName() string {
+	return "pacman"
 }
