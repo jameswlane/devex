@@ -815,6 +815,10 @@ applications:
         uninstall_command: 'lazydocker'
         official_support: true
         brew_tap: 'jesseduffield/lazydocker'
+        system_requirements:
+          docker_version: '20.10+'
+          min_memory_mb: 512
+          min_disk_space_mb: 100
         alternatives:
           - install_method: 'brew'
             install_command: 'lazydocker'
@@ -825,6 +829,10 @@ applications:
         install_command: 'lazydocker'
         uninstall_command: 'lazydocker'
         official_support: true
+        system_requirements:
+          docker_version: '20.10+'
+          min_memory_mb: 512
+          min_disk_space_mb: 100
         alternatives:
           - install_method: 'chocolatey'
             install_command: 'lazydocker'
@@ -835,6 +843,12 @@ applications:
         install_command: 'curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash'
         uninstall_command: 'rm -f $HOME/.local/bin/lazydocker'
         official_support: true
+        system_requirements:
+          docker_version: '20.10+'
+          min_memory_mb: 512
+          min_disk_space_mb: 100
+          required_services:
+            - 'docker'
         alternatives:
           - install_method: 'pacman'
             install_command: 'lazydocker'
@@ -848,6 +862,13 @@ applications:
             official_support: true
             platform_requirements:
               - go_version: '1.19+'
+            system_requirements:
+              docker_version: '20.10+'
+              go_version: '1.19+'
+              min_memory_mb: 512
+              min_disk_space_mb: 100
+              required_services:
+                - 'docker'
           - install_method: 'asdf'
             install_command: 'lazydocker latest'
             uninstall_command: 'lazydocker'
