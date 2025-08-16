@@ -371,6 +371,7 @@ func processConfigFiles(app types.AppConfig) error {
 	for _, configFile := range app.ConfigFiles {
 		// Process source path
 		sourcePath := utils.ReplacePlaceholders(configFile.Source, map[string]string{})
+		sourcePath = strings.Replace(sourcePath, "~", homeDir, 1)
 
 		// Process destination path
 		destPath := utils.ReplacePlaceholders(configFile.Destination, map[string]string{})
