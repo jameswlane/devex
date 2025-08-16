@@ -268,6 +268,11 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		}
 	}
 
+	// Handle YAY version check
+	if strings.Contains(command, "yay --version") {
+		return "yay v12.1.3 - libalpm v13.0.2", nil
+	}
+
 	if strings.Contains(command, "yay -S --noconfirm") {
 		parts := strings.Fields(command)
 		if len(parts) >= 4 {
@@ -296,10 +301,28 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		return "building package...\npackage built and installed successfully", nil
 	}
 
+	// Handle git status checks in YAY build directory
+	if strings.Contains(command, "git status") && strings.Contains(command, "yay") {
+		return "On branch master\nnothing to commit, working tree clean", nil
+	}
+
+	// Handle git pull in YAY build directory
+	if strings.Contains(command, "git pull") && strings.Contains(command, "yay") {
+		return "Already up to date.", nil
+	}
+
 	// Handle base-devel group installation
 	if strings.Contains(command, "sudo pacman -S --noconfirm base-devel") {
 		m.InstallationState["base-devel"] = true
 		return "installing base-devel group...\ninstallation complete", nil
+	}
+
+	// Handle git package installation check
+	if strings.Contains(command, "pacman -Q git") {
+		if m.InstallationState["git"] {
+			return "git 2.40.1-1", nil
+		}
+		return "error: package 'git' was not found", fmt.Errorf("package was not found")
 	}
 
 	// Handle Docker run commands - mark container as installed
