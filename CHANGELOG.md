@@ -1,3 +1,9 @@
+## [0.23.0](https://github.com/jameswlane/devex/compare/0.22.0...0.23.0) (2025-08-16)
+
+### Features
+
+* complete pacman installer ([#137](https://github.com/jameswlane/devex/issues/137)) ([67df842](https://github.com/jameswlane/devex/commit/67df842c2738f516230d3b1d4587a7d6aa655419))
+
 ## [0.22.0](https://github.com/jameswlane/devex/compare/0.21.0...0.22.0) (2025-08-15)
 
 ### Features
