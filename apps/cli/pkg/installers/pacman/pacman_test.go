@@ -50,13 +50,6 @@ var _ = Describe("Pacman Installer", func() {
 		})
 	})
 
-	Describe("NewPacmanInstaller (deprecated)", func() {
-		It("creates a new Pacman installer", func() {
-			pacmanInstaller := pacman.NewPacmanInstaller()
-			Expect(pacmanInstaller).NotTo(BeNil())
-		})
-	})
-
 	Describe("Install", func() {
 		Context("with valid package", func() {
 			It("installs a package successfully", func() {
@@ -386,7 +379,7 @@ var _ = Describe("Pacman Installer", func() {
 			It("returns package validation error", func() {
 				err := installer.Install("failing-package", mockRepo)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("package not found in official repositories or AUR"))
+				Expect(err.Error()).To(ContainSubstring("package not available in AUR"))
 			})
 		})
 
