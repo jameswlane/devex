@@ -1,0 +1,82 @@
+# Database Applications and Tools Configuration
+# Database servers, clients, and development tools
+database_applications:
+  servers:
+    # Database server applications (docker-based)
+    - name: MySQL
+      description: 'MySQL relational database management system'
+      category: 'Databases'
+      all_platforms:
+        install_method: 'docker'
+        install_command: 'mysql:8.4'
+        docker_options:
+          ports:
+            - '127.0.0.1:3306:3306'
+          container_name: 'mysql8'
+          environment:
+            # WARNING: Development configuration - no password by default
+            # Set MYSQL_ROOT_PASSWORD environment variable for production use
+            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-}
+            - MYSQL_ALLOW_EMPTY_PASSWORD=${MYSQL_ROOT_PASSWORD:+false}${MYSQL_ROOT_PASSWORD:-true}
+          restart_policy: 'unless-stopped'
+    - name: Redis
+      description: 'Redis in-memory data structure store'
+      category: 'Databases'
+      default: false
+      all_platforms:
+        install_method: 'docker'
+        install_command: 'redis:7'
+        docker_options:
+          ports:
+            - '127.0.0.1:6379:6379'
+          container_name: 'redis'
+          restart_policy: 'unless-stopped'
+    - name: PostgreSQL
+      description: 'PostgreSQL relational database system'
+      category: 'Databases'
+      default: false
+      all_platforms:
+        install_method: 'docker'
+        install_command: 'postgres:16'
+        docker_options:
+          ports:
+            - '127.0.0.1:5432:5432'
+          container_name: 'postgres16'
+          environment:
+            # WARNING: Development configuration only
+            # For production, set POSTGRES_PASSWORD and remove POSTGRES_HOST_AUTH_METHOD
+            - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+            - POSTGRES_HOST_AUTH_METHOD=${POSTGRES_PASSWORD:+}${POSTGRES_PASSWORD:-trust}
+          restart_policy: 'unless-stopped'
+  tools:
+    # Database CLI tools and utilities
+    - name: Redis Tools
+      description: 'Tools for working with Redis'
+      category: 'Databases'
+      linux:
+        install_method: 'apt'
+        install_command: 'redis-tools'
+        uninstall_command: 'redis-tools'
+        dependencies:
+          - 'redis'
+          - 'apt'
+  libraries:
+    # Development libraries and drivers
+    - name: SQLite Libraries
+      description: 'SQLite libraries for database operations'
+      category: 'Databases'
+      linux:
+        install_method: 'apt'
+        install_command: 'sqlite3 libsqlite3-0'
+        uninstall_command: 'sqlite3 libsqlite3-0'
+        dependencies:
+          - 'apt'
+    - name: MySQL Development Libraries
+      description: 'Development libraries for MySQL'
+      category: 'Databases'
+      linux:
+        install_method: 'apt'
+        install_command: 'default-libmysqlclient-dev'
+        uninstall_command: 'default-libmysqlclient-dev'
+        dependencies:
+          - 'apt'

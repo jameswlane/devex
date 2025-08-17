@@ -19,7 +19,7 @@ func LoadConfigs(homeDir string, files []string) (*viper.Viper, error) {
 
 	// Default configuration path
 	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
-	overrideConfigPath := filepath.Join(homeDir, ".devex")
+	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
 
 	// Load default configurations
 	for _, file := range files {

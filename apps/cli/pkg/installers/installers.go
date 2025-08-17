@@ -136,6 +136,13 @@ func InstallCrossPlatformApp(app types.CrossPlatformApp, settings config.CrossPl
 	// Get OS-specific configuration
 	osConfig := app.GetOSConfig()
 
+	// Ensure Homebrew is installed if needed
+	if osConfig.InstallMethod == "brew" {
+		if err := ensureHomebrewInstalled(settings, repo); err != nil {
+			return fmt.Errorf("failed to ensure Homebrew is available: %w", err)
+		}
+	}
+
 	// Create AppConfig for direct installation
 	appConfig := types.AppConfig{
 		BaseConfig: types.BaseConfig{
@@ -783,4 +790,34 @@ func cleanupAfterInstall(app types.AppConfig) {
 	}
 
 	log.Info("Cleanup completed", "app", app.Name)
+}
+
+// ensureHomebrewInstalled checks if Homebrew is available and installs it if needed
+func ensureHomebrewInstalled(settings config.CrossPlatformSettings, repo types.Repository) error {
+	// Check if Homebrew is already installed by checking for the brew command
+	if _, err := utils.CommandExec.RunShellCommand("which brew"); err == nil {
+		log.Debug("Homebrew is already available")
+		return nil
+	}
+
+	log.Info("Homebrew not found, installing...")
+
+	// Install Homebrew directly using curlpipe installer to avoid circular dependency
+	curlpipeInstaller := installerRegistry["curlpipe"]
+	if curlpipeInstaller == nil {
+		return fmt.Errorf("curlpipe installer not available for Homebrew installation")
+	}
+
+	homebrewCommand := "NONINTERACTIVE=1 /bin/bash -c \"$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+	if err := curlpipeInstaller.Install(homebrewCommand, repo); err != nil {
+		return fmt.Errorf("failed to install Homebrew: %w", err)
+	}
+
+	// Verify installation by checking for the brew command again
+	if _, err := utils.CommandExec.RunShellCommand("which brew"); err != nil {
+		return fmt.Errorf("homebrew installation completed but 'brew' command is not available (may need PATH update)")
+	}
+
+	log.Info("Homebrew installed successfully")
+	return nil
 }
