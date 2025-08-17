@@ -802,6 +802,111 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		return "GPG key imported successfully", nil
 	}
 
+	// Handle Homebrew commands
+	if strings.Contains(command, "brew --version") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew --version command failed")
+		}
+		return "Homebrew 4.0.10\nHomebrew/homebrew-core (git revision 123abc; last commit 2023-01-01)", nil
+	}
+
+	// Handle brew list commands for installation verification
+	if strings.Contains(command, "brew list") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew list command failed")
+		}
+
+		// Extract package name from brew list command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2] // "brew list package-name"
+			if m.InstallationState[packageName] {
+				return fmt.Sprintf("%s: version info", packageName), nil
+			}
+		}
+		// For packages not in installation state, return error (package not found)
+		return "", fmt.Errorf("no such keg: /usr/local/Cellar/package")
+	}
+
+	// Handle brew install commands - mark packages as installed
+	if strings.Contains(command, "brew install") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew install command failed")
+		}
+
+		// Extract package names from command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			// All arguments after "brew install" are package names
+			for i := 2; i < len(parts); i++ {
+				packageName := parts[i]
+				m.InstallationState[packageName] = true
+			}
+		}
+		return "Installing packages... Done.", nil
+	}
+
+	// Handle brew uninstall commands - mark packages as uninstalled
+	if strings.Contains(command, "brew uninstall") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew uninstall command failed")
+		}
+
+		// Extract package name from brew uninstall command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2]                  // "brew uninstall package-name"
+			delete(m.InstallationState, packageName) // Remove from installed state
+		}
+		return "Uninstalling package... Done.", nil
+	}
+
+	// Handle brew search commands
+	if strings.Contains(command, "brew search") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew search command failed")
+		}
+
+		// Extract search query
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			query := parts[2]
+			if strings.Contains(query, "nonexistent") || strings.Contains(query, "failing") {
+				return "No formula or cask found for \"" + query + "\"", nil
+			}
+			return fmt.Sprintf("%s  %s-dev  %s-tools", query, query, query), nil
+		}
+		return "No results found", nil
+	}
+
+	// Handle brew update commands
+	if strings.Contains(command, "brew update") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew update command failed")
+		}
+		return "Updating Homebrew...", nil
+	}
+
+	// Handle brew cleanup commands
+	if strings.Contains(command, "brew cleanup") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew cleanup command failed")
+		}
+		return "Cleaning up packages...", nil
+	}
+
+	// Handle brew --prefix commands
+	if strings.Contains(command, "brew --prefix") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew --prefix command failed")
+		}
+		return "/usr/local", nil
+	}
+
 	return "mock output", nil
 }
 

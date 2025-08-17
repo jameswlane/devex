@@ -52,6 +52,11 @@ func IsAppInstalled(app types.AppConfig) (bool, error) {
 				log.Info("Deb package not found", "command", cmd)
 				return false, nil
 			}
+		case "brew":
+			if !isBrewInstalled(cmd) {
+				log.Info("Brew package not installed", "package", cmd)
+				return false, nil
+			}
 		default:
 			log.Warn("Unknown install method, skipping check", "method", app.InstallMethod)
 			return false, nil
@@ -204,4 +209,16 @@ func isDebInstalled(command string) bool {
 
 	log.Info("Deb package command not found after exhaustive search", "command", command)
 	return false
+}
+
+func isBrewInstalled(packageName string) bool {
+	// Use brew list to check if package is installed
+	command := "brew list " + packageName
+	_, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// brew list returns non-zero exit code if package is not installed
+		log.Info("Brew package not installed", "package", packageName, "error", err)
+		return false
+	}
+	return true
 }
