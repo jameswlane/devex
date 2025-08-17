@@ -116,7 +116,7 @@ func LoadSettings(homeDir string) (Settings, error) {
 
 	// Paths for default configurations
 	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
-	overrideConfigPath := filepath.Join(homeDir, ".devex")
+	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
 
 	// Load default configs directly into the main Viper instance
 	for _, file := range DefaultFiles {
@@ -204,7 +204,7 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 
 	// Paths for default configurations
 	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
-	overrideConfigPath := filepath.Join(homeDir, ".devex")
+	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
 
 	// Load default configs
 	for _, file := range CrossPlatformFiles {
