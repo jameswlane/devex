@@ -8,47 +8,17 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/pkg/commands/status"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
 )
-
-// AppStatus represents the status of an installed application
-type AppStatus struct {
-	Name              string             `json:"name"`
-	Installed         bool               `json:"installed"`
-	Version           string             `json:"version,omitempty"`
-	LatestVersion     string             `json:"latest_version,omitempty"`
-	InstallMethod     string             `json:"install_method,omitempty"`
-	InstallDate       *time.Time         `json:"install_date,omitempty"`
-	Status            string             `json:"status"` // "healthy", "warning", "error", "not_installed"
-	Issues            []string           `json:"issues,omitempty"`
-	Dependencies      []DependencyStatus `json:"dependencies,omitempty"`
-	Services          []ServiceStatus    `json:"services,omitempty"`
-	PathStatus        bool               `json:"in_path"`
-	ConfigStatus      bool               `json:"config_valid"`
-	HealthCheckResult string             `json:"health_check"`
-}
-
-// DependencyStatus represents the status of a dependency
-type DependencyStatus struct {
-	Name      string `json:"name"`
-	Installed bool   `json:"installed"`
-	Version   string `json:"version,omitempty"`
-}
-
-// ServiceStatus represents the status of a system service
-type ServiceStatus struct {
-	Name   string `json:"name"`
-	Active bool   `json:"active"`
-	Status string `json:"status"`
-}
 
 // NewStatusCmd creates a new status command
 func NewStatusCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
@@ -99,50 +69,55 @@ Examples:
 func runStatus(repo types.Repository, settings config.CrossPlatformSettings, apps []string, all bool, category string, format string, verbose bool, fix bool) error {
 	ctx := context.Background()
 
-	// Determine which apps to check
 	var appsToCheck []types.AppConfig
 
+	// Determine which applications to check
 	switch {
 	case all:
-		// Get all installed apps from database
+		// Get all installed applications
 		installedApps, err := repo.ListApps()
 		if err != nil {
 			return fmt.Errorf("failed to list installed apps: %w", err)
 		}
 		appsToCheck = installedApps
+
 	case category != "":
-		// Get apps by category
+		// Get applications by category
 		installedApps, err := repo.ListApps()
 		if err != nil {
 			return fmt.Errorf("failed to list installed apps: %w", err)
 		}
+
 		for _, app := range installedApps {
 			if app.Category == category {
 				appsToCheck = append(appsToCheck, app)
 			}
 		}
+
 	case len(apps) > 0:
-		// Get specific apps
+		// Get specific applications
 		for _, appName := range apps {
-			// Split comma-separated values
+			// Handle comma-separated values
 			names := strings.Split(appName, ",")
 			for _, name := range names {
 				name = strings.TrimSpace(name)
-				app, err := settings.GetApplicationByName(name)
-				if err != nil {
-					fmt.Printf("Warning: Application '%s' not found in configuration\n", name)
-					continue
+
+				// Try to get from database first
+				if installedApp, err := repo.GetApp(name); err == nil {
+					appsToCheck = append(appsToCheck, *installedApp)
+				} else {
+					// Try to get from configuration
+					if app, err := settings.GetApplicationByName(name); err == nil {
+						appsToCheck = append(appsToCheck, *app)
+					} else {
+						fmt.Printf("Warning: Application '%s' not found in configuration\n", name)
+					}
 				}
-				appsToCheck = append(appsToCheck, *app)
 			}
 		}
+
 	default:
-		// Default to showing all installed apps
-		installedApps, err := repo.ListApps()
-		if err != nil {
-			return fmt.Errorf("failed to list installed apps: %w", err)
-		}
-		appsToCheck = installedApps
+		return fmt.Errorf("you must specify --app, --all, or --category")
 	}
 
 	if len(appsToCheck) == 0 {
@@ -150,32 +125,25 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 		return nil
 	}
 
-	// Check status for each app
-	statuses := make([]AppStatus, 0, len(appsToCheck))
+	// Check status for each application
+	results := make([]status.AppStatus, 0, len(appsToCheck))
 	for _, app := range appsToCheck {
-		status := checkAppStatus(ctx, &app, settings, verbose)
+		appStatus := checkAppStatus(ctx, &app, settings, verbose)
 
 		// Attempt fixes if requested
-		if fix && len(status.Issues) > 0 {
-			attemptFixes(ctx, &app, &status, settings)
+		if fix && len(appStatus.Issues) > 0 {
+			attemptFixes(ctx, &app, &appStatus, settings)
 		}
 
-		statuses = append(statuses, status)
+		results = append(results, appStatus)
 	}
 
 	// Output results
-	switch format {
-	case "json":
-		return outputJSON(statuses)
-	case "yaml":
-		return outputYAML(statuses)
-	default:
-		return outputTable(statuses, verbose)
-	}
+	return outputResults(results, format, verbose)
 }
 
-func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.CrossPlatformSettings, verbose bool) AppStatus {
-	status := AppStatus{
+func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.CrossPlatformSettings, verbose bool) status.AppStatus {
+	appStatus := status.AppStatus{
 		Name:          app.Name,
 		InstallMethod: app.InstallMethod,
 		Status:        "unknown",
@@ -185,77 +153,201 @@ func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.C
 	// Check if app is installed
 	installer := installers.GetInstaller(app.InstallMethod)
 	if installer == nil {
-		status.Status = "error"
-		status.Issues = append(status.Issues, fmt.Sprintf("Invalid install method: %s", app.InstallMethod))
-		return status
+		appStatus.Status = "error"
+		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Invalid install method: %s", app.InstallMethod))
+		return appStatus
 	}
 
 	installed, err := installer.IsInstalled(app.InstallCommand)
 	if err != nil {
-		status.Status = "error"
-		status.Issues = append(status.Issues, fmt.Sprintf("Failed to check installation: %v", err))
-		return status
+		appStatus.Status = "error"
+		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Failed to check installation: %v", err))
+		return appStatus
 	}
 
-	status.Installed = installed
+	appStatus.Installed = installed
 
-	if !status.Installed {
-		status.Status = "not_installed"
-		return status
+	if !appStatus.Installed {
+		appStatus.Status = "not_installed"
+		return appStatus
 	}
 
 	// Get version information
-	status.Version = getAppVersion(ctx, app)
+	appStatus.Version = getAppVersion(ctx, app)
 	if verbose {
-		status.LatestVersion = "check manually" // Placeholder for now
+		appStatus.LatestVersion = "check manually" // Placeholder for now
 	}
 
 	// Check dependencies
 	if len(app.Dependencies) > 0 {
-		status.Dependencies = checkDependencies(ctx, app.Dependencies, settings)
-		for _, dep := range status.Dependencies {
+		appStatus.Dependencies = checkDependencies(ctx, app.Dependencies, settings)
+		for _, dep := range appStatus.Dependencies {
 			if !dep.Installed {
-				status.Issues = append(status.Issues, fmt.Sprintf("Missing dependency: %s", dep.Name))
+				appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Missing dependency: %s", dep.Name))
 			}
 		}
 	}
 
 	// Check if app is in PATH
-	status.PathStatus = checkInPath(app.Name)
-	if !status.PathStatus && shouldBeInPath(app) {
-		status.Issues = append(status.Issues, "Application not found in PATH")
+	appStatus.PathStatus = checkInPath(app.Name)
+	if !appStatus.PathStatus && shouldBeInPath(app) {
+		appStatus.Issues = append(appStatus.Issues, "Application not found in PATH")
 	}
 
 	// Check services (for apps like Docker, MySQL, etc.)
 	if services := getAppServices(app); len(services) > 0 {
-		status.Services = checkServices(ctx, services)
-		for _, svc := range status.Services {
+		appStatus.Services = checkServices(ctx, services)
+		for _, svc := range appStatus.Services {
 			if !svc.Active && isServiceCritical(app, svc.Name) {
-				status.Issues = append(status.Issues, fmt.Sprintf("Service not running: %s", svc.Name))
+				appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Service not running: %s", svc.Name))
 			}
 		}
 	}
 
+	// Check configuration validity
+	configValid := checkAppConfiguration(ctx, app)
+	appStatus.ConfigStatus = configValid
+	if !configValid {
+		appStatus.Issues = append(appStatus.Issues, "Configuration validation failed")
+	}
+
+	// Check permissions
+	permissionIssues := checkAppPermissions(ctx, app)
+	if len(permissionIssues) > 0 {
+		appStatus.Issues = append(appStatus.Issues, permissionIssues...)
+	}
+
+	// Check file integrity
+	fileIntegrityIssues := status.CheckFileIntegrity(ctx, app)
+	if len(fileIntegrityIssues) > 0 {
+		appStatus.Issues = append(appStatus.Issues, fileIntegrityIssues...)
+	}
+
+	// Check repository status
+	repositoryIssues := status.CheckRepositoryStatus(ctx, app)
+	if len(repositoryIssues) > 0 {
+		appStatus.Issues = append(appStatus.Issues, repositoryIssues...)
+	}
+
+	// Collect performance metrics
+	if appStatus.Installed {
+		performance := status.CollectPerformanceMetrics(ctx, app)
+		if performance != nil {
+			appStatus.Performance = performance
+		}
+	}
+
+	// Analyze logs for issues
+	logIssues := status.AnalyzeApplicationLogs(ctx, app)
+	if len(logIssues) > 0 {
+		appStatus.Issues = append(appStatus.Issues, logIssues...)
+	}
+
+	// Check security and updates
+	securityIssues := status.CheckSecurityAndUpdates(ctx, app)
+	if len(securityIssues) > 0 {
+		appStatus.Issues = append(appStatus.Issues, securityIssues...)
+	}
+
 	// Run app-specific health checks
-	healthResult := runHealthCheck(ctx, app)
-	status.HealthCheckResult = healthResult
+	healthResult := status.RunHealthCheck(ctx, app)
+	appStatus.HealthCheckResult = healthResult
 	if healthResult != "healthy" && healthResult != "" {
-		status.Issues = append(status.Issues, fmt.Sprintf("Health check failed: %s", healthResult))
+		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Health check failed: %s", healthResult))
+	}
+
+	// Also check systemd service logs if the service exists
+	if services := getAppServices(app); len(services) > 0 {
+		for _, service := range services {
+			if systemdLogs := status.AnalyzeSystemdLogs(ctx, service); len(systemdLogs) > 0 {
+				appStatus.Issues = append(appStatus.Issues, systemdLogs...)
+			}
+		}
 	}
 
 	// Determine overall status
 	switch {
-	case len(status.Issues) == 0:
-		status.Status = "healthy"
-	case containsCriticalIssue(status.Issues):
-		status.Status = "error"
+	case len(appStatus.Issues) == 0:
+		appStatus.Status = "healthy"
+	case containsCriticalIssue(appStatus.Issues):
+		appStatus.Status = "error"
 	default:
-		status.Status = "warning"
+		appStatus.Status = "warning"
 	}
 
-	return status
+	return appStatus
 }
 
+func outputResults(results []status.AppStatus, format string, verbose bool) error {
+	switch strings.ToLower(format) {
+	case "json":
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(results)
+
+	case "yaml":
+		encoder := yaml.NewEncoder(os.Stdout)
+		defer encoder.Close()
+		return encoder.Encode(results)
+
+	case "table", "":
+		outputTable(results, verbose)
+		return nil
+
+	default:
+		return fmt.Errorf("unsupported output format: %s", format)
+	}
+}
+
+func outputTable(results []status.AppStatus, verbose bool) {
+	if len(results) == 0 {
+		fmt.Println("No applications found")
+		return
+	}
+
+	// Colors
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+
+	// Header
+	fmt.Printf("%-20s %-15s %-10s %-10s %s\n", "APPLICATION", "STATUS", "VERSION", "METHOD", "ISSUES")
+	fmt.Println(strings.Repeat("─", 80))
+
+	for _, result := range results {
+		statusColor := green
+		switch result.Status {
+		case "warning":
+			statusColor = yellow
+		case "error", "not_installed":
+			statusColor = red
+		}
+
+		issueCount := len(result.Issues)
+		issueStr := ""
+		if issueCount > 0 {
+			issueStr = fmt.Sprintf("%d issue(s)", issueCount)
+		}
+
+		fmt.Printf("%-20s %-15s %-10s %-10s %s\n",
+			result.Name,
+			statusColor(result.Status),
+			result.Version,
+			result.InstallMethod,
+			issueStr,
+		)
+
+		// Show details in verbose mode
+		if verbose && len(result.Issues) > 0 {
+			for _, issue := range result.Issues {
+				fmt.Printf("  • %s\n", issue)
+			}
+			fmt.Println()
+		}
+	}
+}
+
+// Helper functions that remain in this file for now
 func getAppVersion(ctx context.Context, app *types.AppConfig) string {
 	// Version detection based on app type
 	versionCmd := getVersionCommand(app.Name)
@@ -269,21 +361,25 @@ func getAppVersion(ctx context.Context, app *types.AppConfig) string {
 		return "unknown"
 	}
 
-	return strings.TrimSpace(string(output))
+	version := strings.TrimSpace(string(output))
+	if version == "" {
+		return "unknown"
+	}
+
+	return version
 }
 
 func getVersionCommand(appName string) string {
 	versionCommands := map[string]string{
 		"git":        "git --version | grep -oP 'git version \\K[0-9.]+'",
 		"docker":     "docker --version | grep -oP 'Docker version \\K[0-9.]+'",
-		"node":       "node --version | sed 's/v//'",
-		"nodejs":     "node --version | sed 's/v//'",
-		"python":     "python3 --version | grep -oP 'Python \\K[0-9.]+'",
+		"node":       "node --version | grep -oP 'v\\K[0-9.]+'",
+		"nodejs":     "node --version | grep -oP 'v\\K[0-9.]+'",
+		"python":     "python --version 2>&1 | grep -oP 'Python \\K[0-9.]+'",
 		"python3":    "python3 --version | grep -oP 'Python \\K[0-9.]+'",
 		"go":         "go version | grep -oP 'go\\K[0-9.]+'",
 		"rust":       "rustc --version | grep -oP 'rustc \\K[0-9.]+'",
 		"java":       "java -version 2>&1 | head -1 | grep -oP '\"\\K[0-9.]+'",
-		"ruby":       "ruby --version | grep -oP 'ruby \\K[0-9.]+'",
 		"php":        "php --version | head -1 | grep -oP 'PHP \\K[0-9.]+'",
 		"mysql":      "mysql --version | grep -oP 'mysql  Ver \\K[0-9.]+'",
 		"postgresql": "psql --version | grep -oP 'psql \\(PostgreSQL\\) \\K[0-9.]+'",
@@ -300,11 +396,11 @@ func getVersionCommand(appName string) string {
 	return fmt.Sprintf("%s --version 2>/dev/null || %s -v 2>/dev/null || echo 'unknown'", appName, appName)
 }
 
-func checkDependencies(ctx context.Context, deps []string, settings config.CrossPlatformSettings) []DependencyStatus {
-	depStatuses := make([]DependencyStatus, 0, len(deps))
+func checkDependencies(ctx context.Context, deps []string, settings config.CrossPlatformSettings) []status.DependencyStatus {
+	depStatuses := make([]status.DependencyStatus, 0, len(deps))
 
 	for _, dep := range deps {
-		depStatus := DependencyStatus{
+		depStatus := status.DependencyStatus{
 			Name: dep,
 		}
 
@@ -371,35 +467,26 @@ func getAppServices(app *types.AppConfig) []string {
 	return []string{}
 }
 
-func checkServices(ctx context.Context, services []string) []ServiceStatus {
+func checkServices(ctx context.Context, services []string) []status.ServiceStatus {
 	p := platform.DetectPlatform()
-	svcStatuses := make([]ServiceStatus, 0, len(services))
+	svcStatuses := make([]status.ServiceStatus, 0, len(services))
 
 	for _, service := range services {
-		svcStatus := ServiceStatus{
+		svcStatus := status.ServiceStatus{
 			Name:   service,
 			Active: false,
 			Status: "unknown",
 		}
 
-		switch p.OS {
-		case "linux":
-			// Check systemd service
+		if p.OS == "linux" {
+			// Use systemctl to check service status
 			cmd := exec.CommandContext(ctx, "systemctl", "is-active", service)
-			output, _ := cmd.Output()
-			status := strings.TrimSpace(string(output))
-
-			svcStatus.Active = status == "active"
-			svcStatus.Status = status
-		case "darwin":
-			// Check launchd service on macOS
-			cmd := exec.CommandContext(ctx, "launchctl", "list")
-			output, _ := cmd.Output()
-			svcStatus.Active = strings.Contains(string(output), service)
-			if svcStatus.Active {
-				svcStatus.Status = "running"
+			output, err := cmd.Output()
+			if err == nil && strings.TrimSpace(string(output)) == "active" {
+				svcStatus.Active = true
+				svcStatus.Status = "active"
 			} else {
-				svcStatus.Status = "stopped"
+				svcStatus.Status = "inactive"
 			}
 		}
 
@@ -409,18 +496,16 @@ func checkServices(ctx context.Context, services []string) []ServiceStatus {
 	return svcStatuses
 }
 
-func isServiceCritical(app *types.AppConfig, service string) bool {
-	// Services that are critical for the app to function
+func isServiceCritical(app *types.AppConfig, serviceName string) bool {
 	criticalServices := map[string][]string{
-		"docker":     {"docker.service"},
-		"mysql":      {"mysql.service", "mysqld.service"},
-		"postgresql": {"postgresql.service"},
-		"redis":      {"redis.service", "redis-server.service"},
+		"docker": {"docker.service"},
+		"mysql":  {"mysql.service", "mysqld.service"},
+		"redis":  {"redis.service", "redis-server.service"},
 	}
 
-	if critical, ok := criticalServices[strings.ToLower(app.Name)]; ok {
-		for _, crit := range critical {
-			if crit == service {
+	if services, ok := criticalServices[strings.ToLower(app.Name)]; ok {
+		for _, critical := range services {
+			if serviceName == critical {
 				return true
 			}
 		}
@@ -429,38 +514,68 @@ func isServiceCritical(app *types.AppConfig, service string) bool {
 	return false
 }
 
-func runHealthCheck(ctx context.Context, app *types.AppConfig) string {
-	// App-specific health checks
+func checkAppConfiguration(ctx context.Context, app *types.AppConfig) bool {
 	switch strings.ToLower(app.Name) {
 	case "docker":
+		// Check if Docker daemon is accessible
 		cmd := exec.CommandContext(ctx, "docker", "info")
-		if err := cmd.Run(); err != nil {
-			return "Docker daemon not accessible"
-		}
-		return "healthy"
+		return cmd.Run() == nil
 
 	case "git":
-		homeDir, _ := os.UserHomeDir()
-		gitConfig := filepath.Join(homeDir, ".gitconfig")
-		if _, err := os.Stat(gitConfig); os.IsNotExist(err) {
-			return "Git config not found"
-		}
-		return "healthy"
+		// Check if Git has user.name configured
+		cmd := exec.CommandContext(ctx, "git", "config", "--global", "--get", "user.name")
+		return cmd.Run() == nil
 
 	case "node", "nodejs":
-		cmd := exec.CommandContext(ctx, "npm", "doctor")
-		if err := cmd.Run(); err != nil {
-			return "npm configuration issues"
-		}
-		return "healthy"
+		// Check if npm is accessible
+		cmd := exec.CommandContext(ctx, "npm", "--version")
+		return cmd.Run() == nil
 
 	default:
-		// If app is installed and in PATH, consider it healthy
-		if checkInPath(app.Name) {
-			return "healthy"
-		}
-		return ""
+		return true
 	}
+}
+
+func checkAppPermissions(ctx context.Context, app *types.AppConfig) []string {
+	var issues []string
+
+	switch strings.ToLower(app.Name) {
+	case "docker":
+		// Check if user is in docker group
+		cmd := exec.CommandContext(ctx, "groups")
+		output, err := cmd.Output()
+		if err != nil {
+			issues = append(issues, "Failed to check user groups")
+			return issues
+		}
+
+		if !strings.Contains(string(output), "docker") {
+			issues = append(issues, "User not in docker group - requires 'sudo usermod -aG docker $USER'")
+		}
+
+	case "git":
+		// Check SSH key permissions if they exist
+		homeDir, _ := os.UserHomeDir()
+		sshDir := filepath.Join(homeDir, ".ssh")
+		if stat, err := os.Stat(sshDir); err == nil {
+			if stat.Mode().Perm() != 0700 {
+				issues = append(issues, "SSH directory permissions incorrect (should be 700)")
+			}
+
+			// Check private key permissions
+			keyFiles := []string{"id_rsa", "id_ed25519", "id_ecdsa"}
+			for _, keyFile := range keyFiles {
+				keyPath := filepath.Join(sshDir, keyFile)
+				if stat, err := os.Stat(keyPath); err == nil {
+					if stat.Mode().Perm() != 0600 {
+						issues = append(issues, fmt.Sprintf("SSH key %s permissions incorrect (should be 600)", keyFile))
+					}
+				}
+			}
+		}
+	}
+
+	return issues
 }
 
 func containsCriticalIssue(issues []string) bool {
@@ -474,241 +589,44 @@ func containsCriticalIssue(issues []string) bool {
 	return false
 }
 
-func attemptFixes(ctx context.Context, app *types.AppConfig, status *AppStatus, settings config.CrossPlatformSettings) {
+func attemptFixes(ctx context.Context, app *types.AppConfig, appStatus *status.AppStatus, settings config.CrossPlatformSettings) {
+	fmt.Printf("🔧 Attempting to fix issues for %s...\n", app.Name)
+
 	// Attempt to fix common issues
-	for _, issue := range status.Issues {
-		if strings.Contains(issue, "Service not running") {
+	for _, issue := range appStatus.Issues {
+		switch {
+		case strings.Contains(issue, "Service not running"):
 			// Try to start the service
 			p := platform.DetectPlatform()
 			if p.OS == "linux" {
 				serviceName := extractServiceName(issue)
 				if serviceName != "" {
+					fmt.Printf("  Attempting to start service: %s\n", serviceName)
 					cmd := exec.CommandContext(ctx, "sudo", "systemctl", "start", serviceName)
 					if err := cmd.Run(); err == nil {
-						fmt.Printf("✓ Started service: %s\n", serviceName)
+						fmt.Printf("  ✓ Started service: %s\n", serviceName)
+					} else {
+						fmt.Printf("  ❌ Failed to start service: %s\n", serviceName)
 					}
 				}
 			}
-		} else if strings.Contains(issue, "not found in PATH") {
-			// Add to PATH if possible
-			fmt.Printf("ℹ To add %s to PATH, add its installation directory to your shell configuration\n", app.Name)
+		case strings.Contains(issue, "User not in docker group"):
+			fmt.Printf("  Attempting to add user to docker group...\n")
+			cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", os.Getenv("USER"))
+			if err := cmd.Run(); err == nil {
+				fmt.Printf("  ✓ Added user to docker group (logout and login to apply)\n")
+			} else {
+				fmt.Printf("  ❌ Failed to add user to docker group\n")
+			}
 		}
 	}
 }
 
 func extractServiceName(issue string) string {
+	// Extract service name from issue string
 	parts := strings.Split(issue, ":")
 	if len(parts) >= 2 {
 		return strings.TrimSpace(parts[1])
 	}
 	return ""
-}
-
-func outputJSON(statuses []AppStatus) error {
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(statuses)
-}
-
-func outputYAML(statuses []AppStatus) error {
-	// For YAML output, we'll use JSON for now
-	// In production, you'd use a YAML library
-	fmt.Println("# Application Status Report")
-	for _, status := range statuses {
-		fmt.Printf("- name: %s\n", status.Name)
-		fmt.Printf("  installed: %v\n", status.Installed)
-		fmt.Printf("  status: %s\n", status.Status)
-		if status.Version != "" {
-			fmt.Printf("  version: %s\n", status.Version)
-		}
-		if len(status.Issues) > 0 {
-			fmt.Println("  issues:")
-			for _, issue := range status.Issues {
-				fmt.Printf("    - %s\n", issue)
-			}
-		}
-	}
-	return nil
-}
-
-func outputTable(statuses []AppStatus, verbose bool) error {
-	if len(statuses) == 1 && verbose {
-		// Detailed single app view
-		return outputDetailedStatus(statuses[0])
-	}
-
-	// Color setup
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-
-	fmt.Printf("\n📊 Application Status Summary (%d applications)\n", len(statuses))
-
-	// Simple table output without external library
-	fmt.Println("┌─────────────────┬────────────┬─────────────┬──────────────┬─────────────┐")
-	fmt.Printf("│ %-15s │ %-10s │ %-11s │ %-12s │ %-11s │\n", "Application", "Status", "Version", "Method", "Health")
-	fmt.Println("├─────────────────┼────────────┼─────────────┼──────────────┼─────────────┤")
-
-	for _, status := range statuses {
-		statusIcon := "❓"
-		statusText := status.Status
-		healthIcon := "❓"
-
-		switch status.Status {
-		case "healthy":
-			statusIcon = "✅"
-			statusText = green("OK")
-			healthIcon = green("Healthy")
-		case "warning":
-			statusIcon = "⚠️"
-			statusText = yellow("Issues")
-			healthIcon = yellow("Warning")
-		case "error":
-			statusIcon = "❌"
-			statusText = red("Error")
-			healthIcon = red("Error")
-		case "not_installed":
-			statusIcon = "⭕"
-			statusText = "Not Installed"
-			healthIcon = "N/A"
-		}
-
-		// Truncate long fields to fit in table
-		appName := status.Name
-		if len(appName) > 15 {
-			appName = appName[:12] + "..."
-		}
-		version := status.Version
-		if len(version) > 11 {
-			version = version[:8] + "..."
-		}
-		method := status.InstallMethod
-		if len(method) > 12 {
-			method = method[:9] + "..."
-		}
-
-		fmt.Printf("│ %-15s │ %s %-7s │ %-11s │ %-12s │ %-11s │\n",
-			appName, statusIcon, statusText, version, method, healthIcon)
-	}
-
-	fmt.Println("└─────────────────┴────────────┴─────────────┴──────────────┴─────────────┘")
-
-	// Show summary of issues
-	var errorCount, warningCount int
-	for _, status := range statuses {
-		switch status.Status {
-		case "error":
-			errorCount++
-		case "warning":
-			warningCount++
-		}
-	}
-
-	if errorCount > 0 || warningCount > 0 {
-		fmt.Println()
-		if errorCount > 0 {
-			fmt.Printf("❌ %d application(s) with errors\n", errorCount)
-		}
-		if warningCount > 0 {
-			fmt.Printf("⚠️  %d application(s) with warnings\n", warningCount)
-		}
-		fmt.Println("\n💡 Use 'devex status --app <name> --verbose' for detailed diagnostics")
-	} else {
-		fmt.Println("\n✅ All applications are healthy")
-	}
-
-	return nil
-}
-
-func outputDetailedStatus(status AppStatus) error {
-	// Detailed single application view
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-
-	statusColor := green
-	statusIcon := "✅"
-	switch status.Status {
-	case "warning":
-		statusColor = yellow
-		statusIcon = "⚠️"
-	case "error":
-		statusColor = red
-		statusIcon = "❌"
-	case "not_installed":
-		statusIcon = "⭕"
-	}
-
-	fmt.Printf("\n📋 Application Status: %s\n", status.Name)
-	fmt.Println("┌─────────────────────┬─────────────────────────────────────────┐")
-	fmt.Printf("│ %-19s │ %-39s │\n", "Property", "Value")
-	fmt.Println("├─────────────────────┼─────────────────────────────────────────┤")
-
-	fmt.Printf("│ %-19s │ %s %-36s │\n", "Status", statusIcon, statusColor(strings.ToUpper(status.Status[:1])+status.Status[1:]))
-	fmt.Printf("│ %-19s │ %-39s │\n", "Installation Method", status.InstallMethod)
-
-	if status.Version != "" && status.Version != "unknown" {
-		fmt.Printf("│ %-19s │ %-39s │\n", "Installed Version", status.Version)
-	}
-
-	if status.LatestVersion != "" && status.LatestVersion != "check manually" {
-		fmt.Printf("│ %-19s │ %-39s │\n", "Latest Version", status.LatestVersion)
-	}
-
-	// Dependencies
-	if len(status.Dependencies) > 0 {
-		depStatus := "✅ All satisfied"
-		depCount := 0
-		for _, dep := range status.Dependencies {
-			if dep.Installed {
-				depCount++
-			}
-		}
-		if depCount < len(status.Dependencies) {
-			depStatus = fmt.Sprintf("⚠️  %d/%d satisfied", depCount, len(status.Dependencies))
-		}
-		fmt.Printf("│ %-19s │ %-39s │\n", "Dependencies", depStatus)
-	}
-
-	// Services
-	if len(status.Services) > 0 {
-		for _, svc := range status.Services {
-			svcStatus := "✅ Active"
-			if !svc.Active {
-				svcStatus = "❌ " + svc.Status
-			}
-			fmt.Printf("│ %-19s │ %-39s │\n", "Service: "+svc.Name, svcStatus)
-		}
-	}
-
-	// PATH status
-	pathStatus := "❌ Not in PATH"
-	if status.PathStatus {
-		pathStatus = "✅ In PATH"
-	}
-	fmt.Printf("│ %-19s │ %-39s │\n", "PATH", pathStatus)
-
-	// Health check
-	if status.HealthCheckResult != "" {
-		healthStatus := "✅ " + status.HealthCheckResult
-		if status.HealthCheckResult != "healthy" {
-			healthStatus = "❌ " + status.HealthCheckResult
-		}
-		fmt.Printf("│ %-19s │ %-39s │\n", "Health Check", healthStatus)
-	}
-
-	fmt.Println("└─────────────────────┴─────────────────────────────────────────┘")
-
-	// Show issues if any
-	if len(status.Issues) > 0 {
-		fmt.Println("\n⚠️  Issues Found:")
-		for _, issue := range status.Issues {
-			fmt.Printf("  • %s\n", issue)
-		}
-		fmt.Println("\n💡 Run 'devex status --app " + status.Name + " --fix' to attempt automatic fixes")
-	} else {
-		fmt.Println("\n✅ No issues found")
-	}
-
-	return nil
 }
