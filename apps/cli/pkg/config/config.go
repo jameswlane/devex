@@ -293,18 +293,20 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
 	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
 
-	// Load default configs
+	// Load default configs - check existence first to avoid unnecessary I/O
 	for _, file := range CrossPlatformFiles {
 		defaultPath := filepath.Join(defaultConfigPath, file)
-		if err := mergeConfigFileIntoViper(v, defaultPath); err != nil {
-			log.Warn("Failed to load default config; skipping", "file", file, "error", err)
+		if exists, _ := fs.Exists(defaultPath); exists {
+			if err := mergeConfigFileIntoViper(v, defaultPath); err != nil {
+				log.Warn("Failed to load default config; skipping", "file", file, "error", err)
+			}
 		}
 	}
 
 	// Apply overrides from the ~/.devex directory
 	for _, file := range CrossPlatformFiles {
 		overridePath := filepath.Join(overrideConfigPath, file)
-		if exists, err := fs.Stat(overridePath); err == nil && exists != nil {
+		if exists, _ := fs.Exists(overridePath); exists {
 			log.Info("Applying override", "file", overridePath)
 			if err := mergeConfigFileIntoViper(v, overridePath); err != nil {
 				log.Warn("Failed to apply override; skipping", "file", overridePath, "error", err)
