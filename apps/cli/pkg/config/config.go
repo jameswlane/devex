@@ -33,14 +33,15 @@ type Settings struct {
 
 // CrossPlatformSettings represents the new configuration structure
 type CrossPlatformSettings struct {
-	DebugMode    bool               `mapstructure:"debug_mode"`
-	HomeDir      string             `mapstructure:"home_dir"`
-	Verbose      bool               `mapstructure:"verbose"`
-	Config       map[string]any     `mapstructure:"config"`
-	Applications ApplicationsConfig `mapstructure:"applications"`
-	Environment  EnvironmentConfig  `mapstructure:"environment"`
-	Desktop      DesktopConfig      `mapstructure:"desktop"`
-	System       SystemConfig       `mapstructure:"system"`
+	DebugMode           bool                      `mapstructure:"debug_mode"`
+	HomeDir             string                    `mapstructure:"home_dir"`
+	Verbose             bool                      `mapstructure:"verbose"`
+	Config              map[string]any            `mapstructure:"config"`
+	Applications        ApplicationsConfig        `mapstructure:"applications"`
+	DesktopApplications DesktopApplicationsConfig `mapstructure:"desktop_applications"`
+	Environment         EnvironmentConfig         `mapstructure:"environment"`
+	Desktop             DesktopConfig             `mapstructure:"desktop"`
+	System              SystemConfig              `mapstructure:"system"`
 }
 
 // ApplicationsConfig represents the application configuration
@@ -49,6 +50,11 @@ type ApplicationsConfig struct {
 	Databases   []types.CrossPlatformApp `mapstructure:"databases"`
 	SystemTools []types.CrossPlatformApp `mapstructure:"system_tools"`
 	Optional    []types.CrossPlatformApp `mapstructure:"optional"`
+}
+
+// DesktopApplicationsConfig represents desktop application configuration
+type DesktopApplicationsConfig struct {
+	Productivity []types.CrossPlatformApp `mapstructure:"productivity"`
 }
 
 // EnvironmentConfig represents development environment configuration
@@ -86,6 +92,7 @@ func (s *CrossPlatformSettings) GetAllApps() []types.CrossPlatformApp {
 	apps = append(apps, s.Applications.Databases...)
 	apps = append(apps, s.Applications.SystemTools...)
 	apps = append(apps, s.Applications.Optional...)
+	apps = append(apps, s.DesktopApplications.Productivity...)
 	apps = append(apps, s.Environment.ProgrammingLanguages...)
 	apps = append(apps, s.Environment.Shell...)
 	return apps
