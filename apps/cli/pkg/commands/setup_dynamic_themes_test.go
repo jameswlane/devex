@@ -112,14 +112,10 @@ func TestGetAvailableThemeNames(t *testing.T) {
 
 		themeNames := getAvailableThemeNames(settings)
 
-		// Should fallback to default themes
+		// Should fallback to default themes (1.0 release themes only)
 		assert.Contains(t, themeNames, "Tokyo Night")
-		assert.Contains(t, themeNames, "Catppuccin")
-		assert.Contains(t, themeNames, "Dracula")
-		assert.Contains(t, themeNames, "Nord")
-		assert.Contains(t, themeNames, "One Dark")
-		assert.Contains(t, themeNames, "Gruvbox")
-		assert.Len(t, themeNames, 6)
+		assert.Contains(t, themeNames, "Synthwave 84")
+		assert.Len(t, themeNames, 2)
 	})
 
 	t.Run("should handle apps with all_platforms configuration", func(t *testing.T) {
