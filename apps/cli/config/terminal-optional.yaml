@@ -1,4 +1,4 @@
-# Optional Terminal Applications Configuration
+# Optional Terminal Applications Configuration  
 # Terminal/CLI applications that can be optionally installed
 terminal_optional_applications:
   development:
