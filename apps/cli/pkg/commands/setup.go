@@ -25,6 +25,11 @@ import (
 	"github.com/jameswlane/devex/pkg/types"
 )
 
+// Compile regex patterns once at package initialization
+var (
+	emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+)
+
 func init() {
 	Register(NewSetupCmd)
 }
@@ -133,6 +138,13 @@ const (
 	RedisPort      = "6379:6379"
 )
 
+// FallbackThemes provides default themes when configuration is unavailable
+// These are the themes available for the 1.0 release
+var FallbackThemes = []string{
+	"Tokyo Night",
+	"Synthwave 84",
+}
+
 // getAvailableThemeNames extracts theme names from application configurations
 func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 	log.Debug("Loading available themes from application configurations")
@@ -140,12 +152,10 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 	// Get all applications from all categories in settings
 	var allApps []interface{}
 
-	// Collect applications from all categories
+	// Collect applications from all categories using GetAllApps
+	allConfigApps := settings.GetAllApps()
 	appCategories := [][]types.CrossPlatformApp{
-		settings.Applications.Development,
-		settings.Applications.Databases,
-		settings.Applications.SystemTools,
-		settings.Applications.Optional,
+		allConfigApps, // Use the unified list from GetAllApps
 	}
 
 	// Convert CrossPlatformApp slice to interface{} slice for GetAvailableThemes
@@ -173,22 +183,14 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 
 	log.Debug("Loaded themes from configurations", "count", len(themeNames), "themes", themeNames)
 
-	// Fallback to hardcoded themes if none found in configurations
+	// Fallback to default themes if none found in configurations
 	// This fallback is used when:
 	// - Configuration files are missing or corrupted
 	// - No desktop environment themes are defined
 	// - Theme loading from config files fails
-	// These themes provide a minimal working set for development environments
 	if len(themeNames) == 0 {
 		log.Warn("No themes found in application configurations, using fallback themes")
-		return []string{
-			"Tokyo Night",
-			"Catppuccin",
-			"Dracula",
-			"Nord",
-			"One Dark",
-			"Gruvbox",
-		}
+		return FallbackThemes
 	}
 
 	return themeNames
@@ -209,7 +211,7 @@ func convertThemesToInterface(themes []types.Theme) []interface{} {
 
 // getProgrammingLanguageNames extracts programming language names from environment configuration
 func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string {
-	if len(settings.Environment.ProgrammingLanguages) == 0 {
+	if len(settings.ProgrammingLanguages) == 0 {
 		log.Warn("No programming languages found in environment configuration, using fallback")
 		// Fallback to default languages if none found in configuration
 		return []string{
@@ -223,8 +225,8 @@ func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string
 	}
 
 	// Performance optimization: Pre-allocate slice with known capacity to avoid reallocations
-	languageNames := make([]string, 0, len(settings.Environment.ProgrammingLanguages))
-	for _, lang := range settings.Environment.ProgrammingLanguages {
+	languageNames := make([]string, 0, len(settings.ProgrammingLanguages))
+	for _, lang := range settings.ProgrammingLanguages {
 		languageNames = append(languageNames, lang.Name)
 	}
 
@@ -1422,8 +1424,6 @@ func (m *SetupModel) saveThemePreference() error {
 // This provides better validation than basic string checking while remaining practical
 // Returns true if email matches standard email format
 func isValidEmail(email string) bool {
-	// Basic pattern matching for most common email formats
-	// More comprehensive than simple @ and . checking
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+	// Uses pre-compiled regex for better performance
 	return emailRegex.MatchString(email)
 }

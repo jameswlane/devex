@@ -159,8 +159,8 @@ func TestGetAvailableDesktopApps(t *testing.T) {
 	t.Run("should filter apps by desktop environment compatibility", func(t *testing.T) {
 		// Create mock settings with test apps
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
-				Optional: []types.CrossPlatformApp{
+			DesktopOptional: config.DesktopOptionalConfig{
+				Utilities: []types.CrossPlatformApp{
 					{
 						Name:                "GNOME Tweaks",
 						Category:            "Utility", // Use exact category from isDesktopApp
@@ -233,8 +233,8 @@ func TestGetAvailableDesktopApps(t *testing.T) {
 
 	t.Run("should exclude incompatible apps on KDE", func(t *testing.T) {
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
-				Optional: []types.CrossPlatformApp{
+			DesktopOptional: config.DesktopOptionalConfig{
+				Utilities: []types.CrossPlatformApp{
 					{
 						Name:                "GNOME Tweaks",
 						Category:            "Utility", // Use exact category from isDesktopApp

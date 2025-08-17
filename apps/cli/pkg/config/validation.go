@@ -15,12 +15,21 @@ func ValidateConfigFiles(homeDir string) error {
 
 	configPath := filepath.Join(homeDir, ".local/share/devex/config")
 
-	// Define required configuration files and their basic structure
+	// Define required configuration files and their basic structure for the new hybrid model
 	requiredFiles := map[string]func(map[string]interface{}) error{
-		"applications.yaml": ValidateApplicationsConfig,
-		"environment.yaml":  validateEnvironmentConfig,
-		"desktop.yaml":      validateDesktopConfig,
-		"system.yaml":       validateSystemConfig,
+		"terminal.yaml":              validateTerminalConfig,
+		"terminal-optional.yaml":     validateTerminalOptionalConfig,
+		"desktop.yaml":               validateDesktopApplicationsConfig,
+		"desktop-optional.yaml":      validateDesktopOptionalConfig,
+		"databases.yaml":             validateDatabasesConfig,
+		"programming-languages.yaml": validateProgrammingLanguagesConfig,
+		"fonts.yaml":                 validateFontsConfig,
+		"shell.yaml":                 validateShellConfig,
+		"dotfiles.yaml":              validateDotfilesConfig,
+		"gnome.yaml":                 validateGnomeConfig,
+		"kde.yaml":                   validateKdeConfig,
+		"macos.yaml":                 validateMacosConfig,
+		"windows.yaml":               validateWindowsConfig,
 	}
 
 	var validationErrors []string
@@ -64,7 +73,7 @@ func ValidateConfigFiles(homeDir string) error {
 	return nil
 }
 
-// ValidateApplicationsConfig validates the applications.yaml structure
+// ValidateApplicationsConfig validates the legacy applications.yaml structure for backward compatibility
 func ValidateApplicationsConfig(config map[string]interface{}) error {
 	// Check if the applications section exists
 	applications, exists := config["applications"]
@@ -89,38 +98,113 @@ func ValidateApplicationsConfig(config map[string]interface{}) error {
 	return nil
 }
 
-// validateEnvironmentConfig validates the environment.yaml structure
-func validateEnvironmentConfig(config map[string]interface{}) error {
-	requiredSections := []string{"programming_languages", "fonts", "shell"}
-
-	for _, section := range requiredSections {
-		if _, exists := config[section]; !exists {
-			return fmt.Errorf("missing required section: %s", section)
+// validateTerminalConfig validates the terminal.yaml structure
+func validateTerminalConfig(config map[string]interface{}) error {
+	if applications, exists := config["applications"]; exists {
+		appsMap, ok := applications.(map[interface{}]interface{})
+		if !ok {
+			return fmt.Errorf("applications section must be a map")
+		}
+		// Optional validation for expected sections
+		expectedSections := []string{"development", "utilities", "dependencies"}
+		for _, section := range expectedSections {
+			if _, exists := appsMap[section]; !exists {
+				log.Info("Optional section missing", "section", section, "file", "terminal.yaml")
+			}
 		}
 	}
-
 	return nil
 }
 
-// validateDesktopConfig validates the desktop.yaml structure
-func validateDesktopConfig(config map[string]interface{}) error {
-	if _, exists := config["desktop_environments"]; !exists {
-		return fmt.Errorf("missing required section: desktop_environments")
+// validateTerminalOptionalConfig validates the terminal-optional.yaml structure
+func validateTerminalOptionalConfig(config map[string]interface{}) error {
+	if applications, exists := config["applications"]; exists {
+		_, ok := applications.(map[interface{}]interface{})
+		if !ok {
+			return fmt.Errorf("applications section must be a map")
+		}
 	}
-
 	return nil
 }
 
-// validateSystemConfig validates the system.yaml structure
-func validateSystemConfig(config map[string]interface{}) error {
-	requiredSections := []string{"git", "ssh", "terminal"}
+// validateDesktopApplicationsConfig validates the desktop.yaml structure
+func validateDesktopApplicationsConfig(config map[string]interface{}) error {
+	if _, exists := config["desktop_applications"]; exists {
+		return nil // Valid if desktop_applications section exists
+	}
+	// Desktop config can be empty, so this is not an error
+	return nil
+}
 
-	for _, section := range requiredSections {
-		if _, exists := config[section]; !exists {
-			return fmt.Errorf("missing required section: %s", section)
+// validateDesktopOptionalConfig validates the desktop-optional.yaml structure
+func validateDesktopOptionalConfig(config map[string]interface{}) error {
+	// Desktop optional can have any structure, just validate it's parseable
+	return nil
+}
+
+// validateDatabasesConfig validates the databases.yaml structure
+func validateDatabasesConfig(config map[string]interface{}) error {
+	if applications, exists := config["applications"]; exists {
+		_, ok := applications.(map[interface{}]interface{})
+		if !ok {
+			return fmt.Errorf("applications section must be a map")
 		}
 	}
+	return nil
+}
 
+// validateProgrammingLanguagesConfig validates the programming-languages.yaml structure
+func validateProgrammingLanguagesConfig(config map[string]interface{}) error {
+	if _, exists := config["programming_languages"]; !exists {
+		return fmt.Errorf("missing required section: programming_languages")
+	}
+	return nil
+}
+
+// validateFontsConfig validates the fonts.yaml structure
+func validateFontsConfig(config map[string]interface{}) error {
+	if _, exists := config["fonts"]; !exists {
+		return fmt.Errorf("missing required section: fonts")
+	}
+	return nil
+}
+
+// validateShellConfig validates the shell.yaml structure
+func validateShellConfig(config map[string]interface{}) error {
+	// Shell config can be empty initially
+	return nil
+}
+
+// validateDotfilesConfig validates the dotfiles.yaml structure
+func validateDotfilesConfig(config map[string]interface{}) error {
+	// Dotfiles config should have at least one section
+	if len(config) == 0 {
+		log.Info("Dotfiles config is empty", "file", "dotfiles.yaml")
+	}
+	return nil
+}
+
+// validateGnomeConfig validates the gnome.yaml structure
+func validateGnomeConfig(config map[string]interface{}) error {
+	// GNOME config can be empty initially
+	return nil
+}
+
+// validateKdeConfig validates the kde.yaml structure
+func validateKdeConfig(config map[string]interface{}) error {
+	// KDE config can be empty initially
+	return nil
+}
+
+// validateMacosConfig validates the macos.yaml structure
+func validateMacosConfig(config map[string]interface{}) error {
+	// macOS config can be empty initially
+	return nil
+}
+
+// validateWindowsConfig validates the windows.yaml structure
+func validateWindowsConfig(config map[string]interface{}) error {
+	// Windows config can be empty initially
 	return nil
 }
 
