@@ -23,8 +23,17 @@ var DefaultFiles = []string{
 
 // CrossPlatformFiles defines the new consolidated configuration files
 var CrossPlatformFiles = []string{
-	"applications.yaml",
-	"environment.yaml",
+	"terminal.yaml",
+	"terminal-optional.yaml",
 	"desktop.yaml",
-	"system.yaml",
+	"desktop-optional.yaml",
+	"databases.yaml",
+	"programming-languages.yaml",
+	"fonts.yaml",
+	"shell.yaml",
+	"dotfiles.yaml",
+	"gnome.yaml",
+	"kde.yaml",
+	"macos.yaml",
+	"windows.yaml",
 }

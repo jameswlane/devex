@@ -33,15 +33,20 @@ type Settings struct {
 
 // CrossPlatformSettings represents the new configuration structure
 type CrossPlatformSettings struct {
-	DebugMode           bool                      `mapstructure:"debug_mode"`
-	HomeDir             string                    `mapstructure:"home_dir"`
-	Verbose             bool                      `mapstructure:"verbose"`
-	Config              map[string]any            `mapstructure:"config"`
-	Applications        ApplicationsConfig        `mapstructure:"applications"`
-	DesktopApplications DesktopApplicationsConfig `mapstructure:"desktop_applications"`
-	Environment         EnvironmentConfig         `mapstructure:"environment"`
-	Desktop             DesktopConfig             `mapstructure:"desktop"`
-	System              SystemConfig              `mapstructure:"system"`
+	DebugMode            bool                       `mapstructure:"debug_mode"`
+	HomeDir              string                     `mapstructure:"home_dir"`
+	Verbose              bool                       `mapstructure:"verbose"`
+	Config               map[string]any             `mapstructure:"config"`
+	Terminal             TerminalApplicationsConfig `mapstructure:"terminal_applications"`
+	TerminalOptional     TerminalOptionalConfig     `mapstructure:"terminal_optional_applications"`
+	Desktop              DesktopApplicationsConfig  `mapstructure:"desktop_applications"`
+	DesktopOptional      DesktopOptionalConfig      `mapstructure:"desktop_optional_applications"`
+	Databases            DatabasesConfig            `mapstructure:"database_applications"`
+	ProgrammingLanguages ProgrammingLanguagesConfig `mapstructure:"programming_languages"`
+	Fonts                FontsConfig                `mapstructure:"fonts"`
+	Shell                ShellConfig                `mapstructure:"shell"`
+	Dotfiles             DotfilesConfig             `mapstructure:",inline"`
+	DesktopEnvironments  DesktopEnvironmentsConfig  `mapstructure:",inline"`
 }
 
 // ApplicationsConfig represents the application configuration
@@ -85,16 +90,98 @@ type SystemConfig struct {
 	Terminal map[string]any    `mapstructure:"terminal"`
 }
 
+// TerminalApplicationsConfig represents terminal application configuration
+type TerminalApplicationsConfig struct {
+	Development  []types.CrossPlatformApp `mapstructure:"development"`
+	Utilities    []types.CrossPlatformApp `mapstructure:"utilities"`
+	Dependencies []types.CrossPlatformApp `mapstructure:"dependencies"`
+}
+
+// TerminalOptionalConfig represents optional terminal application configuration
+type TerminalOptionalConfig struct {
+	Development       []types.CrossPlatformApp `mapstructure:"development"`
+	Utilities         []types.CrossPlatformApp `mapstructure:"utilities"`
+	SystemMonitoring  []types.CrossPlatformApp `mapstructure:"system_monitoring"`
+	TerminalEmulators []types.CrossPlatformApp `mapstructure:"terminal_emulators"`
+}
+
+// DesktopOptionalConfig represents optional desktop application configuration
+type DesktopOptionalConfig struct {
+	Communication []types.CrossPlatformApp `mapstructure:"communication"`
+	Productivity  []types.CrossPlatformApp `mapstructure:"productivity"`
+	System        []types.CrossPlatformApp `mapstructure:"system"`
+	Browsers      []types.CrossPlatformApp `mapstructure:"browsers"`
+	Utilities     []types.CrossPlatformApp `mapstructure:"utilities"`
+}
+
+// DatabasesConfig represents database configuration
+type DatabasesConfig struct {
+	Servers   []types.CrossPlatformApp `mapstructure:"servers"`
+	Tools     []types.CrossPlatformApp `mapstructure:"tools"`
+	Libraries []types.CrossPlatformApp `mapstructure:"libraries"`
+}
+
+// ProgrammingLanguagesConfig represents programming language configuration
+type ProgrammingLanguagesConfig []types.CrossPlatformApp
+
+// FontsConfig represents font configuration
+type FontsConfig []types.Font
+
+// ShellConfig represents shell configuration
+type ShellConfig []types.CrossPlatformApp
+
+// DotfilesConfig represents dotfiles and system configuration
+type DotfilesConfig struct {
+	Git         []types.GitConfig `mapstructure:"git"`
+	SSH         map[string]any    `mapstructure:"ssh"`
+	Terminal    map[string]any    `mapstructure:"terminal"`
+	GlobalTheme string            `mapstructure:"global_theme"`
+}
+
+// DesktopEnvironmentsConfig represents desktop environment configurations
+type DesktopEnvironmentsConfig struct {
+	GNOME   DesktopEnvConfig `mapstructure:",inline"`
+	KDE     DesktopEnvConfig `mapstructure:",inline"`
+	MacOS   DesktopEnvConfig `mapstructure:",inline"`
+	Windows DesktopEnvConfig `mapstructure:",inline"`
+}
+
 // GetAllApps returns all applications from the cross-platform configuration
 func (s *CrossPlatformSettings) GetAllApps() []types.CrossPlatformApp {
 	var apps []types.CrossPlatformApp
-	apps = append(apps, s.Applications.Development...)
-	apps = append(apps, s.Applications.Databases...)
-	apps = append(apps, s.Applications.SystemTools...)
-	apps = append(apps, s.Applications.Optional...)
-	apps = append(apps, s.DesktopApplications.Productivity...)
-	apps = append(apps, s.Environment.ProgrammingLanguages...)
-	apps = append(apps, s.Environment.Shell...)
+
+	// Terminal applications
+	apps = append(apps, s.Terminal.Development...)
+	apps = append(apps, s.Terminal.Utilities...)
+	apps = append(apps, s.Terminal.Dependencies...)
+
+	// Terminal optional applications
+	apps = append(apps, s.TerminalOptional.Development...)
+	apps = append(apps, s.TerminalOptional.Utilities...)
+	apps = append(apps, s.TerminalOptional.SystemMonitoring...)
+	apps = append(apps, s.TerminalOptional.TerminalEmulators...)
+
+	// Desktop applications
+	apps = append(apps, s.Desktop.Productivity...)
+
+	// Desktop optional applications
+	apps = append(apps, s.DesktopOptional.Communication...)
+	apps = append(apps, s.DesktopOptional.Productivity...)
+	apps = append(apps, s.DesktopOptional.System...)
+	apps = append(apps, s.DesktopOptional.Browsers...)
+	apps = append(apps, s.DesktopOptional.Utilities...)
+
+	// Database applications
+	apps = append(apps, s.Databases.Servers...)
+	apps = append(apps, s.Databases.Tools...)
+	apps = append(apps, s.Databases.Libraries...)
+
+	// Programming languages
+	apps = append(apps, s.ProgrammingLanguages...)
+
+	// Shell applications
+	apps = append(apps, s.Shell...)
+
 	return apps
 }
 
@@ -256,19 +343,15 @@ func (s *CrossPlatformSettings) ToLegacySettings() Settings {
 		legacy.Apps = append(legacy.Apps, legacyApp)
 	}
 
-	// Convert environment configs
-	legacy.Fonts = append(legacy.Fonts, s.Environment.Fonts...)
+	// Convert fonts config
+	legacy.Fonts = append(legacy.Fonts, s.Fonts...)
 
-	// Convert system configs
-	legacy.GitConfig = append(legacy.GitConfig, s.System.Git...)
+	// Convert dotfiles configs
+	legacy.GitConfig = append(legacy.GitConfig, s.Dotfiles.Git...)
 
-	// Convert desktop configs for GNOME (if exists)
-	if gnome, exists := s.Desktop.DesktopEnvironments["gnome"]; exists {
-		legacy.Themes = append(legacy.Themes, gnome.Themes...)
-		legacy.GnomeSettings = append(legacy.GnomeSettings, gnome.Settings...)
-		legacy.GnomeExt = append(legacy.GnomeExt, gnome.Extensions...)
-		legacy.Dock = append(legacy.Dock, gnome.Dock...)
-	}
+	// Convert desktop environment configs (placeholder for now)
+	// TODO: Implement proper desktop environment config conversion
+	// when GNOME/KDE/etc configs are properly structured
 
 	return legacy
 }

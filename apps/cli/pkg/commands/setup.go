@@ -140,12 +140,10 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 	// Get all applications from all categories in settings
 	var allApps []interface{}
 
-	// Collect applications from all categories
+	// Collect applications from all categories using GetAllApps
+	allConfigApps := settings.GetAllApps()
 	appCategories := [][]types.CrossPlatformApp{
-		settings.Applications.Development,
-		settings.Applications.Databases,
-		settings.Applications.SystemTools,
-		settings.Applications.Optional,
+		allConfigApps, // Use the unified list from GetAllApps
 	}
 
 	// Convert CrossPlatformApp slice to interface{} slice for GetAvailableThemes
@@ -209,7 +207,7 @@ func convertThemesToInterface(themes []types.Theme) []interface{} {
 
 // getProgrammingLanguageNames extracts programming language names from environment configuration
 func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string {
-	if len(settings.Environment.ProgrammingLanguages) == 0 {
+	if len(settings.ProgrammingLanguages) == 0 {
 		log.Warn("No programming languages found in environment configuration, using fallback")
 		// Fallback to default languages if none found in configuration
 		return []string{
@@ -223,8 +221,8 @@ func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string
 	}
 
 	// Performance optimization: Pre-allocate slice with known capacity to avoid reallocations
-	languageNames := make([]string, 0, len(settings.Environment.ProgrammingLanguages))
-	for _, lang := range settings.Environment.ProgrammingLanguages {
+	languageNames := make([]string, 0, len(settings.ProgrammingLanguages))
+	for _, lang := range settings.ProgrammingLanguages {
 		languageNames = append(languageNames, lang.Name)
 	}
 
