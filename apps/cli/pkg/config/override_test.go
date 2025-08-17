@@ -239,10 +239,10 @@ applications:
 
 	Context("LoadCrossPlatformSettings Override Functionality", func() {
 		It("applies overrides to cross-platform settings", func() {
-			// Create default applications config
-			defaultAppPath := filepath.Join(defaultConfigDir, "applications.yaml")
+			// Create default terminal applications config
+			defaultAppPath := filepath.Join(defaultConfigDir, "terminal.yaml")
 			defaultAppConfig := `
-applications:
+terminal_applications:
   development:
     - name: "git"
       description: "Version control"
@@ -252,10 +252,10 @@ applications:
 			err := os.WriteFile(defaultAppPath, []byte(defaultAppConfig), 0644)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Create override applications config
-			overrideAppPath := filepath.Join(overrideConfigDir, "applications.yaml")
+			// Create override terminal applications config
+			overrideAppPath := filepath.Join(overrideConfigDir, "terminal.yaml")
 			overrideAppConfig := `
-applications:
+terminal_applications:
   development:
     - name: "git"
       description: "Custom Git Description"
@@ -269,10 +269,23 @@ applications:
 			err = os.WriteFile(overrideAppPath, []byte(overrideAppConfig), 0644)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Create minimal other required config files
-			for _, file := range []string{"environment.yaml", "desktop.yaml", "system.yaml"} {
-				path := filepath.Join(defaultConfigDir, file)
-				content := "# Minimal config for testing\n"
+			// Create minimal other required config files for hybrid structure
+			configFiles := map[string]string{
+				"terminal-optional.yaml":     "terminal_optional_applications: {}",
+				"desktop.yaml":               "desktop_applications: {}",
+				"desktop-optional.yaml":      "desktop_optional_applications: {}",
+				"databases.yaml":             "database_applications: {}",
+				"programming-languages.yaml": "programming_languages: []",
+				"fonts.yaml":                 "fonts: []",
+				"shell.yaml":                 "shell: []",
+				"dotfiles.yaml":              "git: []\nssh: {}\nterminal: {}",
+				"gnome.yaml":                 "# GNOME config",
+				"kde.yaml":                   "# KDE config",
+				"macos.yaml":                 "# macOS config",
+				"windows.yaml":               "# Windows config",
+			}
+			for filename, content := range configFiles {
+				path := filepath.Join(defaultConfigDir, filename)
 				err = os.WriteFile(path, []byte(content), 0644)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -281,58 +294,80 @@ applications:
 			settings, err := config.LoadCrossPlatformSettings(tempHomeDir)
 			Expect(err).ToNot(HaveOccurred())
 
-			// TODO: Update test for new hybrid configuration structure
-			// Verify total apps can be retrieved
-			allApps := settings.GetAllApps()
-			Expect(len(allApps)).To(BeNumerically(">", 0))
+			// Verify override was applied to terminal development apps
+			terminalDevApps := settings.Terminal.Development
+			Expect(len(terminalDevApps)).To(Equal(2)) // git (overridden) + custom-tool (added)
 
-			// Find the custom tool
-			var customApp *types.CrossPlatformApp
-			for i := range allApps {
-				if allApps[i].Name == "custom-tool" {
-					customApp = &allApps[i]
+			// Find the git app and verify it was overridden
+			var gitApp *types.CrossPlatformApp
+			for i := range terminalDevApps {
+				if terminalDevApps[i].Name == "git" {
+					gitApp = &terminalDevApps[i]
 					break
 				}
 			}
+			Expect(gitApp).ToNot(BeNil())
+			Expect(gitApp.Description).To(Equal("Custom Git Description"))
+			Expect(gitApp.Default).To(BeFalse()) // Should be overridden from true to false
 
+			// Find the custom tool and verify it was added
+			var customApp *types.CrossPlatformApp
+			for i := range terminalDevApps {
+				if terminalDevApps[i].Name == "custom-tool" {
+					customApp = &terminalDevApps[i]
+					break
+				}
+			}
 			Expect(customApp).ToNot(BeNil())
 			Expect(customApp.Description).To(Equal("User added tool"))
 			Expect(customApp.Default).To(BeTrue())
 		})
 
 		It("handles partial config overrides correctly", func() {
-			// Create comprehensive default config
-			defaultEnvPath := filepath.Join(defaultConfigDir, "environment.yaml")
-			defaultEnvConfig := `environment:
-  programming_languages:
-    - name: "node"
-      description: "Node.js runtime"
-      default: true
-  fonts:
-    - name: "JetBrains Mono"
-      description: "Programming font"
+			// Create default programming languages config
+			defaultLangPath := filepath.Join(defaultConfigDir, "programming-languages.yaml")
+			defaultLangConfig := `programming_languages:
+  - name: "node"
+    description: "Node.js runtime"
+    default: true
 `
-			err := os.WriteFile(defaultEnvPath, []byte(defaultEnvConfig), 0644)
+			err := os.WriteFile(defaultLangPath, []byte(defaultLangConfig), 0644)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Create partial override (only override fonts) - this completely replaces the section
-			overrideEnvPath := filepath.Join(overrideConfigDir, "environment.yaml")
-			overrideEnvConfig := `environment:
-  programming_languages:
-    - name: "node"
-      description: "Node.js runtime"
-      default: true
-  fonts:
-    - name: "Fira Code"
-      description: "Custom programming font"
+			// Create default fonts config
+			defaultFontsPath := filepath.Join(defaultConfigDir, "fonts.yaml")
+			defaultFontsConfig := `fonts:
+  - name: "JetBrains Mono"
+    description: "Programming font"
 `
-			err = os.WriteFile(overrideEnvPath, []byte(overrideEnvConfig), 0644)
+			err = os.WriteFile(defaultFontsPath, []byte(defaultFontsConfig), 0644)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Create minimal other required config files
-			for _, file := range []string{"applications.yaml", "desktop.yaml", "system.yaml"} {
-				path := filepath.Join(defaultConfigDir, file)
-				content := "# Minimal config for testing\n"
+			// Create override fonts config (only override fonts, not programming languages)
+			overrideFontsPath := filepath.Join(overrideConfigDir, "fonts.yaml")
+			overrideFontsConfig := `fonts:
+  - name: "Fira Code"
+    description: "Custom programming font"
+`
+			err = os.WriteFile(overrideFontsPath, []byte(overrideFontsConfig), 0644)
+			Expect(err).ToNot(HaveOccurred())
+
+			// Create minimal other required config files for hybrid structure
+			configFiles := map[string]string{
+				"terminal.yaml":          "terminal_applications: {}",
+				"terminal-optional.yaml": "terminal_optional_applications: {}",
+				"desktop.yaml":           "desktop_applications: {}",
+				"desktop-optional.yaml":  "desktop_optional_applications: {}",
+				"databases.yaml":         "database_applications: {}",
+				"shell.yaml":             "shell: []",
+				"dotfiles.yaml":          "git: []\nssh: {}\nterminal: {}",
+				"gnome.yaml":             "# GNOME config",
+				"kde.yaml":               "# KDE config",
+				"macos.yaml":             "# macOS config",
+				"windows.yaml":           "# Windows config",
+			}
+			for filename, content := range configFiles {
+				path := filepath.Join(defaultConfigDir, filename)
 				err = os.WriteFile(path, []byte(content), 0644)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -341,8 +376,7 @@ applications:
 			settings, err := config.LoadCrossPlatformSettings(tempHomeDir)
 			Expect(err).ToNot(HaveOccurred())
 
-			// TODO: Update test for new hybrid configuration structure
-			// Verify programming languages from override are present
+			// Verify programming languages use default (no override)
 			langs := settings.ProgrammingLanguages
 			Expect(len(langs)).To(Equal(1))
 			Expect(langs[0].Name).To(Equal("node"))
@@ -433,10 +467,10 @@ applications:
 
 	Context("Real-world Integration Tests", func() {
 		It("mimics actual DevEx configuration override workflow", func() {
-			// Create realistic default applications.yaml
-			defaultAppPath := filepath.Join(defaultConfigDir, "applications.yaml")
-			defaultAppConfig := `
-applications:
+			// Create realistic default terminal applications config
+			defaultTerminalPath := filepath.Join(defaultConfigDir, "terminal.yaml")
+			defaultTerminalConfig := `
+terminal_applications:
   development:
     - name: "git"
       description: "Version control system"
@@ -455,13 +489,13 @@ applications:
         install_command: "docker.io"
         uninstall_command: "docker.io"
 `
-			err := os.WriteFile(defaultAppPath, []byte(defaultAppConfig), 0644)
+			err := os.WriteFile(defaultTerminalPath, []byte(defaultTerminalConfig), 0644)
 			Expect(err).ToNot(HaveOccurred())
 
 			// User wants to customize: enable docker by default, add custom app
-			overrideAppPath := filepath.Join(overrideConfigDir, "applications.yaml")
-			overrideAppConfig := `
-applications:
+			overrideTerminalPath := filepath.Join(overrideConfigDir, "terminal.yaml")
+			overrideTerminalConfig := `
+terminal_applications:
   development:
     - name: "git"
       description: "Version control system"
@@ -487,13 +521,26 @@ applications:
         install_method: "curlpipe"
         install_command: "https://example.com/install.sh"
 `
-			err = os.WriteFile(overrideAppPath, []byte(overrideAppConfig), 0644)
+			err = os.WriteFile(overrideTerminalPath, []byte(overrideTerminalConfig), 0644)
 			Expect(err).ToNot(HaveOccurred())
 
-			// Create other required config files
-			for _, file := range []string{"environment.yaml", "desktop.yaml", "system.yaml"} {
-				path := filepath.Join(defaultConfigDir, file)
-				content := "# Minimal config for testing\n"
+			// Create minimal other required config files for hybrid structure
+			configFiles := map[string]string{
+				"terminal-optional.yaml":     "terminal_optional_applications: {}",
+				"desktop.yaml":               "desktop_applications: {}",
+				"desktop-optional.yaml":      "desktop_optional_applications: {}",
+				"databases.yaml":             "database_applications: {}",
+				"programming-languages.yaml": "programming_languages: []",
+				"fonts.yaml":                 "fonts: []",
+				"shell.yaml":                 "shell: []",
+				"dotfiles.yaml":              "git: []\nssh: {}\nterminal: {}",
+				"gnome.yaml":                 "# GNOME config",
+				"kde.yaml":                   "# KDE config",
+				"macos.yaml":                 "# macOS config",
+				"windows.yaml":               "# Windows config",
+			}
+			for filename, content := range configFiles {
+				path := filepath.Join(defaultConfigDir, filename)
 				err = os.WriteFile(path, []byte(content), 0644)
 				Expect(err).ToNot(HaveOccurred())
 			}
@@ -502,16 +549,19 @@ applications:
 			settings, err := config.LoadCrossPlatformSettings(tempHomeDir)
 			Expect(err).ToNot(HaveOccurred())
 
-			// TODO: Update test for new hybrid configuration structure
-			// Verify the configuration was properly loaded
+			// Verify the configuration was properly loaded with new hybrid structure
 			allApps := settings.GetAllApps()
 			Expect(len(allApps)).To(BeNumerically(">", 0)) // Should have some apps
 
-			// Check that apps can be retrieved
+			// Check that apps can be retrieved from terminal applications
+			terminalDevApps := settings.Terminal.Development
+			Expect(len(terminalDevApps)).To(Equal(3)) // git, docker, custom-tool
+
+			// Check that docker was overridden to default: true
 			var dockerApp *types.CrossPlatformApp
-			for i := range allApps {
-				if allApps[i].Name == "docker" {
-					dockerApp = &allApps[i]
+			for i := range terminalDevApps {
+				if terminalDevApps[i].Name == "docker" {
+					dockerApp = &terminalDevApps[i]
 					break
 				}
 			}
@@ -520,9 +570,9 @@ applications:
 
 			// Check that custom tool was added
 			var customApp *types.CrossPlatformApp
-			for i := range allApps {
-				if allApps[i].Name == "custom-tool" {
-					customApp = &allApps[i]
+			for i := range terminalDevApps {
+				if terminalDevApps[i].Name == "custom-tool" {
+					customApp = &terminalDevApps[i]
 					break
 				}
 			}
