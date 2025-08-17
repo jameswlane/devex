@@ -1,0 +1,14 @@
+# KDE Plasma Desktop Environment Configuration
+#
+# This file contains themes, settings, extensions, and other configurations
+# specific to the KDE Plasma desktop environment.
+platforms: ["linux"]
+themes:
+# KDE themes will be added here
+settings:
+# KDE system settings will be added here
+extensions:
+# KDE widgets and extensions will be added here
+dock:
+
+# KDE panel/dock configuration will be added here

@@ -1,0 +1,15 @@
+# Dotfiles and System Configuration
+# Git aliases, SSH configuration, terminal settings, and global themes
+git:
+  - aliases:
+      co: 'checkout'
+      br: 'branch'
+      ci: 'commit'
+      st: 'status'
+    settings:
+      pull:
+        rebase: true
+ssh: {}
+terminal: {}
+# Global theme preference for applications
+global_theme: 'Tokyo Night'

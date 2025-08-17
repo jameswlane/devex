@@ -28,7 +28,7 @@ var _ = Describe("List Command", func() {
 		buf = new(bytes.Buffer)
 
 		settings = config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
+			Terminal: config.TerminalApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
 						Name:        "git",
@@ -52,7 +52,9 @@ var _ = Describe("List Command", func() {
 						},
 					},
 				},
-				Databases: []types.CrossPlatformApp{
+			},
+			Databases: config.DatabasesConfig{
+				Servers: []types.CrossPlatformApp{
 					{
 						Name:        "mysql",
 						Description: "MySQL database",
@@ -362,7 +364,7 @@ var _ = Describe("List Command", func() {
 
 			It("should handle empty results", func() {
 				emptySettings := config.CrossPlatformSettings{
-					Applications: config.ApplicationsConfig{},
+					Terminal: config.TerminalApplicationsConfig{},
 				}
 
 				cmd := commands.NewListCmd(mockRepo, emptySettings)
@@ -420,7 +422,7 @@ func BenchmarkListInstalledApps(b *testing.B) {
 // Helper function to create test settings
 func createTestSettings() config.CrossPlatformSettings {
 	return config.CrossPlatformSettings{
-		Applications: config.ApplicationsConfig{
+		Terminal: config.TerminalApplicationsConfig{
 			Development: []types.CrossPlatformApp{
 				{
 					Name:        "git",

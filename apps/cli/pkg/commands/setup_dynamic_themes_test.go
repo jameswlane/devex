@@ -13,7 +13,7 @@ func TestGetAvailableThemeNames(t *testing.T) {
 	t.Run("should extract themes from application configurations", func(t *testing.T) {
 		// Create test settings with apps that have themes
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
+			Terminal: config.TerminalApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
 						Name: "neovim",
@@ -33,7 +33,9 @@ func TestGetAvailableThemeNames(t *testing.T) {
 						},
 					},
 				},
-				Optional: []types.CrossPlatformApp{
+			},
+			TerminalOptional: config.TerminalOptionalConfig{
+				Development: []types.CrossPlatformApp{
 					{
 						Name: "typora",
 						AllPlatforms: types.OSConfig{
@@ -62,7 +64,7 @@ func TestGetAvailableThemeNames(t *testing.T) {
 	t.Run("should deduplicate theme names", func(t *testing.T) {
 		// Create test settings with duplicate theme names
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
+			Terminal: config.TerminalApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
 						Name: "app1",
@@ -96,7 +98,7 @@ func TestGetAvailableThemeNames(t *testing.T) {
 	t.Run("should fallback to default themes when no themes found", func(t *testing.T) {
 		// Create test settings with no themes
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
+			Terminal: config.TerminalApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
 						Name:  "git",
@@ -110,20 +112,16 @@ func TestGetAvailableThemeNames(t *testing.T) {
 
 		themeNames := getAvailableThemeNames(settings)
 
-		// Should fallback to default themes
+		// Should fallback to default themes (1.0 release themes only)
 		assert.Contains(t, themeNames, "Tokyo Night")
-		assert.Contains(t, themeNames, "Catppuccin")
-		assert.Contains(t, themeNames, "Dracula")
-		assert.Contains(t, themeNames, "Nord")
-		assert.Contains(t, themeNames, "One Dark")
-		assert.Contains(t, themeNames, "Gruvbox")
-		assert.Len(t, themeNames, 6)
+		assert.Contains(t, themeNames, "Synthwave 84")
+		assert.Len(t, themeNames, 2)
 	})
 
 	t.Run("should handle apps with all_platforms configuration", func(t *testing.T) {
 		// Test apps using all_platforms (like mise tools)
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
+			Terminal: config.TerminalApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
 						Name: "mise-tool",
@@ -147,7 +145,7 @@ func TestGetAvailableThemeNames(t *testing.T) {
 	t.Run("should handle mixed OS-specific and all_platforms themes", func(t *testing.T) {
 		// Test mix of OS-specific and all_platforms themes
 		settings := config.CrossPlatformSettings{
-			Applications: config.ApplicationsConfig{
+			Terminal: config.TerminalApplicationsConfig{
 				Development: []types.CrossPlatformApp{
 					{
 						Name: "linux-app",

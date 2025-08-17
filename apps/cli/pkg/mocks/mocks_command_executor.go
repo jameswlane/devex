@@ -389,11 +389,34 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 	}
 
 	// Handle Flatpak commands
-	if strings.Contains(command, "flatpak list --columns=application") {
+	if strings.Contains(command, "flatpak list") {
 		// Check if this command should fail
 		if m.FailingCommands[command] || m.FailingCommands["flatpak list --columns=application"] {
 			return "", fmt.Errorf("mock flatpak list command failed")
 		}
+
+		// Handle grep pattern if present
+		if strings.Contains(command, "grep -q") {
+			// Extract the app ID from the grep pattern
+			// Command format: "flatpak list --columns=application | grep -q '^appID$'"
+			// or "flatpak list --user --columns=application | grep -q '^appID$'"
+			parts := strings.Split(command, "grep -q")
+			if len(parts) >= 2 {
+				grepPattern := strings.TrimSpace(parts[1])
+				// Remove quotes and regex anchors
+				grepPattern = strings.Trim(grepPattern, " '\"")
+				grepPattern = strings.TrimPrefix(grepPattern, "^")
+				grepPattern = strings.TrimSuffix(grepPattern, "$")
+
+				// Check if this app is installed
+				if m.InstallationState[grepPattern] {
+					return grepPattern, nil // grep found the pattern
+				}
+				// App not found - grep returns error
+				return "", fmt.Errorf("pattern not found")
+			}
+		}
+
 		// Return installed applications based on installation state
 		var installedApps []string
 		for appID, installed := range m.InstallationState {
@@ -418,14 +441,24 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 
 		// Extract app ID from flatpak install command
 		parts := strings.Fields(command)
+		var appID string
 		switch {
+		case len(parts) >= 5 && !strings.Contains(parts[3], "."):
+			// Format: "flatpak install -y remote appID"
+			appID = parts[4] // The actual app ID after the remote
 		case len(parts) >= 4:
-			appID := strings.Join(parts[3:], " ") // Everything after "flatpak install -y"
+			// Format: "flatpak install -y appID" or "flatpak install -y flathub firefox"
+			if len(parts) == 5 {
+				// Two arguments after -y means remote + appID
+				appID = parts[4]
+			} else {
+				// Single argument after -y means just appID
+				appID = parts[3]
+			}
 			// Handle empty app ID case
 			if strings.TrimSpace(appID) == "" {
 				return "", fmt.Errorf("mock flatpak install failed: empty application ID")
 			}
-			m.InstallationState[appID] = true
 		case len(parts) == 3 && strings.HasSuffix(command, "flatpak install -y"):
 			// Handle case where command ends with "flatpak install -y" with no app ID
 			return "", fmt.Errorf("mock flatpak install failed: no application ID provided")
@@ -433,7 +466,85 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 			// Malformed command case
 			return "", fmt.Errorf("mock flatpak install failed: malformed command")
 		}
+
+		// Store the app as installed
+		if appID != "" {
+			m.InstallationState[appID] = true
+		}
+
 		return "Installing application... Done.", nil
+	}
+
+	// Handle Flatpak uninstall commands - mark app as uninstalled
+	if strings.Contains(command, "flatpak uninstall -y") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock flatpak uninstall command failed")
+		}
+
+		// Extract app ID from flatpak uninstall command
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			appID := parts[3]                  // "flatpak uninstall -y appID"
+			delete(m.InstallationState, appID) // Remove from installed state
+		}
+		return "Uninstalling application... Done.", nil
+	}
+
+	// Handle Flatpak search commands
+	if strings.Contains(command, "flatpak search") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock flatpak search command failed")
+		}
+		// Return some mock search results
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			query := parts[len(parts)-1]
+			return fmt.Sprintf("Application Name  %s  Description", query), nil
+		}
+		return "No results found", nil
+	}
+
+	// Handle Flatpak remote-ls commands
+	if strings.Contains(command, "flatpak remote-ls") {
+		// Check if this command should fail (especially with grep)
+		if strings.Contains(command, "grep") {
+			// Extract the grep pattern
+			parts := strings.Split(command, "grep -i")
+			if len(parts) >= 2 {
+				pattern := strings.TrimSpace(parts[1])
+				if m.FailingCommands[command] {
+					return "", fmt.Errorf("pattern not found")
+				}
+				return fmt.Sprintf("%s\tApplication", pattern), nil
+			}
+		}
+		return "org.mozilla.firefox\tFirefox\norg.videolan.VLC\tVLC", nil
+	}
+
+	// Handle Flatpak remotes command
+	if command == "flatpak remotes" {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock flatpak remotes command failed")
+		}
+		return "flathub\tsystem", nil
+	}
+
+	// Handle Flatpak version command
+	if strings.Contains(command, "flatpak --version") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock flatpak --version command failed")
+		}
+		return "Flatpak 1.14.4", nil
+	}
+
+	// Handle Flatpak update commands
+	if strings.Contains(command, "flatpak update") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock flatpak update command failed")
+		}
+		return "Updating metadata...", nil
 	}
 
 	// Handle Pip show commands for installation verification
@@ -689,6 +800,111 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 	// Handle rpm --import for GPG keys
 	if strings.Contains(command, "sudo rpm --import") {
 		return "GPG key imported successfully", nil
+	}
+
+	// Handle Homebrew commands
+	if strings.Contains(command, "brew --version") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew --version command failed")
+		}
+		return "Homebrew 4.0.10\nHomebrew/homebrew-core (git revision 123abc; last commit 2023-01-01)", nil
+	}
+
+	// Handle brew list commands for installation verification
+	if strings.Contains(command, "brew list") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew list command failed")
+		}
+
+		// Extract package name from brew list command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2] // "brew list package-name"
+			if m.InstallationState[packageName] {
+				return fmt.Sprintf("%s: version info", packageName), nil
+			}
+		}
+		// For packages not in installation state, return error (package not found)
+		return "", fmt.Errorf("no such keg: /usr/local/Cellar/package")
+	}
+
+	// Handle brew install commands - mark packages as installed
+	if strings.Contains(command, "brew install") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew install command failed")
+		}
+
+		// Extract package names from command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			// All arguments after "brew install" are package names
+			for i := 2; i < len(parts); i++ {
+				packageName := parts[i]
+				m.InstallationState[packageName] = true
+			}
+		}
+		return "Installing packages... Done.", nil
+	}
+
+	// Handle brew uninstall commands - mark packages as uninstalled
+	if strings.Contains(command, "brew uninstall") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew uninstall command failed")
+		}
+
+		// Extract package name from brew uninstall command
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			packageName := parts[2]                  // "brew uninstall package-name"
+			delete(m.InstallationState, packageName) // Remove from installed state
+		}
+		return "Uninstalling package... Done.", nil
+	}
+
+	// Handle brew search commands
+	if strings.Contains(command, "brew search") {
+		// Check if this command should fail
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew search command failed")
+		}
+
+		// Extract search query
+		parts := strings.Fields(command)
+		if len(parts) >= 3 {
+			query := parts[2]
+			if strings.Contains(query, "nonexistent") || strings.Contains(query, "failing") {
+				return "No formula or cask found for \"" + query + "\"", nil
+			}
+			return fmt.Sprintf("%s  %s-dev  %s-tools", query, query, query), nil
+		}
+		return "No results found", nil
+	}
+
+	// Handle brew update commands
+	if strings.Contains(command, "brew update") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew update command failed")
+		}
+		return "Updating Homebrew...", nil
+	}
+
+	// Handle brew cleanup commands
+	if strings.Contains(command, "brew cleanup") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew cleanup command failed")
+		}
+		return "Cleaning up packages...", nil
+	}
+
+	// Handle brew --prefix commands
+	if strings.Contains(command, "brew --prefix") {
+		if m.FailingCommands[command] {
+			return "", fmt.Errorf("mock brew --prefix command failed")
+		}
+		return "/usr/local", nil
 	}
 
 	return "mock output", nil

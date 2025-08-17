@@ -1,190 +1,57 @@
-desktop_environments:
-  gnome:
-    platforms: ["linux"]
-    themes:
-      - name: 'Tokyo Night'
-        theme_color: 'purple'
-        theme_background: 'assets/themes/tokyo-night/background.jpg'
-        neovim_colorscheme: 'assets/themes/tokyo-night/neovim.lua'
-      - name: 'Kanagawa'
-        theme_color: 'purple'
-        theme_background: 'assets/themes/kanagawa/background.jpg'
-        neovim_colorscheme: 'assets/themes/kanagawa/neovim.lua'
-    settings:
-      - name: 'Tactile'
-        settings:
-          - key: 'org.gnome.shell.extensions.tactile col-0'
-            value: 1
-          - key: 'org.gnome.shell.extensions.tactile col-1'
-            value: 2
-          - key: 'org.gnome.shell.extensions.tactile col-2'
-            value: 1
-          - key: 'org.gnome.shell.extensions.tactile col-3'
-            value: 0
-          - key: 'org.gnome.shell.extensions.tactile row-0'
-            value: 1
-          - key: 'org.gnome.shell.extensions.tactile row-1'
-            value: 1
-          - key: 'org.gnome.shell.extensions.tactile gap-size'
-            value: 32
-      - name: 'Just Perfection'
-        settings:
-          - key: 'org.gnome.shell.extensions.just-perfection animation'
-            value: 2
-          - key: 'org.gnome.shell.extensions.just-perfection dash-app-running'
-            value: true
-          - key: 'org.gnome.shell.extensions.just-perfection workspace'
-            value: true
-          - key: 'org.gnome.shell.extensions.just-perfection workspace-popup'
-            value: false
-      - name: 'Blur My Shell'
-        settings:
-          - key: 'org.gnome.shell.extensions.blur-my-shell.appfolder blur'
-            value: false
-          - key: 'org.gnome.shell.extensions.blur-my-shell.lockscreen blur'
-            value: false
-          - key: 'org.gnome.shell.extensions.blur-my-shell.screenshot blur'
-            value: false
-          - key: 'org.gnome.shell.extensions.blur-my-shell.window-list blur'
-            value: false
-          - key: 'org.gnome.shell.extensions.blur-my-shell.panel brightness'
-            value: 0.6
-          - key: 'org.gnome.shell.extensions.blur-my-shell.panel sigma'
-            value: 30
-          - key: 'org.gnome.shell.extensions.blur-my-shell.overview blur'
-            value: true
-          - key: 'org.gnome.shell.extensions.blur-my-shell.dash-to-dock blur'
-            value: true
-          - key: 'org.gnome.shell.extensions.blur-my-shell.dash-to-dock brightness'
-            value: 0.6
-          - key: 'org.gnome.shell.extensions.blur-my-shell.dash-to-dock sigma'
-            value: 30
-          - key: 'org.gnome.shell.extensions.blur-my-shell.dash-to-dock static-blur'
-            value: true
-          - key: 'org.gnome.shell.extensions.blur-my-shell.dash-to-dock style-dash-to-dock'
-            value: 0
-      - name: 'Space Bar'
-        settings:
-          - key: 'org.gnome.shell.extensions.space-bar.behavior smart-workspace-names'
-            value: false
-          - key: 'org.gnome.shell.extensions.space-bar.shortcuts enable-activate-workspace-shortcuts'
-            value: false
-          - key: 'org.gnome.shell.extensions.space-bar.shortcuts enable-move-to-workspace-shortcuts'
-            value: true
-          - key: 'org.gnome.shell.extensions.space-bar.shortcuts open-menu'
-            value: '@as []'
-      - name: 'Tweaks'
-        settings:
-          - key: 'org.gnome.mutter center-new-windows'
-            value: true
-      - name: 'Monospace Font'
-        settings:
-          - key: 'org.gnome.desktop.interface monospace-font-name'
-            value: 'CaskaydiaMono Nerd Font 10'
-      - name: 'Keybindings'
-        settings:
-          - key: 'org.gnome.desktop.wm.keybindings close'
-            value: "['<Super>w']"
-          - key: 'org.gnome.desktop.wm.keybindings maximize'
-            value: "['<Super>Up']"
-          - key: 'org.gnome.desktop.wm.keybindings begin-resize'
-            value: "['<Super>BackSpace']"
-          - key: 'org.gnome.settings-daemon.plugins.media-keys next'
-            value: "['<Shift>AudioPlay']"
-          - key: 'org.gnome.desktop.wm.keybindings toggle-fullscreen'
-            value: "['<Shift>F11']"
-      - name: 'Workspaces'
-        settings:
-          - key: 'org.gnome.mutter dynamic-workspaces'
-            value: false
-          - key: 'org.gnome.desktop.wm.preferences num-workspaces'
-            value: 6
-      - name: 'Pinned Apps Keybindings'
-        settings:
-          - key: 'org.gnome.shell.keybindings switch-to-application-1'
-            value: "['<Alt>1']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-2'
-            value: "['<Alt>2']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-3'
-            value: "['<Alt>3']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-4'
-            value: "['<Alt>4']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-5'
-            value: "['<Alt>5']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-6'
-            value: "['<Alt>6']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-7'
-            value: "['<Alt>7']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-8'
-            value: "['<Alt>8']"
-          - key: 'org.gnome.shell.keybindings switch-to-application-9'
-            value: "['<Alt>9']"
-      - name: 'Workspace Keybindings'
-        settings:
-          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-1'
-            value: "['<Super>1']"
-          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-2'
-            value: "['<Super>2']"
-          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-3'
-            value: "['<Super>3']"
-          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-4'
-            value: "['<Super>4']"
-          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-5'
-            value: "['<Super>5']"
-          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-6'
-            value: "['<Super>6']"
-      - name: 'Custom Keybindings'
-        settings:
-          - key: 'org.gnome.settings-daemon.plugins.media-keys custom-keybindings'
-            value: "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/']"
-          # Ulauncher
-          - key: 'org.gnome.desktop.wm.keybindings switch-input-source'
-            value: '@as []'
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name'
-            value: 'ulauncher-toggle'
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command'
-            value: 'ulauncher-toggle'
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding'
-            value: '<Super>space'
-          # Flameshot
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ name'
-            value: 'Flameshot'
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ command'
-            value: "sh -c -- 'flameshot gui'"
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ binding'
-            value: '<Control>Print'
-          # Chrome New Window
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/ name'
-            value: 'new chrome'
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/ command'
-            value: 'google-chrome'
-          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/ binding'
-            value: '<Shift><Alt>1'
-    extensions:
-      - id: 'tactile@lundal.io'
-        schema_files:
-          - source: '~/.local/share/gnome-shell/extensions/tactile@lundal.io/schemas/org.gnome.shell.extensions.tactile.gschema.xml'
-            destination: '/usr/share/glib-2.0/schemas/'
-      - id: 'just-perfection-desktop@just-perfection'
-        schema_files:
-          - source: '~/.local/share/gnome-shell/extensions/just-perfection-desktop@just-perfection/schemas/org.gnome.shell.extensions.just-perfection.gschema.xml'
-            destination: '/usr/share/glib-2.0/schemas/'
-      - id: 'blur-my-shell@aunetx'
-        schema_files:
-          - source: '~/.local/share/gnome-shell/extensions/blur-my-shell@aunetx/schemas/org.gnome.shell.extensions.blur-my-shell.gschema.xml'
-            destination: '/usr/share/glib-2.0/schemas/'
-      - id: 'space-bar@luchrioh'
-        schema_files:
-          - source: '~/.local/share/gnome-shell/extensions/space-bar@luchrioh/schemas/org.gnome.shell.extensions.space-bar.gschema.xml'
-            destination: '/usr/share/glib-2.0/schemas/'
-      - id: 'undecorate@sun.wxg@gmail.com'
-        schema_files: []
-    dock:
-      - name: 'VS Code'
-        desktop_file: 'code.desktop'
-      - name: 'Typora'
-        desktop_file: 'typora.desktop'
-      - name: '1Password'
-        desktop_file: '1password.desktop'
-      - name: 'Settings'
-        desktop_file: 'org.gnome.Settings.desktop'
+# Desktop Applications Configuration
+#
+# This file contains GUI applications that run in desktop environments.
+# These applications typically require a windowing system and provide
+# graphical user interfaces.
+desktop_applications:
+  productivity:
+    - name: LocalSend
+      description: 'Cross-platform secure file sharing'
+      category: 'File Sharing'
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: '--cask localsend'
+        uninstall_command: '--cask localsend'
+        official_support: true
+        alternatives:
+          - install_method: 'nix'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'localsend'
+        uninstall_command: 'localsend'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+            pre_install:
+              - command: 'scoop bucket add extras'
+      linux:
+        install_method: 'flatpak'
+        install_command: 'flatpak install flathub org.localsend.localsend_app'
+        uninstall_command: 'flatpak remove org.localsend.localsend_app'
+        official_support: true
+        dependencies:
+          - 'flatpak'
+        alternatives:
+          - install_method: 'snap'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+          - install_method: 'yay'
+            install_command: 'localsend-bin'
+            uninstall_command: 'localsend-bin'
+            official_support: false
+          - install_method: 'nix'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
