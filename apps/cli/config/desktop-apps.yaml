@@ -1,0 +1,57 @@
+# Desktop Applications Configuration
+#
+# This file contains GUI applications that run in desktop environments.
+# These applications typically require a windowing system and provide
+# graphical user interfaces.
+desktop_applications:
+  productivity:
+    - name: LocalSend
+      description: 'Cross-platform secure file sharing'
+      category: 'File Sharing'
+      desktop_environments: ['all']
+      macos:
+        install_method: 'brew'
+        install_command: '--cask localsend'
+        uninstall_command: '--cask localsend'
+        official_support: true
+        alternatives:
+          - install_method: 'nix'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+      windows:
+        install_method: 'winget'
+        install_command: 'localsend'
+        uninstall_command: 'localsend'
+        official_support: true
+        alternatives:
+          - install_method: 'chocolatey'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+          - install_method: 'scoop'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+            pre_install:
+              - command: 'scoop bucket add extras'
+      linux:
+        install_method: 'flatpak'
+        install_command: 'flatpak install flathub org.localsend.localsend_app'
+        uninstall_command: 'flatpak remove org.localsend.localsend_app'
+        official_support: true
+        dependencies:
+          - 'flatpak'
+        alternatives:
+          - install_method: 'snap'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+          - install_method: 'yay'
+            install_command: 'localsend-bin'
+            uninstall_command: 'localsend-bin'
+            official_support: false
+          - install_method: 'nix'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
