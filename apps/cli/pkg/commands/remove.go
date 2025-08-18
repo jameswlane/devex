@@ -15,8 +15,10 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/version"
 )
 
 // RemoveAppItem represents an application item for removal
@@ -275,8 +277,13 @@ func (m *RemoveModel) removeAppFromConfig(app types.AppConfig, createBackup bool
 
 	// Create backup if requested
 	if createBackup {
-		if err := m.createBackup(userConfig.Applications); err != nil {
-			return fmt.Errorf("failed to create backup: %w", err)
+		// Use new backup system for comprehensive backups
+		baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+		if _, err := backup.BackupBeforeOperation(baseDir, fmt.Sprintf("remove-%s", app.Name)); err != nil {
+			// Fall back to legacy backup system if new system fails
+			if err := m.createBackup(userConfig.Applications); err != nil {
+				return fmt.Errorf("failed to create backup: %w", err)
+			}
 		}
 	}
 
@@ -305,6 +312,18 @@ func (m *RemoveModel) removeAppFromConfig(app types.AppConfig, createBackup bool
 
 	if err := os.WriteFile(userAppsPath, newData, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Create new version after successful configuration change
+	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+	vm := version.NewVersionManager(baseDir)
+	_, versionErr := vm.UpdateVersion(
+		fmt.Sprintf("Removed application: %s", app.Name),
+		[]string{fmt.Sprintf("Removed %s from applications configuration", app.Name)},
+	)
+	if versionErr != nil {
+		// Log warning but don't fail the operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create version: %v\n", versionErr)
 	}
 
 	return nil

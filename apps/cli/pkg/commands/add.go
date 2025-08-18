@@ -14,8 +14,10 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/version"
 )
 
 // AppItem represents an application item for the list component
@@ -212,6 +214,13 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
+	// Create automatic backup before modification
+	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+	if _, err := backup.BackupBeforeOperation(baseDir, fmt.Sprintf("add-%s", app.Name)); err != nil {
+		// Log backup failure but don't block the operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create backup: %v\n", err)
+	}
+
 	// Read existing configuration or create new one
 	var userConfig struct {
 		Applications []types.AppConfig `yaml:"applications"`
@@ -246,6 +255,17 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 
 	if err := os.WriteFile(userAppsPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	// Create new version after successful configuration change
+	vm := version.NewVersionManager(baseDir)
+	_, versionErr := vm.UpdateVersion(
+		fmt.Sprintf("Added application: %s", app.Name),
+		[]string{fmt.Sprintf("Added %s to applications configuration", app.Name)},
+	)
+	if versionErr != nil {
+		// Log warning but don't fail the operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create version: %v\n", versionErr)
 	}
 
 	return nil

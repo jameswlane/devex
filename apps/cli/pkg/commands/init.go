@@ -12,9 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/version"
 )
 
 // InitConfig represents the configuration created by init command
@@ -621,6 +623,13 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
+	// Create automatic backup before initialization
+	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+	if _, err := backup.BackupBeforeOperation(baseDir, fmt.Sprintf("init-%s", config.Profile)); err != nil {
+		// Log backup failure but don't block initialization
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create backup: %v\n", err)
+	}
+
 	// Create a metadata file with the init configuration
 	metadataPath := filepath.Join(configDir, "devex.yaml")
 	data, err := yaml.Marshal(config)
@@ -635,6 +644,23 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 	// Create basic configuration files if they don't exist
 	if err := createDefaultConfigs(configDir, config); err != nil {
 		return fmt.Errorf("failed to create default configs: %w", err)
+	}
+
+	// Create new version after successful initialization
+	vm := version.NewVersionManager(baseDir)
+	_, versionErr := vm.UpdateVersion(
+		fmt.Sprintf("Initialized configuration with profile: %s", config.Profile),
+		[]string{
+			fmt.Sprintf("Initialized DevEx with %s profile", config.Profile),
+			fmt.Sprintf("Platform: %s", config.Platform.OS),
+			fmt.Sprintf("Desktop: %s", config.Platform.Desktop),
+			fmt.Sprintf("Shell: %s", config.Environment.Shell),
+			fmt.Sprintf("Languages: %v", config.Environment.Languages),
+		},
+	)
+	if versionErr != nil {
+		// Log warning but don't fail the operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to create version: %v\n", versionErr)
 	}
 
 	return nil

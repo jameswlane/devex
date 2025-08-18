@@ -15,8 +15,10 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/version"
 )
 
 // ConfigInfo represents configuration file information
@@ -84,6 +86,8 @@ Examples:
 	cmd.AddCommand(newConfigEnvironmentCmd(settings))
 	cmd.AddCommand(newConfigExportCmd(settings))
 	cmd.AddCommand(newConfigImportCmd(settings))
+	cmd.AddCommand(newConfigBackupCmd(settings))
+	cmd.AddCommand(newConfigVersionCmd(settings))
 
 	return cmd
 }
@@ -1763,7 +1767,11 @@ func exportAsBundle(data map[string]interface{}, output string, compress bool) e
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to clean up temp directory %s: %v\n", tmpDir, removeErr)
+		}
+	}()
 
 	// Write metadata
 	metadataData, err := yaml.Marshal(data["metadata"])
@@ -1898,7 +1906,11 @@ func importFromBundle(bundlePath string) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp directory: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to clean up temp directory %s: %v\n", tmpDir, removeErr)
+		}
+	}()
 
 	// Extract bundle
 	ctx := context.Background()
@@ -2116,4 +2128,817 @@ func applyImportedConfigurations(data map[string]interface{}, settings config.Cr
 	}
 
 	return nil
+}
+
+// newConfigBackupCmd creates the backup subcommand
+func newConfigBackupCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "backup",
+		Short: "Manage configuration backups",
+		Long: `Create, restore, and manage backups of your DevEx configuration.
+
+The backup system automatically creates backups before major operations
+and allows manual backup creation and restoration.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	// Add backup subcommands
+	cmd.AddCommand(newConfigBackupCreateCmd(settings))
+	cmd.AddCommand(newConfigBackupListCmd(settings))
+	cmd.AddCommand(newConfigBackupRestoreCmd(settings))
+	cmd.AddCommand(newConfigBackupDeleteCmd(settings))
+	cmd.AddCommand(newConfigBackupCompareCmd(settings))
+
+	return cmd
+}
+
+// newConfigBackupCreateCmd creates a new backup
+func newConfigBackupCreateCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		description string
+		tags        []string
+		compress    bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Create a new configuration backup",
+		Long: `Create a backup of your current DevEx configuration.
+
+Examples:
+  # Create a simple backup
+  devex config backup create
+  
+  # Create backup with description
+  devex config backup create --description "Before major update"
+  
+  # Create compressed backup with tags
+  devex config backup create --compress --tags "stable,pre-update"`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			manager := backup.NewBackupManager(baseDir)
+
+			backupMetadata, err := manager.CreateBackup(backup.BackupOptions{
+				Description: description,
+				Type:        "manual",
+				Tags:        tags,
+				Compress:    compress,
+				MaxBackups:  backup.MaxBackups,
+			})
+
+			if err != nil {
+				return fmt.Errorf("failed to create backup: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			fmt.Printf("%s Created backup: %s\n", green("✓"), backupMetadata.ID)
+			fmt.Printf("  Size: %s\n", formatBytes(backupMetadata.Size))
+			fmt.Printf("  Files: %d\n", len(backupMetadata.Files))
+			if description != "" {
+				fmt.Printf("  Description: %s\n", description)
+			}
+			if len(tags) > 0 {
+				fmt.Printf("  Tags: %s\n", strings.Join(tags, ", "))
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&description, "description", "d", "", "Backup description")
+	cmd.Flags().StringSliceVarP(&tags, "tags", "t", []string{}, "Tags for the backup")
+	cmd.Flags().BoolVarP(&compress, "compress", "c", true, "Compress the backup")
+
+	return cmd
+}
+
+// newConfigBackupListCmd lists available backups
+func newConfigBackupListCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		filter string
+		limit  int
+		format string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List available configuration backups",
+		Long: `List all available configuration backups.
+
+Examples:
+  # List all backups
+  devex config backup list
+  
+  # List backups with filter
+  devex config backup list --filter "stable"
+  
+  # List last 5 backups
+  devex config backup list --limit 5`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			manager := backup.NewBackupManager(baseDir)
+
+			backups, err := manager.ListBackups(filter, limit)
+			if err != nil {
+				return fmt.Errorf("failed to list backups: %w", err)
+			}
+
+			if len(backups) == 0 {
+				fmt.Println("No backups found")
+				return nil
+			}
+
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(backups, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+				return nil
+			case "yaml":
+				data, err := yaml.Marshal(backups)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+				return nil
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				fmt.Printf("Found %d backups:\n\n", len(backups))
+				for _, b := range backups {
+					fmt.Printf("%s %s\n", green("•"), b.ID)
+					fmt.Printf("  Created: %s\n", b.Timestamp.Format("2006-01-02 15:04:05"))
+					fmt.Printf("  Type: %s\n", b.Type)
+					fmt.Printf("  Size: %s\n", formatBytes(b.Size))
+					if b.Description != "" {
+						fmt.Printf("  Description: %s\n", b.Description)
+					}
+					if len(b.Tags) > 0 {
+						fmt.Printf("  Tags: %s\n", strings.Join(b.Tags, ", "))
+					}
+					fmt.Println()
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&filter, "filter", "f", "", "Filter backups by ID, type, or tag")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "Limit number of results")
+	cmd.Flags().StringVarP(&format, "output", "o", "table", "Output format (table, json, yaml)")
+
+	return cmd
+}
+
+// newConfigBackupRestoreCmd restores a backup
+func newConfigBackupRestoreCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		force bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "restore [backup-id]",
+		Short: "Restore a configuration backup",
+		Long: `Restore a previously created configuration backup.
+
+This operation will create a pre-restore backup automatically
+before applying the selected backup.
+
+Examples:
+  # Restore a specific backup
+  devex config backup restore backup-20240817-143022
+  
+  # Force restore without confirmation
+  devex config backup restore backup-20240817-143022 --force`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("backup ID required")
+			}
+
+			backupID := args[0]
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			manager := backup.NewBackupManager(baseDir)
+
+			// Get backup info
+			backupInfo, err := manager.GetBackup(backupID)
+			if err != nil {
+				return fmt.Errorf("failed to get backup: %w", err)
+			}
+
+			// Confirm restore
+			if !force {
+				fmt.Printf("Restore backup %s?\n", backupID)
+				fmt.Printf("Created: %s\n", backupInfo.Timestamp.Format("2006-01-02 15:04:05"))
+				if backupInfo.Description != "" {
+					fmt.Printf("Description: %s\n", backupInfo.Description)
+				}
+				yellow := color.New(color.FgYellow).SprintFunc()
+				fmt.Printf("\n%s This will replace your current configuration.\n", yellow("⚠"))
+				fmt.Printf("Continue? [y/N]: ")
+
+				var response string
+				if _, err := fmt.Scanln(&response); err != nil {
+					// If scan fails, default to 'no' for safety
+					fmt.Println("Restore cancelled")
+					return nil
+				}
+				if strings.ToLower(response) != "y" {
+					fmt.Println("Restore cancelled")
+					return nil
+				}
+			}
+
+			// Perform restore
+			if err := manager.RestoreBackup(backupID, ""); err != nil {
+				return fmt.Errorf("failed to restore backup: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			fmt.Printf("%s Successfully restored backup: %s\n", green("✓"), backupID)
+			fmt.Println("A pre-restore backup was created automatically")
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
+
+	return cmd
+}
+
+// newConfigBackupDeleteCmd deletes a backup
+func newConfigBackupDeleteCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "delete [backup-id]",
+		Short: "Delete a configuration backup",
+		Long: `Delete a specific configuration backup.
+
+Examples:
+  # Delete a backup
+  devex config backup delete backup-20240817-143022
+  
+  # Force delete without confirmation
+  devex config backup delete backup-20240817-143022 --force`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("backup ID required")
+			}
+
+			backupID := args[0]
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			manager := backup.NewBackupManager(baseDir)
+
+			// Confirm deletion
+			if !force {
+				fmt.Printf("Delete backup %s? [y/N]: ", backupID)
+				var response string
+				if _, err := fmt.Scanln(&response); err != nil {
+					// If scan fails, default to 'no' for safety
+					fmt.Println("Deletion cancelled")
+					return nil
+				}
+				if strings.ToLower(response) != "y" {
+					fmt.Println("Deletion cancelled")
+					return nil
+				}
+			}
+
+			if err := manager.DeleteBackup(backupID); err != nil {
+				return fmt.Errorf("failed to delete backup: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			fmt.Printf("%s Deleted backup: %s\n", green("✓"), backupID)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation prompt")
+
+	return cmd
+}
+
+// newConfigBackupCompareCmd compares two backups
+func newConfigBackupCompareCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "compare [backup-id-1] [backup-id-2]",
+		Short: "Compare two configuration backups",
+		Long: `Compare two configuration backups to see differences.
+
+Examples:
+  # Compare two backups
+  devex config backup compare backup-20240817-143022 backup-20240817-150000`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) < 2 {
+				return fmt.Errorf("two backup IDs required")
+			}
+
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			manager := backup.NewBackupManager(baseDir)
+
+			comparison, err := manager.CompareBackups(args[0], args[1])
+			if err != nil {
+				return fmt.Errorf("failed to compare backups: %w", err)
+			}
+
+			fmt.Printf("Comparing %s with %s:\n\n", args[0], args[1])
+
+			green := color.New(color.FgGreen).SprintFunc()
+			red := color.New(color.FgRed).SprintFunc()
+			yellow := color.New(color.FgYellow).SprintFunc()
+
+			if len(comparison.AddedFiles) > 0 {
+				fmt.Printf("%s Added files:\n", green("+"))
+				for _, file := range comparison.AddedFiles {
+					fmt.Printf("  + %s\n", file)
+				}
+				fmt.Println()
+			}
+
+			if len(comparison.RemovedFiles) > 0 {
+				fmt.Printf("%s Removed files:\n", red("-"))
+				for _, file := range comparison.RemovedFiles {
+					fmt.Printf("  - %s\n", file)
+				}
+				fmt.Println()
+			}
+
+			if len(comparison.ModifiedFiles) > 0 {
+				fmt.Printf("%s Modified files:\n", yellow("~"))
+				for _, file := range comparison.ModifiedFiles {
+					fmt.Printf("  ~ %s\n", file)
+				}
+			}
+
+			if len(comparison.AddedFiles) == 0 && len(comparison.RemovedFiles) == 0 && len(comparison.ModifiedFiles) == 0 {
+				fmt.Println("No differences found")
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+// formatBytes formats bytes to human-readable string
+func formatBytes(bytes int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case bytes >= GB:
+		return fmt.Sprintf("%.2f GB", float64(bytes)/GB)
+	case bytes >= MB:
+		return fmt.Sprintf("%.2f MB", float64(bytes)/MB)
+	case bytes >= KB:
+		return fmt.Sprintf("%.2f KB", float64(bytes)/KB)
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
+// newConfigVersionCmd creates the version subcommand
+func newConfigVersionCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "Manage configuration versions and migrations",
+		Long: `Track, migrate, and rollback configuration versions.
+
+The version system automatically tracks configuration changes and 
+provides migration paths between different versions.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	// Add version subcommands
+	cmd.AddCommand(newConfigVersionShowCmd(settings))
+	cmd.AddCommand(newConfigVersionListCmd(settings))
+	cmd.AddCommand(newConfigVersionMigrateCmd(settings))
+	cmd.AddCommand(newConfigVersionRollbackCmd(settings))
+	cmd.AddCommand(newConfigVersionCompatibilityCmd(settings))
+	cmd.AddCommand(newConfigVersionUpdateCmd(settings))
+
+	return cmd
+}
+
+// newConfigVersionShowCmd shows current version info
+func newConfigVersionShowCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show current configuration version",
+		Long: `Display information about the current configuration version.
+
+Shows version number, timestamp, description, changes, and hash.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			vm := version.NewVersionManager(baseDir)
+
+			currentVersion, err := vm.GetCurrentVersion()
+			if err != nil {
+				return fmt.Errorf("failed to get current version: %w", err)
+			}
+
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(currentVersion, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+			case "yaml":
+				data, err := yaml.Marshal(currentVersion)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				blue := color.New(color.FgBlue).SprintFunc()
+
+				fmt.Printf("%s Configuration Version\n\n", green("●"))
+				fmt.Printf("Version: %s\n", blue(currentVersion.Version))
+				fmt.Printf("Timestamp: %s\n", currentVersion.Timestamp.Format("2006-01-02 15:04:05"))
+				if currentVersion.Description != "" {
+					fmt.Printf("Description: %s\n", currentVersion.Description)
+				}
+				if currentVersion.Author != "" {
+					fmt.Printf("Author: %s\n", currentVersion.Author)
+				}
+				fmt.Printf("Hash: %s\n", currentVersion.Hash[:16])
+				if currentVersion.BackupID != "" {
+					fmt.Printf("Backup ID: %s\n", currentVersion.BackupID)
+				}
+				if len(currentVersion.Changes) > 0 {
+					fmt.Println("\nChanges:")
+					for _, change := range currentVersion.Changes {
+						fmt.Printf("  • %s\n", change)
+					}
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
+
+	return cmd
+}
+
+// newConfigVersionListCmd lists all configuration versions
+func newConfigVersionListCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		format string
+		limit  int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all configuration versions",
+		Long: `List all configuration versions in chronological order.
+
+Shows version history with timestamps and descriptions.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			vm := version.NewVersionManager(baseDir)
+
+			versions, err := vm.ListVersions()
+			if err != nil {
+				return fmt.Errorf("failed to list versions: %w", err)
+			}
+
+			if limit > 0 && len(versions) > limit {
+				versions = versions[:limit]
+			}
+
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(versions, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+			case "yaml":
+				data, err := yaml.Marshal(versions)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				blue := color.New(color.FgBlue).SprintFunc()
+				gray := color.New(color.FgHiBlack).SprintFunc()
+
+				if len(versions) == 0 {
+					fmt.Println("No versions found")
+					return nil
+				}
+
+				fmt.Printf("Found %d versions:\n\n", len(versions))
+				for i, v := range versions {
+					var prefix string
+					if i == 0 {
+						prefix = green("●")
+					} else {
+						prefix = gray("○")
+					}
+
+					fmt.Printf("%s %s", prefix, blue(v.Version))
+					if i == 0 {
+						fmt.Printf(" %s", green("(current)"))
+					}
+					fmt.Println()
+					fmt.Printf("    %s\n", v.Timestamp.Format("2006-01-02 15:04:05"))
+					if v.Description != "" {
+						fmt.Printf("    %s\n", v.Description)
+					}
+					if v.Author != "" {
+						fmt.Printf("    by %s\n", v.Author)
+					}
+					fmt.Println()
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 0, "Limit number of versions to show")
+
+	return cmd
+}
+
+// newConfigVersionMigrateCmd migrates to a specific version
+func newConfigVersionMigrateCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "migrate [target-version]",
+		Short: "Migrate configuration to a specific version",
+		Long: `Migrate configuration to a target version using available migrations.
+
+Creates automatic backups before migration and validates compatibility.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("target version required")
+			}
+
+			targetVersion := args[0]
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			vm := version.NewVersionManager(baseDir)
+
+			// Check compatibility first
+			if !force {
+				report, err := vm.CheckCompatibility(targetVersion)
+				if err != nil {
+					return fmt.Errorf("failed to check compatibility: %w", err)
+				}
+
+				if !report.Compatible {
+					fmt.Printf("❌ Migration to %s is not compatible:\n", targetVersion)
+					for _, issue := range report.Issues {
+						fmt.Printf("  • %s\n", issue)
+					}
+					fmt.Println("\nUse --force to override compatibility checks")
+					return fmt.Errorf("compatibility check failed")
+				}
+
+				if len(report.Warnings) > 0 {
+					yellow := color.New(color.FgYellow).SprintFunc()
+					fmt.Printf("%s Warnings:\n", yellow("⚠"))
+					for _, warning := range report.Warnings {
+						fmt.Printf("  • %s\n", warning)
+					}
+					fmt.Println()
+				}
+
+				if len(report.RequiredActions) > 0 {
+					fmt.Println("Required actions before migration:")
+					for _, action := range report.RequiredActions {
+						fmt.Printf("  • %s\n", action)
+					}
+					fmt.Printf("\nContinue with migration? [y/N]: ")
+					var response string
+					if _, err := fmt.Scanln(&response); err != nil {
+						// If scan fails, default to 'no' for safety
+						fmt.Println("Migration cancelled")
+						return nil
+					}
+					if strings.ToLower(response) != "y" {
+						fmt.Println("Migration cancelled")
+						return nil
+					}
+				}
+			}
+
+			// Perform migration
+			if err := vm.MigrateTo(targetVersion); err != nil {
+				return fmt.Errorf("migration failed: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			fmt.Printf("%s Successfully migrated to version %s\n", green("✓"), targetVersion)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force migration ignoring compatibility checks")
+
+	return cmd
+}
+
+// newConfigVersionRollbackCmd rolls back to a previous version
+func newConfigVersionRollbackCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "rollback [version]",
+		Short: "Rollback to a previous configuration version",
+		Long: `Rollback configuration to a previous version using backups.
+
+This restores configuration from the backup created when the target version was active.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("target version required")
+			}
+
+			targetVersion := args[0]
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			vm := version.NewVersionManager(baseDir)
+
+			// Confirm rollback
+			if !force {
+				fmt.Printf("Rollback to version %s?\n", targetVersion)
+				fmt.Printf("This will restore configuration from backup.\n")
+				fmt.Printf("Continue? [y/N]: ")
+				var response string
+				if _, err := fmt.Scanln(&response); err != nil {
+					// If scan fails, default to 'no' for safety
+					fmt.Println("Rollback cancelled")
+					return nil
+				}
+				if strings.ToLower(response) != "y" {
+					fmt.Println("Rollback cancelled")
+					return nil
+				}
+			}
+
+			// Perform rollback
+			if err := vm.RollbackToVersion(targetVersion); err != nil {
+				return fmt.Errorf("rollback failed: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			fmt.Printf("%s Successfully rolled back to version %s\n", green("✓"), targetVersion)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force rollback without confirmation")
+
+	return cmd
+}
+
+// newConfigVersionCompatibilityCmd checks version compatibility
+func newConfigVersionCompatibilityCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "compatibility [target-version]",
+		Short: "Check compatibility with a target version",
+		Long: `Check if current configuration is compatible with a target version.
+
+Shows potential issues, warnings, and required actions for migration.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("target version required")
+			}
+
+			targetVersion := args[0]
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			vm := version.NewVersionManager(baseDir)
+
+			report, err := vm.CheckCompatibility(targetVersion)
+			if err != nil {
+				return fmt.Errorf("failed to check compatibility: %w", err)
+			}
+
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(report, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+			case "yaml":
+				data, err := yaml.Marshal(report)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				red := color.New(color.FgRed).SprintFunc()
+				yellow := color.New(color.FgYellow).SprintFunc()
+
+				fmt.Printf("Compatibility Report: %s → %s\n\n", report.CurrentVersion, report.TargetVersion)
+
+				if report.Compatible {
+					fmt.Printf("%s Compatible\n", green("✓"))
+				} else {
+					fmt.Printf("%s Not Compatible\n", red("✗"))
+				}
+
+				if len(report.Issues) > 0 {
+					fmt.Printf("\n%s Issues:\n", red("●"))
+					for _, issue := range report.Issues {
+						fmt.Printf("  • %s\n", issue)
+					}
+				}
+
+				if len(report.Warnings) > 0 {
+					fmt.Printf("\n%s Warnings:\n", yellow("●"))
+					for _, warning := range report.Warnings {
+						fmt.Printf("  • %s\n", warning)
+					}
+				}
+
+				if len(report.RequiredActions) > 0 {
+					fmt.Printf("\n%s Required Actions:\n", yellow("●"))
+					for _, action := range report.RequiredActions {
+						fmt.Printf("  • %s\n", action)
+					}
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
+
+	return cmd
+}
+
+// newConfigVersionUpdateCmd creates a new version
+func newConfigVersionUpdateCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		description string
+		changes     []string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "update",
+		Short: "Create a new configuration version",
+		Long: `Create a new version of the current configuration.
+
+This creates a backup and updates the version history with the current state.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			vm := version.NewVersionManager(baseDir)
+
+			if description == "" {
+				description = "Manual version update"
+			}
+
+			newVersion, err := vm.UpdateVersion(description, changes)
+			if err != nil {
+				return fmt.Errorf("failed to create new version: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			fmt.Printf("%s Created version %s\n", green("✓"), newVersion.Version)
+			fmt.Printf("  Description: %s\n", newVersion.Description)
+			fmt.Printf("  Backup ID: %s\n", newVersion.BackupID)
+			if len(newVersion.Changes) > 0 {
+				fmt.Println("  Changes:")
+				for _, change := range newVersion.Changes {
+					fmt.Printf("    • %s\n", change)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&description, "description", "d", "", "Version description")
+	cmd.Flags().StringSliceVarP(&changes, "changes", "c", []string{}, "List of changes")
+
+	return cmd
 }
