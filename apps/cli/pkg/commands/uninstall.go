@@ -187,6 +187,36 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 		return nil
 	}
 
+	// Detect conflicts before proceeding
+	fmt.Printf("%s Checking for conflicts...\n", cyan("🔍"))
+	conflictDetector := NewConflictDetector(repo)
+	conflicts, err := conflictDetector.DetectConflicts(appsToUninstall, cascade)
+	if err != nil {
+		log.Warn("Failed to detect conflicts", "error", err)
+	} else if len(conflicts) > 0 {
+		summary := conflictDetector.SummarizeConflicts(conflicts)
+
+		fmt.Printf("\n%s Detected %d potential conflicts:\n", yellow("⚠️"), summary.TotalConflicts)
+		for _, conflict := range conflicts {
+			severityColor := yellow
+			if conflict.Severity == "critical" {
+				severityColor = red
+			}
+			fmt.Printf("  %s %s: %s\n", severityColor("•"), strings.ToUpper(conflict.Severity), conflict.Description)
+			fmt.Printf("    Resolution: %s\n", conflict.Resolution)
+		}
+
+		if !summary.CanProceed && !force {
+			fmt.Printf("\n%s Cannot proceed due to %d critical conflicts. Use --force to override.\n", red("❌"), summary.CriticalCount)
+			return nil
+		}
+
+		if summary.CriticalCount == 0 {
+			fmt.Printf("\n%s All conflicts can be resolved automatically or are non-critical.\n", green("✅"))
+		}
+		fmt.Println()
+	}
+
 	// Show what will be uninstalled
 	fmt.Printf("%s Uninstalling %d application(s):\n\n", cyan("📦"), len(appsToUninstall))
 
@@ -221,6 +251,17 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 				log.Warn("Failed to remove app from database", "app", app.Name, "error", err)
 			}
 			continue
+		}
+
+		// Create backup if requested
+		if backup {
+			bm := NewBackupManager(repo)
+			backupEntry, err := bm.CreateBackup(&app)
+			if err != nil {
+				fmt.Printf("  %s Warning: Failed to create backup: %v\n", yellow("⚠️"), err)
+			} else {
+				fmt.Printf("  %s Created backup at: %s\n", green("💾"), backupEntry.BackupPath)
+			}
 		}
 
 		// Stop services if requested
