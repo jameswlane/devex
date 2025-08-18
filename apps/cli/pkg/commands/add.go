@@ -14,9 +14,9 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/undo"
 	"github.com/jameswlane/devex/pkg/version"
 )
 
@@ -214,11 +214,23 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Create automatic backup before modification
+	// Create undo operation before modification
 	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
-	if _, err := backup.BackupBeforeOperation(baseDir, fmt.Sprintf("add-%s", app.Name)); err != nil {
-		// Log backup failure but don't block the operation
-		fmt.Fprintf(os.Stderr, "Warning: Failed to create backup: %v\n", err)
+	undoManager := undo.NewUndoManager(baseDir)
+
+	metadata := map[string]interface{}{
+		"app_name":        app.Name,
+		"app_category":    app.Category,
+		"app_description": app.Description,
+	}
+
+	undoOp, err := undoManager.RecordOperation("add",
+		fmt.Sprintf("Added application: %s", app.Name),
+		app.Name,
+		metadata)
+	if err != nil {
+		// Log warning but don't block the operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to record undo operation: %v\n", err)
 	}
 
 	// Read existing configuration or create new one
@@ -266,6 +278,13 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 	if versionErr != nil {
 		// Log warning but don't fail the operation
 		fmt.Fprintf(os.Stderr, "Warning: Failed to create version: %v\n", versionErr)
+	}
+
+	// Update undo operation with completion info
+	if undoOp != nil {
+		if updateErr := undoManager.UpdateOperation(undoOp.ID); updateErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to update undo operation: %v\n", updateErr)
+		}
 	}
 
 	return nil

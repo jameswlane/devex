@@ -18,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/undo"
 	"github.com/jameswlane/devex/pkg/version"
 )
 
@@ -88,6 +89,7 @@ Examples:
 	cmd.AddCommand(newConfigImportCmd(settings))
 	cmd.AddCommand(newConfigBackupCmd(settings))
 	cmd.AddCommand(newConfigVersionCmd(settings))
+	cmd.AddCommand(newConfigUndoCmd(settings))
 
 	return cmd
 }
@@ -2939,6 +2941,364 @@ This creates a backup and updates the version history with the current state.`,
 
 	cmd.Flags().StringVarP(&description, "description", "d", "", "Version description")
 	cmd.Flags().StringSliceVarP(&changes, "changes", "c", []string{}, "List of changes")
+
+	return cmd
+}
+
+// newConfigUndoCmd creates the undo subcommand
+func newConfigUndoCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "undo",
+		Short: "Undo recent configuration changes",
+		Long: `Rollback recent configuration changes using backup and version history.
+
+The undo system tracks all configuration operations and allows you to safely
+rollback changes using the backup and version control systems.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	// Add undo subcommands
+	cmd.AddCommand(newConfigUndoListCmd(settings))
+	cmd.AddCommand(newConfigUndoLastCmd(settings))
+	cmd.AddCommand(newConfigUndoOperationCmd(settings))
+	cmd.AddCommand(newConfigUndoStatusCmd(settings))
+
+	return cmd
+}
+
+// newConfigUndoListCmd lists undoable operations
+func newConfigUndoListCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		format string
+		limit  int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List recent undoable operations",
+		Long: `List recent operations that can be undone.
+
+Shows operation details, timestamps, and potential risks of undoing each operation.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			undoManager := undo.NewUndoManager(baseDir)
+
+			if limit == 0 {
+				limit = 10 // Default limit
+			}
+
+			operations, err := undoManager.GetUndoableOperations(limit)
+			if err != nil {
+				return fmt.Errorf("failed to get undoable operations: %w", err)
+			}
+
+			if len(operations) == 0 {
+				fmt.Println("No operations available to undo")
+				return nil
+			}
+
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(operations, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+			case "yaml":
+				data, err := yaml.Marshal(operations)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				yellow := color.New(color.FgYellow).SprintFunc()
+				red := color.New(color.FgRed).SprintFunc()
+				gray := color.New(color.FgHiBlack).SprintFunc()
+
+				fmt.Printf("Recent undoable operations (showing %d):\n\n", len(operations))
+				for i, op := range operations {
+					fmt.Printf("%s %s", green("●"), op.Operation)
+					if !op.CanUndo {
+						fmt.Printf(" %s", red("(cannot undo)"))
+					}
+					fmt.Println()
+
+					fmt.Printf("    ID: %s\n", gray(op.ID))
+					fmt.Printf("    Time: %s\n", op.Timestamp.Format("2006-01-02 15:04:05"))
+					fmt.Printf("    Description: %s\n", op.Description)
+					if op.Target != "" {
+						fmt.Printf("    Target: %s\n", op.Target)
+					}
+
+					if len(op.UndoRisks) > 0 {
+						fmt.Printf("    %s Risks: %s\n", yellow("⚠"), strings.Join(op.UndoRisks, ", "))
+					}
+
+					if i < len(operations)-1 {
+						fmt.Println()
+					}
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
+	cmd.Flags().IntVarP(&limit, "limit", "l", 10, "Number of operations to show")
+
+	return cmd
+}
+
+// newConfigUndoLastCmd undoes the most recent operation
+func newConfigUndoLastCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "last",
+		Short: "Undo the most recent operation",
+		Long: `Undo the most recent configuration operation.
+
+This is a quick way to rollback the last change you made.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			undoManager := undo.NewUndoManager(baseDir)
+
+			// Check if there are operations to undo
+			canUndo, err := undoManager.CanUndo()
+			if err != nil {
+				return fmt.Errorf("failed to check undo availability: %w", err)
+			}
+
+			if !canUndo {
+				fmt.Println("No operations available to undo")
+				return nil
+			}
+
+			// Get the last operation for confirmation
+			operations, err := undoManager.GetUndoableOperations(1)
+			if err != nil {
+				return fmt.Errorf("failed to get operations: %w", err)
+			}
+
+			if len(operations) == 0 {
+				fmt.Println("No operations available to undo")
+				return nil
+			}
+
+			lastOp := operations[0]
+
+			// Confirm unless forced
+			if !force {
+				fmt.Printf("Undo operation: %s\n", lastOp.Description)
+				fmt.Printf("Target: %s\n", lastOp.Target)
+				fmt.Printf("Time: %s\n", lastOp.Timestamp.Format("2006-01-02 15:04:05"))
+
+				if len(lastOp.UndoRisks) > 0 {
+					yellow := color.New(color.FgYellow).SprintFunc()
+					fmt.Printf("\n%s Risks:\n", yellow("⚠"))
+					for _, risk := range lastOp.UndoRisks {
+						fmt.Printf("  • %s\n", risk)
+					}
+				}
+
+				fmt.Printf("\nContinue? [y/N]: ")
+				var response string
+				if _, err := fmt.Scanln(&response); err != nil {
+					response = "n" // Default to no on input error
+				}
+				if strings.ToLower(response) != "y" {
+					fmt.Println("Undo cancelled")
+					return nil
+				}
+			}
+
+			// Perform the undo
+			result, err := undoManager.UndoLast(force)
+			if err != nil {
+				return fmt.Errorf("failed to undo operation: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			yellow := color.New(color.FgYellow).SprintFunc()
+
+			fmt.Printf("%s %s\n", green("✓"), result.Message)
+			fmt.Printf("Restored from: %s\n", result.RestoredFrom)
+
+			if result.NewBackupID != "" {
+				fmt.Printf("Pre-undo backup: %s\n", result.NewBackupID)
+			}
+
+			if len(result.Warnings) > 0 {
+				fmt.Printf("\n%s Warnings:\n", yellow("⚠"))
+				for _, warning := range result.Warnings {
+					fmt.Printf("  • %s\n", warning)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation and ignore risks")
+
+	return cmd
+}
+
+// newConfigUndoOperationCmd undoes a specific operation
+func newConfigUndoOperationCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "operation [operation-id]",
+		Short: "Undo a specific operation",
+		Long: `Undo a specific operation by its ID.
+
+Use 'devex config undo list' to see available operation IDs.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("operation ID required")
+			}
+
+			operationID := args[0]
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			undoManager := undo.NewUndoManager(baseDir)
+
+			// Get operation details
+			operation, err := undoManager.GetOperationDetails(operationID)
+			if err != nil {
+				return fmt.Errorf("failed to get operation details: %w", err)
+			}
+
+			// Confirm unless forced
+			if !force {
+				fmt.Printf("Undo operation: %s\n", operation.Description)
+				fmt.Printf("Target: %s\n", operation.Target)
+				fmt.Printf("Time: %s\n", operation.Timestamp.Format("2006-01-02 15:04:05"))
+
+				if len(operation.UndoRisks) > 0 {
+					yellow := color.New(color.FgYellow).SprintFunc()
+					fmt.Printf("\n%s Risks:\n", yellow("⚠"))
+					for _, risk := range operation.UndoRisks {
+						fmt.Printf("  • %s\n", risk)
+					}
+				}
+
+				fmt.Printf("\nContinue? [y/N]: ")
+				var response string
+				if _, err := fmt.Scanln(&response); err != nil {
+					response = "n" // Default to no on input error
+				}
+				if strings.ToLower(response) != "y" {
+					fmt.Println("Undo cancelled")
+					return nil
+				}
+			}
+
+			// Perform the undo
+			result, err := undoManager.UndoOperation(operationID, force)
+			if err != nil {
+				return fmt.Errorf("failed to undo operation: %w", err)
+			}
+
+			green := color.New(color.FgGreen).SprintFunc()
+			yellow := color.New(color.FgYellow).SprintFunc()
+
+			fmt.Printf("%s %s\n", green("✓"), result.Message)
+			fmt.Printf("Restored from: %s\n", result.RestoredFrom)
+
+			if result.NewBackupID != "" {
+				fmt.Printf("Pre-undo backup: %s\n", result.NewBackupID)
+			}
+
+			if len(result.Warnings) > 0 {
+				fmt.Printf("\n%s Warnings:\n", yellow("⚠"))
+				for _, warning := range result.Warnings {
+					fmt.Printf("  • %s\n", warning)
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Skip confirmation and ignore risks")
+
+	return cmd
+}
+
+// newConfigUndoStatusCmd shows undo system status
+func newConfigUndoStatusCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show undo system status",
+		Long: `Display the current status of the undo system.
+
+Shows available operations, recent activity, and system health.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			undoManager := undo.NewUndoManager(baseDir)
+
+			summary, err := undoManager.GetUndoSummary()
+			if err != nil {
+				return fmt.Errorf("failed to get undo summary: %w", err)
+			}
+
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(summary, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+			case "yaml":
+				data, err := yaml.Marshal(summary)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				blue := color.New(color.FgBlue).SprintFunc()
+				gray := color.New(color.FgHiBlack).SprintFunc()
+
+				fmt.Printf("%s Undo System Status\n\n", blue("●"))
+
+				if summary.CanUndo {
+					fmt.Printf("Status: %s\n", green("Ready"))
+				} else {
+					fmt.Printf("Status: %s\n", gray("No operations to undo"))
+				}
+
+				fmt.Printf("Total operations: %d\n", summary.TotalOperations)
+				fmt.Printf("Undoable operations: %d\n", summary.UndoableOperations)
+
+				if summary.LastOperation != nil {
+					fmt.Printf("Last operation: %s\n", *summary.LastOperation)
+				}
+
+				if summary.LastUndo != nil {
+					fmt.Printf("Last undo: %s\n", *summary.LastUndo)
+				}
+
+				if len(summary.RecentOperations) > 0 {
+					fmt.Println("\nRecent operations:")
+					for _, op := range summary.RecentOperations {
+						fmt.Printf("  • %s\n", op)
+					}
+				}
+			}
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
 
 	return cmd
 }

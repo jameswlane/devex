@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/undo"
 	"github.com/jameswlane/devex/pkg/version"
 )
 
@@ -623,11 +623,26 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Create automatic backup before initialization
+	// Create undo operation before initialization
 	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
-	if _, err := backup.BackupBeforeOperation(baseDir, fmt.Sprintf("init-%s", config.Profile)); err != nil {
-		// Log backup failure but don't block initialization
-		fmt.Fprintf(os.Stderr, "Warning: Failed to create backup: %v\n", err)
+	undoManager := undo.NewUndoManager(baseDir)
+
+	metadata := map[string]interface{}{
+		"profile":    config.Profile,
+		"platform":   config.Platform.OS,
+		"desktop":    config.Platform.Desktop,
+		"shell":      config.Environment.Shell,
+		"languages":  config.Environment.Languages,
+		"categories": config.Applications.Categories,
+	}
+
+	undoOp, err := undoManager.RecordOperation("init",
+		fmt.Sprintf("Initialized configuration with profile: %s", config.Profile),
+		config.Profile,
+		metadata)
+	if err != nil {
+		// Log warning but don't block the operation
+		fmt.Fprintf(os.Stderr, "Warning: Failed to record undo operation: %v\n", err)
 	}
 
 	// Create a metadata file with the init configuration
@@ -661,6 +676,13 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 	if versionErr != nil {
 		// Log warning but don't fail the operation
 		fmt.Fprintf(os.Stderr, "Warning: Failed to create version: %v\n", versionErr)
+	}
+
+	// Update undo operation with completion info
+	if undoOp != nil {
+		if updateErr := undoManager.UpdateOperation(undoOp.ID); updateErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to update undo operation: %v\n", updateErr)
+		}
 	}
 
 	return nil
