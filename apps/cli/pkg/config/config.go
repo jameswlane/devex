@@ -290,11 +290,19 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	// Paths for default configurations
-	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
-	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
+	// Paths for environment-aware configuration inheritance
+	tempSettings := CrossPlatformSettings{HomeDir: homeDir}
+	defaultConfigPath, teamConfigPath, userConfigPath, envDirs := tempSettings.GetConfigDirsWithEnvironment()
 
-	// Load default configs - check existence first to avoid unnecessary I/O
+	// Load configurations in priority order (lowest to highest):
+	// 1. Default configs
+	// 2. Default environment configs
+	// 3. Team configs
+	// 4. Team environment configs
+	// 5. User configs
+	// 6. User environment configs
+
+	// 1. Load default configs first (lowest priority)
 	for _, file := range CrossPlatformFiles {
 		defaultPath := filepath.Join(defaultConfigPath, file)
 		if exists, _ := fs.Exists(defaultPath); exists {
@@ -304,13 +312,57 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 		}
 	}
 
-	// Apply overrides from the ~/.devex directory
+	// 2. Load default environment configs
 	for _, file := range CrossPlatformFiles {
-		overridePath := filepath.Join(overrideConfigPath, file)
-		if exists, _ := fs.Exists(overridePath); exists {
-			log.Info("Applying override", "file", overridePath)
-			if err := mergeConfigFileIntoViper(v, overridePath); err != nil {
-				log.Warn("Failed to apply override; skipping", "file", overridePath, "error", err)
+		envPath := filepath.Join(envDirs["default"], file)
+		if exists, _ := fs.Exists(envPath); exists {
+			log.Info("Applying default environment config", "file", envPath, "env", tempSettings.GetEnvironment())
+			if err := mergeConfigFileIntoViper(v, envPath); err != nil {
+				log.Warn("Failed to apply default environment config; skipping", "file", envPath, "error", err)
+			}
+		}
+	}
+
+	// 3. Apply team configs
+	for _, file := range CrossPlatformFiles {
+		teamPath := filepath.Join(teamConfigPath, file)
+		if exists, _ := fs.Exists(teamPath); exists {
+			log.Info("Applying team config", "file", teamPath)
+			if err := mergeConfigFileIntoViper(v, teamPath); err != nil {
+				log.Warn("Failed to apply team config; skipping", "file", teamPath, "error", err)
+			}
+		}
+	}
+
+	// 4. Apply team environment configs
+	for _, file := range CrossPlatformFiles {
+		envPath := filepath.Join(envDirs["team"], file)
+		if exists, _ := fs.Exists(envPath); exists {
+			log.Info("Applying team environment config", "file", envPath, "env", tempSettings.GetEnvironment())
+			if err := mergeConfigFileIntoViper(v, envPath); err != nil {
+				log.Warn("Failed to apply team environment config; skipping", "file", envPath, "error", err)
+			}
+		}
+	}
+
+	// 5. Apply user configs
+	for _, file := range CrossPlatformFiles {
+		userPath := filepath.Join(userConfigPath, file)
+		if exists, _ := fs.Exists(userPath); exists {
+			log.Info("Applying user config", "file", userPath)
+			if err := mergeConfigFileIntoViper(v, userPath); err != nil {
+				log.Warn("Failed to apply user config; skipping", "file", userPath, "error", err)
+			}
+		}
+	}
+
+	// 6. Apply user environment configs (highest priority)
+	for _, file := range CrossPlatformFiles {
+		envPath := filepath.Join(envDirs["user"], file)
+		if exists, _ := fs.Exists(envPath); exists {
+			log.Info("Applying user environment config", "file", envPath, "env", tempSettings.GetEnvironment())
+			if err := mergeConfigFileIntoViper(v, envPath); err != nil {
+				log.Warn("Failed to apply user environment config; skipping", "file", envPath, "error", err)
 			}
 		}
 	}
@@ -395,12 +447,74 @@ func mergeConfigFileIntoViper(v *viper.Viper, path string) error {
 	return nil
 }
 
-// GetConfigDir returns the configuration directory path
+// GetConfigDir returns the default configuration directory path
 func (s *CrossPlatformSettings) GetConfigDir() string {
 	if s.HomeDir == "" {
 		s.HomeDir = defaultHomeDir()
 	}
 	return filepath.Join(s.HomeDir, ".local/share/devex/config")
+}
+
+// GetUserConfigDir returns the user override configuration directory path
+func (s *CrossPlatformSettings) GetUserConfigDir() string {
+	if s.HomeDir == "" {
+		s.HomeDir = defaultHomeDir()
+	}
+	return filepath.Join(s.HomeDir, ".devex/config")
+}
+
+// GetTeamConfigDir returns the team/organization configuration directory path
+func (s *CrossPlatformSettings) GetTeamConfigDir() string {
+	if s.HomeDir == "" {
+		s.HomeDir = defaultHomeDir()
+	}
+	// Look for team config in environment variable or default location
+	if teamDir := os.Getenv("DEVEX_TEAM_CONFIG_DIR"); teamDir != "" {
+		return teamDir
+	}
+	return filepath.Join(s.HomeDir, ".devex/team")
+}
+
+// GetConfigDirs returns both default and user config directories for inheritance
+func (s *CrossPlatformSettings) GetConfigDirs() (defaultDir, userDir string) {
+	return s.GetConfigDir(), s.GetUserConfigDir()
+}
+
+// GetAllConfigDirs returns all config directories in inheritance order: default -> team -> user
+func (s *CrossPlatformSettings) GetAllConfigDirs() (defaultDir, teamDir, userDir string) {
+	return s.GetConfigDir(), s.GetTeamConfigDir(), s.GetUserConfigDir()
+}
+
+// GetEnvironment returns the current environment (dev, staging, prod, etc.)
+func (s *CrossPlatformSettings) GetEnvironment() string {
+	// Check environment variable first
+	if env := os.Getenv("DEVEX_ENV"); env != "" {
+		return env
+	}
+	if env := os.Getenv("ENVIRONMENT"); env != "" {
+		return env
+	}
+	if env := os.Getenv("NODE_ENV"); env != "" {
+		return env
+	}
+	// Default to development
+	return "dev"
+}
+
+// GetConfigDirsWithEnvironment returns config directories with environment-specific paths
+func (s *CrossPlatformSettings) GetConfigDirsWithEnvironment() (defaultDir, teamDir, userDir string, envDirs map[string]string) {
+	env := s.GetEnvironment()
+	defaultDir = s.GetConfigDir()
+	teamDir = s.GetTeamConfigDir()
+	userDir = s.GetUserConfigDir()
+
+	envDirs = map[string]string{
+		"default": filepath.Join(defaultDir, "environments", env),
+		"team":    filepath.Join(teamDir, "environments", env),
+		"user":    filepath.Join(userDir, "environments", env),
+	}
+
+	return defaultDir, teamDir, userDir, envDirs
 }
 
 // GetApplicationByName returns an application configuration by name

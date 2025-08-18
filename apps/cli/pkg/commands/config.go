@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -78,6 +79,11 @@ Examples:
 	cmd.AddCommand(newConfigEditCmd(settings))
 	cmd.AddCommand(newConfigValidateCmd(settings))
 	cmd.AddCommand(newConfigDiffCmd(settings))
+	cmd.AddCommand(newConfigInheritanceCmd(settings))
+	cmd.AddCommand(newConfigTeamCmd(settings))
+	cmd.AddCommand(newConfigEnvironmentCmd(settings))
+	cmd.AddCommand(newConfigExportCmd(settings))
+	cmd.AddCommand(newConfigImportCmd(settings))
 
 	return cmd
 }
@@ -681,4 +687,1433 @@ func formatSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// newConfigInheritanceCmd creates the inheritance subcommand
+func newConfigInheritanceCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "inheritance",
+		Short: "Show configuration inheritance hierarchy",
+		Long: `Display how configuration files are inherited from defaults to user overrides.
+
+This shows the environment-aware configuration inheritance system where:
+- Default configs are loaded from ~/.local/share/devex/config/
+- Default environment configs from ~/.local/share/devex/config/environments/{env}/
+- Team configs are applied from ~/.devex/team/ (or $DEVEX_TEAM_CONFIG_DIR)
+- Team environment configs from ~/.devex/team/environments/{env}/
+- User configs are applied from ~/.devex/config/
+- User environment configs from ~/.devex/config/environments/{env}/
+- Each tier overrides the previous with environment-specific configs having higher priority`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return showConfigInheritance(settings)
+		},
+	}
+
+	return cmd
+}
+
+// showConfigInheritance displays the configuration inheritance hierarchy
+func showConfigInheritance(settings config.CrossPlatformSettings) error {
+	defaultDir, teamDir, userDir, envDirs := settings.GetConfigDirsWithEnvironment()
+	currentEnv := settings.GetEnvironment()
+
+	fmt.Printf("📁 Environment-Aware Configuration Inheritance\n\n")
+	fmt.Printf("Current Environment: %s\n\n", currentEnv)
+
+	fmt.Printf("1. Default Configs (loaded first - lowest priority):\n")
+	fmt.Printf("   📂 %s\n", defaultDir)
+
+	// List default config files
+	showConfigTier(defaultDir, "📄", false)
+
+	fmt.Printf("\n2. Default Environment Configs (%s):\n", currentEnv)
+	fmt.Printf("   📂 %s\n", envDirs["default"])
+	showConfigTier(envDirs["default"], "🌍", true)
+
+	fmt.Printf("\n3. Team Configs:\n")
+	fmt.Printf("   📂 %s\n", teamDir)
+	if teamConfigEnv := os.Getenv("DEVEX_TEAM_CONFIG_DIR"); teamConfigEnv != "" {
+		fmt.Printf("   ℹ️  Using custom team config from DEVEX_TEAM_CONFIG_DIR\n")
+	}
+	showConfigTier(teamDir, "🏢", true)
+
+	fmt.Printf("\n4. Team Environment Configs (%s):\n", currentEnv)
+	fmt.Printf("   📂 %s\n", envDirs["team"])
+	showConfigTier(envDirs["team"], "🏢🌍", true)
+
+	fmt.Printf("\n5. User Configs:\n")
+	fmt.Printf("   📂 %s\n", userDir)
+	showConfigTier(userDir, "👤", true)
+
+	fmt.Printf("\n6. User Environment Configs (%s - highest priority):\n", currentEnv)
+	fmt.Printf("   📂 %s\n", envDirs["user"])
+	showConfigTier(envDirs["user"], "👤🌍", true)
+
+	fmt.Printf("\n💡 Tips:\n")
+	fmt.Printf("• Set DEVEX_ENV, ENVIRONMENT, or NODE_ENV to change environment (current: %s)\n", currentEnv)
+	fmt.Printf("• Create environment-specific configs in environments/{env}/ subdirectories\n")
+	fmt.Printf("• Environment configs override base configs in the same tier\n")
+	fmt.Printf("• Set DEVEX_TEAM_CONFIG_DIR to use a shared team configuration location\n")
+	fmt.Printf("• Use 'devex config diff <file>' to compare between layers\n")
+
+	return nil
+}
+
+// showConfigTier displays configuration files for a specific tier
+func showConfigTier(dir, icon string, showEmpty bool) {
+	if entries, err := os.ReadDir(dir); err == nil {
+		hasConfigs := false
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".yaml") {
+				hasConfigs = true
+				info, _ := entry.Info()
+				fmt.Printf("   %s %s (%s)\n", icon, entry.Name(), formatSize(info.Size()))
+			}
+		}
+		if !hasConfigs && showEmpty {
+			fmt.Printf("   📭 No configs found\n")
+		}
+	} else {
+		if showEmpty {
+			fmt.Printf("   📭 Directory not found\n")
+		} else {
+			fmt.Printf("   ⚠️  Directory not found\n")
+		}
+	}
+}
+
+// newConfigTeamCmd creates the team subcommand
+func newConfigTeamCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "team",
+		Short: "Manage team/organization configurations",
+		Long: `Manage team or organization-wide configuration files.
+
+Team configurations provide a middle layer in the inheritance hierarchy:
+- Default configs (lowest priority)
+- Team configs (middle priority) - shared across team/organization
+- User configs (highest priority) - personal overrides
+
+Team configs can be stored in:
+- ~/.devex/team/ (default)
+- Custom location via DEVEX_TEAM_CONFIG_DIR environment variable
+
+Examples:
+  # Show team config status
+  devex config team status
+  
+  # Initialize team configs from current user configs
+  devex config team init
+  
+  # Sync team configs from a shared repository
+  devex config team sync https://github.com/company/devex-team-config.git`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	// Add team subcommands
+	cmd.AddCommand(newConfigTeamStatusCmd(settings))
+	cmd.AddCommand(newConfigTeamInitCmd(settings))
+	cmd.AddCommand(newConfigTeamSyncCmd(settings))
+
+	return cmd
+}
+
+// newConfigTeamStatusCmd creates the team status subcommand
+func newConfigTeamStatusCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show team configuration status",
+		Long:  `Display information about team configuration files and their status.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return showTeamConfigStatus(settings)
+		},
+	}
+
+	return cmd
+}
+
+// newConfigTeamInitCmd creates the team init subcommand
+func newConfigTeamInitCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		fromUser bool
+		force    bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize team configuration",
+		Long: `Initialize team configuration files.
+
+This creates team configuration files that can be shared across your organization.
+You can initialize from your current user configs or start with minimal defaults.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return initTeamConfig(settings, fromUser, force)
+		},
+	}
+
+	cmd.Flags().BoolVar(&fromUser, "from-user", false, "Initialize team config from current user config")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing team config")
+
+	return cmd
+}
+
+// newConfigTeamSyncCmd creates the team sync subcommand
+func newConfigTeamSyncCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		branch string
+		force  bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "sync [repository-url]",
+		Short: "Sync team configuration from repository",
+		Long: `Synchronize team configuration from a Git repository.
+
+This allows teams to maintain shared configurations in version control
+and sync them across team members' development environments.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repoURL := ""
+			if len(args) > 0 {
+				repoURL = args[0]
+			}
+			return syncTeamConfig(settings, repoURL, branch, force)
+		},
+	}
+
+	cmd.Flags().StringVar(&branch, "branch", "main", "Git branch to sync from")
+	cmd.Flags().BoolVar(&force, "force", false, "Force sync, overwriting local changes")
+
+	return cmd
+}
+
+// showTeamConfigStatus displays team configuration status
+func showTeamConfigStatus(settings config.CrossPlatformSettings) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	teamDir := settings.GetTeamConfigDir()
+
+	fmt.Printf("%s Team Configuration Status\n\n", cyan("🏢"))
+	fmt.Printf("Team Config Directory: %s\n", teamDir)
+
+	if teamConfigEnv := os.Getenv("DEVEX_TEAM_CONFIG_DIR"); teamConfigEnv != "" {
+		fmt.Printf("Source: DEVEX_TEAM_CONFIG_DIR environment variable\n")
+	} else {
+		fmt.Printf("Source: Default location\n")
+	}
+
+	// Check if directory exists
+	if _, err := os.Stat(teamDir); os.IsNotExist(err) {
+		fmt.Printf("Status: %s\n\n", red("❌ Not initialized"))
+		fmt.Printf("%s To get started:\n", yellow("💡"))
+		fmt.Printf("  • Run 'devex config team init' to create team configs\n")
+		fmt.Printf("  • Or run 'devex config team init --from-user' to copy from your current setup\n")
+		fmt.Printf("  • Or run 'devex config team sync <repo-url>' to sync from a repository\n")
+		return nil
+	}
+
+	fmt.Printf("Status: %s\n\n", green("✅ Initialized"))
+
+	// List team config files
+	configFiles := []string{"applications.yaml", "environment.yaml", "system.yaml", "desktop.yaml"}
+	fmt.Printf("%s Team Configuration Files:\n", cyan("📁"))
+	fmt.Printf("%-15s %-8s %-10s %-20s\n", "FILE", "STATUS", "SIZE", "MODIFIED")
+	fmt.Println(strings.Repeat("─", 60))
+
+	hasConfigs := false
+	for _, configFile := range configFiles {
+		path := filepath.Join(teamDir, configFile)
+		if stat, err := os.Stat(path); err == nil {
+			hasConfigs = true
+			status := green("✓ Present")
+			size := formatSize(stat.Size())
+			modified := stat.ModTime().Format("Jan 02 15:04")
+			fmt.Printf("%-15s %-8s %-10s %-20s\n", configFile, status, size, modified)
+		} else {
+			status := yellow("- Missing")
+			fmt.Printf("%-15s %-8s %-10s %-20s\n", configFile, status, "-", "-")
+		}
+	}
+
+	if !hasConfigs {
+		fmt.Printf("\n%s No team configuration files found\n", yellow("⚠️"))
+	}
+
+	// Check for Git repository
+	gitDir := filepath.Join(teamDir, ".git")
+	if _, err := os.Stat(gitDir); err == nil {
+		fmt.Printf("\n%s Git repository detected\n", green("🔗"))
+		fmt.Printf("Team configs are version controlled\n")
+	}
+
+	return nil
+}
+
+// initTeamConfig initializes team configuration
+func initTeamConfig(settings config.CrossPlatformSettings, fromUser, force bool) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	teamDir := settings.GetTeamConfigDir()
+
+	fmt.Printf("%s Initializing Team Configuration\n\n", cyan("🏢"))
+	fmt.Printf("Team directory: %s\n", teamDir)
+
+	// Check if already exists
+	if _, err := os.Stat(teamDir); !os.IsNotExist(err) && !force {
+		fmt.Printf("%s Team configuration already exists\n", yellow("⚠️"))
+		fmt.Printf("Use --force to overwrite existing configuration\n")
+		return nil
+	}
+
+	// Create team directory
+	if err := os.MkdirAll(teamDir, 0755); err != nil {
+		return fmt.Errorf("failed to create team directory: %w", err)
+	}
+
+	if fromUser {
+		// Copy from user config
+		userDir := settings.GetUserConfigDir()
+		fmt.Printf("Copying configuration from: %s\n", userDir)
+
+		configFiles := []string{"applications.yaml", "environment.yaml", "system.yaml", "desktop.yaml"}
+		for _, configFile := range configFiles {
+			userPath := filepath.Join(userDir, configFile)
+			teamPath := filepath.Join(teamDir, configFile)
+
+			if data, err := os.ReadFile(userPath); err == nil {
+				// Add header indicating it's a team config
+				header := fmt.Sprintf("# DevEx Team Configuration - %s\n# Generated from user config\n# Share this with your team/organization\n\n", configFile)
+				content := header + string(data)
+
+				if err := os.WriteFile(teamPath, []byte(content), 0644); err != nil {
+					fmt.Printf("Warning: failed to copy %s: %v\n", configFile, err)
+				} else {
+					fmt.Printf("  ✓ Copied %s\n", configFile)
+				}
+			}
+		}
+	} else {
+		// Create minimal team configs
+		fmt.Printf("Creating minimal team configuration\n")
+
+		minimalConfigs := map[string]string{
+			"applications.yaml": `# DevEx Team Applications Configuration
+# Add applications that all team members should have
+applications:
+  - baseconfig:
+      name: git
+      description: Version control system
+      category: development
+    install_method: apt
+    install_command: git
+    default: true
+`,
+			"environment.yaml": `# DevEx Team Environment Configuration
+# Define shared environment settings
+shell: bash
+editor: vim
+`,
+			"system.yaml": `# DevEx Team System Configuration
+# Shared system settings
+git:
+  - key: user.name
+    value: ""
+    scope: global
+  - key: user.email
+    value: ""
+    scope: global
+`,
+		}
+
+		for filename, content := range minimalConfigs {
+			path := filepath.Join(teamDir, filename)
+			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				fmt.Printf("Warning: failed to create %s: %v\n", filename, err)
+			} else {
+				fmt.Printf("  ✓ Created %s\n", filename)
+			}
+		}
+	}
+
+	fmt.Printf("\n%s Team configuration initialized successfully!\n", green("🎉"))
+	fmt.Printf("\nNext steps:\n")
+	fmt.Printf("  1. Edit team configs: devex config edit\n")
+	fmt.Printf("  2. Version control: git init && git add . && git commit\n")
+	fmt.Printf("  3. Share with team: git remote add origin <repo-url> && git push\n")
+	fmt.Printf("  4. Team members sync: devex config team sync <repo-url>\n")
+
+	return nil
+}
+
+// syncTeamConfig syncs team configuration from a repository
+func syncTeamConfig(settings config.CrossPlatformSettings, repoURL, branch string, force bool) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	teamDir := settings.GetTeamConfigDir()
+
+	if repoURL == "" {
+		// Check if already a git repository
+		gitDir := filepath.Join(teamDir, ".git")
+		if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+			return fmt.Errorf("no repository URL provided and team config is not a git repository")
+		}
+
+		fmt.Printf("%s Syncing team configuration from existing repository\n\n", cyan("🔄"))
+
+		// Pull from existing repository
+		ctx := context.Background()
+		cmd := exec.CommandContext(ctx, "git", "-C", teamDir, "pull", "origin", branch)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to pull from repository: %w", err)
+		}
+
+		fmt.Printf("\n%s Team configuration synced successfully!\n", green("✅"))
+		return nil
+	}
+
+	fmt.Printf("%s Syncing team configuration from repository\n\n", cyan("🔄"))
+	fmt.Printf("Repository: %s\n", repoURL)
+	fmt.Printf("Branch: %s\n", branch)
+	fmt.Printf("Target: %s\n\n", teamDir)
+
+	// Check if directory exists and has content
+	if _, err := os.Stat(teamDir); !os.IsNotExist(err) && !force {
+		if entries, err := os.ReadDir(teamDir); err == nil && len(entries) > 0 {
+			fmt.Printf("%s Team directory exists and is not empty\n", yellow("⚠️"))
+			fmt.Printf("Use --force to overwrite existing configuration\n")
+			return nil
+		}
+	}
+
+	// Remove existing directory if forcing
+	if force {
+		if err := os.RemoveAll(teamDir); err != nil {
+			return fmt.Errorf("failed to remove existing team config: %w", err)
+		}
+	}
+
+	// Clone repository
+	ctx := context.Background()
+	cmd := exec.CommandContext(ctx, "git", "clone", "-b", branch, repoURL, teamDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to clone repository: %w", err)
+	}
+
+	fmt.Printf("\n%s Team configuration synced successfully!\n", green("🎉"))
+	fmt.Printf("\nTeam configuration is now available at: %s\n", teamDir)
+	fmt.Printf("Run 'devex config inheritance' to see the full hierarchy\n")
+
+	return nil
+}
+
+// newConfigEnvironmentCmd creates the environment subcommand
+func newConfigEnvironmentCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "environment",
+		Aliases: []string{"env"},
+		Short:   "Manage environment-specific configurations",
+		Long: `Manage environment-specific configuration files (dev, staging, prod, etc.).
+
+Environment-specific configurations provide targeted overrides for different deployment environments:
+- Development (dev) - Local development settings
+- Staging (staging) - Pre-production testing environment
+- Production (prod) - Live production environment
+- Custom environments (test, integration, etc.)
+
+Environment configs are stored in environments/{env}/ subdirectories within each tier:
+- ~/.local/share/devex/config/environments/{env}/
+- ~/.devex/team/environments/{env}/
+- ~/.devex/config/environments/{env}/
+
+Examples:
+  # Show current environment and configs
+  devex config env status
+  
+  # Create environment-specific configs
+  devex config env init staging
+  
+  # List available environments
+  devex config env list`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
+	}
+
+	// Add environment subcommands
+	cmd.AddCommand(newConfigEnvStatusCmd(settings))
+	cmd.AddCommand(newConfigEnvInitCmd(settings))
+	cmd.AddCommand(newConfigEnvListCmd(settings))
+
+	return cmd
+}
+
+// newConfigEnvStatusCmd creates the environment status subcommand
+func newConfigEnvStatusCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "status",
+		Short: "Show current environment configuration status",
+		Long:  `Display information about the current environment and its configuration files.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return showEnvironmentStatus(settings)
+		},
+	}
+
+	return cmd
+}
+
+// newConfigEnvInitCmd creates the environment init subcommand
+func newConfigEnvInitCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		tier     string
+		copyFrom string
+		force    bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "init [environment]",
+		Short: "Initialize environment-specific configuration",
+		Long: `Initialize configuration files for a specific environment.
+
+This creates environment-specific configuration files that override base configs
+for the specified environment (dev, staging, prod, etc.).`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			env := "dev"
+			if len(args) > 0 {
+				env = args[0]
+			}
+			return initEnvironmentConfig(settings, env, tier, copyFrom, force)
+		},
+	}
+
+	cmd.Flags().StringVar(&tier, "tier", "user", "Configuration tier (user, team)")
+	cmd.Flags().StringVar(&copyFrom, "copy-from", "", "Copy from another environment")
+	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing environment config")
+
+	return cmd
+}
+
+// newConfigEnvListCmd creates the environment list subcommand
+func newConfigEnvListCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List available environment configurations",
+		Long:  `List all available environment configurations across all tiers.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return listEnvironmentConfigs(settings)
+		},
+	}
+
+	return cmd
+}
+
+// showEnvironmentStatus displays current environment status
+func showEnvironmentStatus(settings config.CrossPlatformSettings) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	currentEnv := settings.GetEnvironment()
+	_, _, _, envDirs := settings.GetConfigDirsWithEnvironment()
+
+	fmt.Printf("%s Environment Configuration Status\n\n", cyan("🌍"))
+	fmt.Printf("Current Environment: %s\n", green(currentEnv))
+
+	// Show environment variable sources
+	fmt.Printf("\nEnvironment Detection:\n")
+	if devexEnv := os.Getenv("DEVEX_ENV"); devexEnv != "" {
+		fmt.Printf("  DEVEX_ENV: %s (primary)\n", devexEnv)
+	}
+	if env := os.Getenv("ENVIRONMENT"); env != "" {
+		fmt.Printf("  ENVIRONMENT: %s\n", env)
+	}
+	if nodeEnv := os.Getenv("NODE_ENV"); nodeEnv != "" {
+		fmt.Printf("  NODE_ENV: %s\n", nodeEnv)
+	}
+	if currentEnv == "dev" {
+		fmt.Printf("  Default: dev (no environment variables set)\n")
+	}
+
+	// Show environment-specific config directories
+	fmt.Printf("\n%s Environment Configuration Directories:\n", cyan("📁"))
+
+	tiers := []struct {
+		name  string
+		path  string
+		label string
+	}{
+		{"Default", envDirs["default"], "🌍"},
+		{"Team", envDirs["team"], "🏢🌍"},
+		{"User", envDirs["user"], "👤🌍"},
+	}
+
+	for _, tier := range tiers {
+		fmt.Printf("\n%s %s Environment (%s):\n", tier.label, tier.name, currentEnv)
+		fmt.Printf("   📂 %s\n", tier.path)
+
+		if _, err := os.Stat(tier.path); os.IsNotExist(err) {
+			fmt.Printf("   📭 Directory not found\n")
+			continue
+		}
+
+		configFiles := []string{"applications.yaml", "environment.yaml", "system.yaml", "desktop.yaml"}
+		hasConfigs := false
+
+		for _, configFile := range configFiles {
+			path := filepath.Join(tier.path, configFile)
+			if stat, err := os.Stat(path); err == nil {
+				hasConfigs = true
+				size := formatSize(stat.Size())
+				modified := stat.ModTime().Format("Jan 02 15:04")
+				fmt.Printf("   %s %s (%s) - %s\n", tier.label, configFile, size, modified)
+			}
+		}
+
+		if !hasConfigs {
+			fmt.Printf("   📭 No environment configs found\n")
+		}
+	}
+
+	fmt.Printf("\n%s Quick Actions:\n", yellow("💡"))
+	fmt.Printf("  • Change environment: export DEVEX_ENV=staging\n")
+	fmt.Printf("  • Create environment configs: devex config env init %s\n", currentEnv)
+	fmt.Printf("  • View full hierarchy: devex config inheritance\n")
+
+	return nil
+}
+
+// initEnvironmentConfig initializes environment-specific configuration
+func initEnvironmentConfig(settings config.CrossPlatformSettings, env, tier, copyFrom string, force bool) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	// Determine target directory based on tier
+	var baseDir string
+	switch tier {
+	case "user":
+		baseDir = settings.GetUserConfigDir()
+	case "team":
+		baseDir = settings.GetTeamConfigDir()
+	default:
+		return fmt.Errorf("invalid tier '%s'. Use 'user' or 'team'", tier)
+	}
+
+	envDir := filepath.Join(baseDir, "environments", env)
+
+	fmt.Printf("%s Initializing Environment Configuration\n\n", cyan("🌍"))
+	fmt.Printf("Environment: %s\n", env)
+	fmt.Printf("Tier: %s\n", tier)
+	fmt.Printf("Directory: %s\n", envDir)
+
+	// Check if already exists
+	if _, err := os.Stat(envDir); !os.IsNotExist(err) && !force {
+		fmt.Printf("%s Environment configuration already exists\n", yellow("⚠️"))
+		fmt.Printf("Use --force to overwrite existing configuration\n")
+		return nil
+	}
+
+	// Create environment directory
+	if err := os.MkdirAll(envDir, 0755); err != nil {
+		return fmt.Errorf("failed to create environment directory: %w", err)
+	}
+
+	if copyFrom != "" {
+		// Copy from another environment
+		srcDir := filepath.Join(baseDir, "environments", copyFrom)
+		fmt.Printf("Copying configuration from environment: %s\n", copyFrom)
+
+		configFiles := []string{"applications.yaml", "environment.yaml", "system.yaml", "desktop.yaml"}
+		for _, configFile := range configFiles {
+			srcPath := filepath.Join(srcDir, configFile)
+			destPath := filepath.Join(envDir, configFile)
+
+			if data, err := os.ReadFile(srcPath); err == nil {
+				// Add header indicating it's an environment config
+				header := fmt.Sprintf("# DevEx %s Environment Configuration - %s\n# Copied from %s environment\n# Environment-specific overrides\n\n", env, configFile, copyFrom)
+				content := header + string(data)
+
+				if err := os.WriteFile(destPath, []byte(content), 0644); err != nil {
+					fmt.Printf("Warning: failed to copy %s: %v\n", configFile, err)
+				} else {
+					fmt.Printf("  ✓ Copied %s\n", configFile)
+				}
+			}
+		}
+	} else {
+		// Create minimal environment configs
+		fmt.Printf("Creating minimal environment configuration\n")
+
+		envConfigs := map[string]string{
+			"applications.yaml": fmt.Sprintf(`# DevEx %s Environment Applications Configuration
+# Environment-specific application overrides
+# These applications will be added/modified for the %s environment only
+applications: []
+`, env, env),
+			"environment.yaml": fmt.Sprintf(`# DevEx %s Environment Configuration
+# Environment-specific settings
+# Example: different shell or editor for %s
+shell: bash
+editor: vim
+`, env, env),
+			"system.yaml": fmt.Sprintf(`# DevEx %s Environment System Configuration
+# Environment-specific system settings
+# Example: different git configs for %s
+git: []
+`, env, env),
+		}
+
+		for filename, content := range envConfigs {
+			path := filepath.Join(envDir, filename)
+			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+				fmt.Printf("Warning: failed to create %s: %v\n", filename, err)
+			} else {
+				fmt.Printf("  ✓ Created %s\n", filename)
+			}
+		}
+	}
+
+	fmt.Printf("\n%s Environment configuration initialized successfully!\n", green("🎉"))
+	fmt.Printf("\nNext steps:\n")
+	fmt.Printf("  1. Edit environment configs: devex config edit\n")
+	fmt.Printf("  2. Set environment: export DEVEX_ENV=%s\n", env)
+	fmt.Printf("  3. Test configuration: devex config inheritance\n")
+
+	return nil
+}
+
+// listEnvironmentConfigs lists all available environment configurations
+func listEnvironmentConfigs(settings config.CrossPlatformSettings) error {
+	cyan := color.New(color.FgCyan).SprintFunc()
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+
+	currentEnv := settings.GetEnvironment()
+	defaultDir, teamDir, userDir, _ := settings.GetConfigDirsWithEnvironment()
+
+	fmt.Printf("%s Available Environment Configurations\n\n", cyan("🌍"))
+	fmt.Printf("Current Environment: %s\n\n", green(currentEnv))
+
+	// Collect all environments from all tiers
+	envMap := make(map[string]map[string]bool) // env -> tier -> hasConfigs
+
+	tiers := []struct {
+		name string
+		path string
+	}{
+		{"Default", defaultDir},
+		{"Team", teamDir},
+		{"User", userDir},
+	}
+
+	for _, tier := range tiers {
+		envPath := filepath.Join(tier.path, "environments")
+		if entries, err := os.ReadDir(envPath); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					envName := entry.Name()
+					if envMap[envName] == nil {
+						envMap[envName] = make(map[string]bool)
+					}
+
+					// Check if this environment has any config files
+					envDir := filepath.Join(envPath, envName)
+					if envEntries, err := os.ReadDir(envDir); err == nil {
+						hasConfigs := false
+						for _, envEntry := range envEntries {
+							if !envEntry.IsDir() && strings.HasSuffix(envEntry.Name(), ".yaml") {
+								hasConfigs = true
+								break
+							}
+						}
+						envMap[envName][tier.name] = hasConfigs
+					}
+				}
+			}
+		}
+	}
+
+	if len(envMap) == 0 {
+		fmt.Printf("%s No environment configurations found\n\n", yellow("📭"))
+		fmt.Printf("Create your first environment:\n")
+		fmt.Printf("  devex config env init dev\n")
+		fmt.Printf("  devex config env init staging\n")
+		fmt.Printf("  devex config env init prod\n")
+		return nil
+	}
+
+	// Display environments
+	fmt.Printf("%-12s %-8s %-8s %-8s %s\n", "ENVIRONMENT", "DEFAULT", "TEAM", "USER", "STATUS")
+	fmt.Println(strings.Repeat("─", 50))
+
+	for env := range envMap {
+		status := ""
+		if env == currentEnv {
+			status = green("(current)")
+		}
+
+		defaultIcon := "❌"
+		teamIcon := "❌"
+		userIcon := "❌"
+
+		if envMap[env]["Default"] {
+			defaultIcon = "✅"
+		}
+		if envMap[env]["Team"] {
+			teamIcon = "✅"
+		}
+		if envMap[env]["User"] {
+			userIcon = "✅"
+		}
+
+		fmt.Printf("%-12s %-8s %-8s %-8s %s\n", env, defaultIcon, teamIcon, userIcon, status)
+	}
+
+	fmt.Printf("\n%s Legend:\n", cyan("💡"))
+	fmt.Printf("  ✅ Environment has configuration files\n")
+	fmt.Printf("  ❌ Environment has no configuration files\n")
+	fmt.Printf("\nCreate new environment: devex config env init <environment>\n")
+
+	return nil
+}
+
+// newConfigExportCmd creates the export subcommand
+func newConfigExportCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		format   string
+		output   string
+		include  []string
+		exclude  []string
+		bundle   bool
+		compress bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export DevEx configurations",
+		Long: `Export DevEx configuration files for backup, sharing, or migration.
+
+This command allows you to export your configurations in various formats:
+- YAML (default) - Individual config files
+- JSON - Machine-readable format
+- Bundle - Combined archive with all configs
+- Archive - Compressed bundle for storage/transfer
+
+Examples:
+  # Export all configs to YAML
+  devex config export
+
+  # Export to JSON format
+  devex config export --format json --output configs.json
+
+  # Create compressed bundle
+  devex config export --bundle --compress --output devex-config.tar.gz
+
+  # Export only specific configs
+  devex config export --include applications,environment`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return exportConfiguration(settings, format, output, include, exclude, bundle, compress)
+		},
+	}
+
+	cmd.Flags().StringVarP(&format, "format", "f", "yaml", "Export format (yaml, json, bundle, archive)")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file/directory (defaults to current directory)")
+	cmd.Flags().StringSliceVar(&include, "include", []string{}, "Config types to include (applications, environment, system, desktop)")
+	cmd.Flags().StringSliceVar(&exclude, "exclude", []string{}, "Config types to exclude")
+	cmd.Flags().BoolVar(&bundle, "bundle", false, "Create a bundled archive")
+	cmd.Flags().BoolVar(&compress, "compress", false, "Compress the output (with bundle)")
+
+	return cmd
+}
+
+// newConfigImportCmd creates the import subcommand
+func newConfigImportCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		merge    bool
+		force    bool
+		backup   bool
+		validate bool
+		dryRun   bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "import [file]",
+		Short: "Import DevEx configurations",
+		Long: `Import DevEx configuration files from backup, shared configs, or migration.
+
+This command allows you to import configurations from various sources:
+- Individual YAML/JSON files
+- Bundle archives created with export
+- Remote configurations via URL
+
+Import modes:
+- Merge: Combine with existing configuration (default)
+- Replace: Overwrite existing configuration completely
+- Validate: Check configuration without applying
+
+Examples:
+  # Import from bundle
+  devex config import devex-config.tar.gz
+
+  # Import with merge
+  devex config import configs.yaml --merge
+
+  # Import with backup of current configs
+  devex config import configs.json --backup
+
+  # Dry run to validate before import
+  devex config import configs.yaml --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			inputFile := ""
+			if len(args) > 0 {
+				inputFile = args[0]
+			}
+			return importConfiguration(settings, inputFile, merge, force, backup, validate, dryRun)
+		},
+	}
+
+	cmd.Flags().BoolVar(&merge, "merge", true, "Merge with existing configuration")
+	cmd.Flags().BoolVar(&force, "force", false, "Force import, overwriting conflicts")
+	cmd.Flags().BoolVar(&backup, "backup", true, "Create backup before import")
+	cmd.Flags().BoolVar(&validate, "validate", true, "Validate configuration before import")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be imported without applying")
+
+	return cmd
+}
+
+// exportConfiguration handles the configuration export functionality
+func exportConfiguration(settings config.CrossPlatformSettings, format, output string, include, exclude []string, bundle, compress bool) error {
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	fmt.Printf("%s Exporting DevEx Configuration\n\n", cyan("📤"))
+
+	// Get all configuration directories (default, team, user, environment-specific)
+	defaultDir, teamDir, userDir, envDirs := settings.GetConfigDirsWithEnvironment()
+	currentEnv := settings.GetEnvironment()
+
+	// Collect all configuration data
+	exportData := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"export_time":   time.Now().Format(time.RFC3339),
+			"devex_version": "1.0.0", // TODO: Get from build info
+			"environment":   currentEnv,
+			"platform":      runtime.GOOS,
+		},
+		"configurations": map[string]interface{}{},
+	}
+
+	// Define configuration files to export
+	configFiles := []string{"applications.yaml", "environment.yaml", "system.yaml", "desktop.yaml"}
+
+	// Filter config files based on include/exclude
+	if len(include) > 0 {
+		filteredFiles := []string{}
+		for _, configFile := range configFiles {
+			configType := strings.TrimSuffix(configFile, ".yaml")
+			for _, incl := range include {
+				if configType == incl {
+					filteredFiles = append(filteredFiles, configFile)
+					break
+				}
+			}
+		}
+		configFiles = filteredFiles
+	}
+
+	if len(exclude) > 0 {
+		filteredFiles := []string{}
+		for _, configFile := range configFiles {
+			configType := strings.TrimSuffix(configFile, ".yaml")
+			excluded := false
+			for _, excl := range exclude {
+				if configType == excl {
+					excluded = true
+					break
+				}
+			}
+			if !excluded {
+				filteredFiles = append(filteredFiles, configFile)
+			}
+		}
+		configFiles = filteredFiles
+	}
+
+	fmt.Printf("Exporting configuration files: %v\n", configFiles)
+	fmt.Printf("Environment: %s\n", currentEnv)
+
+	// Collect configurations from all tiers
+	tiers := []struct {
+		name string
+		path string
+		key  string
+	}{
+		{"Default", defaultDir, "default"},
+		{"Team", teamDir, "team"},
+		{"User", userDir, "user"},
+		{"Default Environment", envDirs["default"], "default_env"},
+		{"Team Environment", envDirs["team"], "team_env"},
+		{"User Environment", envDirs["user"], "user_env"},
+	}
+
+	configurations := make(map[string]interface{})
+	for _, tier := range tiers {
+		tierConfigs := make(map[string]interface{})
+
+		for _, configFile := range configFiles {
+			configPath := filepath.Join(tier.path, configFile)
+			if data, err := os.ReadFile(configPath); err == nil {
+				var configData interface{}
+				if err := yaml.Unmarshal(data, &configData); err == nil {
+					configType := strings.TrimSuffix(configFile, ".yaml")
+					tierConfigs[configType] = configData
+					fmt.Printf("  ✓ Collected %s/%s\n", tier.name, configFile)
+				} else {
+					fmt.Printf("  ⚠ Warning: Failed to parse %s/%s: %v\n", tier.name, configFile, err)
+				}
+			}
+		}
+
+		if len(tierConfigs) > 0 {
+			configurations[tier.key] = tierConfigs
+		}
+	}
+
+	exportData["configurations"] = configurations
+
+	// Handle output format and location
+	if bundle {
+		return exportAsBundle(exportData, output, compress)
+	}
+
+	switch format {
+	case "json":
+		return exportAsJSON(exportData, output)
+	case "yaml":
+		return exportAsYAML(exportData, output)
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+}
+
+// exportAsYAML exports configuration as YAML format
+func exportAsYAML(data map[string]interface{}, output string) error {
+	yamlData, err := yaml.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal YAML: %w", err)
+	}
+
+	if output == "" {
+		output = fmt.Sprintf("devex-config-%s.yaml", time.Now().Format("20060102-150405"))
+	}
+
+	if err := os.WriteFile(output, yamlData, 0600); err != nil {
+		return fmt.Errorf("failed to write YAML file: %w", err)
+	}
+
+	green := color.New(color.FgGreen).SprintFunc()
+	fmt.Printf("\n%s Configuration exported to: %s\n", green("✅"), output)
+	return nil
+}
+
+// exportAsJSON exports configuration as JSON format
+func exportAsJSON(data map[string]interface{}, output string) error {
+	jsonData, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	if output == "" {
+		output = fmt.Sprintf("devex-config-%s.json", time.Now().Format("20060102-150405"))
+	}
+
+	if err := os.WriteFile(output, jsonData, 0600); err != nil {
+		return fmt.Errorf("failed to write JSON file: %w", err)
+	}
+
+	green := color.New(color.FgGreen).SprintFunc()
+	fmt.Printf("\n%s Configuration exported to: %s\n", green("✅"), output)
+	return nil
+}
+
+// exportAsBundle exports configuration as a compressed bundle
+func exportAsBundle(data map[string]interface{}, output string, compress bool) error {
+	if output == "" {
+		if compress {
+			output = fmt.Sprintf("devex-config-%s.tar.gz", time.Now().Format("20060102-150405"))
+		} else {
+			output = fmt.Sprintf("devex-config-%s.tar", time.Now().Format("20060102-150405"))
+		}
+	}
+
+	// Create temporary directory for bundle contents
+	tmpDir, err := os.MkdirTemp("", "devex-export-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Write metadata
+	metadataData, err := yaml.Marshal(data["metadata"])
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "metadata.yaml"), metadataData, 0600); err != nil {
+		return fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	// Write individual config files
+	configurations, ok := data["configurations"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid configurations data")
+	}
+	for tier, tierConfigs := range configurations {
+		tierDir := filepath.Join(tmpDir, tier)
+		if err := os.MkdirAll(tierDir, 0750); err != nil {
+			return fmt.Errorf("failed to create tier directory: %w", err)
+		}
+
+		tierConfigsMap, ok := tierConfigs.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for configType, configData := range tierConfigsMap {
+			configYAML, err := yaml.Marshal(configData)
+			if err != nil {
+				return fmt.Errorf("failed to marshal config %s/%s: %w", tier, configType, err)
+			}
+
+			configFile := filepath.Join(tierDir, configType+".yaml")
+			if err := os.WriteFile(configFile, configYAML, 0600); err != nil {
+				return fmt.Errorf("failed to write config file: %w", err)
+			}
+		}
+	}
+
+	// Create archive
+	ctx := context.Background()
+	var cmd *exec.Cmd
+	if compress {
+		cmd = exec.CommandContext(ctx, "tar", "-czf", output, "-C", tmpDir, ".")
+	} else {
+		cmd = exec.CommandContext(ctx, "tar", "-cf", output, "-C", tmpDir, ".")
+	}
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create archive: %w", err)
+	}
+
+	green := color.New(color.FgGreen).SprintFunc()
+	fmt.Printf("\n%s Configuration bundle exported to: %s\n", green("✅"), output)
+	return nil
+}
+
+// importConfiguration handles the configuration import functionality
+func importConfiguration(settings config.CrossPlatformSettings, inputFile string, merge, force, backup, validate, dryRun bool) error {
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	if inputFile == "" {
+		return fmt.Errorf("input file is required")
+	}
+
+	fmt.Printf("%s Importing DevEx Configuration\n\n", cyan("📥"))
+	fmt.Printf("Input file: %s\n", inputFile)
+	fmt.Printf("Mode: %s\n", map[bool]string{true: "merge", false: "replace"}[merge])
+
+	// Check if input file exists
+	if _, err := os.Stat(inputFile); os.IsNotExist(err) {
+		return fmt.Errorf("input file not found: %s", inputFile)
+	}
+
+	// Determine file type and extract data
+	var importData map[string]interface{}
+	var err error
+
+	switch {
+	case strings.HasSuffix(inputFile, ".tar.gz"), strings.HasSuffix(inputFile, ".tar"):
+		importData, err = importFromBundle(inputFile)
+	case strings.HasSuffix(inputFile, ".json"):
+		importData, err = importFromJSON(inputFile)
+	case strings.HasSuffix(inputFile, ".yaml"), strings.HasSuffix(inputFile, ".yml"):
+		importData, err = importFromYAML(inputFile)
+	default:
+		return fmt.Errorf("unsupported file format: %s", inputFile)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to read import data: %w", err)
+	}
+
+	// Validate import data structure
+	if validate {
+		if err := validateImportData(importData); err != nil {
+			return fmt.Errorf("import validation failed: %w", err)
+		}
+		fmt.Printf("%s Import data validation passed\n", green("✓"))
+	}
+
+	if dryRun {
+		fmt.Printf("\n%s Dry run - showing what would be imported:\n", yellow("🔍"))
+		return showImportPreview(importData, settings)
+	}
+
+	// Create backup if requested
+	if backup {
+		backupFile := fmt.Sprintf("devex-config-backup-%s.yaml", time.Now().Format("20060102-150405"))
+		if err := exportConfiguration(settings, "yaml", backupFile, []string{}, []string{}, false, false); err != nil {
+			fmt.Printf("%s Warning: Failed to create backup: %v\n", yellow("⚠"), err)
+		} else {
+			fmt.Printf("%s Backup created: %s\n", green("💾"), backupFile)
+		}
+	}
+
+	// Apply configurations
+	if err := applyImportedConfigurations(importData, settings, merge, force); err != nil {
+		return fmt.Errorf("failed to apply configurations: %w", err)
+	}
+
+	fmt.Printf("\n%s Configuration imported successfully!\n", green("🎉"))
+	return nil
+}
+
+// importFromBundle extracts and reads configuration from a tar bundle
+func importFromBundle(bundlePath string) (map[string]interface{}, error) {
+	// Create temporary directory for extraction
+	tmpDir, err := os.MkdirTemp("", "devex-import-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Extract bundle
+	ctx := context.Background()
+	var cmd *exec.Cmd
+	if strings.HasSuffix(bundlePath, ".tar.gz") {
+		cmd = exec.CommandContext(ctx, "tar", "-xzf", bundlePath, "-C", tmpDir)
+	} else {
+		cmd = exec.CommandContext(ctx, "tar", "-xf", bundlePath, "-C", tmpDir)
+	}
+
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to extract bundle: %w", err)
+	}
+
+	// Read metadata
+	metadataPath := filepath.Join(tmpDir, "metadata.yaml")
+	var metadata map[string]interface{}
+	if data, err := os.ReadFile(metadataPath); err == nil {
+		if err := yaml.Unmarshal(data, &metadata); err != nil {
+			// Metadata is optional, just log and continue
+			fmt.Printf("Warning: failed to parse metadata: %v\n", err)
+		}
+	}
+
+	// Read configurations from tier directories
+	configurations := make(map[string]interface{})
+	tiers := []string{"default", "team", "user", "default_env", "team_env", "user_env"}
+
+	for _, tier := range tiers {
+		tierDir := filepath.Join(tmpDir, tier)
+		if _, err := os.Stat(tierDir); os.IsNotExist(err) {
+			continue
+		}
+
+		tierConfigs := make(map[string]interface{})
+		configFiles := []string{"applications.yaml", "environment.yaml", "system.yaml", "desktop.yaml"}
+
+		for _, configFile := range configFiles {
+			configPath := filepath.Join(tierDir, configFile)
+			if data, err := os.ReadFile(configPath); err == nil {
+				var configData interface{}
+				if err := yaml.Unmarshal(data, &configData); err == nil {
+					configType := strings.TrimSuffix(configFile, ".yaml")
+					tierConfigs[configType] = configData
+				}
+			}
+		}
+
+		if len(tierConfigs) > 0 {
+			configurations[tier] = tierConfigs
+		}
+	}
+
+	return map[string]interface{}{
+		"metadata":       metadata,
+		"configurations": configurations,
+	}, nil
+}
+
+// importFromJSON reads configuration from JSON file
+func importFromJSON(jsonPath string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(jsonPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read JSON file: %w", err)
+	}
+
+	var importData map[string]interface{}
+	if err := json.Unmarshal(data, &importData); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return importData, nil
+}
+
+// importFromYAML reads configuration from YAML file
+func importFromYAML(yamlPath string) (map[string]interface{}, error) {
+	data, err := os.ReadFile(yamlPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read YAML file: %w", err)
+	}
+
+	var importData map[string]interface{}
+	if err := yaml.Unmarshal(data, &importData); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	return importData, nil
+}
+
+// validateImportData validates the structure of import data
+func validateImportData(data map[string]interface{}) error {
+	// Check for required top-level keys
+	if _, ok := data["configurations"]; !ok {
+		return fmt.Errorf("missing 'configurations' key in import data")
+	}
+
+	// Validate configurations structure
+	configurations, ok := data["configurations"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("'configurations' must be a map")
+	}
+
+	// Validate tier structure
+	validTiers := map[string]bool{
+		"default": true, "team": true, "user": true,
+		"default_env": true, "team_env": true, "user_env": true,
+	}
+
+	for tier := range configurations {
+		if !validTiers[tier] {
+			return fmt.Errorf("invalid tier: %s", tier)
+		}
+	}
+
+	return nil
+}
+
+// showImportPreview shows what would be imported without applying changes
+func showImportPreview(data map[string]interface{}, settings config.CrossPlatformSettings) error {
+	cyan := color.New(color.FgCyan).SprintFunc()
+
+	configurations, ok := data["configurations"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid configurations data")
+	}
+
+	fmt.Printf("\n%s Import Preview:\n", cyan("👀"))
+
+	for tier, tierConfigs := range configurations {
+		fmt.Printf("\n%s:\n", tier)
+		tierConfigsMap, ok := tierConfigs.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for configType, configData := range tierConfigsMap {
+			fmt.Printf("  • %s.yaml\n", configType)
+
+			// Show some details about the config
+			if configMap, ok := configData.(map[string]interface{}); ok {
+				for key := range configMap {
+					fmt.Printf("    - %s\n", key)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// applyImportedConfigurations applies the imported configurations to the file system
+func applyImportedConfigurations(data map[string]interface{}, settings config.CrossPlatformSettings, merge, force bool) error {
+	green := color.New(color.FgGreen).SprintFunc()
+
+	configurations, ok := data["configurations"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid configurations data")
+	}
+
+	// Get target directories
+	defaultDir, teamDir, userDir, envDirs := settings.GetConfigDirsWithEnvironment()
+
+	tierDirs := map[string]string{
+		"default":     defaultDir,
+		"team":        teamDir,
+		"user":        userDir,
+		"default_env": envDirs["default"],
+		"team_env":    envDirs["team"],
+		"user_env":    envDirs["user"],
+	}
+
+	for tier, tierConfigs := range configurations {
+		targetDir, ok := tierDirs[tier]
+		if !ok {
+			continue
+		}
+
+		// Create target directory if it doesn't exist
+		if err := os.MkdirAll(targetDir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
+		}
+
+		tierConfigsMap, ok := tierConfigs.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		for configType, configData := range tierConfigsMap {
+			configFile := filepath.Join(targetDir, configType+".yaml")
+
+			finalData := configData
+
+			// Handle merge mode
+			if merge {
+				if existingData, err := os.ReadFile(configFile); err == nil {
+					var existing interface{}
+					if err := yaml.Unmarshal(existingData, &existing); err == nil {
+						// Simple merge - new data overwrites existing
+						// TODO: Implement smart merge logic for complex cases
+						finalData = configData
+					}
+				}
+			}
+
+			// Write configuration file
+			yamlData, err := yaml.Marshal(finalData)
+			if err != nil {
+				return fmt.Errorf("failed to marshal %s/%s: %w", tier, configType, err)
+			}
+
+			if err := os.WriteFile(configFile, yamlData, 0644); err != nil {
+				return fmt.Errorf("failed to write %s: %w", configFile, err)
+			}
+
+			fmt.Printf("  %s Applied %s/%s.yaml\n", green("✓"), tier, configType)
+		}
+	}
+
+	return nil
 }

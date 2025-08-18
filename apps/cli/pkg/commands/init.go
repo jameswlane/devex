@@ -128,12 +128,13 @@ var profileTemplates = []ProfileTemplate{
 // NewInitCmd creates a new init command
 func NewInitCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	var (
-		interactive bool
-		profile     string
-		force       bool
-		validate    bool
-		export      bool
-		importFile  string
+		interactive  bool
+		profile      string
+		force        bool
+		validate     bool
+		export       bool
+		importFile   string
+		useTemplates bool
 	)
 
 	cmd := &cobra.Command{
@@ -168,15 +169,20 @@ Examples:
 			}
 
 			if export {
-				return exportConfiguration(settings)
+				return exportInitConfiguration(settings)
 			}
 
 			if importFile != "" {
-				return importConfiguration(importFile, settings, force)
+				return importInitConfiguration(importFile, settings, force)
 			}
 
 			if profile != "" && profile != "custom" {
 				return initWithProfile(profile, settings, repo, force)
+			}
+
+			// Use new template system if requested
+			if useTemplates {
+				return runInteractiveInitWithTemplates(settings, repo, force)
 			}
 
 			// Default to interactive mode
@@ -190,6 +196,7 @@ Examples:
 	cmd.Flags().BoolVar(&validate, "validate", false, "Validate existing configuration")
 	cmd.Flags().BoolVar(&export, "export", false, "Export current configuration")
 	cmd.Flags().StringVar(&importFile, "import", "", "Import configuration from file")
+	cmd.Flags().BoolVarP(&useTemplates, "templates", "t", false, "Use the new template system (recommended)")
 
 	return cmd
 }
@@ -525,7 +532,7 @@ func validateConfiguration(settings config.CrossPlatformSettings) error {
 	return nil
 }
 
-func exportConfiguration(settings config.CrossPlatformSettings) error {
+func exportInitConfiguration(settings config.CrossPlatformSettings) error {
 	// Create a comprehensive export of all configurations
 	export := map[string]interface{}{
 		"version": "1.0",
@@ -553,7 +560,7 @@ func exportConfiguration(settings config.CrossPlatformSettings) error {
 	return nil
 }
 
-func importConfiguration(file string, settings config.CrossPlatformSettings, force bool) error {
+func importInitConfiguration(file string, settings config.CrossPlatformSettings, force bool) error {
 	// Check for existing configuration
 	configDir := settings.GetConfigDir()
 	if _, err := os.Stat(configDir); !os.IsNotExist(err) && !force {
