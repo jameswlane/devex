@@ -1,0 +1,28 @@
+id: full-stack
+name: Full-Stack Development
+version: 1.2.0
+description: Complete full-stack web development environment with Node.js, Python, and databases
+author: DevEx Team
+homepage: https://devex.sh/templates/full-stack
+license: MIT
+min_devex_version: 1.0.0
+categories:
+  - development
+  - web
+  - full-stack
+tags:
+  - nodejs
+  - python
+  - react
+  - database
+  - docker
+files:
+  - applications.yaml
+  - environment.yaml
+  - system.yaml
+  - desktop.yaml
+metadata:
+  stack_type: full-stack
+  primary_languages: nodejs,python,go
+  includes_database: "true"
+  includes_containers: "true"

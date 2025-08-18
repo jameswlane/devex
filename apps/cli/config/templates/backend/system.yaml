@@ -1,0 +1,63 @@
+# Backend Template System Configuration
+# Template Version: 1.1.0
+# Git configuration
+configure_git: true
+git_config:
+  user:
+    name: "" # Will be prompted during setup
+    email: "" # Will be prompted during setup
+  core:
+    editor: vim
+    autocrlf: input
+  pull:
+    rebase: true # Prefer rebase for cleaner history
+  init:
+    defaultBranch: main
+# SSH configuration
+configure_ssh: true
+ssh_config:
+  generate_key: true
+  key_type: ed25519
+  key_comment: "DevEx Backend Setup"
+# System packages for backend development
+system_packages:
+  - build-essential
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - pkg-config
+  - libssl-dev
+  - protobuf-compiler
+# Services to enable
+services:
+  - docker
+  - postgresql
+  - redis-server
+  - rabbitmq-server
+# Performance tuning
+kernel_parameters:
+  # Increase file descriptor limits for high-concurrency applications
+  fs.file-max: 65536
+  # Network performance tuning
+  net.core.somaxconn: 65535
+  net.ipv4.tcp_max_syn_backlog: 65535
+# Security settings
+security:
+  firewall:
+    enabled: true
+    default_policy: deny
+    rules:
+      - port: 22
+        protocol: tcp
+        description: "SSH access"
+      - port: 80
+        protocol: tcp
+        description: "HTTP"
+      - port: 443
+        protocol: tcp
+        description: "HTTPS"
+      - port: 8080
+        protocol: tcp
+        description: "Development server"

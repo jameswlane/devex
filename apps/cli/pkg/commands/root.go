@@ -55,6 +55,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.AddCommand(NewRemoveCmd(repo, settings))
 	cmd.AddCommand(NewConfigCmd(repo, settings))
 	cmd.AddCommand(NewUndoCmd(repo, settings))
+	cmd.AddCommand(NewTemplateCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
