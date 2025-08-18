@@ -196,8 +196,11 @@ func (sd *StackDetector) walkDirectory(dir string, depth int, fileMap map[string
 				continue
 			}
 			// Recursively scan subdirectories
-			sd.walkDirectory(path, depth+1, fileMap)
-		} else {
+			if err := sd.walkDirectory(path, depth+1, fileMap); err != nil {
+				// Log error but continue scanning other directories
+				continue
+			}
+		} else if entry.Type().IsRegular() {
 			// Only read small files to avoid memory issues
 			if entry.Name() != "" && !strings.HasPrefix(entry.Name(), ".") || sd.isImportantFile(entry.Name()) {
 				if info, err := entry.Info(); err == nil && info.Size() < 1024*1024 { // Max 1MB
@@ -303,7 +306,7 @@ func (sd *StackDetector) applyRule(rule DetectionRule, fileMap map[string][]byte
 	avgConfidence := totalConfidence / float64(evidenceCount)
 
 	// Generate suggestions
-	var suggestions []Suggestion
+	suggestions := make([]Suggestion, 0, len(rule.Suggestions))
 	for _, suggestionRule := range rule.Suggestions {
 		suggestions = append(suggestions, Suggestion{
 			Type:        suggestionRule.Type,
@@ -401,19 +404,29 @@ func (sd *StackDetector) GetDetectionSummary(stacks []TechnologyStack) map[strin
 		"low_confidence":     0,
 	}
 
-	categories := summary["categories"].(map[string]int)
+	categories, ok := summary["categories"].(map[string]int)
+	if !ok {
+		categories = make(map[string]int)
+	}
 
 	for _, stack := range stacks {
 		// Count by category
 		categories[stack.Category]++
 
 		// Count by confidence level
-		if stack.Confidence >= 0.8 {
-			summary["high_confidence"] = summary["high_confidence"].(int) + 1
-		} else if stack.Confidence >= 0.5 {
-			summary["medium_confidence"] = summary["medium_confidence"].(int) + 1
-		} else {
-			summary["low_confidence"] = summary["low_confidence"].(int) + 1
+		switch {
+		case stack.Confidence >= 0.8:
+			if val, ok := summary["high_confidence"].(int); ok {
+				summary["high_confidence"] = val + 1
+			}
+		case stack.Confidence >= 0.5:
+			if val, ok := summary["medium_confidence"].(int); ok {
+				summary["medium_confidence"] = val + 1
+			}
+		default:
+			if val, ok := summary["low_confidence"].(int); ok {
+				summary["low_confidence"] = val + 1
+			}
 		}
 	}
 
@@ -427,7 +440,7 @@ func (sd *StackDetector) SaveResults(stacks []TechnologyStack, outputPath string
 		return fmt.Errorf("failed to marshal results: %w", err)
 	}
 
-	if err := os.WriteFile(outputPath, data, 0644); err != nil {
+	if err := os.WriteFile(outputPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write results: %w", err)
 	}
 

@@ -9,6 +9,8 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/stackdetector"
@@ -233,9 +235,13 @@ func runDetectAnalyze(dir string, settings config.CrossPlatformSettings) error {
 
 	// Show by category
 	fmt.Printf("\nBy Category:\n")
-	categories := summary["categories"].(map[string]int)
+	categories, ok := summary["categories"].(map[string]int)
+	if !ok {
+		categories = make(map[string]int)
+	}
+	titleCase := cases.Title(language.English)
 	for category, count := range categories {
-		fmt.Printf("  • %s: %d\n", strings.Title(category), count)
+		fmt.Printf("  • %s: %d\n", titleCase.String(category), count)
 	}
 
 	// Show detailed results
@@ -292,7 +298,8 @@ func runDetectSuggest(settings config.CrossPlatformSettings) error {
 		}
 
 		colorFunc := priorityColors[priority]
-		fmt.Printf("%s %s Priority:\n", colorFunc("●"), strings.Title(priority))
+		titleCase := cases.Title(language.English)
+		fmt.Printf("%s %s Priority:\n", colorFunc("●"), titleCase.String(priority))
 
 		// Group by type
 		suggestionsByType := make(map[string][]stackdetector.Suggestion)
@@ -301,7 +308,8 @@ func runDetectSuggest(settings config.CrossPlatformSettings) error {
 		}
 
 		for suggestionType, typeSuggestions := range suggestionsByType {
-			fmt.Printf("  %s:\n", strings.Title(suggestionType))
+			titleCase := cases.Title(language.English)
+			fmt.Printf("  %s:\n", titleCase.String(suggestionType))
 			for _, suggestion := range typeSuggestions {
 				fmt.Printf("    • %s - %s\n", suggestion.Target, suggestion.Description)
 			}
@@ -343,7 +351,7 @@ func displayDetectionResults(stacks []stackdetector.TechnologyStack, detailed bo
 	}
 
 	// Sort categories
-	var categoryNames []string
+	categoryNames := make([]string, 0, len(categories))
 	for category := range categories {
 		categoryNames = append(categoryNames, category)
 	}
@@ -352,16 +360,18 @@ func displayDetectionResults(stacks []stackdetector.TechnologyStack, detailed bo
 	for _, category := range categoryNames {
 		stacks := categories[category]
 
-		fmt.Printf("%s %s:\n", cyan("📂"), strings.Title(strings.ReplaceAll(category, "-", " ")))
+		titleCase := cases.Title(language.English)
+		fmt.Printf("%s %s:\n", cyan("📂"), titleCase.String(strings.ReplaceAll(category, "-", " ")))
 
 		for _, stack := range stacks {
 			// Color by confidence
 			var confidenceColor func(...interface{}) string
-			if stack.Confidence >= 0.8 {
+			switch {
+			case stack.Confidence >= 0.8:
 				confidenceColor = green
-			} else if stack.Confidence >= 0.5 {
+			case stack.Confidence >= 0.5:
 				confidenceColor = yellow
-			} else {
+			default:
 				confidenceColor = red
 			}
 
@@ -449,7 +459,7 @@ func applyDetectionSuggestions(stacks []stackdetector.TechnologyStack, settings 
 		if dryRun {
 			fmt.Printf("%s Would create/update applications configuration in %s\n", cyan("📝"), configDir)
 		} else {
-			if err := os.MkdirAll(configDir, 0755); err != nil {
+			if err := os.MkdirAll(configDir, 0750); err != nil {
 				return fmt.Errorf("failed to create config directory: %w", err)
 			}
 
@@ -465,7 +475,7 @@ applications:
 %s
 `, formatApplicationsAsYAML(appSuggestions))
 
-			if err := os.WriteFile(appsPath, []byte(yamlContent), 0644); err != nil {
+			if err := os.WriteFile(appsPath, []byte(yamlContent), 0600); err != nil {
 				return fmt.Errorf("failed to write applications config: %w", err)
 			}
 
@@ -483,41 +493,6 @@ applications:
 	return nil
 }
 
-// createDetectionApplicationsConfig creates an applications configuration from suggestions
-func createDetectionApplicationsConfig(suggestions map[string][]string) map[string]interface{} {
-	var applications []map[string]interface{}
-
-	// Add applications by priority
-	priorities := []string{"critical", "recommended", "optional"}
-
-	for _, priority := range priorities {
-		apps := suggestions[priority]
-		for _, app := range apps {
-			// Remove duplicates
-			exists := false
-			for _, existing := range applications {
-				if existing["name"] == app {
-					exists = true
-					break
-				}
-			}
-
-			if !exists {
-				applications = append(applications, map[string]interface{}{
-					"name":        app,
-					"description": fmt.Sprintf("Detected from project analysis (%s priority)", priority),
-					"category":    "development",
-					"default":     priority == "critical",
-				})
-			}
-		}
-	}
-
-	return map[string]interface{}{
-		"applications": applications,
-	}
-}
-
 // formatApplicationsAsYAML formats applications as YAML-like text
 func formatApplicationsAsYAML(suggestions map[string][]string) string {
 	var lines []string
@@ -526,7 +501,8 @@ func formatApplicationsAsYAML(suggestions map[string][]string) string {
 	for _, priority := range priorities {
 		apps := suggestions[priority]
 		if len(apps) > 0 {
-			lines = append(lines, fmt.Sprintf("  # %s priority applications", strings.Title(priority)))
+			titleCase := cases.Title(language.English)
+			lines = append(lines, fmt.Sprintf("  # %s priority applications", titleCase.String(priority)))
 			for _, app := range apps {
 				lines = append(lines, fmt.Sprintf("  - name: %s", app))
 				lines = append(lines, fmt.Sprintf("    description: \"Detected from project analysis (%s priority)\"", priority))

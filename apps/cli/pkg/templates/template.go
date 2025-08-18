@@ -159,7 +159,7 @@ func (tm *TemplateManager) GetAvailableTemplates() ([]Template, error) {
 	}
 
 	// Convert map back to slice
-	var templates []Template
+	templates := make([]Template, 0, len(templateMap))
 	for _, template := range templateMap {
 		templates = append(templates, template)
 	}
@@ -213,7 +213,7 @@ func (tm *TemplateManager) GetTemplate(name string) (*Template, error) {
 // SaveTemplate saves a template to the user templates directory
 func (tm *TemplateManager) SaveTemplate(template Template) error {
 	// Ensure user templates directory exists
-	if err := os.MkdirAll(tm.userTemplatesDir, 0755); err != nil {
+	if err := os.MkdirAll(tm.userTemplatesDir, 0750); err != nil {
 		return fmt.Errorf("failed to create templates directory: %w", err)
 	}
 
@@ -282,7 +282,7 @@ func (tm *TemplateManager) ValidateTemplate(template Template) error {
 
 // loadTemplatesFromDir loads templates from a directory
 func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) {
-	var templates []Template
+	templates := make([]Template, 0)
 
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return templates, nil // Directory doesn't exist, return empty slice

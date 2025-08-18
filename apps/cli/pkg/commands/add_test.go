@@ -2,7 +2,6 @@ package commands_test
 
 import (
 	"os"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -11,11 +10,6 @@ import (
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/mocks"
 )
-
-func TestAddCommand(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Add Command Suite")
-}
 
 var _ = Describe("Add Command", func() {
 	var (

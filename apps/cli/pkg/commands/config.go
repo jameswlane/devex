@@ -972,7 +972,7 @@ func initTeamConfig(settings config.CrossPlatformSettings, fromUser, force bool)
 	}
 
 	// Create team directory
-	if err := os.MkdirAll(teamDir, 0755); err != nil {
+	if err := os.MkdirAll(teamDir, 0750); err != nil {
 		return fmt.Errorf("failed to create team directory: %w", err)
 	}
 
@@ -991,7 +991,7 @@ func initTeamConfig(settings config.CrossPlatformSettings, fromUser, force bool)
 				header := fmt.Sprintf("# DevEx Team Configuration - %s\n# Generated from user config\n# Share this with your team/organization\n\n", configFile)
 				content := header + string(data)
 
-				if err := os.WriteFile(teamPath, []byte(content), 0644); err != nil {
+				if err := os.WriteFile(teamPath, []byte(content), 0600); err != nil {
 					fmt.Printf("Warning: failed to copy %s: %v\n", configFile, err)
 				} else {
 					fmt.Printf("  ✓ Copied %s\n", configFile)
@@ -1033,7 +1033,7 @@ git:
 
 		for filename, content := range minimalConfigs {
 			path := filepath.Join(teamDir, filename)
-			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 				fmt.Printf("Warning: failed to create %s: %v\n", filename, err)
 			} else {
 				fmt.Printf("  ✓ Created %s\n", filename)
@@ -1327,7 +1327,7 @@ func initEnvironmentConfig(settings config.CrossPlatformSettings, env, tier, cop
 	}
 
 	// Create environment directory
-	if err := os.MkdirAll(envDir, 0755); err != nil {
+	if err := os.MkdirAll(envDir, 0750); err != nil {
 		return fmt.Errorf("failed to create environment directory: %w", err)
 	}
 
@@ -1346,7 +1346,7 @@ func initEnvironmentConfig(settings config.CrossPlatformSettings, env, tier, cop
 				header := fmt.Sprintf("# DevEx %s Environment Configuration - %s\n# Copied from %s environment\n# Environment-specific overrides\n\n", env, configFile, copyFrom)
 				content := header + string(data)
 
-				if err := os.WriteFile(destPath, []byte(content), 0644); err != nil {
+				if err := os.WriteFile(destPath, []byte(content), 0600); err != nil {
 					fmt.Printf("Warning: failed to copy %s: %v\n", configFile, err)
 				} else {
 					fmt.Printf("  ✓ Copied %s\n", configFile)
@@ -1378,7 +1378,7 @@ git: []
 
 		for filename, content := range envConfigs {
 			path := filepath.Join(envDir, filename)
-			if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 				fmt.Printf("Warning: failed to create %s: %v\n", filename, err)
 			} else {
 				fmt.Printf("  ✓ Created %s\n", filename)
@@ -2076,7 +2076,7 @@ func applyImportedConfigurations(data map[string]interface{}, settings config.Cr
 		}
 
 		// Create target directory if it doesn't exist
-		if err := os.MkdirAll(targetDir, 0755); err != nil {
+		if err := os.MkdirAll(targetDir, 0750); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
 		}
 
@@ -2107,7 +2107,7 @@ func applyImportedConfigurations(data map[string]interface{}, settings config.Cr
 				return fmt.Errorf("failed to marshal %s/%s: %w", tier, configType, err)
 			}
 
-			if err := os.WriteFile(configFile, yamlData, 0644); err != nil {
+			if err := os.WriteFile(configFile, yamlData, 0600); err != nil {
 				return fmt.Errorf("failed to write %s: %w", configFile, err)
 			}
 

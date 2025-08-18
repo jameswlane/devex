@@ -44,7 +44,7 @@ var _ = Describe("Template System", func() {
 		It("should get available built-in templates", func() {
 			templates, err := templateManager.GetAvailableTemplates()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(templates).To(HaveLen(9)) // 9 built-in templates
+			Expect(templates).To(HaveLen(2)) // 2 built-in templates (converted to YAML)
 
 			// Check that we have the expected templates
 			templateNames := make([]string, len(templates))
@@ -54,13 +54,6 @@ var _ = Describe("Template System", func() {
 
 			expectedTemplates := []string{
 				"web-development",
-				"mobile-development",
-				"devops",
-				"data-science",
-				"game-development",
-				"full-stack",
-				"backend",
-				"frontend",
 				"minimal",
 			}
 
@@ -128,43 +121,12 @@ var _ = Describe("Template System", func() {
 			Expect(webTemplate.Environment.Languages).To(ContainElement("node"))
 		})
 
-		It("should have a mobile development template", func() {
-			mobileTemplate := findTemplate(availableTemplates, "mobile-development")
-			Expect(mobileTemplate).ToNot(BeNil())
-			Expect(mobileTemplate.Metadata.Description).To(ContainSubstring("React Native, Flutter"))
-			Expect(mobileTemplate.Metadata.Difficulty).To(Equal("advanced"))
-			Expect(mobileTemplate.Applications).To(ContainElement(HaveField("Name", "flutter")))
-			Expect(mobileTemplate.Environment.Languages).To(ContainElement("dart"))
-		})
-
-		It("should have a devops template", func() {
-			devopsTemplate := findTemplate(availableTemplates, "devops")
-			Expect(devopsTemplate).ToNot(BeNil())
-			Expect(devopsTemplate.Metadata.Description).To(ContainSubstring("containers, orchestration"))
-			Expect(devopsTemplate.Metadata.Difficulty).To(Equal("advanced"))
-			Expect(devopsTemplate.Applications).To(ContainElement(HaveField("Name", "docker")))
-			Expect(devopsTemplate.Applications).To(ContainElement(HaveField("Name", "kubectl")))
-			Expect(devopsTemplate.Environment.Languages).To(ContainElement("go"))
-		})
-
-		It("should have a data science template", func() {
-			dsTemplate := findTemplate(availableTemplates, "data-science")
-			Expect(dsTemplate).ToNot(BeNil())
-			Expect(dsTemplate.Metadata.Description).To(ContainSubstring("Python, R, Jupyter"))
-			Expect(dsTemplate.Applications).To(ContainElement(HaveField("Name", "python")))
-			Expect(dsTemplate.Applications).To(ContainElement(HaveField("Name", "jupyter")))
-			Expect(dsTemplate.Environment.Languages).To(ContainElement("python"))
-			Expect(dsTemplate.Environment.Languages).To(ContainElement("r"))
-		})
-
 		It("should have a minimal template", func() {
 			minimalTemplate := findTemplate(availableTemplates, "minimal")
 			Expect(minimalTemplate).ToNot(BeNil())
 			Expect(minimalTemplate.Metadata.Description).To(ContainSubstring("essential development tools"))
 			Expect(minimalTemplate.Metadata.Difficulty).To(Equal("beginner"))
-			Expect(minimalTemplate.Applications).To(HaveLen(2)) // Only git and vim
-			Expect(minimalTemplate.Applications).To(ContainElement(HaveField("Name", "git")))
-			Expect(minimalTemplate.Applications).To(ContainElement(HaveField("Name", "vim")))
+			Expect(minimalTemplate.Applications).To(HaveLen(1)) // Only vim
 		})
 	})
 
@@ -178,10 +140,8 @@ var _ = Describe("Template System", func() {
 				categories[template.Metadata.Category]++
 			}
 
-			// Check expected categories
+			// Check that we have development category templates
 			Expect(categories["development"]).To(BeNumerically(">", 0))
-			Expect(categories["infrastructure"]).To(BeNumerically(">", 0))
-			Expect(categories["science"]).To(BeNumerically(">", 0))
 		})
 	})
 

@@ -3,7 +3,6 @@ package commands_test
 import (
 	"os"
 	"path/filepath"
-	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,11 +14,6 @@ import (
 	"github.com/jameswlane/devex/pkg/mocks"
 	"github.com/jameswlane/devex/pkg/types"
 )
-
-func TestConfigCommand(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Config Command Suite")
-}
 
 var _ = Describe("Config Command", func() {
 	var (

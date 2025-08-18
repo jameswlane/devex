@@ -11,6 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fatih/color"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/pkg/config"
@@ -21,16 +23,14 @@ import (
 
 // TemplateSelectionModel represents the TUI state for template selection
 type TemplateSelectionModel struct {
-	templates      []templates.Template
-	cursor         int
-	selected       map[int]bool
-	choice         *templates.Template
-	quitting       bool
-	width          int
-	height         int
-	showDetails    bool
-	filterText     string
-	categoryFilter string
+	templates   []templates.Template
+	cursor      int
+	selected    map[int]bool
+	choice      *templates.Template
+	quitting    bool
+	width       int
+	height      int
+	showDetails bool
 }
 
 var (
@@ -47,12 +47,6 @@ var (
 				PaddingLeft(2).
 				Foreground(lipgloss.Color("#7D56F4")).
 				Bold(true)
-
-	detailStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#874BFD")).
-			Padding(1).
-			Margin(1)
 
 	templateHelpStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#626262"))
@@ -143,8 +137,9 @@ func (m TemplateSelectionModel) View() string {
 	}
 
 	currentIndex := 0
+	titleCase := cases.Title(language.English)
 	for category, categoryTemplates := range categories {
-		s += fmt.Sprintf("  %s:\n", strings.Title(category))
+		s += fmt.Sprintf("  %s:\n", titleCase.String(category))
 
 		for _, template := range categoryTemplates {
 			cursor := " "
@@ -224,7 +219,10 @@ func runInteractiveInitWithTemplates(settings config.CrossPlatformSettings, repo
 	fmt.Print("\nChoose mode (1-2): ")
 
 	var modeChoice int
-	fmt.Scanln(&modeChoice)
+	if _, err := fmt.Scanln(&modeChoice); err != nil {
+		// Default to interactive TUI on input error
+		modeChoice = 1
+	}
 
 	var selectedTemplate *templates.Template
 	var err error
@@ -315,9 +313,10 @@ func selectTemplateFromList(templateManager *templates.TemplateManager, reader *
 
 	templateIndex := 1
 	indexToTemplate := make(map[int]templates.Template)
+	titleCase := cases.Title(language.English)
 
 	for category, categoryTemplates := range categories {
-		fmt.Printf("\n  %s:\n", strings.Title(category))
+		fmt.Printf("\n  %s:\n", titleCase.String(category))
 		for _, template := range categoryTemplates {
 			fmt.Printf("    %d. %s %s - %s\n",
 				templateIndex, template.Metadata.Icon, yellow(template.Metadata.Name), template.Metadata.Description)
@@ -347,7 +346,7 @@ func applyTemplate(template templates.Template, settings config.CrossPlatformSet
 	configDir := settings.GetConfigDir()
 
 	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(configDir, 0755); err != nil {
+	if err := os.MkdirAll(configDir, 0750); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
