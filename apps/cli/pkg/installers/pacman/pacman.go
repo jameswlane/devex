@@ -732,7 +732,7 @@ func setupRedisService() error {
 	return nil
 }
 
-// Uninstall removes packages using pacman
+// Uninstall removes packages using pacman with dependency checking
 func (p *PacmanInstaller) Uninstall(command string, repo types.Repository) error {
 	log.Debug("pacman installer: starting uninstallation", "command", command)
 
@@ -758,7 +758,16 @@ func (p *PacmanInstaller) Uninstall(command string, repo types.Repository) error
 		return nil
 	}
 
+	// Check for dependencies
+	dependents, err := p.GetDependents(command)
+	if err != nil {
+		log.Warn("Failed to check package dependents", "error", err)
+	} else if len(dependents) > 0 {
+		log.Warn("Package has dependents that may be affected", "package", command, "dependents", dependents)
+	}
+
 	// Run pacman remove command using secure execution
+	// -Rs removes dependencies that were installed with the package and are not required by other packages
 	commandStr := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", command)
 	if output, err := utils.CommandExec.RunShellCommand(commandStr); err != nil {
 		log.Error("failed to uninstall package via pacman", err, "command", command, "output", output)
@@ -972,4 +981,97 @@ func (p *PacmanInstaller) IsAvailable(ctx context.Context) bool {
 // GetName returns the package manager name
 func (p *PacmanInstaller) GetName() string {
 	return "pacman"
+}
+
+// GetDependents returns packages that depend on the given package
+func (p *PacmanInstaller) GetDependents(packageName string) ([]string, error) {
+	log.Debug("Checking package dependents", "package", packageName)
+
+	// Validate package name to prevent injection
+	if !validPackageName.MatchString(packageName) {
+		return nil, fmt.Errorf("invalid package name: %s", packageName)
+	}
+
+	// Use pacman -Qi to get package info including Required By
+	command := fmt.Sprintf("pacman -Qi %s", packageName)
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get package info: %w", err)
+	}
+
+	// Parse the output to find Required By line
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Required By") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				deps := strings.TrimSpace(parts[1])
+				if deps == "None" {
+					return []string{}, nil
+				}
+				// Split by spaces to get individual packages
+				dependents := strings.Fields(deps)
+				return dependents, nil
+			}
+		}
+	}
+
+	return []string{}, nil
+}
+
+// GetOrphans returns orphaned packages (installed as dependencies but no longer needed)
+func (p *PacmanInstaller) GetOrphans() ([]string, error) {
+	log.Debug("Finding orphaned packages")
+
+	// Use pacman -Qtdq to find orphans
+	command := "pacman -Qtdq"
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// No orphans returns error code, check if output is empty
+		if strings.TrimSpace(output) == "" {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("failed to find orphans: %w", err)
+	}
+
+	// Parse the output to get package names
+	orphans := []string{}
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			orphans = append(orphans, line)
+		}
+	}
+
+	log.Debug("Found orphaned packages", "count", len(orphans))
+	return orphans, nil
+}
+
+// RemoveOrphans removes orphaned packages
+func (p *PacmanInstaller) RemoveOrphans() error {
+	log.Debug("Removing orphaned packages")
+
+	orphans, err := p.GetOrphans()
+	if err != nil {
+		return fmt.Errorf("failed to get orphans: %w", err)
+	}
+
+	if len(orphans) == 0 {
+		log.Info("No orphaned packages to remove")
+		return nil
+	}
+
+	log.Info("Removing orphaned packages", "packages", orphans)
+
+	// Remove orphans using pacman
+	orphansStr := strings.Join(orphans, " ")
+	command := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", orphansStr)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to remove orphans", err, "output", output)
+		return fmt.Errorf("failed to remove orphans: %w", err)
+	}
+
+	log.Info("Successfully removed orphaned packages", "count", len(orphans))
+	return nil
 }

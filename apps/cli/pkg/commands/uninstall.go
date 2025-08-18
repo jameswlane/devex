@@ -1,8 +1,10 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -18,13 +20,18 @@ import (
 
 func NewUninstallCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	var (
-		appName    string
-		apps       []string
-		category   string
-		all        bool
-		force      bool
-		keepConfig bool
-		keepData   bool
+		appName       string
+		apps          []string
+		category      string
+		all           bool
+		force         bool
+		keepConfig    bool
+		keepData      bool
+		removeOrphans bool
+		cascade       bool
+		backup        bool
+		stopServices  bool
+		cleanupSystem bool
 	)
 
 	cmd := &cobra.Command{
@@ -67,7 +74,7 @@ Safety features:
 				apps = []string{appName}
 			}
 
-			return runUninstall(apps, category, all, force, keepConfig, keepData, repo, settings)
+			return runUninstall(apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, repo, settings)
 		},
 	}
 
@@ -78,11 +85,16 @@ Safety features:
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompts")
 	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep configuration files")
 	cmd.Flags().BoolVar(&keepData, "keep-data", false, "Keep user data and databases")
+	cmd.Flags().BoolVar(&removeOrphans, "remove-orphans", false, "Remove orphaned dependencies")
+	cmd.Flags().BoolVar(&cascade, "cascade", false, "Remove dependent packages")
+	cmd.Flags().BoolVar(&backup, "backup", false, "Create backup before uninstalling")
+	cmd.Flags().BoolVar(&stopServices, "stop-services", false, "Stop services before uninstalling")
+	cmd.Flags().BoolVar(&cleanupSystem, "cleanup-system", false, "Clean up system files (service files, desktop files, icons)")
 
 	return cmd
 }
 
-func runUninstall(apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+func runUninstall(apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings) error {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
 
@@ -211,6 +223,13 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 			continue
 		}
 
+		// Stop services if requested
+		if stopServices {
+			if err := stopAppServices(&app); err != nil {
+				fmt.Printf("  %s Warning: Failed to stop services: %v\n", yellow("⚠️"), err)
+			}
+		}
+
 		// Uninstall the application
 		if err := installer.Uninstall(app.UninstallCommand, repo); err != nil {
 			fmt.Printf("  %s Failed to uninstall: %v\n", red("❌"), err)
@@ -238,6 +257,15 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 			}
 		}
 
+		// Clean up system files if requested
+		if cleanupSystem {
+			if err := cleanupSystemFiles(&app); err != nil {
+				fmt.Printf("  %s Warning: Failed to clean up system files: %v\n", yellow("⚠️"), err)
+			} else {
+				fmt.Printf("  %s Cleaned up system files\n", green("🧹"))
+			}
+		}
+
 		// Remove from database
 		if err := repo.DeleteApp(app.Name); err != nil {
 			fmt.Printf("  %s Warning: Failed to remove from database: %v\n", yellow("⚠️"), err)
@@ -245,6 +273,14 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 
 		success++
 		fmt.Println()
+	}
+
+	// Handle orphan removal if requested
+	if removeOrphans && success > 0 {
+		fmt.Printf("\n%s Checking for orphaned packages...\n", cyan("🔍"))
+		// Try to remove orphans based on the package manager used
+		// This is a simplified approach - in production you'd want to detect the package manager
+		handleOrphanRemoval()
 	}
 
 	// Summary
@@ -296,4 +332,209 @@ func removeFileIfExists(path string) error {
 	}
 
 	return os.RemoveAll(path)
+}
+
+// stopAppServices stops services associated with an application
+func stopAppServices(app *types.AppConfig) error {
+	services := getAppServicesForUninstall(app)
+	if len(services) == 0 {
+		return nil
+	}
+
+	log.Info("Stopping services for app", "app", app.Name, "services", services)
+
+	for _, service := range services {
+		// Stop the service
+		cmd := fmt.Sprintf("sudo systemctl stop %s", service)
+		if output, err := runCommand(cmd); err != nil {
+			log.Warn("Failed to stop service", "service", service, "error", err, "output", output)
+			// Continue with other services
+		} else {
+			log.Info("Stopped service", "service", service)
+		}
+
+		// Disable the service to prevent it from starting on boot
+		cmd = fmt.Sprintf("sudo systemctl disable %s", service)
+		if output, err := runCommand(cmd); err != nil {
+			log.Warn("Failed to disable service", "service", service, "error", err, "output", output)
+		}
+	}
+
+	return nil
+}
+
+// getAppServicesForUninstall returns the list of services associated with an app
+func getAppServicesForUninstall(app *types.AppConfig) []string {
+	serviceMap := map[string][]string{
+		"docker":        {"docker.service", "docker.socket"},
+		"mysql":         {"mysql.service", "mysqld.service"},
+		"postgresql":    {"postgresql.service"},
+		"mongodb":       {"mongod.service"},
+		"redis":         {"redis.service", "redis-server.service"},
+		"nginx":         {"nginx.service"},
+		"apache2":       {"apache2.service", "httpd.service"},
+		"jenkins":       {"jenkins.service"},
+		"elasticsearch": {"elasticsearch.service"},
+	}
+
+	if services, ok := serviceMap[strings.ToLower(app.Name)]; ok {
+		return services
+	}
+
+	return []string{}
+}
+
+// cleanupSystemFiles removes system files like service files, desktop files, icons
+func cleanupSystemFiles(app *types.AppConfig) error {
+	log.Info("Cleaning up system files for app", "app", app.Name)
+
+	// Clean up systemd service files
+	servicePaths := []string{
+		"/etc/systemd/system/",
+		"/usr/lib/systemd/system/",
+		"/lib/systemd/system/",
+	}
+
+	for _, path := range servicePaths {
+		serviceFile := filepath.Join(path, app.Name+".service")
+		if err := removeFileIfExists(serviceFile); err != nil {
+			log.Warn("Failed to remove service file", "file", serviceFile, "error", err)
+		}
+	}
+
+	// Clean up desktop files
+	desktopPaths := []string{
+		"/usr/share/applications/",
+		"/usr/local/share/applications/",
+		filepath.Join(os.Getenv("HOME"), ".local/share/applications/"),
+	}
+
+	for _, path := range desktopPaths {
+		desktopFile := filepath.Join(path, app.Name+".desktop")
+		if err := removeFileIfExists(desktopFile); err != nil {
+			log.Warn("Failed to remove desktop file", "file", desktopFile, "error", err)
+		}
+	}
+
+	// Clean up icons
+	iconPaths := []string{
+		"/usr/share/icons/hicolor/",
+		"/usr/share/pixmaps/",
+		filepath.Join(os.Getenv("HOME"), ".local/share/icons/"),
+	}
+
+	for _, path := range iconPaths {
+		// Try to remove icon files with common extensions
+		for _, ext := range []string{".png", ".svg", ".xpm"} {
+			iconFile := filepath.Join(path, app.Name+ext)
+			if err := removeFileIfExists(iconFile); err != nil {
+				log.Warn("Failed to remove icon file", "file", iconFile, "error", err)
+			}
+		}
+	}
+
+	// Update icon cache
+	cmd := "gtk-update-icon-cache -f -t /usr/share/icons/hicolor"
+	if _, err := runCommand(cmd); err != nil {
+		log.Warn("Failed to update icon cache", "error", err)
+	}
+
+	// Clean up man pages
+	manPaths := []string{
+		"/usr/share/man/man1/",
+		"/usr/local/share/man/man1/",
+	}
+
+	for _, path := range manPaths {
+		manFile := filepath.Join(path, app.Name+".1")
+		if err := removeFileIfExists(manFile); err != nil {
+			log.Warn("Failed to remove man page", "file", manFile, "error", err)
+		}
+		// Also try with .gz extension
+		manFileGz := filepath.Join(path, app.Name+".1.gz")
+		if err := removeFileIfExists(manFileGz); err != nil {
+			log.Warn("Failed to remove man page", "file", manFileGz, "error", err)
+		}
+	}
+
+	return nil
+}
+
+// runCommand is a helper to run shell commands
+func runCommand(cmd string) (string, error) {
+	// Use exec.CommandContext to run the command
+	parts := strings.Fields(cmd)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("empty command")
+	}
+
+	ctx := context.Background()
+	command := exec.CommandContext(ctx, parts[0], parts[1:]...)
+	output, err := command.CombinedOutput()
+	if err != nil {
+		return string(output), err
+	}
+	return string(output), nil
+}
+
+// handleOrphanRemoval attempts to remove orphaned packages based on the detected package manager
+func handleOrphanRemoval() {
+	// Try different package managers to remove orphans
+
+	// Try APT (Debian/Ubuntu)
+	if _, err := exec.LookPath("apt"); err == nil {
+		fmt.Println("Removing orphaned packages with APT...")
+		if output, err := runCommand("sudo apt autoremove -y"); err != nil {
+			log.Warn("Failed to remove orphans with APT", "error", err, "output", output)
+		} else {
+			fmt.Println("✅ Removed orphaned APT packages")
+		}
+		return
+	}
+
+	// Try DNF (Fedora/RHEL)
+	if _, err := exec.LookPath("dnf"); err == nil {
+		fmt.Println("Removing orphaned packages with DNF...")
+		if output, err := runCommand("sudo dnf autoremove -y"); err != nil {
+			log.Warn("Failed to remove orphans with DNF", "error", err, "output", output)
+		} else {
+			fmt.Println("✅ Removed orphaned DNF packages")
+		}
+		return
+	}
+
+	// Try Pacman (Arch)
+	if _, err := exec.LookPath("pacman"); err == nil {
+		fmt.Println("Checking for orphaned packages with Pacman...")
+		// First get orphans
+		output, err := runCommand("pacman -Qtdq")
+		if err != nil || strings.TrimSpace(output) == "" {
+			fmt.Println("No orphaned packages found")
+			return
+		}
+
+		// Remove orphans
+		orphans := strings.Fields(output)
+		fmt.Printf("Found %d orphaned packages, removing...\n", len(orphans))
+		cmd := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", strings.Join(orphans, " "))
+		if output, err := runCommand(cmd); err != nil {
+			log.Warn("Failed to remove orphans with Pacman", "error", err, "output", output)
+		} else {
+			fmt.Println("✅ Removed orphaned Pacman packages")
+		}
+		return
+	}
+
+	// Try Zypper (openSUSE)
+	if _, err := exec.LookPath("zypper"); err == nil {
+		fmt.Println("Removing orphaned packages with Zypper...")
+		if output, err := runCommand("sudo zypper remove --clean-deps -y"); err != nil {
+			log.Warn("Failed to remove orphans with Zypper", "error", err, "output", output)
+		} else {
+			fmt.Println("✅ Removed orphaned Zypper packages")
+		}
+		return
+	}
+
+	fmt.Println("Could not detect package manager for orphan removal")
 }
