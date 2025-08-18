@@ -265,6 +265,11 @@ func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.C
 		}
 	}
 
+	// Collect uninstall-related information
+	if appStatus.Installed {
+		appStatus.UninstallInfo = collectUninstallInfo(ctx, app, settings)
+	}
+
 	// Determine overall status
 	switch {
 	case len(appStatus.Issues) == 0:
@@ -342,6 +347,26 @@ func outputTable(results []status.AppStatus, verbose bool) {
 			for _, issue := range result.Issues {
 				fmt.Printf("  • %s\n", issue)
 			}
+		}
+
+		// Show uninstall information in verbose mode
+		if verbose && result.UninstallInfo != nil {
+			info := result.UninstallInfo
+			if info.HasBackup {
+				fmt.Printf("  🔄 Backup available from %s\n", info.BackupDate.Format("2006-01-02 15:04"))
+			}
+			if len(info.RequiredBy) > 0 {
+				fmt.Printf("  ⚠️  Required by: %s\n", strings.Join(info.RequiredBy, ", "))
+			}
+			if len(info.UninstallRisks) > 0 {
+				fmt.Printf("  ⚠️  Uninstall risks: %s\n", strings.Join(info.UninstallRisks, "; "))
+			}
+			if !info.CanUninstall {
+				fmt.Printf("  🚫 Uninstall not recommended\n")
+			}
+		}
+
+		if verbose {
 			fmt.Println()
 		}
 	}
@@ -630,3 +655,61 @@ func extractServiceName(issue string) string {
 	}
 	return ""
 }
+
+func collectUninstallInfo(ctx context.Context, app *types.AppConfig, settings config.CrossPlatformSettings) *status.UninstallInfo {
+	info := &status.UninstallInfo{
+		CanUninstall: true, // Most apps can be uninstalled
+	}
+
+	// Create temporary mock repository for dependency checking
+	// In a real implementation, this would use the actual repository
+	mockRepo := &mockRepositoryForStatus{}
+
+	// Check for backup availability
+	bm := NewBackupManager(mockRepo)
+	backups, err := bm.ListBackups()
+	if err == nil {
+		for _, backup := range backups {
+			if backup.AppName == app.Name {
+				info.HasBackup = true
+				info.BackupDate = &backup.CreatedAt
+				info.BackupPath = backup.BackupPath
+				break
+			}
+		}
+	}
+
+	// Check dependency information
+	dm := NewDependencyManager(mockRepo)
+
+	// Check if this is a system package that shouldn't be uninstalled
+	if dm.IsSystemPackage(app.Name) {
+		info.CanUninstall = false
+		info.UninstallRisks = append(info.UninstallRisks, "Critical system package - uninstall not recommended")
+	}
+
+	// Note: Dependency analysis requires actual package manager queries
+	// For status display, we provide basic information only
+	// Full dependency analysis is performed during actual uninstall operations
+
+	// Add service-related risks
+	if services := getAppServices(app); len(services) > 0 {
+		info.UninstallRisks = append(info.UninstallRisks, fmt.Sprintf("Will stop %d system service(s)", len(services)))
+	}
+
+	return info
+}
+
+// mockRepositoryForStatus is a minimal mock for status checking
+type mockRepositoryForStatus struct{}
+
+func (m *mockRepositoryForStatus) ListApps() ([]types.AppConfig, error) { return nil, nil }
+func (m *mockRepositoryForStatus) SaveApp(app types.AppConfig) error    { return nil }
+func (m *mockRepositoryForStatus) Set(key, value string) error          { return nil }
+func (m *mockRepositoryForStatus) Get(key string) (string, error)       { return "", fmt.Errorf("not found") }
+func (m *mockRepositoryForStatus) DeleteApp(name string) error          { return nil }
+func (m *mockRepositoryForStatus) AddApp(name string) error             { return nil }
+func (m *mockRepositoryForStatus) GetApp(name string) (*types.AppConfig, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockRepositoryForStatus) GetAll() (map[string]string, error) { return nil, nil }

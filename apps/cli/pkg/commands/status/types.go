@@ -18,6 +18,7 @@ type AppStatus struct {
 	ConfigStatus      bool                `json:"config_valid"`
 	HealthCheckResult string              `json:"health_check"`
 	Performance       *PerformanceMetrics `json:"performance,omitempty"`
+	UninstallInfo     *UninstallInfo      `json:"uninstall_info,omitempty"`
 }
 
 // DependencyStatus represents the status of a dependency
@@ -40,4 +41,15 @@ type PerformanceMetrics struct {
 	MemoryUsage int64   `json:"memory_usage,omitempty"` // Memory usage in bytes
 	ProcessID   int     `json:"process_id,omitempty"`   // Process ID if running
 	Uptime      string  `json:"uptime,omitempty"`       // How long the process has been running
+}
+
+// UninstallInfo represents uninstall-related information for an application
+type UninstallInfo struct {
+	CanUninstall       bool       `json:"can_uninstall"`
+	HasBackup          bool       `json:"has_backup,omitempty"`
+	BackupDate         *time.Time `json:"backup_date,omitempty"`
+	BackupPath         string     `json:"backup_path,omitempty"`
+	OrphanedDependents []string   `json:"orphaned_dependents,omitempty"`
+	RequiredBy         []string   `json:"required_by,omitempty"`
+	UninstallRisks     []string   `json:"uninstall_risks,omitempty"`
 }
