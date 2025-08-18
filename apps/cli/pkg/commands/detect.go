@@ -530,7 +530,7 @@ func formatApplicationsAsYAML(suggestions map[string][]string) string {
 			for _, app := range apps {
 				lines = append(lines, fmt.Sprintf("  - name: %s", app))
 				lines = append(lines, fmt.Sprintf("    description: \"Detected from project analysis (%s priority)\"", priority))
-				lines = append(lines, fmt.Sprintf("    category: development"))
+				lines = append(lines, "    category: development")
 				if priority == "critical" {
 					lines = append(lines, "    default: true")
 				}
