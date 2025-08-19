@@ -50,8 +50,9 @@ var _ = Describe("DNF Installer", func() {
 				Expect(err).ToNot(HaveOccurred())
 				// Verify DNF system validation commands
 				Expect(mockExec.Commands).To(ContainElement("which dnf"))
-				Expect(mockExec.Commands).To(ContainElement("which rpm"))
 				Expect(mockExec.Commands).To(ContainElement("rpm --version"))
+				// Verify package checks
+				Expect(mockExec.Commands).To(ContainElement("rpm -q test-package"))
 				// Verify installation command
 				Expect(mockExec.Commands).To(ContainElement("sudo dnf install -y test-package"))
 			})

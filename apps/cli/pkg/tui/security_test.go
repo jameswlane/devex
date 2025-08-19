@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -287,13 +288,33 @@ func TestSecureString_LargePasswords(t *testing.T) {
 
 // Helper functions
 
+func createTestInstaller(t *testing.T) *StreamingInstaller {
+	t.Helper()
+
+	program := tea.NewProgram(nil)
+	mockRepo := &struct{ types.Repository }{} // Empty mock for security tests
+	ctx := context.Background()
+
+	settings := config.CrossPlatformSettings{
+		HomeDir: "/tmp/test-devex",
+		Verbose: false,
+	}
+
+	return NewStreamingInstaller(program, mockRepo, ctx, settings)
+}
+
 func createTestInstallerWithContext(t *testing.T, ctx context.Context) *StreamingInstaller {
 	t.Helper()
 
 	program := tea.NewProgram(nil)
 	mockRepo := &struct{ types.Repository }{} // Empty mock for security tests
 
-	return NewStreamingInstaller(program, mockRepo, ctx)
+	settings := config.CrossPlatformSettings{
+		HomeDir: "/tmp/test-devex",
+		Verbose: false,
+	}
+
+	return NewStreamingInstaller(program, mockRepo, ctx, settings)
 }
 
 func generateLongString(length int) string {

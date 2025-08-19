@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/mocks"
 	"github.com/jameswlane/devex/pkg/types"
 )
@@ -21,7 +22,11 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 	BeforeEach(func() {
 		mockRepo = mocks.NewMockRepository()
 		ctx, cancel = context.WithCancel(context.Background())
-		installer = NewStreamingInstaller(nil, mockRepo, ctx) // Use constructor to ensure proper initialization
+		settings := config.CrossPlatformSettings{
+			HomeDir: "/tmp/test-devex",
+			Verbose: false,
+		}
+		installer = NewStreamingInstaller(nil, mockRepo, ctx, settings) // Use constructor to ensure proper initialization
 
 		themes = []types.Theme{
 			{Name: "Tokyo Night", ThemeColor: "#1A1B26", ThemeBackground: "dark"},
@@ -48,7 +53,11 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 		})
 
 		It("should handle nil repository gracefully", func() {
-			installerWithoutRepo := NewStreamingInstaller(nil, nil, ctx)
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			installerWithoutRepo := NewStreamingInstaller(nil, nil, ctx, settings)
 
 			err := installerWithoutRepo.handleThemeSelection(ctx, "neovim", themes)
 
@@ -87,7 +96,11 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 		})
 
 		It("should skip when no repository available", func() {
-			installerWithoutRepo := NewStreamingInstaller(nil, nil, ctx)
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			installerWithoutRepo := NewStreamingInstaller(nil, nil, ctx, settings)
 
 			err := installerWithoutRepo.applySelectedTheme(ctx, "neovim", detailedThemes)
 
@@ -117,7 +130,11 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 
 			// Create installer with mock command executor to avoid actual file operations
 			mockExecutor := &mocks.MockCommandExecutor{}
-			installerWithMockExec := NewStreamingInstallerWithExecutor(nil, mockRepo, ctx, mockExecutor)
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			installerWithMockExec := NewStreamingInstallerWithExecutor(nil, mockRepo, ctx, mockExecutor, settings)
 
 			err := installerWithMockExec.applySelectedTheme(ctx, "neovim", detailedThemes)
 
@@ -156,7 +173,11 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 
 		BeforeEach(func() {
 			localCtx, localCancel = context.WithCancel(context.Background())
-			localInstaller = NewStreamingInstaller(nil, nil, localCtx)
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			localInstaller = NewStreamingInstaller(nil, nil, localCtx, settings)
 		})
 
 		AfterEach(func() {
@@ -182,12 +203,16 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 			mockExecutor.FailingCommands = make(map[string]bool)
 
 			// Configure installer with short timeouts
-			config := InstallerConfig{
+			installerConfig := InstallerConfig{
 				InstallationTimeout: 100 * time.Millisecond, // Very short timeout for testing
 			}
 
-			installerWithMock := NewStreamingInstallerWithExecutor(nil, nil, localCtx, mockExecutor)
-			installerWithMock.config = config
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			installerWithMock := NewStreamingInstallerWithExecutor(nil, nil, localCtx, mockExecutor, settings)
+			installerWithMock.config = installerConfig
 
 			// Test that the function correctly handles directory creation logic
 			err := installerWithMock.createDirectoryForFile(localCtx, "/path/to/file.txt")
@@ -241,7 +266,11 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 			mockRepo := mocks.NewMockRepository()
 			mockExecutor := &mocks.MockCommandExecutor{}
 
-			installer := NewStreamingInstallerWithExecutor(nil, mockRepo, localCtx, mockExecutor)
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			installer := NewStreamingInstallerWithExecutor(nil, mockRepo, localCtx, mockExecutor, settings)
 
 			themes := []types.Theme{
 				{
@@ -293,12 +322,16 @@ var _ = Describe("StreamingInstaller Theme Handling", func() {
 			mockRepo := mocks.NewMockRepository()
 			mockExecutor := &mocks.MockCommandExecutor{}
 
-			config := InstallerConfig{
+			installerConfig := InstallerConfig{
 				InstallationTimeout: 5 * time.Second,
 			}
 
-			installer := NewStreamingInstallerWithExecutor(nil, mockRepo, localCtx, mockExecutor)
-			installer.config = config
+			settings := config.CrossPlatformSettings{
+				HomeDir: "/tmp/test-devex",
+				Verbose: false,
+			}
+			installer := NewStreamingInstallerWithExecutor(nil, mockRepo, localCtx, mockExecutor, settings)
+			installer.config = installerConfig
 
 			// For now, just test that the installer can be created without error
 			Expect(installer).ToNot(BeNil())

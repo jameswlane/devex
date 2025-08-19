@@ -146,7 +146,7 @@ func TestStreamingInstaller_Integration(t *testing.T) {
 
 	// Create mock components - use nil program to avoid TUI message sending
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	// Create test apps with safe commands
 	apps := []types.CrossPlatformApp{
@@ -186,7 +186,7 @@ func TestStreamingInstaller_Integration(t *testing.T) {
 func TestStreamingInstaller_CommandValidationIntegration(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	// Test app with dangerous command
 	dangerousApps := []types.CrossPlatformApp{
@@ -217,7 +217,7 @@ func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	// Create app with long-running command
 	apps := []types.CrossPlatformApp{
@@ -265,7 +265,7 @@ func TestStreamingInstaller_RepositoryError(t *testing.T) {
 
 	// Create mock repo that always errors
 	mockRepo := &MockRepository{shouldError: true}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	apps := []types.CrossPlatformApp{
 		{
@@ -288,7 +288,7 @@ func TestStreamingInstaller_RepositoryError(t *testing.T) {
 func TestStreamingInstaller_PrePostInstallCommands(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	apps := []types.CrossPlatformApp{
 		{
@@ -325,7 +325,7 @@ func TestStreamingInstaller_SleepCommand(t *testing.T) {
 	defer cancel()
 
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	apps := []types.CrossPlatformApp{
 		{
@@ -361,7 +361,7 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	apps := []types.CrossPlatformApp{
 		{
@@ -405,7 +405,7 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 func TestStreamingInstaller_MultipleAppsWithErrors(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	apps := []types.CrossPlatformApp{
 		{
@@ -467,7 +467,7 @@ func TestStartInstallation_Integration(t *testing.T) {
 		// Mock the StartInstallation call by creating the components manually
 		model := NewModel(apps)
 		program := tea.NewProgram(model)
-		installer := NewStreamingInstaller(program, mockRepo, ctx)
+		installer := NewStreamingInstaller(program, mockRepo, ctx, getTestSettings())
 
 		// Verify installer was created correctly
 		assert.NotNil(t, installer)
@@ -489,7 +489,7 @@ func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
 			defer wg.Done()
 
 			mockRepo := &MockRepository{}
-			installer := NewStreamingInstaller(nil, mockRepo, ctx)
+			installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 			apps := []types.CrossPlatformApp{
 				{
@@ -518,7 +518,7 @@ func TestStreamingInstaller_ConcurrentInstallations(t *testing.T) {
 func TestStreamingInstaller_LargeNumberOfApps(t *testing.T) {
 	ctx := context.Background()
 	mockRepo := &MockRepository{}
-	installer := NewStreamingInstaller(nil, mockRepo, ctx)
+	installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 
 	// Create many apps
 	const numApps = 50
@@ -573,7 +573,7 @@ func BenchmarkStreamingInstaller_SingleApp(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		mockRepo := &MockRepository{}
-		installer := NewStreamingInstaller(nil, mockRepo, ctx)
+		installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 		_ = installer.InstallApps(context.Background(), apps, settings)
 	}
 }
@@ -598,7 +598,7 @@ func BenchmarkStreamingInstaller_MultipleApps(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		mockRepo := &MockRepository{}
-		installer := NewStreamingInstaller(nil, mockRepo, ctx)
+		installer := NewStreamingInstaller(nil, mockRepo, ctx, getTestSettings())
 		_ = installer.InstallApps(context.Background(), apps, settings)
 	}
 }
