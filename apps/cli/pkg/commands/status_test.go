@@ -251,7 +251,7 @@ var _ = Describe("Status Command", func() {
 			It("should handle database errors", func() {
 				failingRepo := &mocks.FailingMockRepository{}
 				cmd := commands.NewStatusCmd(failingRepo, mockSettings)
-				cmd.SetArgs([]string{"--all"})
+				cmd.SetArgs([]string{"--all", "--no-tui"})
 
 				err := cmd.Execute()
 				Expect(err).To(HaveOccurred())
