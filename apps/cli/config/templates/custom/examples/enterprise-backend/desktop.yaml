@@ -1,0 +1,232 @@
+# Enterprise Backend Custom Template - Desktop Configuration
+# Template Version: 1.0.0
+# Organization: Enterprise
+# Desktop environment (GNOME for enterprise standardization)
+desktop_environment: GNOME
+# GNOME configuration for enterprise development
+gnome:
+  extensions:
+    # Essential productivity extensions
+    - dash-to-dock
+    - user-themes
+    - workspace-indicator
+    - activities-configurator
+    - system-monitor
+    # Enterprise security extensions
+    - screen-lock
+    - privacy-settings
+    - security-center
+    # Development productivity
+    - clipboard-indicator
+    - multi-monitors-add-on
+    - auto-move-windows
+  settings:
+    # Interface settings (enterprise theme)
+    interface:
+      gtk-theme: "Adwaita-dark" # Standard dark theme for reduced eye strain
+      icon-theme: "Adwaita"
+      cursor-theme: "Adwaita"
+      font-name: "Cantarell 11"
+      monospace-font-name: "Source Code Pro 12"
+    # Desktop settings with enterprise security
+    desktop:
+      background-uri: "file:///usr/share/backgrounds/enterprise-wallpaper.png"
+      show-desktop-icons: false # Clean desktop for security
+      lock-screen-timeout: 300 # 5 minutes for security
+    # Privacy and security settings
+    privacy:
+      remember-recent-files: false
+      remember-app-usage: false
+      send-software-usage-stats: false
+      report-technical-problems: false
+    # Enterprise dock settings
+    dash-to-dock:
+      dock-position: "LEFT"
+      dash-max-icon-size: 32
+      show-favorites: true
+      show-running: true
+      show-trash: false
+      show-mounts: true
+    # Terminal preferences (enterprise development)
+    terminal:
+      theme-variant: "dark"
+      use-system-font: false
+      font: "Source Code Pro 11"
+      scrollback-lines: 10000
+      audible-bell: false
+    # Enterprise keybindings
+    keybindings:
+      - name: "Terminal"
+        key: "<Ctrl><Alt>t"
+        command: "gnome-terminal"
+      - name: "File Manager"
+        key: "<Super>e"
+        command: "nautilus"
+      - name: "System Monitor"
+        key: "<Ctrl><Shift><Escape>"
+        command: "gnome-system-monitor"
+      - name: "Lock Screen"
+        key: "<Super>l"
+        command: "gnome-screensaver-command --lock"
+      - name: "Screenshot Tool"
+        key: "<Shift><Super>s"
+        command: "gnome-screenshot --interactive"
+      - name: "Password Manager"
+        key: "<Super>p"
+        command: "keepassxc"
+    # Enterprise window management
+    window-manager:
+      auto-raise: false
+      focus-mode: "click"
+      action-double-click-titlebar: "toggle-maximize"
+      action-middle-click-titlebar: "lower"
+      action-right-click-titlebar: "menu"
+# Enterprise themes (security and productivity focused)
+themes:
+  - name: "Enterprise Dark"
+    type: "gtk"
+    source: "builtin"
+    description: "Corporate dark theme optimized for long development sessions"
+  - name: "Security Blue"
+    type: "gtk"
+    source: "https://github.com/enterprise/security-blue-theme"
+    description: "High-contrast theme for security-focused work"
+  - name: "Corporate Professional"
+    type: "gtk"
+    source: "builtin"
+    description: "Professional light theme for presentations and documentation"
+# Enterprise fonts (development and compliance)
+fonts:
+  # Development fonts
+  - "Source Code Pro" # Primary monospace for coding
+  - "JetBrains Mono" # Alternative monospace with ligatures
+  - "Fira Code" # Monospace with programming ligatures
+  - "Ubuntu Mono" # Ubuntu system monospace
+  # Document fonts for enterprise reporting
+  - "Liberation Sans" # MS-compatible sans serif
+  - "Liberation Serif" # MS-compatible serif
+  - "Liberation Mono" # MS-compatible monospace
+  # International support
+  - "Noto Sans" # Unicode support
+  - "Noto Serif" # Unicode serif
+  - "Noto Color Emoji" # Emoji support
+# Enterprise wallpapers (professional and branded)
+wallpapers:
+  - name: "Enterprise Corporate"
+    source: "builtin"
+    description: "Corporate branded wallpaper with company logo"
+  - name: "Security Abstract"
+    source: "builtin"
+    description: "Abstract pattern representing security and technology"
+  - name: "Development Grid"
+    source: "builtin"
+    description: "Grid pattern optimized for development workflows"
+# Enterprise application defaults
+applications:
+  # Default applications for security
+  web-browser: "firefox-esr" # Firefox ESR for enterprise security
+  file-manager: "nautilus" # GNOME file manager
+  text-editor: "vim" # Vim for consistent enterprise experience
+  terminal: "gnome-terminal" # GNOME terminal
+  # Enterprise security applications
+  password-manager: "keepassxc" # Open source password manager
+  vpn-client: "openvpn" # Enterprise VPN client
+  backup-tool: "deja-dup" # Automated backup solution
+  # Development applications
+  code-editor: "code" # VS Code for enterprise development
+  git-gui: "gitg" # Git GUI tool
+  database-client: "dbeaver" # Universal database client
+  api-client: "insomnia" # API testing client
+# Enterprise security settings
+security:
+  # Screen lock settings
+  screen-lock:
+    automatic-lock: true
+    lock-delay: 300 # 5 minutes
+    show-notifications: false # Hide notifications on lock screen
+  # Privacy settings
+  privacy:
+    disable-camera: false # Allow camera for video calls
+    disable-microphone: false # Allow microphone for calls
+    disable-location: true # Disable location services
+  # Enterprise policies
+  policies:
+    disable-user-switching: true
+    disable-log-out: false
+    force-online-accounts: false
+    disable-printing-features: false
+# Enterprise accessibility (compliance)
+accessibility:
+  # Visual accessibility
+  high-contrast: false
+  large-text: false
+  cursor-size: 24
+  # Keyboard accessibility
+  sticky-keys: false
+  slow-keys: false
+  bounce-keys: false
+  # Mouse accessibility
+  click-assist: false
+  hover-click: false
+  # Screen reader support
+  screen-reader: false # Enable if needed for compliance
+# Enterprise productivity settings
+productivity:
+  # Workspace configuration
+  workspaces:
+    number: 4
+    dynamic: true
+    only-on-primary: false
+  # Window management
+  windows:
+    titlebar-buttons: "close,minimize,maximize"
+    focus-new-windows: "smart"
+    auto-hide-decorations: false
+  # Notification management
+  notifications:
+    show-banners: true
+    show-in-lock-screen: false
+    show-details-in-lock-screen: false
+# Enterprise development environment
+development:
+  # Code editor settings
+  editor:
+    font-family: "Source Code Pro"
+    font-size: 12
+    line-numbers: true
+    word-wrap: false
+    indent-size: 4
+  # Terminal settings
+  terminal:
+    font-family: "Source Code Pro"
+    font-size: 11
+    transparency: 0.05
+    unlimited-scrollback: false
+    scrollback-lines: 10000
+  # File manager settings
+  file-manager:
+    show-hidden-files: true
+    sort-directories-first: true
+    default-view: "list"
+# Enterprise monitoring (system health)
+monitoring:
+  # System resource monitoring
+  system-monitor:
+    show-processes: true
+    show-resources: true
+    show-file-systems: true
+    update-interval: 2000
+  # Network monitoring
+  network:
+    monitor-traffic: true
+    show-connection-details: true
+# Enterprise compliance display settings
+compliance:
+  # Display notices and warnings
+  security-notices: true
+  compliance-reminders: true
+  policy-updates: true
+  # Audit trail for user actions
+  audit-user-actions: true
+  log-application-usage: true
+  track-file-access: true

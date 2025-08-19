@@ -64,6 +64,7 @@ Examples:
 	cmd.AddCommand(newTemplateInfoCmd(settings))
 	cmd.AddCommand(newTemplateStatusCmd(settings))
 	cmd.AddCommand(newTemplateInitCmd(settings))
+	cmd.AddCommand(NewTemplateCustomCmd(repo, settings))
 
 	return cmd
 }
