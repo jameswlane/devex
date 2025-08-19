@@ -19,22 +19,17 @@ import (
 
 // Configuration constants
 const (
-	// DefaultPackageUpdateTimeout is the default timeout for package manager updates
-	DefaultPackageUpdateTimeout = 6 * time.Hour
-	// DefaultYAYBuildTimeout is the default timeout for building YAY from source
-	DefaultYAYBuildTimeout = 10 * time.Minute
-	// DefaultSystemValidationCacheDuration is how long to cache system validation results
-	DefaultSystemValidationCacheDuration = 1 * time.Hour
-	// DefaultCacheMaxAge is the maximum age before cache entries are considered stale
-	DefaultCacheMaxAge = 24 * time.Hour
-	// DefaultValidationTimeout is the timeout for background system validation
-	DefaultValidationTimeout = 30 * time.Second
-	// DefaultForceUpdateCacheDuration is the cache duration when force updating
-	DefaultForceUpdateCacheDuration = 1 * time.Second
-	// DefaultStandardCacheDuration is the standard cache duration for package updates
-	DefaultStandardCacheDuration = 24 * time.Hour
-	// DefaultServiceStartupDelay is the delay after starting a service
-	DefaultServiceStartupDelay = 2 * time.Second
+	// Timeouts
+	DefaultPackageUpdateTimeout = 6 * time.Hour    // Default timeout for package manager updates
+	DefaultYAYBuildTimeout      = 10 * time.Minute // Default timeout for building YAY from source
+	DefaultValidationTimeout    = 30 * time.Second // Timeout for background system validation
+	DefaultServiceStartupDelay  = 2 * time.Second  // Delay after starting a service
+
+	// Cache durations
+	DefaultSystemValidationCacheDuration = 1 * time.Hour   // How long to cache system validation results
+	DefaultCacheMaxAge                   = 24 * time.Hour  // Maximum age before cache entries are stale
+	DefaultForceUpdateCacheDuration      = 1 * time.Second // Cache duration when force updating
+	DefaultStandardCacheDuration         = 24 * time.Hour  // Standard cache duration for package updates
 )
 
 // Security validation patterns

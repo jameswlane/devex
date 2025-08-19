@@ -308,6 +308,17 @@ func (hm *HelpManager) loadTopics() error {
 			Description: "Common issues and their solutions",
 		},
 		{
+			ID:          "recover",
+			Title:       "devex recover",
+			Category:    "Commands",
+			Keywords:    []string{"recover", "recovery", "error", "fix", "troubleshoot"},
+			RelatedTo:   []string{"undo", "config", "backup"},
+			FilePath:    "docs/commands/recover.md",
+			Context:     string(ContextCommand),
+			Priority:    8,
+			Description: "Error recovery and troubleshooting assistance",
+		},
+		{
 			ID:          "faq",
 			Title:       "Frequently Asked Questions",
 			Category:    "Help",
