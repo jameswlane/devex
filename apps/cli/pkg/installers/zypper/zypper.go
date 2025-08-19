@@ -89,7 +89,7 @@ func (z *ZypperInstaller) Install(command string, repo types.Repository) error {
 	return nil
 }
 
-// Uninstall removes packages using zypper
+// Uninstall removes packages using zypper with dependency checking
 func (z *ZypperInstaller) Uninstall(command string, repo types.Repository) error {
 	log.Debug("Zypper Installer: Starting uninstallation", "command", command)
 
@@ -110,8 +110,16 @@ func (z *ZypperInstaller) Uninstall(command string, repo types.Repository) error
 		return nil
 	}
 
-	// Run zypper remove command
-	uninstallCommand := fmt.Sprintf("sudo zypper remove --non-interactive %s", command)
+	// Check for dependencies
+	dependents, err := z.GetDependents(command)
+	if err != nil {
+		log.Warn("Failed to check package dependents", "error", err)
+	} else if len(dependents) > 0 {
+		log.Warn("Package has dependents that may be affected", "package", command, "dependents", dependents)
+	}
+
+	// Run zypper remove command with --clean-deps to remove unneeded dependencies
+	uninstallCommand := fmt.Sprintf("sudo zypper remove --non-interactive --clean-deps %s", command)
 	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
 		log.Error("Failed to uninstall package via zypper", err, "command", command)
 		return fmt.Errorf("failed to uninstall package via zypper: %w", err)
@@ -740,4 +748,160 @@ func isValidURL(urlStr string) bool {
 	}
 
 	return true
+}
+
+// GetDependents returns packages that depend on the given package
+func (z *ZypperInstaller) GetDependents(packageName string) ([]string, error) {
+	log.Debug("Checking package dependents", "package", packageName)
+
+	// Use zypper to check what requires this package
+	command := fmt.Sprintf("zypper search --requires %s", packageName)
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// If error, try rpm approach
+		return z.getDependentsViaRPM(packageName)
+	}
+
+	// Parse the output to find dependent packages
+	dependents := []string{}
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		// Skip header lines and empty lines
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Loading") || strings.HasPrefix(line, "S |") || strings.Contains(line, "---") {
+			continue
+		}
+
+		// Parse package name from zypper output format
+		parts := strings.Split(line, "|")
+		if len(parts) >= 2 {
+			pkgName := strings.TrimSpace(parts[1])
+			if pkgName != "" && pkgName != packageName {
+				dependents = append(dependents, pkgName)
+			}
+		}
+	}
+
+	return dependents, nil
+}
+
+// getDependentsViaRPM uses rpm to check package dependencies (fallback method)
+func (z *ZypperInstaller) getDependentsViaRPM(packageName string) ([]string, error) {
+	// Use rpm to check what requires this package
+	command := fmt.Sprintf("rpm -q --whatrequires %s", packageName)
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// Check if it's just "no package requires" message
+		if strings.Contains(output, "no package requires") {
+			return []string{}, nil
+		}
+		return nil, fmt.Errorf("failed to check dependents: %w", err)
+	}
+
+	// Parse the output to get package names
+	dependents := []string{}
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.Contains(line, "no package requires") {
+			// Extract just the package name without version
+			parts := strings.Split(line, "-")
+			if len(parts) >= 2 {
+				// Reconstruct package name (may contain hyphens)
+				pkgName := strings.Join(parts[:len(parts)-2], "-")
+				if pkgName != "" {
+					dependents = append(dependents, pkgName)
+				}
+			}
+		}
+	}
+
+	return dependents, nil
+}
+
+// GetOrphans returns orphaned packages (installed as dependencies but no longer needed)
+func (z *ZypperInstaller) GetOrphans() ([]string, error) {
+	log.Debug("Finding orphaned packages")
+
+	// Use zypper to find unneeded packages
+	command := "zypper packages --unneeded"
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// Try alternative approach
+		return z.getOrphansViaRPM()
+	}
+
+	// Parse the output to get package names
+	orphans := []string{}
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Skip header lines
+		if line == "" || strings.HasPrefix(line, "Loading") || strings.Contains(line, "---") || strings.HasPrefix(line, "S |") {
+			continue
+		}
+
+		// Parse package name from zypper output
+		parts := strings.Split(line, "|")
+		if len(parts) >= 3 {
+			pkgName := strings.TrimSpace(parts[2])
+			if pkgName != "" {
+				orphans = append(orphans, pkgName)
+			}
+		}
+	}
+
+	log.Debug("Found orphaned packages", "count", len(orphans))
+	return orphans, nil
+}
+
+// getOrphansViaRPM uses rpm to find leaf packages (fallback method)
+func (z *ZypperInstaller) getOrphansViaRPM() ([]string, error) {
+	// Use package-cleanup if available (from yum-utils)
+	command := "package-cleanup --leaves --quiet"
+	output, err := utils.CommandExec.RunShellCommand(command)
+	if err != nil {
+		// package-cleanup not available, return empty list
+		return []string{}, nil
+	}
+
+	// Parse the output
+	orphans := []string{}
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			orphans = append(orphans, line)
+		}
+	}
+
+	return orphans, nil
+}
+
+// RemoveOrphans removes orphaned packages
+func (z *ZypperInstaller) RemoveOrphans() error {
+	log.Debug("Removing orphaned packages")
+
+	orphans, err := z.GetOrphans()
+	if err != nil {
+		return fmt.Errorf("failed to get orphans: %w", err)
+	}
+
+	if len(orphans) == 0 {
+		log.Info("No orphaned packages to remove")
+		return nil
+	}
+
+	log.Info("Removing orphaned packages", "packages", orphans)
+
+	// Remove orphans using zypper
+	orphansStr := strings.Join(orphans, " ")
+	command := fmt.Sprintf("sudo zypper remove --non-interactive --clean-deps %s", orphansStr)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to remove orphans", err, "output", output)
+		return fmt.Errorf("failed to remove orphans: %w", err)
+	}
+
+	log.Info("Successfully removed orphaned packages", "count", len(orphans))
+	return nil
 }

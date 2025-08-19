@@ -1,0 +1,63 @@
+# Full-Stack Template Applications Configuration
+# Template Version: 1.2.0
+applications:
+  # Core Development Tools
+  - name: git
+    category: development
+    description: Distributed version control system
+    default: true
+    install_method: apt
+    install_command: git
+  - name: curl
+    category: development
+    description: Command line tool for transferring data
+    default: true
+    install_method: apt
+    install_command: curl
+  - name: wget
+    category: development
+    description: Network downloader
+    default: true
+    install_method: apt
+    install_command: wget
+  # Code Editors
+  - name: vscode
+    category: development
+    description: Visual Studio Code editor
+    default: true
+    install_method: snap
+    install_command: code
+  # Containerization
+  - name: docker
+    category: container
+    description: Container platform
+    default: true
+    install_method: apt
+    install_command: docker.io
+    dependencies: []
+  # Database Systems
+  - name: postgresql
+    category: database
+    description: PostgreSQL database server
+    default: true
+    install_method: apt
+    install_command: postgresql postgresql-contrib
+  - name: redis
+    category: database
+    description: In-memory data structure store
+    default: true
+    install_method: apt
+    install_command: redis-server
+  # Web Browsers
+  - name: chrome
+    category: browser
+    description: Google Chrome web browser
+    default: true
+    install_method: snap
+    install_command: chromium
+  - name: firefox-developer
+    category: browser
+    description: Firefox Developer Edition
+    default: true
+    install_method: snap
+    install_command: firefox

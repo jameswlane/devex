@@ -197,6 +197,51 @@ SQLite database with migration system:
 
 ## Development Guidelines
 
+### ⚠️ CRITICAL: Pre-Commit and Pre-Push Verification
+
+**🚨 NEVER SKIP PRE-COMMIT OR PRE-PUSH HOOKS 🚨**
+
+This repository has mandatory pre-commit and pre-push hooks that ensure code quality and prevent CI/CD pipeline failures. **ALWAYS** respect these verification steps:
+
+**Pre-Commit Hook Requirements:**
+- ✅ All code must pass `golangci-lint` with zero issues
+- ✅ Code formatting must be consistent (go-fmt, biome)
+- ✅ No large files or security issues
+- ✅ Import organization must be correct (go-imports)
+- ✅ End-of-file formatting must be proper
+
+**Pre-Push Hook Requirements:**
+- ✅ All tests must pass before pushing
+- ✅ Build verification must succeed
+- ✅ Security scans must pass
+
+**NEVER USE:**
+- `git commit --no-verify` 
+- `git push --no-verify`
+- `--no-hooks` flags
+- Any method to bypass verification
+
+**Why This Matters:**
+- Skipping hooks **WILL BREAK** the CI/CD pipeline
+- Failed builds waste time and resources
+- Inconsistent code causes merge conflicts
+- Security vulnerabilities may be introduced
+- Team productivity suffers from preventable failures
+
+**If Hooks Fail:**
+1. **Fix the underlying issues** - don't bypass them
+2. Run `task lint:fix` to auto-fix linting issues
+3. Run tests locally: `task test` or `task test:ginkgo`
+4. Ensure all files are properly formatted
+5. Address any security or import issues
+6. **Only commit after all checks pass**
+
+**Emergency Exceptions:**
+- If absolutely necessary, get explicit approval from team lead
+- Document the reason in the commit message
+- Create immediate follow-up issue to fix the problems
+- **This should be extremely rare**
+
 ### Coding Standards & Quality
 
 **Security Requirements**:

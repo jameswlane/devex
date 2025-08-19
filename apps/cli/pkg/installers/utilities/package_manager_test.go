@@ -195,6 +195,9 @@ var _ = Describe("PackageManagerCache", func() {
 			var wg sync.WaitGroup
 			errors := make(chan error, numGoroutines)
 
+			// Ensure a fresh cache for this test by clearing any existing data
+			utilities.ResetPackageManagerCache()
+
 			for i, pm := range packageManagers {
 				wg.Add(1)
 				go func(packageManager string, index int) {
@@ -214,8 +217,9 @@ var _ = Describe("PackageManagerCache", func() {
 				Expect(err).NotTo(HaveOccurred())
 			}
 
-			// Verify that package manager commands were executed
-			Expect(len(mockExec.Commands)).To(BeNumerically(">=", len(packageManagers)))
+			// Verify that all package manager commands were executed
+			// Each package manager should run exactly once since cache is fresh
+			Expect(len(mockExec.Commands)).To(Equal(len(packageManagers)))
 
 			// Verify specific commands were called
 			Expect(mockExec.Commands).To(ContainElement("sudo apt-get update"))
