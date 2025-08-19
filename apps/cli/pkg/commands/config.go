@@ -17,6 +17,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/undo"
 	"github.com/jameswlane/devex/pkg/version"
@@ -1531,6 +1532,14 @@ Examples:
   # Export only specific configs
   devex config export --include applications,environment`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check for --no-tui flag
+			noTUI, _ := cmd.Flags().GetBool("no-tui")
+
+			if !noTUI {
+				return runConfigExportWithProgress(settings, format, output, include, exclude, bundle, compress)
+			}
+
+			// Fallback to original implementation
 			return exportConfiguration(settings, format, output, include, exclude, bundle, compress)
 		},
 	}
@@ -1541,6 +1550,7 @@ Examples:
 	cmd.Flags().StringSliceVar(&exclude, "exclude", []string{}, "Config types to exclude")
 	cmd.Flags().BoolVar(&bundle, "bundle", false, "Create a bundled archive")
 	cmd.Flags().BoolVar(&compress, "compress", false, "Compress the output (with bundle)")
+	cmd.Flags().Bool("no-tui", false, "Disable TUI progress display")
 
 	return cmd
 }
@@ -2179,6 +2189,14 @@ Examples:
   # Create compressed backup with tags
   devex config backup create --compress --tags "stable,pre-update"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check for --no-tui flag
+			noTUI, _ := cmd.Flags().GetBool("no-tui")
+
+			if !noTUI {
+				return runConfigBackupWithProgress(settings, description, tags, compress)
+			}
+
+			// Fallback to original implementation
 			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
 			manager := backup.NewBackupManager(baseDir)
 
@@ -2212,6 +2230,7 @@ Examples:
 	cmd.Flags().StringVarP(&description, "description", "d", "", "Backup description")
 	cmd.Flags().StringSliceVarP(&tags, "tags", "t", []string{}, "Tags for the backup")
 	cmd.Flags().BoolVarP(&compress, "compress", "c", true, "Compress the backup")
+	cmd.Flags().Bool("no-tui", false, "Disable TUI progress display")
 
 	return cmd
 }
@@ -3301,4 +3320,24 @@ Shows available operations, recent activity, and system health.`,
 	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
 
 	return cmd
+}
+
+// runConfigBackupWithProgress runs config backup with TUI progress tracking
+func runConfigBackupWithProgress(settings config.CrossPlatformSettings, description string, tags []string, compress bool) error {
+	// Create progress runner
+	runner := tui.NewProgressRunner(context.Background(), settings)
+	defer runner.Quit()
+
+	// Start config backup operation with progress
+	return runner.RunConfigOperation("backup", description, tags, compress)
+}
+
+// runConfigExportWithProgress runs config export with TUI progress tracking
+func runConfigExportWithProgress(settings config.CrossPlatformSettings, format, output string, include, exclude []string, bundle, compress bool) error {
+	// Create progress runner
+	runner := tui.NewProgressRunner(context.Background(), settings)
+	defer runner.Quit()
+
+	// Start config export operation with progress
+	return runner.RunConfigOperation("export", format, output, include, exclude, bundle, compress)
 }

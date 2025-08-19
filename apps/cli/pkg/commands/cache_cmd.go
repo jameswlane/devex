@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/cache"
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -266,6 +268,7 @@ func newCacheRemoveCmd(repo types.Repository, settings config.CrossPlatformSetti
 // newCacheMetricsCmd creates the cache metrics command
 func newCacheMetricsCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	var limit int
+	var noTUI bool
 
 	cmd := &cobra.Command{
 		Use:   "metrics [application]",
@@ -273,64 +276,23 @@ func newCacheMetricsCmd(repo types.Repository, settings config.CrossPlatformSett
 		Long:  "Display performance metrics including installation times, download sizes, and success rates.",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheManager, err := cache.NewCacheManager(settings)
-			if err != nil {
-				return fmt.Errorf("failed to initialize cache manager: %w", err)
-			}
-
 			var applicationName string
 			if len(args) > 0 {
 				applicationName = args[0]
 			}
 
-			metrics, err := cacheManager.GetPerformanceMetrics(applicationName, limit)
-			if err != nil {
-				return fmt.Errorf("failed to get performance metrics: %w", err)
+			// Use TUI progress unless explicitly disabled
+			if !noTUI {
+				return runCacheMetricsWithProgress(settings, applicationName, limit)
 			}
 
-			if len(metrics) == 0 {
-				if applicationName != "" {
-					fmt.Printf("No performance metrics found for application '%s'.\n", applicationName)
-				} else {
-					fmt.Println("No performance metrics found.")
-				}
-				return nil
-			}
-
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "APPLICATION\tMETHOD\tDOWNLOAD\tINSTALL\tTOTAL\tSIZE\tSUCCESS\tCACHE\tTIMESTAMP")
-			fmt.Fprintln(w, "-----------\t------\t--------\t-------\t-----\t----\t-------\t-----\t---------")
-
-			for _, metric := range metrics {
-				successStr := "✓"
-				if !metric.Success {
-					successStr = "✗"
-				}
-
-				cacheStr := "Miss"
-				if metric.CacheHit {
-					cacheStr = "Hit"
-				}
-
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					metric.ApplicationName,
-					metric.InstallMethod,
-					metric.DownloadTime.Truncate(time.Millisecond),
-					metric.InstallTime.Truncate(time.Millisecond),
-					metric.TotalTime.Truncate(time.Millisecond),
-					formatBytes(metric.PackageSize),
-					successStr,
-					cacheStr,
-					metric.Timestamp.Format("2006-01-02 15:04"),
-				)
-			}
-			_ = w.Flush()
-
-			return nil
+			// Fallback to original implementation for --no-tui
+			return runCacheMetricsDirect(settings, applicationName, limit)
 		},
 	}
 
 	cmd.Flags().IntVarP(&limit, "limit", "l", 20, "Limit number of metrics to display")
+	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable TUI progress display")
 
 	return cmd
 }
@@ -340,89 +302,27 @@ func newCacheCleanupCmd(repo types.Repository, settings config.CrossPlatformSett
 	var maxSize string
 	var maxAge string
 	var dryRun bool
+	var noTUI bool
 
 	cmd := &cobra.Command{
 		Use:   "cleanup",
 		Short: "Clean up expired and least used cache entries",
 		Long:  "Remove expired cache entries and least recently used items to free up space.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cacheManager, err := cache.NewCacheManager(settings)
-			if err != nil {
-				return fmt.Errorf("failed to initialize cache manager: %w", err)
+			// Use TUI progress unless explicitly disabled
+			if !noTUI {
+				return runCacheCleanupWithProgress(settings, maxSize, maxAge, dryRun)
 			}
 
-			// Use default config and override with flags
-			config := cache.DefaultCacheConfig
-
-			if maxSize != "" {
-				sizeBytes, err := parseSize(maxSize)
-				if err != nil {
-					return fmt.Errorf("invalid max-size format: %w", err)
-				}
-				config.MaxSize = sizeBytes
-			}
-
-			if maxAge != "" {
-				ageDuration, err := time.ParseDuration(maxAge)
-				if err != nil {
-					return fmt.Errorf("invalid max-age format: %w", err)
-				}
-				config.MaxAge = ageDuration
-			}
-
-			if dryRun {
-				fmt.Println("Dry run mode - showing what would be cleaned up:")
-
-				// Show current stats
-				stats, err := cacheManager.GetCacheStats()
-				if err != nil {
-					return fmt.Errorf("failed to get cache stats: %w", err)
-				}
-
-				fmt.Printf("Current cache size: %s\n", formatBytes(stats.TotalSize))
-				fmt.Printf("Max size limit: %s\n", formatBytes(config.MaxSize))
-				fmt.Printf("Max age limit: %s\n", config.MaxAge)
-
-				if stats.TotalSize > config.MaxSize {
-					fmt.Printf("Cache is %s over limit\n", formatBytes(stats.TotalSize-config.MaxSize))
-				} else {
-					fmt.Println("Cache is within size limits")
-				}
-
-				return nil
-			}
-
-			// Get stats before cleanup
-			statsBefore, err := cacheManager.GetCacheStats()
-			if err != nil {
-				return fmt.Errorf("failed to get initial cache stats: %w", err)
-			}
-
-			if err := cacheManager.CleanupExpiredEntries(config); err != nil {
-				return fmt.Errorf("failed to cleanup cache: %w", err)
-			}
-
-			// Get stats after cleanup
-			statsAfter, err := cacheManager.GetCacheStats()
-			if err != nil {
-				return fmt.Errorf("failed to get final cache stats: %w", err)
-			}
-
-			entriesRemoved := statsBefore.TotalEntries - statsAfter.TotalEntries
-			spaceFreed := statsBefore.TotalSize - statsAfter.TotalSize
-
-			fmt.Printf("Cache cleanup completed:\n")
-			fmt.Printf("- Entries removed: %d\n", entriesRemoved)
-			fmt.Printf("- Space freed: %s\n", formatBytes(spaceFreed))
-			fmt.Printf("- Current size: %s\n", formatBytes(statsAfter.TotalSize))
-
-			return nil
+			// Fallback to original implementation for --no-tui
+			return runCacheCleanupDirect(settings, maxSize, maxAge, dryRun)
 		},
 	}
 
 	cmd.Flags().StringVar(&maxSize, "max-size", "", "Maximum cache size (e.g., 1GB, 500MB)")
 	cmd.Flags().StringVar(&maxAge, "max-age", "", "Maximum age for cache entries (e.g., 30d, 7d, 24h)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be cleaned up without actually doing it")
+	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable TUI progress display")
 
 	return cmd
 }
@@ -492,4 +392,155 @@ func parseSize(sizeStr string) (int64, error) {
 	}
 
 	return int64(num * float64(multiplier)), nil
+}
+
+// runCacheCleanupWithProgress runs cache cleanup with TUI progress tracking
+func runCacheCleanupWithProgress(settings config.CrossPlatformSettings, maxSize, maxAge string, dryRun bool) error {
+	// Create progress runner
+	runner := tui.NewProgressRunner(context.Background(), settings)
+	defer runner.Quit()
+
+	// Start cache cleanup operation with progress
+	if dryRun {
+		return runner.RunCacheOperation("analyze", maxSize, maxAge, dryRun)
+	}
+	return runner.RunCacheOperation("cleanup", maxSize, maxAge, dryRun)
+}
+
+// runCacheCleanupDirect runs cache cleanup without TUI (original implementation)
+func runCacheCleanupDirect(settings config.CrossPlatformSettings, maxSize, maxAge string, dryRun bool) error {
+	cacheManager, err := cache.NewCacheManager(settings)
+	if err != nil {
+		return fmt.Errorf("failed to initialize cache manager: %w", err)
+	}
+
+	// Use default config and override with flags
+	config := cache.DefaultCacheConfig
+
+	if maxSize != "" {
+		sizeBytes, err := parseSize(maxSize)
+		if err != nil {
+			return fmt.Errorf("invalid max-size format: %w", err)
+		}
+		config.MaxSize = sizeBytes
+	}
+
+	if maxAge != "" {
+		ageDuration, err := time.ParseDuration(maxAge)
+		if err != nil {
+			return fmt.Errorf("invalid max-age format: %w", err)
+		}
+		config.MaxAge = ageDuration
+	}
+
+	if dryRun {
+		fmt.Println("Dry run mode - showing what would be cleaned up:")
+
+		// Show current stats
+		stats, err := cacheManager.GetCacheStats()
+		if err != nil {
+			return fmt.Errorf("failed to get cache stats: %w", err)
+		}
+
+		fmt.Printf("Current cache size: %s\n", formatBytes(stats.TotalSize))
+		fmt.Printf("Max size limit: %s\n", formatBytes(config.MaxSize))
+		fmt.Printf("Max age limit: %s\n", config.MaxAge)
+
+		if stats.TotalSize > config.MaxSize {
+			fmt.Printf("Cache is %s over limit\n", formatBytes(stats.TotalSize-config.MaxSize))
+		} else {
+			fmt.Println("Cache is within size limits")
+		}
+
+		return nil
+	}
+
+	// Get stats before cleanup
+	statsBefore, err := cacheManager.GetCacheStats()
+	if err != nil {
+		return fmt.Errorf("failed to get initial cache stats: %w", err)
+	}
+
+	if err := cacheManager.CleanupExpiredEntries(config); err != nil {
+		return fmt.Errorf("failed to cleanup cache: %w", err)
+	}
+
+	// Get stats after cleanup
+	statsAfter, err := cacheManager.GetCacheStats()
+	if err != nil {
+		return fmt.Errorf("failed to get final cache stats: %w", err)
+	}
+
+	entriesRemoved := statsBefore.TotalEntries - statsAfter.TotalEntries
+	spaceFreed := statsBefore.TotalSize - statsAfter.TotalSize
+
+	fmt.Printf("Cache cleanup completed:\n")
+	fmt.Printf("- Entries removed: %d\n", entriesRemoved)
+	fmt.Printf("- Space freed: %s\n", formatBytes(spaceFreed))
+	fmt.Printf("- Current size: %s\n", formatBytes(statsAfter.TotalSize))
+
+	return nil
+}
+
+// runCacheMetricsWithProgress runs cache metrics analysis with TUI progress tracking
+func runCacheMetricsWithProgress(settings config.CrossPlatformSettings, applicationName string, limit int) error {
+	// Create progress runner
+	runner := tui.NewProgressRunner(context.Background(), settings)
+	defer runner.Quit()
+
+	// Start cache analysis operation with progress
+	return runner.RunCacheOperation("analyze", applicationName, limit)
+}
+
+// runCacheMetricsDirect runs cache metrics analysis without TUI (original implementation)
+func runCacheMetricsDirect(settings config.CrossPlatformSettings, applicationName string, limit int) error {
+	cacheManager, err := cache.NewCacheManager(settings)
+	if err != nil {
+		return fmt.Errorf("failed to initialize cache manager: %w", err)
+	}
+
+	metrics, err := cacheManager.GetPerformanceMetrics(applicationName, limit)
+	if err != nil {
+		return fmt.Errorf("failed to get performance metrics: %w", err)
+	}
+
+	if len(metrics) == 0 {
+		if applicationName != "" {
+			fmt.Printf("No performance metrics found for application '%s'.\n", applicationName)
+		} else {
+			fmt.Println("No performance metrics found.")
+		}
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "APPLICATION\tMETHOD\tDOWNLOAD\tINSTALL\tTOTAL\tSIZE\tSUCCESS\tCACHE\tTIMESTAMP")
+	fmt.Fprintln(w, "-----------\t------\t--------\t-------\t-----\t----\t-------\t-----\t---------")
+
+	for _, metric := range metrics {
+		successStr := "✓"
+		if !metric.Success {
+			successStr = "✗"
+		}
+
+		cacheStr := "Miss"
+		if metric.CacheHit {
+			cacheStr = "Hit"
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			metric.ApplicationName,
+			metric.InstallMethod,
+			metric.DownloadTime.Truncate(time.Millisecond),
+			metric.InstallTime.Truncate(time.Millisecond),
+			metric.TotalTime.Truncate(time.Millisecond),
+			formatBytes(metric.PackageSize),
+			successStr,
+			cacheStr,
+			metric.Timestamp.Format("2006-01-02 15:04"),
+		)
+	}
+	_ = w.Flush()
+
+	return nil
 }

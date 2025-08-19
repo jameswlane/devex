@@ -25,6 +25,7 @@ import (
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/performance"
 	"github.com/jameswlane/devex/pkg/platform"
+	progresspkg "github.com/jameswlane/devex/pkg/progress"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -224,6 +225,7 @@ type StreamingInstaller struct {
 	cancel              context.CancelFunc
 	config              InstallerConfig                  // Configuration settings
 	performanceAnalyzer *performance.PerformanceAnalyzer // Performance analysis and warnings
+	progressManager     *progresspkg.ProgressManager     // Optional progress manager for enhanced tracking
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -551,6 +553,16 @@ func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Reposito
 		config:              DefaultInstallerConfig(),
 		performanceAnalyzer: analyzer,
 	}
+}
+
+// SetProgressManager sets the progress manager for enhanced progress tracking
+func (si *StreamingInstaller) SetProgressManager(manager *progresspkg.ProgressManager) {
+	si.progressManager = manager
+}
+
+// GetProgressManager returns the current progress manager
+func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager {
+	return si.progressManager
 }
 
 // InstallApps installs multiple applications sequentially with streaming output and context cancellation.

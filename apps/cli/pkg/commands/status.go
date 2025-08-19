@@ -17,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/platform"
+	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -29,6 +30,7 @@ func NewStatusCmd(repo types.Repository, settings config.CrossPlatformSettings) 
 		format   string
 		verbose  bool
 		fix      bool
+		noTUI    bool
 	)
 
 	cmd := &cobra.Command{
@@ -52,6 +54,12 @@ Examples:
   # Get JSON output for automation
   devex status --app docker --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Use TUI progress unless explicitly disabled
+			if !noTUI {
+				return runStatusWithProgress(repo, settings, apps, all, category, format, verbose, fix)
+			}
+
+			// Fallback to original implementation for --no-tui
 			return runStatus(repo, settings, apps, all, category, format, verbose, fix)
 		},
 	}
@@ -62,6 +70,7 @@ Examples:
 	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed status information")
 	cmd.Flags().BoolVar(&fix, "fix", false, "Attempt to fix common issues")
+	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable TUI progress display")
 
 	return cmd
 }
@@ -713,3 +722,30 @@ func (m *mockRepositoryForStatus) GetApp(name string) (*types.AppConfig, error) 
 	return nil, fmt.Errorf("not found")
 }
 func (m *mockRepositoryForStatus) GetAll() (map[string]string, error) { return nil, nil }
+
+// runStatusWithProgress runs status checks with TUI progress tracking
+func runStatusWithProgress(repo types.Repository, settings config.CrossPlatformSettings, apps []string, all bool, category string, format string, verbose bool, fix bool) error {
+	runner := tui.NewProgressRunner(context.Background(), settings)
+	defer runner.Quit()
+
+	// Build check list for progress tracking
+	var checkNames []string
+	switch {
+	case all:
+		checkNames = append(checkNames, "all-apps")
+	case category != "":
+		checkNames = append(checkNames, "category-"+category)
+	default:
+		for _, app := range apps {
+			names := strings.Split(app, ",")
+			for _, name := range names {
+				name = strings.TrimSpace(name)
+				if name != "" {
+					checkNames = append(checkNames, name)
+				}
+			}
+		}
+	}
+
+	return runner.RunStatusCheck(checkNames)
+}

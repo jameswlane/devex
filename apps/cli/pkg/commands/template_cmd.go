@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/templates"
+	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -183,6 +185,19 @@ This command safely updates templates by creating backups and undo points
 before making changes. Updates preserve user customizations and provide
 rollback capabilities.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check for --no-tui flag
+			noTUI, _ := cmd.Flags().GetBool("no-tui")
+
+			var templateID string
+			if len(args) > 0 {
+				templateID = args[0]
+			}
+
+			if !noTUI {
+				return runTemplateUpdateWithProgress(settings, templateID, all, force, format)
+			}
+
+			// Fallback to original implementation
 			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
@@ -210,7 +225,6 @@ rollback capabilities.`,
 			}
 
 			// Update specific template
-			templateID := args[0]
 			result, err := tvm.UpdateTemplate(templateID, force)
 			if err != nil {
 				return fmt.Errorf("failed to update template %s: %w", templateID, err)
@@ -223,6 +237,7 @@ rollback capabilities.`,
 	cmd.Flags().BoolVar(&all, "all", false, "Update all templates")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force update even if no update is available")
 	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, yaml)")
+	cmd.Flags().Bool("no-tui", false, "Disable TUI progress display")
 
 	return cmd
 }
@@ -449,6 +464,14 @@ func displayUpdateCheck(updates []string, format string, tvm *templates.Template
 	}
 
 	return nil
+}
+
+// runTemplateUpdateWithProgress runs template update with TUI progress tracking
+func runTemplateUpdateWithProgress(settings config.CrossPlatformSettings, templateID string, all, force bool, format string) error {
+	runner := tui.NewProgressRunner(context.Background(), settings)
+	defer runner.Quit()
+
+	return runner.RunTemplateOperation("update", templateID, all, force, format)
 }
 
 func displayUpdateResults(results []*templates.TemplateUpdateResult, format string) error {
