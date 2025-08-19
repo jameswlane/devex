@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/help"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/undo"
@@ -199,6 +200,9 @@ Examples:
 	cmd.Flags().BoolVar(&export, "export", false, "Export current configuration")
 	cmd.Flags().StringVar(&importFile, "import", "", "Import configuration from file")
 	cmd.Flags().BoolVarP(&useTemplates, "templates", "t", false, "Use the new template system (recommended)")
+
+	// Add contextual help integration
+	AddContextualHelp(cmd, help.ContextGettingStarted, "init")
 
 	return cmd
 }

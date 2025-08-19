@@ -17,6 +17,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/help"
 	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/undo"
@@ -91,6 +92,9 @@ Examples:
 	cmd.AddCommand(newConfigBackupCmd(settings))
 	cmd.AddCommand(newConfigVersionCmd(settings))
 	cmd.AddCommand(newConfigUndoCmd(settings))
+
+	// Add contextual help integration
+	AddContextualHelp(cmd, help.ContextConfiguration, "config")
 
 	return cmd
 }
