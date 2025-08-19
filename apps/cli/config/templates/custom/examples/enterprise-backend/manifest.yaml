@@ -1,0 +1,46 @@
+id: enterprise-backend
+name: Enterprise Backend Development
+version: 1.0.0
+description: Enterprise-grade backend development stack with security, monitoring, and corporate compliance
+author: DevEx Team
+organization: enterprise
+homepage: https://devex.sh/templates/enterprise-backend
+repository: https://github.com/jameswlane/devex-templates
+license: MIT
+min_devex_version: 1.0.0
+categories:
+  - enterprise
+  - backend
+  - security
+  - compliance
+tags:
+  - golang
+  - postgresql
+  - redis
+  - kubernetes
+  - security
+  - monitoring
+  - vault
+  - ldap
+files:
+  - applications.yaml
+  - environment.yaml
+  - system.yaml
+  - desktop.yaml
+dependencies:
+  - security-baseline
+metadata:
+  stack_type: enterprise-backend
+  primary_languages: go,java
+  includes_database: "true"
+  includes_containers: "true"
+  includes_security: "true"
+  includes_monitoring: "true"
+  compliance_level: enterprise
+  api_key_required: "true"
+created_at: 2025-08-18T12:00:00Z
+updated_at: 2025-08-18T12:00:00Z
+source:
+  type: local
+  path: /data/GitHub/jameswlane/devex/apps/cli/config/templates/custom/examples/enterprise-backend
+checksum: abc123def456789

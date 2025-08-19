@@ -1,0 +1,66 @@
+# Full-Stack Template Desktop Configuration
+# Template Version: 1.2.0
+# Desktop environment settings
+desktop_environment: GNOME
+# GNOME specific configuration
+gnome:
+  extensions:
+    - dash-to-dock
+    - blur-my-shell
+    - user-themes
+    - workspace-indicator
+    - activities-configurator
+    - clipboard-indicator
+    - system-monitor
+  settings:
+    # Interface settings
+    interface:
+      gtk-theme: "Yaru-purple-dark"
+      icon-theme: "Yaru-purple"
+      cursor-theme: "Yaru"
+      font-name: "Ubuntu 11"
+      monospace-font-name: "Ubuntu Mono 13"
+    # Desktop settings
+    desktop:
+      background-uri: "file:///usr/share/backgrounds/warty-final-ubuntu.png"
+      show-desktop-icons: false
+    # Dock settings (Dash to Dock)
+    dash-to-dock:
+      dock-position: "BOTTOM"
+      dash-max-icon-size: 48
+      show-favorites: true
+      show-running: true
+      show-trash: false
+    # Terminal preferences
+    terminal:
+      theme-variant: "dark"
+      use-system-font: false
+      font: "Ubuntu Mono 12"
+    # Keybindings
+    keybindings:
+      - name: "Terminal"
+        key: "<Ctrl><Alt>t"
+        command: "gnome-terminal"
+      - name: "File Manager"
+        key: "<Super>e"
+        command: "nautilus"
+# Theme configuration
+themes:
+  - name: "Tokyo Night"
+    type: "gtk"
+    source: "https://github.com/Fausto-Korpsvart/Tokyo-Night-GTK-Theme"
+  - name: "Dracula"
+    type: "gtk"
+    source: "https://github.com/dracula/gtk"
+# Fonts to install
+fonts:
+  - "JetBrains Mono"
+  - "Fira Code"
+  - "Ubuntu Mono"
+  - "Source Code Pro"
+# Wallpapers
+wallpapers:
+  - name: "Tokyo Night"
+    source: "https://github.com/tokyo-night/tokyo-night-wallpapers"
+  - name: "Abstract Dev"
+    source: "builtin"

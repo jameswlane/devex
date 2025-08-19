@@ -11,7 +11,6 @@ import (
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/datastore"
 	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/errors"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
 	"github.com/jameswlane/devex/pkg/types"
@@ -103,11 +102,7 @@ func isDebugMode() bool {
 func handleError(context string, err error) {
 	if err != nil {
 		log.Error("Error occurred", err, "context", context)
-		if errors.Is(err, errors.ErrInvalidInput) {
-			fmt.Println("Please check the input and try again.")
-		} else {
-			fmt.Println("An unexpected error occurred. Please try again.")
-		}
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		Exit(1)
 	}
 }

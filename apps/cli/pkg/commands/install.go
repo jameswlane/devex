@@ -5,6 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/help"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/tui"
 	"github.com/jameswlane/devex/pkg/types"
@@ -47,6 +48,9 @@ Configuration files are located in ~/.local/share/devex/config/:
 			runInstall(repo, settings)
 		},
 	}
+
+	// Add contextual help integration
+	AddContextualHelp(cmd, help.ContextCommand, "install")
 
 	return cmd
 }

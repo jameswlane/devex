@@ -23,7 +23,9 @@ import (
 	"github.com/jameswlane/devex/pkg/installers/apt"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/performance"
 	"github.com/jameswlane/devex/pkg/platform"
+	progresspkg "github.com/jameswlane/devex/pkg/progress"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -214,14 +216,16 @@ func createSecureTempFile(dir, pattern string) (*os.File, error) {
 
 // StreamingInstaller handles installation with real-time output and interaction
 type StreamingInstaller struct {
-	program   *tea.Program
-	repo      types.Repository
-	executor  CommandExecutor // Pluggable command executor for better testability
-	stdinMux  sync.Mutex      // Protects stdin access from race conditions
-	repoMutex sync.RWMutex    // Protects repository access from race conditions
-	ctx       context.Context
-	cancel    context.CancelFunc
-	config    InstallerConfig // Configuration settings
+	program             *tea.Program
+	repo                types.Repository
+	executor            CommandExecutor // Pluggable command executor for better testability
+	stdinMux            sync.Mutex      // Protects stdin access from race conditions
+	repoMutex           sync.RWMutex    // Protects repository access from race conditions
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	config              InstallerConfig                  // Configuration settings
+	performanceAnalyzer *performance.PerformanceAnalyzer // Performance analysis and warnings
+	progressManager     *progresspkg.ProgressManager     // Optional progress manager for enhanced tracking
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -507,29 +511,58 @@ func (ce *DefaultCommandExecutor) validateCommandWhitelist(command string) error
 }
 
 // NewStreamingInstaller creates a new streaming installer with context cancellation
-func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx context.Context) *StreamingInstaller {
+func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx context.Context, settings config.CrossPlatformSettings) *StreamingInstaller {
 	instCtx, cancel := context.WithCancel(ctx)
+
+	// Initialize performance analyzer
+	analyzer, err := performance.NewPerformanceAnalyzer(settings)
+	if err != nil {
+		log.Warn("Failed to initialize performance analyzer", "error", err)
+		// Continue without performance analysis rather than failing
+		analyzer = nil
+	}
+
 	return &StreamingInstaller{
-		program:  program,
-		repo:     repo,
-		executor: NewDefaultCommandExecutor(), // Use default command executor
-		ctx:      instCtx,
-		cancel:   cancel,
-		config:   DefaultInstallerConfig(),
+		program:             program,
+		repo:                repo,
+		executor:            NewDefaultCommandExecutor(), // Use default command executor
+		ctx:                 instCtx,
+		cancel:              cancel,
+		config:              DefaultInstallerConfig(),
+		performanceAnalyzer: analyzer,
 	}
 }
 
 // NewStreamingInstallerWithExecutor creates a streaming installer with a custom command executor for testing
-func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Repository, ctx context.Context, executor CommandExecutor) *StreamingInstaller {
+func NewStreamingInstallerWithExecutor(program *tea.Program, repo types.Repository, ctx context.Context, executor CommandExecutor, settings config.CrossPlatformSettings) *StreamingInstaller {
 	instCtx, cancel := context.WithCancel(ctx)
-	return &StreamingInstaller{
-		program:  program,
-		repo:     repo,
-		executor: executor,
-		ctx:      instCtx,
-		cancel:   cancel,
-		config:   DefaultInstallerConfig(),
+
+	// Initialize performance analyzer
+	analyzer, err := performance.NewPerformanceAnalyzer(settings)
+	if err != nil {
+		log.Warn("Failed to initialize performance analyzer", "error", err)
+		analyzer = nil
 	}
+
+	return &StreamingInstaller{
+		program:             program,
+		repo:                repo,
+		executor:            executor,
+		ctx:                 instCtx,
+		cancel:              cancel,
+		config:              DefaultInstallerConfig(),
+		performanceAnalyzer: analyzer,
+	}
+}
+
+// SetProgressManager sets the progress manager for enhanced progress tracking
+func (si *StreamingInstaller) SetProgressManager(manager *progresspkg.ProgressManager) {
+	si.progressManager = manager
+}
+
+// GetProgressManager returns the current progress manager
+func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager {
+	return si.progressManager
 }
 
 // InstallApps installs multiple applications sequentially with streaming output and context cancellation.
@@ -592,12 +625,14 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 // post-install commands, and database registration. All command execution is validated for security.
 //
 // The installation process includes:
+//   - Performance analysis and warnings (if enabled)
 //   - Platform-specific configuration resolution
 //   - App validation using the app's Validate() method
 //   - Pre-install command execution (if configured)
 //   - Main installation command execution via the configured install method
 //   - Post-install command execution (if configured)
 //   - Database registration of the successfully installed app
+//   - Post-installation performance tracking
 //
 // Parameters:
 //   - app: CrossPlatformApp configuration containing installation instructions
@@ -608,6 +643,8 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	si.sendLog("INFO", fmt.Sprintf("Starting installation of %s", app.Name))
 
+	startTime := time.Now()
+
 	// Get platform-specific configuration
 	osConfig := app.GetOSConfig()
 	if osConfig.InstallMethod == "" {
@@ -617,6 +654,40 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	// Validate app
 	if err := app.Validate(); err != nil {
 		return fmt.Errorf("app validation failed: %w", err)
+	}
+
+	// Perform performance analysis and show warnings
+	if si.performanceAnalyzer != nil {
+		si.sendLog("INFO", fmt.Sprintf("Analyzing performance characteristics for %s...", app.Name))
+		warnings := si.performanceAnalyzer.AnalyzePreInstall(app.Name, app)
+
+		// Display warnings to user
+		for _, warning := range warnings {
+			formattedWarning := performance.FormatWarning(warning)
+
+			// Send warning with appropriate level
+			switch warning.Level {
+			case performance.WarningLevelCritical:
+				si.sendLog("CRITICAL", formattedWarning)
+			case performance.WarningLevelWarning:
+				si.sendLog("WARN", formattedWarning)
+			case performance.WarningLevelCaution:
+				si.sendLog("CAUTION", formattedWarning)
+			case performance.WarningLevelInfo:
+				si.sendLog("INFO", formattedWarning)
+			}
+
+			// Add a brief pause for critical warnings to ensure visibility
+			if warning.Level == performance.WarningLevelCritical {
+				time.Sleep(2 * time.Second)
+			}
+		}
+
+		if len(warnings) > 0 {
+			si.sendLog("INFO", fmt.Sprintf("Performance analysis complete. Found %d warning(s) for %s", len(warnings), app.Name))
+		} else {
+			si.sendLog("INFO", fmt.Sprintf("Performance analysis complete. No issues detected for %s", app.Name))
+		}
 	}
 
 	// Handle theme selection if app has themes
@@ -631,18 +702,21 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	if len(osConfig.PreInstall) > 0 {
 		si.sendLog("INFO", "Executing pre-install commands...")
 		if err := si.executeCommands(ctx, osConfig.PreInstall); err != nil {
+			si.recordFailedInstallation(app.Name, startTime, err)
 			return fmt.Errorf("pre-install failed: %w", err)
 		}
 	}
 
 	// Check and install platform dependencies before main installation
 	if err := si.checkAndInstallDependencies(ctx, osConfig); err != nil {
+		si.recordFailedInstallation(app.Name, startTime, err)
 		return fmt.Errorf("dependency checking failed: %w", err)
 	}
 
 	// Execute main installation command
 	si.sendLog("INFO", fmt.Sprintf("Installing %s using %s...", app.Name, osConfig.InstallMethod))
 	if err := si.executeInstallCommand(ctx, app, &osConfig); err != nil {
+		si.recordFailedInstallation(app.Name, startTime, err)
 		return fmt.Errorf("installation failed: %w", err)
 	}
 
@@ -650,6 +724,7 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	if len(osConfig.PostInstall) > 0 {
 		si.sendLog("INFO", "Executing post-install commands...")
 		if err := si.executeCommands(ctx, osConfig.PostInstall); err != nil {
+			si.recordFailedInstallation(app.Name, startTime, err)
 			return fmt.Errorf("post-install failed: %w", err)
 		}
 	}
@@ -688,8 +763,33 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 			app.Name, si.getInstallerType()))
 	}
 
+	// Record post-installation performance metrics
+	if si.performanceAnalyzer != nil {
+		// Estimate download size (we don't have exact size without more complex tracking)
+		estimatedSize := int64(50 * 1024 * 1024) // Default 50MB, could be improved with actual tracking
+
+		// Record metrics with success status
+		if err := si.performanceAnalyzer.AnalyzePostInstall(app.Name, startTime, true, estimatedSize); err != nil {
+			si.sendLog("WARN", fmt.Sprintf("Failed to record performance metrics for %s: %v", app.Name, err))
+			// Don't fail installation if metrics recording fails
+		} else {
+			installTime := time.Since(startTime)
+			si.sendLog("INFO", fmt.Sprintf("Performance metrics recorded for %s (install time: %v)", app.Name, installTime))
+		}
+	}
+
 	si.sendLog("INFO", fmt.Sprintf("Successfully installed %s", app.Name))
 	return nil
+}
+
+// recordFailedInstallation records performance metrics for failed installations
+func (si *StreamingInstaller) recordFailedInstallation(appName string, startTime time.Time, err error) {
+	if si.performanceAnalyzer != nil {
+		// Record failed installation metrics
+		if recordErr := si.performanceAnalyzer.AnalyzePostInstall(appName, startTime, false, 0); recordErr != nil {
+			si.sendLog("WARN", fmt.Sprintf("Failed to record failure metrics for %s: %v", appName, recordErr))
+		}
+	}
 }
 
 // executeInstallCommand executes the main installation command
@@ -1336,7 +1436,7 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 	}()
 
 	// Create streaming installer with context
-	installer := NewStreamingInstaller(p, repo, ctx)
+	installer := NewStreamingInstaller(p, repo, ctx, settings)
 	defer installer.cancel() // Ensure cleanup
 
 	// Start installation in background with context cancellation

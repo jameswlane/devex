@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -14,7 +15,7 @@ var _ = Describe("Command Validation", func() {
 	var installer *StreamingInstaller
 
 	BeforeEach(func() {
-		installer = createTestInstaller(GinkgoT())
+		installer = createTestInstallerGinkgo()
 	})
 
 	Describe("Allowed Commands", func() {
@@ -174,7 +175,7 @@ var _ = Describe("Command Validation", func() {
 })
 
 // Helper functions
-func createTestInstaller(t GinkgoTInterface) *StreamingInstaller {
+func createTestInstallerGinkgo() *StreamingInstaller {
 	// Create a minimal tea program for testing
 	program := tea.NewProgram(nil)
 
@@ -184,5 +185,11 @@ func createTestInstaller(t GinkgoTInterface) *StreamingInstaller {
 	// Create context
 	ctx := context.Background()
 
-	return NewStreamingInstaller(program, mockRepo, ctx)
+	// Create test settings
+	settings := config.CrossPlatformSettings{
+		HomeDir: "/tmp/test-devex",
+		Verbose: false,
+	}
+
+	return NewStreamingInstaller(program, mockRepo, ctx, settings)
 }

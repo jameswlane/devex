@@ -1,0 +1,132 @@
+# Enterprise Backend Custom Template - Environment
+# Template Version: 1.0.0
+# Organization: Enterprise
+# Default shell with security enhancements
+shell: bash # Bash for enterprise compliance and scripting
+# Default editor for enterprise development
+editor: vim # Vim for security and remote access
+# Programming languages and runtime management
+languages:
+  - name: go
+    version: "1.21.5"
+    manager: mise
+    default: true
+    config:
+      # Enterprise Go configuration
+      GOPROXY: "https://proxy.company.com,direct"
+      GOPRIVATE: "company.com,*.company.com"
+      GOSUMDB: "sum.company.com"
+  - name: java
+    version: "17.0.8"
+    manager: mise
+    default: true
+    config:
+      # Enterprise Java configuration
+      enterprise_jvm_opts: true
+      security_policy_enabled: true
+  - name: node
+    version: "18.18.2"
+    manager: mise
+    default: false
+    config:
+      # Limited Node.js for tooling only
+      NPM_REGISTRY: "https://npm.company.com"
+  - name: python
+    version: "3.11.6"
+    manager: mise
+    default: false
+    config:
+      # Python for automation scripts
+      PIP_INDEX_URL: "https://pypi.company.com/simple"
+# Enterprise environment variables
+environment_variables:
+  # Security
+  VAULT_ADDR: "https://vault.company.com"
+  VAULT_NAMESPACE: "development"
+  # Database connections (will use Vault for actual secrets)
+  DATABASE_HOST: "postgres.company.com"
+  REDIS_HOST: "redis.company.com"
+  # Monitoring
+  PROMETHEUS_URL: "https://prometheus.company.com"
+  GRAFANA_URL: "https://grafana.company.com"
+  JAEGER_ENDPOINT: "https://jaeger.company.com"
+  # Enterprise services
+  LDAP_SERVER: "ldap://ldap.company.com"
+  SMTP_SERVER: "smtp.company.com"
+  # Security policies
+  SECURITY_POLICY_ENABLED: "true"
+  AUDIT_LOGGING_ENABLED: "true"
+  # Development
+  GO_PRIVATE: "company.com,*.company.com"
+  MAVEN_SETTINGS: "/etc/maven/settings.xml"
+# Enterprise shell aliases
+aliases:
+  # Security-focused aliases
+  ll: ls -la --color=auto
+  la: ls -A --color=auto
+  l: ls -CF --color=auto
+  # Git with signing
+  gcs: git commit -S -m # Signed commits
+  gps: git push --signed # Signed pushes
+  # Docker with security
+  dps: docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+  di: docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+  # Kubernetes
+  k: kubectl
+  kns: kubectl config set-context --current --namespace
+  kctx: kubectl config use-context
+  # Security tools
+  scan: clamdscan
+  audit: sudo aureport
+  # Enterprise shortcuts
+  vault-login: vault auth -method=ldap username=$USER
+  scan-secrets: git secrets --scan
+  # Monitoring
+  logs: journalctl -f
+  perf: htop
+  # Development
+  build: make clean && make build
+  test: make test
+  lint: make lint
+# Enterprise path additions
+path_additions:
+  - $HOME/.local/bin
+  - /opt/vault/bin
+  - /opt/sonar-scanner/bin
+  - /opt/enterprise-tools/bin
+  - $HOME/go/bin
+  - /usr/local/go/bin
+# Enterprise shell configuration
+shell_config:
+  # Bash history with security
+  HISTSIZE: 10000
+  HISTFILESIZE: 20000
+  HISTCONTROL: ignoreboth:erasedups
+  HISTTIMEFORMAT: '%F %T '
+  # Security settings
+  vi_mode: true # Vi mode for security consistency
+  umask: '0027' # Secure file permissions by default
+  # Enterprise prompt with security context
+  PS1_SECURITY_CONTEXT: true
+  PROMPT_COMMAND: 'history -a; echo "$(date): $(whoami): $(pwd): $BASH_COMMAND" >> ~/.audit_log'
+# Enterprise compliance settings
+compliance:
+  audit_logging: true
+  password_policy: strict
+  session_timeout: 1800 # 30 minutes
+  failed_login_attempts: 3
+  password_expiry_days: 90
+# Security policies
+security:
+  require_2fa: true
+  vault_integration: true
+  ldap_authentication: true
+  certificate_based_auth: true
+  network_security_scanning: true
+# Development workflow
+workflow:
+  pre_commit_hooks: true
+  code_scanning: true
+  security_scanning: true
+  license_compliance: true
+  vulnerability_scanning: true

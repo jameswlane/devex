@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/mocks"
 )
 
@@ -36,6 +37,14 @@ func (m *MockCommandExecutorForStreaming) GetCommands() []string {
 	return m.commands
 }
 
+// getTestSettings returns default settings for testing
+func getTestSettings() config.CrossPlatformSettings {
+	return config.CrossPlatformSettings{
+		HomeDir: "/tmp/test-devex",
+		Verbose: false,
+	}
+}
+
 var _ = Describe("StreamingInstaller Command Execution", func() {
 	var mockRepo *mocks.MockRepository
 	var mockExecutor *MockCommandExecutorForStreaming
@@ -49,7 +58,7 @@ var _ = Describe("StreamingInstaller Command Execution", func() {
 		ctx, cancel = context.WithCancel(context.Background())
 
 		// Create installer with custom executor
-		installer = NewStreamingInstallerWithExecutor(nil, mockRepo, ctx, mockExecutor)
+		installer = NewStreamingInstallerWithExecutor(nil, mockRepo, ctx, mockExecutor, getTestSettings())
 		// Override the installation timeout for faster tests
 		installer.config.InstallationTimeout = 5 * time.Second
 	})
