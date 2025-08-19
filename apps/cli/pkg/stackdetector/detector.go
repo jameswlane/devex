@@ -151,10 +151,13 @@ func (sd *StackDetector) DetectStack() ([]TechnologyStack, error) {
 		}
 	}
 
-	// Sort by confidence (highest first)
+	// Sort by confidence using simple bubble sort (highest first)
+	// Note: Using bubble sort for simplicity since stack count is typically small (<20)
+	// For larger datasets, consider using sort.Slice with custom comparator
 	for i := 0; i < len(detectedStacks); i++ {
 		for j := i + 1; j < len(detectedStacks); j++ {
 			if detectedStacks[j].Confidence > detectedStacks[i].Confidence {
+				// Swap stacks to maintain descending confidence order
 				detectedStacks[i], detectedStacks[j] = detectedStacks[j], detectedStacks[i]
 			}
 		}
@@ -176,7 +179,11 @@ func (sd *StackDetector) scanDirectory() (map[string][]byte, error) {
 }
 
 // walkDirectory recursively walks the directory tree
+// Uses depth-first traversal with configurable maximum depth to prevent
+// performance issues in deeply nested projects. Maintains a file map
+// for efficient content-based pattern matching.
 func (sd *StackDetector) walkDirectory(dir string, depth int, fileMap map[string][]byte) error {
+	// Depth limiting prevents exponential time complexity in deep directory trees
 	if depth > sd.maxDepth {
 		return nil
 	}
@@ -191,20 +198,24 @@ func (sd *StackDetector) walkDirectory(dir string, depth int, fileMap map[string
 		relPath, _ := filepath.Rel(sd.workingDir, path)
 
 		if entry.IsDir() {
-			// Skip excluded directories
+			// Skip excluded directories (node_modules, .git, etc.) to improve performance
+			// and avoid scanning irrelevant build artifacts or version control data
 			if sd.isExcludedDir(entry.Name()) {
 				continue
 			}
-			// Recursively scan subdirectories
+			// Recursively scan subdirectories with incremented depth counter
 			if err := sd.walkDirectory(path, depth+1, fileMap); err != nil {
-				// Log error but continue scanning other directories
+				// Continue scanning other directories even if one fails (resilient traversal)
 				continue
 			}
 		} else if entry.Type().IsRegular() {
-			// Only read small files to avoid memory issues
+			// File filtering: read regular files, skip hidden files unless they're important
+			// (like .gitignore, .nvmrc, etc.) for technology detection
 			if entry.Name() != "" && !strings.HasPrefix(entry.Name(), ".") || sd.isImportantFile(entry.Name()) {
+				// Memory protection: only read files under 1MB to prevent OOM on large binaries
 				if info, err := entry.Info(); err == nil && info.Size() < 1024*1024 { // Max 1MB
 					if data, err := os.ReadFile(path); err == nil {
+						// Store file content in map using relative path as key for pattern matching
 						fileMap[relPath] = data
 					}
 				}
@@ -226,20 +237,25 @@ func (sd *StackDetector) isExcludedDir(name string) bool {
 }
 
 // isImportantFile checks if a file is important for detection (even if it starts with .)
+// This function implements a whitelist approach for dotfiles that contain technology indicators
 func (sd *StackDetector) isImportantFile(name string) bool {
+	// Explicit list of configuration files that indicate specific technologies
+	// These files are critical for accurate stack detection despite being hidden
 	importantFiles := []string{
 		".gitignore", ".gitattributes", ".dockerignore", ".env", ".env.example",
 		".nvmrc", ".node-version", ".python-version", ".ruby-version", ".go-version",
 		".babelrc", ".eslintrc", ".prettierrc", ".editorconfig", ".browserslistrc",
 	}
 
+	// O(n) linear search is acceptable here since list is small (<20 items)
 	for _, important := range importantFiles {
 		if name == important {
 			return true
 		}
 	}
 
-	// Also include dotfiles with extensions
+	// Include dotfiles with extensions (e.g., .eslintrc.json, .prettierrc.yml)
+	// Pattern: starts with dot, contains another dot, longer than 1 char
 	if strings.HasPrefix(name, ".") && strings.Contains(name, ".") && len(name) > 1 {
 		return true
 	}
@@ -302,7 +318,10 @@ func (sd *StackDetector) applyRule(rule DetectionRule, fileMap map[string][]byte
 		return nil
 	}
 
-	// Calculate average confidence
+	// Calculate average confidence across all evidence pieces
+	// This normalizes confidence scores regardless of evidence count,
+	// preventing technologies with many weak indicators from scoring higher
+	// than those with fewer strong indicators
 	avgConfidence := totalConfidence / float64(evidenceCount)
 
 	// Generate suggestions
@@ -350,7 +369,9 @@ func (sd *StackDetector) matchFilePattern(pattern FilePattern, fileMap map[strin
 	return false
 }
 
-// matchContentPattern checks if content patterns match
+// matchContentPattern performs regex-based content analysis across filtered files
+// This is the most computationally expensive operation in stack detection,
+// using compiled regex patterns to scan file contents for technology indicators
 func (sd *StackDetector) matchContentPattern(pattern ContentPattern, fileMap map[string][]byte) []struct {
 	Path        string
 	Description string
@@ -370,8 +391,12 @@ func (sd *StackDetector) matchContentPattern(pattern ContentPattern, fileMap map
 		return matches
 	}
 
+	// Dual-phase matching: first filter files by path regex, then scan content
+	// This optimization reduces regex operations on file content (expensive)
+	// by pre-filtering based on file paths (cheap)
 	for path, content := range fileMap {
 		if fileRegex.MatchString(path) && contentRegex.Match(content) {
+			// Create match record with descriptive context for debugging
 			matches = append(matches, struct {
 				Path        string
 				Description string

@@ -76,7 +76,7 @@ func (bm *BackupManager) CreateBackup(options BackupOptions) (*BackupMetadata, e
 	configDir := filepath.Join(bm.baseDir, "config")
 	files, err := bm.collectFiles(configDir, options.Include, options.Exclude)
 	if err != nil {
-		return nil, fmt.Errorf("failed to collect files: %w", err)
+		return nil, fmt.Errorf("failed to collect files from %s (include: %v, exclude: %v): %w", configDir, options.Include, options.Exclude, err)
 	}
 
 	var totalSize int64
@@ -126,9 +126,9 @@ func (bm *BackupManager) CreateBackup(options BackupOptions) (*BackupMetadata, e
 
 	if err := bm.saveMetadata(backupDir, metadata); err != nil {
 		if removeErr := os.RemoveAll(backupDir); removeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to clean up backup directory: %v\n", removeErr)
+			fmt.Fprintf(os.Stderr, "Warning: failed to clean up backup directory %s: %v\n", backupDir, removeErr)
 		}
-		return nil, fmt.Errorf("failed to save metadata: %w", err)
+		return nil, fmt.Errorf("failed to save metadata to %s for backup %s: %w", backupDir, backupID, err)
 	}
 
 	if err := bm.updateGlobalMetadata(metadata); err != nil {
@@ -145,12 +145,12 @@ func (bm *BackupManager) CreateBackup(options BackupOptions) (*BackupMetadata, e
 func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error {
 	backupDir := filepath.Join(bm.backupsDir, backupID)
 	if _, err := os.Stat(backupDir); os.IsNotExist(err) {
-		return fmt.Errorf("backup %s not found", backupID)
+		return fmt.Errorf("backup %s not found in directory %s", backupID, bm.backupsDir)
 	}
 
 	_, err := bm.loadMetadata(backupDir)
 	if err != nil {
-		return fmt.Errorf("failed to load backup metadata: %w", err)
+		return fmt.Errorf("failed to load backup metadata for %s from %s: %w", backupID, backupDir, err)
 	}
 
 	if targetDir == "" {
@@ -163,7 +163,7 @@ func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error 
 		Tags:        []string{"auto", "pre-restore"},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create pre-restore backup: %w", err)
+		return fmt.Errorf("failed to create pre-restore backup before restoring %s to %s: %w", backupID, targetDir, err)
 	}
 
 	compressedPath := filepath.Join(backupDir, "config.tar.gz")
@@ -235,11 +235,11 @@ func (bm *BackupManager) GetBackup(backupID string) (*BackupMetadata, error) {
 func (bm *BackupManager) DeleteBackup(backupID string) error {
 	backupDir := filepath.Join(bm.backupsDir, backupID)
 	if _, err := os.Stat(backupDir); os.IsNotExist(err) {
-		return fmt.Errorf("backup %s not found", backupID)
+		return fmt.Errorf("backup %s not found in directory %s", backupID, bm.backupsDir)
 	}
 
 	if err := os.RemoveAll(backupDir); err != nil {
-		return fmt.Errorf("failed to delete backup: %w", err)
+		return fmt.Errorf("failed to delete backup %s from %s: %w", backupID, backupDir, err)
 	}
 
 	return bm.removeFromGlobalMetadata(backupID)
