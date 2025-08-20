@@ -86,7 +86,7 @@ Here's the full configuration file for web development:
           install_command: node@lts
           priority: 20
           post_install:
-            - shell: "npm install -g npm@latest"
+            - shell: "npm install -g npm@10.4.0"  # Pin npm version
             - shell: "npm install -g pnpm yarn"
             
         # Package Managers
@@ -97,13 +97,13 @@ Here's the full configuration file for web development:
           dependencies: ["node"]
           linux:
             install_method: npm
-            install_command: "pnpm@latest"
+            install_command: "pnpm@8.14.1"  # Pin pnpm version
           macos:
             install_method: brew
             install_command: pnpm
           windows:
             install_method: npm
-            install_command: "pnpm@latest"
+            install_command: "pnpm@8.14.1"  # Pin pnpm version
             
         # Code Editors
         - name: vscode
@@ -295,7 +295,7 @@ Here's the full configuration file for web development:
         description: "Fast all-in-one JavaScript runtime"
         category: "Programming Languages"
         install_method: mise
-        install_command: bun@latest
+        install_command: bun@1.0.25     # Pin bun version
         default: false
         dependencies: ["mise"]
         
@@ -303,7 +303,7 @@ Here's the full configuration file for web development:
         description: "Modern runtime for JavaScript and TypeScript"
         category: "Programming Languages"
         install_method: mise
-        install_command: deno@latest
+        install_command: deno@1.40.2    # Pin deno version
         default: false
         dependencies: ["mise"]
     

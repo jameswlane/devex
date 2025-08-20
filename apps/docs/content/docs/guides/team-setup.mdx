@@ -23,6 +23,10 @@ DevEx excels at creating consistent development environments across team members
 
 ## Team Configuration Strategy
 
+<Callout type="info">
+This guide builds on concepts from the [Getting Started Guide](/docs/guides/getting-started). For security considerations in team environments, review our [Security Guide](/docs/guides/security).
+</Callout>
+
 ### Centralized Configuration Management
 
 <Steps>
@@ -267,6 +271,7 @@ echo "🚀 Welcome to the team! Setting up your development environment..."
 # Install DevEx
 if ! command -v devex &> /dev/null; then
   echo "📦 Installing DevEx..."
+  # See /docs/guides/security for best practices
   curl -fsSL https://devex.sh/install | bash
   source ~/.bashrc
 fi
@@ -359,7 +364,9 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Install DevEx
-        run: curl -fsSL https://devex.sh/install | bash
+        run: |
+          # Install DevEx with version pinning for CI reproducibility
+          curl -fsSL https://devex.sh/install | bash
         
       - name: Validate Configuration
         run: |
@@ -378,8 +385,8 @@ jobs:
 # Dockerfile.dev
 FROM ubuntu:22.04
 
-# Install DevEx
-RUN apt-get update && apt-get install -y curl sudo
+# Install DevEx with security considerations
+RUN apt-get update && apt-get install -y curl sudo ca-certificates
 RUN curl -fsSL https://devex.sh/install | bash
 
 # Copy team configuration

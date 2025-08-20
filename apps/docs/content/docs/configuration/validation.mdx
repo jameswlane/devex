@@ -603,6 +603,7 @@ jobs:
       
       - name: Install DevEx
         run: |
+          # Review security guide before installation
           wget -qO- https://devex.sh/install | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           

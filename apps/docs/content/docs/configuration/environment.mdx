@@ -67,13 +67,13 @@ DevEx uses [mise](https://mise.jdx.dev/) for managing programming language versi
     ```yaml
     programming_languages:
       - name: Python
-        install_command: 'python@latest'  # Latest stable
+        install_command: 'python@3.11.7'  # Pinned stable version
         
       - name: Go
-        install_command: 'go@latest'      # Latest version
+        install_command: 'go@1.21.6'      # Pinned stable version
         
       - name: Rust
-        install_command: 'rust@latest'    # Latest release
+        install_command: 'rust@1.75.0'    # Pinned stable version
     ```
   </Tab>
   
@@ -270,6 +270,13 @@ DevEx manages programming fonts and system fonts through multiple installation m
 </Tabs>
 
 ### Recommended Programming Fonts
+
+<Callout type="tip">
+**Version Pinning for Fonts**: For production or team environments, consider pinning font URLs to specific releases instead of using "latest" for better reproducibility:
+```
+url: 'https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/CascadiaMono.zip'
+```
+</Callout>
 
 ```yaml
 fonts:

@@ -347,7 +347,7 @@ While waiting for native Windows support, consider these alternatives:
 # Install WSL2 with Ubuntu
 wsl --install -d Ubuntu-22.04
 
-# Run DevEx inside WSL2
+# Run DevEx inside WSL2 (review security guide first)
 curl -fsSL https://devex.sh/install | bash
 ```
 
@@ -360,6 +360,7 @@ curl -fsSL https://devex.sh/install | bash
 ```dockerfile
 # Use DevEx in a container
 FROM ubuntu:22.04
+# Install DevEx with security considerations
 RUN curl -fsSL https://devex.sh/install | bash
 ```
 

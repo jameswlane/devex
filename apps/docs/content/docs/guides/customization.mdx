@@ -115,7 +115,7 @@ applications:
         - name: "prepare"
           commands:
             - shell: "mkdir -p ~/.local/share/custom-stack"
-            - shell: "curl -fsSL https://example.com/setup.sh | bash"
+            - shell: "curl -fsSL https://example.com/setup.sh | bash"  # Always review scripts first
             
         - name: "languages"
           parallel: true

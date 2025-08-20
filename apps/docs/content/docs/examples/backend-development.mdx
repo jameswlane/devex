@@ -260,7 +260,7 @@ This example provides a comprehensive backend development environment supporting
         shell_updates:
           - "export NODE_OPTIONS='--max-old-space-size=4096'"
         post_install:
-          - shell: "npm install -g npm@latest"
+          - shell: "npm install -g npm@10.4.0"  # Pin npm version for stability
           - shell: "npm install -g pnpm yarn"
           - shell: "npm install -g nodemon pm2 forever"
           - shell: "npm install -g @nestjs/cli express-generator"
@@ -281,7 +281,7 @@ This example provides a comprehensive backend development environment supporting
         description: "Go programming language"
         category: "Programming Languages"
         install_method: mise
-        install_command: go@latest
+        install_command: go@1.21.6     # Pin Go version for stability
         default: true
         shell_updates:
           - "export GOPATH=$HOME/go"
@@ -295,7 +295,7 @@ This example provides a comprehensive backend development environment supporting
         description: "Rust programming language"
         category: "Programming Languages"
         install_method: mise
-        install_command: rust@latest
+        install_command: rust@1.75.0   # Pin Rust version for stability
         default: false
         post_install:
           - shell: "rustup component add clippy rustfmt"
@@ -524,7 +524,7 @@ This example provides a comprehensive backend development environment supporting
     programming_languages:
       - name: go
         install_method: mise
-        install_command: go@latest
+        install_command: go@1.21.6     # Pin Go version for stability
         default: true
         post_install:
           - shell: "go install github.com/grpc/grpc-go/cmd/protoc-gen-go-grpc@latest"
