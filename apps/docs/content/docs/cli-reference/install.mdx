@@ -1,0 +1,513 @@
+---
+title: devex install
+description: Install your complete development environment automatically
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex install
+
+The `install` command automates the installation of your complete development environment based on your configuration files. Unlike the interactive `setup` command, `install` runs non-interactively using your pre-configured settings.
+
+## Usage
+
+```bash
+devex install [flags]
+```
+
+## Description
+
+The install command handles:
+
+- **Development tools** (Git, Docker, VS Code, Neovim, etc.)
+- **Programming languages** (Node.js, Python, Go, Ruby, etc.)
+- **Databases** (PostgreSQL, MySQL, Redis, SQLite)
+- **Optional applications** (browsers, communication tools, etc.)
+- **Package repository configuration** and GPG keys
+- **Dependency resolution** and conflict handling
+- **Post-installation configuration** and shell setup
+- **Theme application** and desktop environment setup
+
+## Installation Categories
+
+<Cards>
+  <Card title="Development Tools" description="Essential coding and debugging tools like Git, Docker, VS Code, and terminal utilities" />
+  <Card title="Programming Languages" description="Language runtimes and package managers via mise (Node.js, Python, Go, etc.)" />
+  <Card title="Databases" description="Local development databases like PostgreSQL, MySQL, Redis, and SQLite" />
+  <Card title="Optional Applications" description="Productivity apps, browsers, and communication tools" />
+</Cards>
+
+## Options
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--category` | `-c` | `string` | `all` | Install specific category (development, databases, optional) |
+| `--app` | `-a` | `string[]` | | Install specific applications only |
+| `--skip` | `-s` | `string[]` | | Skip specific applications |
+| `--force` | `-f` | `bool` | `false` | Force reinstall even if already installed |
+| `--verbose` | `-v` | `bool` | `false` | Enable verbose output |
+| `--dry-run` | `-n` | `bool` | `false` | Show what would be installed without executing |
+
+## Examples
+
+### Basic Installation
+
+```bash
+# Install everything with default configuration
+devex install
+
+# Install with verbose output
+devex install --verbose
+
+# Preview what would be installed
+devex install --dry-run
+```
+
+### Category-Specific Installation
+
+<Tabs items={['Development', 'Databases', 'Optional', 'Languages']}>
+  <Tab value="Development">
+    ```bash
+    # Install only development tools
+    devex install --category development
+    
+    # Includes: git, docker, vscode, curl, etc.
+    ```
+  </Tab>
+  
+  <Tab value="Databases">
+    ```bash
+    # Install only databases
+    devex install --category databases
+    
+    # Includes: postgresql, mysql, redis, sqlite
+    ```
+  </Tab>
+  
+  <Tab value="Optional">
+    ```bash
+    # Install optional applications
+    devex install --category optional
+    
+    # Includes: slack, chrome, postman, etc.
+    ```
+  </Tab>
+  
+  <Tab value="Languages">
+    ```bash
+    # Programming languages are managed via mise
+    devex install --category environment
+    
+    # Includes: node, python, go, ruby, etc.
+    ```
+  </Tab>
+</Tabs>
+
+### Selective Installation
+
+```bash
+# Install specific applications
+devex install --app docker --app postgresql
+
+# Install everything except certain apps
+devex install --skip slack --skip chrome
+
+# Force reinstall of specific tools
+devex install --app docker --force
+```
+
+## Installation Process
+
+<Steps>
+  <Step>
+    **Platform Detection**
+    
+    DevEx detects your operating system and selects appropriate package managers:
+    
+    ```
+    Platform: Ubuntu 22.04 LTS (x86_64)
+    Package managers: apt, flatpak, snap
+    Desktop environment: GNOME 42
+    ```
+  </Step>
+  
+  <Step>
+    **Configuration Loading**
+    
+    Loads configuration from:
+    1. User overrides: `~/.devex/`
+    2. Default configs: `~/.local/share/devex/config/`
+    
+    ```
+    Loading configurations:
+    ✓ applications.yaml (247 applications)
+    ✓ environment.yaml (15 languages, 8 fonts)
+    ✓ desktop.yaml (3 themes, 12 extensions)
+    ✓ system.yaml (git, ssh, terminal)
+    ```
+  </Step>
+  
+  <Step>
+    **Dependency Resolution**
+    
+    Analyzes dependencies and determines optimal installation order:
+    
+    ```
+    Dependency analysis:
+    ┌─────────────────┬─────────────────────────┐
+    │ Application     │ Dependencies            │
+    ├─────────────────┼─────────────────────────┤
+    │ docker-compose  │ docker                  │
+    │ kubectl         │ curl                    │
+    │ node (via mise) │ mise, curl, git         │
+    └─────────────────┴─────────────────────────┘
+    
+    Installation order: curl → git → mise → docker → node → docker-compose
+    ```
+  </Step>
+  
+  <Step>
+    **Package Repository Setup**
+    
+    Configures third-party repositories and GPG keys:
+    
+    ```
+    Setting up repositories:
+    ✓ Docker official repository
+    ✓ Google Chrome repository  
+    ✓ VS Code repository
+    ✓ Node.js via mise
+    ```
+  </Step>
+  
+  <Step>
+    **Application Installation**
+    
+    Installs applications using platform-appropriate methods:
+    
+    ```
+    Installing applications:
+    [1/24] git (apt) ✓
+    [2/24] curl (apt) ✓  
+    [3/24] docker (apt) ✓
+    [4/24] vscode (apt) ✓
+    [5/24] node@lts (mise) ✓
+    ...
+    ```
+  </Step>
+  
+  <Step>
+    **Post-Installation Configuration**
+    
+    Applies configuration files and runs setup scripts:
+    
+    ```
+    Post-installation:
+    ✓ Git configured with user.name and user.email
+    ✓ Docker service started and enabled
+    ✓ VS Code extensions installed
+    ✓ Shell configured with aliases and paths
+    ```
+  </Step>
+</Steps>
+
+## Platform-Specific Behavior
+
+<Tabs items={['Linux', 'macOS', 'Windows']}>
+  <Tab value="Linux">
+    **Package Managers:**
+    - **Primary**: Distribution package manager (apt, dnf, pacman)
+    - **Universal**: Flatpak, Snap
+    - **Languages**: mise for programming languages
+    - **Containers**: Docker official repositories
+    
+    **System Integration:**
+    - Systemd service management
+    - Desktop environment configuration
+    - Font installation and cache refresh
+    - Shell configuration and defaults
+    
+    ```bash
+    # Linux-specific features
+    sudo systemctl enable docker    # Service management
+    fc-cache -fv                   # Font cache refresh
+    gsettings set ...              # GNOME settings
+    ```
+  </Tab>
+  
+  <Tab value="macOS">
+    **Package Managers:**
+    - **Primary**: Homebrew
+    - **App Store**: mas (Mac App Store CLI)
+    - **Languages**: mise for programming languages
+    
+    **System Integration:**
+    - macOS defaults configuration
+    - Dock and Finder settings
+    - Keychain integration
+    - LaunchAgent setup
+    
+    ```bash
+    # macOS-specific features
+    defaults write com.apple.dock orientation bottom
+    launchctl load ~/Library/LaunchAgents/...
+    ```
+  </Tab>
+  
+  <Tab value="Windows">
+    **Package Managers:**
+    - **Primary**: winget (Windows Package Manager)
+    - **Alternative**: Chocolatey, Scoop
+    - **Languages**: mise for programming languages
+    
+    **System Integration:**
+    - Windows Terminal configuration
+    - PowerShell profile setup
+    - Windows Subsystem for Linux (WSL)
+    - Registry settings (when needed)
+    
+    ```bash
+    # Windows-specific features
+    winget install Microsoft.WindowsTerminal
+    wsl --install                  # WSL setup if requested
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling and Recovery
+
+<Callout type="warn">
+DevEx includes robust error handling to ensure partial failures don't break your entire setup.
+</Callout>
+
+### Installation Resilience
+
+```
+Installation Results:
+✓ 18 applications installed successfully
+⚠ 2 applications had warnings
+✗ 1 application failed to install
+
+Failed:
+- slack: Repository key verification failed
+
+Warnings:  
+- docker: Service not started (run 'sudo systemctl start docker')
+- vscode: Some extensions failed to install
+
+Recovery suggestions:
+→ Run 'devex recovery check' to diagnose issues
+→ Use 'devex install --app slack --force' to retry failed installs
+```
+
+### Common Recovery Commands
+
+```bash
+# Check for and fix common issues
+devex recovery check
+
+# Retry failed installations
+devex install --app slack --force
+
+# Repair broken dependencies
+devex recovery repair
+
+# View detailed error logs
+devex logs --verbose
+```
+
+## Configuration File Integration
+
+The install command reads from these configuration files:
+
+### Applications Configuration
+
+```yaml
+# ~/.local/share/devex/config/applications.yaml
+applications:
+  development:
+    - name: docker
+      description: 'Container platform'
+      category: 'Development Tools'
+      default: true
+      linux:
+        install_method: 'apt'
+        install_command: 'docker-ce'
+        apt_sources:
+          - key_source: "https://download.docker.com/linux/ubuntu/gpg"
+            source_repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu jammy stable"
+        post_install:
+          - shell: "sudo systemctl enable docker"
+          - shell: "sudo usermod -aG docker $USER"
+```
+
+### Environment Configuration
+
+```yaml
+# ~/.local/share/devex/config/environment.yaml
+programming_languages:
+  - name: "Node.js LTS"
+    install_method: "mise"
+    install_command: "node@lts"
+    default: true
+    post_install:
+      - shell: "npm install -g yarn pnpm"
+```
+
+## Performance and Optimization
+
+### Parallel Installation
+
+DevEx optimizes installation performance:
+
+```
+Parallel installation groups:
+Group 1: git, curl, wget (no dependencies)
+Group 2: docker, mise (depends on Group 1)  
+Group 3: node, python (depends on mise)
+Group 4: docker-compose (depends on docker)
+
+Estimated time: 8-12 minutes
+```
+
+### Caching
+
+```bash
+# DevEx caches downloaded packages and metadata
+ls ~/.cache/devex/
+# downloads/    - Downloaded packages
+# metadata/     - Package metadata cache
+# repositories/ - Repository configurations
+```
+
+### Bandwidth Optimization
+
+```bash
+# Use local package mirrors when available
+devex install --use-mirrors
+
+# Skip large optional downloads
+devex install --skip-fonts --skip-themes
+```
+
+## Advanced Usage
+
+### Custom Installation Scripts
+
+You can add custom pre/post-installation scripts:
+
+```yaml
+applications:
+  development:
+    - name: custom-tool
+      pre_install:
+        - shell: "echo 'Preparing custom tool installation'"
+        - shell: "mkdir -p /opt/custom-tool"
+      post_install:
+        - shell: "custom-tool --setup"
+        - file: 
+            source: "configs/custom-tool.conf"
+            destination: "~/.config/custom-tool/config"
+```
+
+### Environment-Specific Installation
+
+```bash
+# Production server setup (minimal)
+devex install --category development --skip slack --skip chrome
+
+# Development workstation (full setup)
+devex install --category all
+
+# CI/CD environment (tools only)
+devex install --app git --app docker --app kubectl
+```
+
+## Integration with Other Commands
+
+The install command works seamlessly with other DevEx commands:
+
+```bash
+# Install, then check status
+devex install && devex status
+
+# Install specific template, then add extras
+devex template apply backend && devex install --app postman
+
+# Install with custom config
+devex config edit applications && devex install
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<Tabs items={['Permission Errors', 'Network Issues', 'Dependency Conflicts', 'Space Issues']}>
+  <Tab value="Permission Errors">
+    ```bash
+    # DevEx will prompt for sudo when needed
+    # If you get permission errors:
+    
+    # Check sudo access
+    sudo -v
+    
+    # Fix common permission issues
+    sudo chown -R $USER:$USER ~/.local/share/devex
+    sudo chmod 755 /usr/local/bin
+    ```
+  </Tab>
+  
+  <Tab value="Network Issues">
+    ```bash
+    # Test connectivity
+    curl -I https://github.com
+    
+    # Use alternative mirrors
+    devex install --use-mirrors
+    
+    # Install offline packages only
+    devex install --offline-only
+    ```
+  </Tab>
+  
+  <Tab value="Dependency Conflicts">
+    ```bash
+    # Check for conflicts
+    devex dependencies check
+    
+    # Force clean installation
+    devex install --force --clean
+    
+    # Resolve specific conflicts
+    devex recovery resolve-conflicts
+    ```
+  </Tab>
+  
+  <Tab value="Space Issues">
+    ```bash
+    # Check disk space
+    df -h
+    
+    # Clean cache
+    devex cache clean
+    
+    # Install minimal set
+    devex install --minimal
+    ```
+  </Tab>
+</Tabs>
+
+## Related Commands
+
+- [`devex setup`](/docs/cli-reference/setup) - Interactive setup wizard
+- [`devex add`](/docs/cli-reference/add-remove#add) - Add individual applications
+- [`devex status`](/docs/cli-reference/status-list#status) - Check installation status
+- [`devex recovery`](/docs/cli-reference/recovery) - Fix installation issues
+- [`devex config`](/docs/cli-reference/config) - Manage configuration files
+
+<Callout type="tip">
+**Pro Tip**: Use `devex install --dry-run --verbose` to see exactly what will be installed and in what order before committing to the installation.
+</Callout>

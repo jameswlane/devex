@@ -1,0 +1,608 @@
+---
+title: Installer Reference
+description: Complete reference for all DevEx package managers and installation methods
+---
+
+# Installer Reference
+
+DevEx supports a wide range of package managers and installation methods across different platforms. This comprehensive reference covers all available installers, their capabilities, and platform-specific usage.
+
+## Cross-Platform Installers
+
+### mise (Programming Language Manager)
+
+<Callout type="success">
+**Universal** - Available on all platforms for programming language version management
+</Callout>
+
+#### Overview
+- **Purpose**: Programming language version management
+- **Platforms**: Linux, macOS, Windows (planned)
+- **Languages**: Node.js, Python, Ruby, Go, Rust, Java, and 100+ more
+- **Repository**: [mise-en-place](https://github.com/jdx/mise)
+
+#### Usage
+```bash
+# Install specific language versions
+devex install nodejs@18.17.0     # Specific Node.js version
+devex install python@3.11        # Python 3.11.x latest
+devex install go@latest          # Latest Go version
+devex install rust               # Latest stable Rust
+
+# List available versions
+mise list-remote nodejs          # All Node.js versions
+mise list python                 # Installed Python versions
+```
+
+#### Configuration
+```yaml
+# mise configuration in DevEx
+environment:
+  programming_languages:
+    nodejs:
+      version: "18.17.0"
+      global: true
+    python:
+      version: "3.11.5"
+      global: true
+    go:
+      version: "1.21.0"
+      global: false
+```
+
+#### Benefits
+- **Version isolation** per project or globally
+- **Automatic switching** based on project files
+- **No conflicts** between different versions
+- **Consistent across** development environments
+
+### curlpipe (Direct Downloads)
+
+<Callout type="info">
+**Universal** - Direct installation via curl for cross-platform tools
+</Callout>
+
+#### Overview
+- **Purpose**: Direct downloads and script execution
+- **Platforms**: Linux, macOS, Windows (PowerShell)
+- **Use Cases**: Install scripts, binary downloads, one-line installers
+- **Security**: Input validation and secure execution
+
+#### Usage
+```bash
+# Install via installation script
+devex install docker             # Executes Docker install script
+devex install rust               # Rust toolchain installer
+devex install node               # Node.js via installation script
+
+# Custom installation commands
+devex install --method=curlpipe "curl -fsSL https://get.docker.com | sh"
+```
+
+#### Security Features
+- **URL validation** to prevent malicious scripts
+- **HTTPS enforcement** for secure downloads
+- **Shell injection prevention** with input sanitization
+- **Context-aware execution** with proper timeouts
+
+#### Common Use Cases
+```bash
+# Development tools with install scripts
+curl -fsSL https://get.docker.com | sh                    # Docker
+curl -fsSL https://sh.rustup.rs | sh                      # Rust
+# Review script first: curl -fsSL https://deb.nodesource.com/setup_lts.x | less
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -  # Node.js
+```
+
+### pip (Python Package Manager)
+
+<Callout type="info">
+**Universal** - Python package installation across all platforms
+</Callout>
+
+#### Overview
+- **Purpose**: Python package and tool installation
+- **Platforms**: Linux, macOS, Windows
+- **Scope**: Python applications and libraries
+- **Integration**: Works with system Python and mise-managed versions
+
+#### Usage
+```bash
+# Install Python applications
+devex install --method=pip jupyter        # Jupyter notebooks
+devex install --method=pip ansible        # Ansible automation
+devex install --method=pip black          # Python formatter
+
+# With specific Python version
+mise exec python@3.11 -- pip install package
+```
+
+#### Best Practices
+- **Virtual environments** for isolation
+- **User installations** (`--user` flag) to avoid system conflicts
+- **Requirements files** for reproducible installations
+
+### docker (Container Platform)
+
+<Callout type="success">
+**Universal** - Container platform with cross-platform support
+</Callout>
+
+#### Overview
+- **Purpose**: Container platform and tools
+- **Platforms**: Linux, macOS, Windows
+- **Components**: Docker Engine, Docker Compose, Docker Desktop
+- **Integration**: Service validation and daemon management
+
+#### Platform-Specific Installation
+
+**Linux (Native)**:
+```bash
+# Adds Docker repository and installs
+devex install docker             # Full Docker setup
+# Includes: docker-ce, docker-ce-cli, containerd.io, docker-compose-plugin
+```
+
+**macOS (Docker Desktop)**:
+```bash
+# Installs Docker Desktop via Homebrew cask
+devex install docker             # Docker Desktop for Mac
+# Includes: Docker Engine, Docker Compose, Kubernetes
+```
+
+**Windows (Docker Desktop)**:
+```bash
+# Planned: Docker Desktop for Windows
+devex install docker             # Docker Desktop for Windows
+# Includes: WSL2 backend, Windows containers
+```
+
+#### Service Validation
+DevEx automatically validates Docker installation:
+- **Daemon availability** checking
+- **Service status** verification
+- **Docker Compose** functionality testing
+- **Permission setup** (Linux docker group)
+
+## Linux Package Managers
+
+### APT (Advanced Package Tool)
+
+<Callout type="success">
+**Primary** - Debian, Ubuntu, and derivatives
+</Callout>
+
+#### Overview
+- **Distributions**: Debian, Ubuntu, Linux Mint, Elementary OS
+- **Package Format**: .deb files
+- **Repository**: Official and third-party APT repositories
+- **Update Mechanism**: `apt update && apt upgrade`
+
+#### Features
+```bash
+# System package installation
+devex install git                # apt install git
+devex install nodejs             # apt install nodejs
+devex install python3-pip        # apt install python3-pip
+
+# Repository management
+devex install code               # Adds Microsoft repository automatically
+devex install docker            # Adds Docker repository automatically
+```
+
+#### APT Source Management
+DevEx automatically manages APT sources for applications:
+
+```yaml
+# Example: Visual Studio Code with APT source
+applications:
+  development:
+    - name: code
+      linux:
+        install_method: 'apt'
+        install_command: 'code'
+        apt_sources:
+          - key_source: 'https://packages.microsoft.com/keys/microsoft.asc'
+            key_name: 'microsoft'
+            source_repo: 'https://packages.microsoft.com/repos/code'
+            source_name: 'vscode'
+```
+
+#### Troubleshooting
+```bash
+# Common APT issues
+sudo apt update                  # Refresh package lists
+sudo apt --fix-broken install   # Fix dependency issues
+sudo dpkg --configure -a        # Configure incomplete packages
+```
+
+### DNF (Dandified YUM)
+
+<Callout type="success">
+**Primary** - Fedora, RHEL 8+, CentOS Stream
+</Callout>
+
+#### Overview
+- **Distributions**: Fedora, RHEL, CentOS Stream, Rocky Linux, AlmaLinux
+- **Package Format**: .rpm files
+- **Repository**: Official and EPEL repositories
+- **Features**: Parallel downloads, dependency solving
+
+#### Usage
+```bash
+# System package installation
+devex install git                # dnf install git
+devex install nodejs             # dnf install nodejs
+devex install python3-pip        # dnf install python3-pip
+
+# Repository management
+devex install rpmfusion-free     # Enables RPM Fusion repository
+devex install code               # Adds Microsoft repository
+```
+
+#### Repository Management
+```bash
+# EPEL repository (Enterprise Linux)
+sudo dnf install epel-release    # Enable EPEL
+
+# RPM Fusion (multimedia codecs)
+sudo dnf install rpmfusion-free-release rpmfusion-nonfree-release
+```
+
+#### Performance Optimization
+```bash
+# Enable parallel downloads
+echo 'max_parallel_downloads=10' | sudo tee -a /etc/dnf/dnf.conf
+echo 'fastestmirror=True' | sudo tee -a /etc/dnf/dnf.conf
+```
+
+### Pacman
+
+<Callout type="success">
+**Primary** - Arch Linux and derivatives
+</Callout>
+
+#### Overview
+- **Distributions**: Arch Linux, Manjaro, EndeavourOS, ArcoLinux
+- **Package Format**: .pkg.tar.xz files
+- **Repository**: Official Arch repositories
+- **Philosophy**: Keep It Simple, Stupid (KISS)
+
+#### Usage
+```bash
+# System package installation
+devex install git                # pacman -S git
+devex install nodejs             # pacman -S nodejs
+devex install python-pip         # pacman -S python-pip
+
+# System update
+sudo pacman -Syu                 # Update entire system
+```
+
+#### AUR Integration
+DevEx automatically uses AUR helpers when available:
+
+```bash
+# AUR helper installation (yay)
+devex install yay                # Install AUR helper
+
+# AUR package installation
+devex install visual-studio-code-bin    # Uses yay if available
+devex install spotify                   # AUR package
+```
+
+### Flatpak (Universal Linux)
+
+<Callout type="success">
+**Universal** - Cross-distribution application platform
+</Callout>
+
+#### Overview
+- **Purpose**: Sandboxed application distribution
+- **Platforms**: Most modern Linux distributions
+- **Repository**: Flathub (primary), distribution-specific
+- **Benefits**: Consistent runtime, security sandboxing
+
+#### Usage
+```bash
+# Application installation
+devex install org.gimp.GIMP             # GIMP image editor
+devex install com.spotify.Client        # Spotify music
+devex install org.blender.Blender       # Blender 3D
+
+# System integration
+flatpak update                   # Update all Flatpak apps
+flatpak list                     # List installed apps
+```
+
+#### Configuration
+```bash
+# Add Flathub repository (usually pre-configured)
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+# Permissions management
+flatpak permissions              # View app permissions
+flatpak permission-reset org.gimp.GIMP  # Reset app permissions
+```
+
+### Snap (Ubuntu Universal)
+
+<Callout type="info">
+**Ubuntu-focused** - Universal packages with automatic updates
+</Callout>
+
+#### Overview
+- **Primary Platform**: Ubuntu (pre-installed)
+- **Other Platforms**: Available on most distributions
+- **Benefits**: Automatic updates, rollback capability
+- **Confinement**: Strict, classic, or devmode
+
+#### Usage
+```bash
+# Application installation
+devex install code --classic            # VS Code (classic snap)
+devex install discord                   # Discord (strict snap)
+devex install blender                   # Blender 3D
+
+# Snap management
+snap list                        # List installed snaps
+snap refresh                     # Update all snaps
+snap revert code                 # Rollback to previous version
+```
+
+#### Snap Types
+- **Strict**: Fully confined, limited system access
+- **Classic**: Full system access, like traditional packages
+- **Devmode**: Developer mode, unrestricted access
+
+## macOS Package Managers
+
+### Homebrew
+
+<Callout type="success">
+**Primary** - The missing package manager for macOS
+</Callout>
+
+#### Overview
+- **Type**: Command-line and GUI application installer
+- **Packages**: 6,000+ formulae (CLI tools) and 4,000+ casks (GUI apps)
+- **Installation**: Automatically set up by DevEx if needed
+- **Update**: Regular updates via `brew update && brew upgrade`
+
+#### Package Types
+
+**Formulae (CLI Tools)**:
+```bash
+# Command-line tools
+devex install git                # Git version control
+devex install nodejs            # Node.js runtime
+devex install python            # Python interpreter
+devex install wget              # Web downloader
+```
+
+**Casks (GUI Applications)**:
+```bash
+# GUI applications
+devex install --cask visual-studio-code    # VS Code
+devex install --cask google-chrome         # Chrome browser
+devex install --cask docker                # Docker Desktop
+devex install --cask figma                 # Figma design tool
+```
+
+#### Homebrew Management
+```bash
+# Maintenance commands
+brew doctor                      # Check for issues
+brew cleanup                     # Remove old versions
+brew services list               # List running services
+```
+
+### Mac App Store (mas-cli)
+
+<Callout type="warning">
+**Limited** - Requires Apple ID authentication
+</Callout>
+
+#### Overview
+- **Purpose**: Install Mac App Store applications via CLI
+- **Requirement**: Apple ID account and authentication
+- **Limitations**: Only apps available in Mac App Store
+- **Installation**: `brew install mas`
+
+#### Usage
+```bash
+# Authentication required
+mas signin apple-id@example.com
+
+# App installation by ID
+mas install 497799835            # Xcode
+mas install 1295203466           # Microsoft Remote Desktop
+mas install 409183694            # Keynote
+
+# App management
+mas list                         # List installed apps
+mas outdated                     # Check for updates
+mas upgrade                      # Update all apps
+```
+
+## Specialized Installers
+
+### Zypper (openSUSE)
+
+<Callout type="warning">
+**Beta** - openSUSE and SUSE Linux Enterprise
+</Callout>
+
+#### Overview
+- **Distributions**: openSUSE Leap, Tumbleweed, SUSE Linux Enterprise
+- **Package Format**: .rpm files
+- **Features**: Pattern-based installation, rollback support
+- **Repository**: Official openSUSE repositories
+
+#### Usage
+```bash
+# Package installation
+devex install git                # zypper install git
+devex install nodejs             # zypper install nodejs
+devex install python3-pip        # zypper install python3-pip
+
+# Pattern installation
+sudo zypper install -t pattern devel_basis    # Development tools
+```
+
+### Yay (AUR Helper)
+
+<Callout type="info">
+**Arch-specific** - Yet Another Yaourt replacement
+</Callout>
+
+#### Overview
+- **Purpose**: Arch User Repository (AUR) package installation
+- **Distribution**: Arch Linux and derivatives
+- **Features**: Pacman wrapper with AUR support
+- **Installation**: Available via DevEx on Arch systems
+
+#### Usage
+```bash
+# AUR package installation
+devex install visual-studio-code-bin    # VS Code from AUR
+devex install spotify                   # Spotify from AUR
+devex install google-chrome             # Chrome from AUR
+
+# Combined official and AUR search
+yay -Ss search-term             # Search both repos
+yay -Syu                        # Update system and AUR packages
+```
+
+### Additional Package Managers
+
+#### APK (Alpine Package Keeper)
+- **Distribution**: Alpine Linux
+- **Use Case**: Container and lightweight systems
+- **Status**: Beta support
+
+#### Emerge (Portage)
+- **Distribution**: Gentoo Linux
+- **Type**: Source-based package manager
+- **Status**: Community support
+
+#### XBPS (X Binary Package System)
+- **Distribution**: Void Linux
+- **Features**: Fast dependency resolution
+- **Status**: Community support
+
+#### Eopkg
+- **Distribution**: Solus
+- **Features**: Modern package manager design
+- **Status**: Community support
+
+## Installation Methods
+
+### Package Manager Priority
+
+DevEx automatically selects the best package manager based on:
+
+1. **Platform detection** (OS and distribution)
+2. **Package availability** in each manager
+3. **Official support** vs community packages
+4. **Installation permissions** required
+5. **Update mechanisms** available
+
+### Override Methods
+
+Force specific installation methods:
+
+```bash
+# Force specific package manager
+devex install --method=apt git          # Force APT
+devex install --method=flatpak gimp     # Force Flatpak
+devex install --method=brew node        # Force Homebrew
+
+# Multiple methods for testing
+devex install --method=apt,flatpak,snap firefox
+```
+
+### Dry Run Mode
+
+Test installations without making changes:
+
+```bash
+# Preview installation actions
+devex install --dry-run                 # Show what would be installed
+devex install --dry-run --verbose       # Detailed installation plan
+devex install --dry-run git docker      # Test specific packages
+```
+
+## Best Practices
+
+### Security
+1. **Verify package sources** before installation
+2. **Use official repositories** when available
+3. **Keep systems updated** regularly
+4. **Review permissions** for sandboxed apps
+
+### Performance
+1. **Use native package managers** for better integration
+2. **Enable parallel downloads** where supported
+3. **Clean up old packages** regularly
+4. **Monitor disk usage** for large applications
+
+### Maintenance
+1. **Regular updates** via DevEx or package managers
+2. **Remove unused packages** to free space
+3. **Check for security updates** frequently
+4. **Backup configurations** before major changes
+
+## Troubleshooting
+
+### Common Issues
+
+#### Package Not Found
+```bash
+# Update package lists
+devex status --refresh-repos
+sudo apt update                  # APT
+sudo dnf makecache              # DNF
+sudo pacman -Sy                 # Pacman
+```
+
+#### Permission Denied
+```bash
+# Check sudo permissions
+sudo -v                         # Validate sudo access
+
+# Fix package manager permissions
+sudo chown -R $(whoami) $(brew --prefix)/*  # Homebrew
+sudo usermod -aG docker $USER              # Docker group
+```
+
+#### Dependency Conflicts
+```bash
+# Fix dependency issues
+sudo apt --fix-broken install   # APT
+sudo dnf distro-sync           # DNF
+sudo pacman -Syu               # Pacman (full update)
+```
+
+### Platform-Specific Troubleshooting
+
+#### Linux
+- **Check distribution detection**: `devex status --verbose`
+- **Verify package manager availability**: `which apt/dnf/pacman`
+- **Review system logs**: `journalctl -xe`
+
+#### macOS
+- **Homebrew doctor**: `brew doctor`
+- **Xcode CLI tools**: `xcode-select --install`
+- **Permission issues**: `sudo chown -R $(whoami) $(brew --prefix)/*`
+
+## Contributing
+
+Help improve installer support:
+
+1. **Test installers** on your platform and report issues
+2. **Submit new installer implementations** for additional package managers
+3. **Improve error handling** and user experience
+4. **Document platform-specific quirks** and solutions
+
+See our [contribution guide](https://github.com/jameswlane/devex/blob/main/CONTRIBUTING.md) for details on adding new installers.

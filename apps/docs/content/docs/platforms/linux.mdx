@@ -1,0 +1,451 @@
+---
+title: Linux Distributions
+description: Complete guide to DevEx support across Linux distributions and package managers
+---
+
+# Linux Distributions
+
+DevEx provides comprehensive support for major Linux distributions, automatically detecting your system and using the appropriate package manager.
+
+## Supported Distributions
+
+### Debian-based Systems
+
+<Callout type="success">
+**Primary Support** - Fully tested with comprehensive feature support
+</Callout>
+
+#### Ubuntu
+- **Versions**: 18.04 LTS, 20.04 LTS, 22.04 LTS, 24.04 LTS
+- **Package Manager**: APT
+- **Additional**: Snap packages (built-in)
+- **Desktop Environments**: GNOME (default), KDE, XFCE, Unity
+
+```bash
+# Example installation detection
+$ devex status
+Platform: linux/ubuntu/22.04 (GNOME)
+Package Manager: apt
+Available Installers: apt, flatpak, snap, mise, curlpipe
+```
+
+#### Debian
+- **Versions**: 10 (Buster), 11 (Bullseye), 12 (Bookworm)
+- **Package Manager**: APT
+- **Additional**: Flatpak (recommended for newer software)
+- **Desktop Environments**: GNOME, KDE, XFCE, LXDE
+
+```bash
+# Add Flatpak support on Debian
+sudo apt install flatpak
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+```
+
+### Red Hat-based Systems
+
+<Callout type="success">
+**Active Support** - Well-tested with regular updates
+</Callout>
+
+#### Fedora
+- **Versions**: 38, 39, 40 (current), 41 (beta)
+- **Package Manager**: DNF
+- **Additional**: Flatpak (pre-installed)
+- **Desktop Environments**: GNOME (default), KDE Spin, XFCE Spin
+
+```bash
+# Fedora detection and configuration
+$ devex status
+Platform: linux/fedora/40 (GNOME)
+Package Manager: dnf
+Available Installers: dnf, rpm, flatpak, mise, curlpipe
+```
+
+#### RHEL/CentOS/Rocky/AlmaLinux
+- **Versions**: RHEL 8, RHEL 9, Rocky 9, AlmaLinux 9
+- **Package Manager**: DNF (RHEL 8+) or YUM (RHEL 7)
+- **Additional**: EPEL repository recommended
+- **Desktop Environments**: GNOME, KDE
+
+```bash
+# Enable EPEL on RHEL-based systems
+sudo dnf install epel-release
+# Or for CentOS 7
+sudo yum install epel-release
+```
+
+### Arch-based Systems
+
+<Callout type="success">
+**Active Support** - Popular with power users and developers
+</Callout>
+
+#### Arch Linux
+- **Package Manager**: Pacman
+- **AUR Helper**: Yay (automatically used if available)
+- **Additional**: Flatpak support
+- **Desktop Environments**: Any (user-configured)
+
+```bash
+# Arch Linux with AUR support
+$ devex status
+Platform: linux/arch/rolling (KDE)
+Package Manager: pacman
+AUR Helper: yay
+Available Installers: pacman, yay, flatpak, mise, curlpipe
+```
+
+#### Manjaro
+- **Package Manager**: Pacman
+- **AUR**: Pre-configured with pamac
+- **Additional**: Flatpak and Snap support
+- **Desktop Environments**: XFCE, KDE, GNOME editions
+
+#### EndeavourOS
+- **Package Manager**: Pacman  
+- **AUR Helper**: Yay (pre-installed)
+- **Additional**: Flatpak support
+- **Desktop Environments**: Multiple options
+
+### SUSE-based Systems
+
+<Callout type="warning">
+**Beta Support** - Community tested, may have limitations
+</Callout>
+
+#### openSUSE Leap
+- **Versions**: 15.4, 15.5, 15.6
+- **Package Manager**: Zypper
+- **Additional**: Flatpak support
+- **Desktop Environments**: KDE (default), GNOME
+
+#### openSUSE Tumbleweed
+- **Type**: Rolling release
+- **Package Manager**: Zypper
+- **Additional**: Flatpak support
+- **Desktop Environments**: KDE (default), GNOME
+
+```bash
+# openSUSE detection
+$ devex status
+Platform: linux/opensuse-tumbleweed/rolling (KDE)
+Package Manager: zypper
+Available Installers: zypper, flatpak, mise, curlpipe
+```
+
+### Other Distributions
+
+<Callout type="info">
+**Community Support** - Limited testing, contributions welcome
+</Callout>
+
+#### Alpine Linux
+- **Package Manager**: APK
+- **Use Case**: Containers and lightweight systems
+- **Note**: Limited desktop environment support
+
+#### Gentoo
+- **Package Manager**: Emerge
+- **Type**: Source-based distribution
+- **Note**: Compilation-heavy installation process
+
+#### Void Linux
+- **Package Manager**: XBPS
+- **Type**: Independent rolling release
+- **Note**: systemd-free alternative
+
+## Package Managers
+
+### APT (Advanced Package Tool)
+
+Used on Debian, Ubuntu, and derivatives.
+
+```bash
+# DevEx automatically handles APT operations
+devex install docker        # Adds repositories if needed
+devex install code          # Installs Microsoft repository
+
+# Manual APT operations
+sudo apt update              # Update package lists
+sudo apt install package    # Install package
+sudo apt remove package     # Remove package
+```
+
+**APT Source Management**:
+DevEx automatically manages APT sources for applications that need them:
+
+```yaml
+# Example: Docker installation with APT source
+applications:
+  infrastructure:
+    - name: docker
+      apt_sources:
+        - key_source: 'https://download.docker.com/linux/ubuntu/gpg'
+          key_name: 'docker'
+          source_repo: 'https://download.docker.com/linux/ubuntu'
+          source_name: 'docker'
+```
+
+### DNF (Dandified YUM)
+
+Used on Fedora, RHEL 8+, and derivatives.
+
+```bash
+# DevEx DNF operations
+devex install nodejs        # Uses DNF for system packages
+devex install code          # Adds Microsoft repository
+
+# Manual DNF operations  
+sudo dnf update              # Update all packages
+sudo dnf install package    # Install package
+sudo dnf remove package     # Remove package
+sudo dnf search term        # Search packages
+```
+
+### Pacman
+
+Used on Arch Linux and derivatives.
+
+```bash
+# DevEx Pacman operations
+devex install git           # Uses pacman for core packages
+devex install yay           # Installs AUR helper if needed
+
+# Manual Pacman operations
+sudo pacman -Syu            # Update system
+sudo pacman -S package      # Install package  
+sudo pacman -R package      # Remove package
+sudo pacman -Ss term        # Search packages
+```
+
+**AUR Support**:
+DevEx automatically uses AUR helpers when available:
+
+```bash
+# AUR package installation via yay
+devex install visual-studio-code-bin  # Uses yay if available
+```
+
+### Flatpak (Universal)
+
+Available on most modern distributions.
+
+```bash
+# DevEx Flatpak operations
+devex install org.gimp.GIMP           # Flatpak application ID
+devex install com.spotify.Client      # Cross-distro compatibility
+
+# Manual Flatpak operations
+flatpak install flathub app-id        # Install from Flathub
+flatpak list                          # List installed apps
+flatpak update                        # Update all apps
+```
+
+### Snap (Ubuntu)
+
+Primarily used on Ubuntu systems.
+
+```bash
+# DevEx Snap operations  
+devex install code --classic           # Classic snap
+devex install discord                  # Regular snap
+
+# Manual Snap operations
+snap install package                   # Install snap
+snap list                             # List installed snaps
+snap refresh                          # Update snaps
+```
+
+## Desktop Environment Integration
+
+### GNOME
+
+**Configuration Management**:
+- **Settings**: dconf/gsettings integration
+- **Extensions**: Automatic installation support
+- **Themes**: GTK3/GTK4 theme management
+- **Fonts**: Font installation and cache updates
+
+```yaml
+# Example GNOME configuration
+desktop:
+  gnome:
+    settings:
+      - key: 'org.gnome.desktop.interface.gtk-theme'
+        value: 'Adwaita-dark'
+      - key: 'org.gnome.shell.enabled-extensions'
+        value: ['user-theme@gnome-shell-extensions.gcampax.github.com']
+```
+
+### KDE Plasma
+
+**Configuration Management**:
+- **Settings**: kconfig integration
+- **Themes**: Plasma theme and icon management
+- **Widgets**: Plasmoid installation support
+- **Fonts**: Font management via fontconfig
+
+### XFCE
+
+**Configuration Management**:
+- **Settings**: xfconf integration
+- **Themes**: GTK and window manager themes
+- **Panels**: Panel configuration management
+- **Fonts**: Font configuration support
+
+## Distribution-Specific Features
+
+### Ubuntu-Specific
+
+**Snap Integration**:
+```bash
+# Ubuntu comes with snap pre-installed
+devex install code           # Prefers snap version on Ubuntu
+devex install --method=apt code  # Force APT version
+```
+
+**PPA Support**:
+```bash
+# DevEx automatically manages PPAs
+devex install obs-studio     # Adds OBS PPA automatically
+```
+
+### Fedora-Specific
+
+**DNF Copr Integration**:
+```bash
+# DevEx can use Copr repositories
+devex install rpmfusion-free    # Enables RPM Fusion
+```
+
+**Silverblue Support**:
+```bash
+# Immutable systems prefer Flatpak
+devex install --method=flatpak gimp
+```
+
+### Arch-Specific
+
+**AUR Integration**:
+```bash
+# Seamless AUR support
+devex install spotify          # Uses AUR if not in official repos
+devex install --aur-helper=paru spotify  # Use specific AUR helper
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Package Manager Lock
+```bash
+# APT lock issues
+sudo rm /var/lib/apt/lists/lock
+sudo rm /var/cache/apt/archives/lock
+sudo rm /var/lib/dpkg/lock*
+
+# DNF lock issues  
+sudo rm /var/run/dnf.pid
+sudo dnf clean all
+
+# Pacman lock issues
+sudo rm /var/lib/pacman/db.lck
+```
+
+#### Repository Issues
+```bash
+# Refresh repository metadata
+devex status --refresh-repos
+
+# Manual repository refresh
+sudo apt update              # Debian/Ubuntu
+sudo dnf makecache          # Fedora/RHEL  
+sudo pacman -Sy             # Arch
+```
+
+#### Permission Issues
+```bash
+# Fix common permission issues
+sudo chown -R $USER:$USER ~/.devex/
+sudo chmod -R 755 ~/.devex/
+```
+
+### Distribution-Specific Troubleshooting
+
+#### Ubuntu/Debian
+```bash
+# Fix broken packages
+sudo apt --fix-broken install
+sudo dpkg --configure -a
+
+# Clear package cache
+sudo apt clean
+sudo apt autoremove
+```
+
+#### Fedora/RHEL
+```bash
+# Clear DNF cache
+sudo dnf clean all
+sudo dnf makecache
+
+# Fix metadata issues
+sudo dnf distro-sync
+```
+
+#### Arch Linux
+```bash
+# Update keyring
+sudo pacman -S archlinux-keyring
+sudo pacman-key --refresh-keys
+
+# Clear package cache  
+sudo pacman -Sc
+```
+
+## Performance Optimization
+
+### Package Manager Optimization
+
+#### APT Optimization
+```bash
+# Parallel downloads (APT 2.0+)
+echo 'Acquire::Queue-Mode "host";' | sudo tee /etc/apt/apt.conf.d/99parallel
+echo 'Acquire::http::Pipeline-Depth "5";' | sudo tee -a /etc/apt/apt.conf.d/99parallel
+```
+
+#### DNF Optimization  
+```bash
+# Enable parallel downloads
+echo 'max_parallel_downloads=10' | sudo tee -a /etc/dnf/dnf.conf
+echo 'fastestmirror=True' | sudo tee -a /etc/dnf/dnf.conf
+```
+
+#### Pacman Optimization
+```bash
+# Enable parallel downloads
+sudo sed -i 's/#ParallelDownloads = 5/ParallelDownloads = 10/' /etc/pacman.conf
+```
+
+### DevEx Optimization
+```bash
+# Use local configuration cache
+devex config cache --enable
+
+# Prefer local package managers over universal ones
+devex config set prefer-native-packages true
+
+# Enable concurrent installations
+devex config set max-concurrent-installs 3
+```
+
+## Contributing
+
+Help improve Linux distribution support:
+
+1. **Test on your distribution** and report issues
+2. **Submit installer implementations** for new package managers  
+3. **Contribute distribution detection** improvements
+4. **Document distribution-specific configurations**
+
+See the [GitHub repository](https://github.com/jameswlane/devex) for contribution guidelines.

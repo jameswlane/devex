@@ -4,10 +4,9 @@
 		"index",
 		"installation",
 		"cli-reference",
-		"guided-setup",
 		"configuration",
-		"customization",
-		"troubleshooting",
+		"platforms",
+		"guides",
 		"examples"
 	]
 }

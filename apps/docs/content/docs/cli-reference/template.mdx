@@ -1,0 +1,731 @@
+---
+title: devex template
+description: Manage configuration templates for consistent development environments
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex template
+
+The `template` command manages configuration templates that provide pre-configured development environments for different use cases. Templates ensure consistency across team members and make it easy to set up specialized environments.
+
+## Usage
+
+```bash
+devex template <subcommand> [flags]
+```
+
+## Subcommands Overview
+
+<Cards>
+  <Card title="list" description="List available configuration templates" />
+  <Card title="show" description="Display template details and contents" />
+  <Card title="apply" description="Apply a template to your configuration" />
+  <Card title="create" description="Create new templates from current configuration" />
+  <Card title="custom" description="Manage custom team templates" />
+</Cards>
+
+## devex template list
+
+List all available configuration templates.
+
+### Usage
+
+```bash
+devex template list [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--category` | `string` | `all` | Filter by template category |
+| `--format` | `string` | `table` | Output format (table, json, yaml) |
+| `--detailed` | `bool` | `false` | Show detailed template information |
+
+### Example Output
+
+<Tabs items={['Basic List', 'Detailed View', 'JSON Format']}>
+  <Tab value="Basic List">
+    ```bash
+    devex template list
+    
+    Available Templates:
+    ┌─────────────────┬─────────────────────────────────────┬──────────────┐
+    │ Name            │ Description                         │ Category     │
+    ├─────────────────┼─────────────────────────────────────┼──────────────┤
+    │ backend         │ Backend development environment     │ Development  │
+    │ frontend        │ Frontend development with Node.js   │ Development  │
+    │ full-stack      │ Complete full-stack setup          │ Development  │
+    │ data-science    │ Python data science environment    │ Specialized  │
+    │ devops          │ DevOps and infrastructure tools    │ Operations   │
+    │ minimal         │ Minimal development setup          │ Basic        │
+    │ enterprise      │ Enterprise development stack       │ Enterprise   │
+    └─────────────────┴─────────────────────────────────────┴──────────────┘
+    
+    Use 'devex template show <name>' for detailed information
+    ```
+  </Tab>
+  
+  <Tab value="Detailed View">
+    ```bash
+    devex template list --detailed
+    
+    backend - Backend development environment
+      Applications: git, docker, postgresql, redis, node, python
+      Languages: Node.js LTS, Python 3.11
+      Databases: PostgreSQL, Redis
+      Tools: Docker, Postman, VS Code
+      Target: API development, microservices
+    
+    frontend - Frontend development with Node.js
+      Applications: git, node, chrome, vscode
+      Languages: Node.js LTS
+      Tools: VS Code, Chrome DevTools
+      Frameworks: React, Vue, Angular ready
+      Target: Web application development
+    ```
+  </Tab>
+  
+  <Tab value="JSON Format">
+    ```bash
+    devex template list --format json
+    
+    {
+      "templates": [
+        {
+          "name": "backend",
+          "description": "Backend development environment",
+          "category": "Development",
+          "applications": ["git", "docker", "postgresql"],
+          "languages": ["node", "python"],
+          "last_updated": "2024-08-17T10:00:00Z"
+        }
+      ]
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## devex template show
+
+Display detailed information about a specific template.
+
+### Usage
+
+```bash
+devex template show <template-name> [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--format` | `string` | `detailed` | Output format (detailed, yaml, json) |
+| `--diff` | `string` | | Compare with another template or current config |
+
+### Example Output
+
+```bash
+devex template show backend
+
+Backend Development Template
+┌─────────────────────────────────────────────────────────────────┐
+│ Description: Complete backend development environment           │
+│ Category: Development                                           │
+│ Author: DevEx Team                                             │
+│ Last Updated: 2024-08-17                                       │
+│ Compatible Platforms: Linux, macOS, Windows                    │
+└─────────────────────────────────────────────────────────────────┘
+
+Applications (12):
+Development Tools:
+  ✓ git - Version control system
+  ✓ docker - Container platform
+  ✓ docker-compose - Multi-container orchestration
+  ✓ vscode - Code editor with extensions
+  ✓ postman - API testing tool
+
+Programming Languages:
+  ✓ node@lts - Node.js LTS version
+  ✓ python@3.11 - Python 3.11
+
+Databases:
+  ✓ postgresql - Primary database
+  ✓ redis - Caching and sessions
+
+System Configuration:
+Git Settings:
+  - User configuration prompts
+  - Common aliases (co, br, ci, st)
+  - Pull rebase enabled
+
+Shell Configuration:
+  - Default shell: zsh
+  - Oh My Zsh with plugins: git, docker, kubectl
+  - Theme: agnoster
+
+Desktop Configuration (Linux):
+  - Theme: Tokyo Night
+  - VS Code extensions: GitLens, Docker, PostgreSQL
+
+Estimated Install Time: 15-20 minutes
+Disk Space Required: ~2.1 GB
+```
+
+### Template Comparison
+
+```bash
+# Compare templates
+devex template show backend --diff frontend
+
+# Compare template with current configuration
+devex template show backend --diff current
+```
+
+## devex template apply
+
+Apply a template to your current configuration.
+
+### Usage
+
+```bash
+devex template apply <template-name> [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--merge` | `bool` | `false` | Merge with existing configuration |
+| `--backup` | `bool` | `true` | Create backup before applying |
+| `--install` | `bool` | `false` | Install applications after applying |
+| `--dry-run` | `bool` | `false` | Show what would be changed |
+| `--interactive` | `bool` | `true` | Prompt for confirmation |
+
+### Application Process
+
+<Steps>
+  <Step>
+    **Template Selection and Validation**
+    
+    ```bash
+    devex template apply backend
+    
+    Template: Backend Development Environment
+    ✓ Template exists and is valid
+    ✓ Compatible with your platform (Linux)
+    ✓ No conflicts detected
+    
+    This will modify your configuration files:
+    - applications.yaml (12 applications will be added)
+    - environment.yaml (2 languages will be configured)
+    - system.yaml (git settings will be updated)
+    - desktop.yaml (theme will be applied)
+    ```
+  </Step>
+  
+  <Step>
+    **Backup Creation**
+    
+    ```bash
+    Creating backup...
+    ✓ Backup created: ~/.devex/backups/before-backend-template-20240817-1430.tar.gz
+    
+    Backup includes:
+    - Current configuration files
+    - Application list
+    - Environment settings
+    ```
+  </Step>
+  
+  <Step>
+    **Configuration Application**
+    
+    ```bash
+    Applying template configuration...
+    ✓ Updated applications.yaml (added 12 applications)
+    ✓ Updated environment.yaml (configured Node.js LTS, Python 3.11)
+    ✓ Updated system.yaml (applied git settings)
+    ✓ Updated desktop.yaml (applied Tokyo Night theme)
+    
+    Template applied successfully!
+    ```
+  </Step>
+  
+  <Step>
+    **Installation Option**
+    
+    ```bash
+    Configuration updated. Install applications now? [Y/n]
+    
+    If yes:
+    → devex install (installs all configured applications)
+    
+    If no:
+    → Run 'devex install' when ready
+    → Use 'devex status' to check what needs installation
+    ```
+  </Step>
+</Steps>
+
+### Application Modes
+
+<Tabs items={['Replace Mode', 'Merge Mode', 'Selective Apply', 'Dry Run']}>
+  <Tab value="Replace Mode">
+    ```bash
+    # Replace current configuration (default)
+    devex template apply backend
+    
+    # This will:
+    # - Replace applications.yaml completely
+    # - Replace environment settings
+    # - Update system configuration
+    # - Apply desktop theme
+    ```
+  </Tab>
+  
+  <Tab value="Merge Mode">
+    ```bash
+    # Merge with existing configuration
+    devex template apply backend --merge
+    
+    # This will:
+    # - Add new applications to existing ones
+    # - Merge environment settings
+    # - Update system settings where specified
+    # - Keep existing customizations
+    ```
+  </Tab>
+  
+  <Tab value="Selective Apply">
+    ```bash
+    # Apply only specific parts
+    devex template apply backend --only applications
+    devex template apply backend --only environment
+    devex template apply backend --only system
+    
+    # Or exclude specific parts
+    devex template apply backend --except desktop
+    ```
+  </Tab>
+  
+  <Tab value="Dry Run">
+    ```bash
+    # Preview changes without applying
+    devex template apply backend --dry-run
+    
+    Changes that would be made:
+    applications.yaml:
+    + docker (new)
+    + postgresql (new)
+    + postman (new)
+    ~ vscode (update extensions)
+    
+    environment.yaml:
+    + node@lts (new)
+    + python@3.11 (new)
+    
+    system.yaml:
+    ~ git.aliases (update)
+    + git.pull.rebase = true (new)
+    ```
+  </Tab>
+</Tabs>
+
+## devex template create
+
+Create new templates from your current configuration.
+
+### Usage
+
+```bash
+devex template create <template-name> [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--description` | `string` | | Template description |
+| `--category` | `string` | `custom` | Template category |
+| `--include` | `string[]` | `all` | Include specific configuration sections |
+| `--exclude` | `string[]` | | Exclude specific applications or settings |
+| `--minimal` | `bool` | `false` | Create minimal template (essential apps only) |
+
+### Template Creation Process
+
+<Steps>
+  <Step>
+    **Current Configuration Analysis**
+    
+    ```bash
+    devex template create my-setup --description "My custom development setup"
+    
+    Analyzing current configuration...
+    ✓ 15 applications configured
+    ✓ 3 programming languages
+    ✓ Git configuration present
+    ✓ Desktop theme configured
+    ✓ Custom shell settings detected
+    ```
+  </Step>
+  
+  <Step>
+    **Template Customization**
+    
+    ```bash
+    Template Configuration:
+    
+    Include in template:
+    [✓] Development applications (git, docker, vscode)
+    [✓] Programming languages (node, python)
+    [✓] System configuration (git settings)
+    [ ] Desktop theme (unchecked - keep personal)
+    [✓] Shell configuration
+    
+    Exclude personal data:
+    [✓] Git user.name and user.email
+    [✓] SSH keys and configurations
+    [✓] Personal VS Code settings
+    [ ] Custom aliases (include these)
+    ```
+  </Step>
+  
+  <Step>
+    **Template Generation**
+    
+    ```bash
+    Creating template...
+    ✓ Generated template manifest
+    ✓ Created configuration files
+    ✓ Added documentation
+    ✓ Validated template structure
+    
+    Template created: ~/.devex/templates/custom/my-setup/
+    
+    Files:
+    - manifest.yaml (template metadata)
+    - applications.yaml (application list)
+    - environment.yaml (language configuration)
+    - system.yaml (system settings)
+    - README.md (template documentation)
+    ```
+  </Step>
+</Steps>
+
+### Template Customization Options
+
+```bash
+# Create minimal template (essential tools only)
+devex template create minimal-dev --minimal
+
+# Create template with specific applications
+devex template create web-dev --include git,node,vscode,chrome
+
+# Create template excluding optional apps
+devex template create core-dev --exclude slack,spotify,games
+
+# Create language-specific template
+devex template create python-ml --category data-science \
+  --include git,python,jupyter,vscode \
+  --description "Python machine learning environment"
+```
+
+## devex template custom
+
+Manage custom and team templates.
+
+### Usage
+
+```bash
+devex template custom <subcommand> [flags]
+```
+
+### Custom Template Subcommands
+
+<Tabs items={['init', 'sync', 'share', 'import']}>
+  <Tab value="init">
+    ```bash
+    # Initialize custom template repository
+    devex template custom init --repo https://github.com/company/devex-templates
+    
+    # Create local custom template directory
+    devex template custom init --local
+    
+    # Initialize with examples
+    devex template custom init --with-examples
+    ```
+  </Tab>
+  
+  <Tab value="sync">
+    ```bash
+    # Sync with remote template repository
+    devex template custom sync
+    
+    # Push local templates to remote
+    devex template custom sync --push
+    
+    # Pull updates from remote
+    devex template custom sync --pull
+    ```
+  </Tab>
+  
+  <Tab value="share">
+    ```bash
+    # Share template with team
+    devex template custom share my-setup --to team-repo
+    
+    # Export template for sharing
+    devex template custom share my-setup --export ./my-setup.tar.gz
+    
+    # Generate shareable link
+    devex template custom share my-setup --link
+    ```
+  </Tab>
+  
+  <Tab value="import">
+    ```bash
+    # Import template from file
+    devex template custom import ./team-setup.tar.gz
+    
+    # Import from URL
+    devex template custom import https://example.com/templates/backend.tar.gz
+    
+    # Import from Git repository
+    devex template custom import git@github.com:company/backend-template.git
+    ```
+  </Tab>
+</Tabs>
+
+## Built-in Templates
+
+DevEx includes several built-in templates for common development scenarios:
+
+### Development Templates
+
+<Tabs items={['Backend', 'Frontend', 'Full-Stack', 'Mobile']}>
+  <Tab value="Backend">
+    **Backend Development Template**
+    
+    Perfect for API development, microservices, and server-side applications.
+    
+    **Applications:**
+    - Git, Docker, Docker Compose
+    - VS Code with backend extensions
+    - Postman for API testing
+    - Database tools (PostgreSQL, Redis)
+    
+    **Languages:**
+    - Node.js LTS
+    - Python 3.11
+    
+    **Configuration:**
+    - Git configured for team development
+    - Docker environment optimized
+    - Database connection helpers
+    ```bash
+    devex template apply backend
+    ```
+  </Tab>
+  
+  <Tab value="Frontend">
+    **Frontend Development Template**
+    
+    Optimized for modern web application development.
+    
+    **Applications:**
+    - Git, Node.js, npm/yarn
+    - VS Code with frontend extensions
+    - Chrome with developer tools
+    - Live server tools
+    
+    **Configuration:**
+    - Modern JavaScript tooling
+    - CSS/SCSS support
+    - Framework-agnostic setup
+    ```bash
+    devex template apply frontend
+    ```
+  </Tab>
+  
+  <Tab value="Full-Stack">
+    **Full-Stack Development Template**
+    
+    Complete environment for full-stack development.
+    
+    **Combines:**
+    - All backend tools
+    - All frontend tools
+    - Database management
+    - Containerization
+    - Deployment tools
+    ```bash
+    devex template apply full-stack
+    ```
+  </Tab>
+  
+  <Tab value="Mobile">
+    **Mobile Development Template**
+    
+    Setup for mobile app development.
+    
+    **Applications:**
+    - Git, Node.js
+    - Android Studio / Xcode
+    - React Native / Flutter tools
+    - Device simulators
+    
+    **Platform-specific:**
+    - Android SDK (Linux/Windows)
+    - Xcode (macOS only)
+    - Cross-platform tools
+    ```bash
+    devex template apply mobile
+    ```
+  </Tab>
+</Tabs>
+
+### Specialized Templates
+
+<Cards>
+  <Card title="data-science" description="Python data science environment with Jupyter, pandas, and ML libraries" />
+  <Card title="devops" description="Infrastructure and operations tools including Kubernetes, Terraform, and monitoring" />
+  <Card title="minimal" description="Minimal development setup with just essential tools" />
+  <Card title="enterprise" description="Enterprise development stack with security and compliance tools" />
+</Cards>
+
+## Team Template Management
+
+### Creating Team Templates
+
+<Steps>
+  <Step>
+    **Design Template Structure**
+    ```bash
+    # Create team template repository
+    mkdir devex-team-templates
+    cd devex-team-templates
+    git init
+    ```
+  </Step>
+  
+  <Step>
+    **Create Template Configurations**
+    ```bash
+    # Generate from existing setup
+    devex template create backend-team --description "Team backend setup"
+    
+    # Customize for team needs
+    devex template edit backend-team
+    ```
+  </Step>
+  
+  <Step>
+    **Add Team-Specific Settings**
+    ```yaml
+    # manifest.yaml
+    name: backend-team
+    description: Company backend development environment
+    version: 1.0.0
+    author: DevOps Team
+    team: engineering
+    requirements:
+      - platform: linux
+      - min_memory: 8GB
+      - docker: required
+    ```
+  </Step>
+  
+  <Step>
+    **Share with Team**
+    ```bash
+    # Commit and push
+    git add .
+    git commit -m "Add backend team template"
+    git push origin main
+    
+    # Team members can then use:
+    devex template custom init --repo https://github.com/company/devex-team-templates
+    devex template apply backend-team
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Callout type="tip">
+**Template Best Practices:**
+
+1. **Keep templates focused** - One template per use case
+2. **Document thoroughly** - Include README and examples
+3. **Version your templates** - Use semantic versioning
+4. **Test templates** - Verify on clean systems
+5. **Include team settings** - But exclude personal data
+</Callout>
+
+### Template Naming Conventions
+
+```bash
+# Good template names
+backend-api          # Specific purpose
+frontend-react       # Technology-specific
+data-science-python  # Domain and language
+minimal-dev          # Scope-specific
+
+# Avoid
+setup               # Too generic
+my-config           # Personal reference
+everything          # Too broad
+temp                # Temporary naming
+```
+
+### Template Documentation
+
+Each template should include:
+
+```markdown
+# Backend Development Template
+
+## Overview
+Complete backend development environment for API development.
+
+## What's Included
+- **Development Tools**: Git, Docker, VS Code
+- **Languages**: Node.js LTS, Python 3.11
+- **Databases**: PostgreSQL, Redis
+- **Testing**: Jest, Postman
+
+## Prerequisites
+- 8GB RAM minimum
+- 20GB free disk space
+- Internet connection for downloads
+
+## Usage
+```bash
+devex template apply backend
+devex install
+```
+
+## Customization
+Edit `~/.devex/applications.yaml` to add/remove applications.
+
+## Team Settings
+- Git aliases configured
+- VS Code extensions included
+- Docker environment optimized
+```
+
+## Related Commands
+
+- [`devex config`](/docs/cli-reference/config) - Manage configuration files that templates modify
+- [`devex install`](/docs/cli-reference/install) - Install applications from applied templates
+- [`devex add`](/docs/cli-reference/add-remove#add) - Add additional applications to template-based configurations
+- [`devex backup`](/docs/cli-reference/config#backup) - Backup configurations before applying templates
+
+<Callout type="info">
+Templates are a powerful way to standardize development environments across teams and quickly set up specialized configurations for different projects or roles.
+</Callout>

@@ -1,0 +1,1936 @@
+---
+title: Backend Development Environment
+description: Complete server-side development setup with Node.js, Python, Go, databases, and microservices tools
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Backend Development Environment
+
+This example provides a comprehensive backend development environment supporting multiple programming languages, databases, container orchestration, and microservices development.
+
+## Quick Start
+
+<Steps>
+  <Step>
+    ### Download Configuration
+    
+    ```bash
+    # Download the backend development configuration
+    curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/examples/backend-development.yaml > ~/.devex/backend-dev.yaml
+    
+    # Preview what will be installed
+    devex config apply --file ~/.devex/backend-dev.yaml --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Apply Configuration
+    
+    ```bash
+    # Apply the configuration
+    devex config apply --file ~/.devex/backend-dev.yaml
+    
+    # Install all tools
+    devex install
+    ```
+  </Step>
+  
+  <Step>
+    ### Verify Installation
+    
+    ```bash
+    # Check installed tools
+    node --version
+    python3 --version
+    go version
+    docker --version
+    kubectl version --client
+    ```
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+<Tabs items={['Full Config', 'Microservices', 'API Development', 'DevOps Focus']}>
+  <Tab value="Full Config">
+    ```yaml
+    # ~/.devex/backend-development.yaml
+    # Complete Backend Development Environment
+    
+    applications:
+      development:
+        # Version Control
+        - name: git
+          description: "Distributed version control system"
+          category: "Version Control"
+          default: true
+          priority: 10
+          
+        - name: gh
+          description: "GitHub CLI"
+          category: "Version Control"
+          default: true
+          dependencies: ["git"]
+          
+        # Code Editors
+        - name: vscode
+          description: "Visual Studio Code"
+          category: "Editors"
+          default: true
+          post_install:
+            # Backend development extensions
+            - shell: "code --install-extension ms-python.python"
+            - shell: "code --install-extension golang.go"
+            - shell: "code --install-extension ms-vscode.vscode-typescript-next"
+            - shell: "code --install-extension ms-vscode.vscode-json"
+            - shell: "code --install-extension redhat.vscode-yaml"
+            - shell: "code --install-extension ms-kubernetes-tools.vscode-kubernetes-tools"
+            - shell: "code --install-extension ms-vscode.vscode-docker"
+            - shell: "code --install-extension humao.rest-client"
+            - shell: "code --install-extension esbenp.prettier-vscode"
+            - shell: "code --install-extension ms-vscode.vscode-eslint"
+            
+        # Alternative Editors
+        - name: vim
+          description: "Vim text editor"
+          category: "Editors"
+          default: false
+          
+        - name: nvim
+          description: "Neovim text editor"
+          category: "Editors"
+          default: false
+          
+        # Container and Orchestration
+        - name: docker
+          description: "Container platform"
+          category: "Containers"
+          default: true
+          priority: 20
+          post_install:
+            - shell: "docker run hello-world"
+            - shell: "sudo usermod -aG docker $USER"
+          service:
+            name: docker
+            enabled: true
+            started: true
+            
+        - name: docker-compose
+          description: "Docker Compose for multi-container apps"
+          category: "Containers"
+          default: true
+          dependencies: ["docker"]
+          
+        - name: kubectl
+          description: "Kubernetes command-line tool"
+          category: "Orchestration"
+          default: true
+          post_install:
+            - shell: "kubectl completion bash > ~/.kube/completion.bash"
+            
+        - name: helm
+          description: "Kubernetes package manager"
+          category: "Orchestration"
+          default: true
+          dependencies: ["kubectl"]
+          
+        - name: k9s
+          description: "Kubernetes cluster management"
+          category: "Orchestration"
+          default: false
+          dependencies: ["kubectl"]
+          
+        # API Development Tools
+        - name: postman
+          description: "API development and testing"
+          category: "API Tools"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: com.getpostman.Postman
+          macos:
+            install_method: brew
+            install_command: postman
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Postman.Postman
+            
+        - name: insomnia
+          description: "API client and design tool"
+          category: "API Tools"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: rest.insomnia.Insomnia
+          macos:
+            install_method: brew
+            install_command: insomnia
+            cask: true
+            
+        - name: httpie
+          description: "Command-line HTTP client"
+          category: "API Tools"
+          default: true
+          
+        - name: curl
+          description: "Command-line data transfer tool"
+          category: "API Tools"
+          default: true
+          
+        - name: jq
+          description: "JSON processor"
+          category: "Utilities"
+          default: true
+          
+        # Monitoring and Debugging
+        - name: htop
+          description: "Interactive process viewer"
+          category: "Monitoring"
+          default: true
+          
+        - name: netstat
+          description: "Network statistics"
+          category: "Monitoring"
+          default: true
+          
+        - name: lsof
+          description: "List open files"
+          category: "Monitoring"
+          default: true
+          
+        - name: tcpdump
+          description: "Network packet analyzer"
+          category: "Monitoring"
+          default: false
+          
+        # Terminal and Shell Tools
+        - name: zsh
+          description: "Zsh shell"
+          category: "Shell"
+          default: true
+          post_install:
+            - shell: "sh -c '$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)'"
+            
+        - name: tmux
+          description: "Terminal multiplexer"
+          category: "Terminal"
+          default: true
+          
+        - name: fzf
+          description: "Fuzzy finder"
+          category: "Utilities"
+          default: true
+          
+        - name: ripgrep
+          description: "Fast grep alternative"
+          category: "Utilities"
+          default: true
+          
+        - name: bat
+          description: "Cat with syntax highlighting"
+          category: "Utilities"
+          default: true
+          
+        # Version Control Tools
+        - name: git-lfs
+          description: "Git Large File Storage"
+          category: "Version Control"
+          default: false
+          dependencies: ["git"]
+          
+        - name: lazygit
+          description: "Terminal UI for git"
+          category: "Version Control"
+          default: false
+          dependencies: ["git"]
+    
+    # Programming Languages
+    programming_languages:
+      - name: Node.js
+        description: "JavaScript runtime for server-side development"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: node@lts
+        default: true
+        shell_updates:
+          - "export NODE_OPTIONS='--max-old-space-size=4096'"
+        post_install:
+          - shell: "npm install -g npm@10.4.0"  # Pin npm version for stability
+          - shell: "npm install -g pnpm yarn"
+          - shell: "npm install -g nodemon pm2 forever"
+          - shell: "npm install -g @nestjs/cli express-generator"
+          
+      - name: Python
+        description: "Python programming language"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: python@3.11
+        default: true
+        post_install:
+          - shell: "pip install --upgrade pip"
+          - shell: "pip install virtualenv pipenv poetry"
+          - shell: "pip install requests flask fastapi django"
+          - shell: "pip install pytest black isort flake8"
+          
+      - name: Go
+        description: "Go programming language"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: go@1.21.6     # Pin Go version for stability
+        default: true
+        shell_updates:
+          - "export GOPATH=$HOME/go"
+          - "export PATH=$PATH:$GOPATH/bin"
+        post_install:
+          - shell: "go install github.com/air-verse/air@latest"
+          - shell: "go install github.com/cosmtrek/air@latest"
+          - shell: "go install github.com/swaggo/swag/cmd/swag@latest"
+          
+      - name: Rust
+        description: "Rust programming language"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: rust@1.75.0   # Pin Rust version for stability
+        default: false
+        post_install:
+          - shell: "rustup component add clippy rustfmt"
+          
+      - name: Java
+        description: "Java programming language"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: java@openjdk-17
+        default: false
+        post_install:
+          - shell: "echo 'export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))' >> ~/.bashrc"
+    
+    # Databases
+    databases:
+      - name: postgresql
+        description: "Advanced open source database"
+        category: "SQL Databases"
+        default: true
+        service:
+          name: postgresql
+          enabled: true
+          started: true
+        post_install:
+          - shell: "sudo -u postgres createuser --superuser $USER"
+          - shell: "sudo -u postgres createdb $USER"
+          
+      - name: mysql
+        description: "Popular open source database"
+        category: "SQL Databases"
+        default: false
+        service:
+          name: mysql
+          enabled: true
+          started: true
+          
+      - name: redis
+        description: "In-memory data structure store"
+        category: "NoSQL Databases"
+        default: true
+        service:
+          name: redis-server
+          enabled: true
+          started: true
+          
+      - name: mongodb
+        description: "Document-oriented database"
+        category: "NoSQL Databases"
+        default: false
+        service:
+          name: mongod
+          enabled: true
+          started: true
+          
+      - name: elasticsearch
+        description: "Search and analytics engine"
+        category: "Search Databases"
+        default: false
+        service:
+          name: elasticsearch
+          enabled: true
+          started: true
+          
+      # Database Tools
+      - name: pgcli
+        description: "PostgreSQL CLI with autocompletion"
+        category: "Database Tools"
+        default: false
+        dependencies: ["postgresql"]
+        install_method: pip
+        install_command: pgcli
+        
+      - name: mycli
+        description: "MySQL CLI with autocompletion"
+        category: "Database Tools"
+        default: false
+        dependencies: ["mysql"]
+        install_method: pip
+        install_command: mycli
+        
+      - name: redis-cli
+        description: "Redis command line interface"
+        category: "Database Tools"
+        default: false
+        dependencies: ["redis"]
+    
+    # Infrastructure and DevOps Tools
+    infrastructure:
+      - name: terraform
+        description: "Infrastructure as code"
+        category: "Infrastructure"
+        default: false
+        
+      - name: ansible
+        description: "IT automation platform"
+        category: "Configuration Management"
+        default: false
+        install_method: pip
+        install_command: ansible
+        
+      - name: vagrant
+        description: "Virtual development environments"
+        category: "Virtualization"
+        default: false
+        
+      - name: nginx
+        description: "HTTP and reverse proxy server"
+        category: "Web Servers"
+        default: false
+        service:
+          name: nginx
+          enabled: false
+          started: false
+          
+      - name: apache2
+        description: "Apache HTTP Server"
+        category: "Web Servers"
+        default: false
+        service:
+          name: apache2
+          enabled: false
+          started: false
+    
+    # Message Queues and Streaming
+    messaging:
+      - name: rabbitmq
+        description: "Message broker"
+        category: "Message Queues"
+        default: false
+        service:
+          name: rabbitmq-server
+          enabled: true
+          started: true
+          
+      - name: kafka
+        description: "Distributed streaming platform"
+        category: "Streaming"
+        default: false
+        
+    # Environment Configuration
+    environment:
+      shell:
+        default_shell: "zsh"
+        oh_my_zsh: true
+        plugins:
+          - "git"
+          - "docker"
+          - "kubectl"
+          - "python"
+          - "golang"
+          - "node"
+          - "npm"
+        theme: "powerlevel10k/powerlevel10k"
+        
+      fonts:
+        - name: "JetBrains Mono"
+          description: "Programming font with ligatures"
+          method: "url"
+          url: "https://download.jetbrains.com/fonts/JetBrainsMono-2.304.zip"
+          destination: "~/.local/share/fonts/"
+          post_install:
+            - shell: "fc-cache -fv"
+    
+    # System Configuration
+    system:
+      git:
+        aliases:
+          co: "checkout"
+          br: "branch"
+          ci: "commit"
+          st: "status"
+          unstage: "reset HEAD --"
+          last: "log -1 HEAD"
+          visual: "!gitk"
+          graph: "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+          
+        settings:
+          - key: "core.editor"
+            value: "code --wait"
+          - key: "init.defaultBranch"
+            value: "main"
+          - key: "pull.rebase"
+            value: "false"
+          - key: "core.autocrlf"
+            value: "input"
+          - key: "push.default"
+            value: "current"
+            
+      docker:
+        config:
+          log-driver: "json-file"
+          log-opts:
+            max-size: "10m"
+            max-file: "3"
+          storage-driver: "overlay2"
+          
+      environment_variables:
+        EDITOR: "code"
+        BROWSER: "firefox"
+        TERM: "xterm-256color"
+        DOCKER_BUILDKIT: "1"
+        COMPOSE_DOCKER_CLI_BUILD: "1"
+    ```
+  </Tab>
+  
+  <Tab value="Microservices">
+    ```yaml
+    # Microservices-focused configuration
+    applications:
+      development:
+        - name: docker
+          default: true
+        - name: docker-compose
+          default: true
+        - name: kubectl
+          default: true
+        - name: helm
+          default: true
+        - name: istio
+          description: "Service mesh platform"
+          default: false
+        - name: envoy
+          description: "Cloud-native proxy"
+          default: false
+          
+    programming_languages:
+      - name: go
+        install_method: mise
+        install_command: go@1.21.6     # Pin Go version for stability
+        default: true
+        post_install:
+          - shell: "go install github.com/grpc/grpc-go/cmd/protoc-gen-go-grpc@latest"
+          - shell: "go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+          
+    infrastructure:
+      - name: consul
+        description: "Service discovery and configuration"
+        default: true
+      - name: vault
+        description: "Secrets management"
+        default: true
+      - name: jaeger
+        description: "Distributed tracing"
+        default: false
+    ```
+  </Tab>
+  
+  <Tab value="API Development">
+    ```yaml
+    # API-focused development configuration
+    applications:
+      development:
+        - name: postman
+          default: true
+        - name: insomnia
+          default: false
+        - name: httpie
+          default: true
+        - name: openapi-generator
+          description: "OpenAPI code generator"
+          install_method: npm
+          install_command: "@openapitools/openapi-generator-cli"
+          global: true
+          
+    programming_languages:
+      - name: node
+        install_method: mise
+        install_command: node@lts
+        post_install:
+          - shell: "npm install -g @nestjs/cli express-generator fastify-cli"
+          - shell: "npm install -g swagger-jsdoc swagger-ui-express"
+          
+      - name: python
+        install_method: mise
+        install_command: python@3.11
+        post_install:
+          - shell: "pip install fastapi uvicorn flask django-rest-framework"
+          - shell: "pip install pydantic marshmallow"
+    ```
+  </Tab>
+  
+  <Tab value="DevOps Focus">
+    ```yaml
+    # DevOps and infrastructure-focused configuration
+    applications:
+      development:
+        - name: docker
+          default: true
+        - name: kubectl
+          default: true
+        - name: helm
+          default: true
+        - name: terraform
+          default: true
+        - name: ansible
+          default: true
+        - name: packer
+          description: "Machine image builder"
+          default: false
+          
+    infrastructure:
+      - name: prometheus
+        description: "Monitoring system"
+        default: false
+      - name: grafana
+        description: "Analytics and monitoring"
+        default: false
+      - name: alertmanager
+        description: "Alert handling"
+        default: false
+        
+    monitoring:
+      - name: netdata
+        description: "Real-time monitoring"
+        default: false
+      - name: htop
+        default: true
+      - name: iotop
+        default: false
+    ```
+  </Tab>
+</Tabs>
+
+## Language-Specific Setups
+
+### Node.js Backend Development
+
+<Tabs items={['Express.js', 'NestJS', 'Fastify', 'Koa.js']}>
+  <Tab value="Express.js">
+    ```bash
+    # Create Express.js project
+    npx express-generator my-express-app --ejs --git
+    cd my-express-app
+    npm install
+    
+    # Install additional dependencies
+    npm install --save dotenv cors helmet morgan
+    npm install --save-dev nodemon jest supertest
+    
+    # Install monitoring tools
+    npm install --save express-prometheus-middleware
+    npm install --save @opentelemetry/api @opentelemetry/node
+    
+    # Create basic API structure
+    mkdir -p routes/api controllers middleware
+    
+    # Start development server
+    npm run dev
+    ```
+    
+    **DevEx Configuration for Express:**
+    ```yaml
+    applications:
+      development:
+        - name: express-tools
+          post_install:
+            - shell: "npm install -g express-generator"
+            - shell: "npm install -g nodemon"
+    ```
+  </Tab>
+  
+  <Tab value="NestJS">
+    ```bash
+    # Install NestJS CLI
+    npm install -g @nestjs/cli
+    
+    # Create new NestJS project
+    nest new my-nest-app
+    cd my-nest-app
+    
+    # Install additional packages
+    npm install @nestjs/swagger @nestjs/jwt @nestjs/passport
+    npm install @nestjs/typeorm typeorm pg
+    npm install @nestjs/config class-validator class-transformer
+    
+    # Generate resources
+    nest generate resource users
+    nest generate service auth
+    nest generate guard jwt
+    
+    # Start development
+    npm run start:dev
+    ```
+    
+    **NestJS Project Structure:**
+    ```
+    src/
+    ├── app.module.ts
+    ├── main.ts
+    ├── users/
+    │   ├── users.controller.ts
+    │   ├── users.service.ts
+    │   ├── users.module.ts
+    │   └── dto/
+    ├── auth/
+    │   ├── auth.service.ts
+    │   ├── auth.module.ts
+    │   └── guards/
+    └── common/
+        ├── filters/
+        ├── guards/
+        └── interceptors/
+    ```
+  </Tab>
+  
+  <Tab value="Fastify">
+    ```bash
+    # Create Fastify project
+    mkdir my-fastify-app
+    cd my-fastify-app
+    npm init -y
+    
+    # Install Fastify and plugins
+    npm install fastify @fastify/cors @fastify/helmet
+    npm install @fastify/swagger @fastify/swagger-ui
+    npm install @fastify/jwt @fastify/auth
+    npm install --save-dev @types/node typescript ts-node
+    
+    # Create basic server
+    cat > index.js << 'EOF'
+    const fastify = require('fastify')({ logger: true })
+    
+    fastify.register(require('@fastify/cors'))
+    fastify.register(require('@fastify/helmet'))
+    fastify.register(require('@fastify/swagger'))
+    
+    fastify.get('/', async (request, reply) => {
+      return { message: 'Hello World!' }
+    })
+    
+    const start = async () => {
+      try {
+        await fastify.listen({ port: 3000 })
+      } catch (err) {
+        fastify.log.error(err)
+        process.exit(1)
+      }
+    }
+    
+    start()
+    EOF
+    
+    # Start server
+    node index.js
+    ```
+  </Tab>
+  
+  <Tab value="Koa.js">
+    ```bash
+    # Create Koa.js project
+    mkdir my-koa-app
+    cd my-koa-app
+    npm init -y
+    
+    # Install Koa and middleware
+    npm install koa @koa/cors @koa/router koa-helmet
+    npm install koa-bodyparser koa-logger koa-jwt
+    npm install --save-dev nodemon
+    
+    # Create basic app
+    cat > app.js << 'EOF'
+    const Koa = require('koa')
+    const Router = require('@koa/router')
+    const cors = require('@koa/cors')
+    const helmet = require('koa-helmet')
+    const bodyParser = require('koa-bodyparser')
+    
+    const app = new Koa()
+    const router = new Router()
+    
+    app.use(helmet())
+    app.use(cors())
+    app.use(bodyParser())
+    
+    router.get('/', (ctx) => {
+      ctx.body = { message: 'Hello World!' }
+    })
+    
+    app.use(router.routes())
+    app.use(router.allowedMethods())
+    
+    app.listen(3000, () => {
+      console.log('Server running on port 3000')
+    })
+    EOF
+    
+    # Start development
+    npx nodemon app.js
+    ```
+  </Tab>
+</Tabs>
+
+### Python Backend Development
+
+<Tabs items={['FastAPI', 'Django', 'Flask', 'Django REST']}>
+  <Tab value="FastAPI">
+    ```bash
+    # Create FastAPI project
+    mkdir my-fastapi-app
+    cd my-fastapi-app
+    python -m venv venv
+    source venv/bin/activate
+    
+    # Install FastAPI and dependencies
+    pip install fastapi uvicorn[standard]
+    pip install sqlalchemy alembic psycopg2-binary
+    pip install pydantic[email] python-jose[cryptography]
+    pip install pytest pytest-asyncio httpx
+    
+    # Create basic app structure
+    mkdir -p app/{api,core,models,schemas,crud}
+    
+    # Create main.py
+    cat > app/main.py << 'EOF'
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
+    
+    app = FastAPI(title="My API", version="1.0.0")
+    
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    
+    @app.get("/")
+    async def root():
+        return {"message": "Hello World"}
+    
+    @app.get("/health")
+    async def health_check():
+        return {"status": "healthy"}
+    EOF
+    
+    # Start development server
+    uvicorn app.main:app --reload
+    ```
+    
+    **FastAPI Project Structure:**
+    ```
+    app/
+    ├── main.py
+    ├── api/
+    │   ├── __init__.py
+    │   ├── deps.py
+    │   └── endpoints/
+    ├── core/
+    │   ├── config.py
+    │   ├── security.py
+    │   └── database.py
+    ├── models/
+    │   └── __init__.py
+    ├── schemas/
+    │   └── __init__.py
+    └── crud/
+        └── __init__.py
+    ```
+  </Tab>
+  
+  <Tab value="Django">
+    ```bash
+    # Create Django project
+    django-admin startproject myproject
+    cd myproject
+    python -m venv venv
+    source venv/bin/activate
+    
+    # Install Django and dependencies
+    pip install django djangorestframework
+    pip install django-cors-headers python-decouple
+    pip install psycopg2-binary redis celery
+    pip install pytest-django factory-boy
+    
+    # Create Django app
+    python manage.py startapp api
+    
+    # Configure settings
+    cat >> myproject/settings.py << 'EOF'
+    
+    INSTALLED_APPS += [
+        'rest_framework',
+        'corsheaders',
+        'api',
+    ]
+    
+    MIDDLEWARE += [
+        'corsheaders.middleware.CorsMiddleware',
+    ]
+    
+    REST_FRAMEWORK = {
+        'DEFAULT_AUTHENTICATION_CLASSES': [
+            'rest_framework.authentication.TokenAuthentication',
+        ],
+        'DEFAULT_PERMISSION_CLASSES': [
+            'rest_framework.permissions.IsAuthenticated',
+        ],
+    }
+    
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    EOF
+    
+    # Run migrations and start server
+    python manage.py migrate
+    python manage.py runserver
+    ```
+  </Tab>
+  
+  <Tab value="Flask">
+    ```bash
+    # Create Flask project
+    mkdir my-flask-app
+    cd my-flask-app
+    python -m venv venv
+    source venv/bin/activate
+    
+    # Install Flask and extensions
+    pip install flask flask-sqlalchemy flask-migrate
+    pip install flask-jwt-extended flask-cors
+    pip install marshmallow flask-marshmallow
+    pip install pytest pytest-flask
+    
+    # Create app structure
+    mkdir -p app/{api,models,schemas}
+    
+    # Create main app
+    cat > app/__init__.py << 'EOF'
+    from flask import Flask
+    from flask_sqlalchemy import SQLAlchemy
+    from flask_migrate import Migrate
+    from flask_cors import CORS
+    
+    db = SQLAlchemy()
+    migrate = Migrate()
+    
+    def create_app():
+        app = Flask(__name__)
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+        app.config['SECRET_KEY'] = 'dev-secret-key'
+        
+        db.init_app(app)
+        migrate.init_app(app, db)
+        CORS(app)
+        
+        from app.api import bp as api_bp
+        app.register_blueprint(api_bp, url_prefix='/api')
+        
+        return app
+    EOF
+    
+    # Start development server
+    flask run --debug
+    ```
+  </Tab>
+  
+  <Tab value="Django REST">
+    ```bash
+    # Create Django REST API project
+    django-admin startproject myapi
+    cd myapi
+    python -m venv venv
+    source venv/bin/activate
+    
+    # Install comprehensive REST framework stack
+    pip install django djangorestframework
+    pip install djangorestframework-simplejwt
+    pip install django-filter django-cors-headers
+    pip install drf-spectacular  # OpenAPI 3 schema generation
+    pip install celery redis
+    
+    # Create API app
+    python manage.py startapp users
+    python manage.py startapp products
+    
+    # Configure comprehensive settings
+    cat > myapi/settings.py << 'EOF'
+    from pathlib import Path
+    from datetime import timedelta
+    
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    
+    SECRET_KEY = 'django-dev-secret-key'
+    DEBUG = True
+    ALLOWED_HOSTS = []
+    
+    INSTALLED_APPS = [
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'rest_framework',
+        'rest_framework_simplejwt',
+        'corsheaders',
+        'django_filters',
+        'drf_spectacular',
+        'users',
+        'products',
+    ]
+    
+    MIDDLEWARE = [
+        'corsheaders.middleware.CorsMiddleware',
+        'django.middleware.security.SecurityMiddleware',
+        'django.contrib.sessions.middleware.SessionMiddleware',
+        'django.middleware.common.CommonMiddleware',
+        'django.middleware.csrf.CsrfViewMiddleware',
+        'django.contrib.auth.middleware.AuthenticationMiddleware',
+        'django.contrib.messages.middleware.MessageMiddleware',
+        'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    ]
+    
+    ROOT_URLCONF = 'myapi.urls'
+    
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'myapi',
+            'USER': 'postgres',
+            'PASSWORD': 'password',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
+    }
+    
+    REST_FRAMEWORK = {
+        'DEFAULT_AUTHENTICATION_CLASSES': (
+            'rest_framework_simplejwt.authentication.JWTAuthentication',
+        ),
+        'DEFAULT_PERMISSION_CLASSES': [
+            'rest_framework.permissions.IsAuthenticated',
+        ],
+        'DEFAULT_FILTER_BACKENDS': [
+            'django_filters.rest_framework.DjangoFilterBackend',
+            'rest_framework.filters.SearchFilter',
+            'rest_framework.filters.OrderingFilter',
+        ],
+        'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+        'PAGE_SIZE': 20,
+        'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    }
+    
+    SIMPLE_JWT = {
+        'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+        'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+        'ROTATE_REFRESH_TOKENS': True,
+    }
+    
+    SPECTACULAR_SETTINGS = {
+        'TITLE': 'My API',
+        'DESCRIPTION': 'A comprehensive REST API',
+        'VERSION': '1.0.0',
+    }
+    
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    EOF
+    
+    # Run migrations
+    python manage.py makemigrations
+    python manage.py migrate
+    python manage.py runserver
+    ```
+  </Tab>
+</Tabs>
+
+### Go Backend Development
+
+<Tabs items={['Gin Framework', 'Echo Framework', 'Fiber Framework', 'Standard Library']}>
+  <Tab value="Gin Framework">
+    ```bash
+    # Create Go project with Gin
+    mkdir my-gin-app
+    cd my-gin-app
+    go mod init my-gin-app
+    
+    # Install Gin and dependencies
+    go get github.com/gin-gonic/gin
+    go get github.com/gin-contrib/cors
+    go get github.com/golang-jwt/jwt/v4
+    go get gorm.io/gorm
+    go get gorm.io/driver/postgres
+    
+    # Create main.go
+    cat > main.go << 'EOF'
+    package main
+    
+    import (
+        "net/http"
+        "github.com/gin-gonic/gin"
+        "github.com/gin-contrib/cors"
+    )
+    
+    func main() {
+        r := gin.Default()
+        
+        // CORS middleware
+        r.Use(cors.Default())
+        
+        // Routes
+        r.GET("/", func(c *gin.Context) {
+            c.JSON(http.StatusOK, gin.H{
+                "message": "Hello World!",
+            })
+        })
+        
+        r.GET("/health", func(c *gin.Context) {
+            c.JSON(http.StatusOK, gin.H{
+                "status": "healthy",
+            })
+        })
+        
+        r.Run(":8080")
+    }
+    EOF
+    
+    # Run the application
+    go run main.go
+    ```
+    
+    **Go Project Structure:**
+    ```
+    my-gin-app/
+    ├── main.go
+    ├── go.mod
+    ├── go.sum
+    ├── handlers/
+    │   ├── auth.go
+    │   └── users.go
+    ├── models/
+    │   └── user.go
+    ├── middleware/
+    │   └── auth.go
+    ├── config/
+    │   └── database.go
+    └── utils/
+        └── jwt.go
+    ```
+  </Tab>
+  
+  <Tab value="Echo Framework">
+    ```bash
+    # Create Echo project
+    mkdir my-echo-app
+    cd my-echo-app
+    go mod init my-echo-app
+    
+    # Install Echo and dependencies
+    go get github.com/labstack/echo/v4
+    go get github.com/labstack/echo/v4/middleware
+    go get github.com/golang-jwt/jwt/v4
+    
+    # Create main.go
+    cat > main.go << 'EOF'
+    package main
+    
+    import (
+        "net/http"
+        "github.com/labstack/echo/v4"
+        "github.com/labstack/echo/v4/middleware"
+    )
+    
+    func main() {
+        e := echo.New()
+        
+        // Middleware
+        e.Use(middleware.Logger())
+        e.Use(middleware.Recover())
+        e.Use(middleware.CORS())
+        
+        // Routes
+        e.GET("/", func(c echo.Context) error {
+            return c.JSON(http.StatusOK, map[string]string{
+                "message": "Hello World!",
+            })
+        })
+        
+        e.GET("/health", func(c echo.Context) error {
+            return c.JSON(http.StatusOK, map[string]string{
+                "status": "healthy",
+            })
+        })
+        
+        e.Logger.Fatal(e.Start(":8080"))
+    }
+    EOF
+    
+    # Run the application
+    go run main.go
+    ```
+  </Tab>
+  
+  <Tab value="Fiber Framework">
+    ```bash
+    # Create Fiber project
+    mkdir my-fiber-app
+    cd my-fiber-app
+    go mod init my-fiber-app
+    
+    # Install Fiber and dependencies
+    go get github.com/gofiber/fiber/v2
+    go get github.com/gofiber/fiber/v2/middleware/cors
+    go get github.com/gofiber/fiber/v2/middleware/logger
+    
+    # Create main.go
+    cat > main.go << 'EOF'
+    package main
+    
+    import (
+        "github.com/gofiber/fiber/v2"
+        "github.com/gofiber/fiber/v2/middleware/cors"
+        "github.com/gofiber/fiber/v2/middleware/logger"
+    )
+    
+    func main() {
+        app := fiber.New()
+        
+        // Middleware
+        app.Use(logger.New())
+        app.Use(cors.New())
+        
+        // Routes
+        app.Get("/", func(c *fiber.Ctx) error {
+            return c.JSON(fiber.Map{
+                "message": "Hello World!",
+            })
+        })
+        
+        app.Get("/health", func(c *fiber.Ctx) error {
+            return c.JSON(fiber.Map{
+                "status": "healthy",
+            })
+        })
+        
+        app.Listen(":8080")
+    }
+    EOF
+    
+    # Run the application
+    go run main.go
+    ```
+  </Tab>
+  
+  <Tab value="Standard Library">
+    ```bash
+    # Create standard library HTTP server
+    mkdir my-go-api
+    cd my-go-api
+    go mod init my-go-api
+    
+    # Create main.go with standard library
+    cat > main.go << 'EOF'
+    package main
+    
+    import (
+        "encoding/json"
+        "fmt"
+        "log"
+        "net/http"
+        "github.com/gorilla/mux"
+    )
+    
+    type Response struct {
+        Message string `json:"message"`
+        Status  string `json:"status,omitempty"`
+    }
+    
+    func homeHandler(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(Response{Message: "Hello World!"})
+    }
+    
+    func healthHandler(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(Response{Status: "healthy"})
+    }
+    
+    func main() {
+        r := mux.NewRouter()
+        
+        r.HandleFunc("/", homeHandler).Methods("GET")
+        r.HandleFunc("/health", healthHandler).Methods("GET")
+        
+        fmt.Println("Server starting on :8080")
+        log.Fatal(http.ListenAndServe(":8080", r))
+    }
+    EOF
+    
+    # Install gorilla/mux for routing
+    go get github.com/gorilla/mux
+    
+    # Run the application
+    go run main.go
+    ```
+  </Tab>
+</Tabs>
+
+## Database Setup and Management
+
+### PostgreSQL Configuration
+
+```bash
+# Initialize PostgreSQL (if not done by DevEx)
+sudo -u postgres initdb -D /var/lib/postgres/data
+
+# Start PostgreSQL service
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Create development user and database
+sudo -u postgres createuser --superuser $USER
+sudo -u postgres createdb $USER
+createdb myapp_development
+createdb myapp_test
+
+# Connect and configure
+psql -d myapp_development -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+psql -d myapp_development -c "CREATE EXTENSION IF NOT EXISTS \"pg_trgm\";"
+```
+
+### Redis Configuration
+
+```bash
+# Configure Redis for development
+sudo tee /etc/redis/redis.conf.d/development.conf > /dev/null <<EOF
+# Development Redis configuration
+maxmemory 256mb
+maxmemory-policy allkeys-lru
+save 900 1
+save 300 10
+save 60 10000
+EOF
+
+# Restart Redis
+sudo systemctl restart redis-server
+
+# Test Redis connection
+redis-cli ping
+```
+
+### MongoDB Setup
+
+```bash
+# Start MongoDB
+sudo systemctl start mongod
+sudo systemctl enable mongod
+
+# Create development database and user
+mongo <<EOF
+use myapp_development
+db.createUser({
+  user: "$USER",
+  pwd: "devpassword",
+  roles: ["readWrite", "dbAdmin"]
+})
+EOF
+```
+
+## Container Development
+
+### Docker Compose for Backend Services
+
+```yaml
+# docker-compose.dev.yml
+version: '3.8'
+
+services:
+  # Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/myapp_dev
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+    command: npm run dev
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: myapp_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  # Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+
+volumes:
+  postgres_data:
+  redis_data:
+  pgadmin_data:
+```
+
+### Multi-Stage Dockerfile
+
+```dockerfile
+# Dockerfile
+# Multi-stage build for Node.js application
+
+# Development stage
+FROM node:18-alpine AS development
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=development
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev"]
+
+# Build stage
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+COPY . .
+RUN npm run build
+
+# Production stage
+FROM node:18-alpine AS production
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package*.json ./
+EXPOSE 3000
+USER node
+CMD ["npm", "start"]
+```
+
+## API Development and Testing
+
+### OpenAPI/Swagger Setup
+
+<Tabs items={['Node.js (Express)', 'Python (FastAPI)', 'Go (Gin)', 'Documentation']}>
+  <Tab value="Node.js (Express)">
+    ```javascript
+    // swagger.js
+    const swaggerJSDoc = require('swagger-jsdoc')
+    const swaggerUi = require('swagger-ui-express')
+    
+    const options = {
+      definition: {
+        openapi: '3.0.0',
+        info: {
+          title: 'My API',
+          version: '1.0.0',
+          description: 'A backend API service',
+        },
+        servers: [
+          {
+            url: 'http://localhost:3000',
+            description: 'Development server',
+          },
+        ],
+      },
+      apis: ['./routes/*.js', './models/*.js'],
+    }
+    
+    const specs = swaggerJSDoc(options)
+    
+    module.exports = { specs, swaggerUi }
+    
+    // app.js
+    const { specs, swaggerUi } = require('./swagger')
+    app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs))
+    ```
+  </Tab>
+  
+  <Tab value="Python (FastAPI)">
+    ```python
+    # main.py
+    from fastapi import FastAPI
+    from fastapi.openapi.docs import get_swagger_ui_html
+    from fastapi.openapi.utils import get_openapi
+    
+    app = FastAPI(
+        title="My API",
+        description="A backend API service",
+        version="1.0.0",
+        docs_url="/api-docs",
+        redoc_url="/redoc",
+    )
+    
+    def custom_openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        openapi_schema = get_openapi(
+            title="My API",
+            version="1.0.0",
+            description="A backend API service",
+            routes=app.routes,
+        )
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
+    
+    app.openapi = custom_openapi
+    ```
+  </Tab>
+  
+  <Tab value="Go (Gin)">
+    ```go
+    // main.go
+    package main
+    
+    import (
+        "github.com/gin-gonic/gin"
+        "github.com/swaggo/gin-swagger"
+        "github.com/swaggo/files"
+        _ "my-gin-app/docs"
+    )
+    
+    // @title My API
+    // @version 1.0
+    // @description A backend API service
+    // @host localhost:8080
+    // @BasePath /api/v1
+    func main() {
+        r := gin.Default()
+        
+        // Swagger documentation
+        r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+        
+        api := r.Group("/api/v1")
+        {
+            api.GET("/users", getUsers)
+            api.POST("/users", createUser)
+        }
+        
+        r.Run(":8080")
+    }
+    
+    // @Summary Get all users
+    // @Description Get all users from database
+    // @Tags users
+    // @Accept json
+    // @Produce json
+    // @Success 200 {array} User
+    // @Router /users [get]
+    func getUsers(c *gin.Context) {
+        // Implementation
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Documentation">
+    Generate and serve API documentation:
+    
+    ```bash
+    # For Go applications
+    go install github.com/swaggo/swag/cmd/swag@latest
+    swag init
+    
+    # For Node.js applications
+    npm install -g swagger-jsdoc swagger-ui-express
+    
+    # For Python applications (FastAPI has built-in docs)
+    # Docs available at http://localhost:8000/docs
+    
+    # Generate static documentation
+    npx swagger-codegen generate -i swagger.json -l html2 -o docs/
+    ```
+  </Tab>
+</Tabs>
+
+## Monitoring and Logging
+
+### Application Monitoring Setup
+
+```yaml
+# docker-compose.monitoring.yml
+version: '3.8'
+
+services:
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+
+  # Grafana for metrics visualization
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+
+  # ELK Stack for logging
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.15.0
+    environment:
+      - discovery.type=single-node
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.15.0
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  elasticsearch_data:
+```
+
+### Application Logging Configuration
+
+<Tabs items={['Node.js (Winston)', 'Python (Logging)', 'Go (Logrus)', 'Configuration']}>
+  <Tab value="Node.js (Winston)">
+    ```javascript
+    // logger.js
+    const winston = require('winston')
+    
+    const logger = winston.createLogger({
+      level: process.env.LOG_LEVEL || 'info',
+      format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
+      ),
+      defaultMeta: { service: 'my-api' },
+      transports: [
+        new winston.transports.File({ filename: 'logs/error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'logs/combined.log' }),
+      ],
+    })
+    
+    if (process.env.NODE_ENV !== 'production') {
+      logger.add(new winston.transports.Console({
+        format: winston.format.simple()
+      }))
+    }
+    
+    module.exports = logger
+    ```
+  </Tab>
+  
+  <Tab value="Python (Logging)">
+    ```python
+    # logger.py
+    import logging
+    import logging.config
+    from pathlib import Path
+    
+    LOGGING_CONFIG = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'standard': {
+                'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+            },
+            'json': {
+                'format': '%(asctime)s %(name)s %(levelname)s %(message)s',
+                'class': 'pythonjsonlogger.jsonlogger.JsonFormatter'
+            }
+        },
+        'handlers': {
+            'default': {
+                'level': 'INFO',
+                'formatter': 'standard',
+                'class': 'logging.StreamHandler',
+                'stream': 'ext://sys.stdout',
+            },
+            'file': {
+                'level': 'INFO',
+                'formatter': 'json',
+                'class': 'logging.FileHandler',
+                'filename': 'logs/app.log',
+                'mode': 'a',
+            },
+        },
+        'loggers': {
+            '': {
+                'handlers': ['default', 'file'],
+                'level': 'INFO',
+                'propagate': False
+            }
+        }
+    }
+    
+    # Ensure logs directory exists
+    Path('logs').mkdir(exist_ok=True)
+    
+    logging.config.dictConfig(LOGGING_CONFIG)
+    logger = logging.getLogger(__name__)
+    ```
+  </Tab>
+  
+  <Tab value="Go (Logrus)">
+    ```go
+    // logger.go
+    package main
+    
+    import (
+        "os"
+        "github.com/sirupsen/logrus"
+    )
+    
+    func init() {
+        // Log as JSON instead of the default ASCII formatter
+        logrus.SetFormatter(&logrus.JSONFormatter{})
+        
+        // Output to stdout instead of the default stderr
+        logrus.SetOutput(os.Stdout)
+        
+        // Only log the warning severity or above
+        logrus.SetLevel(logrus.InfoLevel)
+    }
+    
+    func GetLogger() *logrus.Logger {
+        logger := logrus.New()
+        
+        // Configure based on environment
+        if os.Getenv("ENVIRONMENT") == "production" {
+            logger.SetLevel(logrus.WarnLevel)
+        } else {
+            logger.SetLevel(logrus.DebugLevel)
+        }
+        
+        return logger
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Configuration">
+    Configure centralized logging:
+    
+    ```yaml
+    # fluent-bit.conf
+    [SERVICE]
+        Flush         1
+        Log_Level     info
+        Daemon        off
+        Parsers_File  parsers.conf
+    
+    [INPUT]
+        Name              tail
+        Path              /app/logs/*.log
+        Parser            json
+        Tag               app.logs
+        Refresh_Interval  5
+    
+    [OUTPUT]
+        Name  es
+        Match *
+        Host  elasticsearch
+        Port  9200
+        Index backend-logs
+    ```
+  </Tab>
+</Tabs>
+
+## Development Automation
+
+### Development Scripts
+
+```bash
+#!/bin/bash
+# scripts/dev-setup.sh
+# Complete development environment setup
+
+set -e
+
+echo "🚀 Setting up backend development environment..."
+
+# Start required services
+echo "📦 Starting development services..."
+docker-compose -f docker-compose.dev.yml up -d postgres redis
+
+# Wait for services to be ready
+echo "⏳ Waiting for services to be ready..."
+sleep 10
+
+# Run database migrations
+echo "🗃️ Running database migrations..."
+if [ -f "package.json" ]; then
+    npm run migrate
+elif [ -f "requirements.txt" ]; then
+    python manage.py migrate
+elif [ -f "go.mod" ]; then
+    go run migrations/*.go
+fi
+
+# Install dependencies
+echo "📚 Installing dependencies..."
+if [ -f "package.json" ]; then
+    npm install
+elif [ -f "requirements.txt" ]; then
+    pip install -r requirements.txt
+elif [ -f "go.mod" ]; then
+    go mod download
+fi
+
+# Start the application
+echo "🎯 Starting application..."
+if [ -f "package.json" ]; then
+    npm run dev &
+elif [ -f "manage.py" ]; then
+    python manage.py runserver &
+elif [ -f "main.go" ]; then
+    go run main.go &
+fi
+
+echo "✅ Development environment is ready!"
+echo "📍 Application: http://localhost:3000"
+echo "📍 Database: postgresql://localhost:5432"
+echo "📍 Redis: redis://localhost:6379"
+```
+
+### Testing Automation
+
+```bash
+#!/bin/bash
+# scripts/run-tests.sh
+# Comprehensive testing script
+
+set -e
+
+echo "🧪 Running comprehensive test suite..."
+
+# Unit tests
+echo "🔬 Running unit tests..."
+if [ -f "package.json" ]; then
+    npm test
+elif [ -f "requirements.txt" ]; then
+    pytest tests/unit/
+elif [ -f "go.mod" ]; then
+    go test ./...
+fi
+
+# Integration tests
+echo "🔗 Running integration tests..."
+if [ -f "package.json" ]; then
+    npm run test:integration
+elif [ -f "requirements.txt" ]; then
+    pytest tests/integration/
+elif [ -f "go.mod" ]; then
+    go test -tags=integration ./...
+fi
+
+# API tests
+echo "🌐 Running API tests..."
+if command -v newman &> /dev/null; then
+    newman run postman_collection.json
+fi
+
+# Load tests
+echo "⚡ Running load tests..."
+if command -v k6 &> /dev/null; then
+    k6 run load-test.js
+fi
+
+echo "✅ All tests completed!"
+```
+
+<Callout type="tip">
+**Backend Development Best Practices:**
+
+1. **API Design**: Follow RESTful principles and use OpenAPI documentation
+2. **Database Management**: Use migrations and seed data for reproducible setups
+3. **Error Handling**: Implement comprehensive error handling and logging
+4. **Security**: Use environment variables for secrets and implement authentication
+5. **Testing**: Write unit, integration, and API tests
+6. **Monitoring**: Implement health checks and application metrics
+7. **Documentation**: Document APIs, deployment, and development setup
+8. **Container Strategy**: Use Docker for consistent development environments
+</Callout>
+
+This backend development environment provides a comprehensive foundation for server-side development across multiple languages and frameworks, with proper tooling for databases, containers, monitoring, and automation.
+
+<Cards>
+  <Card title="Web Development" href="/docs/examples/web-development" description="Frontend development environment" />
+  <Card title="Data Science" href="/docs/examples/data-science" description="Python data science setup" />
+  <Card title="Mobile Development" href="/docs/examples/mobile-development" description="Mobile app development environment" />
+  <Card title="Team Setup" href="/docs/guides/team-setup" description="Configure DevEx for teams" />
+</Cards>

@@ -1,0 +1,590 @@
+---
+title: Global Flags & Completion
+description: Global command-line options, environment variables, and shell completion
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# Global Flags & Completion
+
+DevEx provides a comprehensive set of global flags, environment variables, and shell completion features that work across all commands to enhance your development experience.
+
+## Global Flags
+
+These flags are available for all DevEx commands and provide consistent behavior across the CLI.
+
+### Core Global Flags
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--verbose` | `-v` | `bool` | `false` | Enable verbose output with detailed information |
+| `--dry-run` | `-n` | `bool` | `false` | Show what would be done without executing |
+| `--help` | `-h` | `bool` | `false` | Show help information for the command |
+| `--version` | | `bool` | `false` | Show DevEx version information |
+
+### Configuration Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--config-dir` | `string` | `~/.local/share/devex/config` | Override default configuration directory |
+| `--user-config-dir` | `string` | `~/.devex` | Override user configuration directory |
+| `--cache-dir` | `string` | `~/.cache/devex` | Override cache directory |
+| `--no-backup` | `bool` | `false` | Disable automatic backups |
+
+### Output Flags
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--output` | `string` | `auto` | Output format: table, json, yaml, csv |
+| `--no-color` | `bool` | `false` | Disable colored output |
+| `--quiet` | `bool` | `false` | Suppress non-essential output |
+| `--debug` | `bool` | `false` | Enable debug logging |
+
+## Global Flag Examples
+
+<Tabs items={['Verbose Mode', 'Dry Run', 'Custom Directories', 'Output Formats']}>
+  <Tab value="Verbose Mode">
+    ```bash
+    # Verbose installation with detailed logs
+    devex install --verbose
+    
+    Output:
+    [INFO] Loading configuration from ~/.local/share/devex/config
+    [INFO] Detected platform: Ubuntu 22.04 (x86_64)
+    [INFO] Using package manager: apt
+    [DEBUG] Checking repository keys...
+    [DEBUG] Repository https://download.docker.com/linux/ubuntu is accessible
+    [INFO] Installing docker...
+    [DEBUG] Running: sudo apt-get install docker-ce
+    [DEBUG] Command output: Reading package lists...
+    [INFO] ✓ Docker installed successfully
+    [DEBUG] Post-install: Adding user to docker group
+    [INFO] Installation completed in 2m 34s
+    ```
+  </Tab>
+  
+  <Tab value="Dry Run">
+    ```bash
+    # Preview what would be installed
+    devex install --dry-run
+    
+    Output:
+    Dry Run Mode: No changes will be made
+    
+    Would install the following applications:
+    ┌─────────────────┬─────────────┬──────────────────────────┐
+    │ Application     │ Method      │ Command                  │
+    ├─────────────────┼─────────────┼──────────────────────────┤
+    │ git             │ apt         │ sudo apt install git     │
+    │ docker          │ apt         │ sudo apt install docker │
+    │ node            │ mise        │ mise install node@lts   │
+    │ postgresql      │ apt         │ sudo apt install postgres│
+    └─────────────────┴─────────────┴──────────────────────────┘
+    
+    Estimated installation time: 8-12 minutes
+    Estimated disk space: 2.1 GB
+    ```
+  </Tab>
+  
+  <Tab value="Custom Directories">
+    ```bash
+    # Use custom configuration directory
+    devex install --config-dir ./team-configs
+    
+    # Use custom cache directory (faster SSD)
+    devex install --cache-dir /fast-storage/devex-cache
+    
+    # Combine multiple directory overrides
+    devex config show \
+      --config-dir ./team-configs \
+      --user-config-dir ./user-overrides \
+      --cache-dir ./cache
+    ```
+  </Tab>
+  
+  <Tab value="Output Formats">
+    ```bash
+    # JSON output for scripting
+    devex status --output json | jq '.applications[] | select(.status == "installed")'
+    
+    # YAML output for documentation
+    devex config show --output yaml > environment-docs.yaml
+    
+    # CSV output for spreadsheets
+    devex list --output csv > application-inventory.csv
+    
+    # Quiet mode for automation
+    devex install --quiet && echo "Installation successful"
+    ```
+  </Tab>
+</Tabs>
+
+## Environment Variables
+
+DevEx recognizes several environment variables that control its behavior globally.
+
+### Core Environment Variables
+
+<Cards>
+  <Card title="DEVEX_DEBUG" description="Enable debug logging (true/false)" />
+  <Card title="DEVEX_CONFIG_DIR" description="Override default configuration directory" />
+  <Card title="DEVEX_NO_COLOR" description="Disable colored output (true/false)" />
+  <Card title="DEVEX_CACHE_DIR" description="Override cache directory location" />
+</Cards>
+
+### Configuration Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEVEX_CONFIG_DIR` | `~/.local/share/devex/config` | Default configuration directory |
+| `DEVEX_USER_CONFIG_DIR` | `~/.devex` | User override configuration directory |
+| `DEVEX_CACHE_DIR` | `~/.cache/devex` | Cache directory for downloads and metadata |
+| `DEVEX_BACKUP_DIR` | `~/.devex/backups` | Directory for configuration backups |
+| `DEVEX_LOG_DIR` | `~/.local/share/devex/logs` | Directory for log files |
+
+### Behavior Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DEVEX_DEBUG` | `false` | Enable debug logging and verbose output |
+| `DEVEX_NO_COLOR` | `false` | Disable colored terminal output |
+| `DEVEX_NO_BACKUP` | `false` | Disable automatic backup creation |
+| `DEVEX_AUTO_YES` | `false` | Automatically answer "yes" to prompts |
+| `DEVEX_TIMEOUT` | `300` | Command timeout in seconds |
+
+### Platform-Specific Variables
+
+| Variable | Platform | Description |
+|----------|----------|-------------|
+| `DEVEX_PACKAGE_MANAGER` | Linux | Force specific package manager (apt, dnf, pacman) |
+| `DEVEX_USE_SUDO` | Linux | Control sudo usage (true/false/auto) |
+| `DEVEX_HOMEBREW_PREFIX` | macOS | Custom Homebrew installation prefix |
+| `DEVEX_WINGET_SOURCE` | Windows | Custom winget source repository |
+
+### Environment Variable Examples
+
+<Tabs items={['Development', 'CI/CD', 'Team Settings', 'Debugging']}>
+  <Tab value="Development">
+    ```bash
+    # Development environment setup
+    export DEVEX_DEBUG=true
+    export DEVEX_CONFIG_DIR=./dev-configs
+    export DEVEX_CACHE_DIR=/tmp/devex-cache
+    
+    # Run with development settings
+    devex install
+    ```
+  </Tab>
+  
+  <Tab value="CI/CD">
+    ```bash
+    # CI/CD environment variables
+    export DEVEX_AUTO_YES=true
+    export DEVEX_NO_COLOR=true
+    export DEVEX_NO_BACKUP=true
+    export DEVEX_TIMEOUT=600
+    
+    # Automated installation
+    devex install --quiet
+    ```
+  </Tab>
+  
+  <Tab value="Team Settings">
+    ```bash
+    # Team configuration
+    export DEVEX_CONFIG_DIR=/shared/team-configs
+    export DEVEX_USER_CONFIG_DIR=$HOME/.devex-team
+    
+    # Use team-wide settings
+    devex template apply backend-team
+    ```
+  </Tab>
+  
+  <Tab value="Debugging">
+    ```bash
+    # Debug mode with detailed logging
+    export DEVEX_DEBUG=true
+    export DEVEX_LOG_LEVEL=trace
+    export DEVEX_LOG_DIR=./debug-logs
+    
+    # Run with full debugging
+    devex install docker --verbose
+    ```
+  </Tab>
+</Tabs>
+
+## Shell Completion
+
+DevEx provides comprehensive shell completion for all major shells, making command-line usage faster and more intuitive.
+
+### devex completion
+
+Generate shell completion scripts for your shell.
+
+#### Usage
+
+```bash
+devex completion <shell> [flags]
+```
+
+#### Supported Shells
+
+- **bash** - Bash shell completion
+- **zsh** - Zsh shell completion  
+- **fish** - Fish shell completion
+- **powershell** - PowerShell completion (Windows)
+
+#### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--no-descriptions` | `bool` | `false` | Disable completion descriptions |
+
+### Installation Instructions
+
+<Tabs items={['Bash', 'Zsh', 'Fish', 'PowerShell']}>
+  <Tab value="Bash">
+    ```bash
+    # Install bash completion
+    devex completion bash > /etc/bash_completion.d/devex
+    
+    # Or for user-only installation
+    devex completion bash > ~/.local/share/bash-completion/completions/devex
+    
+    # Reload your shell or run:
+    source ~/.bashrc
+    
+    # Test completion
+    devex <TAB><TAB>
+    ```
+  </Tab>
+  
+  <Tab value="Zsh">
+    ```bash
+    # Install zsh completion
+    devex completion zsh > "${fpath[1]}/_devex"
+    
+    # Or add to your .zshrc:
+    echo 'eval "$(devex completion zsh)"' >> ~/.zshrc
+    
+    # Reload your shell
+    source ~/.zshrc
+    
+    # Test completion
+    devex <TAB>
+    ```
+  </Tab>
+  
+  <Tab value="Fish">
+    ```bash
+    # Install fish completion
+    devex completion fish > ~/.config/fish/completions/devex.fish
+    
+    # Reload fish configuration
+    fish -c "source ~/.config/fish/config.fish"
+    
+    # Test completion
+    devex <TAB>
+    ```
+  </Tab>
+  
+  <Tab value="PowerShell">
+    ```powershell
+    # Install PowerShell completion
+    devex completion powershell | Out-String | Invoke-Expression
+    
+    # Add to PowerShell profile for persistence
+    devex completion powershell >> $PROFILE
+    
+    # Test completion
+    devex <TAB>
+    ```
+  </Tab>
+</Tabs>
+
+### Completion Features
+
+<Steps>
+  <Step>
+    **Command Completion**
+    ```bash
+    devex <TAB>
+    # Shows: add, config, install, list, remove, setup, status, template
+    
+    devex c<TAB>
+    # Shows: config, completion
+    ```
+  </Step>
+  
+  <Step>
+    **Subcommand Completion**
+    ```bash
+    devex config <TAB>
+    # Shows: backup, diff, edit, show, validate
+    
+    devex template <TAB>
+    # Shows: apply, create, list, show
+    ```
+  </Step>
+  
+  <Step>
+    **Flag Completion**
+    ```bash
+    devex install --<TAB>
+    # Shows: --verbose, --dry-run, --category, --app
+    
+    devex config show --format <TAB>
+    # Shows: table, json, yaml, csv
+    ```
+  </Step>
+  
+  <Step>
+    **Dynamic Content Completion**
+    ```bash
+    devex add <TAB>
+    # Shows available applications: docker, git, node, python, vscode
+    
+    devex template apply <TAB>
+    # Shows available templates: backend, frontend, full-stack
+    
+    devex config edit <TAB>
+    # Shows configuration files: applications, environment, system, desktop
+    ```
+  </Step>
+</Steps>
+
+### Advanced Completion Examples
+
+```bash
+# Complete application names
+devex add doc<TAB>
+# Completes to: docker, docker-compose
+
+# Complete with descriptions
+devex add docker<TAB>
+# Shows: docker (Container platform for developers)
+
+# Complete configuration files
+devex config edit app<TAB>
+# Completes to: applications
+
+# Complete template names
+devex template show back<TAB>
+# Completes to: backend
+
+# Complete output formats
+devex status --output <TAB>
+# Shows: table, json, yaml, csv
+```
+
+## Help System
+
+DevEx provides comprehensive help at multiple levels.
+
+### Command Help
+
+```bash
+# General help
+devex --help
+devex help
+
+# Command-specific help
+devex install --help
+devex config --help
+
+# Subcommand help
+devex config edit --help
+devex template apply --help
+```
+
+### Contextual Help
+
+DevEx provides contextual help based on your current environment and configuration:
+
+```bash
+# Smart help suggestions
+devex help
+# Shows relevant commands based on your setup status
+
+# Context-aware tips
+devex status
+# May suggest: "Run 'devex recovery check' to diagnose issues"
+
+# Command suggestions
+devex
+# If no subcommand: "Try 'devex setup' for first-time configuration"
+```
+
+### Help Output Examples
+
+<Tabs items={['Command Help', 'Flag Help', 'Example Help', 'Error Help']}>
+  <Tab value="Command Help">
+    ```bash
+    devex install --help
+    
+    Install your development environment
+    
+    Usage:
+      devex install [flags]
+    
+    Description:
+      The install command automates the installation of your complete 
+      development environment based on your configuration files.
+    
+    Flags:
+      -c, --category string    Install specific category (development, databases, optional)
+      -a, --app stringArray    Install specific applications only
+      -f, --force              Force reinstall even if already installed
+      -h, --help               help for install
+      -n, --dry-run            Show what would be installed without executing
+      -v, --verbose            Enable verbose output
+    
+    Global Flags:
+          --config-dir string   Override default config directory
+          --no-color           Disable colored output
+          --debug              Enable debug logging
+    
+    Examples:
+      devex install
+      devex install --category development
+      devex install --app docker --app vscode
+    ```
+  </Tab>
+  
+  <Tab value="Flag Help">
+    ```bash
+    devex config show --help
+    
+    Flags:
+      --format string     Output format (table, json, yaml) (default "table")
+      --verbose          Show detailed information
+      --files            Show individual file details
+    
+    The --format flag controls output formatting:
+      table  - Human-readable table (default)
+      json   - Machine-readable JSON
+      yaml   - Human-readable YAML
+      csv    - Spreadsheet-compatible CSV
+    ```
+  </Tab>
+  
+  <Tab value="Example Help">
+    ```bash
+    devex template apply --help
+    
+    Examples:
+      # Apply backend development template
+      devex template apply backend
+      
+      # Apply with merge mode (keep existing apps)
+      devex template apply backend --merge
+      
+      # Preview changes without applying
+      devex template apply backend --dry-run
+      
+      # Apply and install immediately
+      devex template apply backend --install
+    ```
+  </Tab>
+  
+  <Tab value="Error Help">
+    ```bash
+    devex add nonexistent-app
+    
+    Error: Application 'nonexistent-app' not found
+    
+    Did you mean one of these?
+      - docker
+      - node
+      - postgresql
+    
+    Use 'devex list' to see all available applications
+    Use 'devex list --search <term>' to search for specific applications
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration Priority
+
+<Steps>
+  <Step>
+    DevEx follows a clear priority order when determining configuration values:
+    
+    ### Command Line Flags (Highest Priority)
+    ```bash
+    devex install --config-dir ./custom
+    # Always uses ./custom regardless of environment variables
+    ```
+  </Step>
+  
+  <Step>
+    ### Environment Variables
+    ```bash
+    export DEVEX_CONFIG_DIR=./team-config
+    devex install  # Uses ./team-config
+    ```
+  </Step>
+  
+  <Step>
+    ### Configuration Files
+    ```yaml
+    # ~/.devex/config.yaml
+    defaults:
+      verbose: true
+      backup: true
+    ```
+  </Step>
+  
+  <Step>
+    ### Built-in Defaults (Lowest Priority)
+    ```
+    Default values hardcoded in DevEx
+    ```
+  </Step>
+</Steps>
+
+## Best Practices
+
+<Callout type="tip">
+**Global Flag Best Practices:**
+
+1. **Use dry-run for safety** - Always preview major changes
+2. **Enable verbose mode for debugging** - Get detailed information when troubleshooting
+3. **Set up shell completion** - Improves command-line efficiency
+4. **Use environment variables for consistency** - Set team-wide defaults
+5. **Leverage help system** - Use `--help` for unfamiliar commands
+</Callout>
+
+### Common Patterns
+
+```bash
+# Safe operation pattern
+devex install --dry-run    # Preview
+devex install --verbose    # Execute with details
+
+# Automation pattern
+export DEVEX_AUTO_YES=true
+export DEVEX_NO_COLOR=true
+devex install --quiet
+
+# Debugging pattern
+export DEVEX_DEBUG=true
+devex config validate --verbose
+
+# Team consistency pattern
+export DEVEX_CONFIG_DIR=/shared/team-configs
+devex template apply backend-team
+```
+
+## Related Commands
+
+- [`devex help`](#help-system) - Get comprehensive help information
+- [`devex version`](#version-information) - Show version and build information
+- [`devex config`](/docs/cli-reference/config) - Manage configuration files and settings
+
+<Callout type="info">
+Master these global flags and environment variables to get the most out of DevEx. They provide powerful ways to customize behavior across all commands.
+</Callout>

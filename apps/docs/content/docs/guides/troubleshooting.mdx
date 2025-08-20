@@ -1,0 +1,945 @@
+---
+title: Troubleshooting Guide
+description: Common issues and solutions when using DevEx across different platforms and scenarios
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Troubleshooting Guide
+
+This comprehensive guide covers common issues, diagnostic techniques, and solutions for DevEx across different platforms and use cases.
+
+## Quick Diagnostics
+
+When encountering issues, start with these diagnostic commands:
+
+```bash
+# Check DevEx status and version
+devex --version
+devex status
+
+# Validate configuration
+devex config validate
+
+# Check system requirements
+devex system check
+
+# Generate diagnostic report
+devex doctor --comprehensive
+
+# Check logs
+devex logs --level error --tail 50
+```
+
+## Installation Issues
+
+### Installation Fails to Start
+
+<Tabs items={['Permission Errors', 'Network Issues', 'Dependency Problems', 'Platform Issues']}>
+  <Tab value="Permission Errors">
+    **Symptoms:**
+    - `Permission denied` errors
+    - `sudo` required messages
+    - Cannot write to directories
+    
+    **Solutions:**
+    ```bash
+    # Fix ownership of DevEx directories
+    sudo chown -R $USER:$USER ~/.local/share/devex
+    sudo chown -R $USER:$USER ~/.devex
+    
+    # Ensure binary is executable
+    chmod +x ~/.local/share/devex/bin/devex
+    
+    # Check home directory permissions
+    ls -la ~ | grep -E "(devex|\.local)"
+    
+    # Fix permissions if needed
+    chmod 755 ~/.local
+    chmod 755 ~/.local/share
+    ```
+    
+    **For corporate environments:**
+    ```bash
+    # Use user-space installation
+    devex config set install.user_space_only true
+    
+    # Configure alternative install directory
+    export DEVEX_HOME="$HOME/tools/devex"
+    devex config set install.prefix "$DEVEX_HOME"
+    ```
+  </Tab>
+  
+  <Tab value="Network Issues">
+    **Symptoms:**
+    - Download timeouts
+    - SSL certificate errors
+    - Proxy authentication failures
+    
+    **Solutions:**
+    ```bash
+    # Configure proxy settings
+    export https_proxy=http://proxy.company.com:8080
+    export http_proxy=http://proxy.company.com:8080
+    devex config set proxy.https "$https_proxy"
+    
+    # Skip SSL verification (not recommended for production)
+    devex config set security.skip_ssl_verify true
+    
+    # Use alternative download methods
+    devex config set download.method wget  # or curl
+    devex config set download.timeout 600  # 10 minutes
+    
+    # Configure retry settings
+    devex config set download.retries 5
+    devex config set download.retry_delay 10
+    
+    # Test connectivity
+    curl -I https://devex.sh
+    wget --spider https://github.com
+    ```
+  </Tab>
+  
+  <Tab value="Dependency Problems">
+    **Symptoms:**
+    - Missing system packages
+    - Command not found errors
+    - Library version conflicts
+    
+    **Solutions:**
+    ```bash
+    # Install missing system dependencies
+    # Ubuntu/Debian
+    sudo apt update
+    sudo apt install -y curl wget git build-essential
+    
+    # Fedora/RHEL
+    sudo dnf install -y curl wget git gcc make
+    
+    # Arch Linux
+    sudo pacman -S curl wget git base-devel
+    
+    # macOS
+    xcode-select --install
+    
+    # Check for missing dependencies
+    devex system dependencies --check
+    devex system dependencies --install
+    
+    # Use alternative package managers
+    devex config set package_manager.priority "flatpak,snap,apt"
+    ```
+  </Tab>
+  
+  <Tab value="Platform Issues">
+    **Symptoms:**
+    - Unsupported OS errors
+    - Architecture mismatches
+    - Package manager not found
+    
+    **Solutions:**
+    ```bash
+    # Check platform detection
+    devex system info
+    
+    # Override platform detection
+    devex config set platform.os linux
+    devex config set platform.distribution ubuntu
+    devex config set platform.version "22.04"
+    
+    # Use universal installation methods
+    devex config set install.prefer_universal true
+    
+    # Check available package managers
+    devex install --list-methods
+    
+    # Force specific package manager
+    devex install docker --method flatpak
+    ```
+  </Tab>
+</Tabs>
+
+### Partial Installation Failures
+
+When some applications install successfully but others fail:
+
+<Steps>
+  <Step>
+    ### Identify Failed Applications
+    
+    ```bash
+    # Check installation status
+    devex status --detailed
+    
+    # List failed installations
+    devex list --status failed
+    
+    # Check specific application
+    devex status docker
+    ```
+  </Step>
+  
+  <Step>
+    ### Analyze Failure Reasons
+    
+    ```bash
+    # View detailed logs
+    devex logs --application docker --level error
+    
+    # Check system requirements
+    devex system check --application docker
+    
+    # Validate configuration
+    devex config validate --application docker
+    ```
+  </Step>
+  
+  <Step>
+    ### Retry with Alternative Methods
+    
+    ```bash
+    # Try alternative installation method
+    devex install docker --method flatpak
+    
+    # Skip problematic dependencies
+    devex install docker --skip-dependencies
+    
+    # Install with elevated privileges
+    sudo devex install docker
+    ```
+  </Step>
+  
+  <Step>
+    ### Clean Up and Retry
+    
+    ```bash
+    # Clean failed installation
+    devex uninstall docker --force
+    devex cache clean --application docker
+    
+    # Retry installation
+    devex install docker --verbose
+    ```
+  </Step>
+</Steps>
+
+## Configuration Issues
+
+### Configuration Not Loading
+
+**Problem:** DevEx not finding or loading configuration files
+
+**Diagnosis:**
+```bash
+# Check configuration file locations
+devex config paths
+
+# Validate configuration syntax
+devex config validate --strict
+
+# Check file permissions
+ls -la ~/.devex/
+ls -la ~/.local/share/devex/config/
+```
+
+**Solutions:**
+```bash
+# Reset to default configuration
+devex config reset
+
+# Recreate configuration directory
+mkdir -p ~/.devex
+devex config init
+
+# Fix configuration syntax
+devex config lint --fix
+
+# Use specific configuration file
+devex config apply --file /path/to/config.yaml
+```
+
+### Variable Resolution Issues
+
+**Problem:** Variables in configuration not being resolved
+
+**Example Configuration:**
+```yaml
+# ~/.devex/variables.yaml
+variables:
+  nodejs_version: "18.17.0"
+  company_domain: "example.com"
+
+# ~/.devex/applications.yaml
+applications:
+  development:
+    - name: node
+      install_command: "node@${nodejs_version}"
+    - name: company-cli
+      install_command: "https://cli.${company_domain}/install.sh"
+```
+
+**Solutions:**
+```bash
+# Check variable resolution
+devex config show --resolved
+
+# Validate variable syntax
+devex config validate --variables
+
+# Debug variable resolution
+devex --debug config apply --dry-run
+
+# Use environment variables as fallback
+export NODEJS_VERSION="18.17.0"
+devex config set variables.nodejs_version "${NODEJS_VERSION}"
+```
+
+## Platform-Specific Issues
+
+### Linux Issues
+
+<Tabs items={['Package Manager Issues', 'Desktop Environment', 'Service Management', 'Permission Models']}>
+  <Tab value="Package Manager Issues">
+    **APT Issues (Ubuntu/Debian):**
+    ```bash
+    # Fix broken packages
+    sudo apt --fix-broken install
+    sudo dpkg --configure -a
+    
+    # Update package lists
+    sudo apt update
+    
+    # Clear APT cache
+    sudo apt clean
+    sudo apt autoclean
+    
+    # Add missing GPG keys
+    devex recovery repair --apt-keys
+    
+    # Reset APT sources
+    sudo cp /etc/apt/sources.list.d/ /etc/apt/sources.list.d.backup/
+    devex config apply --reset-repos
+    ```
+    
+    **DNF Issues (Fedora/RHEL):**
+    ```bash
+    # Clean DNF cache
+    sudo dnf clean all
+    
+    # Rebuild package database
+    sudo dnf makecache
+    
+    # Fix repository issues
+    sudo dnf distro-sync
+    
+    # Check repository configuration
+    devex system repositories --check
+    ```
+    
+    **Pacman Issues (Arch):**
+    ```bash
+    # Update package database
+    sudo pacman -Sy
+    
+    # Fix keyring issues
+    sudo pacman-key --refresh-keys
+    
+    # Clear package cache
+    sudo pacman -Scc
+    
+    # Check for partial upgrades
+    devex system check --pacman
+    ```
+  </Tab>
+  
+  <Tab value="Desktop Environment">
+    **GNOME Issues:**
+    ```bash
+    # Reset GNOME settings
+    dconf reset -f /org/gnome/
+    
+    # Restart GNOME Shell
+    killall -3 gnome-shell
+    
+    # Check extension conflicts
+    devex theme check --gnome-extensions
+    
+    # Disable problematic extensions
+    devex config set gnome.extensions.enabled false
+    ```
+    
+    **KDE Issues:**
+    ```bash
+    # Reset KDE configuration
+    rm -rf ~/.config/plasma*
+    rm -rf ~/.local/share/plasma*
+    
+    # Restart Plasma
+    killall plasmashell && plasmashell &
+    
+    # Check theme compatibility
+    devex theme validate --kde
+    ```
+  </Tab>
+  
+  <Tab value="Service Management">
+    **Systemd Service Issues:**
+    ```bash
+    # Check service status
+    devex service status --all
+    
+    # Restart failed services
+    devex service restart --failed
+    
+    # Check service logs
+    journalctl -u docker.service -f
+    
+    # Fix service permissions
+    sudo systemctl daemon-reload
+    ```
+    
+    **Docker Service Issues:**
+    ```bash
+    # Check Docker daemon
+    sudo systemctl status docker
+    
+    # Fix Docker permissions
+    sudo usermod -aG docker $USER
+    newgrp docker
+    
+    # Reset Docker configuration
+    devex recovery repair --docker
+    ```
+  </Tab>
+  
+  <Tab value="Permission Models">
+    **AppArmor/SELinux Issues:**
+    ```bash
+    # Check AppArmor status
+    sudo aa-status
+    
+    # Disable AppArmor for DevEx (temporary)
+    sudo aa-complain /usr/bin/devex
+    
+    # Check SELinux context
+    ls -Z ~/.local/share/devex/
+    
+    # Fix SELinux context
+    sudo restorecon -R ~/.local/share/devex/
+    ```
+  </Tab>
+</Tabs>
+
+### macOS Issues
+
+<Tabs items={['Homebrew Issues', 'System Permissions', 'Xcode Dependencies', 'Gatekeeper']}>
+  <Tab value="Homebrew Issues">
+    ```bash
+    # Update Homebrew
+    brew update
+    brew upgrade
+    
+    # Fix Homebrew permissions
+    sudo chown -R $(whoami) $(brew --prefix)/*
+    
+    # Reinstall Homebrew
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    
+    # Check for conflicting installations
+    brew doctor
+    
+    # Clean Homebrew cache
+    brew cleanup
+    ```
+  </Tab>
+  
+  <Tab value="System Permissions">
+    ```bash
+    # Check macOS permissions
+    devex system permissions --check
+    
+    # Request Full Disk Access
+    open "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"
+    
+    # Check Developer Tools permission
+    xcode-select --print-path
+    
+    # Reset permissions database
+    sudo tccutil reset All
+    ```
+  </Tab>
+  
+  <Tab value="Xcode Dependencies">
+    ```bash
+    # Install Xcode Command Line Tools
+    xcode-select --install
+    
+    # Accept Xcode license
+    sudo xcodebuild -license accept
+    
+    # Check Xcode installation
+    xcode-select --print-path
+    xcrun --show-sdk-path
+    
+    # Switch Xcode versions
+    sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+    ```
+  </Tab>
+  
+  <Tab value="Gatekeeper">
+    ```bash
+    # Check Gatekeeper status
+    spctl --status
+    
+    # Allow unsigned applications (temporary)
+    sudo spctl --master-disable
+    
+    # Remove quarantine from DevEx
+    sudo xattr -rd com.apple.quarantine ~/.local/share/devex/
+    
+    # Add DevEx to allowed applications
+    sudo spctl --add ~/.local/share/devex/bin/devex
+    ```
+  </Tab>
+</Tabs>
+
+### Windows Issues
+
+<Tabs items={['Package Managers', 'PowerShell Execution', 'UAC Issues', 'Windows Defender']}>
+  <Tab value="Package Managers">
+    **Winget Issues:**
+    ```powershell
+    # Update winget
+    winget upgrade --id Microsoft.AppInstaller
+    
+    # Reset winget sources
+    winget source reset
+    
+    # Check winget version
+    winget --version
+    
+    # Install from Microsoft Store if missing
+    # Search for "App Installer" in Microsoft Store
+    ```
+    
+    **Chocolatey Issues:**
+    ```powershell
+    # Update Chocolatey
+    choco upgrade chocolatey
+    
+    # Fix Chocolatey configuration
+    choco feature enable -n=allowGlobalConfirmation
+    
+    # Clear Chocolatey cache
+    choco cache clean
+    ```
+  </Tab>
+  
+  <Tab value="PowerShell Execution">
+    ```powershell
+    # Check execution policy
+    Get-ExecutionPolicy
+    
+    # Set execution policy for DevEx
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+    
+    # Bypass execution policy temporarily
+    PowerShell -ExecutionPolicy Bypass -File devex-script.ps1
+    
+    # Check PowerShell version
+    $PSVersionTable
+    ```
+  </Tab>
+  
+  <Tab value="UAC Issues">
+    ```powershell
+    # Check if running as administrator
+    ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+    
+    # Request administrator privileges
+    Start-Process powershell -Verb runAs
+    
+    # Configure UAC bypass for DevEx (not recommended)
+    # Add DevEx to Task Scheduler with highest privileges
+    ```
+  </Tab>
+  
+  <Tab value="Windows Defender">
+    ```powershell
+    # Add DevEx to exclusions
+    Add-MpPreference -ExclusionPath "$env:USERPROFILE\.local\share\devex"
+    
+    # Check Windows Defender status
+    Get-MpThreatDetection
+    
+    # Restore quarantined files
+    Restore-MpThreat
+    
+    # Disable real-time protection temporarily
+    Set-MpPreference -DisableRealtimeMonitoring $true
+    ```
+  </Tab>
+</Tabs>
+
+## Application-Specific Issues
+
+### Docker Installation Problems
+
+<Tabs items={['Service Issues', 'Permission Problems', 'Network Configuration', 'Storage Issues']}>
+  <Tab value="Service Issues">
+    ```bash
+    # Check Docker service status
+    sudo systemctl status docker
+    
+    # Start Docker service
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    
+    # Check Docker daemon logs
+    journalctl -u docker.service -f
+    
+    # Restart Docker service
+    sudo systemctl restart docker
+    
+    # Check Docker version
+    docker --version
+    docker info
+    ```
+  </Tab>
+  
+  <Tab value="Permission Problems">
+    ```bash
+    # Add user to docker group
+    sudo usermod -aG docker $USER
+    
+    # Apply group changes
+    newgrp docker
+    
+    # Test Docker access
+    docker run hello-world
+    
+    # Fix socket permissions
+    sudo chmod 666 /var/run/docker.sock
+    
+    # Check group membership
+    groups $USER
+    ```
+  </Tab>
+  
+  <Tab value="Network Configuration">
+    ```bash
+    # Check Docker networks
+    docker network ls
+    
+    # Reset Docker networks
+    docker network prune -f
+    
+    # Check DNS configuration
+    docker run --rm busybox nslookup google.com
+    
+    # Configure Docker DNS
+    sudo tee /etc/docker/daemon.json > /dev/null <<EOF
+    {
+      "dns": ["8.8.8.8", "8.8.4.4"]
+    }
+    EOF
+    sudo systemctl restart docker
+    ```
+  </Tab>
+  
+  <Tab value="Storage Issues">
+    ```bash
+    # Check Docker disk usage
+    docker system df
+    
+    # Clean up Docker resources
+    docker system prune -a
+    
+    # Check available disk space
+    df -h /var/lib/docker
+    
+    # Configure Docker storage driver
+    sudo tee /etc/docker/daemon.json > /dev/null <<EOF
+    {
+      "storage-driver": "overlay2"
+    }
+    EOF
+    sudo systemctl restart docker
+    ```
+  </Tab>
+</Tabs>
+
+### Programming Language Issues
+
+**Node.js via mise:**
+```bash
+# Check mise status
+mise doctor
+
+# List available Node.js versions
+mise list-all node
+
+# Install specific version
+mise install node@18.17.0
+
+# Set global version
+mise global node@18.17.0
+
+# Check Node.js installation
+node --version
+npm --version
+
+# Fix npm permissions
+npm config set prefix ~/.local
+```
+
+**Python Issues:**
+```bash
+# Check Python installation
+python3 --version
+pip3 --version
+
+# Fix pip installation
+python3 -m ensurepip --upgrade
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Fix package installation issues
+pip install --upgrade pip setuptools wheel
+```
+
+## Performance Issues
+
+### Slow Installation
+
+**Diagnosis:**
+```bash
+# Check system resources
+devex system resources
+
+# Monitor installation progress
+devex install --verbose --progress
+
+# Check network speed
+devex network test
+
+# Profile installation
+devex install --profile docker
+```
+
+**Solutions:**
+```bash
+# Enable parallel installations
+devex config set install.parallel true
+devex config set install.max_parallel 4
+
+# Use faster mirrors
+devex config set mirrors.use_fastest true
+
+# Enable caching
+devex config set cache.enabled true
+devex config set cache.size "1GB"
+
+# Optimize for speed
+devex config set install.verify_checksums false  # Not recommended for production
+```
+
+### Memory Issues
+
+```bash
+# Check memory usage
+devex system memory
+
+# Configure memory limits
+devex config set resources.memory_limit "2GB"
+
+# Enable swap if needed
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+
+# Clean up memory
+devex cache clean
+devex logs clean --older-than 7d
+```
+
+## Recovery Procedures
+
+### Complete Environment Reset
+
+When all else fails, completely reset your DevEx environment:
+
+<Steps>
+  <Step>
+    ### Backup Current Configuration
+    
+    ```bash
+    # Create backup
+    backup_dir="$HOME/devex-backup-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+    
+    # Backup configurations
+    cp -r ~/.devex "$backup_dir/" 2>/dev/null || true
+    cp -r ~/.local/share/devex "$backup_dir/" 2>/dev/null || true
+    
+    # Backup important files
+    cp ~/.bashrc "$backup_dir/bashrc.backup"
+    cp ~/.zshrc "$backup_dir/zshrc.backup" 2>/dev/null || true
+    ```
+  </Step>
+  
+  <Step>
+    ### Complete Removal
+    
+    ```bash
+    # Stop all DevEx processes
+    devex stop --all
+    
+    # Uninstall all applications
+    devex uninstall --all --force
+    
+    # Remove DevEx completely
+    rm -rf ~/.local/share/devex
+    rm -rf ~/.devex
+    
+    # Clean PATH
+    sed -i '/devex/d' ~/.bashrc
+    sed -i '/devex/d' ~/.zshrc 2>/dev/null || true
+    ```
+  </Step>
+  
+  <Step>
+    ### Fresh Installation
+    
+    ```bash
+    # Fresh DevEx installation (review security guide first)
+    curl -fsSL https://devex.sh/install | bash
+    
+    # Reload shell
+    source ~/.bashrc
+    
+    # Verify installation
+    devex --version
+    devex doctor
+    ```
+  </Step>
+  
+  <Step>
+    ### Restore Configuration
+    
+    ```bash
+    # Restore custom configurations
+    cp -r "$backup_dir/.devex" ~/
+    
+    # Apply restored configuration
+    devex config validate
+    devex install
+    ```
+  </Step>
+</Steps>
+
+### Service Recovery
+
+For applications with persistent services:
+
+```bash
+# Docker recovery
+devex recovery docker --full-reset
+
+# Database recovery
+devex recovery postgresql --repair-data
+
+# System service recovery
+devex recovery services --restart-all
+```
+
+## Getting Help
+
+### Debug Information Collection
+
+When reporting issues, collect this information:
+
+```bash
+# Generate comprehensive diagnostic report
+devex doctor --comprehensive --output devex-diagnostic.txt
+
+# System information
+devex system info --detailed
+
+# Configuration dump
+devex config dump --sanitized
+
+# Recent logs
+devex logs --since "1 hour ago" --level error
+
+# Package manager status
+devex system package-managers --status
+```
+
+### Community Support
+
+<Cards>
+  <Card title="GitHub Issues" href="https://github.com/jameswlane/devex/issues" description="Report bugs and request features" />
+  <Card title="Discussions" href="https://github.com/jameswlane/devex/discussions" description="Community Q&A and discussions" />
+  <Card title="Documentation" href="/docs" description="Complete documentation" />
+  <Card title="Examples" href="/docs/examples" description="Real-world usage examples" />
+</Cards>
+
+### Creating Bug Reports
+
+When creating bug reports, include:
+
+1. **DevEx version**: `devex --version`
+2. **Operating system**: `devex system info`
+3. **Configuration files**: Sanitized configuration files
+4. **Error messages**: Complete error output
+5. **Steps to reproduce**: Detailed reproduction steps
+6. **Expected behavior**: What should have happened
+7. **Diagnostic report**: Output from `devex doctor`
+
+<Callout type="info">
+**Prevention is Better Than Cure:**
+
+1. **Regular Updates**: Keep DevEx and applications updated
+2. **Configuration Backups**: Regularly backup your configurations
+3. **Validation**: Validate configurations before applying
+4. **Monitoring**: Monitor system resources and logs
+5. **Documentation**: Document any customizations
+6. **Testing**: Test changes in safe environments first
+</Callout>
+
+### Advanced Debugging
+
+For complex issues:
+
+```bash
+# Enable trace mode
+export DEVEX_TRACE=1
+export DEVEX_DEBUG=1
+
+# Run with maximum verbosity
+devex --verbose --log-level trace install problematic-app
+
+# Use debugging tools
+strace -o devex.trace devex install app
+ltrace -o devex.ltrace devex install app
+
+# Analyze system calls
+grep -E "(open|read|write|exec)" devex.trace
+```
+
+Remember: Most issues have simple solutions. Start with basic troubleshooting before moving to advanced techniques.
+
+<Cards>
+  <Card title="Getting Started" href="/docs/guides/getting-started" description="Basic DevEx usage guide" />
+  <Card title="Configuration" href="/docs/configuration" description="Configuration reference" />
+  <Card title="CLI Reference" href="/docs/cli-reference" description="Complete command reference" />
+  <Card title="Platform Support" href="/docs/platforms" description="Platform-specific information" />
+</Cards>
