@@ -1,0 +1,1017 @@
+---
+title: Web Development Environment
+description: Complete frontend development setup with React, Vue, modern tooling, and best practices
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Web Development Environment
+
+This example provides a complete modern frontend development environment suitable for React, Vue, Angular, and other web frameworks. It includes essential tools, editors, browsers, and development utilities.
+
+## Quick Start
+
+<Steps>
+  <Step>
+    ### Download Configuration
+    
+    ```bash
+    # Download the web development configuration
+    curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/examples/web-development.yaml > ~/.devex/web-dev.yaml
+    
+    # Preview what will be installed
+    devex config apply --file ~/.devex/web-dev.yaml --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Apply Configuration
+    
+    ```bash
+    # Apply the configuration
+    devex config apply --file ~/.devex/web-dev.yaml
+    
+    # Install all tools
+    devex install
+    ```
+  </Step>
+  
+  <Step>
+    ### Verify Installation
+    
+    ```bash
+    # Check installed tools
+    node --version
+    npm --version
+    code --version
+    git --version
+    ```
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+Here's the full configuration file for web development:
+
+<Tabs items={['Complete Config', 'Applications Only', 'Environment Only', 'Team Version']}>
+  <Tab value="Complete Config">
+    ```yaml
+    # ~/.devex/web-development.yaml
+    # Complete Web Development Environment
+    
+    applications:
+      development:
+        # Version Control
+        - name: git
+          description: "Distributed version control system"
+          category: "Version Control"
+          default: true
+          priority: 10
+          
+        - name: gh
+          description: "GitHub CLI"
+          category: "Version Control"
+          default: true
+          dependencies: ["git"]
+          
+        # Node.js Ecosystem
+        - name: node
+          description: "Node.js JavaScript runtime"
+          category: "Programming Languages"
+          default: true
+          install_method: mise
+          install_command: node@lts
+          priority: 20
+          post_install:
+            - shell: "npm install -g npm@10.4.0"  # Pin npm version
+            - shell: "npm install -g pnpm yarn"
+            
+        # Package Managers
+        - name: pnpm
+          description: "Fast, disk space efficient package manager"
+          category: "Package Managers"
+          default: true
+          dependencies: ["node"]
+          linux:
+            install_method: npm
+            install_command: "pnpm@8.14.1"  # Pin pnpm version
+          macos:
+            install_method: brew
+            install_command: pnpm
+          windows:
+            install_method: npm
+            install_command: "pnpm@8.14.1"  # Pin pnpm version
+            
+        # Code Editors
+        - name: vscode
+          description: "Visual Studio Code"
+          category: "Editors"
+          default: true
+          linux:
+            install_method: flatpak
+            install_command: com.visualstudio.code
+          macos:
+            install_method: brew
+            install_command: visual-studio-code
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Microsoft.VisualStudioCode
+          post_install:
+            # Essential VS Code extensions
+            - shell: "code --install-extension ms-vscode.vscode-typescript-next"
+            - shell: "code --install-extension esbenp.prettier-vscode"
+            - shell: "code --install-extension bradlc.vscode-tailwindcss"
+            - shell: "code --install-extension ms-vscode.vscode-json"
+            - shell: "code --install-extension formulahendry.auto-rename-tag"
+            - shell: "code --install-extension christian-kohler.path-intellisense"
+            - shell: "code --install-extension ms-vscode.vscode-eslint"
+            - shell: "code --install-extension ms-vscode.vscode-css"
+            - shell: "code --install-extension ritwickdey.liveserver"
+          config_files:
+            - source: "~/.devex/assets/vscode/settings.json"
+              destination: "~/.config/Code/User/settings.json"
+              
+        # Browsers for Testing
+        - name: chrome
+          description: "Google Chrome browser"
+          category: "Browsers"
+          default: true
+          linux:
+            install_method: flatpak
+            install_command: com.google.Chrome
+          macos:
+            install_method: brew
+            install_command: google-chrome
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Google.Chrome
+            
+        - name: firefox
+          description: "Mozilla Firefox browser"
+          category: "Browsers"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: org.mozilla.firefox
+          macos:
+            install_method: brew
+            install_command: firefox
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Mozilla.Firefox
+            
+        # Development Tools
+        - name: docker
+          description: "Container platform"
+          category: "Development Tools"
+          default: true
+          post_install:
+            - shell: "docker run hello-world"
+            
+        - name: postman
+          description: "API development and testing"
+          category: "Development Tools"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: com.getpostman.Postman
+          macos:
+            install_method: brew
+            install_command: postman
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Postman.Postman
+            
+        # Terminal and Shell Tools
+        - name: zsh
+          description: "Zsh shell"
+          category: "Shell"
+          default: true
+          linux:
+            install_method: apt
+            install_command: zsh
+          post_install:
+            - shell: "sh -c '$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)'"
+            
+        - name: fzf
+          description: "Fuzzy finder for command line"
+          category: "Utilities"
+          default: true
+          
+        - name: ripgrep
+          description: "Fast grep alternative"
+          category: "Utilities"
+          default: true
+          
+        - name: bat
+          description: "Cat with syntax highlighting"
+          category: "Utilities"
+          default: true
+          
+        - name: exa
+          description: "Modern ls replacement"
+          category: "Utilities"
+          default: true
+          
+      databases:
+        # Development Databases
+        - name: redis
+          description: "In-memory data structure store"
+          category: "Databases"
+          default: false
+          service:
+            name: redis-server
+            enabled: true
+            
+        - name: postgresql
+          description: "Advanced open source database"
+          category: "Databases"
+          default: false
+          service:
+            name: postgresql
+            enabled: true
+            
+      optional:
+        # Design Tools
+        - name: figma-linux
+          description: "Figma design tool"
+          category: "Design"
+          default: false
+          desktop_environments: ["gnome", "kde", "xfce"]
+          linux:
+            install_method: flatpak
+            install_command: io.github.Figma_Linux.figma_linux
+            
+        # Communication
+        - name: slack
+          description: "Team communication"
+          category: "Communication"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: com.slack.Slack
+          macos:
+            install_method: brew
+            install_command: slack
+            cask: true
+          windows:
+            install_method: winget
+            install_command: SlackTechnologies.Slack
+            
+        - name: discord
+          description: "Voice and text chat"
+          category: "Communication"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: com.discordapp.Discord
+          macos:
+            install_method: brew
+            install_command: discord
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Discord.Discord
+    
+    # Programming Languages Configuration
+    programming_languages:
+      - name: Node.js LTS
+        description: "JavaScript runtime environment"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: node@lts
+        default: true
+        shell_updates:
+          - "export NODE_OPTIONS='--max-old-space-size=4096'"
+          
+      - name: Bun
+        description: "Fast all-in-one JavaScript runtime"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: bun@1.0.25     # Pin bun version
+        default: false
+        dependencies: ["mise"]
+        
+      - name: Deno
+        description: "Modern runtime for JavaScript and TypeScript"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: deno@1.40.2    # Pin deno version
+        default: false
+        dependencies: ["mise"]
+    
+    # Environment Configuration
+    environment:
+      shell:
+        default_shell: "zsh"
+        oh_my_zsh: true
+        plugins:
+          - "git"
+          - "node"
+          - "npm"
+          - "docker"
+          - "vscode"
+        theme: "agnoster"
+        
+      fonts:
+        - name: "JetBrains Mono"
+          description: "A typeface for developers"
+          method: "url"
+          url: "https://download.jetbrains.com/fonts/JetBrainsMono-2.304.zip"
+          destination: "~/.local/share/fonts/"
+          post_install:
+            - shell: "fc-cache -fv"
+            
+        - name: "Fira Code"
+          description: "Programming font with ligatures"
+          linux:
+            install_method: apt
+            install_command: fonts-firacode
+          macos:
+            install_method: brew
+            install_command: font-fira-code
+          windows:
+            install_method: winget
+            install_command: FiraCode
+    
+    # Desktop Configuration
+    desktop:
+      theme:
+        name: "Tokyo Night"
+        vscode_theme: "Tokyo Night"
+        terminal_theme: "tokyo-night"
+        
+      gnome:
+        extensions:
+          - name: "Dash to Dock"
+            uuid: "dash-to-dock@micxgx.gmail.com"
+            settings:
+              dock-position: "BOTTOM"
+              dock-size-limit: 48
+        settings:
+          - key: "org.gnome.desktop.interface.gtk-theme"
+            value: "Adwaita-dark"
+          - key: "org.gnome.desktop.interface.show-battery-percentage"
+            value: true
+    
+    # System Configuration
+    system:
+      git:
+        aliases:
+          co: "checkout"
+          br: "branch"
+          ci: "commit"
+          st: "status"
+          unstage: "reset HEAD --"
+          last: "log -1 HEAD"
+          visual: "!gitk"
+          graph: "log --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit"
+          
+        settings:
+          - key: "core.editor"
+            value: "code --wait"
+          - key: "init.defaultBranch"
+            value: "main"
+          - key: "pull.rebase"
+            value: "false"
+          - key: "core.autocrlf"
+            value: "input"
+            
+      npm:
+        global_packages:
+          - "@vue/cli"
+          - "create-react-app"
+          - "@angular/cli"
+          - "vite"
+          - "typescript"
+          - "ts-node"
+          - "nodemon"
+          - "prettier"
+          - "eslint"
+          - "serve"
+          - "http-server"
+          - "json-server"
+    ```
+  </Tab>
+  
+  <Tab value="Applications Only">
+    ```yaml
+    # Essential web development applications only
+    applications:
+      development:
+        - name: git
+          default: true
+        - name: node
+          install_method: mise
+          install_command: node@lts
+          default: true
+        - name: pnpm
+          default: true
+        - name: vscode
+          default: true
+          post_install:
+            - shell: "code --install-extension ms-vscode.vscode-typescript-next"
+            - shell: "code --install-extension esbenp.prettier-vscode"
+        - name: chrome
+          default: true
+        - name: docker
+          default: true
+        - name: zsh
+          default: true
+    ```
+  </Tab>
+  
+  <Tab value="Environment Only">
+    ```yaml
+    # Environment and shell configuration
+    environment:
+      shell:
+        default_shell: "zsh"
+        oh_my_zsh: true
+        plugins: ["git", "node", "npm", "docker", "vscode"]
+        theme: "agnoster"
+        
+      fonts:
+        - name: "JetBrains Mono"
+          method: "url"
+          url: "https://download.jetbrains.com/fonts/JetBrainsMono-2.304.zip"
+          
+    system:
+      npm:
+        global_packages:
+          - "create-react-app"
+          - "vite"
+          - "typescript"
+          - "prettier"
+          - "eslint"
+    ```
+  </Tab>
+  
+  <Tab value="Team Version">
+    ```yaml
+    # Team-oriented web development configuration
+    team:
+      name: "frontend-team"
+      standards:
+        editor: "vscode"
+        package_manager: "pnpm"
+        node_version: "lts"
+        
+    applications:
+      development:
+        - name: git
+          default: true
+          config:
+            core.editor: "code --wait"
+            init.defaultBranch: "main"
+        - name: node
+          install_method: mise
+          install_command: node@lts
+          default: true
+        - name: pnpm
+          default: true
+        - name: vscode
+          default: true
+          extensions:
+            - "ms-vscode.vscode-typescript-next"
+            - "esbenp.prettier-vscode"
+            - "bradlc.vscode-tailwindcss"
+            - "ms-vscode.vscode-eslint"
+          settings:
+            "editor.formatOnSave": true
+            "editor.defaultFormatter": "esbenp.prettier-vscode"
+    ```
+  </Tab>
+</Tabs>
+
+## Framework-Specific Setups
+
+### React Development
+
+<Tabs items={['Create React App', 'Vite + React', 'Next.js']}>
+  <Tab value="Create React App">
+    ```bash
+    # Install React development tools
+    npm install -g create-react-app
+    
+    # Create new React project
+    npx create-react-app my-react-app
+    cd my-react-app
+    
+    # Install additional development dependencies
+    npm install -D @types/react @types/react-dom
+    npm install -D tailwindcss postcss autoprefixer
+    npm install -D @testing-library/react @testing-library/jest-dom
+    
+    # Start development server
+    npm start
+    ```
+    
+    **VS Code Extensions for React:**
+    ```bash
+    code --install-extension ms-vscode.vscode-react
+    code --install-extension ms-vscode.vscode-typescript-next
+    code --install-extension bradlc.vscode-tailwindcss
+    code --install-extension formulahendry.auto-rename-tag
+    ```
+  </Tab>
+  
+  <Tab value="Vite + React">
+    ```bash
+    # Create Vite + React project
+    npm create vite@latest my-vite-app -- --template react-ts
+    cd my-vite-app
+    npm install
+    
+    # Install additional tools
+    npm install -D tailwindcss postcss autoprefixer
+    npm install -D @vitejs/plugin-react
+    npm install -D vitest @testing-library/react
+    
+    # Start development
+    npm run dev
+    ```
+    
+    **Vite Configuration:**
+    ```javascript
+    // vite.config.js
+    import { defineConfig } from 'vite'
+    import react from '@vitejs/plugin-react'
+    
+    export default defineConfig({
+      plugins: [react()],
+      server: {
+        port: 3000,
+        open: true
+      }
+    })
+    ```
+  </Tab>
+  
+  <Tab value="Next.js">
+    ```bash
+    # Create Next.js project
+    npx create-next-app@latest my-next-app --typescript --tailwind --eslint
+    cd my-next-app
+    
+    # Install additional dependencies
+    npm install @next/bundle-analyzer
+    npm install -D @types/node
+    
+    # Start development
+    npm run dev
+    ```
+    
+    **Next.js DevEx Addition:**
+    ```yaml
+    applications:
+      development:
+        - name: nextjs-tools
+          post_install:
+            - shell: "npm install -g @next/codemod"
+            - shell: "npm install -g next-sitemap"
+    ```
+  </Tab>
+</Tabs>
+
+### Vue.js Development
+
+```bash
+# Install Vue CLI and Vite
+npm install -g @vue/cli
+npm install -g create-vue
+
+# Create Vue 3 project with Vite
+npm create vue@latest my-vue-app
+cd my-vue-app
+npm install
+
+# Install development tools
+npm install -D @vue/test-utils vitest
+npm install -D tailwindcss postcss autoprefixer
+
+# VS Code extensions for Vue
+code --install-extension Vue.volar
+code --install-extension Vue.vscode-typescript-vue-plugin
+```
+
+**Vue DevEx Configuration:**
+```yaml
+applications:
+  development:
+    - name: vue-devtools
+      linux:
+        install_method: npm
+        install_command: "@vue/devtools@latest"
+      browser_extension: true
+```
+
+### Angular Development
+
+```bash
+# Install Angular CLI
+npm install -g @angular/cli
+
+# Create new Angular project
+ng new my-angular-app --routing --style=scss
+cd my-angular-app
+
+# Install additional tools
+ng add @angular/material
+ng add @angular/pwa
+
+# Start development server
+ng serve
+
+# VS Code extensions for Angular
+code --install-extension Angular.ng-template
+code --install-extension ms-vscode.vscode-typescript-next
+```
+
+## Development Workflows
+
+### Project Setup Automation
+
+Create a script to automate new project setup:
+
+```bash
+#!/bin/bash
+# ~/.devex/scripts/new-web-project.sh
+
+project_name="$1"
+framework="${2:-react}"
+
+if [ -z "$project_name" ]; then
+    echo "Usage: new-web-project <project-name> [react|vue|angular]"
+    exit 1
+fi
+
+echo "🚀 Creating new $framework project: $project_name"
+
+case $framework in
+    "react")
+        npx create-react-app "$project_name" --template typescript
+        cd "$project_name"
+        npm install -D tailwindcss postcss autoprefixer
+        npx tailwindcss init -p
+        ;;
+    "vue")
+        npm create vue@latest "$project_name" -- --typescript --router --pinia --vitest --cypress
+        cd "$project_name"
+        npm install
+        ;;
+    "angular")
+        ng new "$project_name" --routing --style=scss
+        cd "$project_name"
+        ng add @angular/material
+        ;;
+esac
+
+# Initialize git repository
+git init
+git add .
+git commit -m "Initial commit"
+
+# Open in VS Code
+code .
+
+echo "✅ Project $project_name created successfully!"
+```
+
+### Development Server Management
+
+```bash
+#!/bin/bash
+# ~/.devex/scripts/dev-servers.sh
+
+case "$1" in
+    "start")
+        echo "🚀 Starting development servers..."
+        
+        # Start databases if needed
+        devex service start redis postgresql
+        
+        # Start main application
+        if [ -f "package.json" ]; then
+            npm run dev &
+        fi
+        
+        # Start additional services
+        if [ -f "docker-compose.dev.yml" ]; then
+            docker-compose -f docker-compose.dev.yml up -d
+        fi
+        ;;
+        
+    "stop")
+        echo "🛑 Stopping development servers..."
+        pkill -f "npm run dev"
+        docker-compose -f docker-compose.dev.yml down 2>/dev/null || true
+        devex service stop redis postgresql
+        ;;
+        
+    "restart")
+        $0 stop
+        sleep 2
+        $0 start
+        ;;
+esac
+```
+
+## VS Code Configuration
+
+### Settings Configuration
+
+```json
+// ~/.devex/assets/vscode/settings.json
+{
+  "editor.fontFamily": "JetBrains Mono, Fira Code, Consolas, monospace",
+  "editor.fontSize": 14,
+  "editor.lineHeight": 1.6,
+  "editor.fontLigatures": true,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true,
+    "source.organizeImports": true
+  },
+  "editor.rulers": [80, 120],
+  "editor.minimap.enabled": false,
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": true,
+  
+  "workbench.colorTheme": "Tokyo Night",
+  "workbench.iconTheme": "material-icon-theme",
+  "workbench.startupEditor": "newUntitledFile",
+  
+  "files.autoSave": "onFocusChange",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  
+  "terminal.integrated.shell.linux": "/bin/zsh",
+  "terminal.integrated.fontSize": 13,
+  "terminal.integrated.cursorBlinking": true,
+  
+  "git.enableSmartCommit": true,
+  "git.confirmSync": false,
+  "git.autofetch": true,
+  
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "typescript.preferences.importModuleSpecifier": "relative",
+  
+  "javascript.updateImportsOnFileMove.enabled": "always",
+  "javascript.preferences.importModuleSpecifier": "relative",
+  
+  "css.validate": true,
+  "scss.validate": true,
+  "less.validate": true,
+  
+  "tailwindCSS.includeLanguages": {
+    "javascript": "javascript",
+    "html": "html"
+  },
+  "tailwindCSS.experimental.classRegex": [
+    "tw`([^`]*)",
+    "tw=\"([^\"]*)",
+    "tw={\"([^\"}]*)",
+    "tw\\.\\w+`([^`]*)",
+    "tw\\(.*?\\)`([^`]*)"
+  ],
+  
+  "emmet.includeLanguages": {
+    "javascript": "javascriptreact",
+    "typescript": "typescriptreact"
+  },
+  
+  "prettier.semi": true,
+  "prettier.singleQuote": true,
+  "prettier.trailingComma": "es5",
+  "prettier.tabWidth": 2,
+  "prettier.printWidth": 80
+}
+```
+
+### Keybindings Configuration
+
+```json
+// ~/.devex/assets/vscode/keybindings.json
+[
+  {
+    "key": "ctrl+shift+e",
+    "command": "workbench.view.explorer"
+  },
+  {
+    "key": "ctrl+shift+f",
+    "command": "workbench.view.search"
+  },
+  {
+    "key": "ctrl+shift+g",
+    "command": "workbench.view.scm"
+  },
+  {
+    "key": "ctrl+shift+d",
+    "command": "workbench.view.debug"
+  },
+  {
+    "key": "ctrl+shift+x",
+    "command": "workbench.view.extensions"
+  },
+  {
+    "key": "ctrl+shift+`",
+    "command": "workbench.action.terminal.new"
+  },
+  {
+    "key": "ctrl+shift+c",
+    "command": "workbench.action.terminal.openNativeConsole"
+  }
+]
+```
+
+## Team Collaboration
+
+### Shared Configuration
+
+For teams, create a shared configuration repository:
+
+```bash
+# Create team config repository
+mkdir team-web-config
+cd team-web-config
+
+# Create base configuration
+cat > team-base.yaml << 'EOF'
+# Team Web Development Configuration
+team:
+  name: "web-development-team"
+  standards:
+    node_version: "lts"
+    package_manager: "pnpm"
+    editor: "vscode"
+    browser: "chrome"
+    
+applications:
+  development:
+    - name: git
+      default: true
+      config:
+        user.name: "${GIT_USER_NAME}"
+        user.email: "${GIT_USER_EMAIL}"
+    - name: node
+      install_method: mise
+      install_command: node@lts
+      default: true
+    - name: pnpm
+      default: true
+    - name: vscode
+      default: true
+      extensions:
+        - "ms-vscode.vscode-typescript-next"
+        - "esbenp.prettier-vscode"
+        - "bradlc.vscode-tailwindcss"
+EOF
+
+# Initialize git repository
+git init
+git add .
+git commit -m "Initial team configuration"
+```
+
+### Team Setup Script
+
+```bash
+#!/bin/bash
+# team-setup.sh
+
+echo "🎯 Setting up team web development environment..."
+
+# Get user information
+read -p "Enter your full name: " GIT_USER_NAME
+read -p "Enter your email: " GIT_USER_EMAIL
+
+# Export environment variables
+export GIT_USER_NAME="$GIT_USER_NAME"
+export GIT_USER_EMAIL="$GIT_USER_EMAIL"
+
+# Clone team configuration
+git clone https://github.com/yourteam/web-dev-config.git ~/.devex
+
+# Apply team configuration
+devex config apply --file ~/.devex/team-base.yaml
+
+# Install team tools
+devex install
+
+# Configure Git
+git config --global user.name "$GIT_USER_NAME"
+git config --global user.email "$GIT_USER_EMAIL"
+
+echo "✅ Team environment setup complete!"
+```
+
+## Customization Options
+
+### Adding New Tools
+
+To add tools to your web development environment:
+
+```yaml
+# Add to ~/.devex/custom-web-tools.yaml
+applications:
+  development:
+    - name: storybook
+      description: "Tool for building UI components"
+      install_method: npm
+      install_command: "@storybook/cli@latest"
+      global: true
+      
+    - name: lighthouse
+      description: "Website performance auditing"
+      install_method: npm
+      install_command: "lighthouse@latest"
+      global: true
+      
+    - name: bundlephobia-cli
+      description: "Check npm package bundle size"
+      install_method: npm
+      install_command: "bundlephobia-cli@latest"
+      global: true
+```
+
+### Environment Variables
+
+```bash
+# ~/.devex/scripts/web-dev-env.sh
+export NODE_ENV=development
+export BROWSER=google-chrome
+export EDITOR=code
+export REACT_EDITOR=code
+export FORCE_COLOR=1
+export NPM_CONFIG_COLOR=always
+```
+
+<Callout type="tip">
+**Web Development Best Practices:**
+
+1. **Use Node Version Manager**: Always use mise or nvm for Node.js versions
+2. **Standardize Package Manager**: Choose pnpm, yarn, or npm and stick with it
+3. **Configure Prettier and ESLint**: Ensure consistent code formatting
+4. **Use TypeScript**: Type safety improves development experience
+5. **Set Up Hot Reloading**: Configure live reload for faster development
+6. **Browser DevTools**: Install browser extensions for debugging
+7. **Version Control**: Use meaningful commit messages and branching strategies
+</Callout>
+
+## Troubleshooting
+
+### Common Issues
+
+**Node.js Version Conflicts:**
+```bash
+# Check current Node version
+node --version
+
+# List installed versions
+mise list node
+
+# Switch to LTS version
+mise use node@lts
+mise global node@lts
+```
+
+**Package Installation Failures:**
+```bash
+# Clear npm cache
+npm cache clean --force
+
+# Clear pnpm cache
+pnpm store prune
+
+# Reinstall node_modules
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**VS Code Extension Issues:**
+```bash
+# Reset VS Code extensions
+code --disable-extensions
+code --list-extensions --show-versions
+
+# Reinstall essential extensions
+devex vscode setup-extensions
+```
+
+This web development environment provides everything needed for modern frontend development, from basic tools to advanced frameworks and team collaboration features.
+
+<Cards>
+  <Card title="Backend Development" href="/docs/examples/backend-development" description="Server-side development environment" />
+  <Card title="Data Science" href="/docs/examples/data-science" description="Python data science setup" />
+  <Card title="Mobile Development" href="/docs/examples/mobile-development" description="Mobile app development environment" />
+  <Card title="Customization Guide" href="/docs/guides/customization" description="Advanced DevEx customization" />
+</Cards>

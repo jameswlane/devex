@@ -1,0 +1,647 @@
+---
+title: Environment Configuration
+description: Manage programming languages, fonts, and shell configurations
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Environment Configuration
+
+The `environment.yaml` file manages development environment essentials: programming languages through mise, font installations, and shell configurations. This configuration ensures consistent tooling across development machines.
+
+## File Location
+
+```bash
+# Default configuration
+~/.local/share/devex/config/environment.yaml
+
+# User override (higher priority)
+~/.devex/environment.yaml
+```
+
+## File Structure
+
+```yaml
+programming_languages:
+  - name: string          # Language/runtime name
+    description: string   # Description of the language
+    category: string      # "Programming Languages"
+    install_method: string # Installation method (mise)
+    install_command: string # Version specification
+    # ... additional fields
+
+fonts:
+  - name: string          # Font name
+    method: string        # Installation method
+    url: string          # Download URL (if applicable)
+    destination: string   # Installation path
+    # ... font-specific options
+
+shell: []                 # Shell configurations (extensible)
+```
+
+## Programming Languages
+
+DevEx uses [mise](https://mise.jdx.dev/) for managing programming language versions. This provides consistent, project-aware version management across all languages.
+
+### Language Definition Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Language identifier |
+| `description` | `string` | Yes | Human-readable description |
+| `category` | `string` | Yes | Always "Programming Languages" |
+| `install_method` | `string` | Yes | Always "mise" |
+| `install_command` | `string` | Yes | Version specification |
+| `uninstall_command` | `string` | Yes | Uninstall identifier |
+| `default` | `bool` | No | Install by default (false) |
+| `dependencies` | `string[]` | No | Required dependencies |
+
+### Version Specifications
+
+<Tabs items={['Latest', 'LTS', 'Specific', 'Multiple']}>
+  <Tab value="Latest">
+    ```yaml
+    programming_languages:
+      - name: Python
+        install_command: 'python@3.11.7'  # Pinned stable version
+        
+      - name: Go
+        install_command: 'go@1.21.6'      # Pinned stable version
+        
+      - name: Rust
+        install_command: 'rust@1.75.0'    # Pinned stable version
+    ```
+  </Tab>
+  
+  <Tab value="LTS">
+    ```yaml
+    programming_languages:
+      - name: Node.js
+        install_command: 'node@lts'       # Current LTS
+        
+      - name: Java
+        install_command: 'java@lts'       # LTS release
+    ```
+  </Tab>
+  
+  <Tab value="Specific">
+    ```yaml
+    programming_languages:
+      - name: Python
+        install_command: 'python@3.11.0' # Exact version
+        
+      - name: Node.js
+        install_command: 'node@18.17.0'  # Specific version
+        
+      - name: Ruby
+        install_command: 'ruby@3.2.0'    # Pinned version
+    ```
+  </Tab>
+  
+  <Tab value="Multiple">
+    ```yaml
+    # Install multiple versions (mise will use first as default)
+    programming_languages:
+      - name: Node.js 18 LTS
+        install_command: 'node@18'
+        
+      - name: Node.js 20 Current  
+        install_command: 'node@20'
+        
+      - name: Node.js Latest
+        install_command: 'node@latest'
+    ```
+  </Tab>
+</Tabs>
+
+### Supported Languages
+
+<Cards>
+  <Card title="Web Development" description="Node.js, Deno, Bun" />
+  <Card title="Systems Programming" description="Rust, Go, Zig" />
+  <Card title="Enterprise" description="Java, C#" />
+  <Card title="Scripting" description="Python, Ruby, Elixir" />
+</Cards>
+
+#### Complete Language Examples
+
+```yaml
+programming_languages:
+  # JavaScript/TypeScript ecosystem
+  - name: Node.js
+    description: 'Node.js runtime'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'node@lts'
+    uninstall_command: 'node'
+    default: false
+    dependencies:
+      - 'mise'
+      
+  - name: Deno
+    description: 'A modern runtime for JavaScript and TypeScript'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'deno@latest'
+    uninstall_command: 'deno'
+    default: false
+    dependencies:
+      - 'mise'
+      
+  - name: Bun
+    description: 'A fast all-in-one JavaScript runtime'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'bun@latest'
+    uninstall_command: 'bun'
+    default: false
+    dependencies:
+      - 'mise'
+
+  # Systems programming
+  - name: Rust
+    description: 'Rust programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'rust@latest'
+    uninstall_command: 'rust'
+    default: false
+    dependencies:
+      - 'mise'
+      
+  - name: Go
+    description: 'Go programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'go@latest'
+    uninstall_command: 'go'
+    default: false
+    dependencies:
+      - 'mise'
+
+  # Functional programming
+  - name: Elixir
+    description: 'Dynamic, functional language for maintainable applications'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'elixir@latest'
+    uninstall_command: 'elixir'
+    default: false
+    dependencies:
+      - 'mise'
+      - 'erlang'  # Elixir runs on Erlang VM
+      
+  - name: Erlang
+    description: 'Programming language for massively scalable soft real-time systems'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'erlang@latest'
+    uninstall_command: 'erlang'
+    default: false
+    dependencies:
+      - 'mise'
+```
+
+## Font Management
+
+DevEx manages programming fonts and system fonts through multiple installation methods.
+
+### Font Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Font display name |
+| `method` | `string` | Yes | Installation method |
+| `url` | `string` | Conditional | Download URL (for url method) |
+| `destination` | `string` | Conditional | Installation directory |
+| `extract_path` | `string` | No | Path within archive to extract |
+
+### Font Installation Methods
+
+<Tabs items={['URL Download', 'Oh My Posh', 'Homebrew', 'Package Manager']}>
+  <Tab value="URL Download">
+    ```yaml
+    fonts:
+      - name: 'Cascadia Mono'
+        method: 'url'
+        url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip'
+        destination: '~/.local/share/fonts'
+        
+      - name: 'iA Writer Mono'
+        method: 'url'
+        url: 'https://github.com/iaolo/iA-Fonts/archive/refs/heads/master.zip'
+        extract_path: 'iA-Fonts-master/iA Writer Mono/Static'
+        destination: '~/.local/share/fonts'
+    ```
+  </Tab>
+  
+  <Tab value="Oh My Posh">
+    ```yaml
+    fonts:
+      - name: 'Meslo LG S'
+        method: 'oh-my-posh'  # Uses oh-my-posh font installer
+    ```
+  </Tab>
+  
+  <Tab value="Homebrew">
+    ```yaml
+    fonts:
+      - name: 'Fira Code'
+        method: 'homebrew'    # macOS via Homebrew
+    ```
+  </Tab>
+  
+  <Tab value="Package Manager">
+    ```yaml
+    fonts:
+      - name: 'Source Code Pro'
+        method: 'apt'         # Linux via package manager
+        package: 'fonts-source-code-pro'
+        
+      - name: 'Ubuntu Mono'
+        method: 'dnf'         # Fedora via DNF
+        package: 'ubuntu-family-fonts'
+    ```
+  </Tab>
+</Tabs>
+
+### Recommended Programming Fonts
+
+<Callout type="tip">
+**Version Pinning for Fonts**: For production or team environments, consider pinning font URLs to specific releases instead of using "latest" for better reproducibility:
+```
+url: 'https://github.com/ryanoasis/nerd-fonts/releases/download/v3.1.1/CascadiaMono.zip'
+```
+</Callout>
+
+```yaml
+fonts:
+  # Nerd Fonts (with programming symbols)
+  - name: 'Cascadia Mono'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip'
+    destination: '~/.local/share/fonts'
+    
+  - name: 'JetBrains Mono'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip'
+    destination: '~/.local/share/fonts'
+    
+  - name: 'Fira Code'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip'
+    destination: '~/.local/share/fonts'
+
+  # System fonts
+  - name: 'SF Mono'           # macOS system font
+    method: 'system'
+    platforms: ['macos']
+    
+  - name: 'Consolas'          # Windows system font
+    method: 'system'
+    platforms: ['windows']
+```
+
+## Shell Configuration
+
+The shell section is currently extensible and ready for future shell configurations like themes, plugins, and prompt customizations.
+
+### Current Structure
+
+```yaml
+shell: []  # Empty array - ready for extension
+```
+
+### Planned Shell Features
+
+<Steps>
+
+<Step>
+**Shell Themes**: Oh My Zsh, Starship, and Oh My Posh configurations
+</Step>
+
+<Step>
+**Shell Plugins**: Auto-completion, syntax highlighting, history
+</Step>
+
+<Step>
+**Environment Variables**: Development-specific environment setup
+</Step>
+
+<Step>
+**Aliases and Functions**: Common development shortcuts
+</Step>
+
+</Steps>
+
+### Future Shell Configuration
+
+```yaml
+# Planned shell configuration structure
+shell:
+  - name: 'starship'
+    type: 'prompt'
+    config_file: '~/.config/starship.toml'
+    theme: 'tokyo-night'
+    
+  - name: 'zsh-autosuggestions'
+    type: 'plugin'
+    install_method: 'git'
+    repo: 'https://github.com/zsh-users/zsh-autosuggestions'
+    
+  - name: 'dev-aliases'
+    type: 'aliases'
+    aliases:
+      ll: 'ls -la'
+      gc: 'git commit'
+      gp: 'git push'
+```
+
+## Version Management with Mise
+
+DevEx leverages mise for unified version management across all programming languages.
+
+### Project-Level Version Control
+
+```bash
+# Create .mise.toml in project root
+echo 'node = "18.17.0"' >> .mise.toml
+echo 'python = "3.11.0"' >> .mise.toml
+
+# Mise automatically switches versions when entering directory
+cd my-project  # Automatically uses Node 18.17.0 and Python 3.11.0
+```
+
+### Global vs Project Versions
+
+<Tabs items={['Global Configuration', 'Project Configuration', 'Version Switching']}>
+  <Tab value="Global Configuration">
+    ```bash
+    # Set global defaults (used outside projects)
+    mise use --global node@lts
+    mise use --global python@3.11
+    mise use --global go@latest
+    
+    # View global versions
+    mise list
+    ```
+  </Tab>
+  
+  <Tab value="Project Configuration">
+    ```toml
+    # .mise.toml in project root
+    [tools]
+    node = "18.17.0"
+    python = "3.11.0"
+    go = "1.21.0"
+    
+    # Alternative: .tool-versions format
+    # node 18.17.0
+    # python 3.11.0
+    # go 1.21.0
+    ```
+  </Tab>
+  
+  <Tab value="Version Switching">
+    ```bash
+    # Install and use specific version
+    mise install python@3.12.0
+    mise use python@3.12.0
+    
+    # Install all project versions
+    mise install
+    
+    # Check current active versions
+    mise current
+    ```
+  </Tab>
+</Tabs>
+
+## Real-World Examples
+
+### Full-Stack JavaScript Development
+
+```yaml
+programming_languages:
+  - name: Node.js
+    description: 'Node.js runtime'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'node@lts'
+    uninstall_command: 'node'
+    default: true
+    dependencies:
+      - 'mise'
+      
+  - name: Deno
+    description: 'Modern JavaScript/TypeScript runtime'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'deno@latest'
+    uninstall_command: 'deno'
+    default: false
+    dependencies:
+      - 'mise'
+
+fonts:
+  - name: 'JetBrains Mono'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip'
+    destination: '~/.local/share/fonts'
+```
+
+### Data Science Environment
+
+```yaml
+programming_languages:
+  - name: Python
+    description: 'Python programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'python@3.11'  # Stable for data science
+    uninstall_command: 'python'
+    default: true
+    dependencies:
+      - 'mise'
+      
+  - name: R
+    description: 'R statistical language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'r@latest'
+    uninstall_command: 'r'
+    default: false
+    dependencies:
+      - 'mise'
+
+fonts:
+  - name: 'Source Code Pro'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/SourceCodePro.zip'
+    destination: '~/.local/share/fonts'
+```
+
+### Systems Programming Setup
+
+```yaml
+programming_languages:
+  - name: Rust
+    description: 'Rust systems programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'rust@latest'
+    uninstall_command: 'rust'
+    default: true
+    dependencies:
+      - 'mise'
+      
+  - name: Go
+    description: 'Go programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'go@latest'
+    uninstall_command: 'go'
+    default: true
+    dependencies:
+      - 'mise'
+      
+  - name: Zig
+    description: 'Zig systems programming language'
+    category: 'Programming Languages'
+    install_method: 'mise'
+    install_command: 'zig@latest'
+    uninstall_command: 'zig'
+    default: false
+    dependencies:
+      - 'mise'
+
+fonts:
+  - name: 'Cascadia Mono'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip'
+    destination: '~/.local/share/fonts'
+```
+
+## Best Practices
+
+<Callout type="tip">
+**Environment Configuration Best Practices:**
+
+1. **Use LTS versions** - For production-focused environments
+2. **Pin specific versions** - For team consistency
+3. **Install Nerd Fonts** - Better terminal experience with symbols
+4. **Leverage mise project configs** - Per-project version management
+5. **Test font rendering** - Ensure fonts work in your terminal/editor
+6. **Document team standards** - Share environment configs across team
+</Callout>
+
+### Team Environment Standardization
+
+```yaml
+# Shared team environment configuration
+programming_languages:
+  # Standardize on specific versions for consistency
+  - name: Node.js
+    install_command: 'node@18.17.0'  # Pinned for team
+    default: true
+    
+  - name: Python
+    install_command: 'python@3.11.0' # Pinned for team
+    default: true
+
+fonts:
+  # Consistent programming font across team
+  - name: 'JetBrains Mono'
+    method: 'url'
+    url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip'
+    destination: '~/.local/share/fonts'
+```
+
+## Validation and Testing
+
+### Validate Environment Configuration
+
+```bash
+# Validate environment.yaml syntax
+devex config validate environment
+
+# Test programming language installation (dry-run)
+devex install python --dry-run
+
+# Verify mise is working
+mise --version
+
+# Check installed languages
+mise list
+
+# Test font installation
+fc-list | grep -i "jetbrains"  # Linux
+```
+
+### Troubleshooting
+
+<Tabs items={['Mise Issues', 'Font Problems', 'Version Conflicts']}>
+  <Tab value="Mise Issues">
+    ```bash
+    # Mise not found
+    curl https://mise.run | sh
+    echo 'eval "$(mise activate bash)"' >> ~/.bashrc
+    
+    # Clear mise cache
+    mise cache clear
+    
+    # Rebuild mise shims
+    mise reshim
+    
+    # Check mise configuration
+    mise doctor
+    ```
+  </Tab>
+  
+  <Tab value="Font Problems">
+    ```bash
+    # Linux: Refresh font cache
+    fc-cache -fv
+    
+    # Check if fonts are installed
+    fc-list | grep -i "font-name"
+    
+    # Verify font directory permissions
+    ls -la ~/.local/share/fonts/
+    
+    # macOS: Font Book utility
+    open /System/Applications/Font\ Book.app
+    ```
+  </Tab>
+  
+  <Tab value="Version Conflicts">
+    ```bash
+    # Check which versions are active
+    mise current
+    
+    # See all available versions
+    mise list-all python
+    
+    # Remove conflicting versions
+    mise uninstall python@3.10.0
+    
+    # Reset to global version
+    mise use --global python@3.11.0
+    ```
+  </Tab>
+</Tabs>
+
+## Related Documentation
+
+- [Applications Configuration](/docs/configuration/applications) - Application installation
+- [System Configuration](/docs/configuration/system) - Git, SSH, and terminal settings
+- [Platform Support](/docs/platforms) - Platform-specific considerations
+- [CLI Reference: Install](/docs/cli-reference/install) - Installation commands
+
+<Callout type="info">
+The environment.yaml configuration ensures consistent development tooling across machines and team members. Combined with mise's project-aware version management, it provides a robust foundation for any development environment.
+</Callout>

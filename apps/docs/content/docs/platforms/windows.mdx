@@ -1,0 +1,411 @@
+---
+title: Windows Support
+description: Windows support roadmap, current status, and planned features for DevEx
+---
+
+# Windows Support
+
+DevEx is actively developing Windows support to bring the same unified development environment experience to Windows 10 and Windows 11.
+
+<Callout type="warning">
+**Under Development** - Windows support is currently in planning and early development phases
+</Callout>
+
+## Current Status
+
+### Development Phase
+- **Status**: 🚧 In Development
+- **Target Release**: Version 2.0
+- **Current Focus**: Architecture design and core installer implementation
+
+### Supported Features (Planned)
+- ✅ Windows Package Manager (WinGet) integration
+- ✅ Chocolatey package manager support  
+- ✅ Scoop package manager support
+- ✅ PowerShell integration
+- ✅ Windows Terminal configuration
+- ✅ WSL2 integration
+- 🔄 Microsoft Store integration (under consideration)
+
+## Target System Requirements
+
+### Windows Versions
+| Version | Support Status | Notes |
+|---------|----------------|-------|
+| **Windows 11** | 🎯 Primary Target | Full feature support |
+| **Windows 10** | 🎯 Primary Target | Version 1809+ required |
+| **Windows Server** | 🔄 Under Review | Server 2019+ consideration |
+
+### Prerequisites (Planned)
+- **PowerShell**: 5.1+ or PowerShell Core 7+
+- **Windows Package Manager**: Auto-installed if needed
+- **Git for Windows**: Auto-installed if needed
+- **Windows Terminal**: Recommended for best experience
+
+### Hardware Requirements
+- **Memory**: 1GB RAM minimum, 4GB recommended
+- **Storage**: 500MB free space
+- **Network**: Internet connection for package downloads
+- **Architecture**: x64, ARM64 (Windows 11)
+
+## Package Manager Support
+
+### Windows Package Manager (WinGet)
+
+<Callout type="success">
+**Primary Package Manager** - Microsoft's official package manager
+</Callout>
+
+#### Planned Features
+```bash
+# DevEx will automatically use WinGet for installations
+devex install git                    # Uses winget install Git.Git
+devex install vscode                 # Uses winget install Microsoft.VisualStudioCode
+devex install nodejs                 # Uses winget install OpenJS.NodeJS
+```
+
+#### Configuration Example
+```yaml
+# Planned Windows configuration format
+applications:
+  development:
+    - name: visual-studio-code
+      description: 'Code editor by Microsoft'
+      windows:
+        install_method: 'winget'
+        install_command: 'Microsoft.VisualStudioCode'
+        uninstall_command: 'Microsoft.VisualStudioCode'
+        official_support: true
+```
+
+#### WinGet Features
+- **Official Microsoft support**
+- **Automatic updates** via Microsoft Store
+- **Secure package verification**
+- **Integration with Windows Update**
+
+### Chocolatey
+
+<Callout type="info">
+**Community Package Manager** - Large ecosystem with extensive package availability
+</Callout>
+
+#### Planned Integration
+```bash
+# Alternative package manager with more packages
+devex install --method=chocolatey firefox
+devex install --method=chocolatey discord
+devex install --method=chocolatey obs-studio
+```
+
+#### Chocolatey Benefits
+- **Largest Windows package repository**
+- **Community-maintained packages**
+- **PowerShell-based installation**
+- **Enterprise features available**
+
+### Scoop
+
+<Callout type="info">
+**Developer-Focused** - Command-line installer for Windows
+</Callout>
+
+#### Planned Features
+```bash
+# Developer tools and CLI utilities
+devex install --method=scoop git
+devex install --method=scoop python
+devex install --method=scoop nodejs
+```
+
+#### Scoop Advantages
+- **Portable installations** (no admin required)
+- **Developer-focused packages**
+- **JSON manifest system**
+- **Easy uninstallation**
+
+## Installer Priority System (Planned)
+
+DevEx will automatically select the best installer based on availability and package type:
+
+```
+1. winget      (Microsoft's official package manager)
+2. chocolatey  (Community package manager)
+3. scoop       (Developer-focused installer)
+4. mise        (Programming language manager)
+5. download    (Direct downloads and manual installation)
+```
+
+### Package Manager Selection Logic
+```yaml
+# Planned selection algorithm
+selection_criteria:
+  - official_support: prefer winget
+  - package_availability: check all managers
+  - installation_method: prefer non-admin when possible
+  - update_mechanism: prefer automatic updates
+```
+
+## Windows Subsystem for Linux (WSL2) Integration
+
+### Planned WSL2 Features
+- **Automatic WSL2 setup** if not present
+- **Linux distribution management** (Ubuntu, Debian, etc.)
+- **Cross-platform configuration** sharing
+- **Docker Desktop integration** via WSL2 backend
+
+### Configuration Example
+```yaml
+# Planned WSL2 integration
+wsl:
+  enabled: true
+  default_distribution: 'ubuntu-22.04'
+  memory_limit: '8GB'
+  processor_count: 4
+  distributions:
+    - name: 'ubuntu-22.04'
+      default: true
+    - name: 'debian'
+      default: false
+```
+
+## Windows Terminal Integration
+
+### Planned Features
+- **Automatic profile creation** for installed shells
+- **Theme synchronization** across PowerShell, WSL, etc.
+- **Keyboard shortcut management**
+- **Tab and pane configuration**
+
+### Configuration Example
+```json
+// Planned Windows Terminal integration
+{
+  "profiles": {
+    "defaults": {
+      "fontFace": "CascadiaCode Nerd Font",
+      "fontSize": 12,
+      "colorScheme": "DevEx Dark"
+    },
+    "list": [
+      {
+        "name": "PowerShell",
+        "source": "Windows.Terminal.PowershellCore"
+      },
+      {
+        "name": "Ubuntu WSL",
+        "source": "Windows.Terminal.Wsl"
+      }
+    ]
+  }
+}
+```
+
+## Development Environment Features
+
+### Programming Language Support
+```bash
+# Planned language installations via mise
+devex install nodejs@18          # Node.js version 18
+devex install python@3.11        # Python 3.11
+devex install go@1.21            # Go 1.21
+devex install rust               # Latest Rust
+```
+
+### Development Tools
+```bash
+# Essential development tools
+devex install git               # Git for Windows
+devex install docker           # Docker Desktop
+devex install vscode           # Visual Studio Code
+devex install postman          # API testing tool
+```
+
+### Windows-Specific Tools
+```bash
+# Windows development tools
+devex install visual-studio     # Visual Studio IDE
+devex install windows-sdk       # Windows SDK
+devex install sysinternals      # System utilities
+devex install powertoys         # Microsoft PowerToys
+```
+
+## PowerShell Integration
+
+### Planned PowerShell Features
+- **Profile management** across PowerShell versions
+- **Module installation** and configuration
+- **Execution policy management**
+- **Environment variable management**
+
+### Configuration Example
+```powershell
+# Planned PowerShell profile integration
+# Microsoft.PowerShell_profile.ps1
+
+# DevEx-managed imports
+Import-Module PSReadLine
+Import-Module Terminal-Icons
+Import-Module posh-git
+
+# DevEx environment variables
+$env:DEVEX_HOME = "$env:USERPROFILE\.devex"
+$env:PATH += ";$env:DEVEX_HOME\bin"
+```
+
+## File System Integration
+
+### Planned Directory Structure
+```
+%USERPROFILE%\
+├── .devex\
+│   ├── config\
+│   │   ├── applications.yaml
+│   │   ├── environment.yaml
+│   │   └── windows.yaml
+│   ├── bin\
+│   └── cache\
+├── AppData\
+│   └── Local\
+│       └── devex\
+└── Documents\
+    └── PowerShell\
+        └── Microsoft.PowerShell_profile.ps1
+```
+
+### Windows Registry Integration
+- **Application associations** management
+- **File type registrations**
+- **System environment variables**
+- **Windows features** enable/disable
+
+## Security Considerations
+
+### Planned Security Features
+- **Code signing verification** for downloaded packages
+- **Windows Defender integration** for safe installations
+- **User Account Control (UAC)** handling
+- **PowerShell execution policy** management
+
+### Best Practices
+```powershell
+# Planned security configurations
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+# Enable Windows Defender real-time protection
+# Verify package signatures before installation
+```
+
+## Development Roadmap
+
+### Phase 1: Core Infrastructure (Q1 2025)
+- [ ] Windows platform detection
+- [ ] WinGet installer implementation
+- [ ] Basic PowerShell integration
+- [ ] Configuration file management
+
+### Phase 2: Package Manager Support (Q2 2025)
+- [ ] Chocolatey installer implementation
+- [ ] Scoop installer implementation
+- [ ] Package manager priority system
+- [ ] Automatic dependency resolution
+
+### Phase 3: System Integration (Q3 2025)
+- [ ] Windows Terminal configuration
+- [ ] WSL2 integration
+- [ ] Environment variable management
+- [ ] Registry integration
+
+### Phase 4: Advanced Features (Q4 2025)
+- [ ] Microsoft Store integration
+- [ ] Visual Studio integration
+- [ ] Windows feature management
+- [ ] Enterprise features
+
+## Beta Testing Program
+
+### Getting Involved
+<Callout type="info">
+Interested in testing Windows support? Join our beta program!
+</Callout>
+
+1. **Sign up** for beta testing notifications
+2. **Follow development** on GitHub
+3. **Provide feedback** on planned features
+4. **Test early releases** when available
+
+### Contact Information
+- **GitHub Issues**: [Report bugs and feature requests](https://github.com/jameswlane/devex/issues)
+- **Discord**: Join our development discussion
+- **Email**: Subscribe to beta testing updates
+
+## Current Alternatives
+
+While waiting for native Windows support, consider these alternatives:
+
+### WSL2 + Linux DevEx
+```bash
+# Install WSL2 with Ubuntu
+wsl --install -d Ubuntu-22.04
+
+# Run DevEx inside WSL2 (review security guide first)
+curl -fsSL https://devex.sh/install | bash
+```
+
+### Manual Installation
+- **WinGet**: Use Microsoft's package manager directly
+- **Chocolatey**: Community package manager
+- **Scoop**: Developer-focused installations
+
+### Docker Development Environment
+```dockerfile
+# Use DevEx in a container
+FROM ubuntu:22.04
+# Install DevEx with security considerations
+RUN curl -fsSL https://devex.sh/install | bash
+```
+
+## Contributing to Windows Support
+
+### How to Help
+1. **Test existing installers** on Windows (via WSL2)
+2. **Contribute Windows-specific code** to the repository
+3. **Document Windows development workflows**
+4. **Provide feedback** on planned features
+
+### Development Setup
+```bash
+# Clone the repository
+git clone https://github.com/jameswlane/devex.git
+cd devex
+
+# Focus on Windows development
+cd apps/cli
+# Windows-specific development coming soon
+```
+
+### Architecture Contributions
+We're actively designing the Windows architecture and welcome contributions:
+
+- **Package manager abstractions**
+- **Windows-specific file handling**
+- **Registry management utilities**
+- **PowerShell integration modules**
+
+## Frequently Asked Questions
+
+### When will Windows support be available?
+**Target**: Version 2.0, estimated Q4 2025. Follow our [GitHub releases](https://github.com/jameswlane/devex/releases) for updates.
+
+### Will it work on Windows 10?
+**Yes**: Windows 10 version 1809+ will be supported with the same features as Windows 11.
+
+### What about Windows Server?
+**Under Review**: Server support is being evaluated based on community interest.
+
+### Can I use DevEx with WSL2 now?
+**Yes**: You can install DevEx inside WSL2 distributions and use full Linux functionality.
+
+### Will there be a GUI installer?
+**Future**: A graphical installer is planned for later releases, focusing on CLI implementation first.
+
+See our [roadmap](https://github.com/jameswlane/devex/blob/main/ROADMAP.md) for the latest development status and timeline updates.

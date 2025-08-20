@@ -1,0 +1,10 @@
+{
+	"title": "Examples",
+	"pages": [
+		"index",
+		"web-development",
+		"backend-development",
+		"data-science",
+		"mobile-development"
+	]
+}

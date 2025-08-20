@@ -1,0 +1,729 @@
+---
+title: devex config
+description: Comprehensive configuration management for DevEx
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex config
+
+The `config` command provides comprehensive tools for managing DevEx configuration files. It includes subcommands for viewing, editing, validating, and backing up your configuration files, as well as advanced features like team configuration management and environment-specific settings.
+
+## Usage
+
+```bash
+devex config <subcommand> [flags]
+```
+
+## Subcommands Overview
+
+<Cards>
+  <Card title="show" description="Display configuration status and summary" />
+  <Card title="edit" description="Edit configuration files with your preferred editor" />
+  <Card title="validate" description="Validate configuration syntax and content" />
+  <Card title="diff" description="Compare configuration files" />
+  <Card title="backup" description="Create and manage configuration backups" />
+  <Card title="team" description="Manage team configuration templates" />
+  <Card title="environment" description="Handle environment-specific configurations" />
+  <Card title="export/import" description="Export and import configuration packages" />
+  <Card title="version" description="Configuration version management" />
+  <Card title="undo" description="Undo configuration changes" />
+</Cards>
+
+## Core Subcommands
+
+### devex config show
+
+Display comprehensive configuration information and status.
+
+```bash
+devex config show [flags]
+```
+
+#### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--format` | `string` | `table` | Output format (table, json, yaml) |
+| `--verbose` | `bool` | `false` | Show detailed information |
+| `--files` | `bool` | `false` | Show individual file details |
+
+#### Examples
+
+<Tabs items={['Basic', 'Detailed', 'JSON Output']}>
+  <Tab value="Basic">
+    ```bash
+    devex config show
+    
+    Configuration Summary:
+    ┌─────────────────┬────────┬─────────┬──────────────────┐
+    │ File            │ Status │ Size    │ Last Modified    │
+    ├─────────────────┼────────┼─────────┼──────────────────┤
+    │ applications    │ ✓      │ 45.2 KB │ 2024-08-17 14:30 │
+    │ environment     │ ✓      │ 12.1 KB │ 2024-08-17 14:25 │
+    │ desktop         │ ✓      │ 8.4 KB  │ 2024-08-17 14:25 │
+    │ system          │ ✓      │ 2.1 KB  │ 2024-08-17 14:25 │
+    └─────────────────┴────────┴─────────┴──────────────────┘
+    
+    Config Directory: ~/.local/share/devex/config
+    Override Directory: ~/.devex (2 files)
+    Total Size: 67.8 KB
+    ```
+  </Tab>
+  
+  <Tab value="Detailed">
+    ```bash
+    devex config show --verbose
+    
+    # Shows additional details like:
+    # - Configuration inheritance
+    # - Template information
+    # - Validation status
+    # - Backup availability
+    # - Team configuration status
+    ```
+  </Tab>
+  
+  <Tab value="JSON Output">
+    ```bash
+    devex config show --format json
+    
+    {
+      "config_dir": "/home/user/.local/share/devex/config",
+      "applications": {
+        "path": "/home/user/.local/share/devex/config/applications.yaml",
+        "size": 46234,
+        "modified": "2024-08-17T14:30:00Z",
+        "exists": true,
+        "valid": true
+      },
+      "total_size": 69376,
+      "validation_errors": []
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### devex config edit
+
+Open configuration files in your preferred editor.
+
+```bash
+devex config edit <file> [flags]
+```
+
+#### Arguments
+
+- `file`: Configuration file to edit (`applications`, `environment`, `desktop`, `system`)
+
+#### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--editor` | `string` | `$EDITOR` | Editor to use (vim, nano, code, etc.) |
+| `--backup` | `bool` | `true` | Create backup before editing |
+| `--template` | `string` | | Start from a template |
+
+#### Examples
+
+```bash
+# Edit applications configuration
+devex config edit applications
+
+# Use specific editor
+devex config edit environment --editor code
+
+# Edit with automatic backup
+devex config edit desktop --backup
+
+# Start from template
+devex config edit applications --template backend-team
+```
+
+### devex config validate
+
+Validate configuration files for syntax and logical errors.
+
+```bash
+devex config validate [file] [flags]
+```
+
+#### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--strict` | `bool` | `false` | Enable strict validation mode |
+| `--fix` | `bool` | `false` | Automatically fix common issues |
+| `--schema` | `string` | | Custom schema file to validate against |
+
+#### Examples
+
+<Tabs items={['All Files', 'Specific File', 'Strict Mode', 'Auto-fix']}>
+  <Tab value="All Files">
+    ```bash
+    devex config validate
+    
+    Validation Results:
+    ✓ applications.yaml - No issues found
+    ✓ environment.yaml - No issues found  
+    ⚠ desktop.yaml - 1 warning
+      → Line 45: Theme 'custom-theme' not found in available themes
+    ✗ system.yaml - 1 error
+      → Line 12: Invalid Git email format
+    
+    Summary: 2 files valid, 1 warning, 1 error
+    ```
+  </Tab>
+  
+  <Tab value="Specific File">
+    ```bash
+    devex config validate applications
+    
+    Validating applications.yaml:
+    ✓ YAML syntax valid
+    ✓ Schema validation passed
+    ✓ Cross-references resolved
+    ✓ Platform compatibility checked
+    
+    247 applications defined
+    No issues found
+    ```
+  </Tab>
+  
+  <Tab value="Strict Mode">
+    ```bash
+    devex config validate --strict
+    
+    # Strict mode checks:
+    # - Unused configurations
+    # - Deprecated options
+    # - Performance implications
+    # - Security best practices
+    ```
+  </Tab>
+  
+  <Tab value="Auto-fix">
+    ```bash
+    devex config validate --fix
+    
+    Auto-fixing issues:
+    ✓ Fixed indentation in applications.yaml
+    ✓ Sorted applications alphabetically
+    ✓ Removed duplicate entries
+    ⚠ Could not fix: Invalid email in system.yaml (manual fix required)
+    ```
+  </Tab>
+</Tabs>
+
+### devex config diff
+
+Compare configuration files or show changes.
+
+```bash
+devex config diff <source> [target] [flags]
+```
+
+#### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--unified` | `int` | `3` | Number of context lines |
+| `--ignore-whitespace` | `bool` | `false` | Ignore whitespace differences |
+| `--semantic` | `bool` | `false` | Show semantic differences only |
+
+#### Examples
+
+```bash
+# Compare with backup
+devex config diff applications backup-20240817.yaml
+
+# Compare current with default
+devex config diff applications default
+
+# Show changes since last commit
+devex config diff --since-commit
+
+# Semantic comparison (ignores formatting)
+devex config diff applications backup.yaml --semantic
+```
+
+## Advanced Configuration Management
+
+### Team Configuration
+
+Manage shared team configurations and templates.
+
+```bash
+devex config team <subcommand> [flags]
+```
+
+#### Team Subcommands
+
+<Tabs items={['status', 'init', 'sync', 'apply']}>
+  <Tab value="status">
+    ```bash
+    devex config team status
+    
+    Team Configuration Status:
+    Repository: https://github.com/company/devex-configs
+    Branch: main
+    Last Sync: 2024-08-17 10:30:00
+    Local Changes: 3 files modified
+    
+    Available Templates:
+    ✓ backend-team     - Backend development setup
+    ✓ frontend-team    - Frontend development setup
+    ✓ full-stack-team  - Full-stack development setup
+    ⚠ data-science     - Template needs update
+    ```
+  </Tab>
+  
+  <Tab value="init">
+    ```bash
+    # Initialize team configuration
+    devex config team init --repo https://github.com/company/devex-configs
+    
+    # Create new team configuration from current setup
+    devex config team init --create backend-team
+    ```
+  </Tab>
+  
+  <Tab value="sync">
+    ```bash
+    # Sync with team repository
+    devex config team sync
+    
+    # Push local changes to team repository
+    devex config team sync --push
+    ```
+  </Tab>
+  
+  <Tab value="apply">
+    ```bash
+    # Apply team template
+    devex config team apply backend-team
+    
+    # Apply with local customizations
+    devex config team apply backend-team --merge-local
+    ```
+  </Tab>
+</Tabs>
+
+### Environment-Specific Configuration
+
+Handle different configurations for different environments (development, staging, production).
+
+```bash
+devex config environment <subcommand> [flags]
+```
+
+#### Environment Subcommands
+
+```bash
+# List available environments
+devex config environment list
+
+# Show current environment
+devex config environment status
+
+# Switch to different environment
+devex config environment use production
+
+# Create new environment configuration
+devex config environment init staging --from development
+```
+
+#### Environment Example
+
+<Steps>
+  <Step>
+    **Create Environment**
+    ```bash
+    devex config environment init staging
+    ```
+  </Step>
+  
+  <Step>
+    **Customize for Environment**
+    ```bash
+    devex config edit applications --env staging
+    # Remove development-only tools
+    # Add staging-specific monitoring
+    ```
+  </Step>
+  
+  <Step>
+    **Switch Environment**
+    ```bash
+    devex config environment use staging
+    devex install  # Installs staging configuration
+    ```
+  </Step>
+</Steps>
+
+## Backup and Version Management
+
+### Configuration Backups
+
+```bash
+devex config backup <subcommand> [flags]
+```
+
+#### Backup Subcommands
+
+<Tabs items={['create', 'list', 'restore', 'compare']}>
+  <Tab value="create">
+    ```bash
+    # Create backup
+    devex config backup create
+    
+    # Create named backup
+    devex config backup create --name "before-team-config"
+    
+    # Create backup with description
+    devex config backup create --description "Pre-migration backup"
+    ```
+  </Tab>
+  
+  <Tab value="list">
+    ```bash
+    devex config backup list
+    
+    Available Backups:
+    ┌─────────────────┬─────────────────────┬──────────┬─────────────────┐
+    │ Name            │ Created             │ Size     │ Description     │
+    ├─────────────────┼─────────────────────┼──────────┼─────────────────┤
+    │ auto-20240817   │ 2024-08-17 14:30:00 │ 67.8 KB  │ Automatic       │
+    │ before-team     │ 2024-08-17 10:15:00 │ 65.2 KB  │ Before team cfg │
+    │ initial-setup   │ 2024-08-16 09:00:00 │ 45.1 KB  │ Initial setup   │
+    └─────────────────┴─────────────────────┴──────────┴─────────────────┘
+    ```
+  </Tab>
+  
+  <Tab value="restore">
+    ```bash
+    # Restore from backup
+    devex config backup restore before-team
+    
+    # Preview restore (dry-run)
+    devex config backup restore before-team --dry-run
+    
+    # Restore specific files only
+    devex config backup restore before-team --files applications,system
+    ```
+  </Tab>
+  
+  <Tab value="compare">
+    ```bash
+    # Compare current with backup
+    devex config backup compare before-team
+    
+    # Compare two backups
+    devex config backup compare backup1 backup2
+    ```
+  </Tab>
+</Tabs>
+
+### Version Management
+
+```bash
+devex config version <subcommand> [flags]
+```
+
+#### Version Subcommands
+
+```bash
+# Show current configuration version
+devex config version show
+
+# List all versions
+devex config version list
+
+# Migrate to newer version
+devex config version migrate --to 2.1.0
+
+# Check compatibility
+devex config version compatibility
+
+# Update configuration format
+devex config version update
+```
+
+## Import and Export
+
+### Export Configurations
+
+```bash
+devex config export [flags]
+```
+
+#### Export Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--output` | `string` | `devex-config.tar.gz` | Output file path |
+| `--format` | `string` | `archive` | Export format (archive, directory, git) |
+| `--include-backups` | `bool` | `false` | Include backup files |
+| `--compress` | `bool` | `true` | Compress the export |
+
+#### Export Examples
+
+```bash
+# Export complete configuration
+devex config export
+
+# Export to specific file
+devex config export --output my-devex-setup.tar.gz
+
+# Export as directory
+devex config export --format directory --output ./my-config
+
+# Export for team sharing (includes templates)
+devex config export --team --include-templates
+```
+
+### Import Configurations
+
+```bash
+devex config import <source> [flags]
+```
+
+#### Import Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--merge` | `bool` | `false` | Merge with existing configuration |
+| `--backup` | `bool` | `true` | Create backup before import |
+| `--validate` | `bool` | `true` | Validate imported configuration |
+
+#### Import Examples
+
+```bash
+# Import configuration package
+devex config import devex-config.tar.gz
+
+# Import and merge with existing
+devex config import team-config.tar.gz --merge
+
+# Import from directory
+devex config import ./config-directory
+
+# Import from Git repository
+devex config import https://github.com/company/devex-configs.git
+```
+
+## Undo System
+
+### Configuration Undo
+
+Track and undo configuration changes.
+
+```bash
+devex config undo <subcommand> [flags]
+```
+
+#### Undo Subcommands
+
+<Tabs items={['list', 'last', 'operation', 'status']}>
+  <Tab value="list">
+    ```bash
+    devex config undo list
+    
+    Recent Configuration Changes:
+    ┌────┬─────────────────────┬─────────────────┬─────────────────────┐
+    │ ID │ Operation           │ Files Changed   │ Timestamp           │
+    ├────┼─────────────────────┼─────────────────┼─────────────────────┤
+    │ 1  │ team apply          │ applications    │ 2024-08-17 14:30:00 │
+    │ 2  │ edit environment    │ environment     │ 2024-08-17 13:15:00 │
+    │ 3  │ import config       │ all files       │ 2024-08-17 12:00:00 │
+    └────┴─────────────────────┴─────────────────┴─────────────────────┘
+    ```
+  </Tab>
+  
+  <Tab value="last">
+    ```bash
+    # Undo last configuration change
+    devex config undo last
+    
+    # Preview what would be undone
+    devex config undo last --dry-run
+    ```
+  </Tab>
+  
+  <Tab value="operation">
+    ```bash
+    # Undo specific operation by ID
+    devex config undo operation 2
+    
+    # Undo by operation type
+    devex config undo operation --type "team apply"
+    ```
+  </Tab>
+  
+  <Tab value="status">
+    ```bash
+    devex config undo status
+    
+    Undo Status:
+    ✓ Undo system enabled
+    ✓ 15 operations tracked
+    ✓ 3 operations can be undone
+    ⚠ 2 operations require manual intervention
+    
+    Storage: ~/.devex/undo/ (2.1 MB)
+    Retention: 30 days (configurable)
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration Inheritance
+
+DevEx supports configuration inheritance for complex scenarios:
+
+```bash
+devex config inheritance <subcommand> [flags]
+```
+
+### Inheritance Chain
+
+```
+User Override (~/.devex/)
+        ↓
+Team Configuration
+        ↓
+Environment Configuration
+        ↓
+Default Configuration
+```
+
+### Inheritance Commands
+
+```bash
+# Show inheritance chain
+devex config inheritance show
+
+# Show effective configuration (after inheritance)
+devex config inheritance effective
+
+# Debug inheritance issues
+devex config inheritance debug
+```
+
+## Best Practices
+
+<Callout type="tip">
+**Configuration Management Best Practices:**
+
+1. **Always backup** before major changes
+2. **Use team configurations** for consistent environments
+3. **Validate regularly** to catch issues early
+4. **Version control** your custom configurations
+5. **Document changes** with meaningful commit messages
+</Callout>
+
+<Steps>
+  <Step>
+    ### Backup Current Configuration
+    ```bash
+    devex config backup create --name "before-changes"
+    ```
+  </Step>
+  
+  <Step>
+    ### Make Changes Safely
+    ```bash
+    devex config edit applications --backup
+    ```
+  </Step>
+  
+  <Step>
+    ### Validate Changes
+    ```bash
+    devex config validate --strict
+    ```
+  </Step>
+  
+  <Step>
+    ### Test with Dry Run
+    ```bash
+    devex install --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Apply if Successful
+    ```bash
+    devex install
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Common Issues
+
+<Tabs items={['Validation Errors', 'Inheritance Issues', 'Backup Problems', 'Permission Issues']}>
+  <Tab value="Validation Errors">
+    ```bash
+    # Check syntax errors
+    devex config validate --verbose
+    
+    # Auto-fix common issues
+    devex config validate --fix
+    
+    # Use schema validation
+    devex config validate --schema
+    ```
+  </Tab>
+  
+  <Tab value="Inheritance Issues">
+    ```bash
+    # Debug inheritance
+    devex config inheritance debug
+    
+    # Show effective configuration
+    devex config inheritance effective
+    
+    # Check override priority
+    devex config show --verbose
+    ```
+  </Tab>
+  
+  <Tab value="Backup Problems">
+    ```bash
+    # Check backup integrity
+    devex config backup verify
+    
+    # Repair corrupted backup
+    devex config backup repair
+    
+    # Clean old backups
+    devex config backup clean --older-than 30d
+    ```
+  </Tab>
+  
+  <Tab value="Permission Issues">
+    ```bash
+    # Fix permission issues
+    sudo chown -R $USER:$USER ~/.local/share/devex
+    chmod 755 ~/.local/share/devex/config
+    
+    # Reset to default permissions
+    devex config reset-permissions
+    ```
+  </Tab>
+</Tabs>
+
+## Related Commands
+
+- [`devex template`](/docs/cli-reference/template) - Work with configuration templates
+- [`devex install`](/docs/cli-reference/install) - Apply configuration by installing
+- [`devex status`](/docs/cli-reference/status-list#status) - Check current installation status
+- [`devex recovery`](/docs/cli-reference/recovery) - Fix configuration issues
+
+<Callout type="info">
+The config command is the heart of DevEx's flexibility. Master these subcommands to get the most out of your development environment setup.
+</Callout>

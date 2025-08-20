@@ -1,0 +1,201 @@
+---
+title: CLI Reference
+description: Complete reference for all DevEx CLI commands, flags, and options
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+
+# DevEx CLI Reference
+
+The DevEx CLI provides a comprehensive suite of commands for managing your development environment. This reference covers all available commands, their options, and usage patterns.
+
+<Callout type="info">
+DevEx follows the Unix philosophy of composable tools. Each command has a specific purpose and can be combined with others for powerful workflows.
+</Callout>
+
+## Command Overview
+
+<Tabs items={['Core Commands', 'Configuration', 'Management', 'Information']}>
+  <Tab value="Core Commands">
+    - [`devex setup`](/docs/cli-reference/setup) - Interactive guided setup
+    - [`devex install`](/docs/cli-reference/install) - Install development environment
+    - [`devex add`](/docs/cli-reference/add-remove#add) - Add new applications
+    - [`devex remove`](/docs/cli-reference/add-remove#remove) - Remove applications
+  </Tab>
+  <Tab value="Configuration">
+    - [`devex config`](/docs/cli-reference/config) - Manage configuration files
+    - [`devex template`](/docs/cli-reference/template) - Work with configuration templates
+    - [`devex init`](/docs/cli-reference/config#init) - Initialize new configurations
+  </Tab>
+  <Tab value="Management">
+    - [`devex status`](/docs/cli-reference/status-list#status) - Show installation status
+    - [`devex list`](/docs/cli-reference/status-list#list) - List available applications
+    - [`devex recovery`](/docs/cli-reference/recovery) - Recovery and repair tools
+    - [`devex rollback`](/docs/cli-reference/recovery#rollback) - Rollback changes
+  </Tab>
+  <Tab value="Information">
+    - [`devex detect`](/docs/cli-reference/status-list#detect) - Detect platform and environment
+    - [`devex help`](/docs/cli-reference/global-flags#help) - Get contextual help
+    - [`devex completion`](/docs/cli-reference/global-flags#completion) - Shell completion
+  </Tab>
+</Tabs>
+
+## Basic Usage
+
+### Getting Started
+
+```bash
+# Start with the interactive setup
+devex setup
+
+# Or install everything with defaults
+devex install
+
+# Check what's installed
+devex status
+```
+
+### Common Workflows
+
+<Steps>
+  <Step>
+    **Initial Setup**: Use `devex setup` for first-time configuration
+  </Step>
+  <Step>
+    **Add Tools**: Use `devex add <application>` to install additional software
+  </Step>
+  <Step>
+    **Configure**: Use `devex config` to customize your environment
+  </Step>
+  <Step>
+    **Maintain**: Use `devex status` and `devex recovery` for ongoing maintenance
+  </Step>
+</Steps>
+
+## Global Flags
+
+All DevEx commands support these global flags:
+
+| Flag | Short | Description | Default |
+|------|-------|-------------|---------|
+| `--verbose` | `-v` | Enable verbose output | `false` |
+| `--dry-run` | `-n` | Show what would be done without executing | `false` |
+| `--config-dir` | | Override default config directory | `~/.local/share/devex/config` |
+| `--help` | `-h` | Show command help | |
+
+### Examples
+
+```bash
+# Verbose installation
+devex install --verbose
+
+# Dry-run to see what would be installed
+devex add docker --dry-run
+
+# Use custom config directory
+devex install --config-dir ./custom-configs
+```
+
+## Environment Variables
+
+DevEx recognizes these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEVEX_DEBUG` | Enable debug logging | `false` |
+| `DEVEX_CONFIG_DIR` | Override config directory | `~/.local/share/devex/config` |
+| `DEVEX_NO_COLOR` | Disable colored output | `false` |
+| `DEVEX_CACHE_DIR` | Override cache directory | `~/.cache/devex` |
+
+## Exit Codes
+
+DevEx commands return standard exit codes:
+
+- **0**: Success
+- **1**: General error
+- **2**: Invalid arguments or options
+- **3**: Configuration error
+- **4**: Installation error
+- **5**: Platform not supported
+
+## Output Formats
+
+Many commands support different output formats:
+
+<Tabs items={['Human-readable', 'JSON', 'YAML']}>
+  <Tab value="Human-readable">
+    ```bash
+    devex status
+    # ✓ git (installed via apt)
+    # ✓ docker (installed via apt)
+    # ✗ node (not installed)
+    ```
+  </Tab>
+  <Tab value="JSON">
+    ```bash
+    devex status --output json
+    # {
+    #   "installed": [
+    #     {"name": "git", "method": "apt", "version": "2.39.2"}
+    #   ],
+    #   "not_installed": ["node"]
+    # }
+    ```
+  </Tab>
+  <Tab value="YAML">
+    ```bash
+    devex status --output yaml
+    # installed:
+    #   - name: git
+    #     method: apt
+    #     version: 2.39.2
+    # not_installed:
+    #   - node
+    ```
+  </Tab>
+</Tabs>
+
+## Performance Tips
+
+<Callout type="tip">
+- Use `--dry-run` to preview changes before execution
+- Enable `--verbose` for detailed operation logging
+- Use specific commands instead of running full `install` for single applications
+- Set `DEVEX_CACHE_DIR` to a fast storage location for better performance
+</Callout>
+
+## Security Considerations
+
+DevEx includes several security features:
+
+- **Input validation**: All user inputs are validated and sanitized
+- **Privilege escalation**: Only prompts for sudo when necessary
+- **GPG verification**: Package signatures are verified when available
+- **Audit trail**: All operations are logged for review
+
+<Callout type="warn">
+DevEx may require administrator privileges for system-level installations. Always review `--dry-run` output before executing privileged operations.
+</Callout>
+
+## Getting Help
+
+For detailed help on any command:
+
+```bash
+# Command-specific help
+devex <command> --help
+
+# Interactive help system
+devex help
+
+# Version information
+devex --version
+```
+
+## Next Steps
+
+- [Setup Command Reference](/docs/cli-reference/setup) - Start with the interactive setup
+- [Configuration Guide](/docs/configuration) - Learn about configuration files
+- [Platform Support](/docs/platforms) - Check platform-specific features

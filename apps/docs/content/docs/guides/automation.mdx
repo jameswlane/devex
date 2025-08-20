@@ -1,0 +1,1115 @@
+---
+title: Automation Guide
+description: Automate DevEx in CI/CD pipelines, deployment scripts, and infrastructure automation
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Automation Guide
+
+DevEx excels in automated environments, making it perfect for CI/CD pipelines, infrastructure automation, and deployment workflows. This guide covers integration patterns, automation strategies, and best practices.
+
+<Callout type="warn">
+**Security in Automation**: When automating DevEx installations, always review our [Security Best Practices](/docs/guides/security) guide. Pin versions, verify checksums, and use secure installation methods in production environments.
+</Callout>
+
+## CI/CD Integration
+
+<Callout type="info">
+For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-setup). For troubleshooting CI/CD issues, check our [Troubleshooting Guide](/docs/guides/troubleshooting).
+</Callout>
+
+### GitHub Actions
+
+<Tabs items={['Basic Setup', 'Matrix Builds', 'Caching', 'Security']}>
+  <Tab value="Basic Setup">
+    ```yaml
+    # .github/workflows/devex-setup.yml
+    name: Development Environment Setup
+    
+    on:
+      push:
+        branches: [main, develop]
+      pull_request:
+        branches: [main]
+    
+    jobs:
+      setup-environment:
+        runs-on: ubuntu-latest
+        steps:
+          - name: Checkout code
+            uses: actions/checkout@v4
+            
+          - name: Install DevEx
+            run: |
+              # Install DevEx with version pinning for CI reproducibility
+              set -euo pipefail  # Enable strict error handling
+              curl -fsSL https://devex.sh/install | bash
+              echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
+              
+          - name: Configure DevEx
+            run: |
+              set -euo pipefail
+              devex config init
+              devex config apply --file .devex/ci.yaml
+              
+          - name: Install development tools
+            run: |
+              set -euo pipefail
+              devex install --category development --non-interactive
+              
+          - name: Verify installation
+            run: |
+              set -euo pipefail
+              devex status
+              devex config validate
+              # Fail if any required tools are missing
+              devex install --dry-run --category development
+    ```
+  </Tab>
+  
+  <Tab value="Matrix Builds">
+    ```yaml
+    # .github/workflows/cross-platform.yml
+    name: Cross-Platform Environment Setup
+    
+    on: [push, pull_request]
+    
+    jobs:
+      test-environments:
+        strategy:
+          matrix:
+            os: [ubuntu-latest, macos-latest, windows-latest]
+            environment: [frontend, backend, fullstack]
+            
+        runs-on: ${{ matrix.os }}
+        
+        steps:
+          - uses: actions/checkout@v4
+          
+          - name: Install DevEx (Unix)
+            if: runner.os != 'Windows'
+            run: |
+              set -euo pipefail
+              # Install DevEx with security considerations
+              curl -fsSL https://devex.sh/install | bash
+            
+          - name: Install DevEx (Windows)
+            if: runner.os == 'Windows'
+            run: |
+              winget install jameswlane.devex
+              if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+              
+          - name: Setup Environment
+            run: |
+              set -euo pipefail
+              devex config apply --file .devex/${{ matrix.environment }}.yaml
+              devex install --non-interactive
+              
+          - name: Validate Environment
+            run: |
+              set -euo pipefail
+              devex status --format json > environment-status.json
+              devex config validate
+              # Check if all required tools are available
+              devex install --dry-run --category development --timeout 10m
+              
+          - name: Test Application
+            run: |
+              # Run tests specific to environment
+              if [ "${{ matrix.environment }}" = "frontend" ]; then
+                npm test
+              elif [ "${{ matrix.environment }}" = "backend" ]; then
+                go test ./...
+              fi
+    ```
+  </Tab>
+  
+  <Tab value="Caching">
+    ```yaml
+    # .github/workflows/cached-setup.yml
+    name: Cached DevEx Setup
+    
+    jobs:
+      setup-with-cache:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          
+          - name: Cache DevEx installation
+            uses: actions/cache@v3
+            with:
+              path: |
+                ~/.local/share/devex
+                ~/.devex/cache
+              key: devex-${{ runner.os }}-${{ hashFiles('.devex/**/*.yaml') }}
+              restore-keys: |
+                devex-${{ runner.os }}-
+                
+          - name: Install DevEx (if not cached)
+            run: |
+              set -euo pipefail
+              if [ ! -f ~/.local/share/devex/bin/devex ]; then
+                # Install DevEx with caching support
+                curl -fsSL https://devex.sh/install | bash
+                # Verify installation succeeded
+                if [ ! -f ~/.local/share/devex/bin/devex ]; then
+                  echo "DevEx installation failed" >&2
+                  exit 1
+                fi
+              fi
+              echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
+              
+          - name: Update environment
+            run: |
+              set -euo pipefail
+              devex install --update-only
+              
+          - name: Cache validation
+            run: |
+              set -euo pipefail
+              # Verify cached installation works
+              devex --version
+              devex config validate
+    ```
+  </Tab>
+  
+  <Tab value="Security">
+    ```yaml
+    # .github/workflows/secure-setup.yml
+    name: Secure DevEx Setup
+    
+    jobs:
+      secure-environment:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v4
+          
+          - name: Verify DevEx installer
+            run: |
+              # Download installer and verify signature
+              curl -fsSL https://devex.sh/install.sig -o installer.sig
+              curl -fsSL https://devex.sh/install -o installer.sh
+              gpg --verify installer.sig installer.sh
+              
+          - name: Install DevEx securely
+            run: |
+              bash installer.sh
+              echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
+              
+          - name: Audit installation
+            run: |
+              devex security audit --output security-report.json
+              
+          - name: Upload security report
+            uses: actions/upload-artifact@v3
+            with:
+              name: security-report
+              path: security-report.json
+    ```
+  </Tab>
+</Tabs>
+
+### GitLab CI/CD
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - setup
+  - test
+  - deploy
+
+variables:
+  DEVEX_VERSION: "latest"
+  DEVEX_CONFIG: ".devex/gitlab-ci.yaml"
+
+.devex_setup: &devex_setup
+  before_script:
+    # Install DevEx with GitLab CI considerations
+    - curl -fsSL https://devex.sh/install | bash
+    - export PATH="$PATH:$HOME/.local/share/devex/bin"
+    - devex config apply --file $DEVEX_CONFIG
+
+setup_environment:
+  stage: setup
+  <<: *devex_setup
+  script:
+    - devex install --category development --non-interactive
+    - devex status
+  artifacts:
+    reports:
+      junit: devex-report.xml
+    paths:
+      - ~/.local/share/devex/
+    expire_in: 1 hour
+
+test_frontend:
+  stage: test
+  dependencies:
+    - setup_environment
+  <<: *devex_setup
+  script:
+    - devex config apply --file .devex/frontend.yaml
+    - npm ci
+    - npm test
+  only:
+    changes:
+      - frontend/**/*
+
+test_backend:
+  stage: test
+  dependencies:
+    - setup_environment
+  <<: *devex_setup
+  script:
+    - devex config apply --file .devex/backend.yaml
+    - go mod download
+    - go test ./...
+  only:
+    changes:
+      - backend/**/*
+```
+
+### Jenkins Pipeline
+
+```groovy
+// Jenkinsfile
+pipeline {
+    agent any
+    
+    environment {
+        DEVEX_HOME = "${env.HOME}/.local/share/devex"
+        PATH = "${env.PATH}:${DEVEX_HOME}/bin"
+    }
+    
+    stages {
+        stage('Setup DevEx') {
+            steps {
+                script {
+                    // Install DevEx if not present
+                    sh '''
+                        if [ ! -f ${DEVEX_HOME}/bin/devex ]; then
+                            # Install DevEx for Jenkins pipeline
+                            curl -fsSL https://devex.sh/install | bash
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        stage('Configure Environment') {
+            parallel {
+                stage('Development Tools') {
+                    steps {
+                        sh 'devex install --category development --non-interactive'
+                    }
+                }
+                stage('Database Setup') {
+                    steps {
+                        sh 'devex install --category databases --non-interactive'
+                    }
+                }
+            }
+        }
+        
+        stage('Validate Setup') {
+            steps {
+                sh '''
+                    devex status
+                    devex config validate
+                    devex security audit --format json > security-audit.json
+                '''
+                archiveArtifacts artifacts: 'security-audit.json'
+            }
+        }
+        
+        stage('Run Tests') {
+            steps {
+                sh '''
+                    # Tests now run in consistent environment
+                    npm test
+                    go test ./...
+                    python -m pytest
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean up resources
+            sh 'devex clean --cache --logs'
+        }
+        failure {
+            // Send notification with DevEx status
+            sh '''
+                devex report generate --format slack > devex-status.json
+                curl -X POST -H 'Content-type: application/json' \
+                    --data @devex-status.json \
+                    $SLACK_WEBHOOK_URL
+            '''
+        }
+    }
+}
+```
+
+## Container Integration
+
+### Dockerfile Integration
+
+<Tabs items={['Development Container', 'Multi-stage Build', 'CI Container']}>
+  <Tab value="Development Container">
+    ```dockerfile
+    # Dockerfile.dev
+    FROM ubuntu:22.04
+    
+    # Install basic dependencies
+    RUN apt-get update && apt-get install -y \
+        curl \
+        wget \
+        sudo \
+        git \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # Create development user
+    RUN useradd -m -s /bin/bash -G sudo developer
+    USER developer
+    WORKDIR /home/developer
+    
+    # Install DevEx with security considerations
+    RUN curl -fsSL https://devex.sh/install | bash
+    ENV PATH="/home/developer/.local/share/devex/bin:${PATH}"
+    
+    # Copy team configuration
+    COPY --chown=developer:developer .devex/ /home/developer/.devex/
+    
+    # Install development environment
+    RUN devex install --non-interactive --category development
+    
+    # Set up shell
+    RUN echo 'source ~/.local/share/devex/shell/setup.sh' >> ~/.bashrc
+    
+    # Expose common ports
+    EXPOSE 3000 8000 8080 5000
+    
+    CMD ["/bin/bash"]
+    ```
+  </Tab>
+  
+  <Tab value="Multi-stage Build">
+    ```dockerfile
+    # Multi-stage build with DevEx
+    
+    # Stage 1: Environment setup
+    FROM ubuntu:22.04 AS devex-setup
+    RUN apt-get update && apt-get install -y curl sudo ca-certificates
+    # Install DevEx in multi-stage build
+    RUN curl -fsSL https://devex.sh/install | bash
+    COPY .devex/ /root/.devex/
+    RUN /root/.local/share/devex/bin/devex install --category build-tools --non-interactive
+    
+    # Stage 2: Build stage
+    FROM devex-setup AS builder
+    WORKDIR /app
+    COPY . .
+    RUN /root/.local/share/devex/bin/devex config apply --file .devex/build.yaml
+    RUN npm ci && npm run build
+    
+    # Stage 3: Production image
+    FROM nginx:alpine AS production
+    COPY --from=builder /app/dist /usr/share/nginx/html
+    COPY nginx.conf /etc/nginx/nginx.conf
+    EXPOSE 80
+    CMD ["nginx", "-g", "daemon off;"]
+    ```
+  </Tab>
+  
+  <Tab value="CI Container">
+    ```dockerfile
+    # CI-specific container
+    FROM ubuntu:22.04
+    
+    # Install CI dependencies
+    RUN apt-get update && apt-get install -y \
+        curl \
+        git \
+        sudo \
+        build-essential \
+        && rm -rf /var/lib/apt/lists/*
+    
+    # Install DevEx with production considerations
+    RUN curl -fsSL https://devex.sh/install | bash
+    ENV PATH="/root/.local/share/devex/bin:${PATH}"
+    
+    # Pre-install common CI tools
+    COPY ci-config.yaml /root/.devex/
+    RUN devex install --config /root/.devex/ci-config.yaml --non-interactive
+    
+    # Set up CI environment
+    RUN devex config set ci_mode true
+    RUN devex config set parallel_installations true
+    
+    # Create workspace
+    WORKDIR /workspace
+    
+    # Default command
+    CMD ["devex", "install", "--update", "--non-interactive"]
+    ```
+  </Tab>
+</Tabs>
+
+### Docker Compose for Development
+
+```yaml
+# docker-compose.dev.yml
+version: '3.8'
+
+services:
+  devex-environment:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/workspace
+      - devex-cache:/home/developer/.devex/cache
+      - node-modules:/workspace/node_modules
+    ports:
+      - "3000:3000"
+      - "8000:8000"
+    environment:
+      - DEVEX_WORKSPACE=/workspace
+      - NODE_ENV=development
+    command: >
+      bash -c "
+        cd /workspace &&
+        devex config apply --file .devex/development.yaml &&
+        devex install --update &&
+        npm run dev
+      "
+
+  database:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: devapp
+      POSTGRES_USER: developer
+      POSTGRES_PASSWORD: devpass
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  devex-cache:
+  node-modules:
+  postgres-data:
+```
+
+## Infrastructure as Code
+
+### Terraform Integration
+
+```hcl
+# terraform/devex-setup.tf
+terraform {
+  required_providers {
+    devex = {
+      source = "jameswlane/devex"
+      version = "~> 1.0"
+    }
+  }
+}
+
+# Configure development workstations
+resource "devex_configuration" "team_frontend" {
+  name = "frontend-team"
+  
+  applications = [
+    {
+      name = "node"
+      version = "18.17.0"
+      install_method = "mise"
+      default = true
+    },
+    {
+      name = "vscode"
+      default = true
+      extensions = [
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  ]
+  
+  environment = {
+    NODE_ENV = "development"
+    API_URL = var.api_url
+  }
+  
+  themes = {
+    name = "company-theme"
+    vscode_theme = "GitHub Dark"
+  }
+}
+
+# Apply configuration to development VMs
+resource "devex_deployment" "dev_workstations" {
+  configuration_id = devex_configuration.team_frontend.id
+  
+  targets = [
+    for vm in var.dev_vms : {
+      host = vm.ip_address
+      user = "developer"
+      ssh_key = file("~/.ssh/id_ed25519")
+    }
+  ]
+  
+  deployment_strategy = "rolling"
+  max_parallel = 3
+}
+
+# Output deployment status
+output "deployment_status" {
+  value = devex_deployment.dev_workstations.status
+}
+```
+
+### Ansible Integration
+
+```yaml
+# ansible/devex-playbook.yml
+---
+- name: Setup Development Environment with DevEx
+  hosts: developers
+  become: yes
+  become_user: "{{ developer_user }}"
+  
+  vars:
+    devex_version: "latest"
+    devex_config_repo: "https://github.com/company/devex-config.git"
+    
+  tasks:
+    - name: Check if DevEx is installed
+      command: which devex
+      register: devex_check
+      failed_when: false
+      changed_when: false
+      
+    - name: Install DevEx
+      shell: |
+        # Install DevEx via Ansible with error handling
+        curl -fsSL https://devex.sh/install | bash
+      when: devex_check.rc != 0
+      
+    - name: Add DevEx to PATH
+      lineinfile:
+        path: "{{ ansible_env.HOME }}/.bashrc"
+        line: 'export PATH="$PATH:$HOME/.local/share/devex/bin"'
+        create: yes
+      when: devex_check.rc != 0
+      
+    - name: Clone team configuration
+      git:
+        repo: "{{ devex_config_repo }}"
+        dest: "{{ ansible_env.HOME }}/.devex"
+        version: main
+        force: yes
+        
+    - name: Apply team configuration
+      shell: |
+        export PATH="$PATH:{{ ansible_env.HOME }}/.local/share/devex/bin"
+        devex config validate
+        devex install --config {{ ansible_env.HOME }}/.devex/team.yaml --non-interactive
+      args:
+        executable: /bin/bash
+        
+    - name: Configure Git
+      git_config:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        scope: global
+      loop:
+        - { name: "user.name", value: "{{ git_user_name }}" }
+        - { name: "user.email", value: "{{ git_user_email }}" }
+        - { name: "core.editor", value: "code --wait" }
+        
+    - name: Generate SSH key if needed
+      openssh_keypair:
+        path: "{{ ansible_env.HOME }}/.ssh/id_ed25519"
+        type: ed25519
+        comment: "{{ git_user_email }}"
+        state: present
+      register: ssh_key
+      
+    - name: Display SSH public key
+      debug:
+        msg: "Add this SSH key to GitHub: {{ ssh_key.public_key }}"
+      when: ssh_key.changed
+```
+
+### Kubernetes Integration
+
+```yaml
+# k8s/devex-init-job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: devex-environment-setup
+  namespace: development
+spec:
+  template:
+    spec:
+      containers:
+      - name: devex-setup
+        image: ubuntu:22.04
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - |
+            # Install DevEx with security considerations
+            apt-get update && apt-get install -y curl ca-certificates
+            curl -fsSL https://devex.sh/install | bash
+            export PATH="$PATH:/root/.local/share/devex/bin"
+            
+            # Apply configuration from ConfigMap
+            devex config apply --file /config/development.yaml
+            devex install --non-interactive
+            
+            # Export environment for other containers
+            devex env export --format k8s > /shared/environment.yaml
+        volumeMounts:
+        - name: config-volume
+          mountPath: /config
+        - name: shared-volume
+          mountPath: /shared
+      volumes:
+      - name: config-volume
+        configMap:
+          name: devex-config
+      - name: shared-volume
+        emptyDir: {}
+      restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devex-config
+  namespace: development
+data:
+  development.yaml: |
+    applications:
+      development:
+        - name: kubectl
+          default: true
+        - name: helm
+          default: true
+        - name: skaffold
+          default: true
+```
+
+## Automation Scripts
+
+### Deployment Automation
+
+<Tabs items={['Production Deployment', 'Staging Setup', 'Developer Onboarding']}>
+  <Tab value="Production Deployment">
+    ```bash
+    #!/bin/bash
+    # scripts/deploy-production.sh
+    
+    set -euo pipefail
+    
+    # Configuration
+    ENVIRONMENT="production"
+    CONFIG_REPO="https://github.com/company/devex-production-config.git"
+    BACKUP_DIR="/backup/devex-$(date +%Y%m%d-%H%M%S)"
+    
+    echo "🚀 Starting production deployment with DevEx..."
+    
+    # Pre-deployment checks
+    echo "🔍 Running pre-deployment checks..."
+    devex config validate --strict
+    devex security audit --fail-on-issues
+    devex system check --requirements production
+    
+    # Backup current configuration
+    echo "💾 Creating backup..."
+    mkdir -p "$BACKUP_DIR"
+    cp -r ~/.devex "$BACKUP_DIR/"
+    cp -r ~/.local/share/devex "$BACKUP_DIR/"
+    
+    # Update to production configuration
+    echo "⚙️ Applying production configuration..."
+    git clone "$CONFIG_REPO" /tmp/prod-config
+    cp -r /tmp/prod-config/* ~/.devex/
+    
+    # Dry run first
+    echo "🧪 Testing configuration (dry run)..."
+    devex install --dry-run --environment "$ENVIRONMENT"
+    
+    # Prompt for confirmation
+    read -p "Deploy to production? (yes/no): " confirm
+    if [[ $confirm != "yes" ]]; then
+        echo "❌ Deployment cancelled"
+        exit 1
+    fi
+    
+    # Deploy with rollback capability
+    echo "📦 Deploying applications..."
+    if ! devex install --environment "$ENVIRONMENT" --timeout 30m; then
+        echo "❌ Deployment failed, rolling back..."
+        cp -r "$BACKUP_DIR/.devex" ~/
+        cp -r "$BACKUP_DIR/devex" ~/.local/share/
+        devex install --rollback
+        exit 1
+    fi
+    
+    # Post-deployment verification
+    echo "✅ Verifying deployment..."
+    devex status --detailed
+    devex test --suite production
+    
+    # Notify team
+    echo "📢 Notifying team..."
+    devex notify slack "Production environment updated successfully"
+    
+    echo "🎉 Production deployment complete!"
+    ```
+  </Tab>
+  
+  <Tab value="Staging Setup">
+    ```bash
+    #!/bin/bash
+    # scripts/setup-staging.sh
+    
+    set -euo pipefail
+    
+    STAGING_BRANCH="${1:-staging}"
+    CONFIG_BRANCH="${2:-main}"
+    
+    echo "🔧 Setting up staging environment..."
+    
+    # Prepare staging configuration
+    echo "📋 Preparing staging configuration..."
+    devex template generate staging \
+        --branch "$CONFIG_BRANCH" \
+        --output /tmp/staging-config.yaml \
+        --vars environment=staging,debug=true
+    
+    # Apply staging configuration
+    echo "⚙️ Applying staging configuration..."
+    devex config apply --file /tmp/staging-config.yaml
+    
+    # Install with staging-specific settings
+    echo "📦 Installing staging applications..."
+    devex install \
+        --category development \
+        --category staging-tools \
+        --parallel \
+        --timeout 15m
+    
+    # Set up staging data
+    echo "🗃️ Setting up staging data..."
+    devex script run setup-staging-db
+    devex script run import-test-data
+    
+    # Configure monitoring
+    echo "📊 Setting up monitoring..."
+    devex install monitoring-agent
+    devex config set monitoring.environment staging
+    devex config set monitoring.endpoint https://monitoring.company.com
+    
+    # Validate staging environment
+    echo "✅ Validating staging environment..."
+    devex test --suite staging
+    devex health-check --environment staging
+    
+    echo "🎯 Staging environment ready!"
+    ```
+  </Tab>
+  
+  <Tab value="Developer Onboarding">
+    ```bash
+    #!/bin/bash
+    # scripts/onboard-developer.sh
+    
+    set -euo pipefail
+    
+    echo "👋 Welcome to the team! Let's set up your development environment..."
+    
+    # Collect developer information
+    echo "📝 Please provide some information:"
+    read -p "Full name: " FULL_NAME
+    read -p "Email address: " EMAIL
+    read -p "Team (frontend/backend/fullstack): " TEAM
+    read -p "Primary OS (linux/macos/windows): " OS_TYPE
+    
+    # Validate inputs
+    if [[ ! "$EMAIL" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+        echo "❌ Invalid email format"
+        exit 1
+    fi
+    
+    # Install DevEx
+    echo "📦 Installing DevEx..."
+    if ! command -v devex &> /dev/null; then
+        if [[ "$OS_TYPE" == "windows" ]]; then
+            winget install jameswlane.devex
+        else
+            # Install DevEx for Unix-like systems
+            curl -fsSL https://devex.sh/install | bash
+        fi
+        
+        # Add to PATH
+        if [[ "$OS_TYPE" != "windows" ]]; then
+            echo 'export PATH="$PATH:$HOME/.local/share/devex/bin"' >> ~/.bashrc
+            export PATH="$PATH:$HOME/.local/share/devex/bin"
+        fi
+    fi
+    
+    # Clone team configuration
+    echo "⚙️ Setting up team configuration..."
+    git clone https://github.com/company/devex-config.git ~/.devex
+    
+    # Apply team-specific configuration
+    echo "🔧 Applying team configuration..."
+    devex config apply --file ~/.devex/teams/${TEAM}.yaml
+    devex config set user.name "$FULL_NAME"
+    devex config set user.email "$EMAIL"
+    devex config set user.team "$TEAM"
+    
+    # Install development tools
+    echo "🛠️ Installing development tools..."
+    devex install --category development --non-interactive
+    devex install --team "$TEAM" --non-interactive
+    
+    # Configure Git
+    echo "🔗 Configuring Git..."
+    git config --global user.name "$FULL_NAME"
+    git config --global user.email "$EMAIL"
+    git config --global core.editor "code --wait"
+    git config --global init.defaultBranch main
+    
+    # Generate SSH key
+    echo "🔐 Generating SSH key..."
+    if [[ ! -f ~/.ssh/id_ed25519 ]]; then
+        ssh-keygen -t ed25519 -C "$EMAIL" -f ~/.ssh/id_ed25519 -N ""
+        
+        echo "📋 Add this SSH key to GitHub:"
+        cat ~/.ssh/id_ed25519.pub
+        echo ""
+        echo "GitHub SSH settings: https://github.com/settings/keys"
+        read -p "Press Enter after adding the SSH key to GitHub..."
+    fi
+    
+    # Test GitHub access
+    echo "🧪 Testing GitHub access..."
+    if ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+        echo "✅ GitHub access configured successfully"
+    else
+        echo "⚠️ GitHub access not configured properly"
+        echo "Please add your SSH key to GitHub and try again"
+    fi
+    
+    # Set up development workspace
+    echo "📁 Setting up workspace..."
+    mkdir -p ~/workspace
+    cd ~/workspace
+    
+    # Clone team repositories
+    echo "📂 Cloning team repositories..."
+    devex repos clone --team "$TEAM" --workspace ~/workspace
+    
+    # Apply development environment
+    echo "🌟 Applying development environment..."
+    devex theme apply company-theme
+    devex shell setup zsh
+    
+    # Final verification
+    echo "✅ Verifying setup..."
+    devex doctor --comprehensive
+    
+    echo "🎉 Welcome to the team! Your development environment is ready!"
+    echo "📚 Next steps:"
+    echo "  1. Review team documentation: https://docs.company.com"
+    echo "  2. Join team Slack channels: #${TEAM}-team"
+    echo "  3. Attend team standup tomorrow"
+    echo "  4. Ask your manager about your first task"
+    ```
+  </Tab>
+</Tabs>
+
+## Monitoring and Alerting
+
+### Environment Monitoring
+
+```bash
+#!/bin/bash
+# scripts/monitor-environments.sh
+
+# Monitor development environments across the team
+
+WEBHOOK_URL="${SLACK_WEBHOOK_URL}"
+ALERT_THRESHOLD=80
+
+echo "📊 Monitoring team development environments..."
+
+# Collect environment data
+devex report generate \
+    --team \
+    --format json \
+    --output /tmp/team-report.json
+
+# Check for issues
+ISSUES=$(devex report analyze \
+    --file /tmp/team-report.json \
+    --threshold "$ALERT_THRESHOLD" \
+    --format count)
+
+if [[ "$ISSUES" -gt 0 ]]; then
+    echo "⚠️ Found $ISSUES environment issues"
+    
+    # Generate detailed report
+    devex report analyze \
+        --file /tmp/team-report.json \
+        --format detailed \
+        --output /tmp/issues-report.txt
+    
+    # Send alert
+    curl -X POST -H 'Content-type: application/json' \
+        --data "{
+            \"text\": \"🚨 DevEx Alert: $ISSUES environment issues detected\",
+            \"attachments\": [{
+                \"color\": \"warning\",
+                \"text\": \"$(cat /tmp/issues-report.txt)\"
+            }]
+        }" \
+        "$WEBHOOK_URL"
+fi
+
+# Generate daily metrics
+devex metrics collect \
+    --team \
+    --period daily \
+    --output /var/log/devex/metrics-$(date +%Y%m%d).json
+```
+
+### Performance Monitoring
+
+```yaml
+# monitoring/devex-monitoring.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devex-monitoring
+data:
+  monitor.sh: |
+    #!/bin/bash
+    while true; do
+        # Collect metrics
+        devex metrics collect --json > /tmp/metrics.json
+        
+        # Check resource usage
+        CPU=$(devex system cpu-usage)
+        MEMORY=$(devex system memory-usage)
+        DISK=$(devex system disk-usage)
+        
+        # Send to monitoring system
+        curl -X POST http://prometheus:9090/metrics \
+            -H "Content-Type: application/json" \
+            -d @/tmp/metrics.json
+        
+        sleep 300  # 5 minutes
+    done
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: devex-monitor
+spec:
+  selector:
+    matchLabels:
+      app: devex-monitor
+  template:
+    metadata:
+      labels:
+        app: devex-monitor
+    spec:
+      containers:
+      - name: monitor
+        image: devex:latest
+        command: ["/bin/bash", "/config/monitor.sh"]
+        volumeMounts:
+        - name: config
+          mountPath: /config
+      volumes:
+      - name: config
+        configMap:
+          name: devex-monitoring
+```
+
+## Best Practices for Automation
+
+<Callout type="tip">
+**DevEx Automation Best Practices:**
+
+1. **Idempotent Operations**: Ensure scripts can run multiple times safely
+2. **Error Handling**: Implement comprehensive error handling and rollback
+3. **Logging**: Log all operations for debugging and auditing
+4. **Validation**: Always validate configurations before applying
+5. **Testing**: Test automation scripts in staging environments
+6. **Monitoring**: Monitor automated deployments and environments
+7. **Security**: Secure credentials and validate inputs
+8. **Documentation**: Document automation processes and procedures
+</Callout>
+
+### Automation Testing
+
+```bash
+#!/bin/bash
+# scripts/test-automation.sh
+
+echo "🧪 Testing DevEx automation..."
+
+# Test configuration validation
+echo "Testing configuration validation..."
+devex config validate --all --strict
+
+# Test dry-run installations
+echo "Testing dry-run installations..."
+devex install --dry-run --all
+
+# Test rollback capability
+echo "Testing rollback capability..."
+devex backup create test-backup
+devex install test-application
+devex rollback test-backup
+devex backup delete test-backup
+
+# Test error handling
+echo "Testing error handling..."
+devex install non-existent-application 2>/dev/null && {
+    echo "❌ Error handling test failed"
+    exit 1
+} || echo "✅ Error handling test passed"
+
+# Test parallel installations
+echo "Testing parallel installations..."
+time devex install --category test-tools --parallel
+
+echo "✅ All automation tests passed!"
+```
+
+<Cards>
+  <Card title="Team Setup" href="/docs/guides/team-setup" description="Configure DevEx for teams" />
+  <Card title="Customization" href="/docs/guides/customization" description="Advanced DevEx customization" />
+  <Card title="Examples" href="/docs/examples" description="Real-world automation examples" />
+  <Card title="CLI Reference" href="/docs/cli-reference" description="Complete command reference" />
+</Cards>

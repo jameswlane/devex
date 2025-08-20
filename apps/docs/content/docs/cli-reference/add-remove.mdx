@@ -1,0 +1,662 @@
+---
+title: devex add & remove
+description: Add and remove applications from your development environment
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex add & remove
+
+The `add` and `remove` commands allow you to dynamically modify your development environment by adding new applications or removing existing ones. These commands provide both interactive and non-interactive modes for managing your software installations.
+
+## devex add
+
+Add new applications to your development environment configuration and optionally install them immediately.
+
+### Usage
+
+```bash
+devex add [application...] [flags]
+```
+
+### Options
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--install` | `-i` | `bool` | `false` | Install immediately after adding to config |
+| `--category` | `-c` | `string` | | Filter applications by category |
+| `--search` | `-s` | `string` | | Search applications by name or description |
+| `--interactive` | | `bool` | `true` | Use interactive selection mode |
+| `--force` | `-f` | `bool` | `false` | Add even if already configured |
+| `--dry-run` | `-n` | `bool` | `false` | Show what would be added without executing |
+
+### Interactive Mode
+
+When run without arguments, `devex add` launches an interactive application browser:
+
+<Steps>
+  <Step>
+    **Application Browser**
+    
+    Navigate through available applications with filtering and search:
+    
+    ```
+    Select Applications to Add
+    
+    ❯ Docker - Container platform for developers
+      VS Code - Lightweight code editor
+      Postman - API development and testing
+      Node.js - JavaScript runtime environment  
+      PostgreSQL - Advanced open source database
+      Redis - In-memory data structure store
+    
+    Use arrow keys to navigate, / to search, enter to select
+    ```
+  </Step>
+  
+  <Step>
+    **Application Details**
+    
+    View detailed information about selected applications:
+    
+    ```
+    Docker - Container platform for developers
+    
+    Category: Development Tools
+    Install Method: apt (with official repository)
+    Dependencies: curl, gnupg
+    Platform Support: Linux, macOS, Windows
+    
+    Description:
+    Docker enables you to separate your applications from your 
+    infrastructure so you can deliver software quickly.
+    
+    Add to configuration? [Y/n]
+    ```
+  </Step>
+  
+  <Step>
+    **Configuration Update**
+    
+    Applications are added to your configuration with confirmation:
+    
+    ```
+    ✓ Added Docker to configuration
+    ✓ Added VS Code to configuration
+    ✓ Added Postman to configuration
+    
+    3 applications added to ~/.devex/applications.yaml
+    
+    Install now? [Y/n]
+    ```
+  </Step>
+</Steps>
+
+### Non-Interactive Mode
+
+Add specific applications directly:
+
+<Tabs items={['Single App', 'Multiple Apps', 'Category Filter', 'Search Filter']}>
+  <Tab value="Single App">
+    ```bash
+    # Add and install Docker
+    devex add docker --install
+    
+    # Add to config only (install later)
+    devex add docker
+    
+    # Force add even if already configured
+    devex add docker --force
+    ```
+  </Tab>
+  
+  <Tab value="Multiple Apps">
+    ```bash
+    # Add multiple applications
+    devex add docker vscode postman
+    
+    # Add and install immediately
+    devex add docker vscode postman --install
+    
+    # Preview what would be added
+    devex add docker vscode postman --dry-run
+    ```
+  </Tab>
+  
+  <Tab value="Category Filter">
+    ```bash
+    # Browse development tools
+    devex add --category development
+    
+    # Browse databases
+    devex add --category databases
+    
+    # Browse optional applications
+    devex add --category optional
+    ```
+  </Tab>
+  
+  <Tab value="Search Filter">
+    ```bash
+    # Search for applications containing "code"
+    devex add --search code
+    
+    # Search for database-related applications
+    devex add --search database
+    
+    # Search by description keywords
+    devex add --search "container platform"
+    ```
+  </Tab>
+</Tabs>
+
+### Application Categories
+
+<Cards>
+  <Card title="Development Tools" description="Essential development utilities like Git, Docker, VS Code, and terminal tools" />
+  <Card title="Programming Languages" description="Language runtimes managed via mise (Node.js, Python, Go, Ruby, etc.)" />
+  <Card title="Databases" description="Development databases like PostgreSQL, MySQL, Redis, and SQLite" />
+  <Card title="Optional Applications" description="Productivity apps, browsers, communication tools, and specialized software" />
+</Cards>
+
+### Examples
+
+```bash
+# Interactive browsing
+devex add
+
+# Add specific development tools
+devex add git docker vscode
+
+# Add database stack
+devex add postgresql redis --install
+
+# Browse and add from category
+devex add --category databases
+
+# Search and add
+devex add --search "api testing"
+
+# Preview additions
+devex add docker kubernetes --dry-run
+```
+
+## devex remove
+
+Remove applications from your development environment configuration with intelligent dependency checking.
+
+### Usage
+
+```bash
+devex remove [application...] [flags]
+```
+
+### Options
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--uninstall` | `-u` | `bool` | `false` | Uninstall from system after removing from config |
+| `--force` | `-f` | `bool` | `false` | Remove even if other apps depend on it |
+| `--backup` | `-b` | `bool` | `true` | Create backup before removal |
+| `--interactive` | | `bool` | `true` | Use interactive selection mode |
+| `--dry-run` | `-n` | `bool` | `false` | Show what would be removed without executing |
+
+### Dependency Safety
+
+<Callout type="warn">
+DevEx automatically analyzes dependencies before removal to prevent breaking your environment. Applications with dependents are marked with warnings and require explicit confirmation.
+</Callout>
+
+### Interactive Mode
+
+The interactive remove mode shows dependency information and removal risks:
+
+<Steps>
+  <Step>
+    **Application Selection**
+    
+    ```
+    Select Applications to Remove
+    
+    ❯ Slack - Team collaboration platform
+      Chrome - Web browser (Required by: Postman, VS Code)
+      Docker - Container platform (Required by: docker-compose, kubectl)
+      Node.js - JavaScript runtime (Required by: npm packages)
+      PostgreSQL - Database system
+    
+    ⚠️ Items marked with dependencies require careful consideration
+    ```
+  </Step>
+  
+  <Step>
+    **Dependency Analysis**
+    
+    ```
+    Remove Docker?
+    
+    ⚠️ Warning: The following applications depend on Docker:
+    - docker-compose (Docker Compose orchestration)
+    - kubectl (Kubernetes CLI - uses Docker for local clusters)
+    - VS Code (Docker extension functionality)
+    
+    Removal Risks:
+    - Local Kubernetes development may break
+    - Container-based projects will not work
+    - VS Code Docker features will be disabled
+    
+    Proceed with removal? [y/N]
+    ```
+  </Step>
+  
+  <Step>
+    **Removal Confirmation**
+    
+    ```
+    Removal Summary:
+    ✓ Slack - Safe to remove (no dependencies)
+    ⚠ Docker - Will affect 3 dependent applications
+    
+    Create backup before removal? [Y/n]
+    Uninstall from system? [y/N]
+    
+    Proceed? [y/N]
+    ```
+  </Step>
+</Steps>
+
+### Non-Interactive Mode
+
+Remove applications directly with safety checks:
+
+<Tabs items={['Safe Removal', 'Force Removal', 'Uninstall', 'Backup']}>
+  <Tab value="Safe Removal">
+    ```bash
+    # Remove application (config only)
+    devex remove slack
+    
+    # Remove multiple applications
+    devex remove slack chrome postman
+    
+    # Preview removal
+    devex remove docker --dry-run
+    ```
+  </Tab>
+  
+  <Tab value="Force Removal">
+    ```bash
+    # Force remove despite dependencies
+    devex remove docker --force
+    
+    # Force remove without backup
+    devex remove docker --force --backup=false
+    
+    # Remove and ignore all warnings
+    devex remove docker --force --uninstall
+    ```
+  </Tab>
+  
+  <Tab value="Uninstall">
+    ```bash
+    # Remove from config and uninstall from system
+    devex remove slack --uninstall
+    
+    # Remove multiple with uninstall
+    devex remove slack chrome --uninstall
+    
+    # Uninstall with backup
+    devex remove docker --uninstall --backup
+    ```
+  </Tab>
+  
+  <Tab value="Backup">
+    ```bash
+    # Create named backup before removal
+    devex remove docker --backup --backup-name="before-docker-removal"
+    
+    # Remove without backup (not recommended)
+    devex remove slack --backup=false
+    
+    # Custom backup location
+    devex remove docker --backup --backup-dir=./my-backups
+    ```
+  </Tab>
+</Tabs>
+
+### Dependency Management
+
+DevEx analyzes three types of dependencies:
+
+#### Direct Dependencies
+Applications that explicitly require the target application:
+
+```yaml
+applications:
+  development:
+    - name: docker-compose
+      dependencies:
+        - docker  # Direct dependency
+```
+
+#### System Dependencies
+Applications that rely on system-level integration:
+
+```
+kubectl → docker (for local Kubernetes clusters)
+VS Code → git (for version control features)
+npm packages → node (runtime requirement)
+```
+
+#### Optional Dependencies
+Applications that enhance functionality but aren't required:
+
+```
+Postman → Chrome (for OAuth flows, optional)
+VS Code → Python (for Python development, optional)
+```
+
+### Removal Strategies
+
+<Tabs items={['Conservative', 'Aggressive', 'Selective', 'Bulk']}>
+  <Tab value="Conservative">
+    **Conservative Removal**: Only remove applications with no dependencies
+    
+    ```bash
+    # Check what's safe to remove
+    devex remove --dry-run --safe-only
+    
+    # Remove only applications without dependents
+    devex remove slack postman chrome
+    ```
+  </Tab>
+  
+  <Tab value="Aggressive">
+    **Aggressive Removal**: Remove everything, handling dependencies
+    
+    ```bash
+    # Remove with cascade (removes dependents too)
+    devex remove docker --cascade
+    
+    # Force remove core dependencies
+    devex remove git --force --cascade
+    ```
+  </Tab>
+  
+  <Tab value="Selective">
+    **Selective Removal**: Choose specific applications with dependency resolution
+    
+    ```bash
+    # Interactive dependency resolution
+    devex remove docker  # Will prompt about dependents
+    
+    # Remove and replace dependencies
+    devex remove docker --replace-with=podman
+    ```
+  </Tab>
+  
+  <Tab value="Bulk">
+    **Bulk Removal**: Remove entire categories
+    
+    ```bash
+    # Remove all optional applications
+    devex remove --category optional
+    
+    # Remove unused applications
+    devex remove --unused
+    
+    # Remove applications not used in 30 days
+    devex remove --unused --days=30
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration Impact
+
+Both add and remove commands modify your configuration files:
+
+### File Modifications
+
+<Tabs items={['applications.yaml', 'environment.yaml', 'Backup System']}>
+  <Tab value="applications.yaml">
+    ```yaml
+    # Before: ~/.devex/applications.yaml
+    applications:
+      development:
+        - name: git
+        - name: docker
+    
+    # After: devex add vscode
+    applications:
+      development:
+        - name: git
+        - name: docker
+        - name: vscode
+          description: 'Lightweight code editor'
+          category: 'Development Tools'
+          default: false
+          added_date: '2024-08-17T14:30:00Z'
+          added_by: 'user'
+    ```
+  </Tab>
+  
+  <Tab value="environment.yaml">
+    ```yaml
+    # Programming languages managed via add/remove
+    programming_languages:
+      - name: "Node.js LTS"
+        install_method: "mise"
+        default: true
+        # Added via: devex add node
+      - name: "Python 3.11"
+        install_method: "mise"
+        default: false
+        # Added via: devex add python
+    ```
+  </Tab>
+  
+  <Tab value="Backup System">
+    ```bash
+    # Automatic backups created before modifications
+    ~/.devex/backups/
+    ├── before-add-2024-08-17-14-30.yaml
+    ├── before-remove-2024-08-17-15-45.yaml
+    └── auto-backup-2024-08-17-16-00.yaml
+    
+    # Restore from backup if needed
+    devex config backup restore before-remove-2024-08-17-15-45
+    ```
+  </Tab>
+</Tabs>
+
+### Undo Support
+
+Both commands support undo operations:
+
+```bash
+# View recent changes
+devex config undo list
+
+# Undo last add operation
+devex config undo last
+
+# Undo specific operation
+devex config undo operation "add docker vscode"
+
+# Undo with confirmation
+devex config undo operation 3 --confirm
+```
+
+## Advanced Usage
+
+### Custom Application Definitions
+
+Add custom applications not in the default catalog:
+
+```bash
+# Add custom application with definition
+devex add custom-tool --define \
+  --name="Custom Tool" \
+  --description="My custom development tool" \
+  --install-method="curlpipe" \
+  --install-command="https://example.com/install.sh"
+
+# Add from custom configuration file
+devex add --from-file ./my-custom-apps.yaml
+```
+
+### Bulk Operations
+
+Perform operations on multiple applications:
+
+```bash
+# Add entire development stack
+devex add @full-stack  # Uses predefined template
+
+# Remove development tools except essentials
+devex remove --category development --except git,curl
+
+# Add applications matching pattern
+devex add "*code*"  # Adds vscode, code-server, etc.
+
+# Remove unused applications
+devex remove --cleanup --unused
+```
+
+### Integration with Templates
+
+Add/remove commands work with configuration templates:
+
+```bash
+# Add applications from template
+devex template apply backend-team
+devex add --from-template backend-team
+
+# Remove applications not in template
+devex remove --not-in-template backend-team
+
+# Sync with team template (add missing, remove extra)
+devex add --sync-template backend-team
+```
+
+## Troubleshooting
+
+<Tabs items={['Add Issues', 'Remove Issues', 'Dependency Problems', 'Configuration Errors']}>
+  <Tab value="Add Issues">
+    ```bash
+    # Application not found
+    devex add nonexistent-app
+    # Error: Application 'nonexistent-app' not found
+    # Use: devex list to see available applications
+    
+    # Check available applications
+    devex list --search app-name
+    
+    # Update application catalog
+    devex list --refresh
+    ```
+  </Tab>
+  
+  <Tab value="Remove Issues">
+    ```bash
+    # Cannot remove due to dependencies
+    devex remove docker
+    # Error: Cannot remove 'docker' - required by docker-compose, kubectl
+    
+    # Force removal (dangerous)
+    devex remove docker --force
+    
+    # Remove cascade (removes dependents too)
+    devex remove docker --cascade
+    ```
+  </Tab>
+  
+  <Tab value="Dependency Problems">
+    ```bash
+    # Check dependencies before removal
+    devex dependencies check docker
+    
+    # Show dependency tree
+    devex dependencies tree
+    
+    # Fix broken dependencies
+    devex dependencies repair
+    ```
+  </Tab>
+  
+  <Tab value="Configuration Errors">
+    ```bash
+    # Validate configuration after changes
+    devex config validate
+    
+    # Fix configuration issues
+    devex config validate --fix
+    
+    # Restore from backup
+    devex config backup restore
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Callout type="tip">
+**Application Management Best Practices:**
+
+1. **Always backup** before removing critical applications
+2. **Check dependencies** before removal
+3. **Use dry-run** to preview changes
+4. **Keep configurations in version control**
+5. **Document custom applications** for team sharing
+</Callout>
+
+<Steps>
+  <Step>
+    ### Plan Changes
+    ```bash
+    devex add docker vscode --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Create Backup
+    ```bash
+    devex config backup create --name "before-dev-tools"
+    ```
+  </Step>
+  
+  <Step>
+    ### Apply Changes
+    ```bash
+    devex add docker vscode --install
+    ```
+  </Step>
+  
+  <Step>
+    ### Verify Results
+    ```bash
+    devex status
+    ```
+  </Step>
+  
+  <Step>
+    ### Test Environment
+    ```bash
+    docker --version
+    code --version
+    ```
+  </Step>
+</Steps>
+
+## Related Commands
+
+- [`devex list`](/docs/cli-reference/status-list#list) - Browse available applications
+- [`devex install`](/docs/cli-reference/install) - Install configured applications
+- [`devex status`](/docs/cli-reference/status-list#status) - Check installation status
+- [`devex config`](/docs/cli-reference/config) - Manage configuration files
+- [`devex template`](/docs/cli-reference/template) - Work with application templates
+
+<Callout type="info">
+The add and remove commands are the primary way to customize your development environment after initial setup. They provide the flexibility to adapt your environment as your needs change.
+</Callout>

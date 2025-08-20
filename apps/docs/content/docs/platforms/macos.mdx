@@ -1,0 +1,517 @@
+---
+title: macOS Support
+description: Complete guide to DevEx on macOS including Homebrew, Mac App Store, and system integration
+---
+
+# macOS Support
+
+DevEx provides first-class support for macOS, leveraging Homebrew for package management and integrating with native macOS features.
+
+## System Requirements
+
+### Supported Versions
+
+<Callout type="success">
+**Full Support** - Thoroughly tested on these versions
+</Callout>
+
+| macOS Version | Codename | Support Status | Notes |
+|---------------|----------|----------------|-------|
+| **macOS 14** | Sonoma | ✅ Full | Latest features |
+| **macOS 13** | Ventura | ✅ Full | Recommended |
+| **macOS 12** | Monterey | ✅ Full | Stable |
+| **macOS 11** | Big Sur | ✅ Full | Intel & Apple Silicon |
+| **macOS 10.15** | Catalina | 🔄 Limited | Legacy support |
+
+### Hardware Support
+
+#### Apple Silicon (M1/M2/M3)
+- **Status**: ✅ Full native support
+- **Architecture**: arm64
+- **Rosetta**: Automatic fallback for Intel-only packages
+- **Performance**: Optimized for Apple Silicon
+
+#### Intel Macs
+- **Status**: ✅ Full support  
+- **Architecture**: x86_64
+- **Compatibility**: All Homebrew packages supported
+- **Legacy**: Supports older Intel Macs
+
+### Prerequisites
+
+DevEx automatically installs missing prerequisites:
+
+1. **Xcode Command Line Tools**
+   ```bash
+   # Automatically installed by DevEx if needed
+   xcode-select --install
+   ```
+
+2. **Homebrew**
+   ```bash
+   # Automatically installed by DevEx if needed
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+## Package Managers
+
+### Homebrew (Primary)
+
+<Callout type="info">
+Homebrew is the primary package manager for macOS, providing the largest ecosystem of macOS-compatible software.
+</Callout>
+
+#### Installation & Setup
+```bash
+# DevEx automatically installs and configures Homebrew
+devex install                    # Sets up Homebrew if needed
+
+# Manual Homebrew verification
+brew --version                   # Check installation
+brew doctor                      # Diagnose issues
+```
+
+#### Package Types
+
+**Formulae** (Command-line tools):
+```bash
+# Examples of formulae installations
+devex install git               # Git version control
+devex install nodejs            # Node.js runtime
+devex install python            # Python interpreter
+devex install docker           # Docker containerization
+```
+
+**Casks** (GUI Applications):
+```bash
+# Examples of cask installations  
+devex install visual-studio-code    # VS Code editor
+devex install google-chrome         # Chrome browser
+devex install discord              # Discord client
+devex install figma               # Figma design tool
+```
+
+#### Homebrew Configuration
+```yaml
+# Example DevEx configuration for macOS apps
+applications:
+  development:
+    - name: visual-studio-code
+      description: 'Code editor by Microsoft'
+      macos:
+        install_method: 'brew'
+        install_command: '--cask visual-studio-code'
+        uninstall_command: '--cask visual-studio-code'
+        official_support: true
+```
+
+### Mac App Store (mas-cli)
+
+<Callout type="warning">
+**Limited Support** - Requires Apple ID authentication and app availability
+</Callout>
+
+#### Setup
+```bash
+# Install Mac App Store CLI
+brew install mas
+
+# Sign in to App Store (required)
+mas signin your-apple-id@example.com
+```
+
+#### Usage
+```bash
+# Search for apps
+mas search "Xcode"
+
+# Install apps by ID
+mas install 497799835            # Xcode
+mas install 1295203466           # Microsoft Remote Desktop
+
+# List installed apps
+mas list
+```
+
+#### Configuration Example
+```yaml
+# Mac App Store configuration
+applications:
+  development:
+    - name: xcode
+      description: 'Apple development environment'
+      macos:
+        install_method: 'mas'
+        install_command: '497799835'  # App Store ID
+        official_support: true
+```
+
+### Alternative Package Managers
+
+#### MacPorts
+- **Status**: 🔄 Community support
+- **Use Case**: Alternative to Homebrew for specific needs
+- **Installation**: Manual setup required
+
+#### Conda/Miniconda
+- **Status**: ✅ Supported via mise
+- **Use Case**: Python/data science environments
+- **Integration**: Automatic via DevEx environment management
+
+## System Integration
+
+### Shell Configuration
+
+DevEx automatically configures your shell environment:
+
+#### Supported Shells
+- **Zsh** (macOS default since Catalina)
+- **Bash** (legacy and user preference)
+- **Fish** (via Homebrew)
+
+#### Path Management
+```bash
+# DevEx automatically updates shell configuration
+# ~/.zshrc or ~/.bash_profile
+
+# Homebrew paths (automatically added)
+export PATH="/opt/homebrew/bin:$PATH"        # Apple Silicon
+export PATH="/usr/local/bin:$PATH"           # Intel
+
+# DevEx paths
+export PATH="$HOME/.local/bin:$PATH"
+export PATH="$HOME/.devex/bin:$PATH"
+```
+
+### macOS-Specific Features
+
+#### System Preferences Integration
+```yaml
+# Example macOS system configuration
+desktop:
+  macos:
+    dock:
+      autohide: true
+      position: 'bottom'
+      tile_size: 48
+    finder:
+      show_hidden_files: true
+      show_path_bar: true
+    security:
+      gatekeeper_enabled: true
+      firewall_enabled: true
+```
+
+#### Spotlight Integration
+```bash
+# DevEx applications automatically indexed by Spotlight
+# Access installed apps via Cmd+Space
+
+# Manual Spotlight reindexing if needed
+sudo mdutil -E /Applications
+```
+
+#### Launchpad Organization
+```bash
+# DevEx can organize installed applications
+devex organize apps --by=category    # Group by development/productivity/etc
+```
+
+## Application Categories
+
+### Development Tools
+
+<Callout type="tip">
+DevEx automatically installs essential development tools with proper macOS integration.
+</Callout>
+
+#### Code Editors & IDEs
+```bash
+# Popular editors available via DevEx
+devex install visual-studio-code    # VS Code (Cask)
+devex install sublime-text         # Sublime Text (Cask)  
+devex install atom                 # Atom (Cask)
+devex install xcode                # Xcode (Mac App Store)
+```
+
+#### Version Control
+```bash
+# Git and related tools
+devex install git                  # Git CLI (Formula)
+devex install github              # GitHub Desktop (Cask)
+devex install sourcetree          # Sourcetree (Cask)
+```
+
+#### Container & Virtualization
+```bash
+# Container and VM tools
+devex install docker              # Docker Desktop (Cask)
+devex install orbstack            # OrbStack (Cask)
+devex install parallels           # Parallels Desktop (Cask)
+```
+
+### Productivity Applications
+
+#### Communication
+```bash
+# Communication tools
+devex install slack               # Slack (Cask)
+devex install discord            # Discord (Cask)
+devex install zoom               # Zoom (Cask)
+devex install microsoft-teams    # Teams (Cask)
+```
+
+#### Design & Creative
+```bash
+# Design applications
+devex install figma             # Figma (Cask)
+devex install sketch            # Sketch (Cask)  
+devex install adobe-creative-cloud  # Adobe CC (Cask)
+```
+
+### System Utilities
+
+#### Terminal & Shell
+```bash
+# Enhanced terminal experience
+devex install iterm2            # iTerm2 (Cask)
+devex install alacritty         # Alacritty (Cask)
+devex install fish              # Fish shell (Formula)
+devex install tmux              # Terminal multiplexer (Formula)
+```
+
+#### File Management
+```bash
+# File management tools
+devex install the-unarchiver    # Archive utility (Cask)
+devex install keka              # Compression tool (Cask)
+devex install path-finder       # Advanced file browser (Cask)
+```
+
+## Platform-Specific Configuration
+
+### Architecture Handling
+
+DevEx automatically handles Apple Silicon vs Intel differences:
+
+```yaml
+# Cross-architecture configuration
+applications:
+  development:
+    - name: docker
+      description: 'Container platform'
+      macos:
+        install_method: 'brew'
+        install_command: '--cask docker'
+        platform_requirements:
+          - architecture: 'arm64'    # Apple Silicon
+            notes: 'Native Apple Silicon support'
+          - architecture: 'x86_64'   # Intel  
+            notes: 'Full Intel support'
+```
+
+### Rosetta 2 Integration
+
+For Apple Silicon Macs running Intel-only software:
+
+```bash
+# DevEx automatically detects when Rosetta 2 is needed
+devex install intel-only-app    # Prompts for Rosetta 2 if needed
+
+# Manual Rosetta 2 installation
+sudo softwareupdate --install-rosetta
+```
+
+### Security & Permissions
+
+#### Gatekeeper Integration
+```bash
+# DevEx handles code signing and notarization
+# Apps from verified developers install seamlessly
+
+# Manual Gatekeeper management
+sudo spctl --master-disable      # Disable (not recommended)
+sudo spctl --master-enable       # Re-enable
+```
+
+#### Full Disk Access
+Some applications require additional permissions:
+
+```bash
+# Applications that may need Full Disk Access:
+# - Terminal.app
+# - iTerm2.app  
+# - DevEx CLI tools
+
+# Grant via: System Preferences > Security & Privacy > Privacy > Full Disk Access
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Homebrew Issues
+```bash
+# Fix common Homebrew problems
+brew doctor                      # Diagnose issues
+brew update                      # Update Homebrew
+brew upgrade                     # Upgrade packages
+
+# Clear cache
+brew cleanup                     # Remove old versions
+rm -rf $(brew --cache)          # Clear download cache
+
+# Reinstall Homebrew (if corrupted)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+#### Permission Issues
+```bash
+# Fix Homebrew permissions
+sudo chown -R $(whoami) $(brew --prefix)/*
+
+# Fix DevEx permissions  
+sudo chown -R $(whoami) ~/.devex/
+chmod -R 755 ~/.devex/
+```
+
+#### Path Issues
+```bash
+# Verify shell configuration
+echo $PATH                       # Check current PATH
+which brew                       # Should show Homebrew location
+
+# Reload shell configuration
+source ~/.zshrc                  # Zsh
+source ~/.bash_profile          # Bash
+```
+
+### Architecture-Specific Issues
+
+#### Apple Silicon
+```bash
+# Check if running under Rosetta
+arch                            # Should show 'arm64'
+uname -m                        # Should show 'arm64'
+
+# Force native Apple Silicon
+arch -arm64 brew install package
+
+# Force Intel emulation (if needed)
+arch -x86_64 brew install package
+```
+
+#### Intel Macs
+```bash
+# Verify Intel architecture
+arch                            # Should show 'i386'
+uname -m                        # Should show 'x86_64'
+
+# Standard installation
+brew install package
+```
+
+### Application-Specific Issues
+
+#### Code Signing Issues
+```bash
+# Remove quarantine attribute
+sudo xattr -r -d com.apple.quarantine /Applications/AppName.app
+
+# Re-sign application (if needed)
+sudo codesign --force --deep --sign - /Applications/AppName.app
+```
+
+#### Cask Issues
+```bash
+# Force reinstall cask
+brew reinstall --cask app-name
+
+# Clear cask cache
+brew cleanup --prune=all
+```
+
+## Performance Optimization
+
+### Homebrew Optimization
+```bash
+# Enable Homebrew analytics (optional)
+brew analytics on
+
+# Parallel installations
+export HOMEBREW_MAKE_JOBS=4
+
+# Use faster mirrors (if available)
+export HOMEBREW_BOTTLE_DOMAIN=https://mirrors.ustc.edu.cn/homebrew-bottles
+```
+
+### System Optimization
+```bash
+# Optimize for SSD (if applicable)
+sudo trimforce enable
+
+# Increase file limits for development
+echo 'ulimit -n 65536' >> ~/.zshrc
+
+# Disable spotlight indexing for node_modules (optional)
+echo 'node_modules' >> ~/.gitignore_global
+```
+
+## Migration & Backup
+
+### Migrating Between Macs
+```bash
+# Export DevEx configuration
+devex config export --output ~/devex-config.yaml
+
+# Import on new Mac
+devex config import ~/devex-config.yaml
+devex install                    # Install all configured apps
+```
+
+### Homebrew Migration
+```bash
+# Export Homebrew packages
+brew bundle dump                 # Creates Brewfile
+
+# Import on new Mac  
+brew bundle install              # Installs from Brewfile
+```
+
+### Time Machine Integration
+DevEx configurations are automatically included in Time Machine backups:
+- `~/.devex/` - DevEx configuration
+- `~/.zshrc` - Shell configuration  
+- `~/Brewfile` - Homebrew packages (if created)
+
+## Best Practices
+
+### Security
+1. **Keep Gatekeeper enabled** for application security
+2. **Verify app sources** before installation
+3. **Use official repositories** (Homebrew, Mac App Store)
+4. **Regular updates** via DevEx and Homebrew
+
+### Performance  
+1. **Use Apple Silicon native apps** when available
+2. **Minimize Rosetta 2 usage** on Apple Silicon
+3. **Regular cleanup** of caches and old versions
+4. **Monitor disk space** usage
+
+### Organization
+1. **Use consistent naming** for custom configurations
+2. **Group applications** by category or project
+3. **Document custom setups** for team sharing
+4. **Version control** DevEx configurations
+
+## Contributing
+
+Help improve macOS support:
+
+1. **Test on different macOS versions** and report compatibility
+2. **Submit new application definitions** with proper cask/formula mappings
+3. **Contribute Apple Silicon optimizations** and compatibility fixes
+4. **Document macOS-specific configurations** and best practices
+
+See the [GitHub repository](https://github.com/jameswlane/devex) for contribution guidelines.

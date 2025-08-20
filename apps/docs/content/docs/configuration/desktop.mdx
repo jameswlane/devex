@@ -1,0 +1,701 @@
+---
+title: Desktop Configuration
+description: Configure desktop environments, themes, extensions, and GUI applications
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Desktop Configuration
+
+The `desktop.yaml` file manages desktop environment configurations including GUI applications, themes, settings, extensions, and visual customizations. This ensures consistent desktop experiences across different machines.
+
+## File Location
+
+```bash
+# Default configuration
+~/.local/share/devex/config/desktop.yaml
+
+# User override (higher priority)
+~/.devex/desktop.yaml
+```
+
+## File Structure
+
+```yaml
+desktop_applications:
+  productivity:          # Application categories
+    - name: string       # Application name
+      description: string # Application description
+      category: string   # Application category
+      # Platform-specific configs...
+      
+  development:
+    # Development GUI applications
+    
+  multimedia:
+    # Media applications
+```
+
+## Desktop Applications
+
+DevEx manages GUI applications that require desktop environments, providing cross-platform installation support.
+
+### Application Schema
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | `string` | Yes | Application identifier |
+| `description` | `string` | Yes | Human-readable description |
+| `category` | `string` | Yes | Application category |
+| `desktop_environments` | `string[]` | No | Supported DEs |
+| `linux` | `object` | No | Linux installation config |
+| `macos` | `object` | No | macOS installation config |
+| `windows` | `object` | No | Windows installation config |
+
+### Platform-Specific Configuration
+
+<Tabs items={['Linux', 'macOS', 'Windows', 'Cross-Platform']}>
+  <Tab value="Linux">
+    ```yaml
+    desktop_applications:
+      productivity:
+        - name: LocalSend
+          description: 'Cross-platform secure file sharing'
+          category: 'File Sharing'
+          desktop_environments: ['all']
+          
+          linux:
+            # Primary installation method
+            install_method: 'flatpak'
+            install_command: 'flatpak install flathub org.localsend.localsend_app'
+            uninstall_command: 'flatpak remove org.localsend.localsend_app'
+            official_support: true
+            dependencies:
+              - 'flatpak'
+              
+            # Alternative installation methods
+            alternatives:
+              - install_method: 'snap'
+                install_command: 'localsend'
+                uninstall_command: 'localsend'
+                official_support: true
+                
+              - install_method: 'yay'  # AUR helper
+                install_command: 'localsend-bin'
+                uninstall_command: 'localsend-bin'
+                official_support: false
+    ```
+  </Tab>
+  
+  <Tab value="macOS">
+    ```yaml
+    desktop_applications:
+      productivity:
+        - name: LocalSend
+          macos:
+            # Primary method: Homebrew Cask
+            install_method: 'brew'
+            install_command: '--cask localsend'
+            uninstall_command: '--cask localsend'
+            official_support: true
+            
+            # Alternative: Nix package manager
+            alternatives:
+              - install_method: 'nix'
+                install_command: 'localsend'
+                uninstall_command: 'localsend'
+                official_support: true
+                
+              # Direct app download
+              - install_method: 'dmg'
+                download_url: 'https://github.com/localsend/localsend/releases/latest/download/LocalSend.dmg'
+    ```
+  </Tab>
+  
+  <Tab value="Windows">
+    ```yaml
+    desktop_applications:
+      productivity:
+        - name: LocalSend
+          windows:
+            # Primary: Windows Package Manager
+            install_method: 'winget'
+            install_command: 'localsend'
+            uninstall_command: 'localsend'
+            official_support: true
+            
+            # Alternative package managers
+            alternatives:
+              - install_method: 'chocolatey'
+                install_command: 'localsend'
+                uninstall_command: 'localsend'
+                official_support: true
+                
+              - install_method: 'scoop'
+                install_command: 'localsend'
+                uninstall_command: 'localsend'
+                official_support: true
+                pre_install:
+                  - command: 'scoop bucket add extras'
+    ```
+  </Tab>
+  
+  <Tab value="Cross-Platform">
+    ```yaml
+    desktop_applications:
+      development:
+        - name: Visual Studio Code
+          description: 'Code editor with extensive extensions'
+          category: 'Development'
+          desktop_environments: ['all']
+          
+          linux:
+            install_method: 'snap'
+            install_command: 'code --classic'
+            
+          macos:
+            install_method: 'brew'
+            install_command: '--cask visual-studio-code'
+            
+          windows:
+            install_method: 'winget'
+            install_command: 'Microsoft.VisualStudioCode'
+    ```
+  </Tab>
+</Tabs>
+
+### Application Categories
+
+<Cards>
+  <Card title="Productivity" description="File sharing, office suites, note-taking" />
+  <Card title="Development" description="IDEs, GUI development tools" />
+  <Card title="Multimedia" description="Media players, editors, streaming" />
+  <Card title="Communication" description="Chat, video calls, email" />
+</Cards>
+
+## Desktop Environment Specific Configuration
+
+DevEx supports desktop environment-specific configurations including themes, extensions, and settings.
+
+### GNOME Configuration
+
+```yaml
+# Separate gnome.yaml configuration
+platforms: ["linux"]
+
+themes:
+  - name: 'Tokyo Night'
+    theme_color: 'purple'
+    theme_background: 'assets/themes/tokyo-night/background.jpg'
+    neovim_colorscheme: 'assets/themes/tokyo-night/neovim.lua'
+    
+  - name: 'Kanagawa'
+    theme_color: 'purple'
+    theme_background: 'assets/themes/kanagawa/background.jpg'
+    neovim_colorscheme: 'assets/themes/kanagawa/neovim.lua'
+
+settings:
+  - name: 'Tweaks'
+    settings:
+      - key: 'org.gnome.mutter center-new-windows'
+        value: true
+        
+  - name: 'Monospace Font'
+    settings:
+      - key: 'org.gnome.desktop.interface monospace-font-name'
+        value: 'CaskaydiaMono Nerd Font 10'
+
+extensions:
+  - id: 'tactile@lundal.io'
+    schema_files:
+      - source: '~/.local/share/gnome-shell/extensions/tactile@lundal.io/schemas/org.gnome.shell.extensions.tactile.gschema.xml'
+        destination: '/usr/share/glib-2.0/schemas/'
+        
+dock:
+  - name: 'VS Code'
+    desktop_file: 'code.desktop'
+  - name: 'Settings'
+    desktop_file: 'org.gnome.Settings.desktop'
+```
+
+### GNOME Settings Configuration
+
+<Tabs items={['Window Management', 'Keybindings', 'Extensions', 'Workspaces']}>
+  <Tab value="Window Management">
+    ```yaml
+    settings:
+      - name: 'Window Behavior'
+        settings:
+          # Center new windows
+          - key: 'org.gnome.mutter center-new-windows'
+            value: true
+            
+          # Window management keybindings
+          - key: 'org.gnome.desktop.wm.keybindings close'
+            value: "['<Super>w']"
+            
+          - key: 'org.gnome.desktop.wm.keybindings maximize'
+            value: "['<Super>Up']"
+            
+          - key: 'org.gnome.desktop.wm.keybindings begin-resize'
+            value: "['<Super>BackSpace']"
+    ```
+  </Tab>
+  
+  <Tab value="Keybindings">
+    ```yaml
+    settings:
+      - name: 'Custom Keybindings'
+        settings:
+          # Application launcher (Ulauncher)
+          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name'
+            value: 'ulauncher-toggle'
+          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command'
+            value: 'ulauncher-toggle'
+          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding'
+            value: '<Super>space'
+            
+          # Screenshot tool (Flameshot)
+          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ name'
+            value: 'Flameshot'
+          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ command'
+            value: "sh -c -- 'flameshot gui'"
+          - key: 'org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ binding'
+            value: '<Control>Print'
+    ```
+  </Tab>
+  
+  <Tab value="Extensions">
+    ```yaml
+    extensions:
+      # Window tiling extension
+      - id: 'tactile@lundal.io'
+        schema_files:
+          - source: '~/.local/share/gnome-shell/extensions/tactile@lundal.io/schemas/org.gnome.shell.extensions.tactile.gschema.xml'
+            destination: '/usr/share/glib-2.0/schemas/'
+            
+      # Visual enhancements
+      - id: 'blur-my-shell@aunetx'
+        schema_files:
+          - source: '~/.local/share/gnome-shell/extensions/blur-my-shell@aunetx/schemas/org.gnome.shell.extensions.blur-my-shell.gschema.xml'
+            destination: '/usr/share/glib-2.0/schemas/'
+            
+      # Workspace management
+      - id: 'space-bar@luchrioh'
+        schema_files:
+          - source: '~/.local/share/gnome-shell/extensions/space-bar@luchrioh/schemas/org.gnome.shell.extensions.space-bar.gschema.xml'
+            destination: '/usr/share/glib-2.0/schemas/'
+    ```
+  </Tab>
+  
+  <Tab value="Workspaces">
+    ```yaml
+    settings:
+      - name: 'Workspaces'
+        settings:
+          # Fixed number of workspaces
+          - key: 'org.gnome.mutter dynamic-workspaces'
+            value: false
+          - key: 'org.gnome.desktop.wm.preferences num-workspaces'
+            value: 6
+            
+      - name: 'Workspace Keybindings'
+        settings:
+          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-1'
+            value: "['<Super>1']"
+          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-2'
+            value: "['<Super>2']"
+          - key: 'org.gnome.desktop.wm.keybindings switch-to-workspace-3'
+            value: "['<Super>3']"
+    ```
+  </Tab>
+</Tabs>
+
+### Theme Management
+
+<Steps>
+
+<Step>
+**Theme Definition**: Configure visual themes with backgrounds and color schemes
+</Step>
+
+<Step>
+**Application Integration**: Link themes to specific applications (Neovim, terminals)
+</Step>
+
+<Step>
+**Asset Management**: Organize theme assets (wallpapers, color files)
+</Step>
+
+<Step>
+**Theme Switching**: Enable easy switching between predefined themes
+</Step>
+
+</Steps>
+
+```yaml
+themes:
+  - name: 'Tokyo Night'
+    theme_color: 'purple'
+    theme_background: 'assets/themes/tokyo-night/background.jpg'
+    neovim_colorscheme: 'assets/themes/tokyo-night/neovim.lua'
+    terminal_theme: 'assets/themes/tokyo-night/terminal.json'
+    vscode_theme: 'Tokyo Night'
+    
+  - name: 'Gruvbox'
+    theme_color: 'orange'
+    theme_background: 'assets/themes/gruvbox/background.jpg'
+    neovim_colorscheme: 'assets/themes/gruvbox/neovim.lua'
+    terminal_theme: 'assets/themes/gruvbox/terminal.json'
+    vscode_theme: 'Gruvbox Dark Hard'
+
+  - name: 'Catppuccin'
+    theme_color: 'pink'
+    theme_background: 'assets/themes/catppuccin/background.jpg'
+    neovim_colorscheme: 'assets/themes/catppuccin/neovim.lua'
+    terminal_theme: 'assets/themes/catppuccin/terminal.json'
+    vscode_theme: 'Catppuccin Mocha'
+```
+
+## Real-World Configuration Examples
+
+### Productivity-Focused Setup
+
+```yaml
+desktop_applications:
+  productivity:
+    - name: LocalSend
+      description: 'Secure file sharing across devices'
+      category: 'File Sharing'
+      desktop_environments: ['all']
+      
+      linux:
+        install_method: 'flatpak'
+        install_command: 'flatpak install flathub org.localsend.localsend_app'
+        uninstall_command: 'flatpak remove org.localsend.localsend_app'
+        
+    - name: Obsidian
+      description: 'Knowledge management and note-taking'
+      category: 'Productivity'
+      
+      linux:
+        install_method: 'flatpak'
+        install_command: 'flatpak install flathub md.obsidian.Obsidian'
+        
+      macos:
+        install_method: 'brew'
+        install_command: '--cask obsidian'
+        
+      windows:
+        install_method: 'winget'
+        install_command: 'Obsidian.Obsidian'
+
+  communication:
+    - name: Discord
+      description: 'Voice, video and text communication'
+      category: 'Communication'
+      
+      linux:
+        install_method: 'flatpak'
+        install_command: 'flatpak install flathub com.discordapp.Discord'
+        
+      macos:
+        install_method: 'brew'
+        install_command: '--cask discord'
+        
+      windows:
+        install_method: 'winget'
+        install_command: 'Discord.Discord'
+```
+
+### Development Environment
+
+```yaml
+desktop_applications:
+  development:
+    - name: GitKraken
+      description: 'Git GUI client'
+      category: 'Development'
+      
+      linux:
+        install_method: 'snap'
+        install_command: 'gitkraken --classic'
+        
+      macos:
+        install_method: 'brew'
+        install_command: '--cask gitkraken'
+        
+      windows:
+        install_method: 'winget'
+        install_command: 'Axosoft.GitKraken'
+        
+    - name: Postman
+      description: 'API development environment'
+      category: 'Development'
+      
+      linux:
+        install_method: 'snap'
+        install_command: 'postman'
+        
+      macos:
+        install_method: 'brew'
+        install_command: '--cask postman'
+        
+      windows:
+        install_method: 'winget'
+        install_command: 'Postman.Postman'
+
+    - name: DBeaver
+      description: 'Universal database tool'
+      category: 'Development'
+      
+      linux:
+        install_method: 'flatpak'
+        install_command: 'flatpak install flathub io.dbeaver.DBeaverCommunity'
+        
+      macos:
+        install_method: 'brew'
+        install_command: '--cask dbeaver-community'
+        
+      windows:
+        install_method: 'winget'
+        install_command: 'dbeaver.dbeaver'
+```
+
+### GNOME Customization Profile
+
+```yaml
+# Complete GNOME setup for development
+platforms: ["linux"]
+
+themes:
+  - name: 'Development Theme'
+    theme_color: 'blue'
+    theme_background: 'assets/themes/dev/background.jpg'
+    neovim_colorscheme: 'assets/themes/dev/neovim.lua'
+
+settings:
+  # Window management for development
+  - name: 'Developer Tweaks'
+    settings:
+      - key: 'org.gnome.mutter center-new-windows'
+        value: true
+      - key: 'org.gnome.desktop.interface monospace-font-name'
+        value: 'JetBrainsMono Nerd Font 11'
+      - key: 'org.gnome.desktop.interface enable-hot-corners'
+        value: false
+        
+  # Development keybindings
+  - name: 'Dev Keybindings'
+    settings:
+      - key: 'org.gnome.desktop.wm.keybindings close'
+        value: "['<Super>w']"
+      - key: 'org.gnome.desktop.wm.keybindings toggle-fullscreen'
+        value: "['<Super>f']"
+
+extensions:
+  - id: 'tactile@lundal.io'  # Window tiling
+  - id: 'space-bar@luchrioh'  # Workspace names
+  - id: 'blur-my-shell@aunetx'  # Visual effects
+
+dock:
+  - name: 'VS Code'
+    desktop_file: 'code.desktop'
+  - name: 'Terminal'
+    desktop_file: 'org.gnome.Terminal.desktop'
+  - name: 'Firefox'
+    desktop_file: 'firefox.desktop'
+  - name: 'File Manager'
+    desktop_file: 'org.gnome.Nautilus.desktop'
+```
+
+## KDE Plasma Configuration
+
+```yaml
+# kde.yaml configuration structure
+platforms: ["linux"]
+
+themes:
+  - name: 'Breeze Dark'
+    plasma_theme: 'breeze-dark'
+    color_scheme: 'BreezeDark'
+    
+settings:
+  - name: 'Window Behavior'
+    config_file: '~/.config/kwinrc'
+    settings:
+      - group: 'Windows'
+        key: 'FocusPolicy'
+        value: 'FocusFollowsMouse'
+        
+  - name: 'Shortcuts'
+    config_file: '~/.config/kglobalshortcutsrc'
+    settings:
+      - group: 'kwin'
+        key: 'Window Close'
+        value: 'Meta+W'
+
+plasmoids:
+  - name: 'System Monitor'
+    package: 'org.kde.plasma.systemmonitor'
+    location: 'panel'
+    
+widgets:
+  - name: 'Task Manager'
+    type: 'org.kde.plasma.taskmanager'
+    settings:
+      groupingStrategy: 0  # Do not group
+```
+
+## macOS Configuration
+
+```yaml
+# macos.yaml configuration structure  
+platforms: ["macos"]
+
+system_preferences:
+  - domain: 'com.apple.dock'
+    settings:
+      - key: 'autohide'
+        type: 'bool'
+        value: true
+      - key: 'tilesize'
+        type: 'int'
+        value: 48
+        
+  - domain: 'NSGlobalDomain'
+    settings:
+      - key: 'AppleKeyboardUIMode'
+        type: 'int'
+        value: 3  # Full keyboard access
+        
+dock_items:
+  - name: 'Finder'
+    path: '/System/Applications/Finder.app'
+  - name: 'VS Code'
+    path: '/Applications/Visual Studio Code.app'
+  - name: 'Terminal'
+    path: '/Applications/Utilities/Terminal.app'
+```
+
+## Validation and Testing
+
+### Configuration Validation
+
+```bash
+# Validate desktop configuration
+devex config validate desktop
+
+# Test application installation (dry-run)
+devex install --category productivity --dry-run
+
+# Validate GNOME settings
+devex desktop apply --dry-run
+
+# Check installed desktop applications
+devex list --desktop-only
+```
+
+### GNOME Validation
+
+```bash
+# Test GNOME settings application
+gsettings list-schemas | grep tactile
+
+# Verify extension installation
+gnome-extensions list --enabled
+
+# Check dconf settings
+dconf dump /org/gnome/shell/extensions/
+```
+
+## Troubleshooting
+
+<Tabs items={['Application Issues', 'GNOME Problems', 'Theme Issues', 'Font Problems']}>
+  <Tab value="Application Issues">
+    ```bash
+    # Flatpak issues
+    flatpak repair
+    flatpak update
+    
+    # Snap issues
+    sudo snap refresh
+    
+    # Check desktop file
+    ls /usr/share/applications/ | grep app-name
+    
+    # Regenerate desktop database
+    update-desktop-database ~/.local/share/applications/
+    ```
+  </Tab>
+  
+  <Tab value="GNOME Problems">
+    ```bash
+    # Reset GNOME settings
+    dconf reset -f /org/gnome/
+    
+    # Restart GNOME Shell
+    killall -3 gnome-shell
+    
+    # Check extension errors
+    journalctl -f -o cat /usr/bin/gnome-shell
+    
+    # Recompile schemas
+    sudo glib-compile-schemas /usr/share/glib-2.0/schemas/
+    ```
+  </Tab>
+  
+  <Tab value="Theme Issues">
+    ```bash
+    # Check theme directory
+    ls ~/.themes/
+    ls ~/.local/share/themes/
+    
+    # Reset to default theme
+    gsettings reset org.gnome.desktop.interface gtk-theme
+    
+    # Apply theme manually
+    gsettings set org.gnome.desktop.interface gtk-theme 'Theme-Name'
+    ```
+  </Tab>
+  
+  <Tab value="Font Problems">
+    ```bash
+    # Refresh font cache
+    fc-cache -fv
+    
+    # Check available fonts
+    fc-list | grep -i font-name
+    
+    # Test font in terminal
+    echo "Testing font rendering: 0O il1|"
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Callout type="tip">
+**Desktop Configuration Best Practices:**
+
+1. **Use official package sources** - Prefer Flatpak/Snap for Linux apps
+2. **Test extensions carefully** - GNOME extensions can be fragile
+3. **Backup settings** - Export dconf/registry before major changes
+4. **Version pin themes** - Avoid theme breaking changes
+5. **Document customizations** - Share team desktop configurations
+6. **Test across DEs** - Ensure apps work on different desktop environments
+</Callout>
+
+## Related Documentation
+
+- [Applications Configuration](/docs/configuration/applications) - Command-line applications
+- [System Configuration](/docs/configuration/system) - System-level settings
+- [Platform Support](/docs/platforms) - Platform-specific details
+- [CLI Reference: Desktop](/docs/cli-reference/desktop) - Desktop management commands
+
+<Callout type="info">
+Desktop configuration provides a complete GUI environment setup, from application installation to desktop environment customization. It ensures consistent visual and functional experiences across development machines.
+</Callout>

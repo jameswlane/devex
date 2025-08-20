@@ -1,0 +1,11 @@
+{
+	"title": "Guides",
+	"pages": [
+		"getting-started",
+		"security",
+		"team-setup",
+		"customization",
+		"automation",
+		"troubleshooting"
+	]
+}

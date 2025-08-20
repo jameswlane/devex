@@ -1,0 +1,523 @@
+---
+title: Getting Started with DevEx
+description: Complete beginner's guide to setting up your development environment with DevEx
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Getting Started with DevEx
+
+DevEx is a powerful CLI tool that streamlines development environment setup across Linux, macOS, and Windows. This guide will walk you through your first DevEx installation and help you understand core concepts.
+
+## What is DevEx?
+
+DevEx automates the installation and configuration of:
+
+<Cards>
+  <Card title="Development Tools" description="Git, VS Code, Docker, terminal tools" />
+  <Card title="Programming Languages" description="Node.js, Python, Go, Java via mise" />
+  <Card title="Desktop Themes" description="GNOME, KDE, macOS appearance settings" />
+  <Card title="System Configuration" description="Git settings, SSH keys, shell setup" />
+</Cards>
+
+## Prerequisites
+
+<Callout type="info">
+For detailed installation instructions, see our [Installation Guide](/docs/installation). For platform-specific requirements, check [Platform Guides](/docs/platforms).
+</Callout>
+
+Before installing DevEx, ensure you have:
+
+<Tabs items={['Linux', 'macOS', 'Windows']}>
+  <Tab value="Linux">
+    - A supported Linux distribution (Ubuntu, Debian, Fedora, Arch, etc.)
+    - `curl` or `wget` installed
+    - `sudo` access for system packages
+    - Internet connection for downloads
+
+    ```bash
+    # Check if you have curl or wget
+    which curl || which wget
+    
+    # Install if missing (Ubuntu/Debian) - Include CA certificates
+    sudo apt update && sudo apt install -y curl wget ca-certificates
+    ```
+  </Tab>
+  
+  <Tab value="macOS">
+    - macOS 10.15 (Catalina) or later
+    - Xcode Command Line Tools
+    - Internet connection
+
+    ```bash
+    # Install Xcode Command Line Tools
+    xcode-select --install
+    
+    # Verify installation
+    xcode-select -p
+    ```
+  </Tab>
+  
+  <Tab value="Windows">
+    - Windows 10 or Windows 11
+    - PowerShell 5.1 or later
+    - Windows Package Manager (winget)
+    - Administrator privileges
+
+    ```powershell
+    # Check PowerShell version
+    $PSVersionTable.PSVersion
+    
+    # Check if winget is available
+    winget --version
+    ```
+  </Tab>
+</Tabs>
+
+## Quick Installation
+
+The fastest way to get started is with our one-line installer:
+
+<Callout type="warn">
+**Security First**: Before executing any remote script, review our [Security Best Practices](/docs/guides/security). You can inspect the installer:
+
+```bash
+curl -fsSL https://devex.sh/install -o devex-install.sh
+less devex-install.sh  # Review before execution
+```
+</Callout>
+
+<Tabs items={['curl', 'wget']}>
+  <Tab value="curl">
+    ```bash
+    # Download and execute installer - v1.0.0
+    curl -fsSL https://devex.sh/install | bash
+    ```
+  </Tab>
+  
+  <Tab value="wget">
+    ```bash
+    # Download and execute installer - v1.0.0
+    wget -qO- https://devex.sh/install | bash
+    ```
+  </Tab>
+</Tabs>
+
+<Callout type="info">
+**What the installer does:**
+1. Downloads the latest DevEx binary for your platform
+2. Installs to `~/.local/share/devex/`
+3. Updates your PATH in shell configuration
+4. Copies default configuration files
+5. Runs initial setup with default applications
+</Callout>
+
+## Step-by-Step Setup
+
+If you prefer manual control over the installation process:
+
+<Steps>
+  <Step>
+    ### Download DevEx Binary
+    
+    Visit [GitHub Releases](https://github.com/jameswlane/devex/releases) and download the appropriate binary:
+    
+    ```bash
+    # Linux x64 - Pin to specific version for security
+    wget https://github.com/jameswlane/devex/releases/download/v1.0.0/devex_linux_amd64.tar.gz
+    
+    # Verify checksum (recommended)
+    wget https://github.com/jameswlane/devex/releases/download/v1.0.0/checksums.txt
+    sha256sum -c checksums.txt
+    
+    # Extract and install
+    tar -xzf devex_linux_amd64.tar.gz
+    chmod +x devex
+    sudo mv devex /usr/local/bin/
+    ```
+  </Step>
+  
+  <Step>
+    ### Initialize Configuration
+    
+    Set up the configuration directory and download default configs:
+    
+    ```bash
+    # Initialize DevEx configuration
+    devex config init
+    
+    # Verify configuration files
+    ls ~/.local/share/devex/config/
+    # Should show: applications.yaml, environment.yaml, desktop.yaml, system.yaml
+    ```
+  </Step>
+  
+  <Step>
+    ### Preview Installation
+    
+    Before making changes, preview what will be installed:
+    
+    ```bash
+    # Show all default applications
+    devex install --list
+    
+    # Preview installation (dry-run)
+    devex install --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Install Default Environment
+    
+    Install the default development tools:
+    
+    ```bash
+    # Install all default applications
+    sudo devex install
+    
+    # Or install specific categories
+    sudo devex install --category development
+    sudo devex install --category databases
+    ```
+  </Step>
+  
+  <Step>
+    ### Configure Your Environment
+    
+    Set up personal configurations:
+    
+    ```bash
+    # Configure Git (required for development)
+    git config --global user.name "Your Name"
+    git config --global user.email "your.email@example.com"
+    
+    # Apply system configurations
+    devex system configure
+    ```
+  </Step>
+</Steps>
+
+## Understanding DevEx Structure
+
+### Configuration Files
+
+DevEx uses four main configuration files:
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `applications.yaml` | Defines installable software | `~/.local/share/devex/config/` |
+| `environment.yaml` | Programming languages, fonts | `~/.local/share/devex/config/` |
+| `desktop.yaml` | Desktop themes and settings | `~/.local/share/devex/config/` |
+| `system.yaml` | Git, SSH, terminal config | `~/.local/share/devex/config/` |
+
+### Directory Structure
+
+```
+~/.local/share/devex/
+├── bin/devex              # DevEx binary
+├── config/               # Default configurations
+│   ├── applications.yaml
+│   ├── environment.yaml
+│   ├── desktop.yaml
+│   └── system.yaml
+└── assets/               # Configuration templates and files
+
+~/.devex/                 # User overrides (optional)
+├── applications.yaml     # Override default apps
+└── custom-config.yaml    # Your customizations
+```
+
+## Your First DevEx Commands
+
+### Check Installation Status
+
+```bash
+# Show DevEx version
+devex --version
+
+# Check system information
+devex system info
+
+# Validate configuration files
+devex config validate
+
+# Show installation status
+devex status
+```
+
+### Install Additional Software
+
+```bash
+# List available applications
+devex install --list
+
+# Install specific applications
+devex install docker
+devex install vscode
+devex install postgresql
+
+# Install by category
+devex install --category databases
+devex install --category optional
+```
+
+### Managing Your Environment
+
+```bash
+# Show installed applications
+devex list --installed
+
+# Uninstall applications
+devex uninstall firefox
+
+# Update application lists
+devex update
+
+# Clean up cached files
+devex clean
+```
+
+## Common Use Cases
+
+### Web Developer Setup
+
+Install essential web development tools:
+
+```bash
+# Core web development stack with version pinning
+devex install git
+devex install node       # Installs via mise
+devex install vscode
+devex install docker
+
+# Additional tools
+devex install firefox
+devex install postman
+devex install mongodb
+
+# Set up Node.js environment with specific versions
+mise install node@20.11.0  # Pin to LTS version
+mise global node@20.11.0
+# Install global packages with specific versions
+npm install -g @vue/cli@5.0.8 create-react-app@5.0.1
+```
+
+### Backend Developer Setup
+
+Set up backend development environment:
+
+```bash
+# Programming languages with version management
+devex install python
+devex install go
+devex install java
+
+# Pin language versions for consistency
+mise install python@3.11.7
+mise install go@1.21.6
+mise global python@3.11.7 go@1.21.6
+
+# Databases
+devex install postgresql
+devex install redis
+devex install mongodb
+
+# Development tools
+devex install docker
+devex install kubernetes-cli
+devex install terraform
+```
+
+### Data Science Setup
+
+Configure Python data science environment:
+
+```bash
+# Python environment with version pinning
+devex install python
+devex install jupyter
+
+# Pin Python version for data science
+mise install python@3.11.7
+mise global python@3.11.7
+
+# Data science tools with pinned versions
+pip install pandas==2.1.4 numpy==1.24.4 matplotlib==3.8.2 seaborn==0.13.0 scikit-learn==1.3.2
+
+# Additional tools
+devex install r
+devex install rstudio
+```
+
+## Customization Basics
+
+<Callout type="tip">
+For advanced customization options, see our [Customization Guide](/docs/guides/customization). For detailed configuration documentation, check [Configuration Reference](/docs/configuration).
+</Callout>
+
+### Override Default Applications
+
+Create custom application lists:
+
+```bash
+# Copy default config for editing
+cp ~/.local/share/devex/config/applications.yaml ~/.devex/
+
+# Edit your custom configuration
+nano ~/.devex/applications.yaml
+```
+
+### Add Custom Applications
+
+Example custom application:
+
+```yaml
+applications:
+  development:
+    - name: my-custom-tool
+      description: "My custom development tool"
+      category: "Custom Tools"
+      default: false
+      linux:
+        install_method: curlpipe
+        install_command: "https://install.my-tool.com/install.sh"
+      macos:
+        install_method: brew
+        install_command: my-tool
+```
+
+### Theme Configuration
+
+Apply desktop themes:
+
+```bash
+# List available themes
+devex theme list
+
+# Apply a theme
+devex theme apply tokyo-night
+
+# Create custom theme
+devex theme create my-theme
+```
+
+## Troubleshooting Common Issues
+
+### Permission Errors
+
+```bash
+# Fix ownership of DevEx directories
+sudo chown -R $USER:$USER ~/.local/share/devex
+sudo chown -R $USER:$USER ~/.devex
+
+# Ensure binary is executable
+chmod +x ~/.local/share/devex/bin/devex
+```
+
+### Path Issues
+
+```bash
+# Check if DevEx is in PATH
+which devex
+
+# Manually add to PATH (if needed)
+echo 'export PATH="$PATH:$HOME/.local/share/devex/bin"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Installation Failures
+
+```bash
+# Check system requirements
+devex system check
+
+# Validate configuration
+devex config validate
+
+# Run with verbose output
+devex --verbose install docker
+
+# Check logs
+tail ~/.local/share/devex/logs/devex.log
+```
+
+### Network Issues
+
+```bash
+# Test connectivity
+curl -I https://devex.sh
+
+# Use alternative download method
+devex config set download_method wget
+
+# Configure proxy (if needed)
+export https_proxy=http://proxy:port
+```
+
+## Best Practices
+
+<Callout type="tip">
+**DevEx Best Practices:**
+
+1. **Start with defaults** - Run the default installation first
+2. **Use dry-run** - Always preview changes with `--dry-run`
+3. **Backup configs** - Keep your customizations in version control
+4. **Regular updates** - Run `devex update` weekly
+5. **Test changes** - Validate configurations before applying
+6. **Document customizations** - Comment your custom configurations
+</Callout>
+
+### Team Collaboration
+
+If working in a team:
+
+```bash
+# Share team configuration
+git init ~/.devex
+git add ~/.devex/applications.yaml
+git commit -m "Team DevEx configuration"
+git remote add origin https://github.com/yourteam/devex-config
+git push -u origin main
+
+# Team members can clone and use
+git clone https://github.com/yourteam/devex-config ~/.devex
+devex install
+```
+
+### Configuration Management
+
+```bash
+# Backup current configuration
+cp -r ~/.devex ~/devex-backup-$(date +%Y%m%d)
+
+# Version control your configurations
+cd ~/.devex
+git init
+git add .
+git commit -m "Initial DevEx configuration"
+```
+
+## Next Steps
+
+Now that you have DevEx installed and understand the basics:
+
+<Cards>
+  <Card title="Team Setup" href="/docs/guides/team-setup" description="Configure DevEx for team collaboration" />
+  <Card title="Customization" href="/docs/guides/customization" description="Advanced configuration and themes" />
+  <Card title="Examples" href="/docs/examples" description="Real-world development setups" />
+  <Card title="CLI Reference" href="/docs/cli-reference" description="Complete command reference" />
+</Cards>
+
+### Learn More
+
+- **Automation**: Set up CI/CD pipelines with DevEx
+- **Advanced Configuration**: Create complex application setups
+- **Platform-Specific Features**: Leverage platform-specific capabilities
+- **Community**: Join the DevEx community for tips and contributions
+
+<Callout type="success">
+**Congratulations!** You now have a fully configured development environment with DevEx. The tool will help you maintain consistency across machines and collaborate effectively with your team.
+</Callout>
