@@ -1,0 +1,242 @@
+# DevEx CLI Test Matrix Configuration
+# Defines comprehensive testing scenarios across distributions and configurations
+meta:
+  version: "2.0"
+  description: "DevEx CLI Docker Test Matrix"
+  maintainer: "DevEx Team"
+  created: "2025-01-08"
+# Distribution definitions
+distributions:
+  debian:
+    name: "Debian"
+    versions: ["12"]
+    package_manager: "apt"
+    family: "debian"
+    dockerfile: "Dockerfile.debian"
+    priority: 1
+    ci_enabled: true
+  ubuntu:
+    name: "Ubuntu"
+    versions: ["22.04", "20.04"]
+    package_manager: "apt"
+    family: "debian"
+    dockerfile: "Dockerfile.ubuntu"
+    priority: 1
+    ci_enabled: true
+  arch:
+    name: "Arch Linux"
+    versions: ["latest"]
+    package_manager: "pacman"
+    family: "arch"
+    dockerfile: "Dockerfile.arch"
+    priority: 2
+    ci_enabled: true
+  manjaro:
+    name: "Manjaro"
+    versions: ["latest"]
+    package_manager: "pacman"
+    family: "arch"
+    dockerfile: "Dockerfile.manjaro"
+    priority: 3
+    ci_enabled: false
+  fedora:
+    name: "Fedora"
+    versions: ["39", "38"]
+    package_manager: "dnf"
+    family: "redhat"
+    dockerfile: "Dockerfile.fedora"
+    priority: 2
+    ci_enabled: true
+  redhat:
+    name: "Red Hat Enterprise Linux"
+    versions: ["9.3"]
+    package_manager: "dnf"
+    family: "redhat"
+    dockerfile: "Dockerfile.redhat"
+    priority: 2
+    ci_enabled: true
+  centos-stream:
+    name: "CentOS Stream"
+    versions: ["9"]
+    package_manager: "dnf"
+    family: "redhat"
+    dockerfile: "Dockerfile.centos-stream"
+    priority: 3
+    ci_enabled: false
+  suse:
+    name: "openSUSE Leap"
+    versions: ["15.5"]
+    package_manager: "zypper"
+    family: "suse"
+    dockerfile: "Dockerfile.suse"
+    priority: 2
+    ci_enabled: true
+  alpine:
+    name: "Alpine Linux"
+    versions: ["3.19", "3.18"]
+    package_manager: "apk"
+    family: "alpine"
+    dockerfile: "Dockerfile.alpine"
+    priority: 2
+    ci_enabled: true
+# Test suite definitions
+test_suites:
+  basic:
+    name: "Basic CLI Tests"
+    description: "Core CLI functionality and help commands"
+    timeout: 60
+    commands:
+      - "--version"
+      - "--help"
+      - "help"
+    expected_exit_codes: [0]
+  configuration:
+    name: "Configuration Management"
+    description: "Configuration validation and management"
+    timeout: 120
+    commands:
+      - "config --help"
+      - "config validate"
+      - "init --help"
+      - "init --dry-run"
+    expected_exit_codes: [0]
+  applications:
+    name: "Application Management"
+    description: "Install, uninstall, and manage applications"
+    timeout: 300
+    commands:
+      - "list --help"
+      - "list categories"
+      - "add --help"
+      - "remove --help"
+      - "install --help"
+      - "install --dry-run"
+      - "uninstall --help"
+      - "status --help"
+      - "status"
+    expected_exit_codes: [0]
+  system:
+    name: "System Commands"
+    description: "System detection and configuration"
+    timeout: 180
+    commands:
+      - "system --help"
+      - "detect --help"
+      - "shell --help"
+      - "cache --help"
+    expected_exit_codes: [0]
+  templates:
+    name: "Template Management"
+    description: "Template creation and management"
+    timeout: 120
+    commands:
+      - "template --help"
+      - "template list"
+    expected_exit_codes: [0]
+  recovery:
+    name: "Recovery Commands"
+    description: "Rollback and undo functionality"
+    timeout: 120
+    commands:
+      - "rollback --help"
+      - "undo --help"
+    expected_exit_codes: [0]
+# CI/CD pipeline configurations
+ci_pipelines:
+  github_actions:
+    name: "GitHub Actions Pipeline"
+    file: ".github/workflows/docker-test.yml"
+    triggers:
+      - "push"
+      - "pull_request"
+    matrix_strategy:
+      include_distros: ["debian", "ubuntu", "arch", "fedora", "alpine"]
+      parallel_jobs: 5
+  gitlab_ci:
+    name: "GitLab CI Pipeline"
+    file: ".gitlab-ci.yml"
+    triggers:
+      - "push"
+      - "merge_requests"
+    matrix_strategy:
+      include_distros: ["debian", "ubuntu", "redhat", "suse"]
+      parallel_jobs: 4
+# Test scenarios
+test_scenarios:
+  smoke_test:
+    name: "Smoke Test"
+    description: "Quick validation across priority 1 distributions"
+    distributions: ["debian", "ubuntu"]
+    test_suites: ["basic", "configuration"]
+    timeout: 300
+  comprehensive_test:
+    name: "Comprehensive Test"
+    description: "Full test suite across all supported distributions"
+    distributions: "all"
+    test_suites: "all"
+    timeout: 1800
+  security_test:
+    name: "Security Test"
+    description: "Security-focused testing with privilege escalation checks"
+    distributions: ["debian", "alpine"]
+    test_suites: ["basic", "system"]
+    additional_checks:
+      - "privilege_escalation"
+      - "file_permissions"
+      - "user_isolation"
+    timeout: 600
+  performance_test:
+    name: "Performance Test"
+    description: "Performance benchmarking across distributions"
+    distributions: ["debian", "alpine", "arch"]
+    test_suites: ["basic", "applications"]
+    metrics:
+      - "execution_time"
+      - "memory_usage"
+      - "cpu_usage"
+    timeout: 900
+# Resource constraints
+resource_limits:
+  default:
+    memory: "512Mi"
+    cpu: "0.5"
+    timeout: 300
+  performance:
+    memory: "1Gi"
+    cpu: "1.0"
+    timeout: 900
+  comprehensive:
+    memory: "2Gi"
+    cpu: "2.0"
+    timeout: 1800
+# Environment variables for testing
+environment:
+  global:
+    DEVEX_TEST_MODE: "true"
+    DEVEX_LOG_LEVEL: "info"
+    TERM: "xterm-256color"
+  ci_specific:
+    CI: "true"
+    DEVEX_NON_INTERACTIVE: "true"
+    DEVEX_DISABLE_TELEMETRY: "true"
+# Reporting configuration
+reporting:
+  formats:
+    - "junit"
+    - "json"
+    - "markdown"
+  outputs:
+    junit: "test-results.xml"
+    json: "test-results.json"
+    markdown: "TEST_REPORT.md"
+  metrics:
+    - "test_duration"
+    - "success_rate"
+    - "distribution_coverage"
+    - "command_coverage"
+# Cleanup configuration
+cleanup:
+  after_test: true
+  retain_on_failure: true
+  image_retention_days: 7
+  log_retention_days: 30

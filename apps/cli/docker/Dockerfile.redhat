@@ -1,8 +1,16 @@
-FROM registry.access.redhat.com/ubi8/ubi:8.8
+# Multi-stage Dockerfile for DevEx CLI testing on Red Hat/RHEL
+# Stage 1: Base system setup
+FROM registry.access.redhat.com/ubi9/ubi:9.3 AS base
+
+# Metadata
+LABEL maintainer="DevEx Team"
+LABEL description="DevEx CLI testing environment for Red Hat/RHEL"
+LABEL version="2.0"
 
 ENV TERM=xterm-256color
+ENV DEVEX_TEST_MODE=true
 
-# Install only essential utilities present on a fresh Red Hat-based installation
+# Install essential utilities and clean up
 RUN dnf -y update && \
     dnf -y install \
     curl \
@@ -10,25 +18,34 @@ RUN dnf -y update && \
     git \
     unzip \
     sudo \
+    ca-certificates \
+    procps-ng \
+    which \
+    gnupg2 \
     && dnf clean all
 
-# Add a non-root user for testing purposes
-RUN useradd -m -s /bin/bash -G wheel testuser && \
-    echo 'testuser:testpass' | chpasswd && \
-    echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Stage 2: User setup and DevEx preparation
+FROM base AS devex-ready
 
-# Switch to the non-root user
+# Create non-root user with passwordless sudo (more secure)
+RUN useradd -m -s /bin/bash -G wheel testuser \
+    && echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
+    && chmod 0440 /etc/sudoers
+
+# Switch to test user and set working directory
 USER testuser
 WORKDIR /home/testuser
 
-# Create expected directories
-RUN mkdir -p ~/.local/share/devex/assets \
-             ~/.local/share/devex/bin \
-             ~/.local/share/devex/config \
-             ~/.local/share/devex/help
+# Create DevEx directory structure
+RUN mkdir -p ~/.local/share/devex/{assets,bin,config,help,cache,logs,themes} \
+    && mkdir -p ~/.devex/{templates,backups} \
+    && mkdir -p ~/workspace
 
-# Ensure ~/.local/share/devex/bin is in PATH
-RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc
+# Configure environment
+RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc \
+    && echo 'export DEVEX_HOME="$HOME/.local/share/devex"' >> ~/.bashrc \
+    && echo 'export DEVEX_TEST_MODE=true' >> ~/.bashrc \
+    && echo 'alias ll="ls -la"' >> ~/.bashrc
 
-# Set default command for the container
+# Set container entrypoint
 CMD ["/bin/bash"]
