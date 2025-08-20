@@ -3,61 +3,10 @@
 	"pages": [
 		"index",
 		"installation",
-		{
-			"title": "CLI Reference",
-			"pages": [
-				"cli-reference/index",
-				"cli-reference/setup",
-				"cli-reference/install",
-				"cli-reference/config",
-				"cli-reference/template",
-				"cli-reference/add-remove",
-				"cli-reference/status-list",
-				"cli-reference/recovery",
-				"cli-reference/global-flags"
-			]
-		},
-		{
-			"title": "Configuration",
-			"pages": [
-				"configuration/index",
-				"configuration/applications",
-				"configuration/environment",
-				"configuration/desktop",
-				"configuration/system",
-				"configuration/templates",
-				"configuration/validation"
-			]
-		},
-		{
-			"title": "Platform Support",
-			"pages": [
-				"platforms/index",
-				"platforms/linux",
-				"platforms/macos",
-				"platforms/windows",
-				"platforms/installers"
-			]
-		},
-		{
-			"title": "Guides",
-			"pages": [
-				"guides/getting-started",
-				"guides/team-setup",
-				"guides/customization",
-				"guides/automation",
-				"guides/troubleshooting"
-			]
-		},
-		{
-			"title": "Examples",
-			"pages": [
-				"examples/index",
-				"examples/web-development",
-				"examples/backend-development",
-				"examples/data-science",
-				"examples/mobile-development"
-			]
-		}
+		"cli-reference",
+		"configuration",
+		"platforms",
+		"guides",
+		"examples"
 	]
 }
