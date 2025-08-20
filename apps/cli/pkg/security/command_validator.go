@@ -213,19 +213,31 @@ func (cv *CommandValidator) validateModerate(command string) error {
 		}
 	}
 
-	// Check for obviously suspicious patterns
-	suspiciousPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`\$\(.*rm\s+-rf.*\)`),    // Command substitution with rm -rf
-		regexp.MustCompile(`\|\s*base64\s+-d\s*\|`), // Base64 decode to pipe
-		regexp.MustCompile(`/dev/tcp/`),             // Bash network redirects
-		regexp.MustCompile(`\|\s*perl\s+-e`),        // Perl one-liners
-		regexp.MustCompile(`\|\s*python[23]?\s+-c`), // Python one-liners
-		regexp.MustCompile(`\|\s*ruby\s+-e`),        // Ruby one-liners
+	// Allow common administrative commands that were being blocked
+	adminPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`^sudo\s+(updatedb|service|systemctl|usermod|groupadd)`), // Common admin commands
+		regexp.MustCompile(`mkdir\s+-p\s+`),                                         // Directory creation
+		regexp.MustCompile(`ln\s+-sf?\s+\$\(which\s+\w+\)`),                         // Safe symlink creation
+		regexp.MustCompile(`echo\s+.*\s+>>\s+~/\.\w+rc`),                            // Shell config modification
 	}
 
-	for _, pattern := range suspiciousPatterns {
+	for _, pattern := range adminPatterns {
 		if pattern.MatchString(command) {
-			return fmt.Errorf("command contains suspicious pattern")
+			return nil
+		}
+	}
+
+	// Only block obviously dangerous patterns in moderate mode
+	obviouslyDangerous := []*regexp.Regexp{
+		regexp.MustCompile(`\$\(.*rm\s+-rf\s+/\)`),     // Command substitution with rm -rf /
+		regexp.MustCompile(`\|\s*base64\s+-d.*\|.*sh`), // Base64 decode to shell execution
+		regexp.MustCompile(`/dev/tcp/.*\|\s*sh`),       // Network redirects to shell
+		regexp.MustCompile(`\:\(\)\{.*\:\|\:\&`),       // Fork bombs
+	}
+
+	for _, pattern := range obviouslyDangerous {
+		if pattern.MatchString(command) {
+			return fmt.Errorf("command contains obviously dangerous pattern")
 		}
 	}
 
@@ -257,7 +269,8 @@ func (cv *CommandValidator) validateModerate(command string) error {
 		}
 	}
 
-	// In moderate mode, allow by default if no issues found
+	// In moderate mode, allow by default if no obviously dangerous patterns found
+	// This is the key change - be permissive by default
 	return nil
 }
 

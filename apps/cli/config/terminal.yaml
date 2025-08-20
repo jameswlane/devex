@@ -826,6 +826,7 @@ terminal_applications:
           - os: 'debian'
           - os: 'ubuntu'
         post_install:
+          - shell: 'mkdir -p ~/.local/bin'
           - shell: 'ln -sf $(which fdfind) ~/.local/bin/fd'
         alternatives:
           - install_method: 'dnf'
