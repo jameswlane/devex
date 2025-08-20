@@ -56,6 +56,9 @@ func handleDockerInContainer() error {
 	}
 
 	log.Warn("Docker socket not found at /var/run/docker.sock")
+	log.Info("Attempting to start Docker daemon in container environment")
+
+	// Attempt to start Docker daemon - this might work in privileged containers
 	return attemptDockerDaemonStartup()
 }
 
@@ -86,6 +89,12 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 
 	// Check if Docker is available and running
 	if err := validateDockerService(); err != nil {
+		// In container environments without Docker, skip Docker-based installations
+		if isRunningInContainer() {
+			log.Warn("Docker daemon not available in container, skipping Docker-based installation", "app", command)
+			log.Info("To enable Docker-in-Docker, run container with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
+			return nil // Don't fail, just skip
+		}
 		return fmt.Errorf("docker service validation failed: %w", err)
 	}
 

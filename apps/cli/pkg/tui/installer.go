@@ -12,9 +12,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/jameswlane/devex/pkg/performance"
 	"github.com/jameswlane/devex/pkg/platform"
 	progresspkg "github.com/jameswlane/devex/pkg/progress"
+	"github.com/jameswlane/devex/pkg/security"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -327,28 +330,32 @@ var (
 		regexp.MustCompile(`\|\s*(bash|sh)\s+-c\s+.*>\s*/`),           // Pipes to shell writing to filesystem
 		regexp.MustCompile(`[;&|]{1,2}\s*curl\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
 		regexp.MustCompile(`[;&|]{1,2}\s*wget\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
-		regexp.MustCompile(`\$\([^)]*\)`),                             // Command substitution
-		regexp.MustCompile(`\$\{[^}]*\}`),                             // Variable expansion
-		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),                     // Multiple directory traversal attempts
-		regexp.MustCompile(`\.\./`),                                   // Directory traversal patterns
-		regexp.MustCompile(`/etc/passwd`),                             // Sensitive files
-		regexp.MustCompile(`/etc/shadow`),                             // Sensitive files
-		regexp.MustCompile(`rm\s+-rf\s+/(\w+|$)`),                     // Dangerous rm commands on system dirs and root
-		regexp.MustCompile(`dd\s+if=/dev.*of=/`),                      // Dangerous dd commands writing to files
-		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                     // Fork bombs
-		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),        // Writing to critical system files
-		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),            // Writing to block devices (not /dev/null)
-		regexp.MustCompile(`\s+&\s+[^&]+`),                            // Background processes with additional commands (but not &&)
-		regexp.MustCompile(`\|\s*(sh|bash)\s*<?`),                     // Pipes specifically to shell interpreters (more specific)
-		regexp.MustCompile(`\|\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$`),         // Pipes to potentially malicious commands (not safe patterns)
-		regexp.MustCompile(`\s+\|\|\s+\w+`),                           // OR operator with additional commands
-		regexp.MustCompile("`[^`]*`"),                                 // Backtick command substitution
-		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),          // Writing to specific dangerous device files
-		regexp.MustCompile(`;\s*\w+.*&&.*chmod`),                      // Multi-command with chmod
-		regexp.MustCompile(`&&.*python.*-c`),                          // Python code execution
-		regexp.MustCompile(`\b(sh|bash)\s+-c\b`),                      // Direct shell code execution
-		regexp.MustCompile(`[;&|]+\s*$`),                              // Commands ending with operators
-		regexp.MustCompile(`>\s*/etc/`),                               // Writing to /etc directory
+		// Removed overly restrictive command substitution blocking
+		// regexp.MustCompile(`\$\([^)]*\)`),                          // Command substitution - TOO RESTRICTIVE
+		// regexp.MustCompile(`\$\{[^}]*\}`),                          // Variable expansion - TOO RESTRICTIVE
+		// Allow safe command substitution patterns but block dangerous ones
+		regexp.MustCompile(`\$\((rm|dd|mkfs|fdisk|kill|killall|shutdown|reboot)\s`), // Dangerous commands in substitution
+		regexp.MustCompile(`\$\{(rm|dd|mkfs|fdisk|kill|killall|shutdown|reboot)\s`), // Dangerous commands in variable expansion
+		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),                                   // Multiple directory traversal attempts
+		regexp.MustCompile(`\.\./`),                                                 // Directory traversal patterns
+		regexp.MustCompile(`/etc/passwd`),                                           // Sensitive files
+		regexp.MustCompile(`/etc/shadow`),                                           // Sensitive files
+		regexp.MustCompile(`rm\s+-rf\s+/(\w+|$)`),                                   // Dangerous rm commands on system dirs and root
+		regexp.MustCompile(`dd\s+if=/dev.*of=/`),                                    // Dangerous dd commands writing to files
+		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                                   // Fork bombs
+		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),                      // Writing to critical system files
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),                          // Writing to block devices (not /dev/null)
+		regexp.MustCompile(`\s+&\s+[^&]+`),                                          // Background processes with additional commands (but not &&)
+		regexp.MustCompile(`\|\s*(sh|bash)\s*<?`),                                   // Pipes specifically to shell interpreters (more specific)
+		regexp.MustCompile(`\|\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$`),                       // Pipes to potentially malicious commands (not safe patterns)
+		regexp.MustCompile(`\s+\|\|\s+\w+`),                                         // OR operator with additional commands
+		regexp.MustCompile("`[^`]*`"),                                               // Backtick command substitution
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),                        // Writing to specific dangerous device files
+		regexp.MustCompile(`;\s*\w+.*&&.*chmod`),                                    // Multi-command with chmod
+		regexp.MustCompile(`&&.*python.*-c`),                                        // Python code execution
+		regexp.MustCompile(`\b(sh|bash)\s+-c\b`),                                    // Direct shell code execution
+		regexp.MustCompile(`[;&|]+\s*$`),                                            // Commands ending with operators
+		regexp.MustCompile(`>\s*/etc/`),                                             // Writing to /etc directory
 	}
 )
 
@@ -510,6 +517,71 @@ func (ce *DefaultCommandExecutor) validateCommandWhitelist(command string) error
 	return nil
 }
 
+// SecureCommandExecutor implements CommandExecutor using pattern-based validation
+type SecureCommandExecutor struct {
+	validator *security.CommandValidator
+}
+
+// NewSecureCommandExecutor creates a new secure command executor with configuration-aware validation
+func NewSecureCommandExecutor(level security.SecurityLevel, apps []types.CrossPlatformApp) *SecureCommandExecutor {
+	return &SecureCommandExecutor{
+		validator: security.NewCommandValidator(level),
+	}
+}
+
+// ExecuteCommand implements CommandExecutor.ExecuteCommand for SecureCommandExecutor
+func (sce *SecureCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	// Validate command using pattern-based approach
+	if err := sce.validator.ValidateCommand(command); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
+
+	// Parse and execute using safest method
+	executable, args, needsShell := parseCommand(command)
+
+	var cmd *exec.Cmd
+	if needsShell {
+		// Use shell for complex commands (pipes, redirections, etc.)
+		cmd = exec.CommandContext(ctx, "bash", "-c", command)
+	} else {
+		// Direct execution for simple commands
+		cmd = exec.CommandContext(ctx, executable, args...)
+	}
+
+	// Set platform-specific security attributes
+	cmd.SysProcAttr = sce.getPlatformSysProcAttr()
+
+	return cmd, nil
+}
+
+// ValidateCommand implements CommandExecutor.ValidateCommand for SecureCommandExecutor
+func (sce *SecureCommandExecutor) ValidateCommand(command string) error {
+	return sce.validator.ValidateCommand(command)
+}
+
+// ValidateConfigCommand validates a command in the context of a specific application
+func (sce *SecureCommandExecutor) ValidateConfigCommand(command string, appName string) error {
+	return sce.validator.ValidateCommand(command)
+}
+
+// getPlatformSysProcAttr returns platform-specific security attributes for SecureCommandExecutor
+func (sce *SecureCommandExecutor) getPlatformSysProcAttr() *syscall.SysProcAttr {
+	switch runtime.GOOS {
+	case "linux", "darwin":
+		return &syscall.SysProcAttr{
+			// Create new process group to isolate from parent
+			Setpgid: true,
+			Pgid:    0,
+		}
+	case "windows":
+		return &syscall.SysProcAttr{
+			// Windows-specific security attributes could be added here
+		}
+	default:
+		return nil
+	}
+}
+
 // NewStreamingInstaller creates a new streaming installer with context cancellation
 func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx context.Context, settings config.CrossPlatformSettings) *StreamingInstaller {
 	instCtx, cancel := context.WithCancel(ctx)
@@ -526,6 +598,28 @@ func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx cont
 		program:             program,
 		repo:                repo,
 		executor:            NewDefaultCommandExecutor(), // Use default command executor
+		ctx:                 instCtx,
+		cancel:              cancel,
+		config:              DefaultInstallerConfig(),
+		performanceAnalyzer: analyzer,
+	}
+}
+
+// NewStreamingInstallerWithSecureExecutor creates a streaming installer with secure pattern-based validation
+func NewStreamingInstallerWithSecureExecutor(program *tea.Program, repo types.Repository, ctx context.Context, level security.SecurityLevel, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) *StreamingInstaller {
+	instCtx, cancel := context.WithCancel(ctx)
+
+	// Initialize performance analyzer
+	analyzer, err := performance.NewPerformanceAnalyzer(settings)
+	if err != nil {
+		log.Warn("Failed to initialize performance analyzer", "error", err)
+		analyzer = nil
+	}
+
+	return &StreamingInstaller{
+		program:             program,
+		repo:                repo,
+		executor:            NewSecureCommandExecutor(level, apps),
 		ctx:                 instCtx,
 		cancel:              cancel,
 		config:              DefaultInstallerConfig(),

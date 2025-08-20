@@ -332,7 +332,7 @@ func TestStreamingInstaller_ContextCancellationIntegration(t *testing.T) {
 
 	// Should get context.Canceled error immediately
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled) || errors.Is(err, context.Canceled),
+	assert.True(t, errors.Is(err, context.Canceled),
 		"Expected context.Canceled, got: %v", err)
 
 	// Commands should not have been executed
@@ -472,7 +472,7 @@ func TestStreamingInstaller_SleepCancellation(t *testing.T) {
 
 	// Should get context.Canceled error immediately
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, context.Canceled) || errors.Is(err, context.Canceled),
+	assert.True(t, errors.Is(err, context.Canceled),
 		"Expected context.Canceled, got: %v", err)
 
 	// Commands should not have been executed
