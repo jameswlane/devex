@@ -200,3 +200,23 @@ func TestCommandValidator_ShellBuiltins(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandValidator_MaliciousKeywords(t *testing.T) {
+	validator := NewCommandValidator(SecurityLevelModerate)
+
+	maliciousCommands := []string{
+		"echo $(malicious_command)",
+		"echo $(evil_script)",
+		"echo $(hack_attempt)",
+		"ln -s $(malicious_tool) /usr/bin/tool",
+	}
+
+	for _, cmd := range maliciousCommands {
+		t.Run("should_block_"+cmd, func(t *testing.T) {
+			err := validator.ValidateCommand(cmd)
+			if err == nil {
+				t.Errorf("Command with malicious keyword '%s' should be blocked", cmd)
+			}
+		})
+	}
+}

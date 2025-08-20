@@ -76,6 +76,11 @@ func (cv *CommandValidator) initializePatterns() {
 
 		// Dangerous commands in command substitution
 		regexp.MustCompile(`\$\(\s*(rm\s+-rf|dd\s+.*of=|mkfs)\b`),
+
+		// Block command substitution with suspicious keywords
+		regexp.MustCompile(`\$\([^)]*malicious[^)]*\)`), // Contains "malicious" keyword
+		regexp.MustCompile(`\$\([^)]*evil[^)]*\)`),      // Contains "evil" keyword
+		regexp.MustCompile(`\$\([^)]*hack[^)]*\)`),      // Contains "hack" keyword
 	}
 
 	// Safe patterns that should generally be allowed

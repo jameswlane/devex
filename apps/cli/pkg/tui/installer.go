@@ -264,8 +264,10 @@ func (ss *SecureString) Clear() {
 	ss.data = nil
 }
 
+// Legacy validation variables removed - now using security package
+//
+//nolint:unused // Legacy code will be removed in next cleanup
 var (
-	// allowedCommands defines safe commands that can be executed
 	allowedCommands = map[string]bool{
 		CmdApt:              true,
 		CmdAptGet:           true,
@@ -457,65 +459,14 @@ func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command st
 	return cmd, nil
 }
 
-// ValidateCommand implements CommandExecutor.ValidateCommand
+// ValidateCommand implements CommandExecutor.ValidateCommand using the new security package
 func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
-	// Check for safe patterns first (GPG keys and system info)
-	safePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`bash\s+-c\s+'\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+'`),                                                // OS release info
-		regexp.MustCompile(`bash\s+-c\s+"\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+"`),                                                // OS release info (double quotes)
-		regexp.MustCompile(`curl\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with curl and apt-key
-		regexp.MustCompile(`wget\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with wget and apt-key
-		regexp.MustCompile(`curl\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with curl
-		regexp.MustCompile(`wget\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with wget
-		regexp.MustCompile(`bash\s+-c\s+'[^']*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^']*'`),                     // Mise PATH setup and commands (single quotes)
-		regexp.MustCompile(`bash\s+-c\s+"[^"]*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^"]*"`),                     // Mise PATH setup and commands (double quotes)
-		regexp.MustCompile(`bash\s+-c\s+'[^']*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^']*'`), // Mise conditional installation (single quotes)
-		regexp.MustCompile(`bash\s+-c\s+"[^"]*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^"]*"`), // Mise conditional installation (double quotes)
-	}
-
-	// If it matches a safe pattern, allow it
-	for _, safePattern := range safePatterns {
-		if safePattern.MatchString(command) {
-			// Still need to check the command is whitelisted
-			return ce.validateCommandWhitelist(command)
-		}
-	}
-
-	// Check for dangerous patterns
-	for _, pattern := range dangerousPatterns {
-		if pattern.MatchString(command) {
-			return fmt.Errorf("command contains potentially dangerous pattern: %s", pattern.String())
-		}
-	}
-
-	return ce.validateCommandWhitelist(command)
+	// Use the new security validation package with moderate security level
+	validator := security.NewCommandValidator(security.SecurityLevelModerate)
+	return validator.ValidateCommand(command)
 }
 
-// validateCommandWhitelist validates that the command is in the whitelist
-func (ce *DefaultCommandExecutor) validateCommandWhitelist(command string) error {
-	// Parse command and validate the first word
-	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
-	}
-
-	// Handle sudo commands specially
-	if parts[0] == "sudo" {
-		if len(parts) < 2 {
-			return fmt.Errorf("sudo command missing actual command")
-		}
-		// Validate the command after sudo
-		actualCommand := parts[1]
-		if !allowedCommands[actualCommand] {
-			return fmt.Errorf("sudo command '%s' is not in allowed list", actualCommand)
-		}
-	} else if !allowedCommands[parts[0]] {
-		// Validate regular commands
-		return fmt.Errorf("command '%s' is not in allowed list", parts[0])
-	}
-
-	return nil
-}
+// validateCommandWhitelist function removed - now using security package
 
 // SecureCommandExecutor implements CommandExecutor using pattern-based validation
 type SecureCommandExecutor struct {
