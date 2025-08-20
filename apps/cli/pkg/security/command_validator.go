@@ -55,7 +55,7 @@ func (cv *CommandValidator) initializePatterns() {
 		regexp.MustCompile(`\bmkfs\b.*\b/dev/`),
 
 		// Fork bombs and resource exhaustion
-		regexp.MustCompile(`:\(\)\{.*:\|:&\}`),
+		regexp.MustCompile(`:\(\)\{.*:\|:&.*\};:`),
 		regexp.MustCompile(`\.\s+/dev/zero`),
 
 		// Privilege escalation attempts
@@ -67,12 +67,15 @@ func (cv *CommandValidator) initializePatterns() {
 		regexp.MustCompile(`>\s*/boot/`),
 
 		// Network attacks
-		regexp.MustCompile(`\bnc\s+.*\s+-e\s+/bin/(bash|sh)`), // Reverse shells
+		regexp.MustCompile(`\bnc\s+.*-e\s+/bin/(bash|sh)`), // Reverse shells
 		regexp.MustCompile(`\bpython.*\s+-c.*socket.*connect`),
 
 		// Code injection in specific contexts
-		regexp.MustCompile(`;\s*curl\s+.*\|\s*(bash|sh)\b`),
-		regexp.MustCompile(`;\s*wget\s+.*\|\s*(bash|sh)\b`),
+		regexp.MustCompile(`\bcurl\s+.*\|\s*(bash|sh)\b`),
+		regexp.MustCompile(`\bwget\s+.*\|\s*(bash|sh)\b`),
+
+		// Dangerous commands in command substitution
+		regexp.MustCompile(`\$\(\s*(rm\s+-rf|dd\s+.*of=|mkfs)\b`),
 	}
 
 	// Safe patterns that should generally be allowed
