@@ -624,34 +624,37 @@ devex config inheritance debug
 5. **Document changes** with meaningful commit messages
 </Callout>
 
-### Recommended Workflow
-
 <Steps>
-  <Step>**Backup Current Configuration**
+  <Step>
+    ### Backup Current Configuration
     ```bash
     devex config backup create --name "before-changes"
     ```
   </Step>
   
-  <Step>**Make Changes Safely**
+  <Step>
+    ### Make Changes Safely
     ```bash
     devex config edit applications --backup
     ```
   </Step>
   
-  <Step>**Validate Changes**
+  <Step>
+    ### Validate Changes
     ```bash
     devex config validate --strict
     ```
   </Step>
   
-  <Step>**Test with Dry Run**
+  <Step>
+    ### Test with Dry Run
     ```bash
     devex install --dry-run
     ```
   </Step>
   
-  <Step>**Apply if Successful**
+  <Step>
+    ### Apply if Successful
     ```bash
     devex install
     ```

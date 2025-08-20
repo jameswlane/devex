@@ -611,34 +611,37 @@ devex add --sync-template backend-team
 5. **Document custom applications** for team sharing
 </Callout>
 
-### Recommended Workflow
-
 <Steps>
-  <Step>**Plan Changes**
+  <Step>
+    ### Plan Changes
     ```bash
     devex add docker vscode --dry-run
     ```
   </Step>
   
-  <Step>**Create Backup**
+  <Step>
+    ### Create Backup
     ```bash
     devex config backup create --name "before-dev-tools"
     ```
   </Step>
   
-  <Step>**Apply Changes**
+  <Step>
+    ### Apply Changes
     ```bash
     devex add docker vscode --install
     ```
   </Step>
   
-  <Step>**Verify Results**
+  <Step>
+    ### Verify Results
     ```bash
     devex status
     ```
   </Step>
   
-  <Step>**Test Environment**
+  <Step>
+    ### Test Environment
     ```bash
     docker --version
     code --version

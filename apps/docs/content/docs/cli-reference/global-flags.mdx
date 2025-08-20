@@ -509,24 +509,27 @@ devex
 
 ## Configuration Priority
 
-DevEx follows a clear priority order when determining configuration values:
-
 <Steps>
-  <Step>**Command Line Flags** (Highest Priority)
+  <Step>
+    DevEx follows a clear priority order when determining configuration values:
+    
+    ### Command Line Flags (Highest Priority)
     ```bash
     devex install --config-dir ./custom
     # Always uses ./custom regardless of environment variables
     ```
   </Step>
   
-  <Step>**Environment Variables**
+  <Step>
+    ### Environment Variables
     ```bash
     export DEVEX_CONFIG_DIR=./team-config
     devex install  # Uses ./team-config
     ```
   </Step>
   
-  <Step>**Configuration Files**
+  <Step>
+    ### Configuration Files
     ```yaml
     # ~/.devex/config.yaml
     defaults:
@@ -535,7 +538,8 @@ DevEx follows a clear priority order when determining configuration values:
     ```
   </Step>
   
-  <Step>**Built-in Defaults** (Lowest Priority)
+  <Step>
+    ### Built-in Defaults (Lowest Priority)
     ```
     Default values hardcoded in DevEx
     ```
