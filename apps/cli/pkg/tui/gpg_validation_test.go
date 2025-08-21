@@ -3,13 +3,17 @@ package tui
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/jameswlane/devex/pkg/security"
+	"github.com/jameswlane/devex/pkg/types"
 )
 
 var _ = Describe("GPG Key Command Validation", func() {
-	var executor *DefaultCommandExecutor
+	var executor *SecureCommandExecutor
 
 	BeforeEach(func() {
-		executor = NewDefaultCommandExecutor()
+		// Use permissive security level for tests that expect permissive behavior
+		executor = NewSecureCommandExecutor(security.SecurityLevelPermissive, []types.CrossPlatformApp{})
 	})
 
 	Context("Safe GPG key installation commands", func() {

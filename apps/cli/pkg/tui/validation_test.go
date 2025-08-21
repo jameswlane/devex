@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/security"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -217,5 +218,6 @@ func createTestInstallerGinkgo() *StreamingInstaller {
 		Verbose: false,
 	}
 
-	return NewStreamingInstaller(program, mockRepo, ctx, settings)
+	// Use permissive security level for tests that expect permissive behavior
+	return NewStreamingInstallerWithSecureExecutor(program, mockRepo, ctx, security.SecurityLevelPermissive, []types.CrossPlatformApp{}, settings)
 }
