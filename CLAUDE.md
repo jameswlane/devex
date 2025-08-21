@@ -1,282 +1,613 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with the DevEx CLI codebase, following enterprise Go CLI best practices.
 
 ## Project Overview
 
-DevEx is a monorepo containing:
+DevEx is a monorepo containing a production-ready CLI tool built with modern Go patterns:
 
-1. **CLI Tool** (`apps/cli/`) - A Go CLI tool for streamlining development environment setup. It manages application installations, programming language configurations, themes, and GNOME settings through YAML configuration files.
+1. **CLI Tool** (`apps/cli/`) - Enterprise-grade Go CLI using Cobra + Viper for streamlined development environment setup
+2. **Website** (`apps/web/`) - Next.js marketing site hosted at devex.sh  
+3. **Documentation** (`apps/docs/`) - Technical documentation built with MDX
 
-2. **Website** (`apps/web/`) - A Next.js website hosted at devex.sh for project information and documentation.
+## CLI Architecture & Best Practices
 
-3. **Documentation** (`apps/docs/`) - Technical documentation site built with MDX and Next.js.
+### Enterprise CLI Patterns
 
-## Monorepo Structure
+The DevEx CLI follows 12-Factor App methodology and enterprise patterns:
 
-When working in this repository, understand the workspace structure:
-- Use `pnpm` for workspace management and Node.js dependencies
-- Use `task` for CLI development tasks (in `apps/cli/`)
-- Each app has its own development workflow and dependencies
+**Configuration Hierarchy** (highest to lowest precedence):
+1. Command-line flags (`--port 3000`)
+2. Environment variables (`DEVEX_PORT=9000`) 
+3. Configuration files (`~/.devex/config.yaml`)
+4. Sensible defaults
 
-## Development Commands
+**Project Structure** (follows Cobra enterprise patterns):
+```
+apps/cli/
+├── cmd/                    # Cobra command definitions
+│   ├── root.go            # Root command with PersistentPreRunE
+│   ├── install.go         # Feature commands
+│   └── system.go          
+├── internal/              # Private application code
+│   ├── cli/               # CLI-specific logic
+│   └── config/            # Configuration management
+├── pkg/                   # Public packages
+│   ├── commands/          # Command implementations
+│   ├── installers/        # Platform-specific installers
+│   ├── types/             # Core data structures
+│   └── config/            # Viper configuration
+├── config/                # Default YAML configurations
+├── migrations/            # Database schema migrations
+└── docs/                  # Auto-generated CLI documentation
+```
 
-### CLI Development (apps/cli/)
+### Command Design Patterns
+
+**Standard Command Pattern**:
+```go
+package cmd
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/spf13/viper"
+)
+
+var installCmd = &cobra.Command{
+    Use:   "install [apps...]",
+    Short: "Install development applications",
+    Long:  "Install applications with cross-platform package manager support",
+    Example: `  # Install default applications
+  devex install
+
+  # Install specific applications  
+  devex install docker git vscode`,
+    Args: cobra.ArbitraryArgs,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        // Get config from Viper (not flags directly)
+        verbose := viper.GetBool("verbose")
+        dryRun := viper.GetBool("dry-run")
+        
+        return executeInstall(cmd.Context(), args, verbose, dryRun)
+    },
+}
+
+func init() {
+    // Define flags
+    installCmd.Flags().Bool("dry-run", false, "show what would be installed")
+    installCmd.Flags().StringSlice("categories", nil, "install apps from categories")
+    
+    // Bind flags to Viper for hierarchical config
+    viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run"))
+    viper.BindPFlag("categories", installCmd.Flags().Lookup("categories"))
+    
+    rootCmd.AddCommand(installCmd)
+}
+```
+
+**Configuration Integration** (in `cmd/root.go`):
+```go
+var rootCmd = &cobra.Command{
+    Use: "devex",
+    PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+        return initializeConfig(cmd)
+    },
+}
+
+func initializeConfig(cmd *cobra.Command) error {
+    // 1. Environment variables
+    viper.SetEnvPrefix("DEVEX")
+    viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
+    viper.AutomaticEnv()
+    
+    // 2. Configuration file
+    if cfgFile != "" {
+        viper.SetConfigFile(cfgFile)
+    } else {
+        home, _ := os.UserHomeDir()
+        viper.AddConfigPath(".")
+        viper.AddConfigPath(home + "/.devex")
+        viper.AddConfigPath(home + "/.local/share/devex/config")
+        viper.SetConfigName("config")
+        viper.SetConfigType("yaml")
+    }
+    
+    // 3. Read config file (ignore if not found)
+    if err := viper.ReadInConfig(); err != nil {
+        var configFileNotFoundError viper.ConfigFileNotFoundError
+        if !errors.As(err, &configFileNotFoundError) {
+            return err
+        }
+    }
+    
+    // 4. Bind all flags to Viper
+    return viper.BindPFlags(cmd.Flags())
+}
+```
+
+### Development Workflow
+
 All CLI development should be done in the `apps/cli/` directory:
 
 ```bash
 cd apps/cli
 
-# Default development workflow (lint + test)
-task
+# Development workflow
+task                    # Default: lint + test
+task build             # Production build to bin/devex
+task build:local       # Development build
+task install           # Install locally
 
-# Install and build locally
-task install
+# Testing (Ginkgo BDD framework)
+task test              # All tests
+task test:ginkgo       # Ginkgo BDD tests only
+ginkgo run ./pkg/commands/  # Specific package tests
 
-# Run specific test types
-task test          # Standard Go tests
-task test:ginkgo   # Ginkgo BDD tests
-task test:testify  # Testify tests
+# Code quality  
+task lint              # golangci-lint
+task lint:fix          # Auto-fix issues
+task vulncheck         # Security vulnerability scan
 
-# Build commands
-task build         # Production build to bin/devex
-task build:local   # Local development build
+# Command Generation (cobra-cli)
+cobra-cli add [command]               # Generate new command
+cobra-cli add [child] -p [parent]     # Generate child command  
+cobra-cli add config --config         # Add config command
 
-# Code quality
-task lint          # Run golangci-lint
-task lint:fix      # Auto-fix linting issues
-task lint:staticcheck  # Run staticcheck
-task gocritic      # Advanced Go analysis
-
-# Security and dependencies
-task vulncheck     # Check for vulnerabilities
-task mod           # Download and tidy Go modules
+# Documentation generation
+go run ./internal/tools/docgen -out ./docs/cli -format markdown
 ```
+
+### Configuration System
+
+**4 Core Configuration Files** (in `apps/cli/config/`):
+- `applications.yaml` - Cross-platform application definitions
+- `environment.yaml` - Programming languages, fonts, shells  
+- `desktop.yaml` - Desktop environment settings (GNOME, KDE, macOS)
+- `system.yaml` - Git, SSH, terminal configurations
+
+**Configuration Features**:
+- **12-Factor compliant**: Environment variable overrides
+- **Cross-platform**: Linux, macOS, Windows support
+- **User overrides**: `~/.devex/` overrides defaults
+- **Validation**: Built-in YAML schema validation
+- **Auto-discovery**: Platform and desktop environment detection
+
+### Installation System Architecture
+
+**Installer Interface** (from `pkg/types/types.go`):
+```go
+type Installer interface {
+    Install(ctx context.Context, app types.CrossPlatformApp) error
+    Uninstall(ctx context.Context, app types.CrossPlatformApp) error
+    IsInstalled(ctx context.Context, app types.CrossPlatformApp) (bool, error)
+    GetName() string
+    GetPriority() int
+    CanInstall(app types.CrossPlatformApp) bool
+}
+```
+
+**Platform Installers** (in `pkg/installers/`):
+- **Linux**: apt, dnf, pacman, zypper, flatpak, snap
+- **Cross-platform**: mise, curlpipe, docker, pip
+- **macOS**: brew, mas (Mac App Store)
+- **Windows**: winget, chocolatey, scoop (planned)
+
+**Installer Priority System**:
+1. Platform-specific package managers (highest priority)
+2. Universal package managers (flatpak, snap)
+3. Language-specific managers (mise, pip)
+4. Direct download methods (curlpipe)
+
+### Error Handling & Observability
+
+**Error Handling Patterns**:
+```go
+// Use RunE for proper error propagation
+var myCmd = &cobra.Command{
+    RunE: func(cmd *cobra.Command, args []string) error {
+        ctx := cmd.Context()
+        
+        if err := validateInputs(args); err != nil {
+            return fmt.Errorf("invalid inputs: %w", err)
+        }
+        
+        return executeOperation(ctx, args)
+    },
+}
+
+func init() {
+    // Prevent usage spam on runtime errors
+    myCmd.SilenceUsage = true
+}
+```
+
+**Context & Tracing** (for observability):
+```go
+import (
+    "go.opentelemetry.io/otel"
+    "go.opentelemetry.io/otel/trace"
+)
+
+var tracer = otel.Tracer("devex")
+
+func executeInstall(ctx context.Context, apps []string) error {
+    ctx, span := tracer.Start(ctx, "install_command",
+        trace.WithAttributes(
+            attribute.StringSlice("apps", apps),
+            attribute.String("platform", runtime.GOOS),
+        ),
+    )
+    defer span.End()
+    
+    for _, app := range apps {
+        if err := installApp(ctx, app); err != nil {
+            span.RecordError(err)
+            return fmt.Errorf("failed to install %s: %w", app, err)
+        }
+    }
+    
+    span.SetStatus(codes.Ok, "Installation completed")
+    return nil
+}
+```
+
+### Testing Framework (Ginkgo BDD)
+
+**CRITICAL**: Use Ginkgo BDD exclusively - no mixing with standard Go tests:
+
+```go
+// pkg/commands/install_suite_test.go
+package commands_test
+
+import (
+    "testing"
+    . "github.com/onsi/ginkgo/v2"
+    . "github.com/onsi/gomega"
+)
+
+func TestCommands(t *testing.T) {
+    RegisterFailHandler(Fail)
+    RunSpecs(t, "Commands Suite")
+}
+
+// pkg/commands/install_test.go  
+var _ = Describe("Install Command", func() {
+    var (
+        installer *mocks.MockInstaller
+        cmd       *cobra.Command
+    )
+    
+    BeforeEach(func() {
+        installer = mocks.NewMockInstaller()
+        cmd = NewInstallCommand(installer)
+    })
+    
+    Context("when installing applications", func() {
+        It("should install default applications", func() {
+            err := cmd.Execute()
+            Expect(err).ToNot(HaveOccurred())
+            Expect(installer.InstallCalls).To(HaveLen(3))
+        })
+        
+        It("should handle installation failures gracefully", func() {
+            installer.ShouldFail = true
+            err := cmd.Execute()
+            Expect(err).To(HaveOccurred())
+            Expect(err.Error()).To(ContainSubstring("installation failed"))
+        })
+    })
+})
+```
+
+### Security & Validation
+
+**Input Validation** (minimal but essential):
+```go
+func validateCommand(command string) error {
+    // Only block obviously destructive commands
+    dangerousPatterns := []*regexp.Regexp{
+        regexp.MustCompile(`\brm\s+(-[rfRi]*\s+)*(/|/home|/usr|/var|/etc)\s*$`),
+        regexp.MustCompile(`\bdd\s+.*\bof=/dev/(sd[a-z]|hd[a-z]|nvme\d+n\d+)\b`),
+        regexp.MustCompile(`\bmkfs\b.*\b/dev/`),
+        regexp.MustCompile(`:\(\)\{.*:\|:&.*\};:`), // fork bombs
+    }
+    
+    for _, pattern := range dangerousPatterns {
+        if pattern.MatchString(command) {
+            return fmt.Errorf("command contains potentially dangerous pattern")
+        }
+    }
+    
+    return nil // Allow by default - focus on functionality
+}
+```
+
+**Context-Aware Execution**:
+```go
+// Always use CommandContext for cancellation support
+func executeShellCommand(ctx context.Context, command string) error {
+    if err := validateCommand(command); err != nil {
+        return err
+    }
+    
+    cmd := exec.CommandContext(ctx, "sh", "-c", command)
+    return cmd.Run()
+}
+```
+
+### Auto-Generated Documentation
+
+**CLI Documentation Generation**:
+```go
+// internal/tools/docgen/main.go
+package main
+
+import (
+    "github.com/spf13/cobra/doc"
+    "example.com/devex/cmd"
+)
+
+func main() {
+    root := cmd.Root()
+    root.DisableAutoGenTag = true // Stable, reproducible files
+    
+    // Generate Markdown docs (LLM-friendly)
+    err := doc.GenMarkdownTree(root, "./docs/cli")
+    if err != nil {
+        log.Fatal(err)
+    }
+}
+```
+
+Run documentation generation:
+```bash
+go run ./internal/tools/docgen -out ./docs/cli -format markdown
+```
+
+### Flag Management Best Practices
+
+**Flag Design Patterns**:
+```go
+func init() {
+    // Local flags (command-specific)
+    installCmd.Flags().StringSlice("categories", nil, "install from categories")
+    installCmd.Flags().Bool("dry-run", false, "show what would be installed") 
+    
+    // Persistent flags (inherited by subcommands)
+    rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
+    rootCmd.PersistentFlags().String("config", "", "config file path")
+    
+    // Required flags
+    installCmd.MarkFlagRequired("categories")
+    
+    // Flag validation in PreRunE
+    installCmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+        categories, _ := cmd.Flags().GetStringSlice("categories")
+        for _, cat := range categories {
+            if !isValidCategory(cat) {
+                return fmt.Errorf("invalid category: %s", cat)
+            }
+        }
+        return nil
+    }
+    
+    // Bind to Viper for config hierarchy
+    viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
+    viper.BindPFlag("dry-run", installCmd.Flags().Lookup("dry-run"))
+}
+```
+
+### Pre-Commit & Quality Gates
+
+**🚨 MANDATORY: Never Skip Quality Checks 🚨**
+
+```bash
+# Pre-commit requirements (enforced by lefthook)
+task lint          # Must pass golangci-lint
+task test          # All tests must pass  
+task build         # Must build successfully
+
+# NEVER use these bypass flags:
+# git commit --no-verify
+# git push --no-verify
+```
+
+**If quality checks fail:**
+1. Fix the issues (don't bypass)
+2. Run `task lint:fix` for auto-fixes
+3. Address test failures properly
+4. Only commit after all checks pass
+
+### Cross-Platform Support
+
+**Platform Detection**:
+```go
+// pkg/platform/platform.go
+type PlatformInfo struct {
+    OS           string // linux, darwin, windows
+    Distribution string // ubuntu, fedora, arch, etc.
+    Version      string
+    Desktop      string // gnome, kde, xfce, etc.
+}
+
+func DetectPlatform() PlatformInfo {
+    // Auto-detect current platform
+}
+
+// Configuration selection
+func (app *CrossPlatformApp) GetOSConfig() OSConfig {
+    switch runtime.GOOS {
+    case "linux":
+        return app.Linux
+    case "darwin": 
+        return app.MacOS
+    case "windows":
+        return app.Windows
+    default:
+        return app.AllPlatforms // Fallback
+    }
+}
+```
+
+### Database & Migration System
+
+**SQLite Schema Management**:
+```sql
+-- migrations/001_initial_schema.up.sql
+CREATE TABLE apps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    version TEXT,
+    install_method TEXT,
+    installed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE schema_migrations (
+    version INTEGER PRIMARY KEY,
+    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Repository Pattern**:
+```go
+type Repository interface {
+    CreateApp(ctx context.Context, app *types.App) error
+    GetApp(ctx context.Context, name string) (*types.App, error)
+    ListApps(ctx context.Context) ([]*types.App, error)
+    DeleteApp(ctx context.Context, name string) error
+}
+```
+
+## Monorepo Structure & Development
+
+### Workspace Management
+- Use `pnpm` for workspace management and Node.js dependencies
+- Use `task` for CLI development tasks (in `apps/cli/`)
+- Each app has its own development workflow and dependencies
 
 ### Website Development (apps/web/)
 ```bash
 cd apps/web
-
-# Install dependencies
-pnpm install
-
-# Start development server
-pnpm dev
-
-# Build for production
-pnpm build
+pnpm install    # Install dependencies
+pnpm dev        # Development server
+pnpm build      # Production build
 ```
 
 ### Documentation Development (apps/docs/)
 ```bash
 cd apps/docs
-
-# Install dependencies
-pnpm install
-
-# Start development server
-pnpm start
-
-# Build static site
-pnpm build
+pnpm install    # Install dependencies
+pnpm start      # Development server  
+pnpm build      # Static site build
 ```
 
 ### Workspace Commands (Root Level)
 ```bash
-# Install all workspace dependencies
-pnpm install
-
-# Format code across all apps
-pnpm biome:format
-
-# Lint code across all apps
-pnpm biome:lint
-
-# Check formatting and linting
-pnpm biome:check
+pnpm install         # Install all workspace dependencies
+pnpm biome:format    # Format code across all apps
+pnpm biome:lint      # Lint code across all apps
+pnpm biome:check     # Check formatting and linting
 ```
 
-### Testing Commands (CLI)
+## Quick Start & Key Files
+
+### One-Line Setup
+```bash
+# Install DevEx
+wget -qO- https://devex.sh/install | bash
+
+# Development setup
+git clone https://github.com/jameswlane/devex.git
+cd devex/apps/cli
+task install
+```
+
+### Essential Files to Understand
+1. **`cmd/root.go`** - Cobra root command with PersistentPreRunE configuration
+2. **`pkg/types/types.go`** - Core data structures and interfaces
+3. **`pkg/config/`** - Viper configuration management 
+4. **`config/*.yaml`** - Default application configurations
+5. **`pkg/installers/`** - Platform-specific installer implementations
+6. **`pkg/commands/`** - Business logic for CLI commands
+7. **`internal/cli/`** - CLI-specific internal packages
+
+### Current CLI Usage Examples
+
+```bash
+# Install development environment
+devex install
+
+# Install specific categories
+devex install --categories development,databases
+
+# System configuration
+devex system apply
+
+# List available applications
+devex list apps
+
+# Show configuration
+devex config show
+
+# Generate shell completion
+devex completion bash > /etc/bash_completion.d/devex
+```
+
+## Platform Development Status
+
+**Current Priority** (Linux-first approach):
+1. ✅ **Debian/Ubuntu** (APT) - Production ready
+2. 🚧 **Fedora/RHEL** (DNF) - In development  
+3. 📋 **Arch Linux** (Pacman) - Planned
+4. 📋 **SUSE** (Zypper) - Planned
+5. 📋 **macOS** (Homebrew) - Planned
+6. 📋 **Windows** (winget/chocolatey) - Future
+
+## Adding New Features & Installers
+
+### Adding New CLI Commands
+
+**Using cobra-cli Generator (Recommended)**:
 ```bash
 cd apps/cli
 
-# Run individual test suites
-ginkgo run ./pkg/commands/            # Run Ginkgo tests for commands
+# Install cobra-cli if not present
+go install github.com/spf13/cobra-cli@latest
+
+# Generate a new command
+cobra-cli add [command]
+
+# Generate a child command  
+cobra-cli add [child] -p [parent]
+
+# Examples
+cobra-cli add backup           # Creates backup command
+cobra-cli add restore -p backup  # Creates backup restore subcommand
+cobra-cli add config --config   # Add config management command
 ```
 
-## Architecture
+**Generated Command Benefits**:
+- ✅ Follows enterprise Cobra patterns automatically
+- ✅ Includes proper license headers and imports
+- ✅ Pre-configured with RunE for error handling
+- ✅ Placeholder help text and examples
+- ✅ Consistent file structure and naming
 
-### CLI Tool Architecture (apps/cli/)
+**Post-Generation Steps**:
+1. Implement business logic in the RunE function
+2. Add appropriate flags with Viper bindings
+3. Update help text and examples
+4. Add comprehensive Ginkgo BDD tests
+5. Register command in parent (if not done automatically)
 
-**Main Entry Point**: `apps/cli/cmd/main.go`
-- Initializes logger, loads configurations, validates dependencies
-- Creates SQLite database connection and repository
-- Executes Cobra CLI commands
-
-**Configuration System**: `apps/cli/pkg/config/`
-- Uses Viper for YAML configuration loading
-- Supports default configs in `~/.local/share/devex/config/` and overrides in `~/.devex/`
-- Configuration types defined in `apps/cli/pkg/types/types.go`
-
-**Data Layer**: `apps/cli/pkg/datastore/`
-- SQLite database with schema migrations in `apps/cli/migrations/`
-- Repository pattern with interfaces in `apps/cli/pkg/types/types.go`
-- App repository handles application installation tracking
-
-**Command Structure**: `apps/cli/pkg/commands/`
-- Cobra-based CLI with root command in `root.go`
-- Subcommands: install, uninstall, system, completion
-- All commands accept `--verbose` and `--dry-run` flags
-- Comprehensive dry-run support across all operations
-
-**Installation System**: `apps/cli/pkg/installers/`
-- **Platform-specific installers**: apt (Debian/Ubuntu), dnf (Fedora/RHEL), pacman (Arch), flatpak, snap
-- **Cross-platform tools**: mise (language versions), curlpipe, docker, pip
-- **macOS support**: brew, mas (Mac App Store)
-- **Windows support**: winget, chocolatey, scoop (planned)
-- **Installer priority system**: Automatically selects best installer for current platform
-- Each installer implements the `Installer` interface from `apps/cli/pkg/types/types.go`
-- **Security features**: Input validation, shell injection prevention, context-aware execution
-- **Error resilience**: Multiple verification methods, fallback mechanisms, service validation
-
-**Validation System**: `apps/cli/pkg/commands/validation.go`
-- **Exported validation functions**: `ValidateDockerConfig`, `ValidatePath`, `ValidateShellCommand`, `ExecuteSecureShellChange`
-- **Security validation**: Directory traversal prevention, shell injection detection, input sanitization
-- **Comprehensive testing**: 59+ test cases covering security scenarios and edge cases
-- **Context-aware execution**: All command execution uses `exec.CommandContext` for proper cancellation
-
-### Key Configuration Files
-
-**Default Configurations** (in `apps/cli/config/`):
-- `applications.yaml` - All application definitions with cross-platform support (development tools, databases, system tools, optional apps)
-- `environment.yaml` - Programming languages, fonts, and shell configurations  
-- `desktop.yaml` - Desktop environment settings organized by DE type (GNOME, KDE, macOS)
-- `system.yaml` - Git configuration, SSH settings, and terminal preferences
-
-**Configuration System Features**:
-- **Cross-platform support**: Each app can define Linux, macOS, and Windows configurations
-- **User overrides**: Files in `~/.devex/` override defaults in `~/.local/share/devex/config/`
-- **Built-in validation**: YAML syntax and schema validation via `pkg/config/validation.go`
-- **Platform detection**: Automatic OS, distribution, and desktop environment detection
-
-### Website Architecture (apps/web/)
-
-**Framework**: Next.js with TypeScript
-- React components in `apps/web/app/components/`
-- Pages in `apps/web/app/` directory
-- Styling with Tailwind CSS
-- Static assets in `apps/web/public/`
-- **One-line installer**: `apps/web/public/install` (bash script)
-- **Hosted at**: https://devex.sh/
-
-### Documentation Architecture (apps/docs/)
-
-**Framework**: Fumadocs with Next.js and MDX
-- MDX documentation in `apps/docs/content/docs/`
-- React components in `apps/docs/app/components/`
-- Configuration in `apps/docs/source.config.ts`
-- Navigation structure in `apps/docs/content/docs/meta.json`
-- **Hosted at**: https://docs.devex.sh/
-
-### Testing Framework (CLI)
-
-**IMPORTANT**: The CLI project uses Ginkgo BDD testing framework exclusively:
-- **Ginkgo Only**: All tests must use Ginkgo BDD-style tests with `*_suite_test.go` files in `apps/cli/pkg/`
-- **No Standard Go Tests**: Do not mix `testing.T` with Ginkgo - this causes suite conflicts
-- **Test Structure**: Each package should have a `*_suite_test.go` file that sets up the Ginkgo test suite
-- **Individual Tests**: Create separate `*_test.go` files with Ginkgo `Describe/Context/It` blocks
-- **Mocks**: Use mocks from `apps/cli/pkg/mocks/` within Ginkgo tests
-- **Security Tests**: All security-related tests must use Ginkgo for consistency
-
-### Database Schema (CLI)
-
-SQLite database with migration system:
-- Schema versions tracked in `schema_migrations` table
-- Migration files in `apps/cli/migrations/` directory (up/down SQL files)
-- Apps table tracks installed applications
-
-## Development Guidelines
-
-### ⚠️ CRITICAL: Pre-Commit and Pre-Push Verification
-
-**🚨 NEVER SKIP PRE-COMMIT OR PRE-PUSH HOOKS 🚨**
-
-This repository has mandatory pre-commit and pre-push hooks that ensure code quality and prevent CI/CD pipeline failures. **ALWAYS** respect these verification steps:
-
-**Pre-Commit Hook Requirements:**
-- ✅ All code must pass `golangci-lint` with zero issues
-- ✅ Code formatting must be consistent (go-fmt, biome)
-- ✅ No large files or security issues
-- ✅ Import organization must be correct (go-imports)
-- ✅ End-of-file formatting must be proper
-
-**Pre-Push Hook Requirements:**
-- ✅ All tests must pass before pushing
-- ✅ Build verification must succeed
-- ✅ Security scans must pass
-
-**NEVER USE:**
-- `git commit --no-verify` 
-- `git push --no-verify`
-- `--no-hooks` flags
-- Any method to bypass verification
-
-**Why This Matters:**
-- Skipping hooks **WILL BREAK** the CI/CD pipeline
-- Failed builds waste time and resources
-- Inconsistent code causes merge conflicts
-- Security vulnerabilities may be introduced
-- Team productivity suffers from preventable failures
-
-**If Hooks Fail:**
-1. **Fix the underlying issues** - don't bypass them
-2. Run `task lint:fix` to auto-fix linting issues
-3. Run tests locally: `task test` or `task test:ginkgo`
-4. Ensure all files are properly formatted
-5. Address any security or import issues
-6. **Only commit after all checks pass**
-
-**Emergency Exceptions:**
-- If absolutely necessary, get explicit approval from team lead
-- Document the reason in the commit message
-- Create immediate follow-up issue to fix the problems
-- **This should be extremely rare**
-
-### Coding Standards & Quality
-
-**Security Requirements**:
-- Use `exec.CommandContext` instead of `exec.Command` for all command execution
-- Validate all user inputs with regex patterns and sanitization
-- Prevent directory traversal attacks in file operations
-- Escape shell metacharacters in dynamic command construction
-- Use structured command building over string concatenation
-
-**Error Handling Standards**:
-- Provide actionable error messages with specific guidance
-- Implement fallback mechanisms for critical operations (e.g., APT package verification)
-- Include hints for common resolution steps in error messages
-- Log errors with structured context using the log package
-- Validate system requirements before attempting operations
-
-**Testing Requirements**:
-- All exported validation functions must have comprehensive tests
-- Use Ginkgo BDD tests for complex behavior scenarios
-- Include edge cases and security validation in test suites
-- Test both dry-run and actual execution modes
-- Achieve meaningful test coverage for critical paths
-
-**Code Quality**:
-- All code must pass `golangci-lint` with zero issues
-- Follow Go naming conventions and documentation standards
-- Use dependency injection for better testability
-- Implement robust input validation for all public functions
-- Structure error messages following Go conventions (lowercase, no capitalization)
-
-### Working with the Monorepo
-1. Always change to the appropriate app directory before development
-2. Use `pnpm` for workspace-level commands
-3. Use app-specific package managers and tools within each app
-4. Consider cross-app dependencies and shared code
+**Manual Command Creation** (if needed):
+1. Create new command in `apps/cli/pkg/commands/[command].go`
+2. Implement proper Cobra command structure with RunE
+3. Add comprehensive flag definitions and Viper bindings
+4. Register in `apps/cli/pkg/commands/root.go`
+5. Add robust error handling with actionable messages
+6. Write Ginkgo BDD tests in `apps/cli/pkg/commands/[command]_test.go`
+7. Include comprehensive examples and help text
 
 ### Adding New CLI Installers
 1. Create new installer in `apps/cli/pkg/installers/[method]/`
@@ -286,14 +617,7 @@ This repository has mandatory pre-commit and pre-push hooks that ensure code qua
 5. Implement service/dependency validation before operations
 6. Add fallback verification mechanisms for installation checks
 7. Include specific guidance for common setup issues
-8. Add comprehensive tests covering success and failure scenarios
-
-**Installer Error Handling Patterns**:
-- Validate system requirements before attempting installation
-- Check service availability for tools requiring daemons (e.g., Docker)
-- Provide multiple verification methods with fallbacks
-- Include specific resolution steps in error messages
-- Log structured error context for debugging
+8. Add comprehensive Ginkgo tests covering success and failure scenarios
 
 ### CLI Configuration Changes
 1. Update type definitions in `apps/cli/pkg/types/types.go`
@@ -302,103 +626,79 @@ This repository has mandatory pre-commit and pre-push hooks that ensure code qua
 4. Test with both default and override scenarios
 
 ### Testing New Features
-1. **CLI**: Write Ginkgo BDD tests for complex behavior, standard Go tests for unit testing
+1. **CLI**: Write Ginkgo BDD tests for complex behavior
 2. **Website/Docs**: Follow Next.js testing conventions
 3. Generate mocks for external dependencies
 4. Test both dry-run and actual execution modes for CLI features
 
-### Cross-App Development
-When changes affect multiple apps:
-1. Update relevant documentation in each app
-2. Test all affected applications
-3. Consider versioning implications
-4. Update workspace-level configurations if needed
+## Resources & Documentation
 
-## Project Status & Roadmap
+- **Live CLI docs**: https://docs.devex.sh/
+- **Website**: https://devex.sh/
+- **Configuration examples**: See `config/*.yaml` files
+- **Testing examples**: See `pkg/commands/*_test.go` files
+- **Installer examples**: See `pkg/installers/*/` directories
 
-### Recent Major Changes (2025-01/08)
+## Security & Quality Standards
 
-1. **Configuration Consolidation**: Reduced from 11 separate config files to 4 structured files
-2. **Cross-Platform Architecture**: Modern type system supporting Linux, macOS, and Windows
-3. **Comprehensive Documentation**: Added complete configuration guides at https://docs.devex.sh/
-4. **Code Cleanup**: Removed dead code, obsolete test files, and improved maintainability
-5. **Enhanced CLI**: Added uninstall command and comprehensive dry-run support
-6. **One-Line Installer**: `wget -qO- https://devex.sh/install | bash` for quick setup
-7. **Security Hardening**: Improved shell script construction, input validation, and context-aware command execution
-8. **Robust Error Handling**: Enhanced Docker installation error handling with fallback mechanisms
-9. **Test Coverage Expansion**: Added comprehensive validation tests with 59+ test cases
-10. **Quality Standards**: Implemented golangci-lint compliance and security best practices
+### Security Requirements
+- Use `exec.CommandContext` instead of `exec.Command` for all command execution
+- Validate user inputs with minimal but essential security patterns
+- Prevent directory traversal attacks in file operations
+- Focus on functionality over restrictive security validation
 
-### Platform Priorities
+### Error Handling Standards
+- Provide actionable error messages with specific guidance
+- Implement fallback mechanisms for critical operations
+- Include hints for common resolution steps in error messages
+- Log errors with structured context using the log package
+- Validate system requirements before attempting operations
 
-Development priority order (as per ROADMAP.md):
-1. **Debian-based Linux** (Ubuntu, Debian) - Primary focus
-2. **Red Hat-based Linux** (Fedora, RHEL, CentOS) - DNF installer development
-3. **Arch-based Linux** (Arch, Manjaro) - Pacman support
-4. **SUSE-based Linux** - Zypper support  
-5. **macOS** - Homebrew and system integration
-6. **Windows 10/11** - winget and chocolatey support
+### Code Quality Requirements
+- All code must pass `golangci-lint` with zero issues
+- Follow Go naming conventions and documentation standards
+- Use dependency injection for better testability
+- Implement robust input validation for all public functions
+- Structure error messages following Go conventions
 
-### Current Development Focus
+## Cobra-CLI Setup & Configuration
 
-- **DNF installer implementation** for Red Hat-based systems
-- **Enhanced platform detection** and automatic installer selection
-- **Configuration validation improvements**
-- **Installation error handling and recovery** ✅ *Recently completed*
-
-### Completed Security & Quality Improvements (2025-08)
-
-**Security Hardening**:
-- ✅ Replaced `exec.Command` with `exec.CommandContext` throughout codebase
-- ✅ Enhanced shell script construction in mise installer with proper escaping
-- ✅ Added comprehensive input validation with regex patterns
-- ✅ Implemented directory traversal prevention in file operations
-
-**Error Handling & Resilience**:
-- ✅ Enhanced Docker installation with service validation
-- ✅ Added APT package verification fallback mechanisms  
-- ✅ Improved error messages with actionable guidance
-- ✅ Implemented Docker daemon availability checking
-
-**Testing & Quality**:
-- ✅ Exported validation functions for better testability
-- ✅ Added comprehensive validation test suite (59+ test cases)
-- ✅ Achieved zero golangci-lint issues
-- ✅ Enhanced test coverage for critical security functions
-
-## Quick Start for New Contributors
-
-### One-Line Setup
+**Initial Setup**:
 ```bash
-# Install DevEx
-wget -qO- https://devex.sh/install | bash
-
-# Or for development
-git clone https://github.com/jameswlane/devex.git
-cd devex
 cd apps/cli
-task install
+
+# Install cobra-cli globally
+go install github.com/spf13/cobra-cli@latest
+
+# Initialize cobra-cli configuration (if not done)
+cobra-cli init --pkg-name github.com/jameswlane/devex/apps/cli
+
+# Configure license and author (optional)
+cobra-cli config set license apache
+cobra-cli config set author "James Lane <email@example.com>"
 ```
 
-### Key Files to Understand
-1. **Configuration**: `apps/cli/config/*.yaml` - The 4 main config files
-2. **Types**: `apps/cli/pkg/types/types.go` - Core data structures
-3. **Installers**: `apps/cli/pkg/installers/` - Package manager implementations
-4. **Commands**: `apps/cli/pkg/commands/` - CLI command handlers
-5. **Platform**: `apps/cli/pkg/platform/platform.go` - OS/distribution detection
-6. **Validation**: `apps/cli/pkg/commands/validation.go` - Security validation functions
-7. **Installation Utilities**: `apps/cli/pkg/installers/utilities/check_install.go` - Installation verification
-8. **Theme Management**: `apps/cli/pkg/commands/theme_manager.go` - Theme and config file management
+**Project Integration**:
+- Generated commands automatically follow DevEx patterns
+- License headers match project standards  
+- Import paths use correct module structure
+- Commands integrate with existing Viper configuration
+- Follows established error handling patterns
 
-### Critical Security Files
-- `apps/cli/pkg/commands/validation.go` - Exported validation functions with comprehensive tests
-- `apps/cli/pkg/installers/utilities/check_install.go` - Installation verification with fallback methods
-- `apps/cli/pkg/installers/docker/docker.go` - Docker service validation and error handling
-- `apps/cli/pkg/installers/apt/apt.go` - APT package management with enhanced verification
-- `apps/cli/pkg/installers/mise/mise.go` - Secure shell script construction for language management
+**Best Practices with cobra-cli**:
+- Generate commands first, then implement business logic
+- Keep generated structure, customize implementation
+- Add comprehensive tests after generation
+- Update help text and examples for user clarity
+- Use descriptive command and flag names
 
-### Documentation Resources
-- **Main docs**: https://docs.devex.sh/
-- **Configuration guide**: Complete YAML configuration reference
-- **Installation guide**: Platform-specific setup instructions
-- **Usage examples**: Common workflows and team setups
+# Important Reminders
+
+- **Use cobra-cli for new commands** - ensures consistency and best practices
+- **Use Ginkgo BDD for all tests** - no mixing with standard Go tests
+- **Follow 12-Factor configuration patterns** - flags > env > config > defaults  
+- **Always use RunE for commands** - proper error handling and exit codes
+- **Implement context propagation** - use `cmd.Context()` throughout
+- **Generate documentation automatically** - keep CLI docs in sync
+- **Never skip quality gates** - pre-commit hooks are mandatory
+- **Design for cross-platform** - Linux first, but plan for macOS/Windows
