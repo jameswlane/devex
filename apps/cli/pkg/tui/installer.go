@@ -1295,8 +1295,45 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 }
 
 // streamOutput streams command output to the TUI with proper error handling
+// It handles carriage returns and progress indicators from package managers like apt
 func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
+	// Use a custom scanner that handles both \n and \r as delimiters
 	scanner := bufio.NewScanner(reader)
+
+	// Custom split function that handles both newlines and carriage returns
+	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+
+		// Look for \n or \r
+		for i := 0; i < len(data); i++ {
+			if data[i] == '\n' {
+				// Found newline, return the line including the newline
+				return i + 1, data[:i], nil
+			}
+			if data[i] == '\r' {
+				// Found carriage return
+				if i+1 < len(data) && data[i+1] == '\n' {
+					// \r\n sequence (Windows style)
+					return i + 2, data[:i], nil
+				}
+				// Just \r (progress update style)
+				return i + 1, data[:i], nil
+			}
+		}
+
+		// If we're at EOF, return what we have
+		if atEOF {
+			return len(data), data, nil
+		}
+
+		// Request more data
+		return 0, nil, nil
+	})
+
+	var currentLine string // Track the current line being updated
+
 	for scanner.Scan() {
 		// Check for context cancellation
 		select {
@@ -1307,15 +1344,66 @@ func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 		}
 
 		line := scanner.Text()
-		if strings.TrimSpace(line) != "" {
+
+		// Clean up ANSI escape sequences and control characters
+		line = cleanTerminalOutput(line)
+
+		// Skip empty lines and apt database reading progress
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Filter out apt progress messages that cause display issues
+		if strings.Contains(line, "Reading database") ||
+			strings.Contains(line, "Scanning processes") ||
+			strings.Contains(line, "Scanning candidates") ||
+			strings.Contains(line, "Scanning linux images") {
+			// These are progress indicators that update in place
+			// We'll show them once when complete
+			if strings.Contains(line, "done") || strings.Contains(line, "100%") {
+				currentLine = line
+			} else {
+				// Store but don't display intermediate progress
+				currentLine = line
+				continue
+			}
+		}
+
+		// Send the cleaned line
+		if currentLine != "" {
+			si.sendLog(source, currentLine)
+			currentLine = ""
+		} else {
 			si.sendLog(source, line)
 		}
+	}
+
+	// Send any remaining line
+	if currentLine != "" {
+		si.sendLog(source, currentLine)
 	}
 
 	// Check for scanner errors (but ignore closed pipe errors)
 	if err := scanner.Err(); err != nil && !strings.Contains(err.Error(), "file already closed") {
 		si.sendLog("ERROR", fmt.Sprintf("Scanner error in %s: %v", source, err))
 	}
+}
+
+// cleanTerminalOutput removes ANSI escape sequences and control characters
+func cleanTerminalOutput(s string) string {
+	// Remove ANSI escape sequences
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	s = ansiRegex.ReplaceAllString(s, "")
+
+	// Remove other control characters except tabs
+	var result strings.Builder
+	for _, r := range s {
+		if r == '\t' || (r >= 32 && r < 127) || r > 127 {
+			result.WriteRune(r)
+		}
+	}
+
+	return strings.TrimSpace(result.String())
 }
 
 // monitorForInput monitors stderr for password prompts and requests user input
