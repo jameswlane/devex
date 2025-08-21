@@ -410,6 +410,10 @@ func (m *Model) View() string {
 
 // renderLeftPane renders the status/progress pane
 func (m *Model) renderLeftPane(width int) string {
+	// Calculate available content height (accounting for border and padding)
+	// Border takes 2 lines (top + bottom), padding takes 2 lines (top + bottom)
+	availableHeight := m.height - 4
+
 	leftStyle := lipgloss.NewStyle().
 		Width(width).
 		Height(m.height).
@@ -418,21 +422,43 @@ func (m *Model) renderLeftPane(width int) string {
 		Padding(1)
 
 	var content strings.Builder
+	lineCount := 0
+	maxLines := availableHeight
+
+	// Helper function to add content with line counting
+	addLine := func(text string) bool {
+		if lineCount >= maxLines {
+			return false
+		}
+		content.WriteString(text)
+		content.WriteString("\n")
+		lineCount++
+		return true
+	}
 
 	// Title
-	content.WriteString(lipgloss.NewStyle().
+	if !addLine(lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("212")).
-		Render("DevEx Application Installer"))
-	content.WriteString("\n\n")
+		Render("DevEx Application Installer")) {
+		return leftStyle.Render(content.String())
+	}
+	if !addLine("") {
+		return leftStyle.Render(content.String())
+	}
 
 	// Current status
-	content.WriteString(lipgloss.NewStyle().
+	if !addLine(lipgloss.NewStyle().
 		Foreground(lipgloss.Color("246")).
-		Render("Status:"))
-	content.WriteString("\n")
-	content.WriteString(m.status)
-	content.WriteString("\n\n")
+		Render("Status:")) {
+		return leftStyle.Render(content.String())
+	}
+	if !addLine(m.status) {
+		return leftStyle.Render(content.String())
+	}
+	if !addLine("") {
+		return leftStyle.Render(content.String())
+	}
 
 	// Progress
 	if len(m.apps) > 0 {
@@ -441,159 +467,154 @@ func (m *Model) renderLeftPane(width int) string {
 		currentProgress := float64(completed) / float64(len(m.apps))
 		progressView := m.progress.ViewAs(currentProgress)
 
-		content.WriteString(lipgloss.NewStyle().
+		if !addLine(lipgloss.NewStyle().
 			Foreground(lipgloss.Color("246")).
-			Render("Progress:"))
-		content.WriteString("\n")
-		content.WriteString(progressView)
-		content.WriteString("\n")
-		content.WriteString(fmt.Sprintf("%d/%d apps", completed, len(m.apps)))
-		content.WriteString("\n\n")
+			Render("Progress:")) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine(progressView) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine(fmt.Sprintf("%d/%d apps", completed, len(m.apps))) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine("") {
+			return leftStyle.Render(content.String())
+		}
 	}
 
 	// Current app detailed information
-	if m.currentApp < len(m.apps) {
+	if m.currentApp < len(m.apps) && lineCount < maxLines-5 { // Keep some buffer space
 		app := m.apps[m.currentApp]
 		appDetails := m.getAppDetails(app)
 
 		// App Name and Category
-		content.WriteString(lipgloss.NewStyle().
+		if !addLine(lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("212")).
-			Render(fmt.Sprintf("📦 %s", appDetails.Name)))
-		content.WriteString("\n")
+			Render(fmt.Sprintf("📦 %s", appDetails.Name))) {
+			return leftStyle.Render(content.String())
+		}
 
 		if appDetails.Category != "" {
-			content.WriteString(lipgloss.NewStyle().
+			if !addLine(lipgloss.NewStyle().
 				Foreground(lipgloss.Color("246")).
 				Italic(true).
-				Render(fmt.Sprintf("Category: %s", appDetails.Category)))
-			content.WriteString("\n")
+				Render(fmt.Sprintf("Category: %s", appDetails.Category))) {
+				return leftStyle.Render(content.String())
+			}
 		}
 
-		// Description
-		content.WriteString(appDetails.Description)
-		content.WriteString("\n\n")
-
-		// Installation Details Section
-		content.WriteString(lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("214")).
-			Render("🔧 Installation Details"))
-		content.WriteString("\n")
-
-		// Installation method with icon
-		methodIcon := getMethodIcon(appDetails.InstallMethod)
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render(fmt.Sprintf("Method: %s %s", methodIcon, appDetails.InstallMethod)))
-		content.WriteString("\n")
-
-		// Official support status
-		supportStatus := "❌ Community"
-		if appDetails.OfficialSupport {
-			supportStatus = "✅ Official"
+		// Description (truncate if too long)
+		description := appDetails.Description
+		if len(description) > 100 {
+			description = description[:97] + "..."
 		}
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render(fmt.Sprintf("Support: %s", supportStatus)))
-		content.WriteString("\n")
+		if !addLine(description) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine("") {
+			return leftStyle.Render(content.String())
+		}
 
-		// Size and time estimates
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render(fmt.Sprintf("Size: %s", appDetails.EstimatedSize)))
-		content.WriteString("\n")
-
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render(fmt.Sprintf("Time: ~%s", formatDuration(appDetails.EstimatedTime))))
-		content.WriteString("\n")
-
-		// Install location
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render(fmt.Sprintf("Location: %s", appDetails.InstallLocation)))
-		content.WriteString("\n\n")
-
-		// Dependencies (if any)
-		if len(appDetails.Dependencies) > 0 {
-			content.WriteString(lipgloss.NewStyle().
+		// Installation Details Section (show only essential info to save space)
+		if lineCount < maxLines-3 {
+			if !addLine(lipgloss.NewStyle().
 				Bold(true).
 				Foreground(lipgloss.Color("214")).
-				Render("📋 Dependencies"))
-			content.WriteString("\n")
-			for _, dep := range appDetails.Dependencies {
-				content.WriteString(lipgloss.NewStyle().
-					Foreground(lipgloss.Color("246")).
-					Render(fmt.Sprintf("• %s", dep)))
-				content.WriteString("\n")
+				Render("🔧 Installation")) {
+				return leftStyle.Render(content.String())
 			}
-			content.WriteString("\n")
-		}
 
-		// Conflicts (if any)
-		if len(appDetails.Conflicts) > 0 {
-			content.WriteString(lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("203")).
-				Render("⚠️  Conflicts"))
-			content.WriteString("\n")
-			for _, conflict := range appDetails.Conflicts {
-				content.WriteString(lipgloss.NewStyle().
-					Foreground(lipgloss.Color("203")).
-					Render(fmt.Sprintf("• %s", conflict)))
-				content.WriteString("\n")
-			}
-			content.WriteString("\n")
-		}
-
-		// Time tracking
-		if !m.startTime.IsZero() {
-			elapsed := time.Since(m.startTime)
-			content.WriteString(lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("214")).
-				Render("⏱️  Timing"))
-			content.WriteString("\n")
-			content.WriteString(lipgloss.NewStyle().
+			// Installation method with icon
+			methodIcon := getMethodIcon(appDetails.InstallMethod)
+			if !addLine(lipgloss.NewStyle().
 				Foreground(lipgloss.Color("246")).
-				Render(fmt.Sprintf("Elapsed: %s", formatDuration(elapsed))))
-			content.WriteString("\n")
+				Render(fmt.Sprintf("Method: %s %s", methodIcon, appDetails.InstallMethod))) {
+				return leftStyle.Render(content.String())
+			}
 
-			// Calculate remaining time estimate
-			if len(m.apps) > 0 {
-				completed := atomic.LoadInt64(&m.completedApps)
-				if completed > 0 {
-					avgTimePerApp := elapsed / time.Duration(completed)
-					remaining := time.Duration(len(m.apps)-int(completed)) * avgTimePerApp
-					content.WriteString(lipgloss.NewStyle().
-						Foreground(lipgloss.Color("246")).
-						Render(fmt.Sprintf("Remaining: ~%s", formatDuration(remaining))))
-					content.WriteString("\n")
+			// Show size if we have space
+			if lineCount < maxLines-2 {
+				if !addLine(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("246")).
+					Render(fmt.Sprintf("Size: %s", appDetails.EstimatedSize))) {
+					return leftStyle.Render(content.String())
 				}
 			}
-			content.WriteString("\n")
+
+			if !addLine("") {
+				return leftStyle.Render(content.String())
+			}
+		}
+
+		// Show dependencies only if critical and we have space
+		if len(appDetails.Dependencies) > 0 && lineCount < maxLines-3 {
+			if !addLine(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("214")).
+				Render(fmt.Sprintf("📋 Deps (%d)", len(appDetails.Dependencies)))) {
+				return leftStyle.Render(content.String())
+			}
+			// Show max 2 dependencies to save space
+			for i, dep := range appDetails.Dependencies {
+				if i >= 2 {
+					break
+				}
+				if !addLine(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("246")).
+					Render(fmt.Sprintf("• %s", dep))) {
+					return leftStyle.Render(content.String())
+				}
+			}
+			if !addLine("") {
+				return leftStyle.Render(content.String())
+			}
+		}
+
+		// Show timing if we have space
+		if !m.startTime.IsZero() && lineCount < maxLines-2 {
+			elapsed := time.Since(m.startTime)
+			if !addLine(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("246")).
+				Render(fmt.Sprintf("⏱️  Elapsed: %s", formatDuration(elapsed)))) {
+				return leftStyle.Render(content.String())
+			}
 		}
 	}
 
-	// Input prompt
-	if m.needsInput {
-		content.WriteString(lipgloss.NewStyle().
+	// Input prompt (prioritize showing this if needed)
+	if m.needsInput && lineCount < maxLines-4 {
+		if !addLine(lipgloss.NewStyle().
 			Foreground(lipgloss.Color("203")).
 			Bold(true).
-			Render("Input Required:"))
-		content.WriteString("\n")
-		content.WriteString(m.inputPrompt)
-		content.WriteString("\n\n")
-		content.WriteString(m.textInput.View())
-		content.WriteString("\n")
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render("Press Enter to submit"))
+			Render("Input Required:")) {
+			return leftStyle.Render(content.String())
+		}
+
+		// Truncate prompt if too long
+		prompt := m.inputPrompt
+		if len(prompt) > 50 {
+			prompt = prompt[:47] + "..."
+		}
+		if !addLine(prompt) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine("") {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine(m.textInput.View()) {
+			return leftStyle.Render(content.String())
+		}
 	}
 
-	return leftStyle.Render(content.String())
+	// Fill remaining space with empty lines to prevent content jumping
+	for lineCount < maxLines {
+		content.WriteString("\n")
+		lineCount++
+	}
+
+	return leftStyle.Render(strings.TrimRight(content.String(), "\n"))
 }
 
 // getAppDetails extracts detailed information about an app for display
