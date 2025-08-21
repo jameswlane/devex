@@ -11,6 +11,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/fs"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/security"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -48,6 +49,7 @@ type CrossPlatformSettings struct {
 	Shell                ShellConfig                `mapstructure:"shell"`
 	Dotfiles             DotfilesConfig             `mapstructure:",inline"`
 	DesktopEnvironments  DesktopEnvironmentsConfig  `mapstructure:",inline"`
+	Security             SecurityConfigField        `mapstructure:"security"`
 }
 
 // ApplicationsConfig represents the application configuration
@@ -145,6 +147,24 @@ type DesktopEnvironmentsConfig struct {
 	KDE     DesktopEnvConfig `mapstructure:",inline"`
 	MacOS   DesktopEnvConfig `mapstructure:",inline"`
 	Windows DesktopEnvConfig `mapstructure:",inline"`
+}
+
+// SecurityConfigField represents security configuration within the main config
+type SecurityConfigField struct {
+	Level                int                                `mapstructure:"level"`
+	EnterpriseMode       bool                               `mapstructure:"enterprise_mode"`
+	WarnOnOverrides      bool                               `mapstructure:"warn_on_overrides"`
+	GlobalOverrides      []SecurityOverrideField            `mapstructure:"global_overrides"`
+	AppSpecificOverrides map[string][]SecurityOverrideField `mapstructure:"app_overrides"`
+}
+
+// SecurityOverrideField represents a security override within the main config
+type SecurityOverrideField struct {
+	RuleType string `mapstructure:"rule_type"`
+	Pattern  string `mapstructure:"pattern"`
+	Reason   string `mapstructure:"reason"`
+	AppName  string `mapstructure:"app_name,omitempty"`
+	WarnUser bool   `mapstructure:"warn_user"`
 }
 
 // GetAllApps returns all applications from the cross-platform configuration
@@ -579,4 +599,71 @@ func defaultHomeDir() string {
 		return "/tmp" // Fallback
 	}
 	return homeDir
+}
+
+// ToSecurityConfig converts SecurityConfigField to security.SecurityConfig
+func (s *SecurityConfigField) ToSecurityConfig() *security.SecurityConfig {
+	securityConfig := &security.SecurityConfig{
+		Level:                security.SecurityLevel(s.Level),
+		EnterpriseMode:       s.EnterpriseMode,
+		WarnOnOverrides:      s.WarnOnOverrides,
+		GlobalOverrides:      make([]security.SecurityOverride, len(s.GlobalOverrides)),
+		AppSpecificOverrides: make(map[string][]security.SecurityOverride),
+	}
+
+	// Convert global overrides
+	for i, override := range s.GlobalOverrides {
+		securityConfig.GlobalOverrides[i] = security.SecurityOverride{
+			RuleType: security.SecurityRuleType(override.RuleType),
+			Pattern:  override.Pattern,
+			Reason:   override.Reason,
+			AppName:  override.AppName,
+			WarnUser: override.WarnUser,
+		}
+	}
+
+	// Convert app-specific overrides
+	for appName, overrides := range s.AppSpecificOverrides {
+		securityOverrides := make([]security.SecurityOverride, len(overrides))
+		for i, override := range overrides {
+			securityOverrides[i] = security.SecurityOverride{
+				RuleType: security.SecurityRuleType(override.RuleType),
+				Pattern:  override.Pattern,
+				Reason:   override.Reason,
+				AppName:  override.AppName,
+				WarnUser: override.WarnUser,
+			}
+		}
+		securityConfig.AppSpecificOverrides[appName] = securityOverrides
+	}
+
+	return securityConfig
+}
+
+// GetSecurityConfig returns the security configuration from CrossPlatformSettings
+func (s *CrossPlatformSettings) GetSecurityConfig() *security.SecurityConfig {
+	return s.Security.ToSecurityConfig()
+}
+
+// LoadSecurityConfigForSettings loads security configuration and applies it to settings
+func (s *CrossPlatformSettings) LoadSecurityConfigForSettings() (*security.SecurityConfig, error) {
+	// Try to get from embedded config first
+	securityConfig := s.GetSecurityConfig()
+
+	// If no embedded config or empty, try loading from separate file
+	if securityConfig.Level == 0 && len(securityConfig.GlobalOverrides) == 0 {
+		return security.LoadSecurityConfigFromDefaults(s.HomeDir)
+	}
+
+	return securityConfig, nil
+}
+
+// GetCommandValidator returns a configured command validator
+func (s *CrossPlatformSettings) GetCommandValidator() (*security.CommandValidator, error) {
+	securityConfig, err := s.LoadSecurityConfigForSettings()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load security config: %w", err)
+	}
+
+	return security.NewCommandValidatorWithConfig(securityConfig.Level, securityConfig), nil
 }

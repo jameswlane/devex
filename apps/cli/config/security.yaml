@@ -1,0 +1,64 @@
+# DevEx Security Configuration
+# This file defines security rules and overrides for command validation
+# Documentation: https://docs.devex.sh/security/
+# Security level for command validation
+# Options: 0=Strict, 1=Moderate, 2=Permissive, 3=Enterprise
+level: 1 # Moderate (default)
+# Enterprise mode allows bypassing most restrictions with warnings
+enterprise_mode: false
+# Whether to show warnings when security overrides are used
+warn_on_overrides: true
+# Global security overrides that apply to all applications
+global_overrides:
+  # Example: Allow curl piping to bash for trusted sources
+  - rule_type: "command-injection"
+    pattern: "curl -fsSL https://(?:raw\\.githubusercontent\\.com|cli\\.github\\.com|mise\\.jdx\\.dev)/.*\\| (?:bash|sh)"
+    reason: "Allow trusted GitHub and development tool installation scripts"
+    warn_user: true
+  # Example: Allow mise PATH modifications
+  - rule_type: "command-injection"
+    pattern: "bash -c 'export PATH=.*mise.*'"
+    reason: "Allow mise runtime environment setup"
+    warn_user: false
+# Application-specific security overrides
+app_overrides:
+  # Docker-related commands
+  docker:
+    - rule_type: "privilege-escalation"
+      pattern: "sudo.*docker.*"
+      reason: "Docker requires sudo for installation and setup"
+      warn_user: true
+    - rule_type: "network-access"
+      pattern: "curl.*docker.*\\|.*sh"
+      reason: "Official Docker installation script is trusted"
+      warn_user: true
+  # GitHub CLI installation
+  gh:
+    - rule_type: "command-injection"
+      pattern: "curl.*cli\\.github\\.com.*\\|.*apt-key"
+      reason: "Official GitHub CLI GPG key installation"
+      warn_user: false
+  # Node.js tools via mise
+  nodejs:
+    - rule_type: "unknown-executable"
+      pattern: "mise (install|use) node@.*"
+      reason: "Allow mise to manage Node.js versions"
+      warn_user: false
+    - rule_type: "unknown-executable"
+      pattern: "npm install -g.*"
+      reason: "Allow global npm package installation for development"
+      warn_user: true
+  # Development database tools
+  postgresql:
+    - rule_type: "filesystem-access"
+      pattern: "sudo.*postgres.*"
+      reason: "PostgreSQL requires system-level configuration"
+      warn_user: true
+
+# Security rule explanations:
+# - dangerous-command: Commands that could damage the system
+# - unknown-executable: Executables not in the system PATH
+# - command-injection: Shell injection patterns like pipes and substitution
+# - privilege-escalation: Commands requiring elevated privileges
+# - network-access: Commands that access network resources
+# - filesystem-access: Commands that modify system files or directories
