@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
-	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -38,48 +40,65 @@ Examples:
   devex shell bash     # Switch to bash
   devex shell fish     # Switch to fish`,
 		Args: cobra.ExactArgs(1),
-		Run:  runShellSwitch,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			targetShell := args[0]
+
+			verbose := viper.GetBool("verbose")
+			dryRun := viper.GetBool("dry-run")
+
+			return executeShellSwitch(ctx, targetShell, verbose, dryRun)
+		},
+		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 }
 
-func runShellSwitch(cmd *cobra.Command, args []string) {
-	targetShell := args[0]
-
-	log.Info("Starting shell switch process", "targetShell", targetShell)
+// executeShellSwitch implements the core shell switching logic with proper context handling
+func executeShellSwitch(ctx context.Context, targetShell string, verbose, dryRun bool) error {
+	log.Info("Starting shell switch process",
+		"targetShell", targetShell,
+		"verbose", verbose,
+		"dry-run", dryRun,
+	)
 
 	// Validate shell name
 	supportedShells := []string{"bash", "zsh", "fish"}
-	isSupported := false
-	for _, shell := range supportedShells {
-		if shell == targetShell {
-			isSupported = true
-			break
-		}
-	}
-
-	if !isSupported {
-		log.Error("Unsupported shell", fmt.Errorf("shell %s is not supported", targetShell), "shell", targetShell, "supported", strings.Join(supportedShells, ", "))
-		fmt.Printf("Error: '%s' is not a supported shell.\n", targetShell)
-		fmt.Printf("Supported shells: %s\n", strings.Join(supportedShells, ", "))
-		os.Exit(1)
+	if err := validateShell(targetShell, supportedShells); err != nil {
+		return err
 	}
 
 	// Check if shell is available
 	shellPath, err := exec.LookPath(targetShell)
 	if err != nil {
-		log.Error("Shell not found on system", err, "shell", targetShell)
-		fmt.Printf("Error: '%s' is not installed on your system.\n", targetShell)
-		fmt.Printf("Please install it first using your package manager.\n")
-		fmt.Printf("For example: sudo apt install %s\n", targetShell)
-		os.Exit(1)
+		return fmt.Errorf("shell '%s' not found on system: %w", targetShell, err)
 	}
 
+	if dryRun {
+		log.Info("Dry run - would switch shell", "target", targetShell, "path", shellPath)
+		return nil
+	}
+
+	// Execute the shell switch
+	return performShellSwitch(ctx, targetShell, shellPath, verbose)
+}
+
+// validateShell validates that the target shell is supported
+func validateShell(targetShell string, supportedShells []string) error {
+	for _, shell := range supportedShells {
+		if shell == targetShell {
+			return nil
+		}
+	}
+	return fmt.Errorf("shell '%s' is not supported - available shells: %s",
+		targetShell, strings.Join(supportedShells, ", "))
+}
+
+// performShellSwitch executes the actual shell change
+func performShellSwitch(ctx context.Context, targetShell, shellPath string, verbose bool) error {
 	// Get current user
 	currentUser := os.Getenv("USER")
 	if currentUser == "" {
-		log.Error("Cannot determine current user", fmt.Errorf("USER environment variable not set"))
-		fmt.Printf("Error: Cannot determine current user.\n")
-		os.Exit(1)
+		return fmt.Errorf("cannot determine current user - USER environment variable not set")
 	}
 
 	// Check current shell
@@ -87,25 +106,19 @@ func runShellSwitch(cmd *cobra.Command, args []string) {
 	switch {
 	case err != nil:
 		log.Warn("Could not detect current shell", "error", err, "user", currentUser)
-		fmt.Printf("Warning: Could not detect your current shell.\n")
+		log.Info("Proceeding with shell change anyway")
 	case currentShell == shellPath:
 		log.Info("Shell already set", "shell", targetShell, "path", shellPath, "user", currentUser)
-		fmt.Printf("✓ Your shell is already set to %s (%s)\n", targetShell, shellPath)
-		return
+		log.Info("Shell is already configured correctly")
+		return nil
 	default:
 		log.Info("Current shell differs from target", "current", currentShell, "target", shellPath, "user", currentUser)
-		fmt.Printf("Current shell: %s\n", currentShell)
-		fmt.Printf("Target shell:  %s\n", shellPath)
-		fmt.Printf("\n")
 	}
 
 	// Inform user about the process
-	fmt.Printf("🔐 Switching to %s requires your password for security verification.\n", targetShell)
-	fmt.Printf("This uses the system 'chsh' command to change your default shell.\n")
-	fmt.Printf("\n")
+	log.Info("Switching shell", "from", currentShell, "to", shellPath)
 
 	// Use chsh interactively so user can enter password
-	ctx := context.Background()
 	chshCmd := exec.CommandContext(ctx, "chsh", "-s", shellPath)
 
 	// Connect stdin/stdout/stderr so user can interact with password prompt
@@ -115,15 +128,11 @@ func runShellSwitch(cmd *cobra.Command, args []string) {
 
 	log.Info("Executing interactive shell change", "shell", targetShell, "path", shellPath, "user", currentUser)
 
-	err = chshCmd.Run()
-	if err != nil {
-		log.Error("Failed to change shell", err, "shell", targetShell, "path", shellPath, "user", currentUser)
-		fmt.Printf("\n❌ Failed to change shell: %v\n", err)
-		fmt.Printf("Please ensure you entered the correct password.\n")
-		os.Exit(1)
+	// Execute the command
+	if err := chshCmd.Run(); err != nil {
+		return fmt.Errorf("failed to change shell to %s: %w", targetShell, err)
 	}
 
-	log.Info("Shell changed successfully", "shell", targetShell, "path", shellPath, "user", currentUser)
-	fmt.Printf("\n✅ Successfully changed shell to %s!\n", targetShell)
-	fmt.Printf("Please log out and log back in (or restart your terminal) for the change to take effect.\n")
+	log.Info("Shell change completed successfully", "shell", targetShell, "path", shellPath)
+	return nil
 }

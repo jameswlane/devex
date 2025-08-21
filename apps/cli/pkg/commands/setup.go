@@ -48,7 +48,13 @@ The setup process includes:
   • Database installation (PostgreSQL, MySQL, Redis)
   • Essential development tools and terminal applications
   • Desktop applications (if desktop environment detected)
-  • Automatic dependency management and ordering`,
+  • Automatic dependency management and ordering
+
+Configuration hierarchy (highest to lowest priority):
+  • Command-line flags
+  • Environment variables (DEVEX_*)
+  • Configuration files (~/.devex/config.yaml)
+  • Default values`,
 		Example: `  # Start interactive guided setup
   devex setup
 
@@ -56,10 +62,21 @@ The setup process includes:
   devex setup --verbose
 
   # Run non-interactive setup with defaults
-  devex setup --non-interactive`,
-		Run: func(cmd *cobra.Command, args []string) {
-			runGuidedSetup(repo, settings)
+  devex setup --non-interactive
+
+  # Dry run to preview what would be installed
+  devex setup --dry-run`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			// Get configuration from Viper (respects hierarchy)
+			verbose := viper.GetBool("verbose")
+			dryRun := viper.GetBool("dry-run")
+			nonInteractive := viper.GetBool("non-interactive")
+
+			return executeGuidedSetup(ctx, verbose, dryRun, nonInteractive, repo, settings)
 		},
+		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 
 	// Add flags
@@ -69,6 +86,71 @@ The setup process includes:
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
 
 	return cmd
+}
+
+// executeGuidedSetup implements the core setup logic with proper context handling
+func executeGuidedSetup(ctx context.Context, verbose, dryRun, nonInteractive bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+	// Update settings with runtime configuration
+	settings.Verbose = verbose
+
+	log.Info("Starting guided setup process",
+		"verbose", verbose,
+		"dry-run", dryRun,
+		"non-interactive", nonInteractive,
+		"logFile", log.GetLogFile(),
+	)
+
+	// Handle non-interactive mode
+	if nonInteractive {
+		log.Info("Non-interactive mode requested, running automated setup")
+		return runAutomatedSetupWithContext(ctx, dryRun, repo, settings)
+	}
+
+	// Handle dry run mode
+	if dryRun {
+		log.Info("Dry run mode - showing what would be set up")
+		return previewSetup(settings)
+	}
+
+	// Run interactive guided setup
+	return runInteractiveSetup(ctx, repo, settings)
+}
+
+// runInteractiveSetup handles the interactive TUI setup process
+func runInteractiveSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {
+	// TODO: Update runGuidedSetup to accept context parameter
+	runGuidedSetup(repo, settings) //nolint:contextcheck
+	return nil
+}
+
+// runAutomatedSetupWithContext handles non-interactive setup with context and dry-run support
+func runAutomatedSetupWithContext(ctx context.Context, dryRun bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+	if dryRun {
+		defaultApps := settings.GetDefaultApps()
+		log.Info("Would install default applications in automated mode")
+		for _, app := range defaultApps {
+			log.Info("Would install", "app", app.Name, "category", app.Category)
+		}
+		return nil
+	}
+
+	// TODO: Update runAutomatedSetup to accept context parameter
+	return runAutomatedSetup(repo, settings) //nolint:contextcheck
+}
+
+// previewSetup shows what the setup process would do
+func previewSetup(settings config.CrossPlatformSettings) error {
+	log.Info("Setup preview - showing available options:")
+
+	defaultApps := settings.GetDefaultApps()
+	log.Info("Default applications", "count", len(defaultApps))
+
+	for _, app := range defaultApps {
+		log.Info("Available app", "name", app.Name, "category", app.Category)
+	}
+
+	log.Info("Use --verbose for detailed setup commands")
+	return nil
 }
 
 // SetupModel represents the state of our guided setup UI

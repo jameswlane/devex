@@ -109,6 +109,7 @@ type Model struct {
 	inputResponse  chan *SecureString // Changed to SecureString
 	channelCleaned bool               // Track channel cleanup to prevent memory leaks
 	cleanupMux     sync.Mutex         // Protect cleanup operations
+	startTime      time.Time          // Track installation start time
 
 	// Layout
 	width  int
@@ -198,6 +199,7 @@ func NewModel(apps []types.CrossPlatformApp) *Model {
 		needsInput:     false,
 		inputResponse:  make(chan *SecureString, 5), // Default channel buffer size to prevent deadlocks
 		channelCleaned: false,
+		startTime:      time.Now(), // Track when installation starts
 	}
 }
 
@@ -449,20 +451,130 @@ func (m *Model) renderLeftPane(width int) string {
 		content.WriteString("\n\n")
 	}
 
-	// Current app
+	// Current app detailed information
 	if m.currentApp < len(m.apps) {
 		app := m.apps[m.currentApp]
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render("Installing:"))
-		content.WriteString("\n")
+		appDetails := m.getAppDetails(app)
+
+		// App Name and Category
 		content.WriteString(lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("212")).
-			Render(app.Name))
+			Render(fmt.Sprintf("📦 %s", appDetails.Name)))
 		content.WriteString("\n")
-		content.WriteString(app.Description)
+
+		if appDetails.Category != "" {
+			content.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("246")).
+				Italic(true).
+				Render(fmt.Sprintf("Category: %s", appDetails.Category)))
+			content.WriteString("\n")
+		}
+
+		// Description
+		content.WriteString(appDetails.Description)
 		content.WriteString("\n\n")
+
+		// Installation Details Section
+		content.WriteString(lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("214")).
+			Render("🔧 Installation Details"))
+		content.WriteString("\n")
+
+		// Installation method with icon
+		methodIcon := getMethodIcon(appDetails.InstallMethod)
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			Render(fmt.Sprintf("Method: %s %s", methodIcon, appDetails.InstallMethod)))
+		content.WriteString("\n")
+
+		// Official support status
+		supportStatus := "❌ Community"
+		if appDetails.OfficialSupport {
+			supportStatus = "✅ Official"
+		}
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			Render(fmt.Sprintf("Support: %s", supportStatus)))
+		content.WriteString("\n")
+
+		// Size and time estimates
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			Render(fmt.Sprintf("Size: %s", appDetails.EstimatedSize)))
+		content.WriteString("\n")
+
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			Render(fmt.Sprintf("Time: ~%s", formatDuration(appDetails.EstimatedTime))))
+		content.WriteString("\n")
+
+		// Install location
+		content.WriteString(lipgloss.NewStyle().
+			Foreground(lipgloss.Color("246")).
+			Render(fmt.Sprintf("Location: %s", appDetails.InstallLocation)))
+		content.WriteString("\n\n")
+
+		// Dependencies (if any)
+		if len(appDetails.Dependencies) > 0 {
+			content.WriteString(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("214")).
+				Render("📋 Dependencies"))
+			content.WriteString("\n")
+			for _, dep := range appDetails.Dependencies {
+				content.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("246")).
+					Render(fmt.Sprintf("• %s", dep)))
+				content.WriteString("\n")
+			}
+			content.WriteString("\n")
+		}
+
+		// Conflicts (if any)
+		if len(appDetails.Conflicts) > 0 {
+			content.WriteString(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("203")).
+				Render("⚠️  Conflicts"))
+			content.WriteString("\n")
+			for _, conflict := range appDetails.Conflicts {
+				content.WriteString(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("203")).
+					Render(fmt.Sprintf("• %s", conflict)))
+				content.WriteString("\n")
+			}
+			content.WriteString("\n")
+		}
+
+		// Time tracking
+		if !m.startTime.IsZero() {
+			elapsed := time.Since(m.startTime)
+			content.WriteString(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("214")).
+				Render("⏱️  Timing"))
+			content.WriteString("\n")
+			content.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("246")).
+				Render(fmt.Sprintf("Elapsed: %s", formatDuration(elapsed))))
+			content.WriteString("\n")
+
+			// Calculate remaining time estimate
+			if len(m.apps) > 0 {
+				completed := atomic.LoadInt64(&m.completedApps)
+				if completed > 0 {
+					avgTimePerApp := elapsed / time.Duration(completed)
+					remaining := time.Duration(len(m.apps)-int(completed)) * avgTimePerApp
+					content.WriteString(lipgloss.NewStyle().
+						Foreground(lipgloss.Color("246")).
+						Render(fmt.Sprintf("Remaining: ~%s", formatDuration(remaining))))
+					content.WriteString("\n")
+				}
+			}
+			content.WriteString("\n")
+		}
 	}
 
 	// Input prompt
@@ -482,6 +594,200 @@ func (m *Model) renderLeftPane(width int) string {
 	}
 
 	return leftStyle.Render(content.String())
+}
+
+// getAppDetails extracts detailed information about an app for display
+func (m *Model) getAppDetails(app types.CrossPlatformApp) AppDisplayInfo {
+	osConfig := app.GetOSConfig()
+
+	return AppDisplayInfo{
+		Name:            app.Name,
+		Description:     app.Description,
+		Category:        app.Category,
+		InstallMethod:   osConfig.InstallMethod,
+		OfficialSupport: osConfig.OfficialSupport,
+		Dependencies:    osConfig.Dependencies,
+		Conflicts:       osConfig.Conflicts,
+		EstimatedSize:   estimateAppSize(app),
+		EstimatedTime:   estimateInstallTime(osConfig.InstallMethod),
+		InstallLocation: getInstallLocation(osConfig),
+	}
+}
+
+// AppDisplayInfo holds all the information we want to display about an app
+type AppDisplayInfo struct {
+	Name            string
+	Description     string
+	Category        string
+	InstallMethod   string
+	OfficialSupport bool
+	Dependencies    []string
+	Conflicts       []string
+	EstimatedSize   string
+	EstimatedTime   time.Duration
+	InstallLocation string
+}
+
+// estimateAppSize provides a rough estimate of app installation size using simple heuristics
+func estimateAppSize(app types.CrossPlatformApp) string {
+	// Use simple heuristics similar to the performance analyzer's known sizes
+	knownSizes := map[string]string{
+		"docker":         "~450MB",
+		"docker-compose": "~50MB",
+		"node":           "~80MB",
+		"nodejs":         "~80MB",
+		"python":         "~100MB",
+		"rust":           "~250MB",
+		"go":             "~350MB",
+		"java":           "~180MB",
+		"vscode":         "~350MB",
+		"chrome":         "~200MB",
+		"firefox":        "~150MB",
+		"postgresql":     "~150MB",
+		"mysql":          "~450MB",
+		"mongodb":        "~250MB",
+		"redis":          "~50MB",
+		"nginx":          "~30MB",
+		"apache2":        "~50MB",
+		"git":            "~20MB",
+		"vim":            "~15MB",
+		"emacs":          "~50MB",
+		"curl":           "~5MB",
+		"wget":           "~3MB",
+		"zsh":            "~10MB",
+		"fish":           "~15MB",
+		"tmux":           "~5MB",
+	}
+
+	appNameLower := strings.ToLower(app.Name)
+	if size, exists := knownSizes[appNameLower]; exists {
+		return size
+	}
+
+	// Check for partial matches
+	for knownApp, size := range knownSizes {
+		if strings.Contains(appNameLower, knownApp) || strings.Contains(knownApp, appNameLower) {
+			return size
+		}
+	}
+
+	osConfig := app.GetOSConfig()
+
+	// Size estimates based on installation method
+	switch osConfig.InstallMethod {
+	case "snap":
+		return "~50-200MB"
+	case "flatpak":
+		return "~100-500MB"
+	case "apt", "dnf", "pacman":
+		if strings.Contains(strings.ToLower(app.Category), "development") {
+			return "~20-100MB"
+		}
+		return "~5-50MB"
+	case "brew":
+		return "~10-100MB"
+	case "curlpipe", "mise":
+		return "~1-20MB"
+	default:
+		return "~50MB"
+	}
+}
+
+// estimateInstallTime provides rough time estimates based on installation method and app type
+func estimateInstallTime(method string) time.Duration {
+	switch method {
+	case "apt", "dnf", "pacman":
+		return 30 * time.Second
+	case "snap":
+		return 60 * time.Second
+	case "flatpak":
+		return 90 * time.Second
+	case "brew":
+		return 45 * time.Second
+	case "curlpipe":
+		return 20 * time.Second
+	case "mise":
+		return 60 * time.Second // Language installations can take longer
+	case "docker":
+		return 120 * time.Second // Docker installs can be lengthy
+	default:
+		return 30 * time.Second
+	}
+}
+
+// getInstallLocation determines where the app will be installed
+func getInstallLocation(osConfig types.OSConfig) string {
+	if osConfig.Destination != "" {
+		return osConfig.Destination
+	}
+
+	switch osConfig.InstallMethod {
+	case "apt", "dnf", "pacman":
+		return "/usr/bin"
+	case "snap":
+		return "/snap/bin"
+	case "flatpak":
+		return "~/.local/share/flatpak"
+	case "brew":
+		return "/opt/homebrew/bin"
+	case "curlpipe":
+		return "~/.local/bin"
+	case "mise":
+		return "~/.local/share/mise"
+	default:
+		return "System default"
+	}
+}
+
+// getMethodIcon returns an icon for the installation method
+func getMethodIcon(method string) string {
+	switch method {
+	case "apt", "dnf", "pacman", "zypper":
+		return "📦"
+	case "snap":
+		return "🫰"
+	case "flatpak":
+		return "📱"
+	case "brew":
+		return "🍺"
+	case "curlpipe":
+		return "⬇️"
+	case "mise":
+		return "🔧"
+	case "docker":
+		return "🐳"
+	case "pip", "pip3":
+		return "🐍"
+	case "npm", "yarn", "pnpm":
+		return "📦"
+	case "cargo":
+		return "🦀"
+	case "go":
+		return "🐹"
+	default:
+		return "⚙️"
+	}
+}
+
+// formatDuration formats a duration in a human-readable way
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0fs", d.Seconds())
+	}
+	if d < time.Hour {
+		minutes := int(d.Minutes())
+		seconds := int(d.Seconds()) % 60
+		if seconds == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if minutes == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dh %dm", hours, minutes)
 }
 
 // renderRightPane renders the terminal output pane
