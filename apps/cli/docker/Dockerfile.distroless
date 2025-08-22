@@ -41,6 +41,7 @@ COPY --from=user-setup --chown=1001:1001 /home/testuser /home/testuser
 COPY --from=builder --chown=1001:1001 /src/devex /home/testuser/.local/share/devex/bin/devex
 
 # Copy necessary files
+COPY --chown=1001:1001 assets/ /home/testuser/.local/share/devex/assets/
 COPY --chown=1001:1001 config/ /home/testuser/.local/share/devex/config/
 COPY --chown=1001:1001 help/ /home/testuser/.local/share/devex/help/
 

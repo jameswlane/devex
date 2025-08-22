@@ -255,10 +255,6 @@ run_cli_test() {
     
     if timeout "$timeout" docker run --rm \
         --user testuser \
-        -v "$PROJECT_ROOT/assets:/home/testuser/.local/share/devex/assets" \
-        -v "$PROJECT_ROOT/bin:/home/testuser/.local/share/devex/bin" \
-        -v "$PROJECT_ROOT/config:/home/testuser/.local/share/devex/config" \
-        -v "$PROJECT_ROOT/help:/home/testuser/.local/share/devex/help" \
         "$DOCKER_IMAGE:$DISTRO" \
         bash -c "/home/testuser/.local/share/devex/bin/devex $cmd" >/dev/null 2>&1; then
         log_success "$desc: PASSED"
@@ -276,10 +272,6 @@ run_interactive_test() {
     
     docker run -it --rm \
         --user testuser \
-        -v "$PROJECT_ROOT/assets:/home/testuser/.local/share/devex/assets" \
-        -v "$PROJECT_ROOT/bin:/home/testuser/.local/share/devex/bin" \
-        -v "$PROJECT_ROOT/config:/home/testuser/.local/share/devex/config" \
-        -v "$PROJECT_ROOT/help:/home/testuser/.local/share/devex/help" \
         "$DOCKER_IMAGE:$DISTRO" \
         bash -c "/home/testuser/.local/share/devex/bin/devex $cmd"
 }
@@ -357,10 +349,8 @@ interactive_shell() {
     
     docker run -it --rm \
         --user testuser \
-        -v "$PROJECT_ROOT/assets:/home/testuser/.local/share/devex/assets" \
-        -v "$PROJECT_ROOT/bin:/home/testuser/.local/share/devex/bin" \
-        -v "$PROJECT_ROOT/config:/home/testuser/.local/share/devex/config" \
-        -v "$PROJECT_ROOT/help:/home/testuser/.local/share/devex/help" \
+        --privileged \
+        -v /var/run/docker.sock:/var/run/docker.sock \
         "$DOCKER_IMAGE:$DISTRO" \
         bash
 }
@@ -401,6 +391,30 @@ clean_up() {
     log_success "Cleanup complete"
 }
 
+purge_all() {
+    log_info "Purging ALL Docker data (containers, images, volumes, networks)..."
+    
+    # Stop all containers
+    docker ps -aq | xargs -r docker stop >/dev/null 2>&1 || true
+    
+    # Remove all containers
+    docker ps -aq | xargs -r docker rm -f >/dev/null 2>&1 || true
+    
+    # Remove all images
+    docker images -aq | xargs -r docker rmi -f >/dev/null 2>&1 || true
+    
+    # Remove all volumes
+    docker volume ls -q | xargs -r docker volume rm >/dev/null 2>&1 || true
+    
+    # Remove all networks (except defaults)
+    docker network ls --filter "type=custom" -q | xargs -r docker network rm >/dev/null 2>&1 || true
+    
+    # Clean up build cache
+    docker builder prune -af >/dev/null 2>&1 || true
+    
+    log_success "Complete purge finished - Docker environment reset"
+}
+
 show_usage() {
     cat << EOF
 
@@ -418,6 +432,7 @@ Commands:
   logs                    - Inspect logs within container
   benchmark              - Run performance benchmarks
   clean                  - Clean up Docker containers and images
+  purge                  - DANGEROUS: Purge ALL Docker data (containers, images, volumes)
 
 Test Suites:
   basic                  - Basic CLI commands (--version, --help)
@@ -445,6 +460,7 @@ Examples:
   $0 benchmark --distro arch         # Benchmark on Arch Linux
   $0 shell --distro fedora           # Interactive shell on Fedora
   $0 clean                           # Clean up environment
+  $0 purge                           # Complete Docker reset (DANGEROUS)
 
 Environment Variables:
   DISTRO                 - Target distribution
@@ -530,6 +546,16 @@ case "${COMMAND}" in
     clean)
         print_header
         clean_up
+        ;;
+    purge)
+        print_header
+        log_warning "This will DELETE ALL Docker data! Are you sure? (y/N)"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            purge_all
+        else
+            log_info "Purge cancelled"
+        fi
         ;;
     help|--help|-h)
         print_header

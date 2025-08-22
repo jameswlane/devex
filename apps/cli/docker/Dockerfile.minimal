@@ -34,8 +34,9 @@ RUN mkdir -p ~/.local/share/devex/{assets,bin,config,help,cache,logs,themes} \
     && mkdir -p ~/.devex/{templates,backups} \
     && mkdir -p ~/workspace
 
-# Copy DevEx binary
+# Copy DevEx binary and assets
 COPY --from=builder --chown=1001:1001 /src/devex ~/.local/share/devex/bin/devex
+COPY --chown=1001:1001 assets/ ~/.local/share/devex/assets/
 COPY --chown=1001:1001 config/ ~/.local/share/devex/config/
 COPY --chown=1001:1001 help/ ~/.local/share/devex/help/
 

@@ -1199,8 +1199,10 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 		}
 
 		if cmd.Shell != "" {
-			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", cmd.Shell))
-			if err := si.executeCommandStream(ctx, cmd.Shell); err != nil {
+			// Replace placeholders in shell commands
+			processedCommand := utils.ReplacePlaceholders(cmd.Shell, map[string]string{})
+			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", processedCommand))
+			if err := si.executeCommandStream(ctx, processedCommand); err != nil {
 				return err
 			}
 		}
@@ -1357,10 +1359,13 @@ func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 		if strings.Contains(line, "Reading database") ||
 			strings.Contains(line, "Scanning processes") ||
 			strings.Contains(line, "Scanning candidates") ||
-			strings.Contains(line, "Scanning linux images") {
+			strings.Contains(line, "Scanning linux images") ||
+			strings.Contains(line, "Readin database") { // Handle partial lines from carriage returns
 			// These are progress indicators that update in place
 			// We'll show them once when complete
-			if strings.Contains(line, "done") || strings.Contains(line, "100%") {
+			if strings.Contains(line, "done") ||
+				strings.Contains(line, "100%") ||
+				strings.Contains(line, "... done") {
 				currentLine = line
 			} else {
 				// Store but don't display intermediate progress
@@ -1391,14 +1396,25 @@ func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 
 // cleanTerminalOutput removes ANSI escape sequences and control characters
 func cleanTerminalOutput(s string) string {
-	// Remove ANSI escape sequences
+	// Remove ANSI escape sequences (including all variants)
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 	s = ansiRegex.ReplaceAllString(s, "")
 
-	// Remove other control characters except tabs
+	// Remove cursor positioning sequences
+	cursorRegex := regexp.MustCompile(`\x1b\[[0-9]*[ABCD]`)
+	s = cursorRegex.ReplaceAllString(s, "")
+
+	// Remove additional control sequences
+	ctrlRegex := regexp.MustCompile(`\x1b[()][0-9A-Z]`)
+	s = ctrlRegex.ReplaceAllString(s, "")
+
+	// Remove carriage returns that aren't followed by newlines
+	s = strings.ReplaceAll(s, "\r", "")
+
+	// Remove other control characters except tabs and newlines
 	var result strings.Builder
 	for _, r := range s {
-		if r == '\t' || (r >= 32 && r < 127) || r > 127 {
+		if r == '\t' || r == '\n' || (r >= 32 && r < 127) || r > 127 {
 			result.WriteRune(r)
 		}
 	}

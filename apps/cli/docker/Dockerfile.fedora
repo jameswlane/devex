@@ -42,6 +42,12 @@ RUN mkdir -p ~/.local/share/devex/{assets,bin,config,help,cache,logs,themes} \
     && mkdir -p ~/.devex/{templates,backups} \
     && mkdir -p ~/workspace
 
+# Copy DevEx binary and assets
+COPY --chown=testuser:testuser bin/devex /home/testuser/.local/share/devex/bin/devex
+COPY --chown=testuser:testuser assets/ /home/testuser/.local/share/devex/assets/
+COPY --chown=testuser:testuser config/ /home/testuser/.local/share/devex/config/
+COPY --chown=testuser:testuser help/ /home/testuser/.local/share/devex/help/
+
 # Configure environment
 RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc \
     && echo 'export DEVEX_HOME="$HOME/.local/share/devex"' >> ~/.bashrc \

@@ -18,7 +18,7 @@ func (m *SetupModel) copyThemeFiles() error {
 
 	homeDir := os.Getenv("HOME")
 	devexDir := homeDir + "/.local/share/devex"
-	assetsDir := devexDir + "/assets"
+	assetsDir := m.detectAssetsDir()
 
 	// Create necessary directories
 	if err := os.MkdirAll(homeDir+"/.config", DirectoryPermissions); err != nil {
@@ -103,7 +103,7 @@ func (m *SetupModel) copyAppConfigFiles() error {
 
 	homeDir := os.Getenv("HOME")
 	devexDir := homeDir + "/.local/share/devex"
-	assetsDir := devexDir + "/assets"
+	assetsDir := m.detectAssetsDir()
 
 	// Create defaults directory in devex
 	defaultsDir := devexDir + "/defaults"

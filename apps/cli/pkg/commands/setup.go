@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -21,6 +21,7 @@ import (
 	"github.com/jameswlane/devex/pkg/installers"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/platform"
+	"github.com/jameswlane/devex/pkg/shell"
 	"github.com/jameswlane/devex/pkg/themes"
 	"github.com/jameswlane/devex/pkg/types"
 )
@@ -375,10 +376,89 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 
 	// Start the Bubble Tea program
 	program := tea.NewProgram(model, tea.WithAltScreen())
-	if _, err := program.Run(); err != nil {
+	finalModel, err := program.Run()
+	if err != nil {
 		log.Error("Error running guided setup", err)
 		os.Exit(1)
 	}
+
+	// Clean up terminal after exiting alt screen
+	if setupModel, ok := finalModel.(*SetupModel); ok {
+		displayFinalMessage(setupModel)
+	} else {
+		log.Warn("Unable to cast final model to SetupModel for cleanup message")
+		fmt.Print("\033[H\033[2J") // Clear screen at minimum
+		fmt.Println("✅ DevEx Setup Completed!")
+	}
+}
+
+// displayFinalMessage shows a clean final message after exiting the TUI
+func displayFinalMessage(model *SetupModel) {
+	// Clear the screen to remove any artifacts
+	fmt.Print("\033[H\033[2J")
+
+	// Build the final message
+	var message strings.Builder
+
+	// Header with some spacing
+	message.WriteString("\n")
+
+	if model.hasErrors {
+		// Error header
+		message.WriteString("⚠️  DevEx Setup Completed with Issues\n")
+		message.WriteString("═══════════════════════════════════════\n\n")
+
+		message.WriteString(fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(model.installErrors)))
+		for _, err := range model.installErrors {
+			message.WriteString(fmt.Sprintf("  ❌ %s\n", err))
+		}
+		message.WriteString("\n")
+	} else {
+		// Success header
+		message.WriteString("✅ DevEx Setup Completed Successfully!\n")
+		message.WriteString("═══════════════════════════════════════\n\n")
+	}
+
+	// What was installed
+	message.WriteString("📦 Installed Components:\n")
+	if selectedLangs := model.getSelectedLanguages(); len(selectedLangs) > 0 {
+		message.WriteString("  • Programming languages via mise\n")
+	}
+	if selectedDBs := model.getSelectedDatabases(); len(selectedDBs) > 0 {
+		message.WriteString("  • Database containers via Docker\n")
+	}
+	if selectedApps := model.getSelectedDesktopApps(); len(selectedApps) > 0 {
+		message.WriteString("  • Desktop development tools\n")
+	}
+	message.WriteString(fmt.Sprintf("  • %s shell configuration\n", model.getSelectedShell()))
+	message.WriteString("\n")
+
+	// Next steps
+	message.WriteString("🚀 Next Steps:\n")
+
+	selectedShell := model.getSelectedShell()
+	if model.shellSwitched {
+		message.WriteString(fmt.Sprintf("  1. Restart your terminal or run: exec %s\n", selectedShell))
+	} else {
+		message.WriteString(fmt.Sprintf("  1. Reload your shell: source ~/.%src (or restart terminal)\n", selectedShell))
+	}
+
+	message.WriteString("  2. Verify mise: mise list\n")
+	message.WriteString("  3. Check Docker: docker ps\n")
+
+	if model.hasErrors {
+		message.WriteString("\n⚠️  Some components may need manual attention.\n")
+	}
+
+	// Log file location
+	if logFile := log.GetLogFile(); logFile != "" {
+		message.WriteString(fmt.Sprintf("\n📋 Logs: %s\n", logFile))
+	}
+
+	message.WriteString("\nThank you for using DevEx! 🎉\n\n")
+
+	// Print the final message
+	fmt.Print(message.String())
 }
 
 // Init satisfies the tea.Model interface
@@ -770,7 +850,6 @@ func (m *SetupModel) View() string {
 			s += fmt.Sprintf("📋 Installation logs: %s\n", logFile)
 			s += "   (Submit this file for debugging if you encounter issues)\n\n"
 		}
-		s += "Exiting automatically..."
 	}
 
 	return s
@@ -1066,7 +1145,6 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 		// Installation completed successfully
 		log.Info("Installation completed successfully")
-		fmt.Printf("\n✅ Installation completed successfully!\n")
 		return InstallCompleteMsg{} // Signal successful completion
 	}
 }
@@ -1082,15 +1160,10 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	selectedShell := m.getSelectedShell()
 	log.Info("Finalizing setup", "selectedShell", selectedShell)
 
-	// Install the selected shell if not available
-	if err := m.ensureShellInstalled(ctx, selectedShell); err != nil {
-		log.Error("Failed to ensure shell is installed", err, "shell", selectedShell)
-		return err
-	}
-
-	// Copy shell configuration files
-	if err := m.copyShellConfiguration(selectedShell); err != nil {
-		log.Error("Failed to copy shell configuration", err, "shell", selectedShell)
+	// Use comprehensive shell manager for complete shell setup
+	shellManager := shell.NewShellManager(m.settings, m.repo)
+	if err := shellManager.SetupShell(ctx, selectedShell); err != nil {
+		log.Error("Failed to setup shell", err, "shell", selectedShell)
 		return err
 	}
 
@@ -1116,15 +1189,6 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	if err := m.saveThemePreference(); err != nil {
 		log.Error("Failed to save theme preference", err)
 		return err
-	}
-
-	// Switch to the selected shell
-	if err := m.switchToShell(ctx, selectedShell); err != nil {
-		log.Warn("Failed to switch shell", "error", err, "shell", selectedShell)
-		shellPath, _ := exec.LookPath(selectedShell)
-		log.Info("You can manually switch later with the DevEx shell command", "command", fmt.Sprintf("devex shell %s", selectedShell))
-		log.Info("Or use the system command directly", "command", fmt.Sprintf("chsh -s %s", shellPath))
-		log.Info("Note: The system shell change requires your password for security")
 	}
 
 	return nil
@@ -1508,4 +1572,42 @@ func (m *SetupModel) saveThemePreference() error {
 func isValidEmail(email string) bool {
 	// Uses pre-compiled regex for better performance
 	return emailRegex.MatchString(email)
+}
+
+// detectAssetsDir detects the location of built-in assets (similar to template manager)
+func (m *SetupModel) detectAssetsDir() string {
+	// Try different possible locations for built-in assets
+	possiblePaths := []string{
+		"assets",                  // Development mode (relative to binary)
+		"./assets",                // Current directory
+		"/usr/share/devex/assets", // System install
+		"/opt/devex/assets",       // Alternative system install
+	}
+
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	// Fallback - try to find relative to the executable
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		assetsPath := filepath.Join(execDir, "assets")
+		if _, err := os.Stat(assetsPath); err == nil {
+			return assetsPath
+		}
+
+		// Try going up directories (for development)
+		for i := 0; i < 3; i++ {
+			execDir = filepath.Dir(execDir)
+			assetsPath := filepath.Join(execDir, "assets")
+			if _, err := os.Stat(assetsPath); err == nil {
+				return assetsPath
+			}
+		}
+	}
+
+	// Final fallback
+	return "assets"
 }
