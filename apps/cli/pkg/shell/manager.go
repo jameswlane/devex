@@ -191,8 +191,98 @@ func (sm *ShellManager) deployShellConfiguration(shellName string) error {
 		return fmt.Errorf("unsupported shell: %s", shellName)
 	}
 
-	// Use CopyShellConfig which handles backup, copying, and permissions
-	return sm.CopyShellConfig(shellType, true) // overwrite = true for setup
+	// 1. Copy main shell configuration file
+	if err := sm.CopyShellConfig(shellType, true); err != nil {
+		return fmt.Errorf("failed to copy main %s config: %w", shellName, err)
+	}
+
+	// 2. Deploy shell module files to defaults directory
+	if err := sm.DeployShellModules(shellName); err != nil {
+		return fmt.Errorf("failed to deploy %s modules: %w", shellName, err)
+	}
+
+	return nil
+}
+
+// DeployShellModules deploys shell module files to the defaults directory
+func (sm *ShellManager) DeployShellModules(shellName string) error {
+	// Create shell defaults directory
+	shellDefaultsDir := filepath.Join(sm.homeDir, ".local", "share", "devex", "defaults", shellName)
+	if err := os.MkdirAll(shellDefaultsDir, 0750); err != nil {
+		return fmt.Errorf("failed to create %s defaults directory: %w", shellName, err)
+	}
+
+	// Define shell module files to copy
+	var moduleFiles []string
+	var sourceSubDir string
+
+	switch shellName {
+	case "bash":
+		sourceSubDir = "bash"
+		moduleFiles = []string{"aliases", "extra", "init", "oh-my-bash", "prompt", "rc", "shell"}
+		// Also copy optional files if they exist
+		optionalFiles := []string{"inputrc", "bash_profile"}
+		for _, file := range optionalFiles {
+			src := filepath.Join(sm.assetsDir, "bash", file)
+			if _, err := os.Stat(src); err == nil {
+				moduleFiles = append(moduleFiles, file)
+			}
+		}
+	case "zsh":
+		sourceSubDir = "zsh"
+		moduleFiles = []string{"aliases", "extra", "init", "oh-my-zsh", "prompt", "rc", "shell", "zplug"}
+		// Also copy optional files if they exist
+		optionalFiles := []string{"inputrc"}
+		for _, file := range optionalFiles {
+			src := filepath.Join(sm.assetsDir, "zsh", file)
+			if _, err := os.Stat(src); err == nil {
+				moduleFiles = append(moduleFiles, file)
+			}
+		}
+	case "fish":
+		sourceSubDir = "fish"
+		moduleFiles = []string{"aliases", "shell", "init", "prompt", "extra", "oh-my-fish"}
+	default:
+		return fmt.Errorf("unsupported shell: %s", shellName)
+	}
+
+	// Copy each module file
+	for _, file := range moduleFiles {
+		src := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, file) // e.g., assets/bash/bash/rc
+		dst := filepath.Join(shellDefaultsDir, file)
+
+		// If the double subdirectory doesn't exist, try single subdirectory
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			src = filepath.Join(sm.assetsDir, sourceSubDir, file) // e.g., assets/bash/rc
+		}
+
+		if err := sm.copyFileWithPermissions(src, dst, 0644); err != nil {
+			log.Warn("Failed to deploy shell module", "shell", shellName, "file", file, "error", err)
+			continue // Don't fail the entire deployment for missing optional files
+		}
+
+		log.Info("Deployed shell module", "shell", shellName, "file", file, "destination", dst)
+	}
+
+	// Handle special files for bash that go to home directory
+	if shellName == "bash" {
+		// Copy .inputrc to home directory if it exists
+		inputrcSrc := filepath.Join(sm.assetsDir, "bash", "inputrc")
+		inputrcDst := filepath.Join(sm.homeDir, ".inputrc")
+		if _, err := os.Stat(inputrcSrc); err == nil {
+			_ = sm.copyFileWithPermissions(inputrcSrc, inputrcDst, 0644) // Best effort
+		}
+
+		// Copy .bash_profile to home directory if it exists
+		bashProfileSrc := filepath.Join(sm.assetsDir, "bash", "bash_profile")
+		bashProfileDst := filepath.Join(sm.homeDir, ".bash_profile")
+		if _, err := os.Stat(bashProfileSrc); err == nil {
+			_ = sm.copyFileWithPermissions(bashProfileSrc, bashProfileDst, 0644) // Best effort
+		}
+	}
+
+	log.Info("Shell modules deployed successfully", "shell", shellName, "destination", shellDefaultsDir)
+	return nil
 }
 
 // switchToShell changes the user's default shell

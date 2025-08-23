@@ -444,7 +444,12 @@ func displayFinalMessage(model *SetupModel) {
 	}
 
 	message.WriteString("  2. Verify mise: mise list\n")
-	message.WriteString("  3. Check Docker: docker ps\n")
+	if selectedDBs := model.getSelectedDatabases(); len(selectedDBs) > 0 {
+		message.WriteString("  3. Refresh Docker permissions: newgrp docker\n")
+		message.WriteString("  4. Check Docker: docker ps\n")
+	} else {
+		message.WriteString("  3. Check Docker: docker ps\n")
+	}
 
 	if model.hasErrors {
 		message.WriteString("\n⚠️  Some components may need manual attention.\n")

@@ -289,6 +289,23 @@ func setupDockerService() error {
 		log.Info("Docker service started successfully")
 	}
 
+	// Configure Docker daemon for log rotation
+	log.Debug("Configuring Docker daemon log rotation")
+	daemonConfig := `{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"5"}}`
+	daemonConfigCmd := fmt.Sprintf("echo '%s' | sudo tee /etc/docker/daemon.json", daemonConfig)
+	if _, err := utils.CommandExec.RunShellCommand(daemonConfigCmd); err != nil {
+		log.Warn("Failed to configure Docker daemon log rotation", "error", err)
+		// Not critical, continue
+	} else {
+		log.Info("Docker daemon configured with log rotation (max 5 files of 10MB each)")
+		// Restart Docker to apply daemon.json changes
+		if _, err := utils.CommandExec.RunShellCommand("sudo systemctl restart docker"); err != nil {
+			log.Warn("Failed to restart Docker after daemon configuration", "error", err)
+		} else {
+			log.Info("Docker service restarted with new configuration")
+		}
+	}
+
 	// Add current user to docker group
 	currentUser := getCurrentUser()
 	if currentUser == "" {
@@ -302,15 +319,30 @@ func setupDockerService() error {
 		log.Info("You may need to manually add your user to the docker group", "command", fmt.Sprintf("sudo usermod -aG docker %s", currentUser))
 	} else {
 		log.Info("User added to docker group", "user", currentUser)
-		log.Info("Note: You may need to log out and log back in for docker group changes to take effect")
+
+		// Try to make the group change effective immediately using sg (switch group)
+		// This is more reliable than newgrp in non-interactive contexts
+		log.Debug("Attempting to refresh group membership")
+
+		// The sg command can run a command with the new group, but we can't change the parent shell
+		// However, we can test if Docker works with the new group
+		testCmd := "sg docker -c 'docker version --format \"{{.Server.Version}}\"' 2>/dev/null"
+		if output, err := utils.CommandExec.RunShellCommand(testCmd); err == nil {
+			log.Info("Docker group membership verified and working", "docker_version", strings.TrimSpace(output))
+			log.Info("Note: Current shell session still requires 'newgrp docker' or re-login for direct docker commands")
+		} else {
+			log.Info("Note: Group changes require session refresh - run 'newgrp docker' or log out and back in")
+			log.Info("To test Docker access immediately: 'newgrp docker' then 'docker ps'")
+		}
 	}
 
 	// Wait a moment for service to fully start
 	time.Sleep(2 * time.Second)
 
-	// Verify Docker daemon is accessible
-	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Info("Docker daemon is running and accessible")
+	// Verify Docker daemon is accessible with current permissions
+	// First try without sudo (in case group is already effective)
+	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}' 2>/dev/null"); err == nil {
+		log.Info("Docker daemon is running and accessible without sudo")
 	} else {
 		log.Warn("Docker daemon may not be fully ready yet", "hint", "Try running 'sudo systemctl status docker' to check service status")
 	}

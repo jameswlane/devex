@@ -10,6 +10,28 @@ function lk {
 # Editor
 export EDITOR=nano
 
+# Docker wrapper function to handle permission issues gracefully
+# This helps when docker group hasn't taken effect yet in current session
+docker() {
+    # Try to run docker command normally first
+    if command docker "$@" 2>/dev/null; then
+        return 0
+    else
+        # Check if it's a permission issue
+        if command docker "$@" 2>&1 | grep -q "permission denied"; then
+            echo "Docker permission denied. Trying with sudo..." >&2
+            sudo docker "$@"
+            echo "" >&2
+            echo "Tip: Run 'newgrp docker' to use Docker without sudo in this session" >&2
+            return $?
+        else
+            # Not a permission issue, run normally to show the actual error
+            command docker "$@"
+            return $?
+        fi
+    fi
+}
+
 # bun completions
 [ -s "/Users/jl82576/.bun/_bun" ] && source "/Users/jl82576/.bun/_bun"
 

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/shell"
@@ -760,6 +761,33 @@ func runShellTestCopy(settings config.CrossPlatformSettings, args []string, shel
 			preview = preview[:200] + "..."
 		}
 		fmt.Printf("  Content: %q\n", preview)
+	}
+
+	// Deploy shell module files to defaults directory
+	fmt.Printf("\n🔧 Shell Module Deployment:\n")
+	if err := manager.DeployShellModules(string(targetShellType)); err != nil {
+		fmt.Printf("  ⚠️  Failed to deploy shell modules: %v\n", err)
+		// Don't fail the entire test for module deployment issues
+	} else {
+		fmt.Printf("  ✅ Shell modules deployed successfully\n")
+
+		// Check if modules were deployed correctly
+		moduleDir := filepath.Join(homeDir, ".local", "share", "devex", "defaults", string(targetShellType))
+		if moduleInfo, err := os.Stat(moduleDir); err == nil {
+			fmt.Printf("  📁 Modules directory: %s (mode: %s)\n", moduleDir, moduleInfo.Mode())
+
+			// List deployed modules
+			if entries, err := os.ReadDir(moduleDir); err == nil && len(entries) > 0 {
+				fmt.Printf("  📄 Deployed modules: ")
+				var moduleNames []string
+				for _, entry := range entries {
+					moduleNames = append(moduleNames, entry.Name())
+				}
+				fmt.Printf("%s\n", strings.Join(moduleNames, ", "))
+			}
+		} else {
+			fmt.Printf("  ❌ Modules directory not found: %v\n", err)
+		}
 	}
 
 	fmt.Printf("\n🎉 Test copy completed successfully!\n")
