@@ -1143,8 +1143,16 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			}
 		}
 
-		// Installation completed successfully
-		log.Info("Installation completed successfully")
+		// Installation completed successfully - now finalize shell setup
+		log.Info("Installation completed successfully, running shell configuration finalization")
+
+		// Run shell finalization (same as automated setup)
+		ctx := context.Background()
+		if err := m.finalizeSetup(ctx); err != nil {
+			log.Warn("Shell setup had issues during TUI installation", "error", err)
+			// Don't fail the entire setup for shell config issues
+		}
+
 		return InstallCompleteMsg{} // Signal successful completion
 	}
 }
