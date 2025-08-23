@@ -14,7 +14,6 @@ import (
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
-	"github.com/jameswlane/devex/pkg/utils"
 )
 
 // ShellType represents different shell types
@@ -140,24 +139,28 @@ func (sm *ShellManager) isShellAvailable(shellName string) bool {
 func (sm *ShellManager) installShellApp(ctx context.Context, app types.CrossPlatformApp) error {
 	// This would integrate with the existing installer system
 	// For now, we'll use a simplified approach
-	log.Info("Installing shell via DevEx configuration", "app", app.Name)
-	// TODO: Integrate with installers.InstallCrossPlatformApp
-	return nil
+	cmd := exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", app.Name)
+	return cmd.Run()
 }
 
-// installShellViaSystem installs shell using system package manager
+// installShellViaSystem installs shell via system package manager
 func (sm *ShellManager) installShellViaSystem(ctx context.Context, shellName string) error {
-	log.Info("Installing shell via system package manager", "shell", shellName)
-
-	installCmd := fmt.Sprintf("sudo apt-get update && sudo apt-get install -y %s", shellName)
-	cmd := exec.CommandContext(ctx, "bash", "-c", installCmd)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Error("Failed to install shell via apt", err, "shell", shellName, "output", string(output))
-		return fmt.Errorf("failed to install %s: %w", shellName, err)
+	// Detect package manager and install
+	// This is simplified - would integrate with package manager detection
+	// Try different package managers
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		cmd := exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", shellName)
+		return cmd.Run()
 	}
-
-	return nil
+	if _, err := exec.LookPath("dnf"); err == nil {
+		cmd := exec.CommandContext(ctx, "sudo", "dnf", "install", "-y", shellName)
+		return cmd.Run()
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		cmd := exec.CommandContext(ctx, "sudo", "pacman", "-S", "--noconfirm", shellName)
+		return cmd.Run()
+	}
+	return fmt.Errorf("unable to detect package manager for shell installation")
 }
 
 // backupExistingConfig creates backup of existing shell configuration
@@ -220,33 +223,17 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 	case "bash":
 		sourceSubDir = "bash"
 		moduleFiles = []string{"aliases", "extra", "init", "oh-my-bash", "prompt", "rc", "shell"}
-		// Also copy optional files if they exist
-		optionalFiles := []string{"inputrc", "bash_profile"}
-		for _, file := range optionalFiles {
-			src := filepath.Join(sm.assetsDir, "bash", file)
-			if _, err := os.Stat(src); err == nil {
-				moduleFiles = append(moduleFiles, file)
-			}
-		}
 	case "zsh":
 		sourceSubDir = "zsh"
 		moduleFiles = []string{"aliases", "extra", "init", "oh-my-zsh", "prompt", "rc", "shell", "zplug"}
-		// Also copy optional files if they exist
-		optionalFiles := []string{"inputrc"}
-		for _, file := range optionalFiles {
-			src := filepath.Join(sm.assetsDir, "zsh", file)
-			if _, err := os.Stat(src); err == nil {
-				moduleFiles = append(moduleFiles, file)
-			}
-		}
 	case "fish":
 		sourceSubDir = "fish"
-		moduleFiles = []string{"aliases", "shell", "init", "prompt", "extra", "oh-my-fish"}
+		moduleFiles = []string{"aliases", "extra", "init", "oh-my-fish", "prompt", "shell"}
 	default:
-		return fmt.Errorf("unsupported shell: %s", shellName)
+		return fmt.Errorf("unsupported shell for module deployment: %s", shellName)
 	}
 
-	// Copy each module file
+	// Copy each module file with fallback path logic
 	for _, file := range moduleFiles {
 		src := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, file) // e.g., assets/bash/bash/rc
 		dst := filepath.Join(shellDefaultsDir, file)
@@ -261,19 +248,19 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 			continue // Don't fail the entire deployment for missing optional files
 		}
 
-		log.Info("Deployed shell module", "shell", shellName, "file", file, "destination", dst)
+		log.Debug("Deployed shell module", "shell", shellName, "file", file)
 	}
 
-	// Handle special files for bash that go to home directory
+	// Special handling for inputrc and bash_profile (bash only)
 	if shellName == "bash" {
-		// Copy .inputrc to home directory if it exists
+		// Deploy inputrc
 		inputrcSrc := filepath.Join(sm.assetsDir, "bash", "inputrc")
 		inputrcDst := filepath.Join(sm.homeDir, ".inputrc")
 		if _, err := os.Stat(inputrcSrc); err == nil {
 			_ = sm.copyFileWithPermissions(inputrcSrc, inputrcDst, 0644) // Best effort
 		}
 
-		// Copy .bash_profile to home directory if it exists
+		// Deploy bash_profile
 		bashProfileSrc := filepath.Join(sm.assetsDir, "bash", "bash_profile")
 		bashProfileDst := filepath.Join(sm.homeDir, ".bash_profile")
 		if _, err := os.Stat(bashProfileSrc); err == nil {
@@ -294,46 +281,37 @@ func (sm *ShellManager) switchToShell(ctx context.Context, shellName string) err
 
 	currentUser := os.Getenv("USER")
 	if currentUser == "" {
-		// Fallback to whoami
-		whoamiCmd := exec.CommandContext(ctx, "whoami")
-		output, err := whoamiCmd.Output()
-		if err != nil {
-			return fmt.Errorf("unable to determine current user: %w", err)
+		return fmt.Errorf("unable to determine current user")
+	}
+
+	// Check if already using this shell
+	currentShell := os.Getenv("SHELL")
+	if strings.HasSuffix(currentShell, "/"+shellName) {
+		log.Info("Already using shell", "shell", shellName)
+		return nil
+	}
+
+	log.Info("Switching default shell", "shell", shellName, "path", shellPath)
+
+	// Use chsh to change shell
+	cmd := exec.CommandContext(ctx, "sudo", "chsh", "-s", shellPath, currentUser)
+	if err := cmd.Run(); err != nil {
+		// Try without sudo
+		cmd = exec.CommandContext(ctx, "chsh", "-s", shellPath)
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to change shell: %w", err)
 		}
-		currentUser = strings.TrimSpace(string(output))
 	}
 
-	// Check if current shell matches desired shell
-	currentShell, err := utils.GetUserShell(currentUser)
-	if err != nil {
-		log.Warn("Could not detect current shell", "error", err, "user", currentUser)
-	} else {
-		currentShellName := filepath.Base(currentShell)
-		selectedShellName := filepath.Base(shellPath)
-
-		if currentShellName == selectedShellName {
-			log.Info("User is already using the selected shell", "shell", shellName, "user", currentUser)
-			return nil
-		}
-	}
-
-	log.Info("Switching to shell", "shell", shellName, "path", shellPath, "user", currentUser)
-
-	// Change user shell
-	chshCmd := exec.CommandContext(ctx, "sudo", "chsh", "-s", shellPath, currentUser)
-	if err := chshCmd.Run(); err != nil {
-		return fmt.Errorf("failed to change shell for user %s: %w", currentUser, err)
-	}
-
-	log.Info("Successfully switched shell", "shell", shellName, "user", currentUser)
+	log.Info("Shell changed successfully", "shell", shellName)
 	return nil
 }
 
-// addShellActivationHint adds instructions for activating the new shell
+// addShellActivationHint provides user guidance for shell activation
 func (sm *ShellManager) addShellActivationHint(shellName string) {
-	configFile := sm.getShellConfigFile(shellName)
-	log.Info("Shell configuration deployed", "shell", shellName, "config", configFile)
-	log.Info("To activate the new shell configuration, run:", "command", fmt.Sprintf("source %s", configFile))
+	log.Info("Shell setup complete", "shell", shellName)
+	log.Info("To activate your new shell environment:", "hint", fmt.Sprintf("exec %s", shellName))
+	log.Info("Or restart your terminal for changes to take effect")
 }
 
 // getShellConfigFile returns the main configuration file for a shell
@@ -404,22 +382,23 @@ func (sm *ShellManager) GetShellConfigs() map[ShellType]ShellConfig {
 	}
 }
 
-// BackupExistingConfig creates a backup of an existing config file using backup manager
+// BackupExistingConfig creates a backup of existing shell config
 func (sm *ShellManager) BackupExistingConfig(configPath string) error {
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil // No file to backup
+	if sm.backupMgr == nil {
+		return fmt.Errorf("backup manager not initialized")
 	}
 
-	// Create backup before modifying
-	_, err := sm.backupMgr.CreateBackup(backup.BackupOptions{
-		Description: fmt.Sprintf("Backup before modifying %s", filepath.Base(configPath)),
-		Type:        "pre-config",
-		Tags:        []string{"shell", "auto"},
-		Compress:    false,
-		Include:     []string{configPath},
-	})
+	// Create backup using the backup manager
+	options := backup.BackupOptions{
+		Description: fmt.Sprintf("Shell config backup for %s", filepath.Base(configPath)),
+		Type:        "shell-config",
+	}
+	if _, err := sm.backupMgr.CreateBackup(options); err != nil {
+		return fmt.Errorf("failed to create backup: %w", err)
+	}
 
-	return err
+	log.Info("Created backup of existing config", "config", configPath)
+	return nil
 }
 
 // CopyShellConfig copies a shell config from assets to home directory with proper naming
@@ -427,66 +406,74 @@ func (sm *ShellManager) CopyShellConfig(shell ShellType, overwrite bool) error {
 	configs := sm.GetShellConfigs()
 	config, exists := configs[shell]
 	if !exists {
-		return fmt.Errorf("unsupported shell: %s", shell)
+		return fmt.Errorf("unsupported shell type: %s", shell)
 	}
 
 	// Check if source asset exists
-	if _, err := os.Stat(config.AssetPath); os.IsNotExist(err) {
-		return fmt.Errorf("shell config asset not found: %s", config.AssetPath)
+	if _, err := os.Stat(config.AssetPath); err != nil {
+		return fmt.Errorf("shell config asset not found: %w", err)
 	}
 
 	// Determine destination path
 	destPath := filepath.Join(sm.homeDir, config.HomeConfigFile)
 
-	// Create backup if file exists
-	if err := sm.BackupExistingConfig(destPath); err != nil {
-		return fmt.Errorf("failed to backup existing config: %w", err)
-	}
-
-	// Check if destination exists and overwrite flag
+	// Check if destination exists
 	if _, err := os.Stat(destPath); err == nil && !overwrite {
-		return fmt.Errorf("config file already exists: %s (use --overwrite to replace)", destPath)
+		return fmt.Errorf("destination file exists (use overwrite to replace)")
 	}
 
-	// Ensure destination directory exists
+	// Backup existing config if it exists
+	if _, err := os.Stat(destPath); err == nil {
+		if err := sm.BackupExistingConfig(destPath); err != nil {
+			log.Warn("Failed to backup existing config", "error", err)
+			// Continue anyway
+		}
+	}
+
+	// Ensure destination directory exists (important for fish)
 	destDir := filepath.Dir(destPath)
 	if err := os.MkdirAll(destDir, 0750); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", destDir, err)
+		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	// Copy the file
+	// Copy the config file with proper permissions
 	if err := sm.copyFileWithPermissions(config.AssetPath, destPath, config.Permissions); err != nil {
-		return fmt.Errorf("failed to copy %s to %s: %w", config.AssetPath, destPath, err)
+		return fmt.Errorf("failed to copy shell config: %w", err)
 	}
 
+	log.Info("Shell config copied successfully", "shell", shell, "destination", destPath)
 	return nil
 }
 
 // copyFileWithPermissions copies a file with specific permissions
 func (sm *ShellManager) copyFileWithPermissions(src, dst string, permissions os.FileMode) error {
+	// Validate source exists
+	if _, err := os.Stat(src); err != nil {
+		return fmt.Errorf("source file not accessible: %w", err)
+	}
+
 	sourceFile, err := os.Open(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer sourceFile.Close()
 
-	// Ensure destination directory exists
-	destDir := filepath.Dir(dst)
-	if err := os.MkdirAll(destDir, 0750); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
 	destFile, err := os.Create(dst)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 	defer destFile.Close()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
-		return err
+		return fmt.Errorf("failed to copy file contents: %w", err)
 	}
 
-	return os.Chmod(dst, permissions)
+	// Set permissions
+	if err := os.Chmod(dst, permissions); err != nil {
+		return fmt.Errorf("failed to set file permissions: %w", err)
+	}
+
+	return nil
 }
 
 // AppendToShellConfig appends content to an existing shell config file
@@ -494,115 +481,94 @@ func (sm *ShellManager) AppendToShellConfig(shell ShellType, content string) err
 	configs := sm.GetShellConfigs()
 	config, exists := configs[shell]
 	if !exists {
-		return fmt.Errorf("unsupported shell: %s", shell)
+		return fmt.Errorf("unsupported shell type: %s", shell)
 	}
 
-	configPath := filepath.Join(sm.homeDir, config.HomeConfigFile)
+	destPath := filepath.Join(sm.homeDir, config.HomeConfigFile)
 
-	// Create backup before modifying
-	if err := sm.BackupExistingConfig(configPath); err != nil {
-		return fmt.Errorf("failed to backup config before append: %w", err)
+	// Ensure file exists
+	if _, err := os.Stat(destPath); err != nil {
+		return fmt.Errorf("shell config file does not exist: %w", err)
 	}
 
-	// Ensure directory exists
-	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0750); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	// Open file for appending, create if it doesn't exist
-	file, err := os.OpenFile(configPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, config.Permissions)
+	// Open file in append mode
+	file, err := os.OpenFile(destPath, os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to open config file for appending: %w", err)
 	}
 	defer file.Close()
 
-	// Add newline before content if file is not empty
-	if stat, err := file.Stat(); err == nil && stat.Size() > 0 {
-		if _, err := file.WriteString("\n"); err != nil {
-			return fmt.Errorf("failed to write newline: %w", err)
-		}
+	// Write content
+	if _, err := file.WriteString("\n" + content + "\n"); err != nil {
+		return fmt.Errorf("failed to append to config file: %w", err)
 	}
 
-	// Append the content
-	if _, err := file.WriteString(content); err != nil {
-		return fmt.Errorf("failed to append content: %w", err)
-	}
-
-	// Ensure content ends with newline
-	if !strings.HasSuffix(content, "\n") {
-		if _, err := file.WriteString("\n"); err != nil {
-			return fmt.Errorf("failed to write final newline: %w", err)
-		}
-	}
-
+	log.Info("Content appended to shell config", "shell", shell)
 	return nil
 }
 
-// GetConfigPath returns the full path to a shell's config file in the home directory
+// GetConfigPath returns the home path for a shell configuration
 func (sm *ShellManager) GetConfigPath(shell ShellType) (string, error) {
 	configs := sm.GetShellConfigs()
 	config, exists := configs[shell]
 	if !exists {
-		return "", fmt.Errorf("unsupported shell: %s", shell)
+		return "", fmt.Errorf("unsupported shell type: %s", shell)
 	}
-
 	return filepath.Join(sm.homeDir, config.HomeConfigFile), nil
 }
 
-// IsConfigInstalled checks if a shell config file exists in the home directory
+// IsConfigInstalled checks if a shell configuration is installed
 func (sm *ShellManager) IsConfigInstalled(shell ShellType) (bool, error) {
 	configPath, err := sm.GetConfigPath(shell)
 	if err != nil {
 		return false, err
 	}
 
-	_, err = os.Stat(configPath)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
+	if _, err := os.Stat(configPath); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
 		return false, err
 	}
 
 	return true, nil
 }
 
-// ListAvailableConfigs returns list of available shell configs from assets
+// ListAvailableConfigs returns list of shell configs available in assets
 func (sm *ShellManager) ListAvailableConfigs() ([]ShellType, error) {
 	var available []ShellType
 	configs := sm.GetShellConfigs()
 
-	for shell, config := range configs {
+	for shellType, config := range configs {
 		if _, err := os.Stat(config.AssetPath); err == nil {
-			available = append(available, shell)
+			available = append(available, shellType)
 		}
 	}
 
 	return available, nil
 }
 
-// DetectUserShell attempts to detect the user's current shell
+// DetectUserShell detects the current user's shell
 func DetectUserShell() ShellType {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		return Bash // Default fallback
+	// Check SHELL environment variable
+	shellEnv := os.Getenv("SHELL")
+	if shellEnv != "" {
+		if strings.Contains(shellEnv, "bash") {
+			return Bash
+		}
+		if strings.Contains(shellEnv, "zsh") {
+			return Zsh
+		}
+		if strings.Contains(shellEnv, "fish") {
+			return Fish
+		}
 	}
 
-	shell = filepath.Base(shell)
-	switch shell {
-	case "bash":
-		return Bash
-	case "zsh":
-		return Zsh
-	case "fish":
-		return Fish
-	default:
-		return Bash // Default fallback
-	}
+	// Default to bash
+	return Bash
 }
 
-// HasMarker checks if a config file contains a specific marker comment
+// HasMarker checks if a shell config file has a specific marker
 func (sm *ShellManager) HasMarker(shell ShellType, marker string) (bool, error) {
 	configPath, err := sm.GetConfigPath(shell)
 	if err != nil {
@@ -610,18 +576,15 @@ func (sm *ShellManager) HasMarker(shell ShellType, marker string) (bool, error) 
 	}
 
 	file, err := os.Open(configPath)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
 	if err != nil {
 		return false, err
 	}
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	markerComment := fmt.Sprintf("# %s", marker)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.Contains(line, marker) {
+		if strings.Contains(scanner.Text(), markerComment) {
 			return true, nil
 		}
 	}
@@ -629,16 +592,17 @@ func (sm *ShellManager) HasMarker(shell ShellType, marker string) (bool, error) 
 	return false, scanner.Err()
 }
 
-// AppendWithMarker appends content to a shell config only if the marker doesn't already exist
+// AppendWithMarker appends content with a marker to prevent duplicates
 func (sm *ShellManager) AppendWithMarker(shell ShellType, marker, content string) error {
 	// Check if marker already exists
-	hasMarker, err := sm.HasMarker(shell, marker)
+	exists, err := sm.HasMarker(shell, marker)
 	if err != nil {
 		return err
 	}
 
-	if hasMarker {
-		return nil // Already exists, nothing to do
+	if exists {
+		log.Info("Marker already exists in config, skipping", "shell", shell, "marker", marker)
+		return nil
 	}
 
 	// Add marker and content
