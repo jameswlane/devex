@@ -17,12 +17,13 @@ type repository struct {
 }
 
 // NewRepository initializes and returns a Repository instance
+// Returns nil if schema initialization fails
 func NewRepository(db types.Database) types.Repository {
 	// Ensure schema is initialized
 	err := datastore.InitializeSchema(db.Conn())
 	if err != nil {
 		log.Error("Failed to initialize database schema", err)
-		panic(fmt.Errorf("repository initialization failed: %w", err))
+		return nil
 	}
 
 	return &repository{
