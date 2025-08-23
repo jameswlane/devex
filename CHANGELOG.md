@@ -1,3 +1,16 @@
+## [0.24.0](https://github.com/jameswlane/devex/compare/0.23.0...0.24.0) (2025-08-23)
+
+### Features
+
+* add desktop applications ([#140](https://github.com/jameswlane/devex/issues/140)) ([69a1154](https://github.com/jameswlane/devex/commit/69a115439c3836ff4ed5db089af8877d52e8e86b))
+* comprehensive DevEx CLI documentation overhaul ([#154](https://github.com/jameswlane/devex/issues/154)) ([2034418](https://github.com/jameswlane/devex/commit/203441880a14025e4f22b057d69d95cf69a24828))
+* critical 1.0 commands ([#143](https://github.com/jameswlane/devex/issues/143)) ([19531f2](https://github.com/jameswlane/devex/commit/19531f2d5ef14413d6cec85becdd2cc418efd5c8)), closes [#99](https://github.com/jameswlane/devex/issues/99) [#97](https://github.com/jameswlane/devex/issues/97) [#95](https://github.com/jameswlane/devex/issues/95) [#99](https://github.com/jameswlane/devex/issues/99) [#97](https://github.com/jameswlane/devex/issues/97) [#95](https://github.com/jameswlane/devex/issues/95) [#99](https://github.com/jameswlane/devex/issues/99) [#97](https://github.com/jameswlane/devex/issues/97) [#97](https://github.com/jameswlane/devex/issues/97) [#97](https://github.com/jameswlane/devex/issues/97) [#97](https://github.com/jameswlane/devex/issues/97) [#97](https://github.com/jameswlane/devex/issues/97) [#97](https://github.com/jameswlane/devex/issues/97) [#95](https://github.com/jameswlane/devex/issues/95) [#95](https://github.com/jameswlane/devex/issues/95) [#95](https://github.com/jameswlane/devex/issues/95) [#95](https://github.com/jameswlane/devex/issues/95) [#95](https://github.com/jameswlane/devex/issues/95) [#95](https://github.com/jameswlane/devex/issues/95) [#4](https://github.com/jameswlane/devex/issues/4) [#95](https://github.com/jameswlane/devex/issues/95) [#5](https://github.com/jameswlane/devex/issues/5) [#95](https://github.com/jameswlane/devex/issues/95) [#7](https://github.com/jameswlane/devex/issues/7)
+* updating default config items ([a4747b3](https://github.com/jameswlane/devex/commit/a4747b303b5d3b0c266b49fce01a884a1af90547))
+
+### Bug Fixes
+
+* add comprehensive Docker testing infrastructure for issue [#155](https://github.com/jameswlane/devex/issues/155) ([#156](https://github.com/jameswlane/devex/issues/156)) ([aeb6231](https://github.com/jameswlane/devex/commit/aeb6231600207afead40aa5dac50d8bb4baa3b36))
+
 ## [0.23.0](https://github.com/jameswlane/devex/compare/0.22.0...0.23.0) (2025-08-16)
 
 ### Features
