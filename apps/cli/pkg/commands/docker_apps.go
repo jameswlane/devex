@@ -27,14 +27,35 @@ func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
 		Linux: types.OSConfig{
 			InstallMethod:  "apt",
 			InstallCommand: "docker.io",
+			PostInstall: []types.InstallCommand{
+				{
+					Shell: "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &",
+				},
+				{
+					Shell: "sudo usermod -aG docker $USER",
+				},
+				{
+					Shell: "newgrp docker || true",
+				},
+			},
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "brew",
 			InstallCommand: "docker",
+			PostInstall: []types.InstallCommand{
+				{
+					Shell: "open -a Docker",
+				},
+			},
 		},
 		Windows: types.OSConfig{
 			InstallMethod:  "winget",
 			InstallCommand: "Docker.DockerDesktop",
+			PostInstall: []types.InstallCommand{
+				{
+					Shell: "net start com.docker.service",
+				},
+			},
 		},
 	}
 }

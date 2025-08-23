@@ -36,4 +36,5 @@ var CrossPlatformFiles = []string{
 	"kde.yaml",
 	"macos.yaml",
 	"windows.yaml",
+	"security.yaml",
 }

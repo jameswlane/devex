@@ -1,0 +1,153 @@
+# DevEx Permissive Security Configuration
+# This configuration allows most operations while blocking only the most
+# dangerous commands. Suitable for personal development environments.
+# Documentation: https://docs.devex.sh/security/permissive
+# Permissive security level - allows most operations
+level: 2 # Permissive
+# Disable enterprise mode (not needed for permissive)
+enterprise_mode: false
+# Warn on overrides for transparency
+warn_on_overrides: true
+# Global overrides for common development patterns
+global_overrides:
+  # Allow curl/wget piping from trusted domains
+  - rule_type: "command-injection"
+    pattern: "(curl|wget).*\\|(bash|sh)"
+    reason: "Allow installation scripts from trusted sources"
+    warn_user: true
+  # Allow complex bash operations
+  - rule_type: "command-injection"
+    pattern: "bash -c '[^']*rm -rf /tmp/[^/]*[^']*'"
+    reason: "Allow cleaning temporary directories"
+    warn_user: false
+  # Allow mise and other development tool setup
+  - rule_type: "command-injection"
+    pattern: "bash -c 'export PATH=.*'"
+    reason: "Allow PATH modifications for development tools"
+    warn_user: false
+  # Allow sudo for package management
+  - rule_type: "privilege-escalation"
+    pattern: "sudo (apt|apt-get|yum|dnf|pacman|zypper|brew|snap|flatpak).*"
+    reason: "Package managers often require sudo"
+    warn_user: false
+  # Allow common network tools
+  - rule_type: "network-access"
+    pattern: "(ssh|scp|rsync) [a-zA-Z0-9\\-_@\\.].*"
+    reason: "Standard network tools for development"
+    warn_user: false
+# Application-specific overrides for development workflows
+app_overrides:
+  # Docker development
+  docker:
+    - rule_type: "privilege-escalation"
+      pattern: "sudo.*docker.*"
+      reason: "Docker often requires sudo for management"
+      warn_user: false
+    - rule_type: "network-access"
+      pattern: "docker pull .*"
+      reason: "Allow pulling Docker images"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "docker run.*-v.*"
+      reason: "Allow volume mounts for development"
+      warn_user: false
+  # Language version managers
+  mise:
+    - rule_type: "unknown-executable"
+      pattern: "mise (install|use|uninstall) .*"
+      reason: "Allow mise to manage language versions"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "ln -sf.*mise.*"
+      reason: "Allow mise symlink management"
+      warn_user: false
+  # Node.js ecosystem
+  nodejs:
+    - rule_type: "unknown-executable"
+      pattern: "(npm|yarn|pnpm) (install|add|remove|update).*"
+      reason: "JavaScript package management"
+      warn_user: false
+    - rule_type: "unknown-executable"
+      pattern: "npx .*"
+      reason: "Allow executing npm packages"
+      warn_user: true
+  # Python development
+  python:
+    - rule_type: "unknown-executable"
+      pattern: "pip3? install.*"
+      reason: "Python package installation"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "python.*setup\\.py.*"
+      reason: "Python package setup and installation"
+      warn_user: false
+  # Go development
+  golang:
+    - rule_type: "unknown-executable"
+      pattern: "go (get|install|build|run).*"
+      reason: "Standard Go development commands"
+      warn_user: false
+    - rule_type: "network-access"
+      pattern: "go mod download"
+      reason: "Download Go module dependencies"
+      warn_user: false
+  # Rust development
+  rust:
+    - rule_type: "unknown-executable"
+      pattern: "cargo (install|build|run|update).*"
+      reason: "Standard Rust development commands"
+      warn_user: false
+    - rule_type: "unknown-executable"
+      pattern: "rustup.*"
+      reason: "Rust toolchain management"
+      warn_user: false
+  # Database tools
+  databases:
+    - rule_type: "network-access"
+      pattern: "(psql|mysql|mongosh) -h.*"
+      reason: "Database client connections"
+      warn_user: false
+    - rule_type: "privilege-escalation"
+      pattern: "sudo systemctl (start|stop|restart) (postgresql|mysql|mongod)"
+      reason: "Local database service management"
+      warn_user: true
+  # Web servers and services
+  webdev:
+    - rule_type: "unknown-executable"
+      pattern: "(nginx|apache2|httpd) -t"
+      reason: "Web server configuration testing"
+      warn_user: false
+    - rule_type: "privilege-escalation"
+      pattern: "sudo systemctl (start|stop|restart) (nginx|apache2|httpd)"
+      reason: "Web server management for development"
+      warn_user: true
+  # Git and version control
+  git:
+    - rule_type: "network-access"
+      pattern: "git (clone|pull|push|fetch) .*"
+      reason: "Standard git operations with remote repositories"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "git config.*"
+      reason: "Git configuration management"
+      warn_user: false
+  # Archive and compression tools
+  archives:
+    - rule_type: "filesystem-access"
+      pattern: "(tar|unzip|gunzip|bunzip2) .*"
+      reason: "Archive extraction for development"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "chmod \\+x [a-zA-Z0-9\\-_/\\.]+"
+      reason: "Make files executable"
+      warn_user: false
+
+# Still blocked operations (critical dangerous patterns):
+# - rm -rf / (root filesystem deletion)
+# - dd to disk devices
+# - mkfs operations (filesystem formatting)
+# - Fork bombs
+# - These require explicit overrides even in permissive mode
+
+# Note: Permissive mode trusts the user to be responsible while providing
+# safety nets for the most destructive operations.
