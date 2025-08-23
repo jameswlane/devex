@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jameswlane/devex/pkg/backup"
@@ -42,6 +43,39 @@ type ShellManager struct {
 	settings   config.CrossPlatformSettings
 	repository types.Repository
 	backupMgr  *backup.BackupManager
+}
+
+// Input validation patterns for security
+var (
+	// validPackageNamePattern allows letters, numbers, hyphens, underscores, and dots
+	validPackageNamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	// validShellNamePattern restricts to known safe shell names
+	validShellNamePattern = regexp.MustCompile(`^(bash|zsh|fish|dash|tcsh|csh|ksh)$`)
+)
+
+// validatePackageName validates package names to prevent command injection
+func validatePackageName(name string) error {
+	if name == "" {
+		return fmt.Errorf("package name cannot be empty")
+	}
+	if len(name) > 100 {
+		return fmt.Errorf("package name too long (max 100 characters)")
+	}
+	if !validPackageNamePattern.MatchString(name) {
+		return fmt.Errorf("package name contains invalid characters: %s", name)
+	}
+	return nil
+}
+
+// validateShellName validates shell names to prevent command injection
+func validateShellName(name string) error {
+	if name == "" {
+		return fmt.Errorf("shell name cannot be empty")
+	}
+	if !validShellNamePattern.MatchString(name) {
+		return fmt.Errorf("unsupported shell name: %s", name)
+	}
+	return nil
 }
 
 // NewShellManager creates a new shell manager instance
@@ -137,6 +171,11 @@ func (sm *ShellManager) isShellAvailable(shellName string) bool {
 
 // installShellApp installs shell using DevEx app configuration
 func (sm *ShellManager) installShellApp(ctx context.Context, app types.CrossPlatformApp) error {
+	// Validate package name for security
+	if err := validatePackageName(app.Name); err != nil {
+		return fmt.Errorf("invalid app name: %w", err)
+	}
+
 	// This would integrate with the existing installer system
 	// For now, we'll use a simplified approach
 	cmd := exec.CommandContext(ctx, "sudo", "apt-get", "install", "-y", app.Name)
@@ -145,6 +184,11 @@ func (sm *ShellManager) installShellApp(ctx context.Context, app types.CrossPlat
 
 // installShellViaSystem installs shell via system package manager
 func (sm *ShellManager) installShellViaSystem(ctx context.Context, shellName string) error {
+	// Validate shell name for security
+	if err := validateShellName(shellName); err != nil {
+		return fmt.Errorf("invalid shell name: %w", err)
+	}
+
 	// Detect package manager and install
 	// This is simplified - would integrate with package manager detection
 	// Try different package managers
@@ -233,28 +277,10 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 		return fmt.Errorf("unsupported shell for module deployment: %s", shellName)
 	}
 
-	// Discover available files once using glob patterns
-	primaryPattern := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, "*")
-	fallbackPattern := filepath.Join(sm.assetsDir, sourceSubDir, "*")
-
-	primaryFiles, _ := filepath.Glob(primaryPattern)
-	fallbackFiles, _ := filepath.Glob(fallbackPattern)
-
-	// Create a map of available files for quick lookup
-	availableFiles := make(map[string]string)
-
-	// Add primary files (double subdirectory) first
-	for _, fullPath := range primaryFiles {
-		fileName := filepath.Base(fullPath)
-		availableFiles[fileName] = fullPath
-	}
-
-	// Add fallback files (single subdirectory) if not already present
-	for _, fullPath := range fallbackFiles {
-		fileName := filepath.Base(fullPath)
-		if _, exists := availableFiles[fileName]; !exists {
-			availableFiles[fileName] = fullPath
-		}
+	// Discover available files with race condition protection
+	availableFiles, err := sm.discoverFilesWithValidation(sourceSubDir)
+	if err != nil {
+		return fmt.Errorf("failed to discover module files: %w", err)
 	}
 
 	// Copy each module file if available
@@ -268,11 +294,16 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 		dst := filepath.Join(shellDefaultsDir, file)
 
 		if err := sm.copyFileWithPermissions(src, dst, 0644); err != nil {
-			log.Warn("Failed to deploy shell module", "shell", shellName, "file", file, "error", err)
+			log.Warn("Failed to deploy shell module (skipping, non-critical)",
+				"shell", shellName,
+				"file", file,
+				"src", src,
+				"dst", dst,
+				"error", err)
 			continue // Don't fail the entire deployment for missing optional files
 		}
 
-		log.Debug("Deployed shell module", "shell", shellName, "file", file)
+		log.Debug("Deployed shell module", "shell", shellName, "file", file, "dst", dst)
 	}
 
 	// Special handling for inputrc and bash_profile (bash only)
@@ -281,14 +312,22 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 		inputrcSrc := filepath.Join(sm.assetsDir, "bash", "inputrc")
 		inputrcDst := filepath.Join(sm.homeDir, ".inputrc")
 		if _, err := os.Stat(inputrcSrc); err == nil {
-			_ = sm.copyFileWithPermissions(inputrcSrc, inputrcDst, 0644) // Best effort
+			if err := sm.copyFileWithPermissions(inputrcSrc, inputrcDst, 0644); err != nil {
+				log.Warn("Failed to deploy .inputrc (non-critical)", "src", inputrcSrc, "dst", inputrcDst, "error", err)
+			} else {
+				log.Debug("Deployed .inputrc successfully", "dst", inputrcDst)
+			}
 		}
 
 		// Deploy bash_profile
 		bashProfileSrc := filepath.Join(sm.assetsDir, "bash", "bash_profile")
 		bashProfileDst := filepath.Join(sm.homeDir, ".bash_profile")
 		if _, err := os.Stat(bashProfileSrc); err == nil {
-			_ = sm.copyFileWithPermissions(bashProfileSrc, bashProfileDst, 0644) // Best effort
+			if err := sm.copyFileWithPermissions(bashProfileSrc, bashProfileDst, 0644); err != nil {
+				log.Warn("Failed to deploy .bash_profile (non-critical)", "src", bashProfileSrc, "dst", bashProfileDst, "error", err)
+			} else {
+				log.Debug("Deployed .bash_profile successfully", "dst", bashProfileDst)
+			}
 		}
 	}
 
@@ -377,6 +416,66 @@ func detectAssetsDir() string {
 
 	// Default fallback
 	return "assets"
+}
+
+// discoverFilesWithValidation safely discovers files with race condition protection
+func (sm *ShellManager) discoverFilesWithValidation(sourceSubDir string) (map[string]string, error) {
+	primaryPattern := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, "*")
+	fallbackPattern := filepath.Join(sm.assetsDir, sourceSubDir, "*")
+
+	// Use channels to handle glob operations with error handling
+	type globResult struct {
+		files []string
+		err   error
+	}
+
+	primaryChan := make(chan globResult, 1)
+	fallbackChan := make(chan globResult, 1)
+
+	// Run glob operations concurrently
+	go func() {
+		files, err := filepath.Glob(primaryPattern)
+		primaryChan <- globResult{files, err}
+	}()
+
+	go func() {
+		files, err := filepath.Glob(fallbackPattern)
+		fallbackChan <- globResult{files, err}
+	}()
+
+	// Collect results
+	primaryResult := <-primaryChan
+	fallbackResult := <-fallbackChan
+
+	if primaryResult.err != nil {
+		return nil, fmt.Errorf("primary glob failed: %w", primaryResult.err)
+	}
+	if fallbackResult.err != nil {
+		return nil, fmt.Errorf("fallback glob failed: %w", fallbackResult.err)
+	}
+
+	// Create a map of available files for quick lookup with validation
+	availableFiles := make(map[string]string)
+
+	// Add primary files (double subdirectory) first with existence validation
+	for _, fullPath := range primaryResult.files {
+		if stat, err := os.Stat(fullPath); err == nil && !stat.IsDir() {
+			fileName := filepath.Base(fullPath)
+			availableFiles[fileName] = fullPath
+		}
+	}
+
+	// Add fallback files (single subdirectory) if not already present with validation
+	for _, fullPath := range fallbackResult.files {
+		fileName := filepath.Base(fullPath)
+		if _, exists := availableFiles[fileName]; !exists {
+			if stat, err := os.Stat(fullPath); err == nil && !stat.IsDir() {
+				availableFiles[fileName] = fullPath
+			}
+		}
+	}
+
+	return availableFiles, nil
 }
 
 // GetShellConfigs returns configuration mapping for all supported shells

@@ -2,7 +2,9 @@ package apt
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -289,21 +291,10 @@ func setupDockerService() error {
 		log.Info("Docker service started successfully")
 	}
 
-	// Configure Docker daemon for log rotation
-	log.Debug("Configuring Docker daemon log rotation")
-	daemonConfig := `{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"5"}}`
-	daemonConfigCmd := fmt.Sprintf("echo '%s' | sudo tee /etc/docker/daemon.json", daemonConfig)
-	if _, err := utils.CommandExec.RunShellCommand(daemonConfigCmd); err != nil {
+	// Configure Docker daemon for log rotation (merge with existing config)
+	if err := configureDockerDaemon(); err != nil {
 		log.Warn("Failed to configure Docker daemon log rotation", "error", err)
 		// Not critical, continue
-	} else {
-		log.Info("Docker daemon configured with log rotation (max 5 files of 10MB each)")
-		// Restart Docker to apply daemon.json changes
-		if _, err := utils.CommandExec.RunShellCommand("sudo systemctl restart docker"); err != nil {
-			log.Warn("Failed to restart Docker after daemon configuration", "error", err)
-		} else {
-			log.Info("Docker service restarted with new configuration")
-		}
 	}
 
 	// Add current user to docker group
@@ -347,6 +338,83 @@ func setupDockerService() error {
 		log.Warn("Docker daemon may not be fully ready yet", "hint", "Try running 'sudo systemctl status docker' to check service status")
 	}
 
+	return nil
+}
+
+// configureDockerDaemon safely merges Docker daemon configuration
+func configureDockerDaemon() error {
+	const daemonConfigPath = "/etc/docker/daemon.json"
+
+	// Our desired configuration
+	desiredConfig := map[string]interface{}{
+		"log-driver": "json-file",
+		"log-opts": map[string]string{
+			"max-size": "10m",
+			"max-file": "5",
+		},
+	}
+
+	// Read existing configuration if it exists
+	existingConfig := make(map[string]interface{})
+	if data, err := os.ReadFile(daemonConfigPath); err == nil {
+		if err := json.Unmarshal(data, &existingConfig); err != nil {
+			log.Warn("Existing daemon.json has invalid JSON, backing up and replacing", "error", err)
+			// Backup the invalid file
+			backupPath := daemonConfigPath + ".backup." + fmt.Sprintf("%d", time.Now().Unix())
+			if _, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo cp %s %s", daemonConfigPath, backupPath)); err != nil {
+				log.Warn("Failed to backup invalid daemon.json", "error", err)
+			} else {
+				log.Info("Backed up invalid daemon.json", "backup_path", backupPath)
+			}
+			// Use empty config since existing is invalid
+			existingConfig = make(map[string]interface{})
+		} else {
+			log.Debug("Found existing Docker daemon configuration, merging")
+		}
+	}
+
+	// Merge configurations - desired config takes precedence for log settings only
+	mergedConfig := existingConfig
+	if mergedConfig == nil {
+		mergedConfig = make(map[string]interface{})
+	}
+
+	// Only override log-related settings, preserve everything else
+	mergedConfig["log-driver"] = desiredConfig["log-driver"]
+	mergedConfig["log-opts"] = desiredConfig["log-opts"]
+
+	// Marshal to JSON
+	configJSON, err := json.MarshalIndent(mergedConfig, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal daemon configuration: %w", err)
+	}
+
+	// Write configuration using a temporary file for atomic operation
+	tempFile := daemonConfigPath + ".tmp"
+	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s", string(configJSON), tempFile)
+	if _, err := utils.CommandExec.RunShellCommand(writeCmd); err != nil {
+		return fmt.Errorf("failed to write temporary daemon configuration: %w", err)
+	}
+
+	// Atomically move temp file to final location
+	moveCmd := fmt.Sprintf("sudo mv %s %s", tempFile, daemonConfigPath)
+	if _, err := utils.CommandExec.RunShellCommand(moveCmd); err != nil {
+		// Cleanup temp file on failure
+		if _, cleanupErr := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo rm -f %s", tempFile)); cleanupErr != nil {
+			log.Warn("Failed to cleanup temporary daemon.json file", "file", tempFile, "error", cleanupErr)
+		}
+		return fmt.Errorf("failed to move daemon configuration to final location: %w", err)
+	}
+
+	log.Info("Docker daemon configured with log rotation (max 5 files of 10MB each)")
+
+	// Restart Docker to apply daemon.json changes
+	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl restart docker"); err != nil {
+		log.Warn("Failed to restart Docker after daemon configuration", "error", err)
+		return fmt.Errorf("failed to restart Docker service: %w", err)
+	}
+
+	log.Info("Docker service restarted with new configuration")
 	return nil
 }
 
