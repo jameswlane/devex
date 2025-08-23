@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type MockCommandExecutor struct {
@@ -908,6 +909,22 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 	}
 
 	return "mock output", nil
+}
+
+func (m *MockCommandExecutor) RunShellCommandWithTimeout(command string, timeout time.Duration) (string, error) {
+	m.Commands = append(m.Commands, command)
+
+	// Check for exact command match first
+	if command == m.FailingCommand {
+		return "", fmt.Errorf("mock shell command with timeout failed: %s", command)
+	}
+
+	// Check multiple failing commands
+	if m.FailingCommands[command] {
+		return "", fmt.Errorf("mock shell command with timeout failed: %s", command)
+	}
+
+	return "mock output with timeout", nil
 }
 
 func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args ...string) (string, error) {

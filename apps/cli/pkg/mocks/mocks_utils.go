@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -32,6 +33,14 @@ func (m *MockUtils) RunShellCommand(command string) (string, error) {
 		return "", fmt.Errorf("mock RunShellCommand failed")
 	}
 	return "mock shell output", nil
+}
+
+func (m *MockUtils) RunShellCommandWithTimeout(command string, timeout time.Duration) (string, error) {
+	m.Commands = append(m.Commands, command)
+	if command == m.FailingCommand {
+		return "", fmt.Errorf("mock RunShellCommandWithTimeout failed")
+	}
+	return "mock shell output with timeout", nil
 }
 
 func (m *MockUtils) FailCommand(command string) {

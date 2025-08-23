@@ -33,7 +33,7 @@ docker() {
 }
 
 # bun completions
-[ -s "/Users/jl82576/.bun/_bun" ] && source "/Users/jl82576/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
@@ -45,7 +45,7 @@ fcd() {
 }
 
 # pnpm
-export PNPM_HOME="/Users/jl82576/Library/pnpm"
+export PNPM_HOME="$HOME/Library/pnpm"
 case ":$PATH:" in
   *":$PNPM_HOME:"*) ;;
   *) export PATH="$PNPM_HOME:$PATH" ;;
@@ -53,7 +53,7 @@ esac
 # pnpm end
 
 # Cargo
-export PATH="/Users/jl82576/.cargo/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 
 
 # Set path if required

@@ -274,7 +274,7 @@ func setupDockerService() error {
 	log.Debug("Configuring Docker service and permissions")
 
 	// Enable Docker service to start on boot
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable docker"); err != nil {
+	if _, err := utils.CommandExec.RunShellCommandWithTimeout("sudo systemctl enable docker", 30*time.Second); err != nil {
 		log.Warn("Failed to enable Docker service", "error", err)
 		// Continue anyway
 	} else {
@@ -282,7 +282,7 @@ func setupDockerService() error {
 	}
 
 	// Start Docker service
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start docker"); err != nil {
+	if _, err := utils.CommandExec.RunShellCommandWithTimeout("sudo systemctl start docker", 30*time.Second); err != nil {
 		log.Warn("Failed to start Docker service", "error", err)
 		// Continue anyway, user can start manually
 	} else {
@@ -293,13 +293,13 @@ func setupDockerService() error {
 	log.Debug("Configuring Docker daemon log rotation")
 	daemonConfig := `{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"5"}}`
 	daemonConfigCmd := fmt.Sprintf("echo '%s' | sudo tee /etc/docker/daemon.json", daemonConfig)
-	if _, err := utils.CommandExec.RunShellCommand(daemonConfigCmd); err != nil {
+	if _, err := utils.CommandExec.RunShellCommandWithTimeout(daemonConfigCmd, 30*time.Second); err != nil {
 		log.Warn("Failed to configure Docker daemon log rotation", "error", err)
 		// Not critical, continue
 	} else {
 		log.Info("Docker daemon configured with log rotation (max 5 files of 10MB each)")
 		// Restart Docker to apply daemon.json changes
-		if _, err := utils.CommandExec.RunShellCommand("sudo systemctl restart docker"); err != nil {
+		if _, err := utils.CommandExec.RunShellCommandWithTimeout("sudo systemctl restart docker", 30*time.Second); err != nil {
 			log.Warn("Failed to restart Docker after daemon configuration", "error", err)
 		} else {
 			log.Info("Docker service restarted with new configuration")
@@ -314,7 +314,7 @@ func setupDockerService() error {
 	}
 
 	addUserCmd := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
-	if _, err := utils.CommandExec.RunShellCommand(addUserCmd); err != nil {
+	if _, err := utils.CommandExec.RunShellCommandWithTimeout(addUserCmd, 30*time.Second); err != nil {
 		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err)
 		log.Info("You may need to manually add your user to the docker group", "command", fmt.Sprintf("sudo usermod -aG docker %s", currentUser))
 	} else {
@@ -326,8 +326,8 @@ func setupDockerService() error {
 
 		// The sg command can run a command with the new group, but we can't change the parent shell
 		// However, we can test if Docker works with the new group
-		testCmd := "sg docker -c 'docker version --format \"{{.Server.Version}}\"' 2>/dev/null"
-		if output, err := utils.CommandExec.RunShellCommand(testCmd); err == nil {
+		testCmd := "sg docker -c 'docker version --format \"{{.Server.Version}}\"'"
+		if output, err := utils.CommandExec.RunShellCommandWithTimeout(testCmd, 30*time.Second); err == nil {
 			log.Info("Docker group membership verified and working", "docker_version", strings.TrimSpace(output))
 			log.Info("Note: Current shell session still requires 'newgrp docker' or re-login for direct docker commands")
 		} else {

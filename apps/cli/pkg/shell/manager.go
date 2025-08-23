@@ -233,15 +233,39 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 		return fmt.Errorf("unsupported shell for module deployment: %s", shellName)
 	}
 
-	// Copy each module file with fallback path logic
-	for _, file := range moduleFiles {
-		src := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, file) // e.g., assets/bash/bash/rc
-		dst := filepath.Join(shellDefaultsDir, file)
+	// Discover available files once using glob patterns
+	primaryPattern := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, "*")
+	fallbackPattern := filepath.Join(sm.assetsDir, sourceSubDir, "*")
 
-		// If the double subdirectory doesn't exist, try single subdirectory
-		if _, err := os.Stat(src); os.IsNotExist(err) {
-			src = filepath.Join(sm.assetsDir, sourceSubDir, file) // e.g., assets/bash/rc
+	primaryFiles, _ := filepath.Glob(primaryPattern)
+	fallbackFiles, _ := filepath.Glob(fallbackPattern)
+
+	// Create a map of available files for quick lookup
+	availableFiles := make(map[string]string)
+
+	// Add primary files (double subdirectory) first
+	for _, fullPath := range primaryFiles {
+		fileName := filepath.Base(fullPath)
+		availableFiles[fileName] = fullPath
+	}
+
+	// Add fallback files (single subdirectory) if not already present
+	for _, fullPath := range fallbackFiles {
+		fileName := filepath.Base(fullPath)
+		if _, exists := availableFiles[fileName]; !exists {
+			availableFiles[fileName] = fullPath
 		}
+	}
+
+	// Copy each module file if available
+	for _, file := range moduleFiles {
+		src, exists := availableFiles[file]
+		if !exists {
+			log.Debug("Module file not found", "shell", shellName, "file", file)
+			continue // Skip missing optional files
+		}
+
+		dst := filepath.Join(shellDefaultsDir, file)
 
 		if err := sm.copyFileWithPermissions(src, dst, 0644); err != nil {
 			log.Warn("Failed to deploy shell module", "shell", shellName, "file", file, "error", err)
@@ -553,13 +577,13 @@ func DetectUserShell() ShellType {
 	// Check SHELL environment variable
 	shellEnv := os.Getenv("SHELL")
 	if shellEnv != "" {
-		if strings.Contains(shellEnv, "bash") {
+		shellName := filepath.Base(shellEnv)
+		switch shellName {
+		case "bash":
 			return Bash
-		}
-		if strings.Contains(shellEnv, "zsh") {
+		case "zsh":
 			return Zsh
-		}
-		if strings.Contains(shellEnv, "fish") {
+		case "fish":
 			return Fish
 		}
 	}
@@ -577,6 +601,9 @@ func (sm *ShellManager) HasMarker(shell ShellType, marker string) (bool, error) 
 
 	file, err := os.Open(configPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil // File doesn't exist, so marker doesn't exist
+		}
 		return false, err
 	}
 	defer file.Close()
