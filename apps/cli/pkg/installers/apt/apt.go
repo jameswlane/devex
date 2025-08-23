@@ -391,7 +391,8 @@ func configureDockerDaemon() error {
 
 	// Write configuration using a temporary file for atomic operation
 	tempFile := daemonConfigPath + ".tmp"
-	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s", string(configJSON), tempFile)
+	escapedConfigJSON := strings.ReplaceAll(string(configJSON), "'", "'\\''")
+	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s", escapedConfigJSON, tempFile)
 	if _, err := utils.CommandExec.RunShellCommand(writeCmd); err != nil {
 		return fmt.Errorf("failed to write temporary daemon configuration: %w", err)
 	}
