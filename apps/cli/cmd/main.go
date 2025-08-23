@@ -119,5 +119,10 @@ func initializeDatabase(homeDir string) types.Repository {
 	if err != nil {
 		handleError("initializing database", err)
 	}
-	return repository.NewRepository(sqlite)
+
+	repo := repository.NewRepository(sqlite)
+	if repo == nil {
+		handleError("initializing repository", fmt.Errorf("repository initialization failed"))
+	}
+	return repo
 }

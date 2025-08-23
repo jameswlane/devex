@@ -59,15 +59,17 @@ func TestAutoExitTiming(t *testing.T) {
 		// This is because tea.Quit returns a private type
 	})
 
-	t.Run("completion view should show auto-exit message", func(t *testing.T) {
+	t.Run("completion view should show clean completion message", func(t *testing.T) {
 		model := createMockSetupModel()
 		model.step = StepComplete
 
 		view := model.View()
 
-		// Should show auto-exit message instead of manual quit instruction
-		assert.Contains(t, view, "Exiting automatically...", "Completion view should show auto-exit message")
+		// Should show completion message without any exit instructions
+		assert.Contains(t, view, "🎉 Setup Complete!", "Completion view should show completion message")
+		assert.Contains(t, view, "Your development environment has been successfully set up!", "Completion view should show success message")
 		assert.NotContains(t, view, "Press 'q' to exit", "Completion view should not show manual quit instruction")
+		assert.NotContains(t, view, "Exiting automatically...", "Completion view should not show auto-exit message")
 	})
 
 	t.Run("completion view should show success message when no errors", func(t *testing.T) {

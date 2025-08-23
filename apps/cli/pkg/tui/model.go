@@ -109,6 +109,7 @@ type Model struct {
 	inputResponse  chan *SecureString // Changed to SecureString
 	channelCleaned bool               // Track channel cleanup to prevent memory leaks
 	cleanupMux     sync.Mutex         // Protect cleanup operations
+	startTime      time.Time          // Track installation start time
 
 	// Layout
 	width  int
@@ -198,6 +199,7 @@ func NewModel(apps []types.CrossPlatformApp) *Model {
 		needsInput:     false,
 		inputResponse:  make(chan *SecureString, 5), // Default channel buffer size to prevent deadlocks
 		channelCleaned: false,
+		startTime:      time.Now(), // Track when installation starts
 	}
 }
 
@@ -408,6 +410,10 @@ func (m *Model) View() string {
 
 // renderLeftPane renders the status/progress pane
 func (m *Model) renderLeftPane(width int) string {
+	// Calculate available content height (accounting for border and padding)
+	// Border takes 2 lines (top + bottom), padding takes 2 lines (top + bottom)
+	availableHeight := m.height - 4
+
 	leftStyle := lipgloss.NewStyle().
 		Width(width).
 		Height(m.height).
@@ -416,21 +422,43 @@ func (m *Model) renderLeftPane(width int) string {
 		Padding(1)
 
 	var content strings.Builder
+	lineCount := 0
+	maxLines := availableHeight
+
+	// Helper function to add content with line counting
+	addLine := func(text string) bool {
+		if lineCount >= maxLines {
+			return false
+		}
+		content.WriteString(text)
+		content.WriteString("\n")
+		lineCount++
+		return true
+	}
 
 	// Title
-	content.WriteString(lipgloss.NewStyle().
+	if !addLine(lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color("212")).
-		Render("DevEx Application Installer"))
-	content.WriteString("\n\n")
+		Render("DevEx Application Installer")) {
+		return leftStyle.Render(content.String())
+	}
+	if !addLine("") {
+		return leftStyle.Render(content.String())
+	}
 
 	// Current status
-	content.WriteString(lipgloss.NewStyle().
+	if !addLine(lipgloss.NewStyle().
 		Foreground(lipgloss.Color("246")).
-		Render("Status:"))
-	content.WriteString("\n")
-	content.WriteString(m.status)
-	content.WriteString("\n\n")
+		Render("Status:")) {
+		return leftStyle.Render(content.String())
+	}
+	if !addLine(m.status) {
+		return leftStyle.Render(content.String())
+	}
+	if !addLine("") {
+		return leftStyle.Render(content.String())
+	}
 
 	// Progress
 	if len(m.apps) > 0 {
@@ -439,49 +467,348 @@ func (m *Model) renderLeftPane(width int) string {
 		currentProgress := float64(completed) / float64(len(m.apps))
 		progressView := m.progress.ViewAs(currentProgress)
 
-		content.WriteString(lipgloss.NewStyle().
+		if !addLine(lipgloss.NewStyle().
 			Foreground(lipgloss.Color("246")).
-			Render("Progress:"))
-		content.WriteString("\n")
-		content.WriteString(progressView)
-		content.WriteString("\n")
-		content.WriteString(fmt.Sprintf("%d/%d apps", completed, len(m.apps)))
-		content.WriteString("\n\n")
+			Render("Progress:")) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine(progressView) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine(fmt.Sprintf("%d/%d apps", completed, len(m.apps))) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine("") {
+			return leftStyle.Render(content.String())
+		}
 	}
 
-	// Current app
-	if m.currentApp < len(m.apps) {
+	// Current app detailed information
+	if m.currentApp < len(m.apps) && lineCount < maxLines-5 { // Keep some buffer space
 		app := m.apps[m.currentApp]
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render("Installing:"))
-		content.WriteString("\n")
-		content.WriteString(lipgloss.NewStyle().
+		appDetails := m.getAppDetails(app)
+
+		// App Name and Category
+		if !addLine(lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("212")).
-			Render(app.Name))
-		content.WriteString("\n")
-		content.WriteString(app.Description)
-		content.WriteString("\n\n")
+			Render(fmt.Sprintf("📦 %s", appDetails.Name))) {
+			return leftStyle.Render(content.String())
+		}
+
+		if appDetails.Category != "" {
+			if !addLine(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("246")).
+				Italic(true).
+				Render(fmt.Sprintf("Category: %s", appDetails.Category))) {
+				return leftStyle.Render(content.String())
+			}
+		}
+
+		// Description (truncate if too long)
+		description := appDetails.Description
+		if len(description) > 100 {
+			description = description[:97] + "..."
+		}
+		if !addLine(description) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine("") {
+			return leftStyle.Render(content.String())
+		}
+
+		// Installation Details Section (show only essential info to save space)
+		if lineCount < maxLines-3 {
+			if !addLine(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("214")).
+				Render("🔧 Installation")) {
+				return leftStyle.Render(content.String())
+			}
+
+			// Installation method with icon
+			methodIcon := getMethodIcon(appDetails.InstallMethod)
+			if !addLine(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("246")).
+				Render(fmt.Sprintf("Method: %s %s", methodIcon, appDetails.InstallMethod))) {
+				return leftStyle.Render(content.String())
+			}
+
+			// Show size if we have space
+			if lineCount < maxLines-2 {
+				if !addLine(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("246")).
+					Render(fmt.Sprintf("Size: %s", appDetails.EstimatedSize))) {
+					return leftStyle.Render(content.String())
+				}
+			}
+
+			if !addLine("") {
+				return leftStyle.Render(content.String())
+			}
+		}
+
+		// Show dependencies only if critical and we have space
+		if len(appDetails.Dependencies) > 0 && lineCount < maxLines-3 {
+			if !addLine(lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("214")).
+				Render(fmt.Sprintf("📋 Deps (%d)", len(appDetails.Dependencies)))) {
+				return leftStyle.Render(content.String())
+			}
+			// Show max 2 dependencies to save space
+			for i, dep := range appDetails.Dependencies {
+				if i >= 2 {
+					break
+				}
+				if !addLine(lipgloss.NewStyle().
+					Foreground(lipgloss.Color("246")).
+					Render(fmt.Sprintf("• %s", dep))) {
+					return leftStyle.Render(content.String())
+				}
+			}
+			if !addLine("") {
+				return leftStyle.Render(content.String())
+			}
+		}
+
+		// Show timing if we have space
+		if !m.startTime.IsZero() && lineCount < maxLines-2 {
+			elapsed := time.Since(m.startTime)
+			if !addLine(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("246")).
+				Render(fmt.Sprintf("⏱️  Elapsed: %s", formatDuration(elapsed)))) {
+				return leftStyle.Render(content.String())
+			}
+		}
 	}
 
-	// Input prompt
-	if m.needsInput {
-		content.WriteString(lipgloss.NewStyle().
+	// Input prompt (prioritize showing this if needed)
+	if m.needsInput && lineCount < maxLines-4 {
+		if !addLine(lipgloss.NewStyle().
 			Foreground(lipgloss.Color("203")).
 			Bold(true).
-			Render("Input Required:"))
-		content.WriteString("\n")
-		content.WriteString(m.inputPrompt)
-		content.WriteString("\n\n")
-		content.WriteString(m.textInput.View())
-		content.WriteString("\n")
-		content.WriteString(lipgloss.NewStyle().
-			Foreground(lipgloss.Color("246")).
-			Render("Press Enter to submit"))
+			Render("Input Required:")) {
+			return leftStyle.Render(content.String())
+		}
+
+		// Truncate prompt if too long
+		prompt := m.inputPrompt
+		if len(prompt) > 50 {
+			prompt = prompt[:47] + "..."
+		}
+		if !addLine(prompt) {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine("") {
+			return leftStyle.Render(content.String())
+		}
+		if !addLine(m.textInput.View()) {
+			return leftStyle.Render(content.String())
+		}
 	}
 
-	return leftStyle.Render(content.String())
+	// Fill remaining space with empty lines to prevent content jumping
+	for lineCount < maxLines {
+		content.WriteString("\n")
+		lineCount++
+	}
+
+	return leftStyle.Render(strings.TrimRight(content.String(), "\n"))
+}
+
+// getAppDetails extracts detailed information about an app for display
+func (m *Model) getAppDetails(app types.CrossPlatformApp) AppDisplayInfo {
+	osConfig := app.GetOSConfig()
+
+	return AppDisplayInfo{
+		Name:            app.Name,
+		Description:     app.Description,
+		Category:        app.Category,
+		InstallMethod:   osConfig.InstallMethod,
+		OfficialSupport: osConfig.OfficialSupport,
+		Dependencies:    osConfig.Dependencies,
+		Conflicts:       osConfig.Conflicts,
+		EstimatedSize:   estimateAppSize(app),
+		EstimatedTime:   estimateInstallTime(osConfig.InstallMethod),
+		InstallLocation: getInstallLocation(osConfig),
+	}
+}
+
+// AppDisplayInfo holds all the information we want to display about an app
+type AppDisplayInfo struct {
+	Name            string
+	Description     string
+	Category        string
+	InstallMethod   string
+	OfficialSupport bool
+	Dependencies    []string
+	Conflicts       []string
+	EstimatedSize   string
+	EstimatedTime   time.Duration
+	InstallLocation string
+}
+
+// estimateAppSize provides a rough estimate of app installation size using simple heuristics
+func estimateAppSize(app types.CrossPlatformApp) string {
+	// Use simple heuristics similar to the performance analyzer's known sizes
+	knownSizes := map[string]string{
+		"docker":         "~450MB",
+		"docker-compose": "~50MB",
+		"node":           "~80MB",
+		"nodejs":         "~80MB",
+		"python":         "~100MB",
+		"rust":           "~250MB",
+		"go":             "~350MB",
+		"java":           "~180MB",
+		"vscode":         "~350MB",
+		"chrome":         "~200MB",
+		"firefox":        "~150MB",
+		"postgresql":     "~150MB",
+		"mysql":          "~450MB",
+		"mongodb":        "~250MB",
+		"redis":          "~50MB",
+		"nginx":          "~30MB",
+		"apache2":        "~50MB",
+		"git":            "~20MB",
+		"vim":            "~15MB",
+		"emacs":          "~50MB",
+		"curl":           "~5MB",
+		"wget":           "~3MB",
+		"zsh":            "~10MB",
+		"fish":           "~15MB",
+		"tmux":           "~5MB",
+	}
+
+	appNameLower := strings.ToLower(app.Name)
+	if size, exists := knownSizes[appNameLower]; exists {
+		return size
+	}
+
+	// Check for partial matches
+	for knownApp, size := range knownSizes {
+		if strings.Contains(appNameLower, knownApp) || strings.Contains(knownApp, appNameLower) {
+			return size
+		}
+	}
+
+	osConfig := app.GetOSConfig()
+
+	// Size estimates based on installation method
+	switch osConfig.InstallMethod {
+	case "snap":
+		return "~50-200MB"
+	case "flatpak":
+		return "~100-500MB"
+	case "apt", "dnf", "pacman":
+		if strings.Contains(strings.ToLower(app.Category), "development") {
+			return "~20-100MB"
+		}
+		return "~5-50MB"
+	case "brew":
+		return "~10-100MB"
+	case "curlpipe", "mise":
+		return "~1-20MB"
+	default:
+		return "~50MB"
+	}
+}
+
+// estimateInstallTime provides rough time estimates based on installation method and app type
+func estimateInstallTime(method string) time.Duration {
+	switch method {
+	case "apt", "dnf", "pacman":
+		return 30 * time.Second
+	case "snap":
+		return 60 * time.Second
+	case "flatpak":
+		return 90 * time.Second
+	case "brew":
+		return 45 * time.Second
+	case "curlpipe":
+		return 20 * time.Second
+	case "mise":
+		return 60 * time.Second // Language installations can take longer
+	case "docker":
+		return 120 * time.Second // Docker installs can be lengthy
+	default:
+		return 30 * time.Second
+	}
+}
+
+// getInstallLocation determines where the app will be installed
+func getInstallLocation(osConfig types.OSConfig) string {
+	if osConfig.Destination != "" {
+		return osConfig.Destination
+	}
+
+	switch osConfig.InstallMethod {
+	case "apt", "dnf", "pacman":
+		return "/usr/bin"
+	case "snap":
+		return "/snap/bin"
+	case "flatpak":
+		return "~/.local/share/flatpak"
+	case "brew":
+		return "/opt/homebrew/bin"
+	case "curlpipe":
+		return "~/.local/bin"
+	case "mise":
+		return "~/.local/share/mise"
+	default:
+		return "System default"
+	}
+}
+
+// getMethodIcon returns an icon for the installation method
+func getMethodIcon(method string) string {
+	switch method {
+	case "apt", "dnf", "pacman", "zypper":
+		return "📦"
+	case "snap":
+		return "🫰"
+	case "flatpak":
+		return "📱"
+	case "brew":
+		return "🍺"
+	case "curlpipe":
+		return "⬇️"
+	case "mise":
+		return "🔧"
+	case "docker":
+		return "🐳"
+	case "pip", "pip3":
+		return "🐍"
+	case "npm", "yarn", "pnpm":
+		return "📦"
+	case "cargo":
+		return "🦀"
+	case "go":
+		return "🐹"
+	default:
+		return "⚙️"
+	}
+}
+
+// formatDuration formats a duration in a human-readable way
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.0fs", d.Seconds())
+	}
+	if d < time.Hour {
+		minutes := int(d.Minutes())
+		seconds := int(d.Seconds()) % 60
+		if seconds == 0 {
+			return fmt.Sprintf("%dm", minutes)
+		}
+		return fmt.Sprintf("%dm %ds", minutes, seconds)
+	}
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	if minutes == 0 {
+		return fmt.Sprintf("%dh", hours)
+	}
+	return fmt.Sprintf("%dh %dm", hours, minutes)
 }
 
 // renderRightPane renders the terminal output pane

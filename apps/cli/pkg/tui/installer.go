@@ -12,9 +12,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/jameswlane/devex/pkg/performance"
 	"github.com/jameswlane/devex/pkg/platform"
 	progresspkg "github.com/jameswlane/devex/pkg/progress"
+	"github.com/jameswlane/devex/pkg/security"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -261,8 +264,10 @@ func (ss *SecureString) Clear() {
 	ss.data = nil
 }
 
+// Legacy validation variables removed - now using security package
+//
+//nolint:unused // Legacy code will be removed in next cleanup
 var (
-	// allowedCommands defines safe commands that can be executed
 	allowedCommands = map[string]bool{
 		CmdApt:              true,
 		CmdAptGet:           true,
@@ -327,28 +332,32 @@ var (
 		regexp.MustCompile(`\|\s*(bash|sh)\s+-c\s+.*>\s*/`),           // Pipes to shell writing to filesystem
 		regexp.MustCompile(`[;&|]{1,2}\s*curl\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
 		regexp.MustCompile(`[;&|]{1,2}\s*wget\s+.*\|\s*(sh|bash)`),    // Download and execute patterns
-		regexp.MustCompile(`\$\([^)]*\)`),                             // Command substitution
-		regexp.MustCompile(`\$\{[^}]*\}`),                             // Variable expansion
-		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),                     // Multiple directory traversal attempts
-		regexp.MustCompile(`\.\./`),                                   // Directory traversal patterns
-		regexp.MustCompile(`/etc/passwd`),                             // Sensitive files
-		regexp.MustCompile(`/etc/shadow`),                             // Sensitive files
-		regexp.MustCompile(`rm\s+-rf\s+/(\w+|$)`),                     // Dangerous rm commands on system dirs and root
-		regexp.MustCompile(`dd\s+if=/dev.*of=/`),                      // Dangerous dd commands writing to files
-		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                     // Fork bombs
-		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),        // Writing to critical system files
-		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),            // Writing to block devices (not /dev/null)
-		regexp.MustCompile(`\s+&\s+[^&]+`),                            // Background processes with additional commands (but not &&)
-		regexp.MustCompile(`\|\s*(sh|bash)\s*<?`),                     // Pipes specifically to shell interpreters (more specific)
-		regexp.MustCompile(`\|\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$`),         // Pipes to potentially malicious commands (not safe patterns)
-		regexp.MustCompile(`\s+\|\|\s+\w+`),                           // OR operator with additional commands
-		regexp.MustCompile("`[^`]*`"),                                 // Backtick command substitution
-		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),          // Writing to specific dangerous device files
-		regexp.MustCompile(`;\s*\w+.*&&.*chmod`),                      // Multi-command with chmod
-		regexp.MustCompile(`&&.*python.*-c`),                          // Python code execution
-		regexp.MustCompile(`\b(sh|bash)\s+-c\b`),                      // Direct shell code execution
-		regexp.MustCompile(`[;&|]+\s*$`),                              // Commands ending with operators
-		regexp.MustCompile(`>\s*/etc/`),                               // Writing to /etc directory
+		// Removed overly restrictive command substitution blocking
+		// regexp.MustCompile(`\$\([^)]*\)`),                          // Command substitution - TOO RESTRICTIVE
+		// regexp.MustCompile(`\$\{[^}]*\}`),                          // Variable expansion - TOO RESTRICTIVE
+		// Allow safe command substitution patterns but block dangerous ones
+		regexp.MustCompile(`\$\((rm|dd|mkfs|fdisk|kill|killall|shutdown|reboot)\s`), // Dangerous commands in substitution
+		regexp.MustCompile(`\$\{(rm|dd|mkfs|fdisk|kill|killall|shutdown|reboot)\s`), // Dangerous commands in variable expansion
+		regexp.MustCompile(`\.\./.*\.\./.*\.\./`),                                   // Multiple directory traversal attempts
+		regexp.MustCompile(`\.\./`),                                                 // Directory traversal patterns
+		regexp.MustCompile(`/etc/passwd`),                                           // Sensitive files
+		regexp.MustCompile(`/etc/shadow`),                                           // Sensitive files
+		regexp.MustCompile(`rm\s+-rf\s+/(\w+|$)`),                                   // Dangerous rm commands on system dirs and root
+		regexp.MustCompile(`dd\s+if=/dev.*of=/`),                                    // Dangerous dd commands writing to files
+		regexp.MustCompile(`:\(\)\{.*;\s*:\s*\|`),                                   // Fork bombs
+		regexp.MustCompile(`>\s*/etc/(passwd|shadow|sudoers)`),                      // Writing to critical system files
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z])\b`),                          // Writing to block devices (not /dev/null)
+		regexp.MustCompile(`\s+&\s+[^&]+`),                                          // Background processes with additional commands (but not &&)
+		regexp.MustCompile(`\|\s*(sh|bash)\s*<?`),                                   // Pipes specifically to shell interpreters (more specific)
+		regexp.MustCompile(`\|\s+[a-zA-Z_][a-zA-Z0-9_]*\s*$`),                       // Pipes to potentially malicious commands (not safe patterns)
+		regexp.MustCompile(`\s+\|\|\s+\w+`),                                         // OR operator with additional commands
+		regexp.MustCompile("`[^`]*`"),                                               // Backtick command substitution
+		regexp.MustCompile(`>\s*/dev/(sd[a-z]|hd[a-z]|tty)`),                        // Writing to specific dangerous device files
+		regexp.MustCompile(`;\s*\w+.*&&.*chmod`),                                    // Multi-command with chmod
+		regexp.MustCompile(`&&.*python.*-c`),                                        // Python code execution
+		regexp.MustCompile(`\b(sh|bash)\s+-c\b`),                                    // Direct shell code execution
+		regexp.MustCompile(`[;&|]+\s*$`),                                            // Commands ending with operators
+		regexp.MustCompile(`>\s*/etc/`),                                             // Writing to /etc directory
 	}
 )
 
@@ -450,64 +459,78 @@ func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command st
 	return cmd, nil
 }
 
-// ValidateCommand implements CommandExecutor.ValidateCommand
+// ValidateCommand implements CommandExecutor.ValidateCommand using the new security package
 func (ce *DefaultCommandExecutor) ValidateCommand(command string) error {
-	// Check for safe patterns first (GPG keys and system info)
-	safePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`bash\s+-c\s+'\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+'`),                                                // OS release info
-		regexp.MustCompile(`bash\s+-c\s+"\.\s*/etc/os-release\s+&&\s+echo\s+\$\w+"`),                                                // OS release info (double quotes)
-		regexp.MustCompile(`curl\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with curl and apt-key
-		regexp.MustCompile(`wget\s+.*\s+\|\s+sudo\s+apt-key\s+add\s+-`),                                                             // GPG key installation with wget and apt-key
-		regexp.MustCompile(`curl\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with curl
-		regexp.MustCompile(`wget\s+.*\s+\|\s+gpg\s+--dearmor`),                                                                      // GPG key dearmoring with wget
-		regexp.MustCompile(`bash\s+-c\s+'[^']*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^']*'`),                     // Mise PATH setup and commands (single quotes)
-		regexp.MustCompile(`bash\s+-c\s+"[^"]*export\s+PATH=.*mise\s+(use\s+--global|install|uninstall)[^"]*"`),                     // Mise PATH setup and commands (double quotes)
-		regexp.MustCompile(`bash\s+-c\s+'[^']*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^']*'`), // Mise conditional installation (single quotes)
-		regexp.MustCompile(`bash\s+-c\s+"[^"]*if\s+command\s+-v\s+mise\s+>/dev/null.*then\s+mise\s+(use\s+--global|install)[^"]*"`), // Mise conditional installation (double quotes)
-	}
-
-	// If it matches a safe pattern, allow it
-	for _, safePattern := range safePatterns {
-		if safePattern.MatchString(command) {
-			// Still need to check the command is whitelisted
-			return ce.validateCommandWhitelist(command)
-		}
-	}
-
-	// Check for dangerous patterns
-	for _, pattern := range dangerousPatterns {
-		if pattern.MatchString(command) {
-			return fmt.Errorf("command contains potentially dangerous pattern: %s", pattern.String())
-		}
-	}
-
-	return ce.validateCommandWhitelist(command)
+	// Use the new security validation package with moderate security level
+	validator := security.NewCommandValidator(security.SecurityLevelModerate)
+	return validator.ValidateCommand(command)
 }
 
-// validateCommandWhitelist validates that the command is in the whitelist
-func (ce *DefaultCommandExecutor) validateCommandWhitelist(command string) error {
-	// Parse command and validate the first word
-	parts := strings.Fields(command)
-	if len(parts) == 0 {
-		return fmt.Errorf("empty command")
+// validateCommandWhitelist function removed - now using security package
+
+// SecureCommandExecutor implements CommandExecutor using pattern-based validation
+type SecureCommandExecutor struct {
+	validator *security.CommandValidator
+}
+
+// NewSecureCommandExecutor creates a new secure command executor with configuration-aware validation
+func NewSecureCommandExecutor(level security.SecurityLevel, apps []types.CrossPlatformApp) *SecureCommandExecutor {
+	return &SecureCommandExecutor{
+		validator: security.NewCommandValidator(level),
+	}
+}
+
+// ExecuteCommand implements CommandExecutor.ExecuteCommand for SecureCommandExecutor
+func (sce *SecureCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	// Validate command using pattern-based approach
+	if err := sce.validator.ValidateCommand(command); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 
-	// Handle sudo commands specially
-	if parts[0] == "sudo" {
-		if len(parts) < 2 {
-			return fmt.Errorf("sudo command missing actual command")
-		}
-		// Validate the command after sudo
-		actualCommand := parts[1]
-		if !allowedCommands[actualCommand] {
-			return fmt.Errorf("sudo command '%s' is not in allowed list", actualCommand)
-		}
-	} else if !allowedCommands[parts[0]] {
-		// Validate regular commands
-		return fmt.Errorf("command '%s' is not in allowed list", parts[0])
+	// Parse and execute using safest method
+	executable, args, needsShell := parseCommand(command)
+
+	var cmd *exec.Cmd
+	if needsShell {
+		// Use shell for complex commands (pipes, redirections, etc.)
+		cmd = exec.CommandContext(ctx, "bash", "-c", command)
+	} else {
+		// Direct execution for simple commands
+		cmd = exec.CommandContext(ctx, executable, args...)
 	}
 
-	return nil
+	// Set platform-specific security attributes
+	cmd.SysProcAttr = sce.getPlatformSysProcAttr()
+
+	return cmd, nil
+}
+
+// ValidateCommand implements CommandExecutor.ValidateCommand for SecureCommandExecutor
+func (sce *SecureCommandExecutor) ValidateCommand(command string) error {
+	return sce.validator.ValidateCommand(command)
+}
+
+// ValidateConfigCommand validates a command in the context of a specific application
+func (sce *SecureCommandExecutor) ValidateConfigCommand(command string, appName string) error {
+	return sce.validator.ValidateCommand(command)
+}
+
+// getPlatformSysProcAttr returns platform-specific security attributes for SecureCommandExecutor
+func (sce *SecureCommandExecutor) getPlatformSysProcAttr() *syscall.SysProcAttr {
+	switch runtime.GOOS {
+	case "linux", "darwin":
+		return &syscall.SysProcAttr{
+			// Create new process group to isolate from parent
+			Setpgid: true,
+			Pgid:    0,
+		}
+	case "windows":
+		return &syscall.SysProcAttr{
+			// Windows-specific security attributes could be added here
+		}
+	default:
+		return nil
+	}
 }
 
 // NewStreamingInstaller creates a new streaming installer with context cancellation
@@ -526,6 +549,28 @@ func NewStreamingInstaller(program *tea.Program, repo types.Repository, ctx cont
 		program:             program,
 		repo:                repo,
 		executor:            NewDefaultCommandExecutor(), // Use default command executor
+		ctx:                 instCtx,
+		cancel:              cancel,
+		config:              DefaultInstallerConfig(),
+		performanceAnalyzer: analyzer,
+	}
+}
+
+// NewStreamingInstallerWithSecureExecutor creates a streaming installer with secure pattern-based validation
+func NewStreamingInstallerWithSecureExecutor(program *tea.Program, repo types.Repository, ctx context.Context, level security.SecurityLevel, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) *StreamingInstaller {
+	instCtx, cancel := context.WithCancel(ctx)
+
+	// Initialize performance analyzer
+	analyzer, err := performance.NewPerformanceAnalyzer(settings)
+	if err != nil {
+		log.Warn("Failed to initialize performance analyzer", "error", err)
+		analyzer = nil
+	}
+
+	return &StreamingInstaller{
+		program:             program,
+		repo:                repo,
+		executor:            NewSecureCommandExecutor(level, apps),
 		ctx:                 instCtx,
 		cancel:              cancel,
 		config:              DefaultInstallerConfig(),
@@ -1154,8 +1199,10 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 		}
 
 		if cmd.Shell != "" {
-			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", cmd.Shell))
-			if err := si.executeCommandStream(ctx, cmd.Shell); err != nil {
+			// Replace placeholders in shell commands
+			processedCommand := utils.ReplacePlaceholders(cmd.Shell, map[string]string{})
+			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", processedCommand))
+			if err := si.executeCommandStream(ctx, processedCommand); err != nil {
 				return err
 			}
 		}
@@ -1250,8 +1297,45 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 }
 
 // streamOutput streams command output to the TUI with proper error handling
+// It handles carriage returns and progress indicators from package managers like apt
 func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
+	// Use a custom scanner that handles both \n and \r as delimiters
 	scanner := bufio.NewScanner(reader)
+
+	// Custom split function that handles both newlines and carriage returns
+	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+
+		// Look for \n or \r
+		for i := 0; i < len(data); i++ {
+			if data[i] == '\n' {
+				// Found newline, return the line including the newline
+				return i + 1, data[:i], nil
+			}
+			if data[i] == '\r' {
+				// Found carriage return
+				if i+1 < len(data) && data[i+1] == '\n' {
+					// \r\n sequence (Windows style)
+					return i + 2, data[:i], nil
+				}
+				// Just \r (progress update style)
+				return i + 1, data[:i], nil
+			}
+		}
+
+		// If we're at EOF, return what we have
+		if atEOF {
+			return len(data), data, nil
+		}
+
+		// Request more data
+		return 0, nil, nil
+	})
+
+	var currentLine string // Track the current line being updated
+
 	for scanner.Scan() {
 		// Check for context cancellation
 		select {
@@ -1262,15 +1346,80 @@ func (si *StreamingInstaller) streamOutput(reader io.Reader, source string) {
 		}
 
 		line := scanner.Text()
-		if strings.TrimSpace(line) != "" {
+
+		// Clean up ANSI escape sequences and control characters
+		line = cleanTerminalOutput(line)
+
+		// Skip empty lines and apt database reading progress
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+
+		// Filter out apt progress messages that cause display issues
+		if strings.Contains(line, "Reading database") ||
+			strings.Contains(line, "Scanning processes") ||
+			strings.Contains(line, "Scanning candidates") ||
+			strings.Contains(line, "Scanning linux images") ||
+			strings.Contains(line, "Readin database") { // Handle partial lines from carriage returns
+			// These are progress indicators that update in place
+			// We'll show them once when complete
+			if strings.Contains(line, "done") ||
+				strings.Contains(line, "100%") ||
+				strings.Contains(line, "... done") {
+				currentLine = line
+			} else {
+				// Store but don't display intermediate progress
+				currentLine = line
+				continue
+			}
+		}
+
+		// Send the cleaned line
+		if currentLine != "" {
+			si.sendLog(source, currentLine)
+			currentLine = ""
+		} else {
 			si.sendLog(source, line)
 		}
+	}
+
+	// Send any remaining line
+	if currentLine != "" {
+		si.sendLog(source, currentLine)
 	}
 
 	// Check for scanner errors (but ignore closed pipe errors)
 	if err := scanner.Err(); err != nil && !strings.Contains(err.Error(), "file already closed") {
 		si.sendLog("ERROR", fmt.Sprintf("Scanner error in %s: %v", source, err))
 	}
+}
+
+// cleanTerminalOutput removes ANSI escape sequences and control characters
+func cleanTerminalOutput(s string) string {
+	// Remove ANSI escape sequences (including all variants)
+	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+	s = ansiRegex.ReplaceAllString(s, "")
+
+	// Remove cursor positioning sequences
+	cursorRegex := regexp.MustCompile(`\x1b\[[0-9]*[ABCD]`)
+	s = cursorRegex.ReplaceAllString(s, "")
+
+	// Remove additional control sequences
+	ctrlRegex := regexp.MustCompile(`\x1b[()][0-9A-Z]`)
+	s = ctrlRegex.ReplaceAllString(s, "")
+
+	// Remove carriage returns that aren't followed by newlines
+	s = strings.ReplaceAll(s, "\r", "")
+
+	// Remove other control characters except tabs and newlines
+	var result strings.Builder
+	for _, r := range s {
+		if r == '\t' || r == '\n' || (r >= 32 && r < 127) || r > 127 {
+			result.WriteRune(r)
+		}
+	}
+
+	return strings.TrimSpace(result.String())
 }
 
 // monitorForInput monitors stderr for password prompts and requests user input

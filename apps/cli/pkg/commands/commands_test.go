@@ -28,7 +28,7 @@ var _ = Describe("Commands", func() {
 		It("creates the install command without errors", func() {
 			cmd := commands.NewInstallCmd(repo, settings)
 			Expect(cmd).ToNot(BeNil())
-			Expect(cmd.Use).To(Equal("install"))
+			Expect(cmd.Use).To(Equal("install [apps...]"))
 		})
 	})
 

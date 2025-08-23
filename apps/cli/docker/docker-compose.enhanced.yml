@@ -1,0 +1,172 @@
+# Enhanced Docker Compose for DevEx CLI Testing
+# Supports multiple distributions, parallel testing, and CI/CD integration
+version: '3.8'
+services:
+  # Base test service template
+  test-base: &test-base
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.${TEST_DISTRO:-debian}
+      target: devex-ready
+    environment:
+      - DEVEX_TEST_MODE=true
+      - DEVEX_LOG_LEVEL=${LOG_LEVEL:-info}
+      - TEST_SUITE=${TEST_SUITE:-all}
+      - VERBOSE=${VERBOSE:-false}
+    volumes:
+      - ../assets:/home/testuser/.local/share/devex/assets:ro
+      - ../bin:/home/testuser/.local/share/devex/bin:ro
+      - ../config:/home/testuser/.local/share/devex/config:ro
+      - ../help:/home/testuser/.local/share/devex/help:ro
+      - test-cache:/home/testuser/.devex/cache
+      - test-logs:/home/testuser/.local/share/devex/logs
+    working_dir: /home/testuser
+    user: testuser
+    tty: true
+    stdin_open: true
+    restart: "no"
+  # Individual distribution services
+  test-debian:
+    !!merge <<: *test-base
+    container_name: devex-test-debian
+    build:
+      dockerfile: docker/Dockerfile.debian
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=debian
+  test-ubuntu:
+    !!merge <<: *test-base
+    container_name: devex-test-ubuntu
+    build:
+      dockerfile: docker/Dockerfile.ubuntu
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=ubuntu
+  test-arch:
+    !!merge <<: *test-base
+    container_name: devex-test-arch
+    build:
+      dockerfile: docker/Dockerfile.arch
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=arch
+  test-fedora:
+    !!merge <<: *test-base
+    container_name: devex-test-fedora
+    build:
+      dockerfile: docker/Dockerfile.fedora
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=fedora
+  test-alpine:
+    !!merge <<: *test-base
+    container_name: devex-test-alpine
+    build:
+      dockerfile: docker/Dockerfile.alpine
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=alpine
+  test-redhat:
+    !!merge <<: *test-base
+    container_name: devex-test-redhat
+    build:
+      dockerfile: docker/Dockerfile.redhat
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=redhat
+  test-suse:
+    !!merge <<: *test-base
+    container_name: devex-test-suse
+    build:
+      dockerfile: docker/Dockerfile.suse
+    environment:
+      - DEVEX_TEST_MODE=true
+      - TEST_DISTRO=suse
+  # Test orchestrator service
+  test-orchestrator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.debian
+    container_name: devex-test-orchestrator
+    environment:
+      - DEVEX_TEST_MODE=true
+      - ORCHESTRATOR_MODE=true
+    volumes:
+      - ../scripts:/scripts:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - test-results:/results
+    working_dir: /scripts
+    command: >
+      bash -c "
+
+
+        echo 'Starting test orchestration...' &&
+        ./cli-docker-test-enhanced.sh test-parallel &&
+        echo 'Test orchestration completed'
+      "
+
+    depends_on:
+      - test-debian
+      - test-ubuntu
+      - test-arch
+      - test-fedora
+      - test-alpine
+  # Performance monitoring service
+  test-monitor:
+    image: prom/prometheus:latest
+    container_name: devex-test-monitor
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    profiles:
+      - monitoring
+  # Test results aggregator
+  test-aggregator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.alpine
+    container_name: devex-test-aggregator
+    environment:
+      - DEVEX_TEST_MODE=true
+      - AGGREGATOR_MODE=true
+    volumes:
+      - test-results:/results
+      - test-reports:/reports
+    working_dir: /results
+    command: >
+      bash -c "
+
+
+        echo 'Aggregating test results...' &&
+        find /results -name '*.json' -exec cat {} \; > /reports/combined-results.json &&
+        echo 'Results aggregated to /reports/combined-results.json'
+      "
+
+    profiles:
+      - reporting
+volumes:
+  test-cache:
+    driver: local
+  test-logs:
+    driver: local
+  test-results:
+    driver: local
+  test-reports:
+    driver: local
+  prometheus-data:
+    driver: local
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

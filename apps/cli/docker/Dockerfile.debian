@@ -1,33 +1,58 @@
-FROM debian:12
+# Multi-stage Dockerfile for DevEx CLI testing on Debian
+# Stage 1: Base system setup
+FROM debian:12-slim AS base
+
+# Metadata
+LABEL maintainer="DevEx Team"
+LABEL description="DevEx CLI testing environment for Debian"
+LABEL version="2.0"
 
 ENV TERM=xterm-256color
+ENV DEBIAN_FRONTEND=noninteractive
+ENV DEVEX_TEST_MODE=true
 
-# Install basic dependencies required to enable the CLI to operate
-RUN apt-get update && apt-get install -y \
+# Install essential dependencies and clean up in single layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     git \
     unzip \
     sudo \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    procps \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Create a non-root user for testing
-RUN useradd -m -s /bin/bash -G sudo testuser && \
-    echo 'testuser:testpass' | chpasswd && \
-    echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+# Stage 2: User setup and DevEx preparation
+FROM base AS devex-ready
 
-# Switch to the test user
+# Create non-root user with passwordless sudo (more secure)
+RUN useradd -m -s /bin/bash -G sudo testuser \
+    && echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
+    && chmod 0440 /etc/sudoers
+
+# Switch to test user and set working directory
 USER testuser
 WORKDIR /home/testuser
 
-# Create expected directories
-RUN mkdir -p ~/.local/share/devex/assets \
-             ~/.local/share/devex/bin \
-             ~/.local/share/devex/config \
-             ~/.local/share/devex/help
+# Create DevEx directory structure
+RUN mkdir -p ~/.local/share/devex/{assets,bin,config,help,cache,logs,themes} \
+    && mkdir -p ~/.devex/{templates,backups} \
+    && mkdir -p ~/workspace
 
-# Ensure ~/.local/share/devex/bin is in PATH
-RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc
+# Copy DevEx binary and assets
+COPY --chown=testuser:testuser bin/devex /home/testuser/.local/share/devex/bin/devex
+COPY --chown=testuser:testuser assets/ /home/testuser/.local/share/devex/assets/
+COPY --chown=testuser:testuser config/ /home/testuser/.local/share/devex/config/
+COPY --chown=testuser:testuser help/ /home/testuser/.local/share/devex/help/
 
-# Set container entrypoint for an interactive shell
+# Configure environment
+RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc \
+    && echo 'export DEVEX_HOME="$HOME/.local/share/devex"' >> ~/.bashrc \
+    && echo 'export DEVEX_TEST_MODE=true' >> ~/.bashrc \
+    && echo 'alias ll="ls -la"' >> ~/.bashrc
+
+# Set container entrypoint
 CMD ["/bin/bash"]

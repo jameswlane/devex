@@ -1,0 +1,105 @@
+# DevEx Strict Security Configuration
+# This configuration is designed for high-security environments where
+# only explicitly approved operations are allowed
+# Documentation: https://docs.devex.sh/security/strict
+# Strict security level - only allows explicitly safe patterns
+level: 0 # Strict
+# Disable enterprise mode
+enterprise_mode: false
+# Always warn when security overrides are used
+warn_on_overrides: true
+# Minimal global overrides - only essential development tools
+global_overrides:
+  # Allow official package manager operations
+  - rule_type: "unknown-executable"
+    pattern: "^(apt|apt-get|yum|dnf|pacman|zypper) (update|upgrade|install|search|show|info)( .*)?$"
+    reason: "Standard package manager operations are required for development"
+    warn_user: false
+  # Allow version checks and help commands
+  - rule_type: "unknown-executable"
+    pattern: ".* (--version|--help|-v|-h|version|help)$"
+    reason: "Version and help commands are safe for information gathering"
+    warn_user: false
+  # Allow git operations (read-only and standard workflow)
+  - rule_type: "unknown-executable"
+    pattern: "^git (clone|pull|fetch|status|log|diff|checkout|branch|tag)( .*)?$"
+    reason: "Standard git operations for source code management"
+    warn_user: false
+# Strict application-specific overrides - only verified safe operations
+app_overrides:
+  # Git - only safe operations
+  git:
+    - rule_type: "network-access"
+      pattern: "^git clone https://github\\.com/[a-zA-Z0-9\\-_]+/[a-zA-Z0-9\\-_]+\\.git$"
+      reason: "Allow cloning from verified GitHub repositories"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "^git config --global (user\\.name|user\\.email) .*$"
+      reason: "Allow basic git user configuration"
+      warn_user: false
+  # Node.js - only through package managers
+  nodejs:
+    - rule_type: "unknown-executable"
+      pattern: "^npm (install|update|audit|list)( .*)?$"
+      reason: "Standard npm operations for JavaScript development"
+      warn_user: false
+    - rule_type: "unknown-executable"
+      pattern: "^node --version$"
+      reason: "Check Node.js version"
+      warn_user: false
+  # Python - only through pip
+  python:
+    - rule_type: "unknown-executable"
+      pattern: "^pip3? (install|upgrade|list|show) [a-zA-Z0-9\\-_]+$"
+      reason: "Standard pip package installation"
+      warn_user: true
+    - rule_type: "unknown-executable"
+      pattern: "^python3? --version$"
+      reason: "Check Python version"
+      warn_user: false
+  # Docker - read-only operations only
+  docker:
+    - rule_type: "unknown-executable"
+      pattern: "^docker (ps|images|version|info)$"
+      reason: "Read-only Docker operations for development"
+      warn_user: false
+    - rule_type: "unknown-executable"
+      pattern: "^docker run --rm -it [a-zA-Z0-9\\-_/:]+ /bin/(bash|sh)$"
+      reason: "Interactive container access for development"
+      warn_user: true
+  # Database clients - read-only access
+  postgresql:
+    - rule_type: "network-access"
+      pattern: "^psql -h localhost -U [a-zA-Z0-9_]+ -d [a-zA-Z0-9_]+$"
+      reason: "Local PostgreSQL client access"
+      warn_user: true
+  # Text editors and IDEs
+  editors:
+    - rule_type: "unknown-executable"
+      pattern: "^(vim|nano|emacs|code|subl) .*$"
+      reason: "Text editors are safe for file editing"
+      warn_user: false
+  # Build tools
+  build-tools:
+    - rule_type: "unknown-executable"
+      pattern: "^(make|cmake|gradle|mvn) (build|compile|test)( .*)?$"
+      reason: "Standard build operations"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "^(gcc|g\\+\\+|javac|rustc) -o [a-zA-Z0-9\\-_/\\.]+ .*$"
+      reason: "Compilation to specific output files"
+      warn_user: false
+
+# Blocked operations (explicitly documented for clarity):
+# - All curl/wget piping to shell
+# - Any bash -c operations
+# - System service management
+# - Package installation from non-standard sources
+# - Network tools (nc, telnet, ssh to arbitrary hosts)
+# - File system operations outside user directories
+# - Privilege escalation (sudo) except for approved package managers
+# - Unknown executables not in system PATH
+# - Command injection patterns
+
+# Note: Even in strict mode, basic file operations (ls, cat, cp, mv)
+# to user-owned directories are allowed by the safe patterns.

@@ -80,7 +80,10 @@ func testInitializeDatabase(homeDir string) types.Repository {
 	dbPath := filepath.Join(devexDir, "datastore.db")
 	sqlite, err := datastore.NewSQLite(dbPath)
 	Expect(err).ToNot(HaveOccurred(), "failed to initialize SQLite database")
-	return repository.NewRepository(sqlite)
+
+	repo := repository.NewRepository(sqlite)
+	Expect(repo).ToNot(BeNil(), "repository should not be nil")
+	return repo
 }
 
 // Helper function to test handleError
