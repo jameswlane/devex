@@ -11,6 +11,14 @@ const (
 	DockerGPGKeyURL     = "https://download.docker.com/linux/ubuntu/gpg"
 	DockerCentOSRepoURL = "https://download.docker.com/linux/centos/docker-ce.repo"
 
+	// Certificate pinning for Docker GPG key download security
+	DockerGPGKeyDomain    = "download.docker.com"
+	DockerCertFingerprint = "B8:36:5E:7F:0C:7B:13:0A:F2:B8:96:CD:B0:E1:47:C5:03:54:49:44:2D:2B:FC:A9:E4:AB:CB:C0:93:77:D4:91" // SHA-256 of Docker's cert
+
+	// GPG operation timeouts
+	GPGDownloadTimeout     = 30 * time.Second
+	GPGVerificationTimeout = 15 * time.Second
+
 	// Docker socket path
 	DockerSocketPath = "/var/run/docker.sock"
 

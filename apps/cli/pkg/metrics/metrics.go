@@ -42,8 +42,9 @@ const (
 	MetricAPTCacheMiss       MetricType = "apt.cache.miss"
 
 	// Security metrics
-	MetricSecurityValidationFailed MetricType = "security.validation.failed"
-	MetricSecurityInjectionBlocked MetricType = "security.injection.blocked"
+	MetricSecurityValidationFailed  MetricType = "security.validation.failed"
+	MetricSecurityValidationSuccess MetricType = "security.validation.success"
+	MetricSecurityInjectionBlocked  MetricType = "security.injection.blocked"
 
 	// Performance metrics
 	MetricTimeoutOccurred MetricType = "timeout.occurred"

@@ -33,6 +33,12 @@ type DockerInstaller struct {
 	cacheMutex sync.RWMutex
 	// cacheTimeout determines how long cached status remains valid
 	cacheTimeout time.Duration
+	// cleanupTicker for automatic cache cleanup
+	cleanupTicker *time.Ticker
+	// cleanupDone channel to stop the cleanup goroutine
+	cleanupDone chan bool
+	// cleanupInterval determines how often to clean expired cache entries
+	cleanupInterval time.Duration
 }
 
 // isRunningInContainer detects if we're running inside a Docker container.
@@ -64,29 +70,41 @@ func isRunningInContainer() bool {
 }
 
 func New() *DockerInstaller {
-	return &DockerInstaller{
-		ServiceTimeout: DefaultServiceTimeout,
-		containerCache: make(map[string]*ContainerStatus),
-		cacheTimeout:   ContainerCacheTimeout,
+	d := &DockerInstaller{
+		ServiceTimeout:  DefaultServiceTimeout,
+		containerCache:  make(map[string]*ContainerStatus),
+		cacheTimeout:    ContainerCacheTimeout,
+		cleanupInterval: 5 * time.Minute, // Clean expired cache entries every 5 minutes
+		cleanupDone:     make(chan bool, 1),
 	}
+	d.startCleanupRoutine()
+	return d
 }
 
 // NewWithTimeout creates a new DockerInstaller with a custom timeout
 func NewWithTimeout(timeout time.Duration) *DockerInstaller {
-	return &DockerInstaller{
-		ServiceTimeout: timeout,
-		containerCache: make(map[string]*ContainerStatus),
-		cacheTimeout:   ContainerCacheTimeout,
+	d := &DockerInstaller{
+		ServiceTimeout:  timeout,
+		containerCache:  make(map[string]*ContainerStatus),
+		cacheTimeout:    ContainerCacheTimeout,
+		cleanupInterval: 5 * time.Minute,
+		cleanupDone:     make(chan bool, 1),
 	}
+	d.startCleanupRoutine()
+	return d
 }
 
 // NewWithCacheTimeout creates a new DockerInstaller with custom timeout and cache duration
 func NewWithCacheTimeout(serviceTimeout, cacheTimeout time.Duration) *DockerInstaller {
-	return &DockerInstaller{
-		ServiceTimeout: serviceTimeout,
-		containerCache: make(map[string]*ContainerStatus),
-		cacheTimeout:   cacheTimeout,
+	d := &DockerInstaller{
+		ServiceTimeout:  serviceTimeout,
+		containerCache:  make(map[string]*ContainerStatus),
+		cacheTimeout:    cacheTimeout,
+		cleanupInterval: 5 * time.Minute,
+		cleanupDone:     make(chan bool, 1),
 	}
+	d.startCleanupRoutine()
+	return d
 }
 
 // handleDockerInContainer handles Docker daemon setup in container environments
@@ -778,5 +796,53 @@ func (d *DockerInstaller) clearExpiredCache() {
 			delete(d.containerCache, containerName)
 			log.Debug("Removed expired cache entry", "containerName", containerName)
 		}
+	}
+}
+
+// startCleanupRoutine starts the background goroutine for automatic cache cleanup
+func (d *DockerInstaller) startCleanupRoutine() {
+	if d.cleanupInterval <= 0 {
+		log.Debug("Cache cleanup disabled - invalid interval")
+		return
+	}
+
+	d.cleanupTicker = time.NewTicker(d.cleanupInterval)
+	log.Debug("Starting cache cleanup routine", "interval", d.cleanupInterval.String())
+
+	go func() {
+		defer func() {
+			if d.cleanupTicker != nil {
+				d.cleanupTicker.Stop()
+			}
+		}()
+
+		for {
+			select {
+			case <-d.cleanupTicker.C:
+				log.Debug("Running automatic cache cleanup")
+				d.clearExpiredCache()
+				log.Debug("Automatic cache cleanup completed")
+
+			case <-d.cleanupDone:
+				log.Debug("Cache cleanup routine stopping")
+				return
+			}
+		}
+	}()
+}
+
+// StopCleanup stops the background cleanup routine
+func (d *DockerInstaller) StopCleanup() {
+	if d.cleanupTicker != nil {
+		d.cleanupTicker.Stop()
+		d.cleanupTicker = nil
+	}
+
+	select {
+	case d.cleanupDone <- true:
+		log.Debug("Sent cleanup stop signal")
+	default:
+		// Channel already has a value or is closed
+		log.Debug("Cleanup already stopped or stopping")
 	}
 }
