@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/metrics"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -130,6 +132,9 @@ func New() *APTInstaller {
 func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("APT Installer: Starting installation", "command", command)
 
+	// Start metrics tracking
+	timer := metrics.StartInstallation("apt", command)
+
 	// Detect APT version early to ensure optimal commands are used
 	if _, err := getAPTVersion(); err != nil {
 		log.Warn("Failed to detect APT version, using defaults", "error", err)
@@ -174,14 +179,46 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 
 	// Check if package is available in repositories
 	if err := validatePackageAvailability(command); err != nil {
+		timer.Failure(err)
 		return fmt.Errorf("package validation failed: %w", err)
 	}
 
-	// Run apt install command using optimal command for the APT version
-	baseCommand := getOptimalAPTCommand("install")
-	installCommand := fmt.Sprintf("%s %s", baseCommand, command)
-	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-		log.Error("Failed to install package via apt", err, "command", command)
+	// Validate package name to prevent command injection
+	if err := utils.ValidatePackageName(command); err != nil {
+		log.Error("Invalid package name", err, "package", command)
+		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+			"installer": "apt",
+			"package":   command,
+			"reason":    "invalid_package_name",
+		})
+		timer.Failure(err)
+		return fmt.Errorf("invalid package name: %w", err)
+	}
+
+	// Run apt install command securely using exec.CommandContext
+	installCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	// Use apt or apt-get based on version
+	aptCmd := "apt"
+	if version, err := getAPTVersion(); err == nil && version.Major < 1 {
+		aptCmd = "apt-get"
+	}
+
+	cmd := exec.CommandContext(installCtx, "sudo", aptCmd, "install", "-y", command)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Error("Failed to install package via apt", err, "command", command, "output", string(output))
+
+		// Check if it was a timeout
+		if installCtx.Err() == context.DeadlineExceeded {
+			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
+				"installer": "apt",
+				"package":   command,
+				"operation": "install",
+			})
+		}
+
+		timer.Failure(err)
 		return fmt.Errorf("failed to install package via apt: %w", err)
 	}
 
@@ -211,10 +248,12 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	// Add the package to the repository
 	if err := repo.AddApp(command); err != nil {
 		log.Error("Failed to add package to repository", err, "command", command)
+		timer.Failure(err)
 		return fmt.Errorf("failed to add package to repository: %w", err)
 	}
 
 	log.Debug("Package added to repository successfully", "command", command)
+	timer.Success()
 	return nil
 }
 
@@ -234,25 +273,34 @@ func RunAptUpdate(forceUpdate bool, repo types.Repository) error {
 
 // validatePackageAvailability checks if a package is available in repositories
 func validatePackageAvailability(packageName string) error {
-	// Use optimal command to check if package is available
-	baseCommand := getOptimalAPTCommand("policy")
-	command := fmt.Sprintf("%s %s", baseCommand, packageName)
-	output, err := utils.CommandExec.RunShellCommand(command)
+	// Validate package name first
+	if err := utils.ValidatePackageName(packageName); err != nil {
+		return fmt.Errorf("invalid package name: %w", err)
+	}
+
+	// Use secure command execution to check package availability
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Use apt-cache policy to check package availability
+	cmd := exec.CommandContext(ctx, "apt-cache", "policy", packageName)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to check package availability: %w", err)
 	}
 
 	// Check if the output indicates the package is available
 	// Handle both legacy and APT 3.0 error messages
-	if strings.Contains(output, "Unable to locate package") ||
-		strings.Contains(output, "No packages found") ||
-		strings.Contains(output, "Package not found") {
+	outputStr := string(output)
+	if strings.Contains(outputStr, "Unable to locate package") ||
+		strings.Contains(outputStr, "No packages found") ||
+		strings.Contains(outputStr, "Package not found") {
 		return fmt.Errorf("package '%s' not found in any repository", packageName)
 	}
 
 	// Check if any installable version is available
 	// APT 3.0 might have slightly different output format
-	if !strings.Contains(output, "Candidate:") && !strings.Contains(output, "Version table:") {
+	if !strings.Contains(outputStr, "Candidate:") && !strings.Contains(outputStr, "Version table:") {
 		return fmt.Errorf("no installable candidate found for package '%s'", packageName)
 	}
 
@@ -441,6 +489,12 @@ func writeConfigFileSecurely(ctx context.Context, content []byte, filePath strin
 func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
 	log.Debug("APT Installer: Starting uninstallation", "command", command)
 
+	// Validate package name to prevent command injection
+	if err := utils.ValidatePackageName(command); err != nil {
+		log.Error("Invalid package name", err, "package", command)
+		return fmt.Errorf("invalid package name: %w", err)
+	}
+
 	// Check if the package is installed
 	isInstalled, err := a.IsInstalled(command)
 	if err != nil {
@@ -453,11 +507,19 @@ func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
 		return nil
 	}
 
-	// Run apt remove command using optimal command for the APT version
-	baseCommand := getOptimalAPTCommand("remove")
-	uninstallCommand := fmt.Sprintf("%s %s", baseCommand, command)
-	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
-		log.Error("Failed to uninstall package via apt", err, "command", command)
+	// Run apt remove command securely using exec.CommandContext
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Use apt or apt-get based on version
+	aptCmd := "apt"
+	if version, err := getAPTVersion(); err == nil && version.Major < 1 {
+		aptCmd = "apt-get"
+	}
+
+	cmd := exec.CommandContext(ctx, "sudo", aptCmd, "remove", "-y", command)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Error("Failed to uninstall package via apt", err, "command", command, "output", string(output))
 		return fmt.Errorf("failed to uninstall package via apt: %w", err)
 	}
 
@@ -475,16 +537,17 @@ func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
 
 // IsInstalled checks if a package is installed using dpkg-query
 func (a *APTInstaller) IsInstalled(command string) (bool, error) {
-	// Use dpkg-query to check if package is installed
-	checkCommand := fmt.Sprintf("dpkg-query -W -f='${Status}' %s 2>/dev/null", command)
-	output, err := utils.CommandExec.RunShellCommand(checkCommand)
-	if err != nil {
-		// dpkg-query returns non-zero exit code if package is not installed
-		return false, nil
+	// Validate package name to prevent command injection
+	if err := utils.ValidatePackageName(command); err != nil {
+		log.Warn("Invalid package name provided", "package", command, "error", err)
+		return false, fmt.Errorf("invalid package name: %w", err)
 	}
 
-	// Check if the package is installed and configured properly
-	return strings.Contains(output, "install ok installed"), nil
+	// Use CheckPackageInstalled for secure package checking
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	return utils.CheckPackageInstalled(ctx, command)
 }
 
 // PackageManager interface implementation methods

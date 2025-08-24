@@ -1,19 +1,26 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/user"
 	"strings"
+	"time"
 
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/metrics"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
-type DockerInstaller struct{}
+type DockerInstaller struct {
+	// ServiceTimeout is the timeout for waiting for Docker daemon to become ready
+	ServiceTimeout time.Duration
+}
 
 // isRunningInContainer detects if we're running inside a Docker container
 func isRunningInContainer() bool {
@@ -43,13 +50,22 @@ func isRunningInContainer() bool {
 }
 
 func New() *DockerInstaller {
-	return &DockerInstaller{}
+	return &DockerInstaller{
+		ServiceTimeout: 30 * time.Second, // Default timeout
+	}
+}
+
+// NewWithTimeout creates a new DockerInstaller with a custom timeout
+func NewWithTimeout(timeout time.Duration) *DockerInstaller {
+	return &DockerInstaller{
+		ServiceTimeout: timeout,
+	}
 }
 
 // handleDockerInContainer handles Docker daemon setup in container environments
-func handleDockerInContainer() error {
+func (d *DockerInstaller) handleDockerInContainer() error {
 	// Check if Docker socket is mounted
-	if _, err := utils.CommandExec.RunShellCommand("test -S /var/run/docker.sock"); err == nil {
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
 		log.Info("Docker socket is available, but daemon access failed")
 		// The socket exists but we can't access it - likely a permission issue
 		return fmt.Errorf("docker socket exists but not accessible - container may need to run as root or with proper socket permissions")
@@ -59,44 +75,93 @@ func handleDockerInContainer() error {
 	log.Info("Attempting to start Docker daemon in container environment")
 
 	// Attempt to start Docker daemon - this might work in privileged containers
-	return attemptDockerDaemonStartup()
+	return d.attemptDockerDaemonStartup()
 }
 
 // attemptDockerDaemonStartup tries to start Docker daemon in privileged containers
-func attemptDockerDaemonStartup() error {
-	startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
+func (d *DockerInstaller) attemptDockerDaemonStartup() error {
+	ctx, cancel := context.WithTimeout(context.Background(), d.ServiceTimeout)
+	defer cancel()
 
-	if _, err := utils.CommandExec.RunShellCommand(startCmd); err != nil {
+	// Try different methods to start Docker daemon
+	if err := d.tryStartDockerService(ctx); err != nil {
 		log.Warn("Failed to start Docker daemon in container", "error", err)
 		return fmt.Errorf("unable to start Docker daemon in container")
 	}
 
 	log.Debug("Attempted to start Docker daemon in container")
 
-	// Give Docker time to start and verify it's accessible
-	if _, err := utils.CommandExec.RunShellCommand("sleep 5"); err == nil {
-		if _, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
-			log.Info("Docker daemon started successfully in container")
-			return nil
+	// Wait for Docker daemon to become ready
+	if err := utils.WaitForDockerDaemon(ctx, d.ServiceTimeout); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
+				"installer": "docker",
+				"operation": "daemon_startup",
+			})
 		}
+		return fmt.Errorf("docker daemon startup attempt failed - daemon not responsive: %w", err)
 	}
 
-	return fmt.Errorf("docker daemon startup attempt failed - daemon not responsive")
+	log.Info("Docker daemon started successfully in container")
+	metrics.RecordCount(metrics.MetricDockerDaemonReady, map[string]string{})
+	return nil
+}
+
+// tryStartDockerService attempts to start Docker using various methods
+func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
+	// Try systemctl first
+	if cmd := exec.CommandContext(ctx, "sudo", "systemctl", "start", "docker"); cmd.Run() == nil {
+		return nil
+	}
+
+	// Try service command
+	if cmd := exec.CommandContext(ctx, "sudo", "service", "docker", "start"); cmd.Run() == nil {
+		return nil
+	}
+
+	// Try starting dockerd directly in background (for containers)
+	cmd := exec.CommandContext(ctx, "sudo", "dockerd",
+		"--host=unix:///var/run/docker.sock",
+		"--host=tcp://0.0.0.0:2375")
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("all Docker startup methods failed")
+	}
+
+	// Detach from the process
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	return nil
 }
 
 func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("Docker Installer: Starting installation", "command", command)
 
+	// Start metrics tracking
+	timer := metrics.StartInstallation("docker", command)
+	defer func() {
+		if r := recover(); r != nil {
+			timer.Failure(fmt.Errorf("panic: %v", r))
+			panic(r)
+		}
+	}()
+
 	// Check if Docker is available and running
-	if err := validateDockerService(); err != nil {
+	metrics.RecordCount(metrics.MetricDockerSetupStarted, map[string]string{"command": command})
+	if err := d.validateDockerService(); err != nil {
 		// In container environments without Docker, skip Docker-based installations
 		if isRunningInContainer() {
 			log.Warn("Docker daemon not available in container, skipping Docker-based installation", "app", command)
 			log.Info("To enable Docker-in-Docker, run container with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
-			return nil // Don't fail, just skip
+			timer.Success() // Consider this a success since we're skipping intentionally
+			return nil      // Don't fail, just skip
 		}
+		metrics.RecordCount(metrics.MetricDockerSetupFailed, map[string]string{"command": command})
+		timer.Failure(err)
 		return fmt.Errorf("docker service validation failed: %w", err)
 	}
+	metrics.RecordCount(metrics.MetricDockerSetupSucceeded, map[string]string{"command": command})
 
 	// Try to get app configuration to check for DockerOptions
 	var finalCommand string
@@ -143,6 +208,7 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 
 	if isInstalled {
 		log.Info("Docker container is already running, skipping installation", "containerName", containerName)
+		timer.Success()
 		return nil
 	}
 
@@ -161,6 +227,7 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	log.Debug("Docker container added to repository successfully", "containerName", containerName)
+	timer.Success()
 	return nil
 }
 
@@ -169,7 +236,7 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 	log.Debug("Docker Installer: Starting uninstallation", "command", command)
 
 	// Check if Docker is available and running
-	if err := validateDockerService(); err != nil {
+	if err := d.validateDockerService(); err != nil {
 		return fmt.Errorf("docker service validation failed: %w", err)
 	}
 
@@ -192,17 +259,35 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 		return nil
 	}
 
-	// Stop and remove the Docker container
-	stopCommand := fmt.Sprintf("docker stop %s", containerName)
-	if err := executeDockerCommand(stopCommand); err != nil {
-		log.Warn("Failed to stop Docker container", "containerName", containerName, "error", err)
-		// Continue with removal attempt even if stop failed
+	// Validate container name to prevent command injection
+	if err := utils.ValidatePackageName(containerName); err != nil {
+		return fmt.Errorf("invalid container name: %w", err)
 	}
 
-	removeCommand := fmt.Sprintf("docker rm %s", containerName)
-	if err := executeDockerCommand(removeCommand); err != nil {
-		log.Error("Failed to remove Docker container", err, "containerName", containerName)
-		return fmt.Errorf("failed to remove Docker container: %w", err)
+	// Stop and remove the Docker container using secure execution
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Try to stop the container
+	stopCmd := exec.CommandContext(ctx, "docker", "stop", containerName)
+	if err := stopCmd.Run(); err != nil {
+		// Try with sudo
+		sudoStopCmd := exec.CommandContext(ctx, "sudo", "docker", "stop", containerName)
+		if err := sudoStopCmd.Run(); err != nil {
+			log.Warn("Failed to stop Docker container", "containerName", containerName, "error", err)
+			// Continue with removal attempt even if stop failed
+		}
+	}
+
+	// Remove the container
+	rmCmd := exec.CommandContext(ctx, "docker", "rm", containerName)
+	if err := rmCmd.Run(); err != nil {
+		// Try with sudo
+		sudoRmCmd := exec.CommandContext(ctx, "sudo", "docker", "rm", containerName)
+		if err := sudoRmCmd.Run(); err != nil {
+			log.Error("Failed to remove Docker container", err, "containerName", containerName)
+			return fmt.Errorf("failed to remove Docker container: %w", err)
+		}
 	}
 
 	log.Debug("Docker container removed successfully", "containerName", containerName)
@@ -225,13 +310,27 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 		return false, fmt.Errorf("failed to extract container name from command: %s", command)
 	}
 
-	// Check if the container is running using docker ps
-	checkCommand := fmt.Sprintf("docker ps --filter \"name=%s\" --filter \"status=running\" --format \"{{.Names}}\"", containerName)
-	output, err := utils.CommandExec.RunShellCommand(checkCommand)
+	// Validate container name to prevent command injection
+	if err := utils.ValidatePackageName(containerName); err != nil {
+		return false, fmt.Errorf("invalid container name: %w", err)
+	}
+
+	// Check if the container is running using docker ps (secure execution)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "docker", "ps",
+		"--filter", fmt.Sprintf("name=%s", containerName),
+		"--filter", "status=running",
+		"--format", "{{.Names}}")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Try with sudo if regular command failed
-		sudoCheckCommand := "sudo " + checkCommand
-		output, err = utils.CommandExec.RunShellCommand(sudoCheckCommand)
+		sudoCmd := exec.CommandContext(ctx, "sudo", "docker", "ps",
+			"--filter", fmt.Sprintf("name=%s", containerName),
+			"--filter", "status=running",
+			"--format", "{{.Names}}")
+		output, err = sudoCmd.CombinedOutput()
 		if err != nil {
 			// If both fail, container is likely not running or Docker is not available
 			return false, nil
@@ -239,7 +338,7 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 	}
 
 	// Check if the container name appears in the output
-	return strings.Contains(output, containerName), nil
+	return strings.Contains(string(output), containerName), nil
 }
 
 func extractContainerName(command string) string {
@@ -253,22 +352,17 @@ func extractContainerName(command string) string {
 }
 
 // validateDockerService checks if Docker is installed and the daemon is running
-func validateDockerService() error {
+func (d *DockerInstaller) validateDockerService() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Check if docker command is available
-	if _, err := utils.CommandExec.RunShellCommand("which docker"); err != nil {
+	if _, err := exec.LookPath("docker"); err != nil {
 		return fmt.Errorf("docker command not found: %w", err)
 	}
 
-	// Try regular docker access first (user in docker group)
-	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Debug("Docker daemon is accessible via user permissions")
-		return nil
-	}
-
-	// Try with sudo (service running but user not in group)
-	if _, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Info("Docker daemon is running but requires sudo access")
-		log.Warn("User may not be in docker group or needs to refresh session", "hint", "Try logging out and back in, or run 'newgrp docker'")
+	// Check if Docker daemon is accessible
+	if err := d.checkDockerAccess(ctx); err == nil {
 		return nil
 	}
 
@@ -276,14 +370,68 @@ func validateDockerService() error {
 	if isRunningInContainer() {
 		log.Warn("Running in container environment - Docker-in-Docker may require special setup")
 		log.Info("Docker-in-Docker setup help", "hint", "Ensure your container runs with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
-		return handleDockerInContainer()
+		return d.handleDockerInContainer()
 	}
 
 	return fmt.Errorf("docker daemon not accessible: For Docker-in-Docker, run container with --privileged -v /var/run/docker.sock:/var/run/docker.sock")
 }
 
+// checkDockerAccess verifies Docker daemon accessibility
+func (d *DockerInstaller) checkDockerAccess(ctx context.Context) error {
+	// Try regular docker access first (user in docker group)
+	cmd := exec.CommandContext(ctx, "docker", "version", "--format", "{{.Server.Version}}")
+	if err := cmd.Run(); err == nil {
+		log.Debug("Docker daemon is accessible via user permissions")
+		return nil
+	}
+
+	// Try with sudo (service running but user not in group)
+	sudoCmd := exec.CommandContext(ctx, "sudo", "docker", "version", "--format", "{{.Server.Version}}")
+	if err := sudoCmd.Run(); err == nil {
+		log.Info("Docker daemon is running but requires sudo access")
+		log.Warn("User may not be in docker group or needs to refresh session", "hint", "Try logging out and back in, or run 'newgrp docker'")
+		return nil
+	}
+
+	return fmt.Errorf("docker daemon not accessible")
+}
+
+// addUserToDockerGroup adds the current user to the docker group
+func (d *DockerInstaller) addUserToDockerGroup() error {
+	currentUser, err := user.Current()
+	if err != nil {
+		return fmt.Errorf("failed to get current user: %w", err)
+	}
+
+	if currentUser.Username == "" || currentUser.Username == "root" {
+		return nil // Skip for root or empty username
+	}
+
+	// Validate username for security
+	if err := utils.ValidateUsername(currentUser.Username); err != nil {
+		return fmt.Errorf("invalid username: %w", err)
+	}
+
+	log.Info("Adding user to docker group", "user", currentUser.Username)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", currentUser.Username)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, string(output))
+	}
+
+	log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", currentUser.Username)
+	metrics.RecordCount(metrics.MetricDockerGroupAdded, map[string]string{"user": currentUser.Username})
+	return nil
+}
+
 // executeDockerCommand runs a Docker command, using sudo if necessary
 func executeDockerCommand(command string) error {
+	// Create a global instance for this function
+	d := &DockerInstaller{ServiceTimeout: 30 * time.Second}
+
 	// First try without sudo
 	if _, err := utils.CommandExec.RunShellCommand(command); err == nil {
 		log.Debug("Docker command executed with user permissions")
@@ -291,21 +439,8 @@ func executeDockerCommand(command string) error {
 	}
 
 	// Add user to docker group if not already a member
-	currentUser, err := user.Current()
-	if err == nil && currentUser.Username != "" {
-		username := currentUser.Username
-
-		// Validate username for security (prevent command injection)
-		if strings.ContainsAny(username, ";&|`$()[]{}*?") {
-			log.Warn("Invalid characters in username, skipping group add", "user", username)
-		} else {
-			log.Info("Adding user to docker group", "user", username)
-			if _, groupErr := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo usermod -aG docker %s", username)); groupErr != nil {
-				log.Warn("Failed to add user to docker group", "error", groupErr, "user", username)
-			} else {
-				log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", username)
-			}
-		}
+	if err := d.addUserToDockerGroup(); err != nil {
+		log.Warn("Failed to add user to docker group", "error", err)
 	}
 
 	// If that fails, try with sudo
