@@ -1,3 +1,9 @@
+## [0.24.1](https://github.com/jameswlane/devex/compare/0.24.0...0.24.1) (2025-08-24)
+
+### Bug Fixes
+
+* comprehensive shell configuration and Docker permissions management ([#157](https://github.com/jameswlane/devex/issues/157)) ([dfbe5be](https://github.com/jameswlane/devex/commit/dfbe5be96e610753489a53e71e67a667442e400d)), closes [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155) [#155](https://github.com/jameswlane/devex/issues/155)
+
 ## [0.24.0](https://github.com/jameswlane/devex/compare/0.23.0...0.24.0) (2025-08-23)
 
 ### Features
