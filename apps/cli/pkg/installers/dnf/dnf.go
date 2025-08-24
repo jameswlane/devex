@@ -3,7 +3,6 @@ package dnf
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -222,19 +221,17 @@ func secureInstallPackage(ctx context.Context, packageName string) error {
 	}
 
 	// Check if dnf is available
-	if cmd := exec.CommandContext(ctx, "which", "dnf"); cmd.Run() == nil {
-		installCmd := exec.CommandContext(ctx, "sudo", "dnf", "install", "-y", packageName)
-		if output, err := installCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("dnf install failed: %w (output: %s)", err, string(output))
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "install", "-y", packageName); err != nil {
+			return fmt.Errorf("dnf install failed: %w", err)
 		}
 		return nil
 	}
 
 	// Check if yum is available as fallback
-	if cmd := exec.CommandContext(ctx, "which", "yum"); cmd.Run() == nil {
-		installCmd := exec.CommandContext(ctx, "sudo", "yum", "install", "-y", packageName)
-		if output, err := installCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("yum install failed: %w (output: %s)", err, string(output))
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "yum"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "install", "-y", packageName); err != nil {
+			return fmt.Errorf("yum install failed: %w", err)
 		}
 		return nil
 	}
@@ -270,19 +267,17 @@ func secureUninstallPackage(ctx context.Context, packageName string) error {
 	}
 
 	// Check if dnf is available
-	if cmd := exec.CommandContext(ctx, "which", "dnf"); cmd.Run() == nil {
-		uninstallCmd := exec.CommandContext(ctx, "sudo", "dnf", "remove", "-y", packageName)
-		if output, err := uninstallCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("dnf remove failed: %w (output: %s)", err, string(output))
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "remove", "-y", packageName); err != nil {
+			return fmt.Errorf("dnf remove failed: %w", err)
 		}
 		return nil
 	}
 
 	// Check if yum is available as fallback
-	if cmd := exec.CommandContext(ctx, "which", "yum"); cmd.Run() == nil {
-		uninstallCmd := exec.CommandContext(ctx, "sudo", "yum", "remove", "-y", packageName)
-		if output, err := uninstallCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("yum remove failed: %w (output: %s)", err, string(output))
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "yum"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "remove", "-y", packageName); err != nil {
+			return fmt.Errorf("yum remove failed: %w", err)
 		}
 		return nil
 	}
@@ -428,20 +423,24 @@ func secureInstallGroup(ctx context.Context, groupName string) error {
 		return fmt.Errorf("invalid group name: %w", err)
 	}
 
+	// Quote group name if it contains spaces for shell safety
+	quotedGroupName := groupName
+	if strings.Contains(groupName, " ") {
+		quotedGroupName = "'" + groupName + "'"
+	}
+
 	// Check if dnf is available
-	if cmd := exec.CommandContext(ctx, "which", "dnf"); cmd.Run() == nil {
-		groupCmd := exec.CommandContext(ctx, "sudo", "dnf", "group", "install", "-y", groupName)
-		if output, err := groupCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("dnf group install failed: %w (output: %s)", err, string(output))
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "group", "install", "-y", quotedGroupName); err != nil {
+			return fmt.Errorf("dnf group install failed: %w", err)
 		}
 		return nil
 	}
 
 	// Fall back to yum
-	if cmd := exec.CommandContext(ctx, "which", "yum"); cmd.Run() == nil {
-		groupCmd := exec.CommandContext(ctx, "sudo", "yum", "groupinstall", "-y", groupName)
-		if output, err := groupCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("yum groupinstall failed: %w (output: %s)", err, string(output))
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "yum"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "groupinstall", "-y", quotedGroupName); err != nil {
+			return fmt.Errorf("yum groupinstall failed: %w", err)
 		}
 		return nil
 	}
@@ -454,15 +453,15 @@ func (d *DnfInstaller) EnableEPEL() error {
 	log.Debug("Enabling EPEL repository")
 
 	// Check if dnf is available
-	if cmd := exec.CommandContext(context.Background(), "which", "dnf"); cmd.Run() == nil {
+	ctx := context.Background()
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
 		// Use DNF with secure execution
-		epelCmd := exec.CommandContext(context.Background(), "sudo", "dnf", "install", "-y", "epel-release")
-		if output, err := epelCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("failed to enable EPEL via DNF: %w (output: %s)", err, string(output))
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "install", "-y", "epel-release"); err != nil {
+			return fmt.Errorf("failed to enable EPEL via DNF: %w", err)
 		}
 	} else {
 		// Use YUM
-		if _, err := utils.CommandExec.RunShellCommand("sudo yum install -y epel-release"); err != nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "install", "-y", "epel-release"); err != nil {
 			return fmt.Errorf("failed to enable EPEL via YUM: %w", err)
 		}
 	}
@@ -620,7 +619,7 @@ func createDnfFallbackValidationSuite() utilities.ValidationSuite {
 func createDnfOrYumAvailabilityCheck() func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		// Check if dnf is available
-		if cmd := exec.CommandContext(ctx, "which", "dnf"); cmd.Run() == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
 			return nil // DNF is available
 		}
 

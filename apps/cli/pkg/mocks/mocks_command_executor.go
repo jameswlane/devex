@@ -83,6 +83,13 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		if command == m.FailingCommand || m.FailingCommands[command] {
 			return "", fmt.Errorf("mock shell command failed: %s", command)
 		}
+		// Handle specific package manager detection
+		if strings.Contains(command, "which dnf") {
+			return "/usr/bin/dnf", nil
+		}
+		if strings.Contains(command, "which yum") {
+			return "/usr/bin/yum", nil
+		}
 		// Most which commands should succeed
 		return "/usr/bin/command", nil
 	}
@@ -642,11 +649,21 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 
 	// Handle DNF group install commands
 	if strings.Contains(command, "sudo dnf group install -y") || strings.Contains(command, "sudo yum groupinstall -y") {
-		// Extract group name (it's in quotes, so we need to handle that)
+		// Extract group name (it may or may not be in quotes)
+		var groupName string
 		start := strings.Index(command, "'")
 		end := strings.LastIndex(command, "'")
 		if start != -1 && end != -1 && start != end {
-			groupName := command[start+1 : end]
+			// Group name is in single quotes
+			groupName = command[start+1 : end]
+		} else {
+			// Group name is not quoted, extract from end of command
+			parts := strings.Fields(command)
+			if len(parts) >= 5 {
+				groupName = parts[len(parts)-1]
+			}
+		}
+		if groupName != "" {
 			m.InstallationState[groupName] = true
 		}
 		return "Group installed successfully", nil
@@ -669,6 +686,16 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 	if strings.Contains(command, "sudo dnf check-update") || strings.Contains(command, "sudo yum check-update") {
 		// Mock successful check-update
 		return "Checking for updates...", nil
+	}
+
+	// Handle DNF uninstall commands - mark package as uninstalled
+	if strings.Contains(command, "sudo dnf remove -y") || strings.Contains(command, "sudo yum remove -y") {
+		parts := strings.Fields(command)
+		if len(parts) >= 4 {
+			packageName := parts[len(parts)-1] // Last argument is the package name
+			m.InstallationState[packageName] = false
+		}
+		return "Package removed successfully", nil
 	}
 
 	// Handle rpm --version
@@ -936,13 +963,13 @@ func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args 
 	// Handle specific command patterns for realistic mock responses
 	if name == "apt-cache" && len(args) >= 2 && args[0] == "policy" {
 		packageName := args[1]
-		
+
 		// Handle edge cases that should fail early
-		if packageName == "." || packageName == ".." || packageName == "-" || packageName == "--" || 
-		   strings.TrimSpace(packageName) == "" || strings.ContainsAny(packageName, "\n\t") {
+		if packageName == "." || packageName == ".." || packageName == "-" || packageName == "--" ||
+			strings.TrimSpace(packageName) == "" || strings.ContainsAny(packageName, "\n\t") {
 			return "", fmt.Errorf("apt-cache policy command failed for invalid package name")
 		}
-		
+
 		if packageName == "failing-package" {
 			// Return output indicating package is not available
 			return `N: Unable to locate package failing-package`, nil
@@ -973,6 +1000,78 @@ func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args 
 		// Mark package as uninstalled for mock tracking
 		m.InstallationState[packageName] = false
 		return fmt.Sprintf("Reading package lists...\nBuilding dependency tree...\nReading state information...\nThe following packages will be REMOVED:\n  %s\n0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.\nProcessing triggers for systemd (245.4-4ubuntu3.18) ...", packageName), nil
+	}
+
+	// Handle which commands for package manager detection
+	if name == "which" && len(args) >= 1 {
+		commandName := args[0]
+		// Check if this specific which command should fail
+		if m.FailingCommand == command || m.FailingCommands[command] {
+			return "", fmt.Errorf("mock which command failed: %s", commandName)
+		}
+		// Return path for available commands
+		return fmt.Sprintf("/usr/bin/%s", commandName), nil
+	}
+
+	// Handle sudo dnf/yum install commands
+	if name == "sudo" && len(args) >= 4 && (args[0] == "dnf" || args[0] == "yum") && args[1] == "install" && args[2] == "-y" {
+		packageName := args[len(args)-1] // Last argument is the package name
+		if packageName == "failing-package" {
+			return "", fmt.Errorf("mock install failed: package not found")
+		}
+		// Mark package as installed for mock tracking
+		m.InstallationState[packageName] = true
+		return fmt.Sprintf("Installing package %s...\nComplete!", packageName), nil
+	}
+
+	// Handle sudo dnf/yum remove commands
+	if name == "sudo" && len(args) >= 4 && (args[0] == "dnf" || args[0] == "yum") && args[1] == "remove" && args[2] == "-y" {
+		packageName := args[len(args)-1] // Last argument is the package name
+		// Mark package as uninstalled for mock tracking
+		m.InstallationState[packageName] = false
+		return fmt.Sprintf("Removing package %s...\nComplete!", packageName), nil
+	}
+
+	// Handle sudo dnf/yum group install commands
+	if name == "sudo" && len(args) >= 5 && (args[0] == "dnf" || args[0] == "yum") {
+		if (args[0] == "dnf" && args[1] == "group" && args[2] == "install" && args[3] == "-y") ||
+			(args[0] == "yum" && args[1] == "groupinstall" && args[2] == "-y") {
+			groupName := args[len(args)-1] // Last argument is the group name
+			// Remove quotes if present for consistent tracking
+			cleanGroupName := strings.Trim(groupName, "'\"")
+			// Mark group as installed for mock tracking
+			m.InstallationState[cleanGroupName] = true
+			return fmt.Sprintf("Installing group %s...\nComplete!", groupName), nil
+		}
+	}
+
+	// Handle sudo dnf/yum install for EPEL
+	if name == "sudo" && len(args) >= 4 && (args[0] == "dnf" || args[0] == "yum") && args[1] == "install" && args[2] == "-y" && args[3] == "epel-release" {
+		m.InstallationState["epel-release"] = true
+		return "EPEL repository enabled", nil
+	}
+
+	// Handle rpm -q commands for DNF/YUM
+	if name == "rpm" && len(args) >= 2 && args[0] == "-q" {
+		packageName := args[1]
+		// Handle patterns and products - strip prefixes for lookup
+		lookupName := packageName
+		if strings.HasPrefix(packageName, "pattern:") {
+			lookupName = strings.TrimPrefix(packageName, "pattern:")
+		} else if strings.HasPrefix(packageName, "product:") {
+			lookupName = strings.TrimPrefix(packageName, "product:")
+		}
+
+		if m.InstallationState[lookupName] || m.InstallationState[packageName] {
+			return fmt.Sprintf("%s-1.0-1.x86_64", packageName), nil
+		}
+		// For packages not in installation state, return error (package not installed)
+		return "package not installed", fmt.Errorf("package not installed")
+	}
+
+	// Handle rpm --version
+	if name == "rpm" && len(args) >= 1 && args[0] == "--version" {
+		return "RPM version 4.16.0", nil
 	}
 
 	return "mock output", nil
