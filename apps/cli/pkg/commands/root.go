@@ -72,7 +72,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
-	cmd.AddCommand(NewSystemCmd())
+	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
 	cmd.AddCommand(NewHelpCmd(repo, settings))
 

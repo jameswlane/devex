@@ -20,6 +20,7 @@ alias n='nvim'
 alias g='git'
 alias grep='grep --color=auto'
 alias d='docker'
+# Note: docker() function in extra handles permissions automatically
 alias r='rails'
 alias cat='bat'
 alias lzg='lazygit'
