@@ -936,6 +936,13 @@ func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args 
 	// Handle specific command patterns for realistic mock responses
 	if name == "apt-cache" && len(args) >= 2 && args[0] == "policy" {
 		packageName := args[1]
+		
+		// Handle edge cases that should fail early
+		if packageName == "." || packageName == ".." || packageName == "-" || packageName == "--" || 
+		   strings.TrimSpace(packageName) == "" || strings.ContainsAny(packageName, "\n\t") {
+			return "", fmt.Errorf("apt-cache policy command failed for invalid package name")
+		}
+		
 		if packageName == "failing-package" {
 			// Return output indicating package is not available
 			return `N: Unable to locate package failing-package`, nil

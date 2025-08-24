@@ -119,7 +119,7 @@ var _ = Describe("APT Installer Security", func() {
 
 		It("should handle installation timeouts gracefully", func() {
 			// Set up a mock that simulates a failing command (timeout scenario)
-			mockExec.FailingCommand = "sudo apt-get install -y valid-package"
+			mockExec.FailingCommand = "sudo apt install -y valid-package"
 
 			err := installer.Install("valid-package", mockRepo)
 			// The actual timeout behavior depends on the implementation
