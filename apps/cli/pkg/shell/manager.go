@@ -277,8 +277,8 @@ func (sm *ShellManager) DeployShellModules(shellName string) error {
 		return fmt.Errorf("unsupported shell for module deployment: %s", shellName)
 	}
 
-	// Discover available files with race condition protection
-	availableFiles, err := sm.discoverFilesWithValidation(sourceSubDir)
+	// Discover available files with race condition protection and early exit optimization
+	availableFiles, err := sm.discoverFilesWithValidation(sourceSubDir, moduleFiles)
 	if err != nil {
 		return fmt.Errorf("failed to discover module files: %w", err)
 	}
@@ -418,34 +418,47 @@ func detectAssetsDir() string {
 	return "assets"
 }
 
-// discoverFilesWithValidation discovers files using a simplified sequential approach
-func (sm *ShellManager) discoverFilesWithValidation(sourceSubDir string) (map[string]string, error) {
+// discoverFilesWithValidation discovers files using a simplified sequential approach with early exit optimization
+func (sm *ShellManager) discoverFilesWithValidation(sourceSubDir string, expectedFiles []string) (map[string]string, error) {
 	primaryPattern := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, "*")
 	fallbackPattern := filepath.Join(sm.assetsDir, sourceSubDir, "*")
 
 	availableFiles := make(map[string]string)
+	expectedFileCount := len(expectedFiles)
 
 	// Try primary pattern first (double subdirectory)
 	if files, err := filepath.Glob(primaryPattern); err == nil {
 		for _, file := range files {
 			if isValidFile(file) {
 				availableFiles[filepath.Base(file)] = file
+				// Early exit when all expected files are found
+				if len(availableFiles) >= expectedFileCount {
+					log.Debug("All expected files found, early exit", "found", len(availableFiles), "expected", expectedFileCount)
+					return availableFiles, nil
+				}
 			}
 		}
 	} else {
 		log.Debug("Primary glob pattern failed", "pattern", primaryPattern, "error", err)
 	}
 
-	// Fill gaps with fallback pattern (single subdirectory)
-	if files, err := filepath.Glob(fallbackPattern); err == nil {
-		for _, file := range files {
-			name := filepath.Base(file)
-			if _, exists := availableFiles[name]; !exists && isValidFile(file) {
-				availableFiles[name] = file
+	// Fill gaps with fallback pattern (single subdirectory) only if we haven't found all files
+	if len(availableFiles) < expectedFileCount {
+		if files, err := filepath.Glob(fallbackPattern); err == nil {
+			for _, file := range files {
+				name := filepath.Base(file)
+				if _, exists := availableFiles[name]; !exists && isValidFile(file) {
+					availableFiles[name] = file
+					// Early exit when all expected files are found
+					if len(availableFiles) >= expectedFileCount {
+						log.Debug("All expected files found in fallback, early exit", "found", len(availableFiles), "expected", expectedFileCount)
+						break
+					}
+				}
 			}
+		} else {
+			log.Debug("Fallback glob pattern failed", "pattern", fallbackPattern, "error", err)
 		}
-	} else {
-		log.Debug("Fallback glob pattern failed", "pattern", fallbackPattern, "error", err)
 	}
 
 	return availableFiles, nil

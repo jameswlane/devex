@@ -82,48 +82,6 @@ func getAPTVersion() (*APTVersion, error) {
 	return cachedAPTVersion, nil
 }
 
-// isAPT3OrNewer checks if the system has APT 3.0 or newer
-func isAPT3OrNewer() bool {
-	version, err := getAPTVersion()
-	if err != nil {
-		log.Warn("Failed to detect APT version, assuming legacy", "error", err)
-		return false
-	}
-	return version.Major >= 3
-}
-
-// getOptimalAPTCommand returns the best APT command for the current version
-func getOptimalAPTCommand(operation string) string {
-	switch operation {
-	case "update":
-		// apt-get update is still preferred for scripts per documentation
-		return "sudo apt-get update"
-	case "install":
-		// apt-get install is still preferred for scripts per documentation
-		return "sudo apt-get install -y"
-	case "remove":
-		// apt-get remove is still preferred for scripts per documentation
-		return "sudo apt-get remove -y"
-	case "search":
-		// Use apt for search operations (better user experience)
-		if isAPT3OrNewer() {
-			return "apt search"
-		}
-		return "apt-cache search"
-	case "show":
-		// Use apt for show operations (better user experience)
-		if isAPT3OrNewer() {
-			return "apt show"
-		}
-		return "apt-cache show"
-	case "policy":
-		// Always use apt-cache for policy (stable interface)
-		return "apt-cache policy"
-	default:
-		return "apt-get"
-	}
-}
-
 func New() *APTInstaller {
 	return &APTInstaller{}
 }
@@ -322,7 +280,7 @@ func setupDockerService(ctx context.Context) error {
 	log.Debug("Configuring Docker service and permissions")
 
 	// Enable Docker service to start on boot
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl enable docker"); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "systemctl", "enable", "docker"); err != nil {
 		log.Warn("Failed to enable Docker service", "error", err)
 		// Continue anyway
 	} else {
@@ -330,7 +288,7 @@ func setupDockerService(ctx context.Context) error {
 	}
 
 	// Start Docker service
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl start docker"); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "systemctl", "start", "docker"); err != nil {
 		log.Warn("Failed to start Docker service", "error", err)
 		// Continue anyway, user can start manually
 	} else {
@@ -350,8 +308,7 @@ func setupDockerService(ctx context.Context) error {
 		return nil
 	}
 
-	addUserCmd := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
-	if _, err := utils.CommandExec.RunShellCommand(addUserCmd); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "usermod", "-aG", "docker", currentUser); err != nil {
 		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err)
 		log.Info("You may need to manually add your user to the docker group", "command", fmt.Sprintf("sudo usermod -aG docker %s", currentUser))
 	} else {
@@ -363,8 +320,7 @@ func setupDockerService(ctx context.Context) error {
 
 		// The sg command can run a command with the new group, but we can't change the parent shell
 		// However, we can test if Docker works with the new group
-		testCmd := "sg docker -c 'docker version --format \"{{.Server.Version}}\"'"
-		if output, err := utils.CommandExec.RunShellCommand(testCmd); err == nil {
+		if output, err := utils.CommandExec.RunCommand(ctx, "sg", "docker", "-c", "docker version --format \"{{.Server.Version}}\""); err == nil {
 			log.Info("Docker group membership verified and working", "docker_version", strings.TrimSpace(output))
 			log.Info("Note: Current shell session still requires 'newgrp docker' or re-login for direct docker commands")
 		} else {
@@ -378,7 +334,7 @@ func setupDockerService(ctx context.Context) error {
 
 	// Verify Docker daemon is accessible with current permissions
 	// First try without sudo (in case group is already effective)
-	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}' 2>/dev/null"); err == nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "docker", "version", "--format", "{{.Server.Version}}"); err == nil {
 		log.Info("Docker daemon is running and accessible without sudo")
 	} else {
 		log.Warn("Docker daemon may not be fully ready yet", "hint", "Try running 'sudo systemctl status docker' to check service status")
@@ -407,7 +363,7 @@ func configureDockerDaemon(ctx context.Context) error {
 			log.Warn("Existing daemon.json has invalid JSON, backing up and replacing", "error", err)
 			// Backup the invalid file
 			backupPath := daemonConfigPath + ".backup." + fmt.Sprintf("%d", time.Now().Unix())
-			if _, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo cp %s %s", daemonConfigPath, backupPath)); err != nil {
+			if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "cp", daemonConfigPath, backupPath); err != nil {
 				log.Warn("Failed to backup invalid daemon.json", "error", err)
 			} else {
 				log.Info("Backed up invalid daemon.json", "backup_path", backupPath)
@@ -442,10 +398,9 @@ func configureDockerDaemon(ctx context.Context) error {
 	}
 
 	// Atomically move temp file to final location
-	moveCmd := fmt.Sprintf("sudo mv %s %s", tempFile, daemonConfigPath)
-	if _, err := utils.CommandExec.RunShellCommand(moveCmd); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "mv", tempFile, daemonConfigPath); err != nil {
 		// Cleanup temp file on failure
-		if _, cleanupErr := utils.CommandExec.RunShellCommand(fmt.Sprintf("sudo rm -f %s", tempFile)); cleanupErr != nil {
+		if _, cleanupErr := utils.CommandExec.RunCommand(ctx, "sudo", "rm", "-f", tempFile); cleanupErr != nil {
 			log.Warn("Failed to cleanup temporary daemon.json file", "file", tempFile, "error", cleanupErr)
 		}
 		return fmt.Errorf("failed to move daemon configuration to final location: %w", err)
@@ -454,7 +409,7 @@ func configureDockerDaemon(ctx context.Context) error {
 	log.Info("Docker daemon configured with log rotation (max 5 files of 10MB each)")
 
 	// Restart Docker to apply daemon.json changes
-	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl restart docker"); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "systemctl", "restart", "docker"); err != nil {
 		log.Warn("Failed to restart Docker after daemon configuration", "error", err)
 		log.Info("You may need to manually restart Docker: sudo systemctl restart docker")
 		// Don't return error - configuration was applied successfully
@@ -475,8 +430,7 @@ func writeConfigFileSecurely(ctx context.Context, content []byte, filePath strin
 	defer os.Remove(tempContentFile) // Clean up temp file
 
 	// Use utils interface to run the command (supports mocking in tests)
-	copyCommand := fmt.Sprintf("sudo cp %s %s", tempContentFile, filePath)
-	if _, err := utils.CommandExec.RunShellCommand(copyCommand); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "cp", tempContentFile, filePath); err != nil {
 		return fmt.Errorf("failed to copy file to %s: %w", filePath, err)
 	}
 
@@ -564,17 +518,12 @@ func (a *APTInstaller) InstallPackages(ctx context.Context, packages []string, d
 	}
 
 	// Update package lists first
-	updateCmd := getOptimalAPTCommand("update")
-	if _, err := utils.CommandExec.RunShellCommand(updateCmd); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "apt-get", "update"); err != nil {
 		return fmt.Errorf("failed to update APT package lists: %w", err)
 	}
 
-	// Install all packages in one command for efficiency
-	packagesStr := strings.Join(packages, " ")
-	baseInstallCmd := getOptimalAPTCommand("install")
-	installCmd := fmt.Sprintf("%s %s", baseInstallCmd, packagesStr)
-
-	if _, err := utils.CommandExec.RunShellCommand(installCmd); err != nil {
+	// Install all packages using secure command execution
+	if _, err := utils.RunPackageCommand(ctx, "apt-get", "install", packages); err != nil {
 		return fmt.Errorf("failed to install packages %v: %w", packages, err)
 	}
 
@@ -584,7 +533,7 @@ func (a *APTInstaller) InstallPackages(ctx context.Context, packages []string, d
 
 // IsAvailable checks if APT package manager is available
 func (a *APTInstaller) IsAvailable(ctx context.Context) bool {
-	_, err := utils.CommandExec.RunShellCommand("which apt-get")
+	_, err := utils.CommandExec.RunCommand(ctx, "command", "-v", "apt-get")
 	return err == nil
 }
 

@@ -436,10 +436,45 @@ func executeDockerCommand(command string) error {
 	return nil
 }
 
+// validateImageName validates that an image name is safe and legitimate
+func validateImageName(imageName string) error {
+	if imageName == "" {
+		return fmt.Errorf("image name is required")
+	}
+
+	// Check for path traversal attempts
+	if strings.Contains(imageName, "..") {
+		return fmt.Errorf("invalid image name format: path traversal detected")
+	}
+
+	// Check for names that start with hyphens (could be confused for flags)
+	if strings.HasPrefix(imageName, "-") {
+		return fmt.Errorf("invalid image name format: cannot start with hyphen")
+	}
+
+	// Check for suspicious patterns that could indicate typosquatting
+	if strings.Contains(imageName, " ") || strings.Contains(imageName, "\t") || strings.Contains(imageName, "\n") {
+		return fmt.Errorf("invalid image name format: contains whitespace")
+	}
+
+	// Check for shell metacharacters
+	if strings.ContainsAny(imageName, ";&|`$()[]{}*?<>\"'\\") {
+		return fmt.Errorf("invalid image name format: contains shell metacharacters")
+	}
+
+	// Basic length check to prevent extremely long names
+	if len(imageName) > 255 {
+		return fmt.Errorf("image name too long")
+	}
+
+	return nil
+}
+
 // buildDockerRunCommand constructs a complete docker run command from DockerOptions
 func buildDockerRunCommand(imageName string, options types.DockerOptions) (string, error) {
-	if imageName == "" {
-		return "", fmt.Errorf("image name is required")
+	// Validate image name for security
+	if err := validateImageName(imageName); err != nil {
+		return "", fmt.Errorf("image validation failed: %w", err)
 	}
 
 	if err := options.Validate(); err != nil {
