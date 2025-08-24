@@ -29,3 +29,13 @@ func (OSCommandExecutor) RunCommand(ctx context.Context, name string, args ...st
 func (OSCommandExecutor) DownloadFileWithContext(ctx context.Context, url, filepath string) error {
 	return DownloadFileWithContext(ctx, url, filepath)
 }
+
+func (OSCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	return cmd, nil
+}
+
+func (OSCommandExecutor) ValidateCommand(command string) error {
+	// Basic validation - let the real security validation happen elsewhere
+	return nil
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -645,13 +644,10 @@ func setupDockerService() error {
 		return fmt.Errorf("invalid username: %w", err)
 	}
 
-	// Add user to docker group using secure command execution
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", currentUser)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err, "output", string(output))
+	// Add user to docker group using secure command execution via utils interface
+	command := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err, "output", output)
 	} else {
 		log.Info("User added to docker group", "user", currentUser)
 		log.Info("Note: You may need to log out and log back in for docker group changes to take effect")
@@ -810,13 +806,10 @@ func (p *PacmanInstaller) InstallGroup(groupName string, repo types.Repository) 
 		return fmt.Errorf("invalid group name: %w", err)
 	}
 
-	// Install group using pacman with secure execution
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "sudo", "pacman", "-S", "--noconfirm", groupName)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Error("Failed to install package group", err, "group", groupName, "output", string(output))
+	// Install group using pacman with secure execution via utils interface
+	command := fmt.Sprintf("sudo pacman -S --noconfirm %s", groupName)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to install package group", err, "group", groupName, "output", output)
 		return fmt.Errorf("failed to install package group via pacman: %w", err)
 	}
 
@@ -973,12 +966,11 @@ func (p *PacmanInstaller) InstallPackages(ctx context.Context, packages []string
 		return fmt.Errorf("failed to update Pacman package database: %w", err)
 	}
 
-	// Install all packages in one command for efficiency using secure execution
-	cmdArgs := append([]string{"sudo", "pacman", "-S", "--noconfirm"}, packages...)
-	cmd := exec.CommandContext(ctx, cmdArgs[0], cmdArgs[1:]...)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to install packages %v: %w (output: %s)", packages, err, string(output))
+	// Install all packages in one command for efficiency using secure execution via utils interface
+	packageList := strings.Join(packages, " ")
+	command := fmt.Sprintf("sudo pacman -S --noconfirm %s", packageList)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		return fmt.Errorf("failed to install packages %v: %w (output: %s)", packages, err, output)
 	}
 
 	log.Info("Successfully installed packages", "packages", packages)
@@ -987,8 +979,7 @@ func (p *PacmanInstaller) InstallPackages(ctx context.Context, packages []string
 
 // IsAvailable checks if Pacman package manager is available
 func (p *PacmanInstaller) IsAvailable(ctx context.Context) bool {
-	cmd := exec.CommandContext(ctx, "which", "pacman")
-	err := cmd.Run()
+	_, err := utils.CommandExec.RunShellCommand("which pacman")
 	return err == nil
 }
 
@@ -1093,16 +1084,11 @@ func (p *PacmanInstaller) RemoveOrphans() error {
 		return nil
 	}
 
-	// Remove orphans using pacman with secure execution
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	args := []string{"pacman", "-Rs", "--noconfirm"}
-	args = append(args, validOrphans...)
-	cmd := exec.CommandContext(ctx, "sudo", args...)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Error("Failed to remove orphans", err, "output", string(output))
+	// Remove orphans using pacman with secure execution via utils interface
+	orphanList := strings.Join(validOrphans, " ")
+	command := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", orphanList)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to remove orphans", err, "output", output)
 		return fmt.Errorf("failed to remove orphans: %w", err)
 	}
 

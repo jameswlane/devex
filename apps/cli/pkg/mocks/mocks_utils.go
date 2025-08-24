@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -143,6 +144,23 @@ func (m *MockUtils) CopyFile(src, dest string) error {
 	m.CopyFileCalled = true
 	if src == m.FailingCommand {
 		return fmt.Errorf("mock CopyFile failed")
+	}
+	return nil
+}
+
+func (m *MockUtils) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	m.Commands = append(m.Commands, command)
+	if command == m.FailingCommand {
+		return nil, fmt.Errorf("mock ExecuteCommand failed")
+	}
+	// Return a mock command that will not actually execute
+	cmd := exec.CommandContext(ctx, "echo", "mock-execution")
+	return cmd, nil
+}
+
+func (m *MockUtils) ValidateCommand(command string) error {
+	if command == m.FailingCommand {
+		return fmt.Errorf("mock ValidateCommand failed")
 	}
 	return nil
 }
