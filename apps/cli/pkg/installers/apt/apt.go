@@ -320,7 +320,9 @@ func setupDockerService(ctx context.Context) error {
 
 		// The sg command can run a command with the new group, but we can't change the parent shell
 		// However, we can test if Docker works with the new group
-		if output, err := utils.CommandExec.RunCommand(ctx, "sg", "docker", "-c", "docker version --format \"{{.Server.Version}}\""); err == nil {
+		const dockerVersionFormat = "{{.Server.Version}}"
+		dockerVersionCmd := "docker version --format \"" + dockerVersionFormat + "\""
+		if output, err := utils.CommandExec.RunCommand(ctx, "sg", "docker", "-c", dockerVersionCmd); err == nil {
 			log.Info("Docker group membership verified and working", "docker_version", strings.TrimSpace(output))
 			log.Info("Note: Current shell session still requires 'newgrp docker' or re-login for direct docker commands")
 		} else {
