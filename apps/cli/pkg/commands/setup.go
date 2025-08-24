@@ -444,7 +444,12 @@ func displayFinalMessage(model *SetupModel) {
 	}
 
 	message.WriteString("  2. Verify mise: mise list\n")
-	message.WriteString("  3. Check Docker: docker ps\n")
+	if selectedDBs := model.getSelectedDatabases(); len(selectedDBs) > 0 {
+		message.WriteString("  3. Refresh Docker permissions: newgrp docker\n")
+		message.WriteString("  4. Check Docker: docker ps\n")
+	} else {
+		message.WriteString("  3. Check Docker: docker ps\n")
+	}
 
 	if model.hasErrors {
 		message.WriteString("\n⚠️  Some components may need manual attention.\n")
@@ -1143,8 +1148,16 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			}
 		}
 
-		// Installation completed successfully
-		log.Info("Installation completed successfully")
+		// Installation completed successfully - now finalize shell setup
+		log.Info("Installation completed successfully, running shell configuration finalization")
+
+		// Run shell finalization (same as automated setup)
+		ctx := context.Background()
+		if err := m.finalizeSetup(ctx); err != nil {
+			log.Warn("Shell setup had issues during TUI installation", "error", err)
+			// Don't fail the entire setup for shell config issues
+		}
+
 		return InstallCompleteMsg{} // Signal successful completion
 	}
 }

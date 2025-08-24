@@ -8,6 +8,7 @@ import (
 
 	"github.com/jameswlane/devex/pkg/installers/utilities"
 	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/pkg/metrics"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )
@@ -23,6 +24,9 @@ func NewDnfInstaller() *DnfInstaller {
 func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 	log.Debug("DNF Installer: Starting installation", "command", command)
 
+	// Start metrics tracking
+	timer := metrics.StartInstallation("dnf", command)
+
 	// Run background validation for better performance
 	validator := utilities.NewBackgroundValidator(30 * time.Second)
 	validator.AddSuite(createDnfFallbackValidationSuite())
@@ -30,6 +34,7 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 
 	ctx := context.Background()
 	if err := validator.RunValidations(ctx); err != nil {
+		timer.Failure(err)
 		return utilities.WrapError(err, utilities.ErrorTypeSystem, "install", command, "dnf")
 	}
 
@@ -70,17 +75,14 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 		return utilities.NewPackageError("availability-check", command, "dnf", err)
 	}
 
-	// Run dnf/yum install command with automatic fallback
-	installCommand, packageManager := getDnfInstallCommand(command)
-	if installCommand == "" {
-		return utilities.NewPackageError("install", command, "dnf/yum", fmt.Errorf("no suitable package manager found"))
-	}
-	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-		log.Error("Failed to install package", err, "command", command, "package_manager", packageManager)
-		return utilities.NewPackageError("install", command, packageManager, err)
+	// Use secure installation method
+	if err := secureInstallPackage(ctx, command); err != nil {
+		log.Error("Failed to install package", err, "command", command)
+		timer.Failure(err)
+		return utilities.NewPackageError("install", command, "dnf", err)
 	}
 
-	log.Debug("Package installed successfully", "command", command, "package_manager", packageManager)
+	log.Debug("Package installed successfully", "command", command, "package_manager", "dnf")
 
 	// Verify installation succeeded
 	if isInstalled, err := d.isPackageInstalled(command); err != nil {
@@ -98,10 +100,12 @@ func (d *DnfInstaller) Install(command string, repo types.Repository) error {
 	// Add the package to the repository
 	if err := repo.AddApp(command); err != nil {
 		log.Error("Failed to add package to repository", err, "command", command)
+		timer.Failure(err)
 		return utilities.NewRepositoryError("add", command, "dnf", err)
 	}
 
 	log.Debug("Package added to repository successfully", "command", command)
+	timer.Success()
 	return nil
 }
 
@@ -130,14 +134,16 @@ func (d *DnfInstaller) Uninstall(command string, repo types.Repository) error {
 		return nil // Not installed is success for uninstall
 	}
 
-	// Run dnf/yum remove command
-	uninstallCommand, packageManager := getDnfUninstallCommand(command)
-	if _, err := utils.CommandExec.RunShellCommand(uninstallCommand); err != nil {
-		log.Error("Failed to uninstall package", err, "command", command, "package_manager", packageManager)
-		return utilities.NewPackageError("uninstall", command, packageManager, err)
+	// Uninstall package using secure execution with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	if err := secureUninstallPackage(ctx, command); err != nil {
+		log.Error("Failed to uninstall package", err, "command", command)
+		return utilities.NewPackageError("uninstall", command, "dnf/yum", err)
 	}
 
-	log.Debug("Package uninstalled successfully", "command", command, "package_manager", packageManager)
+	log.Debug("Package uninstalled successfully", "command", command, "package_manager", "dnf")
 
 	// Remove the package from the repository
 	if err := repo.DeleteApp(command); err != nil {
@@ -202,17 +208,35 @@ func RunDnfUpdate(forceUpdate bool, repo types.Repository) error {
 }
 
 // getDnfInstallCommand returns the appropriate install command and package manager name
-func getDnfInstallCommand(packageName string) (string, string) {
+// secureInstallPackage installs a package using DNF or YUM with secure execution
+func secureInstallPackage(ctx context.Context, packageName string) error {
+	// Validate package name
+	if err := utils.ValidatePackageName(packageName); err != nil {
+		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+			"installer": "dnf",
+			"package":   packageName,
+			"reason":    "invalid_package_name",
+		})
+		return fmt.Errorf("invalid package name: %w", err)
+	}
+
 	// Check if dnf is available
-	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
-		return fmt.Sprintf("sudo dnf install -y %s", packageName), "dnf"
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "install", "-y", packageName); err != nil {
+			return fmt.Errorf("dnf install failed: %w", err)
+		}
+		return nil
 	}
+
 	// Check if yum is available as fallback
-	if _, err := utils.CommandExec.RunShellCommand("which yum"); err == nil {
-		return fmt.Sprintf("sudo yum install -y %s", packageName), "yum"
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "yum"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "install", "-y", packageName); err != nil {
+			return fmt.Errorf("yum install failed: %w", err)
+		}
+		return nil
 	}
-	// Neither available - return error case (should not happen if validation passed)
-	return "", ""
+
+	return fmt.Errorf("neither dnf nor yum package managers found")
 }
 
 // getDnfUpdateCommand returns the appropriate update command
@@ -230,17 +254,35 @@ func getDnfUpdateCommand() (string, string) {
 }
 
 // getDnfUninstallCommand returns the appropriate uninstall command
-func getDnfUninstallCommand(packageName string) (string, string) {
+// secureUninstallPackage uninstalls a package using DNF or YUM with secure execution
+func secureUninstallPackage(ctx context.Context, packageName string) error {
+	// Validate package name
+	if err := utils.ValidatePackageName(packageName); err != nil {
+		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+			"installer": "dnf",
+			"package":   packageName,
+			"reason":    "invalid_package_name",
+		})
+		return fmt.Errorf("invalid package name: %w", err)
+	}
+
 	// Check if dnf is available
-	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
-		return fmt.Sprintf("sudo dnf remove -y %s", packageName), "dnf"
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "remove", "-y", packageName); err != nil {
+			return fmt.Errorf("dnf remove failed: %w", err)
+		}
+		return nil
 	}
+
 	// Check if yum is available as fallback
-	if _, err := utils.CommandExec.RunShellCommand("which yum"); err == nil {
-		return fmt.Sprintf("sudo yum remove -y %s", packageName), "yum"
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "yum"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "remove", "-y", packageName); err != nil {
+			return fmt.Errorf("yum remove failed: %w", err)
+		}
+		return nil
 	}
-	// Neither available - return error case (should not happen if validation passed)
-	return "", ""
+
+	return fmt.Errorf("neither dnf nor yum package managers found")
 }
 
 // validateDnfSystem checks if DNF is available and functional
@@ -350,15 +392,14 @@ func (d *DnfInstaller) InstallGroup(groupName string, repo types.Repository) err
 		return fmt.Errorf("dnf system validation failed: %w", err)
 	}
 
-	// Get the appropriate command for group installation
-	installCommand, packageManager := getDnfGroupInstallCommand(groupName)
-
-	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-		log.Error("Failed to install package group", err, "group", groupName, "package_manager", packageManager)
-		return fmt.Errorf("failed to install package group via %s: %w", packageManager, err)
+	// Use secure group installation method
+	ctx := context.Background()
+	if err := secureInstallGroup(ctx, groupName); err != nil {
+		log.Error("Failed to install package group", err, "group", groupName)
+		return fmt.Errorf("failed to install package group via dnf: %w", err)
 	}
 
-	log.Info("Package group installed successfully", "group", groupName, "package_manager", packageManager)
+	log.Info("Package group installed successfully", "group", groupName, "package_manager", "dnf")
 
 	// Add the group to the repository
 	if err := repo.AddApp(groupName); err != nil {
@@ -370,13 +411,41 @@ func (d *DnfInstaller) InstallGroup(groupName string, repo types.Repository) err
 }
 
 // getDnfGroupInstallCommand returns the appropriate group install command
-func getDnfGroupInstallCommand(groupName string) (string, string) {
-	// Check if dnf is available
-	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
-		return fmt.Sprintf("sudo dnf group install -y '%s'", groupName), "dnf"
+// secureInstallGroup installs a group using DNF or YUM with secure execution
+func secureInstallGroup(ctx context.Context, groupName string) error {
+	// Validate group name
+	if err := utils.ValidatePackageName(groupName); err != nil {
+		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+			"installer": "dnf",
+			"group":     groupName,
+			"reason":    "invalid_group_name",
+		})
+		return fmt.Errorf("invalid group name: %w", err)
 	}
+
+	// Quote group name if it contains spaces for shell safety
+	quotedGroupName := groupName
+	if strings.Contains(groupName, " ") {
+		quotedGroupName = "'" + groupName + "'"
+	}
+
+	// Check if dnf is available
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "group", "install", "-y", quotedGroupName); err != nil {
+			return fmt.Errorf("dnf group install failed: %w", err)
+		}
+		return nil
+	}
+
 	// Fall back to yum
-	return fmt.Sprintf("sudo yum groupinstall -y '%s'", groupName), "yum"
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "yum"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "groupinstall", "-y", quotedGroupName); err != nil {
+			return fmt.Errorf("yum groupinstall failed: %w", err)
+		}
+		return nil
+	}
+
+	return fmt.Errorf("neither dnf nor yum package managers found")
 }
 
 // EnableEPEL enables the Extra Packages for Enterprise Linux repository
@@ -384,14 +453,15 @@ func (d *DnfInstaller) EnableEPEL() error {
 	log.Debug("Enabling EPEL repository")
 
 	// Check if dnf is available
-	if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
-		// Use DNF
-		if _, err := utils.CommandExec.RunShellCommand("sudo dnf install -y epel-release"); err != nil {
+	ctx := context.Background()
+	if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
+		// Use DNF with secure execution
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "dnf", "install", "-y", "epel-release"); err != nil {
 			return fmt.Errorf("failed to enable EPEL via DNF: %w", err)
 		}
 	} else {
 		// Use YUM
-		if _, err := utils.CommandExec.RunShellCommand("sudo yum install -y epel-release"); err != nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "yum", "install", "-y", "epel-release"); err != nil {
 			return fmt.Errorf("failed to enable EPEL via YUM: %w", err)
 		}
 	}
@@ -549,7 +619,7 @@ func createDnfFallbackValidationSuite() utilities.ValidationSuite {
 func createDnfOrYumAvailabilityCheck() func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		// Check if dnf is available
-		if _, err := utils.CommandExec.RunShellCommand("which dnf"); err == nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "which", "dnf"); err == nil {
 			return nil // DNF is available
 		}
 

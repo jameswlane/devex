@@ -34,22 +34,37 @@ var _ = Describe("Commands", func() {
 
 	Context("System Command", func() {
 		BeforeEach(func() {
-			cmd = commands.NewSystemCmd()
+			cmd = commands.NewSystemCmd(settings)
 			cmd.SetOut(io.Discard) // Suppress output
 			cmd.SetErr(io.Discard) // Suppress error output
 		})
 
-		It("requires the --user flag", func() {
+		It("shows help when no subcommand is provided", func() {
 			cmd.SetArgs([]string{})
 			err := cmd.Execute()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("required flag(s) \"user\" not set"))
+			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("executes successfully with the --user flag", func() {
-			cmd.SetArgs([]string{"--user", "testuser"})
-			err := cmd.Execute()
-			Expect(err).ToNot(HaveOccurred())
+		It("has shell subcommand", func() {
+			shellCmd := cmd.Commands()
+			Expect(shellCmd).To(HaveLen(1))
+			Expect(shellCmd[0].Name()).To(Equal("shell"))
+
+			// Check that shell command has its own subcommands
+			shellSubCmds := shellCmd[0].Commands()
+			Expect(shellSubCmds).To(HaveLen(6))
+
+			subCmdNames := make([]string, len(shellSubCmds))
+			for i, subcmd := range shellSubCmds {
+				subCmdNames[i] = subcmd.Name()
+			}
+
+			Expect(subCmdNames).To(ContainElement("copy"))
+			Expect(subCmdNames).To(ContainElement("append"))
+			Expect(subCmdNames).To(ContainElement("status"))
+			Expect(subCmdNames).To(ContainElement("list"))
+			Expect(subCmdNames).To(ContainElement("debug"))
+			Expect(subCmdNames).To(ContainElement("test-copy"))
 		})
 	})
 

@@ -639,7 +639,12 @@ func setupDockerService() error {
 		return nil
 	}
 
-	// Add user to docker group using secure command execution
+	// Validate username
+	if err := utils.ValidateUsername(currentUser); err != nil {
+		return fmt.Errorf("invalid username: %w", err)
+	}
+
+	// Add user to docker group using secure command execution via utils interface
 	command := fmt.Sprintf("sudo usermod -aG docker %s", currentUser)
 	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
 		log.Warn("Failed to add user to docker group", "user", currentUser, "error", err, "output", output)
@@ -795,10 +800,16 @@ func (p *PacmanInstaller) InstallGroup(groupName string, repo types.Repository) 
 		return fmt.Errorf("pacman system validation failed: %w", err)
 	}
 
-	// Install group using pacman
-	installCommand := fmt.Sprintf("sudo pacman -S --noconfirm %s", groupName)
-	if _, err := utils.CommandExec.RunShellCommand(installCommand); err != nil {
-		log.Error("Failed to install package group", err, "group", groupName)
+	// Validate group name
+	if err := utils.ValidatePackageName(groupName); err != nil {
+		log.Error("Invalid group name", err, "group", groupName)
+		return fmt.Errorf("invalid group name: %w", err)
+	}
+
+	// Install group using pacman with secure execution via utils interface
+	command := fmt.Sprintf("sudo pacman -S --noconfirm %s", groupName)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		log.Error("Failed to install package group", err, "group", groupName, "output", output)
 		return fmt.Errorf("failed to install package group via pacman: %w", err)
 	}
 
@@ -955,12 +966,11 @@ func (p *PacmanInstaller) InstallPackages(ctx context.Context, packages []string
 		return fmt.Errorf("failed to update Pacman package database: %w", err)
 	}
 
-	// Install all packages in one command for efficiency
-	packagesStr := strings.Join(packages, " ")
-	installCmd := fmt.Sprintf("sudo pacman -S --noconfirm %s", packagesStr)
-
-	if _, err := utils.CommandExec.RunShellCommand(installCmd); err != nil {
-		return fmt.Errorf("failed to install packages %v: %w", packages, err)
+	// Install all packages in one command for efficiency using secure execution via utils interface
+	packageList := strings.Join(packages, " ")
+	command := fmt.Sprintf("sudo pacman -S --noconfirm %s", packageList)
+	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
+		return fmt.Errorf("failed to install packages %v: %w (output: %s)", packages, err, output)
 	}
 
 	log.Info("Successfully installed packages", "packages", packages)
@@ -1059,9 +1069,24 @@ func (p *PacmanInstaller) RemoveOrphans() error {
 
 	log.Info("Removing orphaned packages", "packages", orphans)
 
-	// Remove orphans using pacman
-	orphansStr := strings.Join(orphans, " ")
-	command := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", orphansStr)
+	// Validate all orphan package names
+	validOrphans := make([]string, 0, len(orphans))
+	for _, orphan := range orphans {
+		if err := utils.ValidatePackageName(orphan); err != nil {
+			log.Warn("Skipping invalid orphan package name", "package", orphan, "error", err)
+			continue
+		}
+		validOrphans = append(validOrphans, orphan)
+	}
+
+	if len(validOrphans) == 0 {
+		log.Info("No valid orphaned packages to remove")
+		return nil
+	}
+
+	// Remove orphans using pacman with secure execution via utils interface
+	orphanList := strings.Join(validOrphans, " ")
+	command := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", orphanList)
 	if output, err := utils.CommandExec.RunShellCommand(command); err != nil {
 		log.Error("Failed to remove orphans", err, "output", output)
 		return fmt.Errorf("failed to remove orphans: %w", err)
