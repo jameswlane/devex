@@ -48,6 +48,10 @@ const (
 	// Performance metrics
 	MetricTimeoutOccurred MetricType = "timeout.occurred"
 	MetricRetryAttempted  MetricType = "retry.attempted"
+
+	// Container cache metrics
+	MetricContainerCacheHit  MetricType = "container.cache.hit"
+	MetricContainerCacheMiss MetricType = "container.cache.miss"
 )
 
 // Metric represents a single metric event

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/user"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jameswlane/devex/pkg/config"
@@ -17,12 +18,29 @@ import (
 	"github.com/jameswlane/devex/pkg/utils"
 )
 
+// ContainerStatus represents cached container status information
+type ContainerStatus struct {
+	IsRunning bool
+	CachedAt  time.Time
+}
+
 type DockerInstaller struct {
 	// ServiceTimeout is the timeout for waiting for Docker daemon to become ready
 	ServiceTimeout time.Duration
+	// containerCache caches container status to avoid repeated Docker API calls
+	containerCache map[string]*ContainerStatus
+	// cacheMutex protects concurrent access to the container cache
+	cacheMutex sync.RWMutex
+	// cacheTimeout determines how long cached status remains valid
+	cacheTimeout time.Duration
 }
 
-// isRunningInContainer detects if we're running inside a Docker container
+// isRunningInContainer detects if we're running inside a Docker container.
+// It uses multiple detection methods to reliably identify container environments:
+// 1. Checks for /.dockerenv file (created by Docker)
+// 2. Examines cgroup information for docker references
+// 3. Looks for container-specific environment variables
+// This prevents unsafe Docker-in-Docker scenarios and provides proper user guidance.
 func isRunningInContainer() bool {
 	// Method 1: Check for .dockerenv file
 	if _, err := os.Stat("/.dockerenv"); err == nil {
@@ -47,7 +65,9 @@ func isRunningInContainer() bool {
 
 func New() *DockerInstaller {
 	return &DockerInstaller{
-		ServiceTimeout: 30 * time.Second, // Default timeout
+		ServiceTimeout: DefaultServiceTimeout,
+		containerCache: make(map[string]*ContainerStatus),
+		cacheTimeout:   ContainerCacheTimeout,
 	}
 }
 
@@ -55,20 +75,31 @@ func New() *DockerInstaller {
 func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 	return &DockerInstaller{
 		ServiceTimeout: timeout,
+		containerCache: make(map[string]*ContainerStatus),
+		cacheTimeout:   ContainerCacheTimeout,
+	}
+}
+
+// NewWithCacheTimeout creates a new DockerInstaller with custom timeout and cache duration
+func NewWithCacheTimeout(serviceTimeout, cacheTimeout time.Duration) *DockerInstaller {
+	return &DockerInstaller{
+		ServiceTimeout: serviceTimeout,
+		containerCache: make(map[string]*ContainerStatus),
+		cacheTimeout:   cacheTimeout,
 	}
 }
 
 // handleDockerInContainer handles Docker daemon setup in container environments
 func (d *DockerInstaller) handleDockerInContainer() error {
 	// Check if Docker socket is mounted using the command executor
-	if _, err := utils.CommandExec.RunShellCommand("test -S /var/run/docker.sock"); err == nil {
-		log.Info("Docker socket is available, but daemon access failed")
+	if _, err := utils.CommandExec.RunShellCommand("test -S " + DockerSocketPath); err == nil {
+		log.Warn("Docker socket is available, but daemon access failed")
 		// The socket exists but we can't access it - likely a permission issue
 		return fmt.Errorf("docker socket exists but not accessible - container may need to run as root or with proper socket permissions")
 	}
 
-	log.Warn("Docker socket not found at /var/run/docker.sock")
-	log.Info("Attempting to start Docker daemon in container environment")
+	log.Debug("Docker socket not found at /var/run/docker.sock")
+	log.Debug("Attempting to start Docker daemon in container environment")
 
 	// Attempt to start Docker daemon - this might work in privileged containers
 	return d.attemptDockerDaemonStartup()
@@ -85,7 +116,7 @@ func (d *DockerInstaller) attemptDockerDaemonStartup() error {
 		return fmt.Errorf("unable to start Docker daemon in container")
 	}
 
-	log.Debug("Attempted to start Docker daemon in container")
+	log.Info("Attempted to start Docker daemon in container")
 
 	// Wait for Docker daemon to become ready
 	if err := utils.WaitForDockerDaemon(ctx, d.ServiceTimeout); err != nil {
@@ -115,106 +146,168 @@ func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
 	return nil
 }
 
+// Install installs Docker containers with comprehensive validation and error handling
 func (d *DockerInstaller) Install(command string, repo types.Repository) error {
-	log.Debug("Docker Installer: Starting installation", "command", command)
+	log.Info("Starting Docker container installation", "command", command)
 
-	// Start metrics tracking
+	// Start metrics tracking with panic recovery
 	timer := metrics.StartInstallation("docker", command)
-	defer func() {
-		if r := recover(); r != nil {
-			timer.Failure(fmt.Errorf("panic: %v", r))
-			panic(r)
-		}
-	}()
+	defer d.recoverFromPanic(timer)
 
-	// Check if Docker is available and running
-	metrics.RecordCount(metrics.MetricDockerSetupStarted, map[string]string{"command": command})
-	if err := d.validateDockerService(); err != nil {
-		// In container environments without Docker, skip Docker-based installations
-		if isRunningInContainer() {
-			log.Warn("Docker daemon not available in container, skipping Docker-based installation", "app", command)
-			log.Info("To enable Docker-in-Docker, run container with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
-			metrics.RecordCount(metrics.MetricDockerSetupSkipped, map[string]string{"command": command, "reason": "container_environment"})
-			timer.Skip("Docker installation skipped in container environment") // Use skip instead of success
-			return nil                                                         // Don't fail, just skip
-		}
-		metrics.RecordCount(metrics.MetricDockerSetupFailed, map[string]string{"command": command})
-		timer.Failure(err)
-		return fmt.Errorf("docker service validation failed: %w", err)
-	}
-	metrics.RecordCount(metrics.MetricDockerSetupSucceeded, map[string]string{"command": command})
-
-	// Try to get app configuration to check for DockerOptions
-	var finalCommand string
-	var containerName string
-
-	if appConfig, err := config.GetAppInfo(command); err == nil && appConfig.DockerOptions.ContainerName != "" {
-		// Build complete docker run command from DockerOptions
-		log.Debug("Building Docker command from DockerOptions", "app", appConfig.Name)
-
-		dockerCmd, buildErr := buildDockerRunCommand(appConfig.InstallCommand, appConfig.DockerOptions)
-		if buildErr != nil {
-			log.Error("Failed to build Docker command from options", buildErr, "app", appConfig.Name)
-			return fmt.Errorf("failed to build Docker command: %w", buildErr)
-		}
-
-		finalCommand = dockerCmd
-		containerName = appConfig.DockerOptions.ContainerName
-		log.Info("Built Docker command from configuration", "command", finalCommand, "container", containerName)
-	} else {
-		// Use command as-is (existing behavior for full docker run commands)
-		finalCommand = command
-		containerName = extractContainerName(command)
-		if containerName == "" {
-			log.Error("Failed to extract container name from command", fmt.Errorf("command: %s", command))
-			return fmt.Errorf("failed to extract container name from command")
-		}
+	// Validate Docker service availability
+	if err := d.validateDockerServiceWithMetrics(command, timer); err != nil {
+		return err
 	}
 
-	// Wrap the command into a types.AppConfig object
-	appConfig := types.AppConfig{
-		BaseConfig: types.BaseConfig{
-			Name: containerName,
-		},
-		InstallMethod:  "docker",
-		InstallCommand: containerName, // For Docker, just use the container name for installation checking
-	}
-
-	// Check if the container is already running
-	isInstalled, err := utilities.IsAppInstalled(appConfig)
+	// Build and validate Docker command
+	finalCommand, containerName, err := d.buildDockerCommand(command)
 	if err != nil {
-		log.Error("Failed to check if Docker container is running", err, "containerName", containerName)
-		return fmt.Errorf("failed to check if Docker container is running: %w", err)
+		timer.Failure(err)
+		return err
 	}
 
-	if isInstalled {
+	// Check if container is already running
+	if isInstalled, err := d.checkContainerStatus(containerName); err != nil {
+		timer.Failure(err)
+		return err
+	} else if isInstalled {
 		log.Info("Docker container is already running, skipping installation", "containerName", containerName)
 		timer.Success()
 		return nil
 	}
 
-	// Run the Docker command (try with and without sudo as needed)
+	// Execute Docker command
+	if err := d.executeDockerCommandSafely(finalCommand); err != nil {
+		timer.Failure(err)
+		return err
+	}
+
+	// Register container in repository
+	if err := d.registerContainer(containerName, repo); err != nil {
+		timer.Failure(err)
+		return err
+	}
+
+	// Clear cache after successful installation to ensure fresh status
+	d.clearCachedStatus(containerName)
+
+	log.Info("Docker container installed successfully", "containerName", containerName)
+	timer.Success()
+	return nil
+}
+
+// recoverFromPanic handles panic recovery during installation
+func (d *DockerInstaller) recoverFromPanic(timer *metrics.InstallationTimer) {
+	if r := recover(); r != nil {
+		timer.Failure(fmt.Errorf("panic during Docker installation: %v", r))
+		panic(r)
+	}
+}
+
+// validateDockerServiceWithMetrics validates Docker service and records appropriate metrics
+func (d *DockerInstaller) validateDockerServiceWithMetrics(command string, timer *metrics.InstallationTimer) error {
+	metrics.RecordCount(metrics.MetricDockerSetupStarted, map[string]string{"command": command})
+
+	if err := d.validateDockerService(); err != nil {
+		// Handle container environment gracefully
+		if isRunningInContainer() {
+			log.Info("Docker daemon not available in container, skipping Docker-based installation", "app", command)
+			log.Debug("To enable Docker-in-Docker, run container with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
+			metrics.RecordCount(metrics.MetricDockerSetupSkipped, map[string]string{"command": command, "reason": "container_environment"})
+			timer.Skip("Docker installation skipped in container environment")
+			return nil
+		}
+
+		metrics.RecordCount(metrics.MetricDockerSetupFailed, map[string]string{"command": command})
+		return fmt.Errorf("docker service validation failed: %w", err)
+	}
+
+	metrics.RecordCount(metrics.MetricDockerSetupSucceeded, map[string]string{"command": command})
+	return nil
+}
+
+// buildDockerCommand constructs the final Docker command and extracts container name
+func (d *DockerInstaller) buildDockerCommand(command string) (finalCommand, containerName string, err error) {
+	// Try to get app configuration for DockerOptions
+	if appConfig, configErr := config.GetAppInfo(command); configErr == nil && appConfig.DockerOptions.ContainerName != "" {
+		log.Info("Building Docker command from configuration", "app", appConfig.Name)
+
+		dockerCmd, buildErr := buildDockerRunCommand(appConfig.InstallCommand, appConfig.DockerOptions)
+		if buildErr != nil {
+			return "", "", fmt.Errorf("failed to build Docker command from options: %w", buildErr)
+		}
+
+		finalCommand = dockerCmd
+		containerName = appConfig.DockerOptions.ContainerName
+		log.Debug("Built Docker command from configuration", "command", finalCommand, "container", containerName)
+	} else {
+		// Use command as-is for full docker run commands
+		finalCommand = command
+		containerName = extractContainerName(command)
+		if containerName == "" {
+			return "", "", fmt.Errorf("failed to extract container name from command: %s", command)
+		}
+	}
+
+	return finalCommand, containerName, nil
+}
+
+// checkContainerStatus verifies if a container is already running with caching
+func (d *DockerInstaller) checkContainerStatus(containerName string) (bool, error) {
+	// Check cache first
+	if cached, valid := d.getCachedStatus(containerName); valid {
+		log.Debug("Using cached container status", "containerName", containerName, "status", cached)
+		metrics.RecordCount(metrics.MetricContainerCacheHit, map[string]string{"container": containerName})
+		return cached, nil
+	}
+
+	metrics.RecordCount(metrics.MetricContainerCacheMiss, map[string]string{"container": containerName})
+
+	appConfig := types.AppConfig{
+		BaseConfig: types.BaseConfig{
+			Name: containerName,
+		},
+		InstallMethod:  "docker",
+		InstallCommand: containerName,
+	}
+
+	isInstalled, err := utilities.IsAppInstalled(appConfig)
+	if err != nil {
+		return false, fmt.Errorf("failed to check if Docker container is running: %w", err)
+	}
+
+	// Cache the result
+	d.setCachedStatus(containerName, isInstalled)
+	log.Debug("Cached container status", "containerName", containerName, "status", isInstalled)
+
+	return isInstalled, nil
+}
+
+// executeDockerCommandSafely executes Docker command with proper error handling
+func (d *DockerInstaller) executeDockerCommandSafely(finalCommand string) error {
 	if err := executeDockerCommand(finalCommand); err != nil {
 		log.Error("Failed to execute Docker command", err, "command", finalCommand)
 		return fmt.Errorf("failed to execute Docker command: %w", err)
 	}
 
-	log.Debug("Docker command executed successfully", "command", finalCommand)
+	log.Info("Docker command executed successfully", "command", finalCommand)
+	return nil
+}
 
-	// Add the container to the repository
+// registerContainer adds the container to the repository
+func (d *DockerInstaller) registerContainer(containerName string, repo types.Repository) error {
 	if err := repo.AddApp(containerName); err != nil {
 		log.Error("Failed to add Docker container to repository", err, "containerName", containerName)
 		return fmt.Errorf("failed to add Docker container to repository: %w", err)
 	}
 
-	log.Debug("Docker container added to repository successfully", "containerName", containerName)
-	timer.Success()
+	log.Debug("Container registered in repository", "containerName", containerName)
 	return nil
 }
 
 // Uninstall removes Docker containers
 func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error {
-	log.Debug("Docker Installer: Starting uninstallation", "command", command)
+	log.Info("Starting Docker container uninstallation", "command", command)
 
 	// Check if Docker is available and running
 	if err := d.validateDockerService(); err != nil {
@@ -246,7 +339,7 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 	}
 
 	// Stop and remove the Docker container using secure execution
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DockerCommandTimeout)
 	defer cancel()
 
 	// Try to stop the container
@@ -255,7 +348,7 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 		// Try with sudo
 		sudoStopCmd := exec.CommandContext(ctx, "sudo", "docker", "stop", containerName)
 		if err := sudoStopCmd.Run(); err != nil {
-			log.Warn("Failed to stop Docker container", "containerName", containerName, "error", err)
+			log.Warn("Failed to stop Docker container, continuing with removal", "containerName", containerName, "error", err)
 			// Continue with removal attempt even if stop failed
 		}
 	}
@@ -271,7 +364,7 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 		}
 	}
 
-	log.Debug("Docker container removed successfully", "containerName", containerName)
+	log.Info("Docker container removed successfully", "containerName", containerName)
 
 	// Remove the container from the repository
 	if err := repo.DeleteApp(containerName); err != nil {
@@ -279,11 +372,14 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 		return fmt.Errorf("failed to remove Docker container from repository: %w", err)
 	}
 
-	log.Debug("Docker container removed from repository successfully", "containerName", containerName)
+	// Clear cache after successful uninstallation
+	d.clearCachedStatus(containerName)
+
+	log.Debug("Container removed from repository", "containerName", containerName)
 	return nil
 }
 
-// IsInstalled checks if a Docker container is running
+// IsInstalled checks if a Docker container is running with caching
 func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 	// Extract container name from the command
 	containerName := extractContainerName(command)
@@ -296,8 +392,17 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 		return false, fmt.Errorf("invalid container name: %w", err)
 	}
 
+	// Check cache first
+	if cached, valid := d.getCachedStatus(containerName); valid {
+		log.Debug("Using cached container status for IsInstalled", "containerName", containerName, "status", cached)
+		metrics.RecordCount(metrics.MetricContainerCacheHit, map[string]string{"container": containerName})
+		return cached, nil
+	}
+
+	metrics.RecordCount(metrics.MetricContainerCacheMiss, map[string]string{"container": containerName})
+
 	// Check if the container is running using docker ps (secure execution)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DockerGroupTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "docker", "ps",
@@ -314,12 +419,20 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 		output, err = sudoCmd.CombinedOutput()
 		if err != nil {
 			// If both fail, container is likely not running or Docker is not available
-			return false, nil
+			isRunning := false
+			d.setCachedStatus(containerName, isRunning)
+			return isRunning, nil
 		}
 	}
 
 	// Check if the container name appears in the output
-	return strings.Contains(string(output), containerName), nil
+	isRunning := strings.Contains(string(output), containerName)
+
+	// Cache the result
+	d.setCachedStatus(containerName, isRunning)
+	log.Debug("Cached container status for IsInstalled", "containerName", containerName, "status", isRunning)
+
+	return isRunning, nil
 }
 
 func extractContainerName(command string) string {
@@ -334,7 +447,7 @@ func extractContainerName(command string) string {
 
 // validateDockerService checks if Docker is installed and the daemon is running
 func (d *DockerInstaller) validateDockerService() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DockerGroupTimeout)
 	defer cancel()
 
 	// Check if docker command is available using the command executor interface
@@ -349,8 +462,8 @@ func (d *DockerInstaller) validateDockerService() error {
 
 	// Check if we're in a container environment and handle accordingly
 	if isRunningInContainer() {
-		log.Warn("Running in container environment - Docker-in-Docker may require special setup")
-		log.Info("Docker-in-Docker setup help", "hint", "Ensure your container runs with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
+		log.Info("Running in container environment - Docker-in-Docker may require special setup")
+		log.Debug("Docker-in-Docker setup help", "hint", "Ensure your container runs with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
 		return d.handleDockerInContainer()
 	}
 
@@ -361,14 +474,14 @@ func (d *DockerInstaller) validateDockerService() error {
 func (d *DockerInstaller) checkDockerAccess(ctx context.Context) error {
 	// Try regular docker access first (user in docker group)
 	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Debug("Docker daemon is accessible via user permissions")
+		log.Info("Docker daemon accessible with user permissions")
 		return nil
 	}
 
 	// Try with sudo (service running but user not in group)
 	if _, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
 		log.Info("Docker daemon is running but requires sudo access")
-		log.Warn("User may not be in docker group or needs to refresh session", "hint", "Try logging out and back in, or run 'newgrp docker'")
+		log.Info("User may not be in docker group or needs session refresh", "hint", "Try logging out and back in, or run 'newgrp docker'")
 		return nil
 	}
 
@@ -390,7 +503,7 @@ func (d *DockerInstaller) addUserToDockerGroup() error {
 
 	log.Info("Adding user to docker group", "user", username)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DockerGroupTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", username)
@@ -403,7 +516,14 @@ func (d *DockerInstaller) addUserToDockerGroup() error {
 	return nil
 }
 
-// getCurrentUserWithFallback attempts multiple methods to determine the current user
+// getCurrentUserWithFallback attempts multiple methods to determine the current user.
+// This function provides robust user detection using multiple fallback mechanisms:
+// 1. Checks USER environment variable (most common)
+// 2. Checks USERNAME environment variable (Windows compatibility)
+// 3. Uses Go's user.Current() function
+// 4. Executes 'whoami' command as fallback
+// 5. Uses 'id -un' command as final fallback
+// This ensures reliable user detection across different environments and configurations.
 func getCurrentUserWithFallback() string {
 	// Try environment variables first
 	if currentUser := os.Getenv("USER"); currentUser != "" {
@@ -419,7 +539,7 @@ func getCurrentUserWithFallback() string {
 	}
 
 	// Create context for command execution
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), UserDetectionTimeout)
 	defer cancel()
 
 	// Try using whoami command
@@ -448,13 +568,13 @@ func executeDockerCommand(command string) error {
 
 	// First try without sudo
 	if _, err := utils.CommandExec.RunShellCommand(command); err == nil {
-		log.Debug("Docker command executed with user permissions")
+		log.Info("Docker command executed with user permissions")
 		return nil
 	}
 
 	// Add user to docker group if not already a member
 	if err := d.addUserToDockerGroup(); err != nil {
-		log.Warn("Failed to add user to docker group", "error", err)
+		log.Warn("Failed to add user to docker group, continuing with sudo", "error", err)
 	}
 
 	// If that fails, try with sudo - use safer command construction
@@ -464,7 +584,7 @@ func executeDockerCommand(command string) error {
 	}
 
 	// Use exec.CommandContext for safer sudo execution
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), DockerCommandTimeout)
 	defer cancel()
 
 	args := strings.Fields(command)
@@ -481,11 +601,17 @@ func executeDockerCommand(command string) error {
 		return fmt.Errorf("docker command failed even with sudo - check if Docker daemon is running and accessible: %w", err)
 	}
 
-	log.Info("Docker command executed with sudo (user may need to refresh docker group membership)", "hint", "Run 'newgrp docker' or log out and back in to refresh group membership")
+	log.Info("Docker command executed with sudo - consider refreshing group membership", "hint", "Run 'newgrp docker' or log out and back in")
 	return nil
 }
 
-// validateDockerCommand validates that a Docker command contains only safe operations
+// validateDockerCommand validates that a Docker command contains only safe operations.
+// This function provides comprehensive security validation by:
+// 1. Ensuring the command starts with 'docker'
+// 2. Whitelisting only safe Docker subcommands (run, stop, start, etc.)
+// 3. Blocking suspicious patterns that could indicate command injection
+// 4. Preventing shell metacharacters and path traversal attempts
+// This is a critical security control that prevents malicious command execution.
 func validateDockerCommand(command string) error {
 	if command == "" {
 		return fmt.Errorf("docker command cannot be empty")
@@ -507,20 +633,7 @@ func validateDockerCommand(command string) error {
 		return fmt.Errorf("docker command must include a subcommand")
 	}
 
-	allowedCommands := map[string]bool{
-		"run":     true,
-		"stop":    true,
-		"start":   true,
-		"restart": true,
-		"ps":      true,
-		"images":  true,
-		"pull":    true,
-		"inspect": true,
-		"logs":    true,
-		"exec":    true,
-		"rm":      true,
-		"rmi":     true,
-	}
+	allowedCommands := AllowedDockerSubcommands
 
 	subcommand := parts[1]
 	if !allowedCommands[subcommand] {
@@ -529,20 +642,7 @@ func validateDockerCommand(command string) error {
 
 	// Check for suspicious patterns
 	fullCommand := strings.Join(parts, " ")
-	suspiciousPatterns := []string{
-		"rm -rf",
-		"sudo",
-		"--privileged",
-		"/dev/",
-		"/proc/",
-		"/sys/",
-		"&&",
-		"||",
-		";",
-		"|",
-		"`",
-		"$(",
-	}
+	suspiciousPatterns := SuspiciousPatterns
 
 	for _, pattern := range suspiciousPatterns {
 		if strings.Contains(fullCommand, pattern) {
@@ -627,4 +727,56 @@ func buildDockerRunCommand(imageName string, options types.DockerOptions) (strin
 
 	// Join with spaces - this is safe since all parts are validated
 	return strings.Join(cmdParts, " "), nil
+}
+
+// getCachedStatus retrieves cached container status if still valid
+func (d *DockerInstaller) getCachedStatus(containerName string) (bool, bool) {
+	d.cacheMutex.RLock()
+	defer d.cacheMutex.RUnlock()
+
+	status, exists := d.containerCache[containerName]
+	if !exists {
+		return false, false
+	}
+
+	// Check if cache entry is still valid
+	if time.Since(status.CachedAt) > d.cacheTimeout {
+		return false, false
+	}
+
+	return status.IsRunning, true
+}
+
+// setCachedStatus stores container status in cache
+func (d *DockerInstaller) setCachedStatus(containerName string, isRunning bool) {
+	d.cacheMutex.Lock()
+	defer d.cacheMutex.Unlock()
+
+	d.containerCache[containerName] = &ContainerStatus{
+		IsRunning: isRunning,
+		CachedAt:  time.Now(),
+	}
+}
+
+// clearCachedStatus removes a specific container from cache (used after install/uninstall)
+func (d *DockerInstaller) clearCachedStatus(containerName string) {
+	d.cacheMutex.Lock()
+	defer d.cacheMutex.Unlock()
+
+	delete(d.containerCache, containerName)
+	log.Debug("Cleared cached status for container", "containerName", containerName)
+}
+
+// clearExpiredCache removes expired entries from cache
+func (d *DockerInstaller) clearExpiredCache() {
+	d.cacheMutex.Lock()
+	defer d.cacheMutex.Unlock()
+
+	now := time.Now()
+	for containerName, status := range d.containerCache {
+		if now.Sub(status.CachedAt) > d.cacheTimeout {
+			delete(d.containerCache, containerName)
+			log.Debug("Removed expired cache entry", "containerName", containerName)
+		}
+	}
 }
