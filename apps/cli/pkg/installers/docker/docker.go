@@ -36,14 +36,10 @@ func isRunningInContainer() bool {
 		}
 	}
 
-	// Method 3: Check if container ID environment variable is set
-	if os.Getenv("HOSTNAME") != "" {
-		if hostname, err := utils.CommandExec.RunShellCommand("hostname"); err == nil {
-			// Docker containers often have 12-character hostnames
-			if len(strings.TrimSpace(hostname)) == 12 {
-				return true
-			}
-		}
+	// Method 3: Check for container-specific environment variables
+	// These are more reliable than hostname length
+	if os.Getenv("container") != "" || os.Getenv("CONTAINER_ID") != "" {
+		return true
 	}
 
 	return false
@@ -138,8 +134,9 @@ func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 		if isRunningInContainer() {
 			log.Warn("Docker daemon not available in container, skipping Docker-based installation", "app", command)
 			log.Info("To enable Docker-in-Docker, run container with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
-			timer.Success() // Consider this a success since we're skipping intentionally
-			return nil      // Don't fail, just skip
+			metrics.RecordCount(metrics.MetricDockerSetupSkipped, map[string]string{"command": command, "reason": "container_environment"})
+			timer.Skip("Docker installation skipped in container environment") // Use skip instead of success
+			return nil                                                         // Don't fail, just skip
 		}
 		metrics.RecordCount(metrics.MetricDockerSetupFailed, map[string]string{"command": command})
 		timer.Failure(err)
@@ -380,33 +377,68 @@ func (d *DockerInstaller) checkDockerAccess(ctx context.Context) error {
 
 // addUserToDockerGroup adds the current user to the docker group
 func (d *DockerInstaller) addUserToDockerGroup() error {
-	currentUser, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("failed to get current user: %w", err)
-	}
-
-	if currentUser.Username == "" || currentUser.Username == "root" {
+	// Use the enhanced user detection with fallback methods
+	username := getCurrentUserWithFallback()
+	if username == "" || username == "root" {
 		return nil // Skip for root or empty username
 	}
 
 	// Validate username for security
-	if err := utils.ValidateUsername(currentUser.Username); err != nil {
+	if err := utils.ValidateUsername(username); err != nil {
 		return fmt.Errorf("invalid username: %w", err)
 	}
 
-	log.Info("Adding user to docker group", "user", currentUser.Username)
+	log.Info("Adding user to docker group", "user", username)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", currentUser.Username)
+	cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", username)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, string(output))
 	}
 
-	log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", currentUser.Username)
-	metrics.RecordCount(metrics.MetricDockerGroupAdded, map[string]string{"user": currentUser.Username})
+	log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", username)
+	metrics.RecordCount(metrics.MetricDockerGroupAdded, map[string]string{"user": username})
 	return nil
+}
+
+// getCurrentUserWithFallback attempts multiple methods to determine the current user
+func getCurrentUserWithFallback() string {
+	// Try environment variables first
+	if currentUser := os.Getenv("USER"); currentUser != "" {
+		return currentUser
+	}
+	if currentUser := os.Getenv("USERNAME"); currentUser != "" {
+		return currentUser
+	}
+
+	// Try using the user package
+	if currentUser, err := user.Current(); err == nil {
+		return currentUser.Username
+	}
+
+	// Create context for command execution
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Try using whoami command
+	if output, err := exec.CommandContext(ctx, "whoami").Output(); err == nil {
+		username := strings.TrimSpace(string(output))
+		if username != "" {
+			return username
+		}
+	}
+
+	// Try using id -un command
+	if output, err := exec.CommandContext(ctx, "id", "-un").Output(); err == nil {
+		username := strings.TrimSpace(string(output))
+		if username != "" {
+			return username
+		}
+	}
+
+	return ""
 }
 
 // executeDockerCommand runs a Docker command, using sudo if necessary
@@ -425,14 +457,99 @@ func executeDockerCommand(command string) error {
 		log.Warn("Failed to add user to docker group", "error", err)
 	}
 
-	// If that fails, try with sudo
-	sudoCommand := "sudo " + command
-	if _, err := utils.CommandExec.RunShellCommand(sudoCommand); err != nil {
-		log.Error("Docker command failed with both user and sudo access", err, "command", command)
+	// If that fails, try with sudo - use safer command construction
+	// Validate the command contains only safe Docker operations
+	if err := validateDockerCommand(command); err != nil {
+		return fmt.Errorf("invalid docker command: %w", err)
+	}
+
+	// Use exec.CommandContext for safer sudo execution
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	args := strings.Fields(command)
+	if len(args) == 0 {
+		return fmt.Errorf("empty docker command")
+	}
+
+	// Prepend sudo to the command args
+	sudoArgs := append([]string{args[0]}, args[1:]...)
+	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
+
+	if output, err := cmd.CombinedOutput(); err != nil {
+		log.Error("Docker command failed with both user and sudo access", err, "command", command, "output", string(output))
 		return fmt.Errorf("docker command failed even with sudo - check if Docker daemon is running and accessible: %w", err)
 	}
 
 	log.Info("Docker command executed with sudo (user may need to refresh docker group membership)", "hint", "Run 'newgrp docker' or log out and back in to refresh group membership")
+	return nil
+}
+
+// validateDockerCommand validates that a Docker command contains only safe operations
+func validateDockerCommand(command string) error {
+	if command == "" {
+		return fmt.Errorf("docker command cannot be empty")
+	}
+
+	// Split command into parts for validation
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return fmt.Errorf("docker command cannot be empty after splitting")
+	}
+
+	// First part should be 'docker'
+	if parts[0] != "docker" {
+		return fmt.Errorf("command must start with 'docker', got: %s", parts[0])
+	}
+
+	// Allow only safe Docker subcommands
+	if len(parts) < 2 {
+		return fmt.Errorf("docker command must include a subcommand")
+	}
+
+	allowedCommands := map[string]bool{
+		"run":     true,
+		"stop":    true,
+		"start":   true,
+		"restart": true,
+		"ps":      true,
+		"images":  true,
+		"pull":    true,
+		"inspect": true,
+		"logs":    true,
+		"exec":    true,
+		"rm":      true,
+		"rmi":     true,
+	}
+
+	subcommand := parts[1]
+	if !allowedCommands[subcommand] {
+		return fmt.Errorf("docker subcommand '%s' not allowed for security reasons", subcommand)
+	}
+
+	// Check for suspicious patterns
+	fullCommand := strings.Join(parts, " ")
+	suspiciousPatterns := []string{
+		"rm -rf",
+		"sudo",
+		"--privileged",
+		"/dev/",
+		"/proc/",
+		"/sys/",
+		"&&",
+		"||",
+		";",
+		"|",
+		"`",
+		"$(",
+	}
+
+	for _, pattern := range suspiciousPatterns {
+		if strings.Contains(fullCommand, pattern) {
+			return fmt.Errorf("docker command contains suspicious pattern: %s", pattern)
+		}
+	}
+
 	return nil
 }
 

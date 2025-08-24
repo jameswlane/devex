@@ -19,43 +19,95 @@ func (m *SetupModel) getSelectedDatabases() []string {
 	return selected
 }
 
-// getDockerApp returns a CrossPlatformApp for Docker installation
+// getDockerApp returns a CrossPlatformApp for Docker Engine installation
 func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
 		Name:        "docker",
-		Description: "Container platform for databases and services",
+		Description: "Container platform and runtime for developing, shipping, and running applications",
 		Linux: types.OSConfig{
-			InstallMethod:  "apt",
-			InstallCommand: "docker.io",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &",
-				},
-				{
-					Shell: "sudo usermod -aG docker $USER",
-				},
-				{
-					Shell: "newgrp docker || true",
-				},
-			},
+			InstallMethod: "curlpipe",
+			InstallCommand: `# Install Docker CE from official repository
+# Add Docker's official GPG key
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+# Add Docker repository based on detected OS
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    case "$ID" in
+        ubuntu|debian)
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/$ID $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras
+            ;;
+        fedora|centos|rhel|rocky|almalinux)
+            sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+            sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            ;;
+        arch|manjaro)
+            sudo pacman -S --noconfirm docker docker-compose
+            ;;
+        opensuse*|sles)
+            sudo zypper install -y docker docker-compose
+            ;;
+        *)
+            echo "Unsupported OS: $ID"
+            exit 1
+            ;;
+    esac
+else
+    echo "Cannot detect OS, defaulting to Ubuntu/Debian installation"
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt-get update
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras
+fi
+
+# Add current user to docker group with fallback methods
+username=""
+if [ -n "$USER" ]; then
+    username="$USER"
+elif [ -n "$USERNAME" ]; then
+    username="$USERNAME"
+elif command -v whoami >/dev/null 2>&1; then
+    username=$(whoami)
+elif command -v id >/dev/null 2>&1; then
+    username=$(id -un)
+fi
+
+if [ -n "$username" ] && [ "$username" != "root" ]; then
+    sudo usermod -aG docker "$username"
+    echo "Added user '$username' to docker group"
+else
+    echo "Could not determine username for docker group setup"
+fi
+
+# Create Docker daemon configuration
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "5"
+  },
+  "storage-driver": "overlay2"
+}
+EOF
+
+# Enable and start Docker service
+sudo systemctl enable docker
+sudo systemctl start docker
+
+echo "Docker installation completed successfully!"
+echo "Note: You may need to log out and back in for Docker group permissions to take effect"
+echo "Or run: newgrp docker"`,
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "brew",
 			InstallCommand: "docker",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "open -a Docker",
-				},
-			},
 		},
 		Windows: types.OSConfig{
 			InstallMethod:  "winget",
 			InstallCommand: "Docker.DockerDesktop",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "net start com.docker.service",
-				},
-			},
 		},
 	}
 }
