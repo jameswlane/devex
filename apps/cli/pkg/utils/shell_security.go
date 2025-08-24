@@ -20,9 +20,9 @@ func NewShellValidator() *ShellValidator {
 	return &ShellValidator{
 		dangerousPatterns: []*regexp.Regexp{
 			// Destructive file operations on critical paths
-			regexp.MustCompile(`\brm\s+(-[rfRi]*\s+)*(/|/home|/usr|/var|/etc|/boot|/sys|/proc)\s*$`),
+			regexp.MustCompile(`\brm\s+(-[rfRi]*\s+)*(/|/home|/usr|/var|/etc|/boot|/sys|/proc)(\s|$)`),
 			regexp.MustCompile(`\bdd\s+.*\bof=/dev/(sd[a-z]|hd[a-z]|nvme\d+n\d+|loop\d+)\b`),
-			regexp.MustCompile(`\bmkfs\b.*\b/dev/`),
+			regexp.MustCompile(`\bmkfs(\.[a-zA-Z0-9]+)?\s+/dev/`),
 
 			// Fork bombs and resource exhaustion
 			regexp.MustCompile(`:\(\)\{.*:\|:&.*\};:`),
@@ -54,14 +54,25 @@ func ValidatePackageName(name string) error {
 		return fmt.Errorf("package name cannot be empty")
 	}
 
+	// Trim whitespace and check if empty after trimming
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return fmt.Errorf("package name contains invalid characters")
+	}
+
 	// Check for shell metacharacters that could lead to command injection
 	if strings.ContainsAny(name, ";&|`$()[]{}*?<>\n\r\t\"'\\") {
 		return fmt.Errorf("package name contains invalid characters")
 	}
 
-	// Check for path traversal attempts
+	// Check for path traversal attempts and problematic names
 	if strings.Contains(name, "..") || strings.Contains(name, "/") {
 		return fmt.Errorf("package name contains path traversal characters")
+	}
+
+	// Check for problematic edge cases
+	if name == "." || name == "-" || name == "--" {
+		return fmt.Errorf("package name contains invalid characters")
 	}
 
 	// Limit length to prevent buffer issues

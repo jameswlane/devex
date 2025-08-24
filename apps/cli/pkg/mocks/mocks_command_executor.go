@@ -2,7 +2,6 @@ package mocks
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -67,6 +66,16 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
   Version table:
      1.0.0 500
         500 http://archive.ubuntu.com/ubuntu focal/main amd64 Packages`, nil
+	}
+
+	// Handle dpkg-query commands for checking installation status
+	if strings.Contains(command, "dpkg-query -W -f='${Status}'") {
+		// For edge cases, return that package is not installed so validation continues
+		if strings.Contains(command, ".") || strings.Contains(command, "-") || strings.Contains(command, " ") || strings.Contains(command, "\t") || strings.Contains(command, "\n") {
+			return "", fmt.Errorf("dpkg-query failed for invalid package name")
+		}
+		// For normal packages, return not installed status
+		return "deinstall ok config-files", nil
 	}
 
 	if strings.Contains(command, "which") {
@@ -911,11 +920,54 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 }
 
 func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args ...string) (string, error) {
-	command := fmt.Sprintf("%s %s", name, args)
+	command := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
 	m.Commands = append(m.Commands, command)
+
+	// Check for exact command match first
 	if command == m.FailingCommand {
-		return "", errors.New("mock command failed")
+		return "", fmt.Errorf("mock command failed: %s", command)
 	}
+
+	// Check multiple failing commands
+	if m.FailingCommands[command] {
+		return "", fmt.Errorf("mock command failed: %s", command)
+	}
+
+	// Handle specific command patterns for realistic mock responses
+	if name == "apt-cache" && len(args) >= 2 && args[0] == "policy" {
+		packageName := args[1]
+		if packageName == "failing-package" {
+			// Return output indicating package is not available
+			return `N: Unable to locate package failing-package`, nil
+		}
+		// Return mock apt-cache policy output that indicates package is available
+		return fmt.Sprintf(`%s:
+  Installed: (none)
+  Candidate: 1.0.0
+  Version table:
+     1.0.0 500
+        500 http://archive.ubuntu.com/ubuntu focal/main amd64 Packages`, packageName), nil
+	}
+
+	// Handle sudo apt install commands
+	if name == "sudo" && len(args) >= 3 && (args[0] == "apt" || args[0] == "apt-get") && args[1] == "install" {
+		packageName := args[len(args)-1] // Last argument is the package name
+		if packageName == "failing-package" {
+			return "", fmt.Errorf("mock install failed: package not found")
+		}
+		// Mark package as installed for mock tracking
+		m.InstallationState[packageName] = true
+		return fmt.Sprintf("Reading package lists...\nBuilding dependency tree...\nReading state information...\nThe following NEW packages will be installed:\n  %s\n0 upgraded, 1 newly installed, 0 to remove and 0 not upgraded.\nProcessing triggers for systemd (245.4-4ubuntu3.18) ...", packageName), nil
+	}
+
+	// Handle sudo apt remove commands
+	if name == "sudo" && len(args) >= 3 && (args[0] == "apt" || args[0] == "apt-get") && args[1] == "remove" {
+		packageName := args[len(args)-1] // Last argument is the package name
+		// Mark package as uninstalled for mock tracking
+		m.InstallationState[packageName] = false
+		return fmt.Sprintf("Reading package lists...\nBuilding dependency tree...\nReading state information...\nThe following packages will be REMOVED:\n  %s\n0 upgraded, 0 newly installed, 1 to remove and 0 not upgraded.\nProcessing triggers for systemd (245.4-4ubuntu3.18) ...", packageName), nil
+	}
+
 	return "mock output", nil
 }
 

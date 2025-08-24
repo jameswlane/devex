@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -205,9 +204,9 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 		aptCmd = "apt-get"
 	}
 
-	cmd := exec.CommandContext(installCtx, "sudo", aptCmd, "install", "-y", command)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Error("Failed to install package via apt", err, "command", command, "output", string(output))
+	output, err := utils.CommandExec.RunCommand(installCtx, "sudo", aptCmd, "install", "-y", command)
+	if err != nil {
+		log.Error("Failed to install package via apt", err, "command", command, "output", output)
 
 		// Check if it was a timeout
 		if installCtx.Err() == context.DeadlineExceeded {
@@ -283,15 +282,14 @@ func validatePackageAvailability(packageName string) error {
 	defer cancel()
 
 	// Use apt-cache policy to check package availability
-	cmd := exec.CommandContext(ctx, "apt-cache", "policy", packageName)
-	output, err := cmd.CombinedOutput()
+	output, err := utils.CommandExec.RunCommand(ctx, "apt-cache", "policy", packageName)
 	if err != nil {
 		return fmt.Errorf("failed to check package availability: %w", err)
 	}
 
 	// Check if the output indicates the package is available
 	// Handle both legacy and APT 3.0 error messages
-	outputStr := string(output)
+	outputStr := output
 	if strings.Contains(outputStr, "Unable to locate package") ||
 		strings.Contains(outputStr, "No packages found") ||
 		strings.Contains(outputStr, "Package not found") {
@@ -517,9 +515,9 @@ func (a *APTInstaller) Uninstall(command string, repo types.Repository) error {
 		aptCmd = "apt-get"
 	}
 
-	cmd := exec.CommandContext(ctx, "sudo", aptCmd, "remove", "-y", command)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Error("Failed to uninstall package via apt", err, "command", command, "output", string(output))
+	output, err := utils.CommandExec.RunCommand(ctx, "sudo", aptCmd, "remove", "-y", command)
+	if err != nil {
+		log.Error("Failed to uninstall package via apt", err, "command", command, "output", output)
 		return fmt.Errorf("failed to uninstall package via apt: %w", err)
 	}
 
