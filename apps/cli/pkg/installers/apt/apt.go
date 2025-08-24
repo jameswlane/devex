@@ -1,12 +1,10 @@
 package apt
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -423,15 +421,17 @@ func configureDockerDaemon(ctx context.Context) error {
 
 // writeConfigFileSecurely writes content to a file using sudo without shell injection risks
 func writeConfigFileSecurely(ctx context.Context, content []byte, filePath string) error {
-	// Use exec.CommandContext to avoid shell injection vulnerabilities
-	cmd := exec.CommandContext(ctx, "sudo", "tee", filePath)
-	cmd.Stdin = bytes.NewReader(content)
+	// Create a temporary file to write the content
+	tempContentFile := filePath + ".content"
+	if err := os.WriteFile(tempContentFile, content, 0600); err != nil {
+		return fmt.Errorf("failed to write temporary content file: %w", err)
+	}
+	defer os.Remove(tempContentFile) // Clean up temp file
 
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to write file %s: %w (stderr: %s)", filePath, err, stderr.String())
+	// Use utils interface to run the command (supports mocking in tests)
+	copyCommand := fmt.Sprintf("sudo cp %s %s", tempContentFile, filePath)
+	if _, err := utils.CommandExec.RunShellCommand(copyCommand); err != nil {
+		return fmt.Errorf("failed to copy file to %s: %w", filePath, err)
 	}
 
 	return nil
