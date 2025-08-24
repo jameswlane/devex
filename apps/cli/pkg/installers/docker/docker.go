@@ -64,8 +64,8 @@ func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 
 // handleDockerInContainer handles Docker daemon setup in container environments
 func (d *DockerInstaller) handleDockerInContainer() error {
-	// Check if Docker socket is mounted
-	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+	// Check if Docker socket is mounted using the command executor
+	if _, err := utils.CommandExec.RunShellCommand("test -S /var/run/docker.sock"); err == nil {
 		log.Info("Docker socket is available, but daemon access failed")
 		// The socket exists but we can't access it - likely a permission issue
 		return fmt.Errorf("docker socket exists but not accessible - container may need to run as root or with proper socket permissions")
@@ -109,28 +109,12 @@ func (d *DockerInstaller) attemptDockerDaemonStartup() error {
 
 // tryStartDockerService attempts to start Docker using various methods
 func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
-	// Try systemctl first
-	if cmd := exec.CommandContext(ctx, "sudo", "systemctl", "start", "docker"); cmd.Run() == nil {
-		return nil
-	}
+	// Use a combined command that tries all methods
+	startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
 
-	// Try service command
-	if cmd := exec.CommandContext(ctx, "sudo", "service", "docker", "start"); cmd.Run() == nil {
-		return nil
+	if _, err := utils.CommandExec.RunShellCommand(startCmd); err != nil {
+		return fmt.Errorf("all Docker startup methods failed: %w", err)
 	}
-
-	// Try starting dockerd directly in background (for containers)
-	cmd := exec.CommandContext(ctx, "sudo", "dockerd",
-		"--host=unix:///var/run/docker.sock",
-		"--host=tcp://0.0.0.0:2375")
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("all Docker startup methods failed")
-	}
-
-	// Detach from the process
-	go func() {
-		_ = cmd.Wait()
-	}()
 
 	return nil
 }
@@ -356,8 +340,8 @@ func (d *DockerInstaller) validateDockerService() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Check if docker command is available
-	if _, err := exec.LookPath("docker"); err != nil {
+	// Check if docker command is available using the command executor interface
+	if _, err := utils.CommandExec.RunShellCommand("which docker"); err != nil {
 		return fmt.Errorf("docker command not found: %w", err)
 	}
 
@@ -379,15 +363,13 @@ func (d *DockerInstaller) validateDockerService() error {
 // checkDockerAccess verifies Docker daemon accessibility
 func (d *DockerInstaller) checkDockerAccess(ctx context.Context) error {
 	// Try regular docker access first (user in docker group)
-	cmd := exec.CommandContext(ctx, "docker", "version", "--format", "{{.Server.Version}}")
-	if err := cmd.Run(); err == nil {
+	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
 		log.Debug("Docker daemon is accessible via user permissions")
 		return nil
 	}
 
 	// Try with sudo (service running but user not in group)
-	sudoCmd := exec.CommandContext(ctx, "sudo", "docker", "version", "--format", "{{.Server.Version}}")
-	if err := sudoCmd.Run(); err == nil {
+	if _, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
 		log.Info("Docker daemon is running but requires sudo access")
 		log.Warn("User may not be in docker group or needs to refresh session", "hint", "Try logging out and back in, or run 'newgrp docker'")
 		return nil

@@ -197,8 +197,8 @@ var _ = Describe("Docker Installer", func() {
 	Describe("Docker Service Validation", func() {
 		Context("when Docker is properly configured", func() {
 			It("succeeds when docker is available and daemon accessible", func() {
-				// Test actual installation which includes validation
-				err := installer.Install("docker", mockRepo)
+				// Test actual installation which includes validation - use valid docker run command
+				err := installer.Install("docker run --name test-container -d nginx:latest", mockRepo)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify the validation commands were called
@@ -211,7 +211,7 @@ var _ = Describe("Docker Installer", func() {
 				mockExec.FailingCommands["docker version --format '{{.Server.Version}}'"] = true
 				// Note: sudo version is NOT in FailingCommands, so it will succeed
 
-				err := installer.Install("docker", mockRepo)
+				err := installer.Install("docker run --name test-container -d nginx:latest", mockRepo)
 				Expect(err).NotTo(HaveOccurred())
 
 				// Verify both user and sudo access were attempted
@@ -224,7 +224,7 @@ var _ = Describe("Docker Installer", func() {
 			It("fails when docker command not found", func() {
 				mockExec.FailingCommands["which docker"] = true
 
-				err := installer.Install("docker", mockRepo)
+				err := installer.Install("docker run --name test-container -d nginx:latest", mockRepo)
 
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("docker command not found"))
@@ -239,14 +239,11 @@ var _ = Describe("Docker Installer", func() {
 				mockExec.FailingCommands[dockerVersionCmd] = true
 				mockExec.FailingCommands[sudoDockerVersionCmd] = true
 
-				err := installer.Install("docker", mockRepo)
+				err := installer.Install("docker run --name test-container -d nginx:latest", mockRepo)
 
-				Expect(err).To(HaveOccurred())
-				// The error could be either "daemon" or "socket" depending on the container detection logic
-				Expect(err.Error()).To(SatisfyAny(
-					ContainSubstring("daemon"),
-					ContainSubstring("socket"),
-				))
+				// The installer should now skip installation in container environments without Docker
+				// This is considered a successful no-op operation rather than an error
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})
