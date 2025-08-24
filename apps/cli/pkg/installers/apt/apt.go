@@ -1,10 +1,12 @@
 package apt
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -203,7 +205,7 @@ func (a *APTInstaller) Install(command string, repo types.Repository) error {
 	}
 
 	// Perform post-installation setup for specific packages
-	if err := performPostInstallationSetup(command); err != nil {
+	if err := performPostInstallationSetup(ctx, command); err != nil {
 		log.Warn("Post-installation setup failed", "package", command, "error", err)
 		// Don't fail the installation, just warn
 	}
@@ -261,10 +263,10 @@ func validatePackageAvailability(packageName string) error {
 }
 
 // performPostInstallationSetup handles package-specific post-installation configuration
-func performPostInstallationSetup(packageName string) error {
+func performPostInstallationSetup(ctx context.Context, packageName string) error {
 	switch packageName {
 	case "docker.io":
-		return setupDockerService()
+		return setupDockerService(ctx)
 	default:
 		// No special setup required
 		return nil
@@ -272,7 +274,7 @@ func performPostInstallationSetup(packageName string) error {
 }
 
 // setupDockerService configures Docker service and user permissions
-func setupDockerService() error {
+func setupDockerService(ctx context.Context) error {
 	log.Debug("Configuring Docker service and permissions")
 
 	// Enable Docker service to start on boot
@@ -292,7 +294,7 @@ func setupDockerService() error {
 	}
 
 	// Configure Docker daemon for log rotation (merge with existing config)
-	if err := configureDockerDaemon(); err != nil {
+	if err := configureDockerDaemon(ctx); err != nil {
 		log.Warn("Failed to configure Docker daemon log rotation", "error", err)
 		// Not critical, continue
 	}
@@ -342,7 +344,7 @@ func setupDockerService() error {
 }
 
 // configureDockerDaemon safely merges Docker daemon configuration
-func configureDockerDaemon() error {
+func configureDockerDaemon(ctx context.Context) error {
 	const daemonConfigPath = "/etc/docker/daemon.json"
 
 	// Our desired configuration
@@ -391,9 +393,7 @@ func configureDockerDaemon() error {
 
 	// Write configuration using a temporary file for atomic operation
 	tempFile := daemonConfigPath + ".tmp"
-	escapedConfigJSON := strings.ReplaceAll(string(configJSON), "'", "'\\''")
-	writeCmd := fmt.Sprintf("echo '%s' | sudo tee %s", escapedConfigJSON, tempFile)
-	if _, err := utils.CommandExec.RunShellCommand(writeCmd); err != nil {
+	if err := writeConfigFileSecurely(ctx, configJSON, tempFile); err != nil {
 		return fmt.Errorf("failed to write temporary daemon configuration: %w", err)
 	}
 
@@ -412,10 +412,28 @@ func configureDockerDaemon() error {
 	// Restart Docker to apply daemon.json changes
 	if _, err := utils.CommandExec.RunShellCommand("sudo systemctl restart docker"); err != nil {
 		log.Warn("Failed to restart Docker after daemon configuration", "error", err)
-		return fmt.Errorf("failed to restart Docker service: %w", err)
+		log.Info("You may need to manually restart Docker: sudo systemctl restart docker")
+		// Don't return error - configuration was applied successfully
+	} else {
+		log.Info("Docker service restarted with new configuration")
 	}
 
-	log.Info("Docker service restarted with new configuration")
+	return nil
+}
+
+// writeConfigFileSecurely writes content to a file using sudo without shell injection risks
+func writeConfigFileSecurely(ctx context.Context, content []byte, filePath string) error {
+	// Use exec.CommandContext to avoid shell injection vulnerabilities
+	cmd := exec.CommandContext(ctx, "sudo", "tee", filePath)
+	cmd.Stdin = bytes.NewReader(content)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to write file %s: %w (stderr: %s)", filePath, err, stderr.String())
+	}
+
 	return nil
 }
 

@@ -418,64 +418,43 @@ func detectAssetsDir() string {
 	return "assets"
 }
 
-// discoverFilesWithValidation safely discovers files with race condition protection
+// discoverFilesWithValidation discovers files using a simplified sequential approach
 func (sm *ShellManager) discoverFilesWithValidation(sourceSubDir string) (map[string]string, error) {
 	primaryPattern := filepath.Join(sm.assetsDir, sourceSubDir, sourceSubDir, "*")
 	fallbackPattern := filepath.Join(sm.assetsDir, sourceSubDir, "*")
 
-	// Use channels to handle glob operations with error handling
-	type globResult struct {
-		files []string
-		err   error
-	}
-
-	primaryChan := make(chan globResult, 1)
-	fallbackChan := make(chan globResult, 1)
-
-	// Run glob operations concurrently
-	go func() {
-		files, err := filepath.Glob(primaryPattern)
-		primaryChan <- globResult{files, err}
-	}()
-
-	go func() {
-		files, err := filepath.Glob(fallbackPattern)
-		fallbackChan <- globResult{files, err}
-	}()
-
-	// Collect results
-	primaryResult := <-primaryChan
-	fallbackResult := <-fallbackChan
-
-	if primaryResult.err != nil {
-		return nil, fmt.Errorf("primary glob failed: %w", primaryResult.err)
-	}
-	if fallbackResult.err != nil {
-		return nil, fmt.Errorf("fallback glob failed: %w", fallbackResult.err)
-	}
-
-	// Create a map of available files for quick lookup with validation
 	availableFiles := make(map[string]string)
 
-	// Add primary files (double subdirectory) first with existence validation
-	for _, fullPath := range primaryResult.files {
-		if stat, err := os.Stat(fullPath); err == nil && !stat.IsDir() {
-			fileName := filepath.Base(fullPath)
-			availableFiles[fileName] = fullPath
-		}
-	}
-
-	// Add fallback files (single subdirectory) if not already present with validation
-	for _, fullPath := range fallbackResult.files {
-		fileName := filepath.Base(fullPath)
-		if _, exists := availableFiles[fileName]; !exists {
-			if stat, err := os.Stat(fullPath); err == nil && !stat.IsDir() {
-				availableFiles[fileName] = fullPath
+	// Try primary pattern first (double subdirectory)
+	if files, err := filepath.Glob(primaryPattern); err == nil {
+		for _, file := range files {
+			if isValidFile(file) {
+				availableFiles[filepath.Base(file)] = file
 			}
 		}
+	} else {
+		log.Debug("Primary glob pattern failed", "pattern", primaryPattern, "error", err)
+	}
+
+	// Fill gaps with fallback pattern (single subdirectory)
+	if files, err := filepath.Glob(fallbackPattern); err == nil {
+		for _, file := range files {
+			name := filepath.Base(file)
+			if _, exists := availableFiles[name]; !exists && isValidFile(file) {
+				availableFiles[name] = file
+			}
+		}
+	} else {
+		log.Debug("Fallback glob pattern failed", "pattern", fallbackPattern, "error", err)
 	}
 
 	return availableFiles, nil
+}
+
+// isValidFile checks if a file path points to a valid regular file
+func isValidFile(path string) bool {
+	stat, err := os.Stat(path)
+	return err == nil && !stat.IsDir()
 }
 
 // GetShellConfigs returns configuration mapping for all supported shells
