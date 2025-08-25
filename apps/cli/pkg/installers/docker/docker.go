@@ -855,6 +855,12 @@ func (d *DockerInstaller) startCleanupRoutine() {
 			}
 		}()
 
+		// Ensure ticker is not nil before using it
+		if d.cleanupTicker == nil {
+			log.Debug("Cleanup ticker not initialized, exiting cleanup routine")
+			return
+		}
+
 		for {
 			select {
 			case <-d.cleanupTicker.C:
