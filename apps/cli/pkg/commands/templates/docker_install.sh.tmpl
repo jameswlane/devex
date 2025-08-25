@@ -1,0 +1,291 @@
+#!/bin/bash
+# Docker Installation Script Template
+# This template provides a secure, OS-agnostic Docker installation script
+# with GPG key verification and proper error handling
+
+set -euo pipefail  # Fail fast on any error
+
+# Docker GPG key fingerprint for verification (Docker's official key)
+DOCKER_GPG_KEY_FINGERPRINT="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+
+# GPG key rotation support - backup fingerprints for seamless updates
+DOCKER_BACKUP_GPG_FINGERPRINTS="" # Space-separated list of backup fingerprints
+
+# Safely parse OS information without sourcing (prevents injection)
+get_os_info() {
+    if [ -f /etc/os-release ]; then
+        # Parse ID safely without sourcing
+        OS_ID=$(grep '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"' | head -1)
+        VERSION_CODENAME=$(grep '^VERSION_CODENAME=' /etc/os-release | cut -d'=' -f2 | tr -d '"' | head -1 || echo "")
+        
+        # Validate OS_ID contains only safe characters
+        if ! echo "$OS_ID" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+            echo "Error: Invalid OS ID detected: $OS_ID"
+            return 1
+        fi
+        
+        export OS_ID VERSION_CODENAME
+        return 0
+    else
+        echo "Error: /etc/os-release not found"
+        return 1
+    fi
+}
+
+# Get OS-specific GPG URL
+get_docker_gpg_url() {
+    case "$OS_ID" in
+        ubuntu|debian)
+            echo "https://download.docker.com/linux/ubuntu/gpg"
+            ;;
+        fedora|centos|rhel|rocky|almalinux)
+            echo "https://download.docker.com/linux/centos/gpg"
+            ;;
+        *)
+            # Default to Ubuntu GPG key for other distributions
+            echo "https://download.docker.com/linux/ubuntu/gpg"
+            ;;
+    esac
+}
+
+# Verify GPG fingerprint with rotation support
+verify_gpg_fingerprint() {
+    local key_file="$1"
+    local fingerprint
+    
+    fingerprint=$(gpg --with-fingerprint --with-colons "$key_file" 2>/dev/null | grep '^fpr:' | cut -d':' -f10 | head -1)
+    
+    # Check primary fingerprint
+    if [ "$fingerprint" = "$DOCKER_GPG_KEY_FINGERPRINT" ]; then
+        echo "Primary GPG key fingerprint verified: $fingerprint"
+        return 0
+    fi
+    
+    # Check backup fingerprints for key rotation support
+    if [ -n "$DOCKER_BACKUP_GPG_FINGERPRINTS" ]; then
+        for backup_fp in $DOCKER_BACKUP_GPG_FINGERPRINTS; do
+            if [ "$fingerprint" = "$backup_fp" ]; then
+                echo "Backup GPG key fingerprint verified: $fingerprint"
+                echo "Warning: Using backup GPG key - consider updating to primary key"
+                return 0
+            fi
+        done
+    fi
+    
+    echo "Error: GPG key fingerprint mismatch!"
+    echo "Expected: $DOCKER_GPG_KEY_FINGERPRINT"
+    if [ -n "$DOCKER_BACKUP_GPG_FINGERPRINTS" ]; then
+        echo "Backup fingerprints: $DOCKER_BACKUP_GPG_FINGERPRINTS"
+    fi
+    echo "Got: $fingerprint"
+    return 1
+}
+
+# Download and verify GPG key with OS-specific URL and rotation support
+setup_docker_gpg_key() {
+    echo "Setting up Docker GPG key with fingerprint verification..."
+    
+    # Create keyring directory
+    sudo mkdir -p /usr/share/keyrings
+    
+    # Get OS-specific GPG URL
+    GPG_URL=$(get_docker_gpg_url)
+    echo "Using GPG URL: $GPG_URL"
+    
+    # Download GPG key to temporary location
+    TEMP_KEY=$(mktemp)
+    if ! curl -fsSL "$GPG_URL" -o "$TEMP_KEY"; then
+        echo "Error: Failed to download Docker GPG key from $GPG_URL"
+        rm -f "$TEMP_KEY"
+        return 1
+    fi
+    
+    # Verify GPG key fingerprint with rotation support
+    if ! verify_gpg_fingerprint "$TEMP_KEY"; then
+        rm -f "$TEMP_KEY"
+        return 1
+    fi
+    
+    # Import verified key
+    sudo gpg --dearmor < "$TEMP_KEY" > /usr/share/keyrings/docker-archive-keyring.gpg
+    sudo chmod 644 /usr/share/keyrings/docker-archive-keyring.gpg
+    rm -f "$TEMP_KEY"
+    
+    echo "Docker GPG key verified and installed successfully"
+    return 0
+}
+
+# Check if docker group exists, create if needed
+ensure_docker_group() {
+    if ! getent group docker >/dev/null 2>&1; then
+        echo "Creating docker group..."
+        sudo groupadd docker
+    fi
+}
+
+# Extract OS-specific Docker installation logic for better testability
+install_docker_for_os() {
+    local os_id="$1"
+    local version_codename="$2"
+    
+    case "$os_id" in
+        ubuntu|debian)
+            install_docker_debian "$os_id" "$version_codename"
+            ;;
+        fedora|centos|rhel|rocky|almalinux)
+            install_docker_redhat
+            ;;
+        arch|manjaro)
+            install_docker_arch
+            ;;
+        opensuse*|sles*)
+            install_docker_suse
+            ;;
+        *)
+            echo "Error: Unsupported OS: $os_id"
+            echo "Supported distributions: Ubuntu, Debian, Fedora, CentOS, RHEL, Rocky Linux, AlmaLinux, Arch, Manjaro, openSUSE, SLES"
+            return 1
+            ;;
+    esac
+}
+
+# Debian/Ubuntu-specific Docker installation
+install_docker_debian() {
+    local os_id="$1"
+    local version_codename="$2"
+    
+    if [ -z "$version_codename" ]; then
+        version_codename=$(lsb_release -cs 2>/dev/null || echo "focal")
+        echo "Warning: Version codename not detected, using fallback: $version_codename"
+    fi
+    
+    echo "Installing Docker on $os_id $version_codename..."
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/$os_id $version_codename stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    
+    sudo apt-get update
+    if ! sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin docker-ce-rootless-extras; then
+        echo "Error: Failed to install Docker packages via APT"
+        return 1
+    fi
+}
+
+# Red Hat family Docker installation  
+install_docker_redhat() {
+    echo "Installing Docker on Red Hat family distribution..."
+    sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    
+    if ! sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin; then
+        echo "Error: Failed to install Docker packages via DNF"
+        return 1
+    fi
+}
+
+# Arch Linux family Docker installation
+install_docker_arch() {
+    echo "Installing Docker on Arch Linux family distribution..."
+    if ! sudo pacman -S --noconfirm docker docker-compose; then
+        echo "Error: Failed to install Docker packages via Pacman"
+        return 1
+    fi
+}
+
+# SUSE family Docker installation
+install_docker_suse() {
+    echo "Installing Docker on SUSE family distribution..."
+    if ! sudo zypper install -y docker docker-compose; then
+        echo "Error: Failed to install Docker packages via Zypper"
+        return 1
+    fi
+}
+
+# Main installation logic
+main() {
+    # Get OS information safely
+    if ! get_os_info; then
+        echo "Error: Could not detect OS information"
+        return 1
+    fi
+    
+    echo "Detected OS: $OS_ID"
+    
+    # Setup GPG key with verification
+    if ! setup_docker_gpg_key; then
+        echo "Error: Failed to setup Docker GPG key"
+        return 1
+    fi
+    
+    # Install Docker based on detected OS using extracted logic
+    install_docker_for_os "$OS_ID" "$VERSION_CODENAME"
+    INSTALL_EXIT_CODE=$?
+    if [ $INSTALL_EXIT_CODE -ne 0 ]; then
+        echo "Error: Docker installation failed for OS: $OS_ID"
+        return $INSTALL_EXIT_CODE
+    fi
+    
+    # Ensure docker group exists before adding user
+    ensure_docker_group
+    
+    # Add current user to docker group with fallback methods
+    username=""
+    if [ -n "${USER:-}" ]; then
+        username="$USER"
+    elif [ -n "${USERNAME:-}" ]; then
+        username="$USERNAME"
+    elif command -v whoami >/dev/null 2>&1; then
+        username=$(whoami)
+    elif command -v id >/dev/null 2>&1; then
+        username=$(id -un)
+    fi
+    
+    # Validate username contains only safe characters
+    if [ -n "$username" ] && echo "$username" | grep -qE '^[a-zA-Z0-9_-]+$'; then
+        if [ "$username" != "root" ]; then
+            sudo usermod -aG docker "$username"
+            echo "Added user '$username' to docker group"
+        fi
+    else
+        echo "Warning: Could not determine safe username for docker group setup"
+    fi
+    
+    # Create secure Docker daemon configuration
+    sudo mkdir -p /etc/docker
+    sudo tee /etc/docker/daemon.json > /dev/null << 'EOF'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "5"
+  },
+  "storage-driver": "overlay2",
+  "live-restore": true,
+  "userland-proxy": false,
+  "no-new-privileges": true,
+  "seccomp-profile": "/etc/docker/seccomp.json"
+}
+EOF
+    
+    # Set secure permissions on daemon config
+    sudo chmod 644 /etc/docker/daemon.json
+    sudo chown root:root /etc/docker/daemon.json
+    
+    # Enable and start Docker service
+    sudo systemctl enable docker
+    sudo systemctl start docker
+    
+    # Verify installation
+    if sudo docker --version >/dev/null 2>&1; then
+        echo "Docker installation completed successfully!"
+        echo "Docker version: $(sudo docker --version)"
+    else
+        echo "Error: Docker installation may have failed"
+        return 1
+    fi
+    
+    echo "Note: You may need to log out and back in for Docker group permissions to take effect"
+    echo "Or run: newgrp docker"
+    
+    return 0
+}
+
+# Execute main function
+main
