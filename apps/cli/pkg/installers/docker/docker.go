@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +82,10 @@ func New() *DockerInstaller {
 		engineInstaller: NewEngineInstaller(),
 	}
 	d.startCleanupRoutine()
+
+	// Set finalizer to ensure cleanup happens even if StopCleanup() is not called
+	runtime.SetFinalizer(d, (*DockerInstaller).StopCleanup)
+
 	return d
 }
 
@@ -95,6 +100,10 @@ func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 		engineInstaller: NewEngineInstaller(),
 	}
 	d.startCleanupRoutine()
+
+	// Set finalizer to ensure cleanup happens even if StopCleanup() is not called
+	runtime.SetFinalizer(d, (*DockerInstaller).StopCleanup)
+
 	return d
 }
 
@@ -109,6 +118,10 @@ func NewWithCacheTimeout(serviceTimeout, cacheTimeout time.Duration) *DockerInst
 		engineInstaller: NewEngineInstaller(),
 	}
 	d.startCleanupRoutine()
+
+	// Set finalizer to ensure cleanup happens even if StopCleanup() is not called
+	runtime.SetFinalizer(d, (*DockerInstaller).StopCleanup)
+
 	return d
 }
 
@@ -159,8 +172,8 @@ func (d *DockerInstaller) attemptDockerDaemonStartup() error {
 
 // tryStartDockerService attempts to start Docker using various methods
 func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
-	// Use a combined command that tries all methods
-	startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
+	// Use a combined command that tries all methods - SECURE: Only use Unix socket
+	startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock &"
 
 	if _, err := utils.CommandExec.RunShellCommand(startCmd); err != nil {
 		return fmt.Errorf("all Docker startup methods failed: %w", err)
@@ -878,6 +891,8 @@ func (d *DockerInstaller) startCleanupRoutine() {
 
 // StopCleanup stops the background cleanup routine
 func (d *DockerInstaller) StopCleanup() {
+	// Clear finalizer since we're doing explicit cleanup
+	runtime.SetFinalizer(d, nil)
 	if d.cleanupTicker != nil {
 		d.cleanupTicker.Stop()
 		d.cleanupTicker = nil

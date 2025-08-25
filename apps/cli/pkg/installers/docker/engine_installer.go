@@ -3,7 +3,9 @@ package docker
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -27,6 +29,60 @@ func NewEngineInstaller() *DockerEngineInstaller {
 		gpgDownloader: NewSecureGPGDownloader(),
 		osDetector:    platform.NewOSDetector(),
 	}
+}
+
+// validateShellInput validates input for dangerous patterns
+func validateShellInput(input string) error {
+	dangerousPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`[;&|><$` + "`" + `]`),     // Shell metacharacters
+		regexp.MustCompile(`\b(rm|dd|mkfs|format)\b`), // Dangerous commands
+		regexp.MustCompile(`\.\.\/`),                  // Path traversal
+		regexp.MustCompile(`\$\(`),                    // Command substitution
+	}
+
+	for _, pattern := range dangerousPatterns {
+		if pattern.MatchString(input) {
+			return fmt.Errorf("input contains potentially dangerous pattern: %s", pattern.String())
+		}
+	}
+	return nil
+}
+
+// secureWriteToFile safely writes content to a file using temp file and atomic move
+func (d *DockerEngineInstaller) secureWriteToFile(ctx context.Context, content, filepath string) error {
+	// Validate inputs
+	if err := validateShellInput(content); err != nil {
+		return fmt.Errorf("content validation failed: %w", err)
+	}
+	if err := validateShellInput(filepath); err != nil {
+		return fmt.Errorf("filepath validation failed: %w", err)
+	}
+
+	// Create temporary file
+	tempFile := filepath + ".tmp"
+
+	// Write to temporary file first
+	f, err := os.Create(tempFile)
+	if err != nil {
+		return fmt.Errorf("failed to create temporary file: %w", err)
+	}
+	defer f.Close()
+	defer os.Remove(tempFile) // Clean up on error
+
+	if _, err := f.WriteString(content); err != nil {
+		return fmt.Errorf("failed to write content: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("failed to close temporary file: %w", err)
+	}
+
+	// Atomically move to final location using sudo
+	if err := d.runCommand(ctx, "sudo", "mv", tempFile, filepath); err != nil {
+		return fmt.Errorf("failed to move file to final location: %w", err)
+	}
+
+	return nil
 }
 
 // InstallDockerEngine installs Docker Engine with OS-specific configuration
@@ -188,11 +244,11 @@ func (d *DockerEngineInstaller) installDockerEngineDebian(ctx context.Context, o
 		return fmt.Errorf("failed to setup Docker GPG key: %w", err)
 	}
 
-	// Add Docker repository
+	// Add Docker repository - SECURE: Use safe file writing instead of shell echo
 	repoLine := fmt.Sprintf("deb [arch=%s signed-by=%s] https://download.docker.com/linux/%s %s stable",
 		d.getArchitecture(ctx), DockerKeyringsPath, d.getDockerRepoOS(osInfo.Distribution), d.getVersionCodename(ctx, osInfo))
 
-	if err := d.runCommand(ctx, "sudo", "sh", "-c", fmt.Sprintf("echo '%s' > /etc/apt/sources.list.d/docker.list", repoLine)); err != nil {
+	if err := d.secureWriteToFile(ctx, repoLine+"\n", "/etc/apt/sources.list.d/docker.list"); err != nil {
 		return fmt.Errorf("failed to add Docker repository: %w", err)
 	}
 
@@ -323,9 +379,8 @@ func (d *DockerEngineInstaller) createDaemonConfig(ctx context.Context) error {
 		return fmt.Errorf("failed to create Docker config directory: %w", err)
 	}
 
-	// Write daemon configuration
-	cmd := fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null", config, DockerDaemonConfig)
-	if err := d.runCommand(ctx, "sh", "-c", cmd); err != nil {
+	// Write daemon configuration - SECURE: Use safe file writing instead of shell echo
+	if err := d.secureWriteToFile(ctx, config, DockerDaemonConfig); err != nil {
 		return fmt.Errorf("failed to write Docker daemon config: %w", err)
 	}
 
