@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jameswlane/devex/pkg/installers/docker"
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
@@ -19,43 +20,22 @@ func (m *SetupModel) getSelectedDatabases() []string {
 	return selected
 }
 
-// getDockerApp returns a CrossPlatformApp for Docker installation
+// getDockerApp returns a CrossPlatformApp for Docker Engine installation using secure Go installer
 func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
 		Name:        "docker",
-		Description: "Container platform for databases and services",
+		Description: "Container platform and runtime for developing, shipping, and running applications",
 		Linux: types.OSConfig{
-			InstallMethod:  "apt",
-			InstallCommand: "docker.io",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &",
-				},
-				{
-					Shell: "sudo usermod -aG docker $USER",
-				},
-				{
-					Shell: "newgrp docker || true",
-				},
-			},
+			InstallMethod:  "docker",
+			InstallCommand: "docker-ce", // Triggers Docker Engine installation
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "brew",
 			InstallCommand: "docker",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "open -a Docker",
-				},
-			},
 		},
 		Windows: types.OSConfig{
 			InstallMethod:  "winget",
 			InstallCommand: "Docker.DockerDesktop",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "net start com.docker.service",
-				},
-			},
 		},
 	}
 }
@@ -69,19 +49,19 @@ func (m *SetupModel) getDatabaseApps() []types.CrossPlatformApp {
 		"PostgreSQL": {
 			"image":     "postgres:16",
 			"container": "postgres16",
-			"port":      PostgreSQLPort,
+			"port":      docker.PostgreSQLPort,
 			"env":       "POSTGRES_HOST_AUTH_METHOD=trust",
 		},
 		"MySQL": {
 			"image":     "mysql:8.4",
 			"container": "mysql8",
-			"port":      MySQLPort,
+			"port":      docker.MySQLPort,
 			"env":       "MYSQL_ALLOW_EMPTY_PASSWORD=true",
 		},
 		"Redis": {
 			"image":     "redis:7",
 			"container": "redis",
-			"port":      RedisPort,
+			"port":      docker.RedisPort,
 			"env":       "",
 		},
 	}
