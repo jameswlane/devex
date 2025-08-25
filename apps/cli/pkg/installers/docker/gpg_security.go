@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/metrics"
@@ -23,8 +25,8 @@ type SecureGPGDownloader struct {
 
 // GPGVerifier interface for GPG operations (enables mocking in tests)
 type GPGVerifier interface {
-	VerifyFingerprint(keyPath, expectedFingerprint string) error
-	ImportKey(keyPath, outputPath string) error
+	VerifyFingerprint(ctx context.Context, keyPath, expectedFingerprint string) error
+	ImportKey(ctx context.Context, keyPath, outputPath string) error
 }
 
 // DefaultGPGVerifier implements GPGVerifier using system gpg command
@@ -110,7 +112,7 @@ func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(ctx context.Context, gpgUR
 
 	// Verify GPG key fingerprint
 	log.Debug("Verifying Docker GPG key fingerprint")
-	if err := d.verifier.VerifyFingerprint(tempFile.Name(), DockerGPGKeyFingerprint); err != nil {
+	if err := d.verifier.VerifyFingerprint(downloadCtx, tempFile.Name(), DockerGPGKeyFingerprint); err != nil {
 		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
 			"operation": "gpg_key_verification",
 			"reason":    "fingerprint_mismatch",
@@ -120,7 +122,7 @@ func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(ctx context.Context, gpgUR
 
 	// Import verified key to final location
 	log.Debug("Importing verified GPG key", "outputPath", outputPath)
-	if err := d.verifier.ImportKey(tempFile.Name(), outputPath); err != nil {
+	if err := d.verifier.ImportKey(downloadCtx, tempFile.Name(), outputPath); err != nil {
 		return fmt.Errorf("failed to import GPG key: %w", err)
 	}
 
@@ -130,6 +132,187 @@ func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(ctx context.Context, gpgUR
 	})
 
 	return nil
+}
+
+// AsyncGPGResult represents the result of an asynchronous GPG operation
+type AsyncGPGResult struct {
+	Error      error
+	URL        string
+	OutputPath string
+	Duration   time.Duration
+}
+
+// DownloadAndVerifyGPGKeyAsync performs GPG key download and verification asynchronously
+func (d *SecureGPGDownloader) DownloadAndVerifyGPGKeyAsync(ctx context.Context, gpgURL, outputPath string) <-chan AsyncGPGResult {
+	resultChan := make(chan AsyncGPGResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		startTime := time.Now()
+
+		log.Debug("Starting async GPG key download", "url", gpgURL)
+		err := d.DownloadAndVerifyGPGKey(ctx, gpgURL, outputPath)
+		duration := time.Since(startTime)
+
+		result := AsyncGPGResult{
+			Error:      err,
+			URL:        gpgURL,
+			OutputPath: outputPath,
+			Duration:   duration,
+		}
+
+		if err != nil {
+			log.Error("Async GPG download failed", err, "url", gpgURL, "duration", duration)
+			metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+				"operation": "async_gpg_download",
+				"reason":    "download_failed",
+			})
+		} else {
+			log.Debug("Async GPG download completed successfully", "url", gpgURL, "duration", duration)
+			metrics.RecordCount(metrics.MetricSecurityValidationSuccess, map[string]string{
+				"operation": "async_gpg_download",
+			})
+		}
+
+		select {
+		case resultChan <- result:
+		case <-ctx.Done():
+			// Context cancelled, don't block on send
+			log.Warn("Async GPG operation cancelled before result could be sent", "url", gpgURL)
+		}
+	}()
+
+	return resultChan
+}
+
+// DownloadMultipleGPGKeysAsync downloads multiple GPG keys concurrently with fallback support
+func (d *SecureGPGDownloader) DownloadMultipleGPGKeysAsync(ctx context.Context, gpgURLs []string, outputPath string) error {
+	if len(gpgURLs) == 0 {
+		return fmt.Errorf("no GPG URLs provided")
+	}
+
+	log.Info("Starting concurrent GPG key download", "urls", gpgURLs, "output", outputPath)
+
+	// Create channels for each download
+	resultChans := make([]<-chan AsyncGPGResult, len(gpgURLs))
+	for i, url := range gpgURLs {
+		resultChans[i] = d.DownloadAndVerifyGPGKeyAsync(ctx, url, outputPath)
+	}
+
+	// Wait for first successful download or all failures
+	var lastError error
+
+	// Use a timeout context to prevent indefinite waiting
+	timeoutCtx, cancel := context.WithTimeout(ctx, 2*GPGDownloadTimeout)
+	defer cancel()
+
+	for i, resultChan := range resultChans {
+		select {
+		case result := <-resultChan:
+			if result.Error == nil {
+				log.Info("GPG key download succeeded",
+					"url", result.URL,
+					"duration", result.Duration,
+					"attempt", i+1)
+
+				// Cancel remaining downloads
+				cancel()
+
+				// Wait briefly for other goroutines to clean up
+				go func() {
+					for j := i + 1; j < len(resultChans); j++ {
+						select {
+						case <-resultChans[j]:
+							// Drain the channel
+						case <-time.After(100 * time.Millisecond):
+							// Don't wait too long
+							return
+						}
+					}
+				}()
+
+				return nil
+			}
+
+			log.Warn("GPG key download failed, trying next URL",
+				"url", result.URL,
+				"error", result.Error,
+				"attempt", i+1)
+			lastError = result.Error
+
+		case <-timeoutCtx.Done():
+			log.Error("GPG key download timed out", timeoutCtx.Err(), "timeout", 2*GPGDownloadTimeout)
+			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
+				"operation": "async_gpg_multi_download",
+			})
+			return fmt.Errorf("GPG key download timed out after %v", 2*GPGDownloadTimeout)
+		}
+	}
+
+	// All downloads failed
+	if lastError != nil {
+		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+			"operation": "async_gpg_multi_download",
+			"reason":    "all_downloads_failed",
+		})
+		return fmt.Errorf("all GPG key downloads failed, last error: %w", lastError)
+	}
+
+	return fmt.Errorf("all GPG key downloads failed with no specific error")
+}
+
+// VerifyFingerprintAsync performs GPG fingerprint verification asynchronously
+func (d *DefaultGPGVerifier) VerifyFingerprintAsync(ctx context.Context, keyPath, expectedFingerprint string) <-chan AsyncGPGResult {
+	resultChan := make(chan AsyncGPGResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		startTime := time.Now()
+		err := d.VerifyFingerprint(ctx, keyPath, expectedFingerprint)
+		duration := time.Since(startTime)
+
+		result := AsyncGPGResult{
+			Error:    err,
+			Duration: duration,
+		}
+
+		select {
+		case resultChan <- result:
+		case <-ctx.Done():
+			log.Warn("Async GPG fingerprint verification cancelled", "key_path", keyPath)
+		}
+	}()
+
+	return resultChan
+}
+
+// ImportKeyAsync performs GPG key import asynchronously
+func (d *DefaultGPGVerifier) ImportKeyAsync(ctx context.Context, keyPath, outputPath string) <-chan AsyncGPGResult {
+	resultChan := make(chan AsyncGPGResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		startTime := time.Now()
+		err := d.ImportKey(ctx, keyPath, outputPath)
+		duration := time.Since(startTime)
+
+		result := AsyncGPGResult{
+			Error:      err,
+			OutputPath: outputPath,
+			Duration:   duration,
+		}
+
+		select {
+		case resultChan <- result:
+		case <-ctx.Done():
+			log.Warn("Async GPG key import cancelled", "key_path", keyPath)
+		}
+	}()
+
+	return resultChan
 }
 
 // verifyDockerCertificate performs certificate pinning verification
@@ -160,51 +343,125 @@ func verifyDockerCertificate(cs tls.ConnectionState) error {
 
 	actualFingerprint := strings.ReplaceAll(formattedFingerprint.String(), ":", "")
 
-	// Check primary fingerprint first
-	expectedFingerprint := strings.ReplaceAll(DockerCertFingerprint, ":", "")
-	if strings.EqualFold(expectedFingerprint, actualFingerprint) {
-		log.Debug("Certificate pinning successful - primary fingerprint match")
-		return nil
-	}
-
-	// Check backup fingerprints if primary fails
-	if DockerBackupCertFingerprints != "" {
-		backupFingerprints := strings.Fields(DockerBackupCertFingerprints)
-		for _, backup := range backupFingerprints {
-			backupFp := strings.ReplaceAll(backup, ":", "")
-			if strings.EqualFold(backupFp, actualFingerprint) {
-				log.Warn("Certificate pinning using backup fingerprint - consider updating to primary",
-					"backup_fingerprint", backup)
-				metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+	// Check all valid certificate fingerprints (supports rotation)
+	for i, validFingerprint := range DockerValidCertFingerprints {
+		expectedFp := strings.ReplaceAll(validFingerprint, ":", "")
+		if strings.EqualFold(expectedFp, actualFingerprint) {
+			if i == 0 {
+				log.Debug("Certificate pinning successful - primary fingerprint match")
+				metrics.RecordCount(metrics.MetricSecurityValidationSuccess, map[string]string{
+					"operation": "certificate_pinning",
+					"type":      "primary_fingerprint",
+				})
+			} else {
+				log.Warn("Certificate pinning using backup fingerprint - consider certificate rotation",
+					"backup_fingerprint", validFingerprint,
+					"fingerprint_index", fmt.Sprintf("%d", i))
+				metrics.RecordCount(metrics.MetricSecurityValidationSuccess, map[string]string{
 					"operation": "certificate_pinning",
 					"type":      "backup_fingerprint_used",
+					"index":     fmt.Sprintf("%d", i),
 				})
-				return nil
 			}
+			return nil
 		}
 	}
 
-	// All fingerprints failed
-	log.Warn("Certificate pinning failed - no fingerprint match",
-		"expected", DockerCertFingerprint,
+	// All fingerprints failed - perform certificate chain validation as fallback
+	if err := verifyDockerCertificateChain(cs); err == nil {
+		log.Info("Certificate pinning failed but certificate chain validation succeeded - updating fingerprint database recommended")
+		metrics.RecordCount(metrics.MetricSecurityValidationSuccess, map[string]string{
+			"operation": "certificate_verification",
+			"type":      "chain_validation_fallback",
+		})
+		return nil
+	}
+
+	// All validation methods failed
+	log.Warn("Certificate pinning and chain validation failed",
+		"expected_fingerprints", DockerValidCertFingerprints,
 		"actual", formattedFingerprint.String(),
 	)
 	metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
 		"operation": "certificate_pinning",
-		"reason":    "fingerprint_mismatch",
+		"reason":    "all_fingerprints_failed",
 	})
-	return fmt.Errorf("certificate pinning failed - fingerprint mismatch")
+	return fmt.Errorf("certificate pinning failed - no valid fingerprint match")
+}
+
+// verifyDockerCertificateChain performs standard certificate chain validation as fallback
+func verifyDockerCertificateChain(cs tls.ConnectionState) error {
+	if len(cs.PeerCertificates) == 0 {
+		return fmt.Errorf("no peer certificates in chain")
+	}
+
+	cert := cs.PeerCertificates[0]
+
+	// Verify certificate is for the expected domain
+	if err := cert.VerifyHostname(DockerGPGKeyDomain); err != nil {
+		return fmt.Errorf("certificate hostname verification failed: %w", err)
+	}
+
+	// Check certificate validity period
+	now := time.Now()
+	if now.Before(cert.NotBefore) {
+		return fmt.Errorf("certificate not yet valid (not before: %v)", cert.NotBefore)
+	}
+	if now.After(cert.NotAfter) {
+		return fmt.Errorf("certificate expired (not after: %v)", cert.NotAfter)
+	}
+
+	// Verify certificate chain against system root CAs
+	opts := x509.VerifyOptions{
+		DNSName: DockerGPGKeyDomain,
+		Roots:   nil, // Use system root CAs
+	}
+
+	chains, err := cert.Verify(opts)
+	if err != nil {
+		return fmt.Errorf("certificate chain verification failed: %w", err)
+	}
+
+	if len(chains) == 0 {
+		return fmt.Errorf("no valid certificate chains found")
+	}
+
+	// Validate certificate key usage for TLS server authentication
+	if cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+		return fmt.Errorf("certificate missing required key usage: digital signature")
+	}
+
+	// Check extended key usage
+	hasServerAuth := false
+	for _, eku := range cert.ExtKeyUsage {
+		if eku == x509.ExtKeyUsageServerAuth {
+			hasServerAuth = true
+			break
+		}
+	}
+	if !hasServerAuth {
+		return fmt.Errorf("certificate missing extended key usage: server authentication")
+	}
+
+	log.Debug("Certificate chain validation successful",
+		"subject", cert.Subject.String(),
+		"issuer", cert.Issuer.String(),
+		"not_before", cert.NotBefore,
+		"not_after", cert.NotAfter,
+		"chain_length", len(chains[0]))
+
+	return nil
 }
 
 // VerifyFingerprint verifies the GPG key fingerprint with timeout
-func (d *DefaultGPGVerifier) VerifyFingerprint(keyPath, expectedFingerprint string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), GPGVerificationTimeout)
+func (d *DefaultGPGVerifier) VerifyFingerprint(ctx context.Context, keyPath, expectedFingerprint string) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, GPGVerificationTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "gpg", "--with-fingerprint", "--with-colons", keyPath)
+	cmd := exec.CommandContext(timeoutCtx, "gpg", "--with-fingerprint", "--with-colons", keyPath)
 	output, err := cmd.Output()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if timeoutCtx.Err() == context.DeadlineExceeded {
 			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
 				"operation": "gpg_fingerprint_verification",
 			})
@@ -234,8 +491,8 @@ func (d *DefaultGPGVerifier) VerifyFingerprint(keyPath, expectedFingerprint stri
 }
 
 // ImportKey imports the GPG key to the system keyring with timeout
-func (d *DefaultGPGVerifier) ImportKey(keyPath, outputPath string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), GPGVerificationTimeout)
+func (d *DefaultGPGVerifier) ImportKey(ctx context.Context, keyPath, outputPath string) error {
+	timeoutCtx, cancel := context.WithTimeout(ctx, GPGVerificationTimeout)
 	defer cancel()
 
 	// Ensure output directory exists
@@ -245,9 +502,9 @@ func (d *DefaultGPGVerifier) ImportKey(keyPath, outputPath string) error {
 	}
 
 	// Import key using gpg --dearmor
-	cmd := exec.CommandContext(ctx, "gpg", "--dearmor", "--output", outputPath, keyPath)
+	cmd := exec.CommandContext(timeoutCtx, "gpg", "--dearmor", "--output", outputPath, keyPath)
 	if err := cmd.Run(); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if timeoutCtx.Err() == context.DeadlineExceeded {
 			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
 				"operation": "gpg_key_import",
 			})

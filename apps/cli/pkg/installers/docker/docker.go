@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -24,15 +25,27 @@ type ContainerStatus struct {
 	CachedAt  time.Time
 }
 
+// DaemonStatus represents cached Docker daemon status information
+type DaemonStatus struct {
+	IsAccessible bool
+	Version      string
+	CachedAt     time.Time
+	Error        error
+}
+
 type DockerInstaller struct {
 	// ServiceTimeout is the timeout for waiting for Docker daemon to become ready
 	ServiceTimeout time.Duration
 	// containerCache caches container status to avoid repeated Docker API calls
 	containerCache map[string]*ContainerStatus
-	// cacheMutex protects concurrent access to the container cache
+	// daemonCache caches Docker daemon status to avoid repeated daemon checks
+	daemonCache *DaemonStatus
+	// cacheMutex protects concurrent access to both container and daemon caches
 	cacheMutex sync.RWMutex
 	// cacheTimeout determines how long cached status remains valid
 	cacheTimeout time.Duration
+	// daemonCacheTimeout determines how long daemon status cache remains valid
+	daemonCacheTimeout time.Duration
 	// cleanupTicker for automatic cache cleanup
 	cleanupTicker *time.Ticker
 	// cleanupDone channel to stop the cleanup goroutine
@@ -46,39 +59,125 @@ type DockerInstaller struct {
 // isRunningInContainer detects if we're running inside a Docker container.
 // It uses multiple detection methods to reliably identify container environments:
 // 1. Checks for /.dockerenv file (created by Docker)
-// 2. Examines cgroup information for docker references
+// 2. Examines cgroup information for container references
 // 3. Looks for container-specific environment variables
+// 4. Checks init process name and PID 1 characteristics
+// 5. Examines filesystem mount information
 // This prevents unsafe Docker-in-Docker scenarios and provides proper user guidance.
 func isRunningInContainer() bool {
-	// Method 1: Check for .dockerenv file
+	// Method 1: Check for .dockerenv file (Docker-specific)
 	if _, err := os.Stat("/.dockerenv"); err == nil {
+		log.Debug("Container detected via .dockerenv file")
 		return true
 	}
 
-	// Method 2: Check cgroup info
-	if output, err := utils.CommandExec.RunShellCommand("cat /proc/1/cgroup 2>/dev/null | grep -q docker || echo 'false'"); err == nil {
-		if !strings.Contains(output, "false") {
-			return true
+	// Method 2: Check cgroup information for container runtime references
+	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
+		cgroup := string(data)
+		containerIndicators := []string{
+			"docker", "containerd", "kubepods", "lxc", "systemd:/docker",
+			"/docker/", "/containerd/", "/kubelet", "garden",
+		}
+		for _, indicator := range containerIndicators {
+			if strings.Contains(cgroup, indicator) {
+				log.Debug("Container detected via cgroup", "indicator", indicator)
+				return true
+			}
 		}
 	}
 
 	// Method 3: Check for container-specific environment variables
-	// These are more reliable than hostname length
-	if os.Getenv("container") != "" || os.Getenv("CONTAINER_ID") != "" {
-		return true
+	containerEnvVars := []string{
+		"container", "CONTAINER_ID", "DOCKER_CONTAINER",
+		"KUBERNETES_SERVICE_HOST", "K8S_POD_NAME", "NOMAD_ALLOC_ID",
+		"HOSTNAME", "MESOS_TASK_ID", "MARATHON_APP_ID",
+	}
+	for _, envVar := range containerEnvVars {
+		if value := os.Getenv(envVar); value != "" {
+			// Additional validation for HOSTNAME (common false positive)
+			if envVar == "HOSTNAME" {
+				hostname := strings.TrimSpace(value)
+				// Container hostnames are typically short hex strings (12 chars) or follow k8s patterns
+				if len(hostname) == 12 && isHexString(hostname) {
+					log.Debug("Container detected via hostname pattern", "hostname", hostname)
+					return true
+				}
+				if strings.Contains(hostname, "-") && (strings.Contains(hostname, "pod") || strings.Contains(hostname, "deployment")) {
+					log.Debug("Container detected via k8s hostname pattern", "hostname", hostname)
+					return true
+				}
+			} else {
+				log.Debug("Container detected via environment variable", "var", envVar, "value", value)
+				return true
+			}
+		}
 	}
 
+	// Method 4: Check init process characteristics
+	if data, err := os.ReadFile("/proc/1/comm"); err == nil {
+		initProcess := strings.TrimSpace(string(data))
+		// In containers, init is often not 'init' or 'systemd'
+		containerInitProcesses := []string{"sh", "bash", "entrypoint", "docker-init", "tini", "dumb-init"}
+		for _, containerInit := range containerInitProcesses {
+			if initProcess == containerInit {
+				log.Debug("Container detected via init process", "init", initProcess)
+				return true
+			}
+		}
+	}
+
+	// Method 5: Check filesystem mount information for overlay/container mounts
+	if data, err := os.ReadFile("/proc/mounts"); err == nil {
+		mounts := string(data)
+		containerMountTypes := []string{"overlay", "aufs", "btrfs", "zfs", "devicemapper"}
+		for _, mountType := range containerMountTypes {
+			if strings.Contains(mounts, mountType) && strings.Contains(mounts, "/var/lib/docker") {
+				log.Debug("Container detected via filesystem mounts", "mount_type", mountType)
+				return true
+			}
+		}
+
+		// Check for container-specific mount paths
+		if strings.Contains(mounts, "/docker/containers/") ||
+			strings.Contains(mounts, "/var/lib/containerd/") ||
+			strings.Contains(mounts, "tmpfs /dev/shm") { // Common in containers
+			log.Debug("Container detected via mount paths")
+			return true
+		}
+	}
+
+	// Method 6: Check for virtualization indicators as final fallback
+	if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
+		cpuInfo := string(data)
+		if strings.Contains(cpuInfo, "container") || strings.Contains(cpuInfo, "docker") {
+			log.Debug("Container detected via CPU info")
+			return true
+		}
+	}
+
+	log.Debug("No container environment detected")
 	return false
+}
+
+// isHexString checks if a string contains only hexadecimal characters
+func isHexString(s string) bool {
+	for _, char := range s {
+		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func New() *DockerInstaller {
 	d := &DockerInstaller{
-		ServiceTimeout:  DefaultServiceTimeout,
-		containerCache:  make(map[string]*ContainerStatus),
-		cacheTimeout:    ContainerCacheTimeout,
-		cleanupInterval: 5 * time.Minute, // Clean expired cache entries every 5 minutes
-		cleanupDone:     make(chan bool, 1),
-		engineInstaller: NewEngineInstaller(),
+		ServiceTimeout:     DefaultServiceTimeout,
+		containerCache:     make(map[string]*ContainerStatus),
+		cacheTimeout:       ContainerCacheTimeout,
+		daemonCacheTimeout: 30 * time.Second, // Daemon status cached for 30 seconds
+		cleanupInterval:    5 * time.Minute,  // Clean expired cache entries every 5 minutes
+		cleanupDone:        make(chan bool, 1),
+		engineInstaller:    NewEngineInstaller(),
 	}
 	// Only start cleanup if interval is valid - safer lifecycle management
 	if d.cleanupInterval > 0 {
@@ -91,12 +190,13 @@ func New() *DockerInstaller {
 // NewWithTimeout creates a new DockerInstaller with a custom timeout
 func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 	d := &DockerInstaller{
-		ServiceTimeout:  timeout,
-		containerCache:  make(map[string]*ContainerStatus),
-		cacheTimeout:    ContainerCacheTimeout,
-		cleanupInterval: 5 * time.Minute,
-		cleanupDone:     make(chan bool, 1),
-		engineInstaller: NewEngineInstaller(),
+		ServiceTimeout:     timeout,
+		containerCache:     make(map[string]*ContainerStatus),
+		cacheTimeout:       ContainerCacheTimeout,
+		daemonCacheTimeout: 30 * time.Second,
+		cleanupInterval:    5 * time.Minute,
+		cleanupDone:        make(chan bool, 1),
+		engineInstaller:    NewEngineInstaller(),
 	}
 	// Only start cleanup if interval is valid - safer lifecycle management
 	if d.cleanupInterval > 0 {
@@ -109,12 +209,13 @@ func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 // NewWithCacheTimeout creates a new DockerInstaller with custom timeout and cache duration
 func NewWithCacheTimeout(serviceTimeout, cacheTimeout time.Duration) *DockerInstaller {
 	d := &DockerInstaller{
-		ServiceTimeout:  serviceTimeout,
-		containerCache:  make(map[string]*ContainerStatus),
-		cacheTimeout:    cacheTimeout,
-		cleanupInterval: 5 * time.Minute,
-		cleanupDone:     make(chan bool, 1),
-		engineInstaller: NewEngineInstaller(),
+		ServiceTimeout:     serviceTimeout,
+		containerCache:     make(map[string]*ContainerStatus),
+		cacheTimeout:       cacheTimeout,
+		daemonCacheTimeout: 30 * time.Second,
+		cleanupInterval:    5 * time.Minute,
+		cleanupDone:        make(chan bool, 1),
+		engineInstaller:    NewEngineInstaller(),
 	}
 	// Only start cleanup if interval is valid - safer lifecycle management
 	if d.cleanupInterval > 0 {
@@ -211,6 +312,24 @@ func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
 func (d *DockerInstaller) Install(command string, repo types.Repository) error {
 	log.Info("Starting Docker installation", "command", command)
 
+	// Validate user permissions and system database consistency before any Docker operations
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := validateCurrentUserPermissions(ctx); err != nil {
+		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+			"operation": "user_validation",
+			"reason":    "permission_check_failed",
+		})
+		return fmt.Errorf("user validation failed: %w", err)
+	}
+
+	log.Debug("User validation successful - proceeding with Docker installation")
+	metrics.RecordCount(metrics.MetricSecurityValidationSuccess, map[string]string{
+		"operation": "user_validation",
+		"type":      "permission_check",
+	})
+
 	// Check if this is a Docker Engine installation request
 	if d.isDockerEngineInstallCommand(command) {
 		return d.installDockerEngine(repo)
@@ -303,7 +422,7 @@ func (d *DockerInstaller) recoverFromPanic(timer *metrics.InstallationTimer) {
 func (d *DockerInstaller) validateDockerServiceWithMetrics(command string, timer *metrics.InstallationTimer) error {
 	metrics.RecordCount(metrics.MetricDockerSetupStarted, map[string]string{"command": command})
 
-	if err := d.validateDockerService(); err != nil {
+	if err := d.validateDockerServiceCached(); err != nil {
 		// Handle container environment gracefully
 		if isRunningInContainer() {
 			log.Info("Docker daemon not available in container, skipping Docker-based installation", "app", command)
@@ -405,7 +524,7 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 	log.Info("Starting Docker container uninstallation", "command", command)
 
 	// Check if Docker is available and running
-	if err := d.validateDockerService(); err != nil {
+	if err := d.validateDockerServiceCached(); err != nil {
 		return fmt.Errorf("docker service validation failed: %w", err)
 	}
 
@@ -540,47 +659,114 @@ func extractContainerName(command string) string {
 	return ""
 }
 
-// validateDockerService checks if Docker is installed and the daemon is running
-func (d *DockerInstaller) validateDockerService() error {
+// validateDockerServiceCached checks Docker daemon status with caching support
+func (d *DockerInstaller) validateDockerServiceCached() error {
+	d.cacheMutex.RLock()
+
+	// Check if we have valid cached daemon status
+	if d.daemonCache != nil && time.Since(d.daemonCache.CachedAt) < d.daemonCacheTimeout {
+		cached := d.daemonCache
+		d.cacheMutex.RUnlock()
+
+		log.Debug("Using cached Docker daemon status",
+			"is_accessible", cached.IsAccessible,
+			"version", cached.Version,
+			"cached_age", time.Since(cached.CachedAt))
+
+		if cached.IsAccessible {
+			return nil
+		}
+		return cached.Error
+	}
+	d.cacheMutex.RUnlock()
+
+	// No valid cache, perform actual validation
+	return d.validateDockerServiceAndCache()
+}
+
+// validateDockerServiceAndCache performs Docker validation and updates cache
+func (d *DockerInstaller) validateDockerServiceAndCache() error {
+	log.Debug("Performing fresh Docker daemon validation")
+
 	ctx, cancel := context.WithTimeout(context.Background(), DockerGroupTimeout)
 	defer cancel()
 
+	var daemonStatus *DaemonStatus
+
 	// Check if docker command is available using the command executor interface
 	if _, err := utils.CommandExec.RunShellCommand("which docker"); err != nil {
-		return fmt.Errorf("docker command not found: %w", err)
+		daemonStatus = &DaemonStatus{
+			IsAccessible: false,
+			CachedAt:     time.Now(),
+			Error:        fmt.Errorf("docker command not found: %w", err),
+		}
+	} else {
+		// Check if Docker daemon is accessible and get version
+		version, err := d.checkDockerAccessAndVersion(ctx)
+		if err == nil {
+			daemonStatus = &DaemonStatus{
+				IsAccessible: true,
+				Version:      version,
+				CachedAt:     time.Now(),
+				Error:        nil,
+			}
+		} else {
+			// Check if we're in a container environment and handle accordingly
+			if isRunningInContainer() {
+				log.Info("Running in container environment - Docker-in-Docker may require special setup")
+				log.Debug("Docker-in-Docker setup help", "hint", "Ensure your container runs with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
+				containerErr := d.handleDockerInContainer()
+				daemonStatus = &DaemonStatus{
+					IsAccessible: containerErr == nil,
+					CachedAt:     time.Now(),
+					Error:        containerErr,
+				}
+			} else {
+				daemonStatus = &DaemonStatus{
+					IsAccessible: false,
+					CachedAt:     time.Now(),
+					Error:        fmt.Errorf("docker daemon not accessible: For Docker-in-Docker, run container with --privileged -v /var/run/docker.sock:/var/run/docker.sock"),
+				}
+			}
+		}
 	}
 
-	// Check if Docker daemon is accessible
-	if err := d.checkDockerAccess(ctx); err == nil {
+	// Update cache
+	d.cacheMutex.Lock()
+	d.daemonCache = daemonStatus
+	d.cacheMutex.Unlock()
+
+	log.Debug("Docker daemon status cached",
+		"is_accessible", daemonStatus.IsAccessible,
+		"version", daemonStatus.Version)
+
+	if daemonStatus.IsAccessible {
 		return nil
 	}
-
-	// Check if we're in a container environment and handle accordingly
-	if isRunningInContainer() {
-		log.Info("Running in container environment - Docker-in-Docker may require special setup")
-		log.Debug("Docker-in-Docker setup help", "hint", "Ensure your container runs with: --privileged -v /var/run/docker.sock:/var/run/docker.sock")
-		return d.handleDockerInContainer()
-	}
-
-	return fmt.Errorf("docker daemon not accessible: For Docker-in-Docker, run container with --privileged -v /var/run/docker.sock:/var/run/docker.sock")
+	return daemonStatus.Error
 }
 
-// checkDockerAccess verifies Docker daemon accessibility
-func (d *DockerInstaller) checkDockerAccess(ctx context.Context) error {
+// checkDockerAccessAndVersion verifies Docker daemon accessibility and returns version
+func (d *DockerInstaller) checkDockerAccessAndVersion(ctx context.Context) (string, error) {
 	// Try regular docker access first (user in docker group)
-	if _, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Info("Docker daemon accessible with user permissions")
-		return nil
+	if version, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Server.Version}}'"); err == nil {
+		log.Info("Docker daemon accessible with user permissions", "version", version)
+		return strings.TrimSpace(version), nil
 	}
 
-	// Try with sudo (service running but user not in group)
-	if _, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
-		log.Info("Docker daemon is running but requires sudo access")
-		log.Info("User may not be in docker group or needs session refresh", "hint", "Try logging out and back in, or run 'newgrp docker'")
-		return nil
+	// Try with sudo if regular access fails
+	if version, err := utils.CommandExec.RunShellCommand("sudo docker version --format '{{.Server.Version}}'"); err == nil {
+		log.Warn("Docker daemon accessible only with sudo - consider adding user to docker group", "version", version)
+		return strings.TrimSpace(version), nil
 	}
 
-	return fmt.Errorf("docker daemon not accessible")
+	// Try basic docker version command as fallback
+	if output, err := utils.CommandExec.RunShellCommand("docker version"); err == nil && strings.Contains(output, "Server:") {
+		log.Info("Docker daemon accessible via basic version command")
+		return "detected", nil
+	}
+
+	return "", fmt.Errorf("docker daemon not accessible with any method")
 }
 
 // addUserToDockerGroup adds the current user to the docker group
@@ -682,6 +868,151 @@ func getCurrentUserWithFallback() string {
 	}
 
 	return ""
+}
+
+// validateUserExistence validates that a user exists in the system databases
+func validateUserExistence(ctx context.Context, username string) error {
+	if username == "" {
+		return fmt.Errorf("empty username provided")
+	}
+
+	// Validate username format (basic sanitization)
+	if strings.ContainsAny(username, ":;|&$`\"'\\(){}[]") {
+		return fmt.Errorf("invalid characters in username: %s", username)
+	}
+
+	// Method 1: Use Go's user.Lookup function (most reliable)
+	if userInfo, err := user.Lookup(username); err == nil {
+		log.Debug("User validation successful via Go user.Lookup",
+			"username", username,
+			"uid", userInfo.Uid,
+			"gid", userInfo.Gid,
+			"home_dir", userInfo.HomeDir)
+
+		// Additional validation: check if home directory exists
+		if userInfo.HomeDir != "" {
+			if _, err := os.Stat(userInfo.HomeDir); err != nil {
+				log.Warn("User home directory does not exist",
+					"username", username,
+					"home_dir", userInfo.HomeDir,
+					"error", err)
+			}
+		}
+		return nil
+	}
+
+	// Method 2: Check /etc/passwd file directly (Linux/Unix systems)
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		if err := validateUserInPasswdFile(username); err == nil {
+			log.Debug("User validation successful via /etc/passwd", "username", username)
+			return nil
+		}
+	}
+
+	// Method 3: Use id command to verify user existence
+	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(timeoutCtx, "id", username)
+	if output, err := cmd.Output(); err == nil {
+		idOutput := strings.TrimSpace(string(output))
+		if strings.Contains(idOutput, fmt.Sprintf("uid=")) {
+			log.Debug("User validation successful via id command",
+				"username", username,
+				"id_output", idOutput)
+			return nil
+		}
+	}
+
+	// Method 4: Use getent command (if available) for NSS databases
+	cmd = exec.CommandContext(timeoutCtx, "getent", "passwd", username)
+	if output, err := cmd.Output(); err == nil {
+		passwdEntry := strings.TrimSpace(string(output))
+		if strings.Contains(passwdEntry, username) {
+			log.Debug("User validation successful via getent",
+				"username", username,
+				"passwd_entry", passwdEntry)
+			return nil
+		}
+	}
+
+	return fmt.Errorf("user %s does not exist in system databases", username)
+}
+
+// validateUserInPasswdFile checks if user exists in /etc/passwd
+func validateUserInPasswdFile(username string) error {
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return fmt.Errorf("cannot read /etc/passwd: %w", err)
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, username+":") {
+			// Parse passwd entry: username:password:uid:gid:gecos:home:shell
+			parts := strings.Split(line, ":")
+			if len(parts) >= 6 {
+				uid := parts[2]
+				gid := parts[3]
+				homeDir := parts[5]
+
+				log.Debug("User found in /etc/passwd",
+					"username", username,
+					"uid", uid,
+					"gid", gid,
+					"home_dir", homeDir)
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("user %s not found in /etc/passwd", username)
+}
+
+// validateCurrentUserPermissions checks if the current user has sufficient permissions
+func validateCurrentUserPermissions(ctx context.Context) error {
+	username := getCurrentUserWithFallbackContext(ctx)
+	if username == "" {
+		return fmt.Errorf("unable to determine current user")
+	}
+
+	// Validate user exists in system databases
+	if err := validateUserExistence(ctx, username); err != nil {
+		return fmt.Errorf("current user validation failed: %w", err)
+	}
+
+	// Check if user is root (not recommended but allowed)
+	if username == "root" {
+		log.Warn("Running as root user - consider using sudo with regular user")
+		return nil
+	}
+
+	// Check sudo capabilities (required for Docker installation)
+	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(timeoutCtx, "sudo", "-n", "echo", "test")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("current user %s lacks sudo privileges required for Docker installation", username)
+	}
+
+	// Check if user is already in docker group (optional optimization)
+	if userInfo, err := user.Lookup(username); err == nil {
+		groupIDs, err := userInfo.GroupIds()
+		if err == nil {
+			for _, gid := range groupIDs {
+				if group, err := user.LookupGroupId(gid); err == nil {
+					if group.Name == "docker" {
+						log.Debug("User already in docker group", "username", username)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	log.Debug("User permissions validation successful", "username", username)
+	return nil
 }
 
 // getCurrentUserWithFallbackContext is a context-aware version of getCurrentUserWithFallback
@@ -934,17 +1265,40 @@ func (d *DockerInstaller) clearCachedStatus(containerName string) {
 	log.Debug("Cleared cached status for container", "containerName", containerName)
 }
 
-// clearExpiredCache removes expired entries from cache
+// clearExpiredCache removes expired entries from both container and daemon caches
 func (d *DockerInstaller) clearExpiredCache() {
 	d.cacheMutex.Lock()
 	defer d.cacheMutex.Unlock()
 
 	now := time.Now()
+
+	// Clean expired container cache entries
 	for containerName, status := range d.containerCache {
 		if now.Sub(status.CachedAt) > d.cacheTimeout {
 			delete(d.containerCache, containerName)
-			log.Debug("Removed expired cache entry", "containerName", containerName)
+			log.Debug("Removed expired container cache entry", "containerName", containerName)
 		}
+	}
+
+	// Clean expired daemon cache
+	if d.daemonCache != nil && now.Sub(d.daemonCache.CachedAt) > d.daemonCacheTimeout {
+		log.Debug("Removed expired daemon cache entry",
+			"cached_age", now.Sub(d.daemonCache.CachedAt),
+			"timeout", d.daemonCacheTimeout)
+		d.daemonCache = nil
+	}
+}
+
+// InvalidateDaemonCache clears the daemon status cache to force fresh validation
+func (d *DockerInstaller) InvalidateDaemonCache() {
+	d.cacheMutex.Lock()
+	defer d.cacheMutex.Unlock()
+
+	if d.daemonCache != nil {
+		log.Debug("Invalidating daemon cache",
+			"was_accessible", d.daemonCache.IsAccessible,
+			"cached_age", time.Since(d.daemonCache.CachedAt))
+		d.daemonCache = nil
 	}
 }
 
