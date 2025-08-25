@@ -7,9 +7,16 @@ const (
 	// Docker GPG key fingerprint for verification (Docker's official key)
 	DockerGPGKeyFingerprint = "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
 
-	// Docker repository URLs
-	DockerGPGKeyURL     = "https://download.docker.com/linux/ubuntu/gpg"
+	// Docker repository URLs - OS-specific
+	DockerUbuntuGPGURL = "https://download.docker.com/linux/ubuntu/gpg"
+	DockerDebianGPGURL = "https://download.docker.com/linux/debian/gpg"
+	DockerCentOSGPGURL = "https://download.docker.com/linux/centos/gpg"
+	DockerGPGKeyURL    = DockerUbuntuGPGURL // Default fallback
+
 	DockerCentOSRepoURL = "https://download.docker.com/linux/centos/docker-ce.repo"
+
+	// GPG key rotation support - backup fingerprints for seamless updates
+	DockerBackupGPGFingerprints = "" // Space-separated list of backup fingerprints
 
 	// Certificate pinning for Docker GPG key download security
 	DockerGPGKeyDomain    = "download.docker.com"

@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"embed"
 	"fmt"
 	"strings"
 
@@ -9,30 +8,6 @@ import (
 	"github.com/jameswlane/devex/pkg/log"
 	"github.com/jameswlane/devex/pkg/types"
 )
-
-//go:embed templates/docker_install.sh.tmpl
-var dockerTemplateFS embed.FS
-
-// getDockerInstallScript loads the Docker installation script template
-func getDockerInstallScript() string {
-	// Read the embedded template file
-	scriptBytes, err := dockerTemplateFS.ReadFile("templates/docker_install.sh.tmpl")
-	if err != nil {
-		// Fallback to inline script if template cannot be loaded
-		log.Warn("Failed to load Docker install template, using fallback", "error", err)
-		return getDockerInstallScriptFallback()
-	}
-	return string(scriptBytes)
-}
-
-// getDockerInstallScriptFallback provides a fallback script if template loading fails
-func getDockerInstallScriptFallback() string {
-	return `#!/bin/bash
-set -euo pipefail
-echo "Error: Docker installation template could not be loaded"
-echo "Please install Docker manually or check template files"
-exit 1`
-}
 
 // getSelectedDatabases returns the names of selected databases
 func (m *SetupModel) getSelectedDatabases() []string {
@@ -45,14 +20,14 @@ func (m *SetupModel) getSelectedDatabases() []string {
 	return selected
 }
 
-// getDockerApp returns a CrossPlatformApp for Docker Engine installation
+// getDockerApp returns a CrossPlatformApp for Docker Engine installation using secure Go installer
 func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
 		Name:        "docker",
 		Description: "Container platform and runtime for developing, shipping, and running applications",
 		Linux: types.OSConfig{
-			InstallMethod:  "curlpipe",
-			InstallCommand: getDockerInstallScript(),
+			InstallMethod:  "docker",
+			InstallCommand: "docker-ce", // Triggers Docker Engine installation
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "brew",

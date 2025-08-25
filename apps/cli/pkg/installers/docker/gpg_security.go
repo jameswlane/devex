@@ -49,9 +49,9 @@ func NewSecureGPGDownloader() *SecureGPGDownloader {
 	}
 }
 
-// DownloadAndVerifyGPGKey securely downloads and verifies Docker's GPG key
-func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(outputPath string) error {
-	log.Info("Starting secure Docker GPG key download with certificate pinning")
+// DownloadAndVerifyGPGKey securely downloads and verifies Docker's GPG key with OS-specific URL
+func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(ctx context.Context, gpgURL, outputPath string) error {
+	log.Info("Starting secure Docker GPG key download with certificate pinning", "url", gpgURL)
 
 	// Create temporary file for download
 	tempFile, err := os.CreateTemp("", "docker-gpg-key-*.tmp")
@@ -61,11 +61,11 @@ func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(outputPath string) error {
 	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
-	// Download GPG key with timeout and certificate pinning
-	ctx, cancel := context.WithTimeout(context.Background(), GPGDownloadTimeout)
+	// Use provided context with timeout for download
+	downloadCtx, cancel := context.WithTimeout(ctx, GPGDownloadTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", DockerGPGKeyURL, nil)
+	req, err := http.NewRequestWithContext(downloadCtx, "GET", gpgURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -74,7 +74,7 @@ func (d *SecureGPGDownloader) DownloadAndVerifyGPGKey(outputPath string) error {
 	req.Header.Set("User-Agent", "DevEx-CLI/1.0 (Secure GPG Downloader)")
 	req.Header.Set("Accept", "application/pgp-keys, */*")
 
-	log.Debug("Downloading Docker GPG key", "url", DockerGPGKeyURL)
+	log.Debug("Downloading Docker GPG key", "url", gpgURL)
 	resp, err := d.client.Do(req)
 	if err != nil {
 		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{

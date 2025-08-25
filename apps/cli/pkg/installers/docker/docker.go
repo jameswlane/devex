@@ -39,6 +39,8 @@ type DockerInstaller struct {
 	cleanupDone chan bool
 	// cleanupInterval determines how often to clean expired cache entries
 	cleanupInterval time.Duration
+	// engineInstaller for Docker Engine installation
+	engineInstaller *DockerEngineInstaller
 }
 
 // isRunningInContainer detects if we're running inside a Docker container.
@@ -76,6 +78,7 @@ func New() *DockerInstaller {
 		cacheTimeout:    ContainerCacheTimeout,
 		cleanupInterval: 5 * time.Minute, // Clean expired cache entries every 5 minutes
 		cleanupDone:     make(chan bool, 1),
+		engineInstaller: NewEngineInstaller(),
 	}
 	d.startCleanupRoutine()
 	return d
@@ -89,6 +92,7 @@ func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 		cacheTimeout:    ContainerCacheTimeout,
 		cleanupInterval: 5 * time.Minute,
 		cleanupDone:     make(chan bool, 1),
+		engineInstaller: NewEngineInstaller(),
 	}
 	d.startCleanupRoutine()
 	return d
@@ -102,6 +106,7 @@ func NewWithCacheTimeout(serviceTimeout, cacheTimeout time.Duration) *DockerInst
 		cacheTimeout:    cacheTimeout,
 		cleanupInterval: 5 * time.Minute,
 		cleanupDone:     make(chan bool, 1),
+		engineInstaller: NewEngineInstaller(),
 	}
 	d.startCleanupRoutine()
 	return d
@@ -164,8 +169,42 @@ func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
 	return nil
 }
 
-// Install installs Docker containers with comprehensive validation and error handling
+// Install installs Docker Engine or containers with comprehensive validation and error handling
 func (d *DockerInstaller) Install(command string, repo types.Repository) error {
+	log.Info("Starting Docker installation", "command", command)
+
+	// Check if this is a Docker Engine installation request
+	if d.isDockerEngineInstallCommand(command) {
+		return d.installDockerEngine(repo)
+	}
+
+	// Otherwise, handle container installation
+	return d.installContainer(command, repo)
+}
+
+// isDockerEngineInstallCommand checks if the command is for Docker Engine installation
+func (d *DockerInstaller) isDockerEngineInstallCommand(command string) bool {
+	engineCommands := []string{"docker-ce", "docker-engine", "docker.io", "install-engine", "engine"}
+	cmdLower := strings.ToLower(command)
+
+	for _, engineCmd := range engineCommands {
+		if strings.Contains(cmdLower, engineCmd) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// installDockerEngine installs Docker Engine using the engine installer
+func (d *DockerInstaller) installDockerEngine(repo types.Repository) error {
+	log.Info("Installing Docker Engine")
+	ctx := context.Background()
+	return d.engineInstaller.InstallDockerEngine(ctx, repo)
+}
+
+// installContainer installs Docker containers with comprehensive validation and error handling
+func (d *DockerInstaller) installContainer(command string, repo types.Repository) error {
 	log.Info("Starting Docker container installation", "command", command)
 
 	// Start metrics tracking with panic recovery
