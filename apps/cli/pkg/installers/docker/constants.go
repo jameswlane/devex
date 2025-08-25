@@ -19,8 +19,9 @@ const (
 	DockerBackupGPGFingerprints = "" // Space-separated list of backup fingerprints
 
 	// Certificate pinning for Docker GPG key download security
-	DockerGPGKeyDomain    = "download.docker.com"
-	DockerCertFingerprint = "B8:36:5E:7F:0C:7B:13:0A:F2:B8:96:CD:B0:E1:47:C5:03:54:49:44:2D:2B:FC:A9:E4:AB:CB:C0:93:77:D4:91" // SHA-256 of Docker's cert
+	DockerGPGKeyDomain           = "download.docker.com"
+	DockerCertFingerprint        = "B8:36:5E:7F:0C:7B:13:0A:F2:B8:96:CD:B0:E1:47:C5:03:54:49:44:2D:2B:FC:A9:E4:AB:CB:C0:93:77:D4:91" // Primary SHA-256 cert
+	DockerBackupCertFingerprints = "C4:A7:B1:A4:7B:2C:71:FA:DB:E1:4B:90:75:FF:C4:15:60:85:89:10:A3:5C:8A:D2:2E:98:8A:48:1A:52:BC:87" // Space-separated backup certs
 
 	// GPG operation timeouts
 	GPGDownloadTimeout     = 30 * time.Second
@@ -103,6 +104,13 @@ var AllowedDockerSubcommands = map[string]bool{
 	"inspect": true,
 	"logs":    true,
 	"exec":    true,
+	"build":   true, // Added for building images
+	"tag":     true, // Added for tagging images
+	"push":    true, // Added for pushing images to registry
+	"commit":  true, // Added for creating images from containers
+	"history": true, // Added for image history
+	"version": true, // Added for version checking
+	"info":    true, // Added for system info
 	"rm":      true,
 	"rmi":     true,
 }

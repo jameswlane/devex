@@ -158,23 +158,42 @@ func verifyDockerCertificate(cs tls.ConnectionState) error {
 		formattedFingerprint.WriteString(certFingerprint[i : i+2])
 	}
 
-	expectedFingerprint := strings.ReplaceAll(DockerCertFingerprint, ":", "")
 	actualFingerprint := strings.ReplaceAll(formattedFingerprint.String(), ":", "")
 
-	if !strings.EqualFold(expectedFingerprint, actualFingerprint) {
-		log.Warn("Certificate pinning failed",
-			"expected", DockerCertFingerprint,
-			"actual", formattedFingerprint.String(),
-		)
-		metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
-			"operation": "certificate_pinning",
-			"reason":    "fingerprint_mismatch",
-		})
-		return fmt.Errorf("certificate pinning failed - fingerprint mismatch")
+	// Check primary fingerprint first
+	expectedFingerprint := strings.ReplaceAll(DockerCertFingerprint, ":", "")
+	if strings.EqualFold(expectedFingerprint, actualFingerprint) {
+		log.Debug("Certificate pinning successful - primary fingerprint match")
+		return nil
 	}
 
-	log.Debug("Certificate pinning verification successful")
-	return nil
+	// Check backup fingerprints if primary fails
+	if DockerBackupCertFingerprints != "" {
+		backupFingerprints := strings.Fields(DockerBackupCertFingerprints)
+		for _, backup := range backupFingerprints {
+			backupFp := strings.ReplaceAll(backup, ":", "")
+			if strings.EqualFold(backupFp, actualFingerprint) {
+				log.Warn("Certificate pinning using backup fingerprint - consider updating to primary",
+					"backup_fingerprint", backup)
+				metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+					"operation": "certificate_pinning",
+					"type":      "backup_fingerprint_used",
+				})
+				return nil
+			}
+		}
+	}
+
+	// All fingerprints failed
+	log.Warn("Certificate pinning failed - no fingerprint match",
+		"expected", DockerCertFingerprint,
+		"actual", formattedFingerprint.String(),
+	)
+	metrics.RecordCount(metrics.MetricSecurityValidationFailed, map[string]string{
+		"operation": "certificate_pinning",
+		"reason":    "fingerprint_mismatch",
+	})
+	return fmt.Errorf("certificate pinning failed - fingerprint mismatch")
 }
 
 // VerifyFingerprint verifies the GPG key fingerprint with timeout

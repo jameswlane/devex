@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -81,10 +80,10 @@ func New() *DockerInstaller {
 		cleanupDone:     make(chan bool, 1),
 		engineInstaller: NewEngineInstaller(),
 	}
-	d.startCleanupRoutine()
-
-	// Set finalizer to ensure cleanup happens even if StopCleanup() is not called
-	runtime.SetFinalizer(d, (*DockerInstaller).StopCleanup)
+	// Only start cleanup if interval is valid - safer lifecycle management
+	if d.cleanupInterval > 0 {
+		d.startCleanupRoutine()
+	}
 
 	return d
 }
@@ -99,10 +98,10 @@ func NewWithTimeout(timeout time.Duration) *DockerInstaller {
 		cleanupDone:     make(chan bool, 1),
 		engineInstaller: NewEngineInstaller(),
 	}
-	d.startCleanupRoutine()
-
-	// Set finalizer to ensure cleanup happens even if StopCleanup() is not called
-	runtime.SetFinalizer(d, (*DockerInstaller).StopCleanup)
+	// Only start cleanup if interval is valid - safer lifecycle management
+	if d.cleanupInterval > 0 {
+		d.startCleanupRoutine()
+	}
 
 	return d
 }
@@ -117,10 +116,10 @@ func NewWithCacheTimeout(serviceTimeout, cacheTimeout time.Duration) *DockerInst
 		cleanupDone:     make(chan bool, 1),
 		engineInstaller: NewEngineInstaller(),
 	}
-	d.startCleanupRoutine()
-
-	// Set finalizer to ensure cleanup happens even if StopCleanup() is not called
-	runtime.SetFinalizer(d, (*DockerInstaller).StopCleanup)
+	// Only start cleanup if interval is valid - safer lifecycle management
+	if d.cleanupInterval > 0 {
+		d.startCleanupRoutine()
+	}
 
 	return d
 }
@@ -172,14 +171,40 @@ func (d *DockerInstaller) attemptDockerDaemonStartup() error {
 
 // tryStartDockerService attempts to start Docker using various methods
 func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
-	// Use a combined command that tries all methods - SECURE: Only use Unix socket
-	startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock &"
+	log.Debug("Attempting to start Docker daemon using multiple methods")
 
-	if _, err := utils.CommandExec.RunShellCommand(startCmd); err != nil {
-		return fmt.Errorf("all Docker startup methods failed: %w", err)
+	// Try each method individually - SECURE: No shell injection risk
+	startupMethods := []struct {
+		name string
+		cmd  []string
+	}{
+		{"service", []string{"sudo", "service", "docker", "start"}},
+		{"systemctl", []string{"sudo", "systemctl", "start", "docker"}},
+		{"dockerd", []string{"sudo", "dockerd", "--host=unix:///var/run/docker.sock"}},
 	}
 
-	return nil
+	for _, method := range startupMethods {
+		log.Debug("Trying Docker startup method", "method", method.name)
+
+		// Use CommandContext for proper cancellation and security
+		cmd := exec.CommandContext(ctx, method.cmd[0], method.cmd[1:]...)
+
+		// For dockerd, run in background
+		if method.name == "dockerd" {
+			if err := cmd.Start(); err == nil {
+				log.Debug("Docker daemon started successfully", "method", method.name)
+				return nil
+			}
+		} else {
+			// For service/systemctl, run and wait
+			if err := cmd.Run(); err == nil {
+				log.Debug("Docker service started successfully", "method", method.name)
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("all Docker startup methods failed")
 }
 
 // Install installs Docker Engine or containers with comprehensive validation and error handling
@@ -586,6 +611,34 @@ func (d *DockerInstaller) addUserToDockerGroup() error {
 	return nil
 }
 
+// addUserToDockerGroupWithContext adds the current user to the docker group with context
+func (d *DockerInstaller) addUserToDockerGroupWithContext(ctx context.Context) error {
+	// Use the enhanced user detection with fallback methods
+	username := getCurrentUserWithFallbackContext(ctx)
+	if username == "" || username == "root" {
+		return nil // Skip for root or empty username
+	}
+
+	// Validate username for security
+	if err := utils.ValidateUsername(username); err != nil {
+		return fmt.Errorf("invalid username: %w", err)
+	}
+
+	log.Info("Adding user to docker group", "user", username)
+
+	// Use provided context with timeout
+	cmdCtx, cancel := context.WithTimeout(ctx, DockerGroupTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(cmdCtx, "sudo", "usermod", "-aG", "docker", username)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, string(output))
+	}
+
+	log.Info("User successfully added to docker group", "user", username, "note", "Group changes take effect after next login")
+	return nil
+}
+
 // getCurrentUserWithFallback attempts multiple methods to determine the current user.
 // This function provides robust user detection using multiple fallback mechanisms:
 // 1. Checks USER environment variable (most common)
@@ -631,8 +684,46 @@ func getCurrentUserWithFallback() string {
 	return ""
 }
 
+// getCurrentUserWithFallbackContext is a context-aware version of getCurrentUserWithFallback
+func getCurrentUserWithFallbackContext(ctx context.Context) string {
+	// Try environment variables first
+	if currentUser := os.Getenv("USER"); currentUser != "" {
+		return currentUser
+	}
+	if currentUser := os.Getenv("USERNAME"); currentUser != "" {
+		return currentUser
+	}
+
+	// Try using the user package
+	if currentUser, err := user.Current(); err == nil {
+		return currentUser.Username
+	}
+
+	// Use provided context for command execution
+	cmdCtx, cancel := context.WithTimeout(ctx, UserDetectionTimeout)
+	defer cancel()
+
+	// Try using whoami command
+	if output, err := exec.CommandContext(cmdCtx, "whoami").Output(); err == nil {
+		username := strings.TrimSpace(string(output))
+		if username != "" {
+			return username
+		}
+	}
+
+	// Try using id -un command
+	if output, err := exec.CommandContext(cmdCtx, "id", "-un").Output(); err == nil {
+		username := strings.TrimSpace(string(output))
+		if username != "" {
+			return username
+		}
+	}
+
+	return ""
+}
+
 // executeDockerCommand runs a Docker command, using sudo if necessary
-func executeDockerCommand(command string) error {
+func executeDockerCommandWithContext(ctx context.Context, command string) error {
 	// Create a global instance for this function
 	d := &DockerInstaller{ServiceTimeout: 30 * time.Second}
 
@@ -643,7 +734,7 @@ func executeDockerCommand(command string) error {
 	}
 
 	// Add user to docker group if not already a member
-	if err := d.addUserToDockerGroup(); err != nil {
+	if err := d.addUserToDockerGroupWithContext(ctx); err != nil {
 		log.Warn("Failed to add user to docker group, continuing with sudo", "error", err)
 	}
 
@@ -653,8 +744,8 @@ func executeDockerCommand(command string) error {
 		return fmt.Errorf("invalid docker command: %w", err)
 	}
 
-	// Use exec.CommandContext for safer sudo execution
-	ctx, cancel := context.WithTimeout(context.Background(), DockerCommandTimeout)
+	// Use provided context for better cancellation support
+	cmdCtx, cancel := context.WithTimeout(ctx, DockerCommandTimeout)
 	defer cancel()
 
 	args := strings.Fields(command)
@@ -664,7 +755,7 @@ func executeDockerCommand(command string) error {
 
 	// Prepend sudo to the command args
 	sudoArgs := append([]string{args[0]}, args[1:]...)
-	cmd := exec.CommandContext(ctx, "sudo", sudoArgs...)
+	cmd := exec.CommandContext(cmdCtx, "sudo", sudoArgs...)
 
 	if output, err := cmd.CombinedOutput(); err != nil {
 		log.Error("Docker command failed with both user and sudo access", err, "command", command, "output", string(output))
@@ -673,6 +764,12 @@ func executeDockerCommand(command string) error {
 
 	log.Info("Docker command executed with sudo - consider refreshing group membership", "hint", "Run 'newgrp docker' or log out and back in")
 	return nil
+}
+
+// executeDockerCommand provides backward compatibility with a default context
+func executeDockerCommand(command string) error {
+	ctx := context.Background()
+	return executeDockerCommandWithContext(ctx, command)
 }
 
 // validateDockerCommand validates that a Docker command contains only safe operations.
@@ -868,15 +965,21 @@ func (d *DockerInstaller) startCleanupRoutine() {
 			}
 		}()
 
-		// Ensure ticker is not nil before using it
-		if d.cleanupTicker == nil {
+		// Capture ticker reference to avoid race condition
+		ticker := d.cleanupTicker
+		if ticker == nil {
 			log.Debug("Cleanup ticker not initialized, exiting cleanup routine")
 			return
 		}
 
 		for {
 			select {
-			case <-d.cleanupTicker.C:
+			case <-ticker.C:
+				// Check if we should still be running before cleanup
+				if d.cleanupTicker == nil {
+					log.Debug("Cleanup routine stopped during execution")
+					return
+				}
 				log.Debug("Running automatic cache cleanup")
 				d.clearExpiredCache()
 				log.Debug("Automatic cache cleanup completed")
@@ -891,8 +994,6 @@ func (d *DockerInstaller) startCleanupRoutine() {
 
 // StopCleanup stops the background cleanup routine
 func (d *DockerInstaller) StopCleanup() {
-	// Clear finalizer since we're doing explicit cleanup
-	runtime.SetFinalizer(d, nil)
 	if d.cleanupTicker != nil {
 		d.cleanupTicker.Stop()
 		d.cleanupTicker = nil
