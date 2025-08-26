@@ -21,7 +21,7 @@
 		"typescript": "5.9.2"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.1.2",
+		"@biomejs/biome": "2.2.2",
 		"autoprefixer": "10.4.21",
 		"docs": "0.3.2-canary.0",
 		"postcss": "8.5.6",
