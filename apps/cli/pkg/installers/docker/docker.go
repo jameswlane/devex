@@ -56,119 +56,6 @@ type DockerInstaller struct {
 	engineInstaller *DockerEngineInstaller
 }
 
-// isRunningInContainer detects if we're running inside a Docker container.
-// It uses multiple detection methods to reliably identify container environments:
-// 1. Checks for /.dockerenv file (created by Docker)
-// 2. Examines cgroup information for container references
-// 3. Looks for container-specific environment variables
-// 4. Checks init process name and PID 1 characteristics
-// 5. Examines filesystem mount information
-// This prevents unsafe Docker-in-Docker scenarios and provides proper user guidance.
-func isRunningInContainer() bool {
-	// Method 1: Check for .dockerenv file (Docker-specific)
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		log.Debug("Container detected via .dockerenv file")
-		return true
-	}
-
-	// Method 2: Check cgroup information for container runtime references
-	if data, err := os.ReadFile("/proc/1/cgroup"); err == nil {
-		cgroup := string(data)
-		containerIndicators := []string{
-			"docker", "containerd", "kubepods", "lxc", "systemd:/docker",
-			"/docker/", "/containerd/", "/kubelet", "garden",
-		}
-		for _, indicator := range containerIndicators {
-			if strings.Contains(cgroup, indicator) {
-				log.Debug("Container detected via cgroup", "indicator", indicator)
-				return true
-			}
-		}
-	}
-
-	// Method 3: Check for container-specific environment variables
-	containerEnvVars := []string{
-		"container", "CONTAINER_ID", "DOCKER_CONTAINER",
-		"KUBERNETES_SERVICE_HOST", "K8S_POD_NAME", "NOMAD_ALLOC_ID",
-		"HOSTNAME", "MESOS_TASK_ID", "MARATHON_APP_ID",
-	}
-	for _, envVar := range containerEnvVars {
-		if value := os.Getenv(envVar); value != "" {
-			// Additional validation for HOSTNAME (common false positive)
-			if envVar == "HOSTNAME" {
-				hostname := strings.TrimSpace(value)
-				// Container hostnames are typically short hex strings (12 chars) or follow k8s patterns
-				if len(hostname) == 12 && isHexString(hostname) {
-					log.Debug("Container detected via hostname pattern", "hostname", hostname)
-					return true
-				}
-				if strings.Contains(hostname, "-") && (strings.Contains(hostname, "pod") || strings.Contains(hostname, "deployment")) {
-					log.Debug("Container detected via k8s hostname pattern", "hostname", hostname)
-					return true
-				}
-			} else {
-				log.Debug("Container detected via environment variable", "var", envVar, "value", value)
-				return true
-			}
-		}
-	}
-
-	// Method 4: Check init process characteristics
-	if data, err := os.ReadFile("/proc/1/comm"); err == nil {
-		initProcess := strings.TrimSpace(string(data))
-		// In containers, init is often not 'init' or 'systemd'
-		containerInitProcesses := []string{"sh", "bash", "entrypoint", "docker-init", "tini", "dumb-init"}
-		for _, containerInit := range containerInitProcesses {
-			if initProcess == containerInit {
-				log.Debug("Container detected via init process", "init", initProcess)
-				return true
-			}
-		}
-	}
-
-	// Method 5: Check filesystem mount information for overlay/container mounts
-	if data, err := os.ReadFile("/proc/mounts"); err == nil {
-		mounts := string(data)
-		containerMountTypes := []string{"overlay", "aufs", "btrfs", "zfs", "devicemapper"}
-		for _, mountType := range containerMountTypes {
-			if strings.Contains(mounts, mountType) && strings.Contains(mounts, "/var/lib/docker") {
-				log.Debug("Container detected via filesystem mounts", "mount_type", mountType)
-				return true
-			}
-		}
-
-		// Check for container-specific mount paths
-		if strings.Contains(mounts, "/docker/containers/") ||
-			strings.Contains(mounts, "/var/lib/containerd/") ||
-			strings.Contains(mounts, "tmpfs /dev/shm") { // Common in containers
-			log.Debug("Container detected via mount paths")
-			return true
-		}
-	}
-
-	// Method 6: Check for virtualization indicators as final fallback
-	if data, err := os.ReadFile("/proc/cpuinfo"); err == nil {
-		cpuInfo := string(data)
-		if strings.Contains(cpuInfo, "container") || strings.Contains(cpuInfo, "docker") {
-			log.Debug("Container detected via CPU info")
-			return true
-		}
-	}
-
-	log.Debug("No container environment detected")
-	return false
-}
-
-// isHexString checks if a string contains only hexadecimal characters
-func isHexString(s string) bool {
-	for _, char := range s {
-		if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
-			return false
-		}
-	}
-	return true
-}
-
 func New() *DockerInstaller {
 	d := &DockerInstaller{
 		ServiceTimeout:     DefaultServiceTimeout,
@@ -916,7 +803,7 @@ func validateUserExistence(ctx context.Context, username string) error {
 	cmd := exec.CommandContext(timeoutCtx, "id", username)
 	if output, err := cmd.Output(); err == nil {
 		idOutput := strings.TrimSpace(string(output))
-		if strings.Contains(idOutput, fmt.Sprintf("uid=")) {
+		if strings.Contains(idOutput, "uid=") {
 			log.Debug("User validation successful via id command",
 				"username", username,
 				"id_output", idOutput)
