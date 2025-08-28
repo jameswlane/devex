@@ -1029,16 +1029,6 @@ func validateDockerCommand(command string) error {
 		}
 	}
 
-	// Debug: print command and patterns for failing test
-	if strings.Contains(fullCommand, "/dev") {
-		fmt.Printf("DEBUG validateDockerCommand: command='%s'\n", fullCommand)
-		fmt.Printf("DEBUG validateDockerCommand: suspicious patterns=%v\n", suspiciousPatterns)
-		for _, pattern := range suspiciousPatterns {
-			contains := strings.Contains(fullCommand, pattern)
-			fmt.Printf("DEBUG pattern '%s' in command: %v\n", pattern, contains)
-		}
-	}
-
 	return nil
 }
 
