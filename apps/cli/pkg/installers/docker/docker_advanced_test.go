@@ -1,7 +1,6 @@
 package docker
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -324,17 +323,15 @@ var _ = Describe("Docker Installer Advanced Tests", func() {
 
 		Context("timeout handling", func() {
 			It("respects context timeouts in daemon startup", func() {
-				// Create a context that times out quickly
-				_, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
-				defer cancel()
-
-				// Mock daemon startup to simulate long-running operation
-				startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
-				mockExec.FailingCommands[startCmd] = true
+				// Mock all Docker daemon startup commands to fail
+				mockExec.FailingCommands["sudo service docker start"] = true
+				mockExec.FailingCommands["sudo systemctl start docker"] = true
+				mockExec.FailingCommands["sudo dockerd --host=unix:///var/run/docker.sock"] = true
 
 				err := installer.attemptDockerDaemonStartup()
 
 				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("unable to start Docker daemon"))
 			})
 		})
 	})
