@@ -1074,7 +1074,8 @@ func validateDockerCommand(command string) error {
 					// If the next part doesn't look like a flag, environment variable, or image name,
 					// it might be part of an unquoted container name with spaces
 					if !strings.HasPrefix(nextPart, "-") && !strings.Contains(nextPart, "=") &&
-						!strings.Contains(nextPart, ":") && !strings.Contains(nextPart, "/") {
+						!strings.Contains(nextPart, ":") && !strings.Contains(nextPart, "/") &&
+						!isLikelyImageName(nextPart) {
 						return fmt.Errorf("container name validation failed: container name appears to contain unquoted spaces")
 					}
 				}
@@ -1212,6 +1213,76 @@ func validatePortMapping(portMapping string) error {
 	}
 
 	return nil
+}
+
+// isLikelyImageName checks if a string looks like a Docker image name
+func isLikelyImageName(name string) bool {
+	// Common Docker image patterns:
+	// - Official images: nginx, redis, postgres, mysql, mongo, etc.
+	// - Registry images with explicit tags/digests: already handled by : and / checks
+	// - Images with versions: handled by : check
+
+	// Common official Docker Hub images (incomplete list for common cases)
+	commonImages := []string{
+		"nginx", "redis", "postgres", "mysql", "mongo", "mariadb",
+		"alpine", "ubuntu", "debian", "centos", "busybox", "scratch",
+		"node", "python", "java", "golang", "php", "ruby",
+		"httpd", "memcached", "elasticsearch", "kibana", "logstash",
+		"traefik", "caddy", "jenkins", "sonarqube", "grafana",
+		"prometheus", "consul", "vault", "etcd", "rabbitmq",
+	}
+
+	// Check against common image names
+	for _, img := range commonImages {
+		if name == img {
+			return true
+		}
+	}
+
+	// If it contains common image patterns (even without : or /)
+	// Look for version-like suffixes or known patterns
+	if strings.Contains(name, "latest") ||
+		strings.Contains(name, "alpine") ||
+		strings.Contains(name, "slim") ||
+		strings.Contains(name, "ubuntu") ||
+		strings.Contains(name, "debian") {
+		return true
+	}
+
+	// Additional heuristics for likely image names
+	// Look for common image naming patterns or characteristics
+	if len(name) > 2 && !strings.ContainsAny(name, " \t\n;|&()[]{}*?<>\"'\\") {
+		// Check if it looks like a typical image name (has common patterns)
+		if strings.Contains(name, "-") || // Many images have hyphens: redis-alpine, mysql-server
+			strings.HasSuffix(name, "db") || // Common database suffixes: mariadb, influxdb
+			strings.HasSuffix(name, "sql") || // mysql, postgresql variations
+			(len(name) >= 6 && !isCommonEnglishWord(name)) { // Longer names that aren't common words
+			return true
+		}
+	}
+
+	return false
+}
+
+// isCommonEnglishWord checks if a word is a common English word that's unlikely to be an image name
+func isCommonEnglishWord(word string) bool {
+	commonWords := []string{
+		"with", "from", "into", "over", "under", "about", "after", "before",
+		"during", "through", "without", "within", "between", "against",
+		"include", "exclude", "should", "could", "would", "might", "will",
+		"have", "been", "were", "they", "them", "this", "that", "these",
+		"those", "what", "when", "where", "which", "while", "until",
+		"because", "although", "however", "therefore", "otherwise",
+		"spaces", "name", "container", "image", "command", "error",
+	}
+
+	wordLower := strings.ToLower(word)
+	for _, common := range commonWords {
+		if wordLower == common {
+			return true
+		}
+	}
+	return false
 }
 
 // buildDockerRunCommand constructs a complete docker run command from DockerOptions
