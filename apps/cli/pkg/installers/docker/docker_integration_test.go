@@ -227,7 +227,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 			})
 
 			It("should handle Docker-in-Docker scenarios", func() {
-				command := "run --name test-container -d nginx:latest"
+				command := "docker run --name test-container -d nginx:latest"
 
 				// Simulate Docker daemon not running in container
 				mockExec.FailingCommands = map[string]bool{
@@ -256,7 +256,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 
 	Describe("Cache and Performance Integration", func() {
 		It("should maintain cache consistency across multiple operations", func() {
-			command := "run --name nginx -d -p 8080:80 nginx:latest"
+			command := "docker run --name nginx -d -p 8080:80 nginx:latest"
 
 			By("Installing container and caching status")
 			// Manually mark container as installed for testing purposes
@@ -285,7 +285,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 			installer = NewWithCacheTimeout(DefaultServiceTimeout, 100*time.Millisecond)
 			utils.CommandExec = mockExec
 
-			command := "run --name redis -d redis:latest"
+			command := "docker run --name redis -d redis:latest"
 
 			By("Installing container to populate cache")
 			err := installer.Install(command, repo)
@@ -315,7 +315,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 
 	Describe("Error Recovery and Resilience", func() {
 		It("should recover from temporary Docker daemon failures", func() {
-			command := "run --name postgres -e POSTGRES_PASSWORD=test -d postgres:13"
+			command := "docker run --name postgres -e POSTGRES_PASSWORD=test -d postgres:13"
 
 			// Simulate Docker daemon temporarily unavailable
 			mockExec.FailingCommands = map[string]bool{
@@ -339,7 +339,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 		It("should handle repository connection failures", func() {
 			repo.shouldError = true
 
-			command := "run --name mongo -d mongo:latest"
+			command := "docker run --name mongo -d mongo:latest"
 
 			By("Installation should proceed despite repository issues")
 			err := installer.Install(command, repo)
@@ -361,7 +361,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 
 	Describe("Container Lifecycle Management", func() {
 		It("should properly uninstall containers and clean up resources", func() {
-			command := "run --name apache -d -p 8080:80 httpd:latest"
+			command := "docker run --name apache -d -p 8080:80 httpd:latest"
 
 			By("Installing container")
 			err := installer.Install(command, repo)
@@ -389,7 +389,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 		})
 
 		It("should handle partial container states gracefully", func() {
-			command := "run --name partial -d busybox:latest"
+			command := "docker run --name partial -d busybox:latest"
 
 			By("Simulating container that exists but is stopped")
 			// This test verifies that the installer can handle partial container states
@@ -415,7 +415,7 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 		})
 
 		It("should handle concurrent cache access during cleanup", func() {
-			command := "run --name concurrent -d nginx:latest"
+			command := "docker run --name concurrent -d nginx:latest"
 
 			By("Installing container to populate cache")
 			err := installer.Install(command, repo)
