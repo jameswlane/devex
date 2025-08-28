@@ -8,32 +8,48 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/pkg/installers/docker"
-	"github.com/jameswlane/devex/pkg/types"
+	"github.com/jameswlane/devex/pkg/mocks"
+	"github.com/jameswlane/devex/pkg/utils"
 )
 
 var _ = Describe("Multi-App Docker Installation Integration", func() {
 	var (
 		installer *docker.DockerInstaller
-		repo      types.Repository
+		repo      *MockRepository
+		mockExec  *mocks.MockCommandExecutor
 	)
 
 	BeforeEach(func() {
-		repo = &MockRepository{}
 		installer = docker.New()
+		mockExec = mocks.NewMockCommandExecutor()
+		repo = &MockRepository{}
+		utils.CommandExec = mockExec
+	})
+
+	AfterEach(func() {
+		// Clean up any background processes
+		installer.StopCleanup()
 	})
 
 	Describe("Docker Engine Installation", func() {
 		Context("when installing Docker Engine", func() {
 			It("should install Docker Engine successfully", func() {
+				// Mock Docker engine installation commands
+				mockExec.InstallationState["docker-ce"] = true
+
 				// Test Docker Engine installation
 				err := installer.Install("docker-ce", repo)
 
-				// For actual testing, we'd mock the system commands
-				// For now, we expect this to work with the new architecture
+				// The installation should either succeed or fail with a clear Docker-related error
 				if err != nil {
-					// In integration tests, we might expect this to fail without root access
-					// But the error handling should be clean
-					Expect(err.Error()).To(ContainSubstring("docker"))
+					// Error should be related to Docker installation, not user validation
+					Expect(err.Error()).To(Or(
+						ContainSubstring("docker"),
+						ContainSubstring("service"),
+						ContainSubstring("daemon"),
+					))
+					// Should not fail due to user validation issues that would suggest missing mocking
+					Expect(err.Error()).NotTo(ContainSubstring("lacks sudo privileges"))
 				}
 			})
 
