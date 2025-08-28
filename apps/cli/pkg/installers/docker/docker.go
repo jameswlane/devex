@@ -1182,10 +1182,27 @@ func validatePortMapping(portMapping string) error {
 	}
 
 	// Check for dangerous exposed ports on all interfaces
+	// Explicit all-interface bindings
 	dangerousPorts := []string{"0.0.0.0:22:", "0.0.0.0:3389:", ":22:", ":3389:"} // SSH, RDP
 	for _, dangerous := range dangerousPorts {
 		if strings.Contains(portMapping, dangerous) {
 			return fmt.Errorf("invalid port mapping: exposing dangerous service on all interfaces")
+		}
+	}
+
+	// Check for implicit all-interface bindings (port:port format without host)
+	// These are dangerous for common service ports
+	dangerousServicePorts := []string{"22:", "3306:", "3389:", "5432:", "6379:", "27017:"} // SSH, MySQL, RDP, PostgreSQL, Redis, MongoDB
+	for _, port := range dangerousServicePorts {
+		// Check if the port mapping starts with the dangerous port (implicit all interfaces)
+		if strings.HasPrefix(portMapping, port) {
+			return fmt.Errorf("invalid port mapping: exposing dangerous service port %s on all interfaces", strings.TrimSuffix(port, ":"))
+		}
+		// Also check for the pattern "port:port" which exposes to all interfaces
+		portNum := strings.TrimSuffix(port, ":")
+		implicitPattern := portNum + ":" + portNum
+		if portMapping == implicitPattern {
+			return fmt.Errorf("invalid port mapping: exposing dangerous service port %s on all interfaces", portNum)
 		}
 	}
 
