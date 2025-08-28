@@ -198,6 +198,9 @@ var _ = Describe("Docker Installer Advanced Tests", func() {
 
 				for _, cmd := range suspiciousCommands {
 					err := validateDockerCommand(cmd)
+					if err == nil {
+						fmt.Printf("DEBUG: Command '%s' unexpectedly passed validation\n", cmd)
+					}
 					Expect(err).To(HaveOccurred(), "Expected validation to fail for suspicious command: %s", cmd)
 				}
 			})
