@@ -255,6 +255,13 @@ func (d *DockerInstaller) installContainer(command string, repo types.Repository
 		return err
 	}
 
+	// Validate that we have a container name for Docker operations
+	if containerName == "" {
+		err := fmt.Errorf("failed to extract container name from command: %s", command)
+		timer.Failure(err)
+		return err
+	}
+
 	// Check if container is already running
 	if isInstalled, err := d.checkContainerStatus(containerName); err != nil {
 		timer.Failure(err)
