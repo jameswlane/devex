@@ -333,9 +333,8 @@ func (d *DockerInstaller) buildDockerCommand(command string) (finalCommand, cont
 		// Use command as-is for full docker run commands
 		finalCommand = command
 		containerName = extractContainerName(command)
-		if containerName == "" {
-			return "", "", fmt.Errorf("failed to extract container name from command: %s", command)
-		}
+		// Note: empty container name is acceptable for commands without DockerOptions
+		log.Debug("Using command as-is", "command", finalCommand, "container", containerName)
 	}
 
 	return finalCommand, containerName, nil
