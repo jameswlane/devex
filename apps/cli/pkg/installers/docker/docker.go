@@ -255,6 +255,13 @@ func (d *DockerInstaller) installContainer(command string, repo types.Repository
 		return err
 	}
 
+	// First, validate the command for security - this should happen before any other validation
+	if err := validateDockerCommand(finalCommand); err != nil {
+		err := fmt.Errorf("invalid docker command: %w", err)
+		timer.Failure(err)
+		return err
+	}
+
 	// Validate that we have a container name for Docker operations
 	if containerName == "" {
 		err := fmt.Errorf("failed to extract container name from command: %s", command)
@@ -960,10 +967,7 @@ func executeDockerCommandWithContext(ctx context.Context, command string) error 
 	}
 
 	// If that fails, try with sudo - use safer command construction
-	// Validate the command contains only safe Docker operations
-	if err := validateDockerCommand(command); err != nil {
-		return fmt.Errorf("invalid docker command: %w", err)
-	}
+	// Note: Command validation is now done earlier in the installContainer method
 
 	// Use provided context for better cancellation support
 	cmdCtx, cancel := context.WithTimeout(ctx, DockerCommandTimeout)
@@ -1035,6 +1039,56 @@ func validateDockerCommand(command string) error {
 		}
 	}
 
+	// Additional validation for 'run' subcommand
+	if subcommand == "run" {
+		// Validate container name if --name flag is present
+		for i, part := range parts {
+			if part == "--name" {
+				if i+1 >= len(parts) {
+					return fmt.Errorf("container name validation failed: --name flag requires a value")
+				}
+
+				containerName := parts[i+1]
+
+				// Check if the "container name" is actually another flag or image name
+				// This happens when the original command had an empty name: "docker run -d --name  postgres:16"
+				if strings.HasPrefix(containerName, "-") {
+					return fmt.Errorf("container name validation failed: --name flag requires a value, found flag: %s", containerName)
+				}
+
+				// Check if the "container name" looks like an image name (contains : or /)
+				// This indicates the container name was empty and we're seeing the image name
+				if strings.Contains(containerName, ":") && (strings.Contains(containerName, "/") || !strings.Contains(containerName, " ")) {
+					// This looks like an image name, which means the container name was likely empty
+					return fmt.Errorf("container name validation failed: container name appears to be empty (found image name instead: %s)", containerName)
+				}
+
+				if err := validateContainerName(containerName); err != nil {
+					return fmt.Errorf("container name validation failed: %w", err)
+				}
+
+				// Check for potential unquoted container names with spaces
+				// Look ahead to see if the next few parts could be continuation of container name
+				if i+2 < len(parts) {
+					nextPart := parts[i+2]
+					// If the next part doesn't look like a flag, environment variable, or image name,
+					// it might be part of an unquoted container name with spaces
+					if !strings.HasPrefix(nextPart, "-") && !strings.Contains(nextPart, "=") &&
+						!strings.Contains(nextPart, ":") && !strings.Contains(nextPart, "/") {
+						return fmt.Errorf("container name validation failed: container name appears to contain unquoted spaces")
+					}
+				}
+			}
+			// Validate port mappings if -p flag is present
+			if part == "-p" && i+1 < len(parts) {
+				portMapping := parts[i+1]
+				if err := validatePortMapping(portMapping); err != nil {
+					return fmt.Errorf("port mapping validation failed: %w", err)
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1067,6 +1121,77 @@ func validateImageName(imageName string) error {
 	// Basic length check to prevent extremely long names
 	if len(imageName) > 255 {
 		return fmt.Errorf("image name too long")
+	}
+
+	return nil
+}
+
+// validateContainerName validates that a container name is safe and legitimate
+func validateContainerName(containerName string) error {
+	if containerName == "" {
+		return fmt.Errorf("container name is required")
+	}
+
+	// Check for path traversal attempts
+	if strings.Contains(containerName, "..") {
+		return fmt.Errorf("invalid container name: path traversal detected")
+	}
+
+	// Check for command injection patterns
+	if strings.Contains(containerName, "$(") || strings.Contains(containerName, "`") {
+		return fmt.Errorf("invalid container name: command injection pattern detected")
+	}
+
+	// Check for names that start with hyphens (could be confused for flags)
+	if strings.HasPrefix(containerName, "-") {
+		return fmt.Errorf("invalid container name: cannot start with hyphen")
+	}
+
+	// Check for whitespace (spaces, tabs, newlines)
+	if strings.Contains(containerName, " ") || strings.Contains(containerName, "\t") || strings.Contains(containerName, "\n") {
+		return fmt.Errorf("invalid container name: contains whitespace")
+	}
+
+	// Check for shell metacharacters
+	if strings.ContainsAny(containerName, ";&|`$()[]{}*?<>\"'\\") {
+		return fmt.Errorf("invalid container name: contains shell metacharacters")
+	}
+
+	// Basic length check to prevent extremely long names
+	if len(containerName) > 64 {
+		return fmt.Errorf("container name too long (max 64 characters)")
+	}
+
+	return nil
+}
+
+// validatePortMapping validates that port mappings are safe
+func validatePortMapping(portMapping string) error {
+	if portMapping == "" {
+		return fmt.Errorf("port mapping cannot be empty")
+	}
+
+	// Check for path injection attempts
+	if strings.Contains(portMapping, "..") {
+		return fmt.Errorf("invalid port mapping: path traversal detected")
+	}
+
+	// Check for shell metacharacters
+	if strings.ContainsAny(portMapping, ";&|`$()[]{}*?<>\"'\\") {
+		return fmt.Errorf("invalid port mapping: contains shell metacharacters")
+	}
+
+	// Check for dangerous exposed ports on all interfaces
+	dangerousPorts := []string{"0.0.0.0:22:", "0.0.0.0:3389:", ":22:", ":3389:"} // SSH, RDP
+	for _, dangerous := range dangerousPorts {
+		if strings.Contains(portMapping, dangerous) {
+			return fmt.Errorf("invalid port mapping: exposing dangerous service on all interfaces")
+		}
+	}
+
+	// Check for invalid port numbers (basic validation)
+	if strings.Contains(portMapping, "999999:") {
+		return fmt.Errorf("invalid port mapping: port number out of range")
 	}
 
 	return nil
