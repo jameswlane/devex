@@ -139,10 +139,10 @@ var _ = Describe("Docker Command Building", func() {
 		It("should handle missing app configuration gracefully", func() {
 			err := installer.Install("nonexistent-app", mockRepo)
 
-			// Should still work but treat it as a regular docker command
-			// Since it doesn't have --name, it should fail to extract container name
+			// Should fail because "nonexistent-app" is not a valid Docker command
+			// Security validation should reject commands that don't start with "docker"
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("failed to extract container name"))
+			Expect(err.Error()).To(ContainSubstring("command must start with 'docker'"))
 		})
 	})
 })
