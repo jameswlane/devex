@@ -218,8 +218,8 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 
 		Context("when running in containerized environment", func() {
 			BeforeEach(func() {
-				// Simulate container environment
-				os.Setenv("HOSTNAME", "docker-container-123")
+				// Simulate container environment with K8s pod hostname pattern
+				os.Setenv("HOSTNAME", "test-pod-12345")
 			})
 
 			AfterEach(func() {
@@ -227,23 +227,28 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 			})
 
 			It("should handle Docker-in-Docker scenarios", func() {
-				command := "install docker-ce"
+				command := "run --name test-container -d nginx:latest"
 
 				// Simulate Docker daemon not running in container
 				mockExec.FailingCommands = map[string]bool{
-					"docker version": true,
+					"docker version":      true,
+					"sudo docker version": true,
+					"docker version --format '{{.Server.Version}}'":      true,
+					"sudo docker version --format '{{.Server.Version}}'": true,
+					"test -S /var/run/docker.sock":                       true, // No docker socket available
 				}
 
 				err := installer.Install(command, repo)
 
-				// Should attempt Docker daemon startup in container
+				// Should attempt Docker daemon startup in container environment
 				Expect(err).To(Or(BeNil(), MatchError(ContainSubstring("container"))))
 
 				By("Verifying Docker daemon startup attempts")
 				commandsStr := strings.Join(mockExec.Commands, " ")
 				Expect(commandsStr).To(Or(
-					ContainSubstring("dockerd"),
-					ContainSubstring("service docker start"),
+					ContainSubstring("sudo service docker start"),
+					ContainSubstring("sudo systemctl start docker"),
+					ContainSubstring("sudo dockerd"),
 				))
 			})
 		})
