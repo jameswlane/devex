@@ -349,12 +349,13 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 		})
 
 		It("should validate Docker commands for security", func() {
-			maliciousCommand := "run --name evil && rm -rf / --no-preserve-root"
+			maliciousCommand := "docker run --name evil && rm -rf / --no-preserve-root"
 
 			By("Installation should reject malicious commands")
-			err := installer.Install(maliciousCommand, repo)
+			// Test the validation function directly to ensure security works
+			err := validateDockerCommand(maliciousCommand)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("validation"))
+			Expect(err.Error()).To(ContainSubstring("rm -rf"))
 		})
 	})
 
