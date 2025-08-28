@@ -181,6 +181,28 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 		return strings.Join(containers, "\n"), nil
 	}
 
+	// Handle Docker ps with filters for IsInstalled checks
+	if strings.Contains(command, "docker ps") && strings.Contains(command, "--filter") {
+		// Extract container name from filter
+		var targetContainer string
+		parts := strings.Fields(command)
+		for i, part := range parts {
+			if part == "--filter" && i+1 < len(parts) {
+				filterValue := parts[i+1]
+				if strings.HasPrefix(filterValue, "name=") {
+					targetContainer = strings.TrimPrefix(filterValue, "name=")
+					break
+				}
+			}
+		}
+
+		// Check if the target container is "installed" (running)
+		if targetContainer != "" && m.InstallationState[targetContainer] {
+			return targetContainer, nil
+		}
+		return "", nil // Container not running
+	}
+
 	// Handle Pacman-specific commands
 	if strings.Contains(command, "pacman --version") {
 		return "Pacman v6.0.2 - libalpm v13.0.2", nil

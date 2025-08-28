@@ -259,6 +259,9 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 			command := "run --name nginx -d -p 8080:80 nginx:latest"
 
 			By("Installing container and caching status")
+			// Manually mark container as installed for testing purposes
+			mockExec.InstallationState["nginx"] = true
+
 			err := installer.Install(command, repo)
 			Expect(err).ToNot(HaveOccurred())
 
