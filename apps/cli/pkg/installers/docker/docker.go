@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/user"
 	"runtime"
 	"strings"
@@ -174,21 +173,10 @@ func (d *DockerInstaller) tryStartDockerService(ctx context.Context) error {
 	for _, method := range startupMethods {
 		log.Debug("Trying Docker startup method", "method", method.name)
 
-		// Use CommandContext for proper cancellation and security
-		cmd := exec.CommandContext(ctx, method.cmd[0], method.cmd[1:]...)
-
-		// For dockerd, run in background
-		if method.name == "dockerd" {
-			if err := cmd.Start(); err == nil {
-				log.Debug("Docker daemon started successfully", "method", method.name)
-				return nil
-			}
-		} else {
-			// For service/systemctl, run and wait
-			if err := cmd.Run(); err == nil {
-				log.Debug("Docker service started successfully", "method", method.name)
-				return nil
-			}
+		// Use mockable command executor for proper cancellation and security
+		if _, err := utils.CommandExec.RunCommand(ctx, method.cmd[0], method.cmd[1:]...); err == nil {
+			log.Debug("Docker startup method succeeded", "method", method.name)
+			return nil
 		}
 	}
 
@@ -444,22 +432,18 @@ func (d *DockerInstaller) Uninstall(command string, repo types.Repository) error
 	defer cancel()
 
 	// Try to stop the container
-	stopCmd := exec.CommandContext(ctx, "docker", "stop", containerName)
-	if err := stopCmd.Run(); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "docker", "stop", containerName); err != nil {
 		// Try with sudo
-		sudoStopCmd := exec.CommandContext(ctx, "sudo", "docker", "stop", containerName)
-		if err := sudoStopCmd.Run(); err != nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "docker", "stop", containerName); err != nil {
 			log.Warn("Failed to stop Docker container, continuing with removal", "containerName", containerName, "error", err)
 			// Continue with removal attempt even if stop failed
 		}
 	}
 
 	// Remove the container
-	rmCmd := exec.CommandContext(ctx, "docker", "rm", containerName)
-	if err := rmCmd.Run(); err != nil {
+	if _, err := utils.CommandExec.RunCommand(ctx, "docker", "rm", containerName); err != nil {
 		// Try with sudo
-		sudoRmCmd := exec.CommandContext(ctx, "sudo", "docker", "rm", containerName)
-		if err := sudoRmCmd.Run(); err != nil {
+		if _, err := utils.CommandExec.RunCommand(ctx, "sudo", "docker", "rm", containerName); err != nil {
 			log.Error("Failed to remove Docker container", err, "containerName", containerName)
 			return fmt.Errorf("failed to remove Docker container: %w", err)
 		}
@@ -506,18 +490,16 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), DockerGroupTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "docker", "ps",
+	output, err := utils.CommandExec.RunCommand(ctx, "docker", "ps",
 		"--filter", fmt.Sprintf("name=%s", containerName),
 		"--filter", "status=running",
 		"--format", "{{.Names}}")
-	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Try with sudo if regular command failed
-		sudoCmd := exec.CommandContext(ctx, "sudo", "docker", "ps",
+		output, err = utils.CommandExec.RunCommand(ctx, "sudo", "docker", "ps",
 			"--filter", fmt.Sprintf("name=%s", containerName),
 			"--filter", "status=running",
 			"--format", "{{.Names}}")
-		output, err = sudoCmd.CombinedOutput()
 		if err != nil {
 			// If both fail, container is likely not running or Docker is not available
 			isRunning := false
@@ -527,7 +509,7 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 	}
 
 	// Check if the container name appears in the output
-	isRunning := strings.Contains(string(output), containerName)
+	isRunning := strings.Contains(output, containerName)
 
 	// Cache the result
 	d.setCachedStatus(containerName, isRunning)
@@ -674,9 +656,9 @@ func (d *DockerInstaller) addUserToDockerGroup() error {
 	ctx, cancel := context.WithTimeout(context.Background(), DockerGroupTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", username)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, string(output))
+	output, err := utils.CommandExec.RunCommand(ctx, "sudo", "usermod", "-aG", "docker", username)
+	if err != nil {
+		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, output)
 	}
 
 	log.Info("User added to docker group. Session refresh may be required for permissions to take effect.", "user", username)
@@ -703,9 +685,9 @@ func (d *DockerInstaller) addUserToDockerGroupWithContext(ctx context.Context) e
 	cmdCtx, cancel := context.WithTimeout(ctx, DockerGroupTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cmdCtx, "sudo", "usermod", "-aG", "docker", username)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, string(output))
+	output, err := utils.CommandExec.RunCommand(cmdCtx, "sudo", "usermod", "-aG", "docker", username)
+	if err != nil {
+		return fmt.Errorf("failed to add user to docker group: %w (output: %s)", err, output)
 	}
 
 	log.Info("User successfully added to docker group", "user", username, "note", "Group changes take effect after next login")
@@ -739,16 +721,16 @@ func getCurrentUserWithFallback() string {
 	defer cancel()
 
 	// Try using whoami command
-	if output, err := exec.CommandContext(ctx, "whoami").Output(); err == nil {
-		username := strings.TrimSpace(string(output))
+	if output, err := utils.CommandExec.RunCommand(ctx, "whoami"); err == nil {
+		username := strings.TrimSpace(output)
 		if username != "" {
 			return username
 		}
 	}
 
 	// Try using id -un command
-	if output, err := exec.CommandContext(ctx, "id", "-un").Output(); err == nil {
-		username := strings.TrimSpace(string(output))
+	if output, err := utils.CommandExec.RunCommand(ctx, "id", "-un"); err == nil {
+		username := strings.TrimSpace(output)
 		if username != "" {
 			return username
 		}
@@ -800,9 +782,9 @@ func validateUserExistence(ctx context.Context, username string) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(timeoutCtx, "id", username)
-	if output, err := cmd.Output(); err == nil {
-		idOutput := strings.TrimSpace(string(output))
+	output, err := utils.CommandExec.RunCommand(timeoutCtx, "id", username)
+	if err == nil {
+		idOutput := strings.TrimSpace(output)
 		if strings.Contains(idOutput, "uid=") {
 			log.Debug("User validation successful via id command",
 				"username", username,
@@ -812,9 +794,9 @@ func validateUserExistence(ctx context.Context, username string) error {
 	}
 
 	// Method 4: Use getent command (if available) for NSS databases
-	cmd = exec.CommandContext(timeoutCtx, "getent", "passwd", username)
-	if output, err := cmd.Output(); err == nil {
-		passwdEntry := strings.TrimSpace(string(output))
+	output, err = utils.CommandExec.RunCommand(timeoutCtx, "getent", "passwd", username)
+	if err == nil {
+		passwdEntry := strings.TrimSpace(output)
 		if strings.Contains(passwdEntry, username) {
 			log.Debug("User validation successful via getent",
 				"username", username,
@@ -878,8 +860,8 @@ func validateCurrentUserPermissions(ctx context.Context) error {
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(timeoutCtx, "sudo", "-n", "echo", "test")
-	if err := cmd.Run(); err != nil {
+	_, err := utils.CommandExec.RunCommand(timeoutCtx, "sudo", "-n", "echo", "test")
+	if err != nil {
 		return fmt.Errorf("current user %s lacks sudo privileges required for Docker installation", username)
 	}
 
@@ -922,16 +904,16 @@ func getCurrentUserWithFallbackContext(ctx context.Context) string {
 	defer cancel()
 
 	// Try using whoami command
-	if output, err := exec.CommandContext(cmdCtx, "whoami").Output(); err == nil {
-		username := strings.TrimSpace(string(output))
+	if output, err := utils.CommandExec.RunCommand(cmdCtx, "whoami"); err == nil {
+		username := strings.TrimSpace(output)
 		if username != "" {
 			return username
 		}
 	}
 
 	// Try using id -un command
-	if output, err := exec.CommandContext(cmdCtx, "id", "-un").Output(); err == nil {
-		username := strings.TrimSpace(string(output))
+	if output, err := utils.CommandExec.RunCommand(cmdCtx, "id", "-un"); err == nil {
+		username := strings.TrimSpace(output)
 		if username != "" {
 			return username
 		}
@@ -971,12 +953,9 @@ func executeDockerCommandWithContext(ctx context.Context, command string) error 
 		return fmt.Errorf("empty docker command")
 	}
 
-	// Prepend sudo to the command args
-	sudoArgs := append([]string{args[0]}, args[1:]...)
-	cmd := exec.CommandContext(cmdCtx, "sudo", sudoArgs...)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Error("Docker command failed with both user and sudo access", err, "command", command, "output", string(output))
+	// Try with sudo using the mockable interface
+	if _, err := utils.CommandExec.RunCommand(cmdCtx, "sudo", args...); err != nil {
+		log.Error("Docker command failed with both user and sudo access", err, "command", command)
 		return fmt.Errorf("docker command failed even with sudo - check if Docker daemon is running and accessible: %w", err)
 	}
 
