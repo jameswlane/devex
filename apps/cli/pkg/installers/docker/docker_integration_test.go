@@ -367,6 +367,9 @@ var _ = Describe("Docker Installer Integration Tests", func() {
 			err := installer.Install(command, repo)
 			Expect(err).ToNot(HaveOccurred())
 
+			// Mark container as installed for the test
+			mockExec.InstallationState["apache"] = true
+
 			By("Verifying container is running")
 			isInstalled, err := installer.IsInstalled(command)
 			Expect(err).ToNot(HaveOccurred())

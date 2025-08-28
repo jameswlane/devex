@@ -520,11 +520,26 @@ func (d *DockerInstaller) IsInstalled(command string) (bool, error) {
 
 func extractContainerName(command string) string {
 	parts := strings.Fields(command)
+
+	// Handle Docker run commands with --name flag
 	for i, part := range parts {
 		if part == "--name" && i+1 < len(parts) {
 			return parts[i+1]
 		}
 	}
+
+	// Handle Docker uninstall commands (stop/rm commands)
+	// Format: "stop containerName" or "stop containerName && rm containerName"
+	for i, part := range parts {
+		if (part == "stop" || part == "rm") && i+1 < len(parts) {
+			nextPart := parts[i+1]
+			// Skip shell operators
+			if nextPart != "&&" && nextPart != "||" && nextPart != ";" {
+				return nextPart
+			}
+		}
+	}
+
 	return ""
 }
 
