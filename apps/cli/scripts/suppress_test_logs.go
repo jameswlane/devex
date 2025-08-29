@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,7 +53,7 @@ func main() {
 }
 
 func updateTestSuite(path string) error {
-	content, err := ioutil.ReadFile(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
@@ -110,5 +109,5 @@ func updateTestSuite(path string) error {
 	fileContent = strings.TrimRight(fileContent, "\n") + logSuppression + "\n"
 
 	// Write the updated content
-	return ioutil.WriteFile(path, []byte(fileContent), 0644)
+	return os.WriteFile(path, []byte(fileContent), 0600)
 }
