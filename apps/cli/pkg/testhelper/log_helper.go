@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/jameswlane/devex/pkg/log"
-	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/ginkgo/v2"
 )
 
 // LogCapture provides a way to capture logs during tests
@@ -48,20 +48,12 @@ func CaptureLogsTo(capture *LogCapture) {
 	log.InitDefaultLogger(capture.Writer())
 }
 
-// SetupTestLogging is a convenience function for Ginkgo BeforeEach blocks
-// It suppresses all log output by default
-func SetupTestLogging() {
-	BeforeEach(func() {
-		SuppressLogs()
-	})
-}
-
 // SetupTestLoggingWithCapture sets up logging with capture capability
 // Returns a LogCapture instance that can be used to inspect logs
 func SetupTestLoggingWithCapture() *LogCapture {
 	var capture *LogCapture
 
-	BeforeEach(func() {
+	ginkgo.BeforeEach(func() {
 		capture = NewLogCapture()
 		CaptureLogsTo(capture)
 	})

@@ -27,4 +27,6 @@ var _ = AfterSuite(func() {
 })
 
 // Set up test logging suppression for all tests in this suite
-var _ = testhelper.SetupTestLogging()
+var _ = BeforeEach(func() {
+	testhelper.SuppressLogs()
+})

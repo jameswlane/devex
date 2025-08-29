@@ -63,7 +63,9 @@ var _ = Describe("LogHelper", func() {
 	})
 
 	Describe("SetupTestLogging", func() {
-		testhelper.SetupTestLogging()
+		BeforeEach(func() {
+			testhelper.SuppressLogs()
+		})
 
 		It("should suppress logs in all tests", func() {
 			// This log should not appear in test output
