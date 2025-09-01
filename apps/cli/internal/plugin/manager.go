@@ -145,7 +145,7 @@ func (m *ExecutableManager) RegisterCommands(rootCmd *cobra.Command) {
 				RunE: func(cmd *cobra.Command, args []string) error {
 					// Execute the plugin with the command name and args
 					pluginArgs := append([]string{cmdName}, args...)
-					return m.ExecutePlugin(cmd.Context(), pName, pluginArgs)
+					return m.ExecutePlugin(pName, pluginArgs)
 				},
 			}
 
@@ -198,7 +198,7 @@ func (m *ExecutableManager) InstallPlugin(sourcePath string, pluginName string) 
 	}
 
 	// Load the plugin
-	return m.loadPlugin(ctx, destPath)
+	return m.loadPlugin(destPath)
 }
 
 // RemovePlugin removes a plugin

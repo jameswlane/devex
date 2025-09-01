@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/jameswlane/devex/pkg/common"
-	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
 )

@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 )
 
 // Container detection methods - each focused on a specific detection technique
