@@ -10,11 +10,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	devex "github.com/jameswlane/devex/cmd"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/errors"
-	"github.com/jameswlane/devex/pkg/types"
+	devex "github.com/jameswlane/devex/apps/cli/cmd"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
+	"github.com/jameswlane/devex/apps/cli/internal/errors"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 var _ = Describe("Main", func() {

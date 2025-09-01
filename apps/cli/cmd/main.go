@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jameswlane/devex/pkg/commands"
-	"github.com/jameswlane/devex/pkg/config"
-	"github.com/jameswlane/devex/pkg/datastore"
-	"github.com/jameswlane/devex/pkg/datastore/repository"
-	"github.com/jameswlane/devex/pkg/log"
-	"github.com/jameswlane/devex/pkg/platform"
-	"github.com/jameswlane/devex/pkg/types"
-	"github.com/jameswlane/devex/pkg/utils"
+	"github.com/jameswlane/devex/apps/cli/internal/commands"
+	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
 
 var (
