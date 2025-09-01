@@ -225,15 +225,12 @@ func (d *Downloader) isPluginUpToDate(pluginPath, expectedChecksum string) bool 
 }
 
 // DownloadRequiredPlugins downloads all plugins required for the current platform
-func (d *Downloader) DownloadRequiredPlugins(platform *Platform) error {
+func (d *Downloader) DownloadRequiredPlugins(requiredPlugins []string) error {
 	registry, err := d.UpdateRegistry()
 	if err != nil {
 		return fmt.Errorf("failed to update registry: %w", err)
 	}
 
-	requiredPlugins := platform.GetRequiredPlugins()
-
-	fmt.Printf("Detected platform: %s\n", platform.String())
 	fmt.Printf("Required plugins: %s\n", strings.Join(requiredPlugins, ", "))
 
 	for _, pluginName := range requiredPlugins {
