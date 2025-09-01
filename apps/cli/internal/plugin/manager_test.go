@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -121,12 +122,20 @@ var _ = Describe("ExecutableManager", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should skip the plugin and continue", func() {
+			It("should create fallback plugin entry", func() {
 				err := manager.DiscoverPlugins()
 				Expect(err).NotTo(HaveOccurred())
 
 				plugins := manager.ListPlugins()
-				Expect(plugins).To(BeEmpty())
+				Expect(plugins).To(HaveLen(1))
+				Expect(plugins).To(HaveKey("test-plugin"))
+
+				// Verify fallback metadata
+				pluginInfo := plugins["test-plugin"]
+				Expect(pluginInfo.Name).To(Equal("test-plugin"))
+				Expect(pluginInfo.Version).To(Equal("unknown"))
+				Expect(pluginInfo.Description).To(Equal("DevEx plugin: test-plugin"))
+				Expect(pluginInfo.Commands).To(BeEmpty())
 			})
 		})
 	})
@@ -164,7 +173,7 @@ var _ = Describe("ExecutableManager", func() {
 			It("should return an error", func() {
 				err := manager.ExecutePlugin("nonexistent-plugin", []string{"test"})
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("plugin nonexistent-plugin not found"))
+				Expect(err.Error()).To(ContainSubstring("plugin nonexistent-plugin is not installed"))
 			})
 		})
 	})
@@ -211,14 +220,22 @@ var _ = Describe("ExecutableManager", func() {
 	})
 
 	Describe("RemovePlugin", func() {
+		var removablePluginPath string
+
 		BeforeEach(func() {
+			// Create a plugin with filename that matches the expected name
+			removablePluginPath = filepath.Join(tempDir, "devex-plugin-removable-plugin")
+			if runtime.GOOS == "windows" {
+				removablePluginPath += ".exe"
+			}
+
 			pluginInfo := sdk.PluginInfo{
 				Name:        "removable-plugin",
 				Version:     "1.0.0",
 				Description: "Plugin to remove",
 				Commands:    []sdk.PluginCommand{},
 			}
-			createMockPlugin(pluginPath, pluginInfo)
+			createMockPlugin(removablePluginPath, pluginInfo)
 
 			err := manager.DiscoverPlugins()
 			Expect(err).NotTo(HaveOccurred())
@@ -238,7 +255,7 @@ var _ = Describe("ExecutableManager", func() {
 				Expect(plugins).NotTo(HaveKey("removable-plugin"))
 
 				// Verify plugin file is deleted
-				Expect(pluginPath).NotTo(BeAnExistingFile())
+				Expect(removablePluginPath).NotTo(BeAnExistingFile())
 			})
 		})
 
@@ -246,7 +263,7 @@ var _ = Describe("ExecutableManager", func() {
 			It("should return an error", func() {
 				err := manager.RemovePlugin("nonexistent-plugin")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("plugin nonexistent-plugin not found"))
+				Expect(err.Error()).To(ContainSubstring("plugin nonexistent-plugin is not installed"))
 			})
 		})
 	})
@@ -268,10 +285,16 @@ func createMockPlugin(path string, info sdk.PluginInfo) {
 
 // createMockPluginScript creates a basic mock plugin script
 func createMockPluginScript(output string) string {
+	// If output contains "invalid json", make the plugin return invalid JSON for --plugin-info
+	pluginInfoOutput := `{"name":"test-plugin","version":"1.0.0","description":"Test plugin","commands":[]}`
+	if strings.Contains(output, "invalid json") {
+		pluginInfoOutput = "invalid json output"
+	}
+
 	if runtime.GOOS == "windows" {
 		return `@echo off
 if "%1"=="--plugin-info" (
-    echo {"name":"test-plugin","version":"1.0.0","description":"Test plugin","commands":[]}
+    echo ` + pluginInfoOutput + `
 ) else (
     echo ` + output + `
 )`
@@ -279,7 +302,7 @@ if "%1"=="--plugin-info" (
 
 	return `#!/bin/bash
 if [ "$1" = "--plugin-info" ]; then
-    echo '{"name":"test-plugin","version":"1.0.0","description":"Test plugin","commands":[]}'
+    echo '` + pluginInfoOutput + `'
 else
     echo "` + output + `"
 fi`

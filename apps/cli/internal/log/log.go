@@ -288,8 +288,7 @@ func Print(msg string, args ...any) {
 	}
 
 	if logger.silentMode || logger.testMode {
-		// In silent or test mode, log instead of printing
-		logger.logWithContext(log.InfoLevel, strings.TrimSpace(formattedMsg))
+		// In silent or test mode, suppress all output completely
 		return
 	}
 

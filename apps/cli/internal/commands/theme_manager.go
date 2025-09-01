@@ -14,18 +14,27 @@ import (
 
 // ValidatePath validates that targetPath is within basePath to prevent directory traversal
 func ValidatePath(targetPath, basePath string) error {
-	absTarget, err := filepath.Abs(targetPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve target path: %w", err)
-	}
-
 	absBase, err := filepath.Abs(basePath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve base path: %w", err)
 	}
 
+	var absTarget string
+	if filepath.IsAbs(targetPath) {
+		absTarget, err = filepath.Abs(targetPath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve target path: %w", err)
+		}
+	} else {
+		// For relative paths, resolve them relative to the base path
+		absTarget, err = filepath.Abs(filepath.Join(absBase, targetPath))
+		if err != nil {
+			return fmt.Errorf("failed to resolve target path: %w", err)
+		}
+	}
+
 	if !strings.HasPrefix(absTarget, absBase) {
-		return fmt.Errorf("path %s is outside base directory %s", absTarget, absBase)
+		return fmt.Errorf("path traversal detected: %s is outside base directory %s", absTarget, absBase)
 	}
 
 	return nil

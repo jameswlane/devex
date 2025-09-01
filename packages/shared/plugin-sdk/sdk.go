@@ -16,6 +16,101 @@ import (
 	"time"
 )
 
+// Logger interface for plugin SDK logging
+// Plugins can provide their own logger implementation or use a default
+type Logger interface {
+	Printf(format string, args ...any)
+	Println(msg string, args ...any)
+	Success(msg string, args ...any)
+	Warning(msg string, args ...any)
+	ErrorMsg(msg string, args ...any)
+	Info(msg string, keyvals ...any)
+	Warn(msg string, keyvals ...any)
+	Error(msg string, err error, keyvals ...any)
+	Debug(msg string, keyvals ...any)
+}
+
+// DefaultLogger provides basic console logging for plugins
+type DefaultLogger struct {
+	silent bool
+}
+
+// NewDefaultLogger creates a new default logger
+func NewDefaultLogger(silent bool) Logger {
+	return &DefaultLogger{silent: silent}
+}
+
+// Printf implements Logger interface
+func (l *DefaultLogger) Printf(format string, args ...any) {
+	if !l.silent {
+		fmt.Printf(format, args...)
+	}
+}
+
+// Println implements Logger interface
+func (l *DefaultLogger) Println(msg string, args ...any) {
+	if !l.silent {
+		if len(args) > 0 {
+			fmt.Printf(msg+"\n", args...)
+		} else {
+			fmt.Println(msg)
+		}
+	}
+}
+
+// Success implements Logger interface
+func (l *DefaultLogger) Success(msg string, args ...any) {
+	if !l.silent {
+		fmt.Printf("✅ "+msg+"\n", args...)
+	}
+}
+
+// Warning implements Logger interface
+func (l *DefaultLogger) Warning(msg string, args ...any) {
+	if !l.silent {
+		fmt.Printf("⚠️  "+msg+"\n", args...)
+	}
+}
+
+// ErrorMsg implements Logger interface
+func (l *DefaultLogger) ErrorMsg(msg string, args ...any) {
+	if !l.silent {
+		fmt.Printf("❌ "+msg+"\n", args...)
+	}
+}
+
+// Info implements Logger interface
+func (l *DefaultLogger) Info(msg string, keyvals ...any) {
+	if !l.silent {
+		fmt.Printf("INFO: "+msg+"\n")
+	}
+}
+
+// Warn implements Logger interface
+func (l *DefaultLogger) Warn(msg string, keyvals ...any) {
+	if !l.silent {
+		fmt.Printf("WARN: "+msg+"\n")
+	}
+}
+
+// Error implements Logger interface
+func (l *DefaultLogger) Error(msg string, err error, keyvals ...any) {
+	if !l.silent {
+		if err != nil {
+			fmt.Printf("ERROR: "+msg+" - %v\n", err)
+		} else {
+			fmt.Printf("ERROR: "+msg+"\n")
+		}
+	}
+}
+
+// Debug implements Logger interface
+func (l *DefaultLogger) Debug(msg string, keyvals ...any) {
+	if !l.silent {
+		fmt.Printf("DEBUG: "+msg+"\n")
+	}
+}
+
 // PluginInfo represents the standard plugin information
 type PluginInfo struct {
 	Name        string          `json:"name"`
@@ -225,6 +320,7 @@ type Downloader struct {
 	verifyChecksums  bool
 	verifySignatures bool
 	publicKeyPath    string
+	logger           Logger
 }
 
 // DownloaderConfig configures the plugin downloader
@@ -249,6 +345,7 @@ func NewDownloader(registryURL, pluginDir string) *Downloader {
 		verifyChecksums:  true,  // Enable checksum verification by default
 		verifySignatures: false, // Signature verification optional for now
 		publicKeyPath:    "",
+		logger:           NewDefaultLogger(false), // Default logger
 	}
 }
 
@@ -261,6 +358,21 @@ func NewSecureDownloader(config DownloaderConfig) *Downloader {
 		verifyChecksums:  config.VerifyChecksums,
 		verifySignatures: config.VerifySignatures,
 		publicKeyPath:    config.PublicKeyPath,
+		logger:           NewDefaultLogger(false), // Default logger
+	}
+}
+
+// SetLogger allows setting a custom logger for the downloader
+func (d *Downloader) SetLogger(logger Logger) {
+	if logger != nil {
+		d.logger = logger
+	}
+}
+
+// SetSilent enables/disables silent mode for the default logger
+func (d *Downloader) SetSilent(silent bool) {
+	if defaultLogger, ok := d.logger.(*DefaultLogger); ok {
+		defaultLogger.silent = silent
 	}
 }
 
@@ -338,11 +450,15 @@ func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName s
 // DownloadRequiredPlugins downloads all required plugins for the platform with verification
 func (d *Downloader) DownloadRequiredPlugins(requiredPlugins []string) error {
 	ctx := context.Background()
-	fmt.Printf("Downloading %d required plugins...\n", len(requiredPlugins))
+	if d.logger != nil {
+		d.logger.Printf("Downloading %d required plugins...\n", len(requiredPlugins))
+	}
 	
 	for _, pluginName := range requiredPlugins {
 		if err := d.DownloadPluginWithContext(ctx, pluginName); err != nil {
-			fmt.Printf("Warning: failed to download plugin %s: %v\n", pluginName, err)
+			if d.logger != nil {
+				d.logger.Warning("Failed to download plugin %s: %v", pluginName, err)
+			}
 			// Continue with other plugins rather than failing completely
 		}
 	}
@@ -370,7 +486,9 @@ func (d *Downloader) fetchRegistry() (*PluginRegistry, error) {
 	if err != nil {
 		// Return cached registry if available
 		if cachedRegistry != nil {
-			fmt.Printf("Warning: using cached registry (network unavailable)\n")
+			if d.logger != nil {
+				d.logger.Warning("Using cached registry (network unavailable)")
+			}
 			return cachedRegistry, nil
 		}
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
@@ -432,11 +550,15 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 
 	// Check if plugin already exists and is up to date
 	if d.isPluginUpToDate(pluginPath, binary.Checksum) {
-		fmt.Printf("Plugin %s is already up to date\n", pluginName)
+		if d.logger != nil {
+			d.logger.Printf("Plugin %s is already up to date\n", pluginName)
+		}
 		return nil
 	}
 
-	fmt.Printf("Downloading %s (%s)...\n", pluginName, binary.OS+"-"+binary.Arch)
+	if d.logger != nil {
+		d.logger.Printf("Downloading %s (%s)...\n", pluginName, binary.OS+"-"+binary.Arch)
+	}
 
 	// Create HTTP client with timeout
 	client := &http.Client{Timeout: 5 * time.Minute}
@@ -496,7 +618,9 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 		return fmt.Errorf("failed to move plugin to final location: %w", err)
 	}
 
-	fmt.Printf("Successfully installed plugin %s\n", pluginName)
+	if d.logger != nil {
+		d.logger.Success("Successfully installed plugin %s", pluginName)
+	}
 	return nil
 }
 
@@ -709,7 +833,7 @@ func (em *ExecutableManager) InstallPlugin(sourcePath, pluginName string) error 
 
 	// Clear cache to force refresh
 	em.cachedPlugins = make(map[string]PluginMetadata)
-	fmt.Printf("Successfully installed plugin %s\n", pluginName)
+	// Note: ExecutableManager doesn't have a logger, this would be handled by the calling code
 	return nil
 }
 

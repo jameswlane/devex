@@ -19,7 +19,7 @@ var _ = Describe("Commands", func() {
 	var settings config.CrossPlatformSettings
 
 	BeforeEach(func() {
-		log.InitDefaultLogger(io.Discard)         // Suppress logs during tests
+		log.InitTestLogger()                      // Initialize test logger to suppress all output
 		repo = &mocks.MockRepository{}            // Use centralized mock repository
 		settings = config.CrossPlatformSettings{} // Mock settings
 	})
@@ -45,26 +45,9 @@ var _ = Describe("Commands", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		It("has shell subcommand", func() {
-			shellCmd := cmd.Commands()
-			Expect(shellCmd).To(HaveLen(1))
-			Expect(shellCmd[0].Name()).To(Equal("shell"))
-
-			// Check that shell command has its own subcommands
-			shellSubCmds := shellCmd[0].Commands()
-			Expect(shellSubCmds).To(HaveLen(6))
-
-			subCmdNames := make([]string, len(shellSubCmds))
-			for i, subcmd := range shellSubCmds {
-				subCmdNames[i] = subcmd.Name()
-			}
-
-			Expect(subCmdNames).To(ContainElement("copy"))
-			Expect(subCmdNames).To(ContainElement("append"))
-			Expect(subCmdNames).To(ContainElement("status"))
-			Expect(subCmdNames).To(ContainElement("list"))
-			Expect(subCmdNames).To(ContainElement("debug"))
-			Expect(subCmdNames).To(ContainElement("test-copy"))
+		It("has no subcommands since functionality moved to plugins", func() {
+			subCommands := cmd.Commands()
+			Expect(subCommands).To(HaveLen(0))
 		})
 	})
 

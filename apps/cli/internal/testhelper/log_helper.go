@@ -6,6 +6,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/onsi/ginkgo/v2"
+	"github.com/spf13/cobra"
 )
 
 // LogCapture provides a way to capture logs during tests
@@ -59,4 +60,14 @@ func SetupTestLoggingWithCapture() *LogCapture {
 	})
 
 	return capture
+}
+
+// SuppressCommandOutput configures a cobra command to suppress all output during tests
+func SuppressCommandOutput(cmd *cobra.Command) {
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	// Also suppress output for all subcommands recursively
+	for _, subCmd := range cmd.Commands() {
+		SuppressCommandOutput(subCmd)
+	}
 }

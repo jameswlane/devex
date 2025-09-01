@@ -251,12 +251,45 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 
 	// Get unique themes from all applications
 	// TODO: Use desktop-themes plugin for theme management
-	var availableThemes []struct{ Name string }
+	var themeNames []string
+	themeSet := make(map[string]bool)
 
-	// Extract theme names
-	themeNames := make([]string, len(availableThemes))
-	for i, theme := range availableThemes {
-		themeNames[i] = theme.Name
+	// Extract theme names from collected apps
+	for _, appInterface := range allApps {
+		appMap, ok := appInterface.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		themesInterface, exists := appMap["themes"]
+		if !exists {
+			continue
+		}
+
+		themes, ok := themesInterface.([]interface{})
+		if !ok {
+			continue
+		}
+
+		for _, themeInterface := range themes {
+			themeMap, ok := themeInterface.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			themeName, exists := themeMap["name"]
+			if !exists {
+				continue
+			}
+
+			name, ok := themeName.(string)
+			if !ok || themeSet[name] {
+				continue
+			}
+
+			themeNames = append(themeNames, name)
+			themeSet[name] = true
+		}
 	}
 
 	log.Debug("Loaded themes from configurations", "count", len(themeNames), "themes", themeNames)

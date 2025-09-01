@@ -213,7 +213,9 @@ func (v *SystemGPGVerifier) VerifyDetachedSignature(filePath, signaturePath stri
 // Enhanced verifyPluginSignature implementation
 func (d *Downloader) verifyPluginSignature(pluginPath, downloadURL string) error {
 	if d.publicKeyPath == "" {
-		fmt.Printf("Warning: No public key configured for signature verification\n")
+		if d.logger != nil {
+			d.logger.Warning("No public key configured for signature verification")
+		}
 		return nil
 	}
 
@@ -225,7 +227,9 @@ func (d *Downloader) verifyPluginSignature(pluginPath, downloadURL string) error
 	
 	// Load public key
 	if err := verifier.LoadPublicKey(d.publicKeyPath); err != nil {
-		fmt.Printf("Warning: Failed to load public key with Go crypto: %v\n", err)
+		if d.logger != nil {
+			d.logger.Warning("Failed to load public key with Go crypto: %v", err)
+		}
 		
 		// Fallback to system GPG
 		return d.verifyWithSystemGPG(pluginPath, signatureURL)
@@ -233,13 +237,17 @@ func (d *Downloader) verifyPluginSignature(pluginPath, downloadURL string) error
 
 	// Verify using Go crypto
 	if err := verifier.VerifySignatureFromURL(pluginPath, signatureURL); err != nil {
-		fmt.Printf("Warning: Go crypto verification failed: %v\n", err)
+		if d.logger != nil {
+			d.logger.Warning("Go crypto verification failed: %v", err)
+		}
 		
 		// Fallback to system GPG
 		return d.verifyWithSystemGPG(pluginPath, signatureURL)
 	}
 
-	fmt.Printf("✅ Plugin signature verification successful\n")
+	if d.logger != nil {
+		d.logger.Success("Plugin signature verification successful")
+	}
 	return nil
 }
 
@@ -288,6 +296,8 @@ func (d *Downloader) verifyWithSystemGPG(pluginPath, signatureURL string) error 
 		return fmt.Errorf("signature verification failed: %w", err)
 	}
 
-	fmt.Printf("✅ Plugin signature verification successful (system GPG)\n")
+	if d.logger != nil {
+		d.logger.Success("Plugin signature verification successful (system GPG)")
+	}
 	return nil
 }

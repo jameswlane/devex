@@ -12,11 +12,24 @@ import (
 )
 
 var pluginBootstrap *bootstrap.PluginBootstrap
+var testMode bool
 
 // InitializeWithPluginBootstrap initializes the installer system with plugin bootstrap
 func InitializeWithPluginBootstrap(pb *bootstrap.PluginBootstrap) {
 	pluginBootstrap = pb
 	log.Debug("Installer system initialized with plugin bootstrap")
+}
+
+// EnableTestMode enables test mode with mock installers
+func EnableTestMode() {
+	testMode = true
+	log.Debug("Test mode enabled for installer system")
+}
+
+// DisableTestMode disables test mode
+func DisableTestMode() {
+	testMode = false
+	log.Debug("Test mode disabled for installer system")
 }
 
 // GetAvailableInstallers returns a list of available installer methods for the current platform
@@ -47,6 +60,17 @@ func GetAvailableInstallers() []string {
 
 // IsInstallerSupported checks if an installer method is supported on the current platform
 func IsInstallerSupported(method string) bool {
+	// In test mode, support common package managers for testing
+	if testMode {
+		supportedTestMethods := []string{"apt", "dnf", "pacman", "snap", "brew", "yum", "zypper"}
+		for _, supported := range supportedTestMethods {
+			if method == supported {
+				return true
+			}
+		}
+		return false
+	}
+
 	if pluginBootstrap == nil {
 		return false
 	}
@@ -59,10 +83,15 @@ func IsInstallerSupported(method string) bool {
 // GetInstaller returns the installer instance for the given method, or nil if not found
 // NOTE: This now uses the plugin system instead of direct installer instances
 func GetInstaller(method string) types.BaseInstaller {
-	// For now, we'll create a plugin-based installer wrapper
-	// This maintains compatibility while using the plugin system
 	if !IsInstallerSupported(method) {
 		return nil
+	}
+
+	// In test mode, return a mock installer
+	if testMode {
+		return &MockInstaller{
+			method: method,
+		}
 	}
 
 	return &PluginBasedInstaller{
@@ -141,7 +170,7 @@ func executeInstallCommand(app types.AppConfig, repo types.Repository) error {
 	installer := GetInstaller(app.InstallMethod)
 	if installer == nil {
 		log.Error("Unsupported install method", fmt.Errorf("method: %s", app.InstallMethod))
-		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
+		return fmt.Errorf("install method '%s' is not supported on this platform", app.InstallMethod)
 	}
 	log.Info("Executing installer", "method", app.InstallMethod)
 	return installer.Install(app.InstallCommand, repo)
@@ -240,4 +269,30 @@ func runInstallCommands(commands []types.InstallCommand) error {
 
 	log.Info("Completed runInstallCommands successfully")
 	return nil
+}
+
+// MockInstaller is a test-only installer that simulates package manager operations
+type MockInstaller struct {
+	method string
+}
+
+// Install simulates package installation
+func (m *MockInstaller) Install(command string, repo types.Repository) error {
+	log.Info("Mock install", "method", m.method, "command", command)
+	// Simulate successful installation in test mode
+	return nil
+}
+
+// Uninstall simulates package uninstallation
+func (m *MockInstaller) Uninstall(command string, repo types.Repository) error {
+	log.Info("Mock uninstall", "method", m.method, "command", command)
+	// Simulate successful uninstallation in test mode
+	return nil
+}
+
+// IsInstalled simulates checking if a package is installed
+func (m *MockInstaller) IsInstalled(command string) (bool, error) {
+	log.Info("Mock check installed", "method", m.method, "command", command)
+	// Simulate package being installed in test mode
+	return true, nil
 }

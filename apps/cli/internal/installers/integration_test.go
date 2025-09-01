@@ -27,10 +27,15 @@ var _ = Describe("Installer Pipeline", func() {
 		mockExec = mocks.NewMockCommandExecutor()
 		utils.CommandExec = mockExec
 		mockRepo = mocks.NewMockRepository()
+
+		// Enable test mode for mock installers
+		installers.EnableTestMode()
 	})
 
 	AfterEach(func() {
 		utils.CommandExec = originalExec
+		// Disable test mode
+		installers.DisableTestMode()
 	})
 
 	Describe("complete installer pipeline from selection to post-install", func() {

@@ -1,10 +1,9 @@
 package commands
 
 import (
-	"fmt"
-
 	"github.com/fatih/color"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/spf13/cobra"
 )
 
@@ -35,22 +34,22 @@ func runSystemCommand(settings config.CrossPlatformSettings) error {
 	yellow := color.New(color.FgYellow).SprintFunc()
 	cyan := color.New(color.FgCyan).SprintFunc()
 
-	fmt.Printf("%s System Configuration\n\n", cyan("🔧"))
-	fmt.Printf("%s System configuration features have been moved to plugins.\n", yellow("⚠️"))
-	fmt.Printf("To manage your system settings:\n\n")
-	fmt.Printf("📝 Shell Configuration:\n")
-	fmt.Printf("  devex plugin run tool-shell setup\n")
-	fmt.Printf("  devex plugin run tool-shell configure bash|zsh|fish\n\n")
-	fmt.Printf("🎨 Desktop Themes:\n")
-	fmt.Printf("  devex plugin run desktop-themes apply [theme-name]\n")
-	fmt.Printf("  devex plugin run desktop-themes list\n\n")
-	fmt.Printf("🔧 Git Configuration:\n")
-	fmt.Printf("  devex plugin run tool-git setup\n")
-	fmt.Printf("  devex plugin run tool-git configure\n\n")
-	fmt.Printf("🖥️ Desktop Environment:\n")
-	fmt.Printf("  devex plugin run desktop-gnome configure    # For GNOME\n")
-	fmt.Printf("  devex plugin run desktop-kde configure      # For KDE\n\n")
-	fmt.Printf("For more information, see: https://docs.devex.sh/plugins/\n")
+	log.Print("%s System Configuration\n\n", cyan("🔧"))
+	log.Print("%s System configuration features have been moved to plugins.\n", yellow("⚠️"))
+	log.Print("To manage your system settings:\n\n")
+	log.Print("📝 Shell Configuration:\n")
+	log.Print("  devex plugin run tool-shell setup\n")
+	log.Print("  devex plugin run tool-shell configure bash|zsh|fish\n\n")
+	log.Print("🎨 Desktop Themes:\n")
+	log.Print("  devex plugin run desktop-themes apply [theme-name]\n")
+	log.Print("  devex plugin run desktop-themes list\n\n")
+	log.Print("🔧 Git Configuration:\n")
+	log.Print("  devex plugin run tool-git setup\n")
+	log.Print("  devex plugin run tool-git configure\n\n")
+	log.Print("🖥️ Desktop Environment:\n")
+	log.Print("  devex plugin run desktop-gnome configure    # For GNOME\n")
+	log.Print("  devex plugin run desktop-kde configure      # For KDE\n\n")
+	log.Print("For more information, see: https://docs.devex.sh/plugins/\n")
 
 	return nil
 }
