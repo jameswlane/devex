@@ -1,0 +1,49 @@
+{
+	"name": "@devex/plugin-desktop-pantheon",
+	"version": "1.0.0",
+	"description": "Pantheon desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"pantheon",
+		"desktop",
+		"linux",
+		"elementary"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/desktop-pantheon"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "pantheon",
+			"dependencies": [
+				"gsettings",
+				"dconf",
+				"switchboard"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"dock": true,
+				"wingpanel": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
+}

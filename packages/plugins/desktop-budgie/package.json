@@ -1,0 +1,48 @@
+{
+	"name": "@devex/plugin-desktop-budgie",
+	"version": "1.0.0",
+	"description": "Budgie desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"budgie",
+		"desktop",
+		"linux",
+		"solus"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/desktop-budgie"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "budgie",
+			"dependencies": [
+				"gsettings",
+				"dconf",
+				"budgie-panel"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"applets": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
+}

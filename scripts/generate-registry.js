@@ -1,4 +1,3 @@
-// scripts/generate-registry.js
 const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');

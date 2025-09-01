@@ -1,5 +1,4 @@
 #!/bin/bash
-# scripts/release-plugins.sh
 
 set -e
 
