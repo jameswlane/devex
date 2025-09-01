@@ -38,8 +38,8 @@ func (lc *LogCapture) Writer() io.Writer {
 // SuppressLogs sets up log suppression for tests
 // This should be called in BeforeEach blocks
 func SuppressLogs() {
-	// Initialize logger with a discard writer
-	log.InitDefaultLogger(io.Discard)
+	// Initialize test logger that discards all output
+	log.InitTestLogger()
 }
 
 // CaptureLogsTo initializes logging to capture output

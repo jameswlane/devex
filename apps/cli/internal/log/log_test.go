@@ -50,6 +50,30 @@ var _ = Describe("WithContext", func() {
 	})
 })
 
+var _ = Describe("Test Mode", func() {
+	It("should suppress output in test mode", func() {
+		log.InitTestLogger()
+
+		// These should not produce any output
+		log.Print("This should be silent")
+		log.Printf("This should also be silent: %s", "test")
+		log.Success("Success message")
+		log.Warning("Warning message")
+		log.ErrorMsg("Error message")
+	})
+
+	It("should detect test mode correctly", func() {
+		log.InitTestLogger()
+		Expect(log.IsTestMode()).To(BeTrue())
+		Expect(log.IsSilentMode()).To(BeTrue())
+
+		buffer := &bytes.Buffer{}
+		log.InitDefaultLogger(buffer)
+		Expect(log.IsTestMode()).To(BeFalse())
+		Expect(log.IsSilentMode()).To(BeFalse())
+	})
+})
+
 var _ = Describe("Log Levels", func() {
 	It("logs informational messages", func() {
 		buffer := &bytes.Buffer{}

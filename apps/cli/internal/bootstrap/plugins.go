@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	sdk "github.com/jameswlane/devex/packages/shared/plugin-sdk"
 	"github.com/spf13/cobra"
@@ -49,9 +50,16 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 		}
 	}
 
+	downloader := sdk.NewDownloader(DefaultRegistryURL, pluginDir)
+
+	// Configure downloader logger based on test mode
+	if log.IsTestMode() {
+		downloader.SetSilent(true)
+	}
+
 	return &PluginBootstrap{
 		detector:     platform.NewDetector(),
-		downloader:   sdk.NewDownloader(DefaultRegistryURL, pluginDir),
+		downloader:   downloader,
 		manager:      sdk.NewExecutableManager(pluginDir),
 		skipDownload: skipDownload,
 	}, nil
@@ -70,7 +78,7 @@ func (b *PluginBootstrap) Initialize(ctx context.Context) error {
 	if !b.skipDownload {
 		requiredPlugins := platform.GetRequiredPlugins()
 		if err := b.downloader.DownloadRequiredPluginsWithContext(ctx, requiredPlugins); err != nil {
-			fmt.Printf("Warning: failed to download some plugins: %v\n", err)
+			log.Warning("Failed to download some plugins: %v", err)
 			// Continue anyway - some plugins might still be available
 		}
 	}
@@ -185,16 +193,16 @@ func (b *PluginBootstrap) handleListPlugins(cmd *cobra.Command, args []string) e
 	plugins := b.manager.ListPlugins()
 
 	if len(plugins) == 0 {
-		fmt.Println("No plugins installed")
-		fmt.Printf("Platform: %s\n", b.platform.String())
-		fmt.Printf("Available package managers: %s\n", strings.Join(b.platform.PackageManagers, ", "))
-		fmt.Println("\nRun 'devex plugin search' to find available plugins")
+		log.Println("No plugins installed")
+		log.Printf("Platform: %s", b.platform.String())
+		log.Printf("Available package managers: %s", strings.Join(b.platform.PackageManagers, ", "))
+		log.Println("\nRun 'devex plugin search' to find available plugins")
 		return nil
 	}
 
-	fmt.Printf("Platform: %s\n", b.platform.String())
-	fmt.Printf("Plugin directory: %s\n\n", b.manager.GetPluginDir())
-	fmt.Println("Installed plugins:")
+	log.Printf("Platform: %s", b.platform.String())
+	log.Printf("Plugin directory: %s\n", b.manager.GetPluginDir())
+	log.Println("Installed plugins:")
 
 	for name, pluginInfo := range plugins {
 		fmt.Printf("📦 %s v%s\n", name, pluginInfo.Version)

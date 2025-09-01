@@ -16,10 +16,12 @@ import (
 
 // Logger wraps the charmbracelet logger with additional context support.
 type Logger struct {
-	logger    *log.Logger
-	context   map[string]any
-	logFile   *os.File
-	debugMode bool
+	logger     *log.Logger
+	context    map[string]any
+	logFile    *os.File
+	debugMode  bool
+	testMode   bool // For silent testing
+	silentMode bool // For completely suppressing all output
 }
 
 var logger *Logger
@@ -38,15 +40,55 @@ func New(w io.Writer) *Logger {
 	l := log.New(w)           // Create a logger with the provided writer
 	l.SetLevel(log.InfoLevel) // Set the default log level
 	return &Logger{
-		logger:    l,
-		context:   make(map[string]any),
-		debugMode: false,
+		logger:     l,
+		context:    make(map[string]any),
+		debugMode:  false,
+		testMode:   false,
+		silentMode: false,
 	}
 }
 
 // InitDefaultLogger initializes the default logger with a specified writer.
 func InitDefaultLogger(w io.Writer) {
 	logger = New(w)
+}
+
+// InitTestLogger initializes a silent logger for tests.
+func InitTestLogger() {
+	logger = &Logger{
+		logger:     log.New(io.Discard), // Discard all output
+		context:    make(map[string]any),
+		debugMode:  false,
+		testMode:   true,
+		silentMode: true,
+	}
+}
+
+// InitSilentLogger initializes a completely silent logger.
+func InitSilentLogger() {
+	logger = &Logger{
+		logger:     log.New(io.Discard),
+		context:    make(map[string]any),
+		debugMode:  false,
+		testMode:   false,
+		silentMode: true,
+	}
+}
+
+// IsTestMode returns whether test mode is enabled.
+func IsTestMode() bool {
+	if logger != nil {
+		return logger.testMode
+	}
+	return false
+}
+
+// IsSilentMode returns whether silent mode is enabled.
+func IsSilentMode() bool {
+	if logger != nil {
+		return logger.silentMode
+	}
+	return false
 }
 
 // InitFileLogger initializes a file-based logger with optional debug mode and enhanced system information.
@@ -88,10 +130,12 @@ func InitFileLogger(debugMode bool) error {
 		writer = io.MultiWriter(file, os.Stderr)
 
 		logger = &Logger{
-			logger:    log.New(writer),
-			context:   make(map[string]any),
-			logFile:   file,
-			debugMode: true,
+			logger:     log.New(writer),
+			context:    make(map[string]any),
+			logFile:    file,
+			debugMode:  true,
+			testMode:   false,
+			silentMode: false,
 		}
 	} else {
 		// Normal mode: log only to file
@@ -113,10 +157,12 @@ func InitFileLogger(debugMode bool) error {
 		writer = file
 
 		logger = &Logger{
-			logger:    log.New(writer),
-			context:   make(map[string]any),
-			logFile:   file,
-			debugMode: false,
+			logger:     log.New(writer),
+			context:    make(map[string]any),
+			logFile:    file,
+			debugMode:  false,
+			testMode:   false,
+			silentMode: false,
 		}
 	}
 
@@ -227,6 +273,67 @@ func Fatal(msg string, err error, keyvals ...any) {
 func Debug(msg string, keyvals ...any) {
 	if logger != nil {
 		logger.logWithContext(log.DebugLevel, msg, keyvals...)
+	}
+}
+
+// Print outputs a message to stdout if not in silent/test mode, otherwise logs it.
+// This replaces fmt.Printf calls throughout the codebase for consistent output handling.
+func Print(msg string, args ...any) {
+	formattedMsg := fmt.Sprintf(msg, args...)
+
+	if logger == nil {
+		// No logger initialized, print to stdout as fallback
+		fmt.Print(formattedMsg)
+		return
+	}
+
+	if logger.silentMode || logger.testMode {
+		// In silent or test mode, log instead of printing
+		logger.logWithContext(log.InfoLevel, strings.TrimSpace(formattedMsg))
+		return
+	}
+
+	// Normal mode: print to stdout
+	fmt.Print(formattedMsg)
+}
+
+// Printf outputs a formatted message to stdout if not in silent/test mode, otherwise logs it.
+func Printf(format string, args ...any) {
+	Print(format, args...)
+}
+
+// Println outputs a message with newline to stdout if not in silent/test mode, otherwise logs it.
+func Println(msg string, args ...any) {
+	if len(args) > 0 {
+		Print(fmt.Sprintf(msg, args...) + "\n")
+	} else {
+		Print(msg + "\n")
+	}
+}
+
+// Success prints a success message with green checkmark (if colors supported).
+func Success(msg string, args ...any) {
+	formattedMsg := fmt.Sprintf("✅ "+msg, args...)
+	Print(formattedMsg + "\n")
+}
+
+// Warning prints a warning message with yellow warning icon.
+func Warning(msg string, args ...any) {
+	formattedMsg := fmt.Sprintf("⚠️  "+msg, args...)
+	Print(formattedMsg + "\n")
+	// Also log as warning
+	if logger != nil {
+		logger.logWithContext(log.WarnLevel, strings.TrimSpace(formattedMsg))
+	}
+}
+
+// ErrorMsg prints an error message with red cross icon.
+func ErrorMsg(msg string, args ...any) {
+	formattedMsg := fmt.Sprintf("❌ "+msg, args...)
+	Print(formattedMsg + "\n")
+	// Also log as error
+	if logger != nil {
+		logger.logWithContext(log.ErrorLevel, strings.TrimSpace(formattedMsg))
 	}
 }
 
