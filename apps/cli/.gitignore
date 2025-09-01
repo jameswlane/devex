@@ -4,6 +4,7 @@ vendor/
 # Build artifacts
 bin/
 *.out
+*.test
 coverage.out
 coverage.html
 test-results.json

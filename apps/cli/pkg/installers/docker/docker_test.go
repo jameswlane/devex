@@ -327,40 +327,42 @@ var _ = Describe("Docker Installer", func() {
 			BeforeEach(func() {
 				// Mock socket not existing
 				mockExec.FailingCommands["test -S /var/run/docker.sock"] = true
-				// Mock daemon startup command failing (this is the default behavior in the mock)
-				startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
-				mockExec.FailingCommands[startCmd] = true
+				// Mock individual daemon startup commands failing
+				mockExec.FailingCommands["sudo service docker start"] = true
+				mockExec.FailingCommands["sudo systemctl start docker"] = true
+				mockExec.FailingCommands["sudo dockerd --host=unix:///var/run/docker.sock"] = true
 			})
 
 			It("attempts daemon startup", func() {
 				err := installer.handleDockerInContainer()
 
 				Expect(err).To(HaveOccurred()) // Will fail in test environment
-				// Verify daemon startup was attempted
-				expectedStartCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
-				Expect(mockExec.Commands).To(ContainElement(expectedStartCmd))
+				// Verify daemon startup was attempted - check for individual commands
+				Expect(mockExec.Commands).To(ContainElement("sudo service docker start"))
 			})
 		})
 	})
 
 	Describe("attemptDockerDaemonStartup", func() {
 		It("attempts to start Docker daemon", func() {
-			// Explicitly configure the mock to fail the daemon startup command
-			startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
-			mockExec.FailingCommands[startCmd] = true
+			// Configure the mock to fail individual daemon startup commands
+			mockExec.FailingCommands["sudo service docker start"] = true
+			mockExec.FailingCommands["sudo systemctl start docker"] = true
+			mockExec.FailingCommands["sudo dockerd --host=unix:///var/run/docker.sock"] = true
 
 			err := installer.attemptDockerDaemonStartup()
 
 			Expect(err).To(HaveOccurred()) // Will fail in test environment
 
 			// Verify the startup command was called
-			expectedCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
-			Expect(mockExec.Commands).To(ContainElement(expectedCmd))
+			Expect(mockExec.Commands).To(ContainElement("sudo service docker start"))
 		})
 
 		It("handles startup command failure", func() {
-			startCmd := "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &"
-			mockExec.FailingCommands[startCmd] = true
+			// Configure individual commands to fail
+			mockExec.FailingCommands["sudo service docker start"] = true
+			mockExec.FailingCommands["sudo systemctl start docker"] = true
+			mockExec.FailingCommands["sudo dockerd --host=unix:///var/run/docker.sock"] = true
 
 			err := installer.attemptDockerDaemonStartup()
 
