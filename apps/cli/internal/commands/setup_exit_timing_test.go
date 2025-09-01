@@ -16,7 +16,7 @@ func TestAutoExitTiming(t *testing.T) {
 	createMockSetupModel := func() *SetupModel {
 		return &SetupModel{
 			step:             StepComplete,
-			detectedPlatform: platform.Platform{OS: "linux", DesktopEnv: "gnome"},
+			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 			hasErrors:        false,

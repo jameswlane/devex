@@ -240,10 +240,11 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 			// Get themes from the appropriate OS config
 			osConfig := app.GetOSConfig()
 			if len(osConfig.Themes) > 0 {
-				allApps = append(allApps, map[string]interface{}{
+				appWithThemes := map[string]interface{}{
 					"name":   app.Name,
 					"themes": convertThemesToInterface(osConfig.Themes),
-				})
+				}
+				allApps = append(allApps, appWithThemes)
 			}
 		}
 	}

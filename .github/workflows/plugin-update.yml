@@ -7,6 +7,7 @@ jobs:
   update-registry:
     permissions:
       contents: write
+      packages: read
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

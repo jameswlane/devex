@@ -73,7 +73,7 @@ func (b *PluginBootstrap) Initialize(ctx context.Context) error {
 
 // RegisterCommands registers all plugin commands with the root command
 func (b *PluginBootstrap) RegisterCommands(rootCmd *cobra.Command) {
-	b.manager.RegisterCommands(rootCmd)
+	_ = b.manager.RegisterCommands(rootCmd) // Ignore error as commands are optional
 
 	// Add plugin management commands
 	rootCmd.AddCommand(b.createPluginManagementCmd())

@@ -231,7 +231,7 @@ func (r *GitHubRegistry) cacheRegistry(registry *PluginRegistry) {
 		return
 	}
 
-	os.WriteFile(cachePath, data, 0644) // Ignore errors
+	_ = os.WriteFile(cachePath, data, 0644) // Ignore cache write errors
 }
 
 // loadCachedRegistry loads registry from cache
@@ -337,7 +337,7 @@ func (r *GitHubRegistry) extractPlugin(reader io.Reader, targetPath, sourceURL s
 
 	// This is a simplified extraction - you'd want proper tar.gz/zip handling
 	// For now, assume the archive contains a single binary
-	tempFile.Close()
+	_ = tempFile.Close() // Close temp file
 
 	return os.Rename(tempFile.Name(), targetPath)
 }

@@ -262,7 +262,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("matches direct OS match", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "linux",
 					Distribution: "ubuntu",
 				}
@@ -272,7 +272,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("matches distribution for Linux platform", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "linux",
 					Distribution: "ubuntu",
 				}
@@ -282,7 +282,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("does not match distribution for non-Linux platform", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "darwin",
 					Distribution: "macos",
 				}
@@ -292,7 +292,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("returns false for non-matching OS", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "darwin",
 					Distribution: "macos",
 				}
@@ -302,7 +302,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("returns false for non-matching distribution", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "linux",
 					Distribution: "fedora",
 				}
@@ -312,7 +312,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("handles empty OS requirement", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "linux",
 					Distribution: "ubuntu",
 				}
@@ -322,7 +322,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("handles empty platform OS", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "",
 					Distribution: "ubuntu",
 				}
@@ -332,7 +332,7 @@ var _ = Describe("Config", func() {
 			})
 
 			It("handles case sensitivity correctly", func() {
-				testPlatform := &platform.Platform{
+				testPlatform := &platform.DetectionResult{
 					OS:           "Linux",  // Capital L
 					Distribution: "Ubuntu", // Capital U
 				}
@@ -436,37 +436,37 @@ var _ = Describe("Config", func() {
 				testCases := []struct {
 					name        string
 					reqOS       string
-					platform    platform.Platform
+					platform    platform.DetectionResult
 					shouldMatch bool
 				}{
 					{
 						name:        "exact OS match",
 						reqOS:       "linux",
-						platform:    platform.Platform{OS: "linux", Distribution: "ubuntu"},
+						platform:    platform.DetectionResult{OS: "linux", Distribution: "ubuntu"},
 						shouldMatch: true,
 					},
 					{
 						name:        "distribution match on Linux",
 						reqOS:       "ubuntu",
-						platform:    platform.Platform{OS: "linux", Distribution: "ubuntu"},
+						platform:    platform.DetectionResult{OS: "linux", Distribution: "ubuntu"},
 						shouldMatch: true,
 					},
 					{
 						name:        "distribution no match on macOS",
 						reqOS:       "ubuntu",
-						platform:    platform.Platform{OS: "darwin", Distribution: "macos"},
+						platform:    platform.DetectionResult{OS: "darwin", Distribution: "macos"},
 						shouldMatch: false,
 					},
 					{
 						name:        "case sensitive OS",
 						reqOS:       "Linux",
-						platform:    platform.Platform{OS: "linux", Distribution: "ubuntu"},
+						platform:    platform.DetectionResult{OS: "linux", Distribution: "ubuntu"},
 						shouldMatch: false,
 					},
 					{
 						name:        "Windows direct match",
 						reqOS:       "windows",
-						platform:    platform.Platform{OS: "windows", Distribution: ""},
+						platform:    platform.DetectionResult{OS: "windows", Distribution: ""},
 						shouldMatch: true,
 					},
 				}

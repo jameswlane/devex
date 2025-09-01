@@ -307,7 +307,7 @@ var _ = Describe("Setup Command", func() {
 
 			It("handles Windows platform correctly", func() {
 				// Mock Windows detection
-				plat := platform.Platform{
+				plat := platform.DetectionResult{
 					OS:         "windows",
 					DesktopEnv: "none",
 				}
@@ -316,7 +316,7 @@ var _ = Describe("Setup Command", func() {
 
 			It("handles Linux desktop environments", func() {
 				// Mock Linux with GNOME
-				plat := platform.Platform{
+				plat := platform.DetectionResult{
 					OS:         "linux",
 					DesktopEnv: "gnome",
 				}
@@ -343,7 +343,7 @@ var _ = Describe("Setup Command", func() {
 			})
 
 			It("skips shell selection on Windows", func() {
-				plat := platform.Platform{OS: "windows"}
+				plat := platform.DetectionResult{OS: "windows"}
 				if plat.OS == "windows" {
 					// Should skip shell step
 					Expect(plat.OS).To(Equal("windows"))

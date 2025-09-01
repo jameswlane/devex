@@ -15,7 +15,7 @@ func TestDesktopEnvironmentFiltering(t *testing.T) {
 	// Create mock setup model with different desktop environments
 	createMockSetupModel := func(os, desktopEnv string) *SetupModel {
 		return &SetupModel{
-			detectedPlatform: platform.Platform{
+			detectedPlatform: platform.DetectionResult{
 				OS:         os,
 				DesktopEnv: desktopEnv,
 			},
@@ -206,7 +206,7 @@ func TestGetAvailableDesktopApps(t *testing.T) {
 		}
 
 		model := &SetupModel{
-			detectedPlatform: platform.Platform{
+			detectedPlatform: platform.DetectionResult{
 				OS:         "linux",
 				DesktopEnv: "gnome",
 			},
@@ -260,7 +260,7 @@ func TestGetAvailableDesktopApps(t *testing.T) {
 		}
 
 		model := &SetupModel{
-			detectedPlatform: platform.Platform{
+			detectedPlatform: platform.DetectionResult{
 				OS:         "linux",
 				DesktopEnv: "kde",
 			},

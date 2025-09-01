@@ -21,7 +21,7 @@ func TestGitConfigValidation(t *testing.T) {
 			gitInputField:    0,
 			gitFullName:      "",
 			gitEmail:         "",
-			detectedPlatform: platform.Platform{OS: "linux", DesktopEnv: "gnome"},
+			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 		}

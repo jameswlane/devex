@@ -181,25 +181,25 @@ func (d *Downloader) DownloadPlugin(registry *PluginRegistry, pluginName string)
 	multiWriter := io.MultiWriter(tempFile, hasher)
 
 	if _, err := io.Copy(multiWriter, resp.Body); err != nil {
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath) // Cleanup temp file
 		return fmt.Errorf("failed to download plugin: %w", err)
 	}
 
 	// Verify checksum
 	actualChecksum := hex.EncodeToString(hasher.Sum(nil))
 	if actualChecksum != binary.Checksum {
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath) // Cleanup temp file
 		return fmt.Errorf("checksum mismatch: expected %s, got %s", binary.Checksum, actualChecksum)
 	}
 
 	// Make executable and move to final location
 	if err := os.Chmod(tempPath, 0755); err != nil {
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath) // Cleanup temp file
 		return fmt.Errorf("failed to make plugin executable: %w", err)
 	}
 
 	if err := os.Rename(tempPath, pluginPath); err != nil {
-		os.Remove(tempPath)
+		_ = os.Remove(tempPath) // Cleanup temp file
 		return fmt.Errorf("failed to move plugin to final location: %w", err)
 	}
 

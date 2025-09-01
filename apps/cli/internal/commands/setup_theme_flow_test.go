@@ -19,7 +19,7 @@ func TestThemeSelectionFlow(t *testing.T) {
 			themes:           []string{"Tokyo Night", "Kanagawa", "Catppuccin"},
 			selectedTheme:    0,
 			cursor:           0,
-			detectedPlatform: platform.Platform{OS: "linux", DesktopEnv: "gnome"},
+			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 		}
@@ -194,7 +194,7 @@ func TestThemeStepNavigation(t *testing.T) {
 			step:             StepDesktopApps,
 			desktopApps:      []string{}, // No desktop apps
 			hasDesktop:       true,
-			detectedPlatform: platform.Platform{OS: "linux", DesktopEnv: "gnome"},
+			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 		}
@@ -210,7 +210,7 @@ func TestThemeStepNavigation(t *testing.T) {
 	t.Run("should skip shell step on Windows", func(t *testing.T) {
 		model := &SetupModel{
 			step:             StepShell,
-			detectedPlatform: platform.Platform{OS: "windows", DesktopEnv: ""},
+			detectedPlatform: platform.DetectionResult{OS: "windows", DesktopEnv: ""},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 		}
@@ -227,7 +227,7 @@ func TestThemeStepNavigation(t *testing.T) {
 			step:             StepWelcome,
 			hasDesktop:       true,
 			desktopApps:      []string{"Test App"},
-			detectedPlatform: platform.Platform{OS: "linux", DesktopEnv: "gnome"},
+			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 		}
@@ -262,7 +262,7 @@ func TestThemeStepNavigation(t *testing.T) {
 			step:             StepConfirmation,
 			hasDesktop:       true,
 			desktopApps:      []string{"Test App"},
-			detectedPlatform: platform.Platform{OS: "linux", DesktopEnv: "gnome"},
+			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
 		}
