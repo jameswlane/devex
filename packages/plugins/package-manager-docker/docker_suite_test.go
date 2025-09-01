@@ -3,6 +3,7 @@ package docker
 import (
 	"testing"
 
+	"github.com/jameswlane/devex/pkg/testhelper"
 	"github.com/jameswlane/devex/pkg/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -23,4 +24,9 @@ var _ = BeforeSuite(func() {
 var _ = AfterSuite(func() {
 	// Restore the original command executor
 	utils.CommandExec = originalExec
+})
+
+// Set up test logging suppression for all tests in this suite
+var _ = BeforeEach(func() {
+	testhelper.SuppressLogs()
 })

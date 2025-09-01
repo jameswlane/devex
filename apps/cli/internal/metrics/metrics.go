@@ -17,6 +17,7 @@ const (
 	MetricInstallStarted   MetricType = "install.started"
 	MetricInstallSucceeded MetricType = "install.succeeded"
 	MetricInstallFailed    MetricType = "install.failed"
+	MetricInstallSkipped   MetricType = "install.skipped"
 	MetricInstallDuration  MetricType = "install.duration"
 
 	// Uninstallation metrics
@@ -29,6 +30,7 @@ const (
 	MetricDockerSetupStarted   MetricType = "docker.setup.started"
 	MetricDockerSetupSucceeded MetricType = "docker.setup.succeeded"
 	MetricDockerSetupFailed    MetricType = "docker.setup.failed"
+	MetricDockerSetupSkipped   MetricType = "docker.setup.skipped"
 	MetricDockerDaemonReady    MetricType = "docker.daemon.ready"
 	MetricDockerGroupAdded     MetricType = "docker.group.added"
 
@@ -40,12 +42,17 @@ const (
 	MetricAPTCacheMiss       MetricType = "apt.cache.miss"
 
 	// Security metrics
-	MetricSecurityValidationFailed MetricType = "security.validation.failed"
-	MetricSecurityInjectionBlocked MetricType = "security.injection.blocked"
+	MetricSecurityValidationFailed  MetricType = "security.validation.failed"
+	MetricSecurityValidationSuccess MetricType = "security.validation.success"
+	MetricSecurityInjectionBlocked  MetricType = "security.injection.blocked"
 
 	// Performance metrics
 	MetricTimeoutOccurred MetricType = "timeout.occurred"
 	MetricRetryAttempted  MetricType = "retry.attempted"
+
+	// Container cache metrics
+	MetricContainerCacheHit  MetricType = "container.cache.hit"
+	MetricContainerCacheMiss MetricType = "container.cache.miss"
 )
 
 // Metric represents a single metric event
@@ -73,6 +80,7 @@ type Stats struct {
 	TotalInstalls          int64
 	SuccessfulInstalls     int64
 	FailedInstalls         int64
+	SkippedInstalls        int64
 	TotalUninstalls        int64
 	SuccessfulUninstalls   int64
 	FailedUninstalls       int64
@@ -179,6 +187,8 @@ func (c *InMemoryCollector) updateStats(metric Metric) {
 		c.stats.SuccessfulInstalls++
 	case MetricInstallFailed:
 		c.stats.FailedInstalls++
+	case MetricInstallSkipped:
+		c.stats.SkippedInstalls++
 	case MetricInstallDuration:
 		c.updateAverageInstallDuration(metric.Duration)
 	case MetricUninstallStarted:
@@ -305,6 +315,25 @@ func (t *InstallationTimer) Failure(err error) {
 	log.Error("Installation failed", err,
 		"installer", t.installer,
 		"package", t.packageName,
+		"duration", duration.String())
+}
+
+// Skip records a skipped installation
+func (t *InstallationTimer) Skip(reason string) {
+	duration := time.Since(t.startTime)
+	tags := map[string]string{
+		"installer": t.installer,
+		"package":   t.packageName,
+		"reason":    reason,
+	}
+
+	RecordCount(MetricInstallSkipped, tags)
+	RecordDuration(MetricInstallDuration, duration, tags)
+
+	log.Info("Installation skipped",
+		"installer", t.installer,
+		"package", t.packageName,
+		"reason", reason,
 		"duration", duration.String())
 }
 

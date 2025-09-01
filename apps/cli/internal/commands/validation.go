@@ -16,7 +16,10 @@ var (
 	// validPortMapping ensures port mappings follow expected format
 	validPortMapping = regexp.MustCompile(`^[0-9]+:[0-9]+$`)
 	// validEnvVar ensures environment variables are safe
-	validEnvVar = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*=[a-zA-Z0-9_.-]*$`)
+	// validEnvVar ensures environment variables are safe but allows realistic values
+	// Allows: letters, numbers, underscores, hyphens, dots, @, spaces, and common special chars
+	// Blocks: shell metacharacters, quotes, backticks, and command substitution
+	validEnvVar = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*=[a-zA-Z0-9_@#%+,:=/\.\s-]*$`)
 	// validShellPath ensures shell paths are absolute and contain safe characters
 	validShellPath = regexp.MustCompile(`^/[a-zA-Z0-9/_.-]+$`)
 	// validUsername ensures usernames contain only safe characters

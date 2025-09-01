@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/jameswlane/devex/pkg/backup"
 	"github.com/jameswlane/devex/pkg/config"
@@ -37,6 +38,7 @@ type ShellConfig struct {
 
 // ShellManager handles comprehensive shell setup and management
 type ShellManager struct {
+	mu         sync.Mutex // Protects concurrent file operations
 	homeDir    string
 	assetsDir  string
 	configDir  string
@@ -518,6 +520,8 @@ func (sm *ShellManager) BackupExistingConfig(configPath string) error {
 
 // CopyShellConfig copies a shell config from assets to home directory with proper naming
 func (sm *ShellManager) CopyShellConfig(shell ShellType, overwrite bool) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	configs := sm.GetShellConfigs()
 	config, exists := configs[shell]
 	if !exists {
@@ -593,6 +597,8 @@ func (sm *ShellManager) copyFileWithPermissions(src, dst string, permissions os.
 
 // AppendToShellConfig appends content to an existing shell config file
 func (sm *ShellManager) AppendToShellConfig(shell ShellType, content string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	configs := sm.GetShellConfigs()
 	config, exists := configs[shell]
 	if !exists {
@@ -712,6 +718,8 @@ func (sm *ShellManager) HasMarker(shell ShellType, marker string) (bool, error) 
 
 // AppendWithMarker appends content with a marker to prevent duplicates
 func (sm *ShellManager) AppendWithMarker(shell ShellType, marker, content string) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
 	// Check if marker already exists
 	exists, err := sm.HasMarker(shell, marker)
 	if err != nil {

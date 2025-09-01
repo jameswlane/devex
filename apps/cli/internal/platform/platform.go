@@ -6,6 +6,62 @@ import (
 	"strings"
 )
 
+// OSInfo represents operating system information for installers
+type OSInfo struct {
+	Distribution string
+	Version      string
+	Codename     string
+	Architecture string
+}
+
+// OSDetector interface for OS detection (enables mocking in tests)
+type OSDetector interface {
+	DetectOS() (*OSInfo, error)
+}
+
+// DefaultOSDetector implements OSDetector using the platform detection system
+type DefaultOSDetector struct {
+	detector *PlatformDetector
+}
+
+// NewOSDetector creates a new OS detector
+func NewOSDetector() OSDetector {
+	return &DefaultOSDetector{
+		detector: NewPlatformDetector(),
+	}
+}
+
+// DetectOS detects the operating system information
+func (d *DefaultOSDetector) DetectOS() (*OSInfo, error) {
+	platform := d.detector.Detect()
+
+	return &OSInfo{
+		Distribution: platform.Distribution,
+		Version:      platform.Version,
+		Codename:     d.detectCodename(),
+		Architecture: platform.Architecture,
+	}, nil
+}
+
+// detectCodename detects the version codename (Ubuntu/Debian)
+func (d *DefaultOSDetector) detectCodename() string {
+	if runtime.GOOS != "linux" {
+		return ""
+	}
+
+	// Try to read codename from /etc/os-release
+	if data, err := d.detector.fs.ReadFile("/etc/os-release"); err == nil {
+		content := string(data)
+		for _, line := range strings.Split(content, "\n") {
+			if strings.HasPrefix(line, "VERSION_CODENAME=") {
+				return strings.Trim(strings.TrimPrefix(line, "VERSION_CODENAME="), "\"")
+			}
+		}
+	}
+
+	return ""
+}
+
 // RuntimeProvider interface for runtime information
 type RuntimeProvider interface {
 	GOOS() string

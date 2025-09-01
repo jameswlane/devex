@@ -8,6 +8,13 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
+// Port constants for database containers
+const (
+	PostgreSQLPort = "5432:5432"
+	MySQLPort      = "3306:3306"
+	RedisPort      = "6379:6379"
+)
+
 // getSelectedDatabases returns the names of selected databases
 func (m *SetupModel) getSelectedDatabases() []string {
 	var selected []string
@@ -19,43 +26,22 @@ func (m *SetupModel) getSelectedDatabases() []string {
 	return selected
 }
 
-// getDockerApp returns a CrossPlatformApp for Docker installation
+// getDockerApp returns a CrossPlatformApp for Docker Engine installation using secure Go installer
 func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
 	return &types.CrossPlatformApp{
 		Name:        "docker",
-		Description: "Container platform for databases and services",
+		Description: "Container platform and runtime for developing, shipping, and running applications",
 		Linux: types.OSConfig{
-			InstallMethod:  "apt",
-			InstallCommand: "docker.io",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "sudo service docker start 2>/dev/null || sudo systemctl start docker 2>/dev/null || sudo dockerd --host=unix:///var/run/docker.sock --host=tcp://0.0.0.0:2375 &",
-				},
-				{
-					Shell: "sudo usermod -aG docker $USER",
-				},
-				{
-					Shell: "newgrp docker || true",
-				},
-			},
+			InstallMethod:  "docker",
+			InstallCommand: "docker-ce", // Triggers Docker Engine installation
 		},
 		MacOS: types.OSConfig{
 			InstallMethod:  "brew",
 			InstallCommand: "docker",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "open -a Docker",
-				},
-			},
 		},
 		Windows: types.OSConfig{
 			InstallMethod:  "winget",
 			InstallCommand: "Docker.DockerDesktop",
-			PostInstall: []types.InstallCommand{
-				{
-					Shell: "net start com.docker.service",
-				},
-			},
 		},
 	}
 }
