@@ -32,10 +32,22 @@ type PluginBootstrap struct {
 func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get home directory: %w", err)
+		return nil, fmt.Errorf("failed to get user home directory: %w", err)
+	}
+
+	// Verify the home directory is accessible
+	if _, err := os.Stat(homeDir); err != nil {
+		return nil, fmt.Errorf("failed to get user home directory: home directory not accessible: %w", err)
 	}
 
 	pluginDir := filepath.Join(homeDir, ".devex", "plugins")
+
+	// Create plugin directory if download is enabled (real use case)
+	if !skipDownload {
+		if err := os.MkdirAll(pluginDir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create plugin directory: %w", err)
+		}
+	}
 
 	return &PluginBootstrap{
 		detector:     platform.NewDetector(),
@@ -57,14 +69,14 @@ func (b *PluginBootstrap) Initialize(ctx context.Context) error {
 	// Download required plugins (unless skipped)
 	if !b.skipDownload {
 		requiredPlugins := platform.GetRequiredPlugins()
-		if err := b.downloader.DownloadRequiredPlugins(requiredPlugins); err != nil {
+		if err := b.downloader.DownloadRequiredPluginsWithContext(ctx, requiredPlugins); err != nil {
 			fmt.Printf("Warning: failed to download some plugins: %v\n", err)
 			// Continue anyway - some plugins might still be available
 		}
 	}
 
 	// Discover and load available plugins
-	if err := b.manager.DiscoverPlugins(); err != nil {
+	if err := b.manager.DiscoverPluginsWithContext(ctx); err != nil {
 		return fmt.Errorf("failed to discover plugins: %w", err)
 	}
 
@@ -235,8 +247,8 @@ func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string)
 
 		// Check if available for current platform
 		platformSupported := false
-		for _, supportedPlatform := range metadata.Platforms {
-			if supportedPlatform == runtime.GOOS {
+		for platformKey := range metadata.Platforms {
+			if strings.HasPrefix(platformKey, runtime.GOOS) {
 				platformSupported = true
 				break
 			}

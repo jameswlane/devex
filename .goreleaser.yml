@@ -1,9 +1,6 @@
-# .goreleaser.yml
 version: 2
 project_name: devex
-# Build configuration for main CLI
 builds:
-  # Main DevEx CLI
   - id: devex-cli
     main: ./apps/cli
     binary: devex
@@ -17,11 +14,181 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-      - -X main.commit={{.Commit}}
-      - -X main.date={{.Date}}
-  # Package Manager Plugins
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+      - "-X main.commit={{.Commit}}"
+      - "-X main.date={{.Date}}"
+  - id: plugin-budgie
+    main: ./packages/plugins/desktop-budgie
+    binary: devex-plugin-desktop-budgie
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-cinnamon
+    main: ./packages/plugins/desktop-cinnamon
+    binary: devex-plugin-desktop-cinnamon
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-cosmic
+    main: ./packages/plugins/desktop-cosmic
+    binary: devex-plugin-desktop-cosmic
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-fonts
+    main: ./packages/plugins/desktop-fonts
+    binary: devex-plugin-desktop-fonts
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-gnome
+    main: ./packages/plugins/desktop-gnome
+    binary: devex-plugin-desktop-gnome
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-kde
+    main: ./packages/plugins/desktop-kde
+    binary: devex-plugin-desktop-kde
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-lxqt
+    main: ./packages/plugins/desktop-lxqt
+    binary: devex-plugin-desktop-lxqt
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-mate
+    main: ./packages/plugins/desktop-mate
+    binary: devex-plugin-desktop-mate
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-pantheon
+    main: ./packages/plugins/desktop-pantheon
+    binary: devex-plugin-desktop-pantheon
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-themes
+    main: ./packages/plugins/desktop-themes
+    binary: devex-plugin-desktop-themes
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-xfce
+    main: ./packages/plugins/desktop-xfce
+    binary: devex-plugin-desktop-xfce
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-apk
+    main: ./packages/plugins/package-manager-apk
+    binary: devex-plugin-package-manager-apk
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-appimage
+    main: ./packages/plugins/package-manager-appimage
+    binary: devex-plugin-package-manager-appimage
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
   - id: plugin-apt
     main: ./packages/plugins/package-manager-apt
     binary: devex-plugin-package-manager-apt
@@ -33,11 +200,40 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-  - id: plugin-yum
-    main: ./packages/plugins/package-manager-yum
-    binary: devex-plugin-package-manager-yum
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-brew
+    main: ./packages/plugins/package-manager-brew
+    binary: devex-plugin-package-manager-brew
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-curlpipe
+    main: ./packages/plugins/package-manager-curlpipe
+    binary: devex-plugin-package-manager-curlpipe
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-deb
+    main: ./packages/plugins/package-manager-deb
+    binary: devex-plugin-package-manager-deb
     env:
       - CGO_ENABLED=0
     goos:
@@ -46,8 +242,118 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-dnf
+    main: ./packages/plugins/package-manager-dnf
+    binary: devex-plugin-package-manager-dnf
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-docker
+    main: ./packages/plugins/package-manager-docker
+    binary: devex-plugin-package-manager-docker
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-emerge
+    main: ./packages/plugins/package-manager-emerge
+    binary: devex-plugin-package-manager-emerge
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-eopkg
+    main: ./packages/plugins/package-manager-eopkg
+    binary: devex-plugin-package-manager-eopkg
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-flatpak
+    main: ./packages/plugins/package-manager-flatpak
+    binary: devex-plugin-package-manager-flatpak
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-mise
+    main: ./packages/plugins/package-manager-mise
+    binary: devex-plugin-package-manager-mise
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-nixflake
+    main: ./packages/plugins/package-manager-nixflake
+    binary: devex-plugin-package-manager-nixflake
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-nixpkgs
+    main: ./packages/plugins/package-manager-nixpkgs
+    binary: devex-plugin-package-manager-nixpkgs
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
   - id: plugin-pacman
     main: ./packages/plugins/package-manager-pacman
     binary: devex-plugin-package-manager-pacman
@@ -59,129 +365,406 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-  - id: plugin-brew
-    main: ./packages/plugins/package-manager-brew
-    binary: devex-plugin-package-manager-brew
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-pip
+    main: ./packages/plugins/package-manager-pip
+    binary: devex-plugin-package-manager-pip
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-rpm
+    main: ./packages/plugins/package-manager-rpm
+    binary: devex-plugin-package-manager-rpm
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-snap
+    main: ./packages/plugins/package-manager-snap
+    binary: devex-plugin-package-manager-snap
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-xbps
+    main: ./packages/plugins/package-manager-xbps
+    binary: devex-plugin-package-manager-xbps
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-yay
+    main: ./packages/plugins/package-manager-yay
+    binary: devex-plugin-package-manager-yay
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-zypper
+    main: ./packages/plugins/package-manager-zypper
+    binary: devex-plugin-package-manager-zypper
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-setup
+    main: ./packages/plugins/system-setup
+    binary: devex-plugin-system-setup
     env:
       - CGO_ENABLED=0
     goos:
       - linux
       - darwin
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-  - id: plugin-choco
-    main: ./packages/plugins/package-manager-choco
-    binary: devex-plugin-package-manager-choco
-    env:
-      - CGO_ENABLED=0
-    goos:
       - windows
     goarch:
       - amd64
       - arm64
     ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-  - id: plugin-winget
-    main: ./packages/plugins/package-manager-winget
-    binary: devex-plugin-package-manager-winget
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-git
+    main: ./packages/plugins/tool-git
+    binary: devex-plugin-tool-git
     env:
       - CGO_ENABLED=0
     goos:
+      - linux
+      - darwin
       - windows
     goarch:
       - amd64
       - arm64
     ldflags:
-      - -s -w
-      - -X main.version={{.Version}}
-# Archive configuration
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-shell
+    main: ./packages/plugins/tool-shell
+    binary: devex-plugin-tool-shell
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+  - id: plugin-stackdetector
+    main: ./packages/plugins/tool-stackdetector
+    binary: devex-plugin-tool-stackdetector
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
 archives:
   - id: main-archive
     builds:
       - devex-cli
-    name_template: "devex_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: devex_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format: tar.gz
     format_overrides:
       - goos: windows
         format: zip
-  # Plugin archives - separate archive per plugin
+  - id: plugin-budgie-archive
+    builds:
+      - plugin-budgie
+    name_template: devex-plugin-desktop-budgie_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-cinnamon-archive
+    builds:
+      - plugin-cinnamon
+    name_template: devex-plugin-desktop-cinnamon_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-cosmic-archive
+    builds:
+      - plugin-cosmic
+    name_template: devex-plugin-desktop-cosmic_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-fonts-archive
+    builds:
+      - plugin-fonts
+    name_template: devex-plugin-desktop-fonts_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-gnome-archive
+    builds:
+      - plugin-gnome
+    name_template: devex-plugin-desktop-gnome_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-kde-archive
+    builds:
+      - plugin-kde
+    name_template: devex-plugin-desktop-kde_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-lxqt-archive
+    builds:
+      - plugin-lxqt
+    name_template: devex-plugin-desktop-lxqt_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-mate-archive
+    builds:
+      - plugin-mate
+    name_template: devex-plugin-desktop-mate_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-pantheon-archive
+    builds:
+      - plugin-pantheon
+    name_template: devex-plugin-desktop-pantheon_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-themes-archive
+    builds:
+      - plugin-themes
+    name_template: devex-plugin-desktop-themes_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-xfce-archive
+    builds:
+      - plugin-xfce
+    name_template: devex-plugin-desktop-xfce_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-apk-archive
+    builds:
+      - plugin-apk
+    name_template: devex-plugin-package-manager-apk_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-appimage-archive
+    builds:
+      - plugin-appimage
+    name_template: devex-plugin-package-manager-appimage_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
   - id: plugin-apt-archive
     builds:
       - plugin-apt
-    name_template: "devex-plugin-package-manager-apt_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
-  - id: plugin-yum-archive
-    builds:
-      - plugin-yum
-    name_template: "devex-plugin-package-manager-yum_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
-  - id: plugin-pacman-archive
-    builds:
-      - plugin-pacman
-    name_template: "devex-plugin-package-manager-pacman_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: devex-plugin-package-manager-apt_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format: tar.gz
   - id: plugin-brew-archive
     builds:
       - plugin-brew
-    name_template: "devex-plugin-package-manager-brew_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: devex-plugin-package-manager-brew_{{ .Version }}_{{ .Os }}_{{ .Arch }}
     format: tar.gz
-  - id: plugin-choco-archive
+  - id: plugin-curlpipe-archive
     builds:
-      - plugin-choco
-    name_template: "devex-plugin-package-manager-choco_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: zip
-  - id: plugin-winget-archive
+      - plugin-curlpipe
+    name_template: devex-plugin-package-manager-curlpipe_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-deb-archive
     builds:
-      - plugin-winget
-    name_template: "devex-plugin-package-manager-winget_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    format: zip
-# Checksum
+      - plugin-deb
+    name_template: devex-plugin-package-manager-deb_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-dnf-archive
+    builds:
+      - plugin-dnf
+    name_template: devex-plugin-package-manager-dnf_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-docker-archive
+    builds:
+      - plugin-docker
+    name_template: devex-plugin-package-manager-docker_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-emerge-archive
+    builds:
+      - plugin-emerge
+    name_template: devex-plugin-package-manager-emerge_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-eopkg-archive
+    builds:
+      - plugin-eopkg
+    name_template: devex-plugin-package-manager-eopkg_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-flatpak-archive
+    builds:
+      - plugin-flatpak
+    name_template: devex-plugin-package-manager-flatpak_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-mise-archive
+    builds:
+      - plugin-mise
+    name_template: devex-plugin-package-manager-mise_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-nixflake-archive
+    builds:
+      - plugin-nixflake
+    name_template: devex-plugin-package-manager-nixflake_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-nixpkgs-archive
+    builds:
+      - plugin-nixpkgs
+    name_template: devex-plugin-package-manager-nixpkgs_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-pacman-archive
+    builds:
+      - plugin-pacman
+    name_template: devex-plugin-package-manager-pacman_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-pip-archive
+    builds:
+      - plugin-pip
+    name_template: devex-plugin-package-manager-pip_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-rpm-archive
+    builds:
+      - plugin-rpm
+    name_template: devex-plugin-package-manager-rpm_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-snap-archive
+    builds:
+      - plugin-snap
+    name_template: devex-plugin-package-manager-snap_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-xbps-archive
+    builds:
+      - plugin-xbps
+    name_template: devex-plugin-package-manager-xbps_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-yay-archive
+    builds:
+      - plugin-yay
+    name_template: devex-plugin-package-manager-yay_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-zypper-archive
+    builds:
+      - plugin-zypper
+    name_template: devex-plugin-package-manager-zypper_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+  - id: plugin-setup-archive
+    builds:
+      - plugin-setup
+    name_template: devex-plugin-system-setup_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-git-archive
+    builds:
+      - plugin-git
+    name_template: devex-plugin-tool-git_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-shell-archive
+    builds:
+      - plugin-shell
+    name_template: devex-plugin-tool-shell_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+  - id: plugin-stackdetector-archive
+    builds:
+      - plugin-stackdetector
+    name_template: devex-plugin-tool-stackdetector_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
 checksum:
-  name_template: 'checksums.txt'
-# Changelog
+  name_template: checksums.txt
+signs:
+  - artifacts: checksum
+    args:
+      - "--batch"
+      - "--local-user"
+      - "{{ .Env.GPG_FINGERPRINT }}"
+      - "--output"
+      - ${signature}
+      - "--detach-sign"
+      - ${artifact}
 changelog:
   sort: asc
   use: github
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
   groups:
-    - title: 'New Features'
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+    - title: New Features
+      regexp: ^.*?feat(\([[:word:]]+\))??!?:.+$
       order: 0
-    - title: 'Bug Fixes'
-      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+    - title: Bug Fixes
+      regexp: ^.*?fix(\([[:word:]]+\))??!?:.+$
       order: 1
-    - title: 'Plugin Updates'
-      regexp: '^.*?plugin(\([[:word:]]+\))??!?:.+$'
+    - title: Plugin Updates
+      regexp: ^.*?plugin(\([[:word:]]+\))??!?:.+$
       order: 2
-    - title: 'Others'
+    - title: Others
       order: 999
-# GitHub Release
 release:
   github:
     owner: jameswlane
     name: devex
-  name_template: "DevEx v{{ .Version }}"
+  name_template: DevEx v{{ .Version }}
   mode: replace
   draft: false
   prerelease: auto
-# Custom hooks to generate registry
 after:
   hooks:
     - cmd: node scripts/generate-registry.js {{ .Version }}
       env:
         - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
-# Homebrew
 brews:
   - name: devex
     ids:
@@ -191,9 +774,8 @@ brews:
       name: homebrew-devex
     folder: Formula
     homepage: https://devex.sh
-    description: "CLI tool for efficiently setting up and managing development environments"
+    description: CLI tool for efficiently setting up and managing development environments
     license: GPL-3.0
-# Snapcraft
 snapcrafts:
   - id: devex-snap
     builds:
@@ -207,7 +789,6 @@ snapcrafts:
     grade: stable
     confinement: classic
     license: GPL-3.0
-# Scoop (Windows)
 scoops:
   - name: devex
     ids:
@@ -217,5 +798,5 @@ scoops:
       name: scoop-devex
     folder: bucket
     homepage: https://devex.sh
-    description: "CLI tool for efficiently setting up and managing development environments"
+    description: CLI tool for efficiently setting up and managing development environments
     license: GPL-3.0
