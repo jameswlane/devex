@@ -1,4 +1,3 @@
-// internal/bootstrap/plugins.go
 package bootstrap
 
 import (
@@ -6,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 
@@ -93,7 +93,10 @@ func (b *PluginBootstrap) Initialize(ctx context.Context) error {
 
 // RegisterCommands registers all plugin commands with the root command
 func (b *PluginBootstrap) RegisterCommands(rootCmd *cobra.Command) {
-	_ = b.manager.RegisterCommands(rootCmd) // Ignore error as commands are optional
+	if err := b.manager.RegisterCommands(rootCmd); err != nil {
+		log.Warning("Failed to register some plugin commands: %v", err)
+		// Continue anyway - plugin commands are optional
+	}
 
 	// Add plugin management commands
 	rootCmd.AddCommand(b.createPluginManagementCmd())
@@ -111,6 +114,11 @@ func (b *PluginBootstrap) GetAvailablePlugins() (map[string]sdk.PluginMetadata, 
 
 // IsPluginAvailable checks if a plugin is available for installation
 func (b *PluginBootstrap) IsPluginAvailable(pluginName string) bool {
+	if err := validatePluginName(pluginName); err != nil {
+		log.Warn("Invalid plugin name provided", "name", pluginName, "error", err)
+		return false
+	}
+
 	plugins, err := b.downloader.GetAvailablePlugins()
 	if err != nil {
 		return false
@@ -121,6 +129,10 @@ func (b *PluginBootstrap) IsPluginAvailable(pluginName string) bool {
 
 // ExecutePlugin executes a plugin with given arguments
 func (b *PluginBootstrap) ExecutePlugin(pluginName string, args []string) error {
+	if err := validatePluginName(pluginName); err != nil {
+		return fmt.Errorf("invalid plugin name: %w", err)
+	}
+
 	return b.manager.ExecutePlugin(pluginName, args)
 }
 
@@ -383,4 +395,60 @@ func getCommandNames(commands []sdk.PluginCommand) []string {
 		names[i] = cmd.Name
 	}
 	return names
+}
+
+// Regular expression for valid plugin names
+// Allows alphanumeric characters, hyphens, and underscores
+// Prevents directory traversal attacks and special characters
+var validPluginNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+
+// validatePluginName validates plugin name to prevent directory traversal and injection attacks
+func validatePluginName(pluginName string) error {
+	if pluginName == "" {
+		return fmt.Errorf("plugin name cannot be empty")
+	}
+
+	// Check length constraints
+	if len(pluginName) > 64 {
+		return fmt.Errorf("plugin name too long (max 64 characters): %s", pluginName)
+	}
+
+	if len(pluginName) < 1 {
+		return fmt.Errorf("plugin name too short (min 1 character)")
+	}
+
+	// Check for directory traversal attempts
+	if strings.Contains(pluginName, "..") ||
+		strings.Contains(pluginName, "/") ||
+		strings.Contains(pluginName, "\\") {
+		return fmt.Errorf("plugin name contains invalid characters (directory traversal detected): %s", pluginName)
+	}
+
+	// Check for null bytes and control characters
+	for _, char := range pluginName {
+		if char == 0 || char < 32 {
+			return fmt.Errorf("plugin name contains null bytes or control characters: %s", pluginName)
+		}
+	}
+
+	// Validate against regex pattern
+	if !validPluginNameRegex.MatchString(pluginName) {
+		return fmt.Errorf("plugin name contains invalid characters (must be alphanumeric with hyphens/underscores, start with alphanumeric): %s", pluginName)
+	}
+
+	// Check for reserved names
+	reservedNames := []string{
+		".", "..", "CON", "PRN", "AUX", "NUL",
+		"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+		"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+	}
+
+	upperPluginName := strings.ToUpper(pluginName)
+	for _, reserved := range reservedNames {
+		if upperPluginName == reserved {
+			return fmt.Errorf("plugin name is reserved and cannot be used: %s", pluginName)
+		}
+	}
+
+	return nil
 }

@@ -1,4 +1,3 @@
-// internal/plugin/github_registry.go
 package plugin
 
 import (

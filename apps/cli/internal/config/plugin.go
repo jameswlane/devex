@@ -1,4 +1,3 @@
-// internal/config/plugin.go
 package config
 
 import (

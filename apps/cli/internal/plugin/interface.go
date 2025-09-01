@@ -1,4 +1,3 @@
-// internal/plugin/interface.go
 package plugin
 
 import (
