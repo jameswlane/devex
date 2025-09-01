@@ -4,8 +4,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/jameswlane/devex/pkg/log"
-	"github.com/jameswlane/devex/pkg/testhelper"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 )
 
 var _ = Describe("LogHelper", func() {

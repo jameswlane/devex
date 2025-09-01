@@ -1,7 +1,6 @@
 package plugin_test
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -18,7 +17,6 @@ var _ = Describe("ExecutableManager", func() {
 		manager    *sdk.ExecutableManager
 		tempDir    string
 		pluginPath string
-		ctx        context.Context
 	)
 
 	BeforeEach(func() {
@@ -27,7 +25,6 @@ var _ = Describe("ExecutableManager", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		manager = sdk.NewExecutableManager(tempDir)
-		ctx = context.Background()
 
 		// Create a mock plugin executable for testing
 		pluginPath = filepath.Join(tempDir, "devex-plugin-test-plugin")
@@ -52,7 +49,7 @@ var _ = Describe("ExecutableManager", func() {
 	Describe("DiscoverPlugins", func() {
 		Context("when plugin directory is empty", func() {
 			It("should discover no plugins", func() {
-				err := manager.DiscoverPlugins(ctx)
+				err := manager.DiscoverPlugins()
 				Expect(err).NotTo(HaveOccurred())
 
 				plugins := manager.ListPlugins()
@@ -78,7 +75,7 @@ var _ = Describe("ExecutableManager", func() {
 			})
 
 			It("should discover and load plugins", func() {
-				err := manager.DiscoverPlugins(ctx)
+				err := manager.DiscoverPlugins()
 				Expect(err).NotTo(HaveOccurred())
 
 				plugins := manager.ListPlugins()
@@ -108,7 +105,7 @@ var _ = Describe("ExecutableManager", func() {
 			})
 
 			It("should ignore invalid files", func() {
-				err := manager.DiscoverPlugins(ctx)
+				err := manager.DiscoverPlugins()
 				Expect(err).NotTo(HaveOccurred())
 
 				plugins := manager.ListPlugins()
@@ -125,7 +122,7 @@ var _ = Describe("ExecutableManager", func() {
 			})
 
 			It("should skip the plugin and continue", func() {
-				err := manager.DiscoverPlugins(ctx)
+				err := manager.DiscoverPlugins()
 				Expect(err).NotTo(HaveOccurred())
 
 				plugins := manager.ListPlugins()
@@ -152,20 +149,20 @@ var _ = Describe("ExecutableManager", func() {
 			}
 			createMockPlugin(pluginPath, pluginInfo)
 
-			err := manager.DiscoverPlugins(ctx)
+			err := manager.DiscoverPlugins()
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		Context("when plugin exists", func() {
 			It("should execute plugin with correct arguments", func() {
-				err := manager.ExecutePlugin(ctx, "test-plugin", []string{"hello", "world"})
+				err := manager.ExecutePlugin("test-plugin", []string{"hello", "world"})
 				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 
 		Context("when plugin does not exist", func() {
 			It("should return an error", func() {
-				err := manager.ExecutePlugin(ctx, "nonexistent-plugin", []string{"test"})
+				err := manager.ExecutePlugin("nonexistent-plugin", []string{"test"})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("plugin nonexistent-plugin not found"))
 			})
@@ -189,7 +186,7 @@ var _ = Describe("ExecutableManager", func() {
 			})
 
 			It("should install plugin successfully", func() {
-				err := manager.InstallPlugin(ctx, sourcePath, "installed-plugin")
+				err := manager.InstallPlugin(sourcePath, "installed-plugin")
 				Expect(err).NotTo(HaveOccurred())
 
 				plugins := manager.ListPlugins()
@@ -206,7 +203,7 @@ var _ = Describe("ExecutableManager", func() {
 
 		Context("when source file does not exist", func() {
 			It("should return an error", func() {
-				err := manager.InstallPlugin(ctx, "/nonexistent/path", "test-plugin")
+				err := manager.InstallPlugin("/nonexistent/path", "test-plugin")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("failed to open source plugin"))
 			})
@@ -223,7 +220,7 @@ var _ = Describe("ExecutableManager", func() {
 			}
 			createMockPlugin(pluginPath, pluginInfo)
 
-			err := manager.DiscoverPlugins(ctx)
+			err := manager.DiscoverPlugins()
 			Expect(err).NotTo(HaveOccurred())
 		})
 

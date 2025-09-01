@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 
-	"github.com/jameswlane/devex/pkg/log"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/onsi/ginkgo/v2"
 )
 

@@ -49,7 +49,7 @@ func NewExecutableManager(pluginDir string) *ExecutableManager {
 }
 
 // DiscoverPlugins discovers all plugins in the plugin directory
-func (m *ExecutableManager) DiscoverPlugins(ctx context.Context) error {
+func (m *ExecutableManager) DiscoverPlugins() error {
 	if err := os.MkdirAll(m.pluginDir, 0755); err != nil {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
@@ -70,7 +70,7 @@ func (m *ExecutableManager) DiscoverPlugins(ctx context.Context) error {
 		}
 
 		pluginPath := filepath.Join(m.pluginDir, entry.Name())
-		if err := m.loadPlugin(ctx, pluginPath); err != nil {
+		if err := m.loadPlugin(pluginPath); err != nil {
 			log.Warn("Failed to load plugin", "path", pluginPath, "error", err)
 			continue
 		}
@@ -81,8 +81,9 @@ func (m *ExecutableManager) DiscoverPlugins(ctx context.Context) error {
 }
 
 // loadPlugin loads a single plugin
-func (m *ExecutableManager) loadPlugin(ctx context.Context, pluginPath string) error {
+func (m *ExecutableManager) loadPlugin(pluginPath string) error {
 	// Get plugin info by running the plugin with --plugin-info flag
+	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, pluginPath, "--plugin-info")
 	output, err := cmd.Output()
 	if err != nil {
@@ -107,12 +108,13 @@ func (m *ExecutableManager) ListPlugins() map[string]*PluginInfo {
 }
 
 // ExecutePlugin executes a plugin with the given arguments
-func (m *ExecutableManager) ExecutePlugin(ctx context.Context, pluginName string, args []string) error {
+func (m *ExecutableManager) ExecutePlugin(pluginName string, args []string) error {
 	plugin, exists := m.plugins[pluginName]
 	if !exists {
 		return fmt.Errorf("plugin %s not found", pluginName)
 	}
 
+	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, plugin.Path, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -165,7 +167,7 @@ func (m *ExecutableManager) GetPluginDir() string {
 }
 
 // InstallPlugin installs a plugin from a given path
-func (m *ExecutableManager) InstallPlugin(ctx context.Context, sourcePath string, pluginName string) error {
+func (m *ExecutableManager) InstallPlugin(sourcePath string, pluginName string) error {
 	destPath := filepath.Join(m.pluginDir, fmt.Sprintf("devex-plugin-%s", pluginName))
 	if runtime.GOOS == "windows" {
 		destPath += ".exe"

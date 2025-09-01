@@ -3,7 +3,7 @@ package errors_test
 import (
 	"testing"
 
-	"github.com/jameswlane/devex/pkg/testhelper"
+	"github.com/jameswlane/devex/apps/cli/internal/testhelper"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

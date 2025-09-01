@@ -212,11 +212,6 @@ const (
 	DirectoryPermissions   = 0755
 	ExecutablePermissions  = 0755
 	RegularFilePermissions = 0644
-
-	// Database configuration
-	PostgreSQLPort = "5432:5432"
-	MySQLPort      = "3306:3306"
-	RedisPort      = "6379:6379"
 )
 
 // FallbackThemes provides default themes when configuration is unavailable
