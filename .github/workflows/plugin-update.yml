@@ -8,6 +8,8 @@ jobs:
     permissions:
       contents: write
       packages: read
+      actions: read
+      security-events: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

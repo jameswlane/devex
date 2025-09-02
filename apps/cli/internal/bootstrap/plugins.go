@@ -13,6 +13,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	sdk "github.com/jameswlane/devex/packages/shared/plugin-sdk"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -59,12 +60,18 @@ func getRegistryURLFromConfig() string {
 		return ""
 	}
 
-	// Simple regex to extract registry URL from YAML
-	// This is a basic implementation - in production you'd use a proper YAML parser
-	re := regexp.MustCompile(`(?m)^\s*plugin_registry_url:\s*["']?([^"'\s]+)["']?`)
-	matches := re.FindSubmatch(data)
-	if len(matches) > 1 {
-		return string(matches[1])
+	// Parse YAML properly to extract registry URL
+	var config struct {
+		PluginRegistryURL string `yaml:"plugin_registry_url"`
+	}
+
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		// If YAML parsing fails, return empty string (fallback to default)
+		return ""
+	}
+
+	if config.PluginRegistryURL != "" {
+		return config.PluginRegistryURL
 	}
 
 	return ""
@@ -511,10 +518,6 @@ func validatePluginName(pluginName string) error {
 	// Check length constraints
 	if len(pluginName) > 64 {
 		return fmt.Errorf("plugin name too long (max 64 characters): %s", pluginName)
-	}
-
-	if len(pluginName) < 1 {
-		return fmt.Errorf("plugin name too short (min 1 character)")
 	}
 
 	// Check for directory traversal attempts

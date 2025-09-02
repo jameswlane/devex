@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 )
 
 // Platform represents the detected platform information
@@ -19,16 +20,39 @@ type Platform struct {
 	PackageManagers []string // apt, yum, pacman, brew, choco, etc.
 }
 
-// Detector handles platform detection
-type Detector struct{}
+// Detector handles platform detection with caching
+type Detector struct {
+	mu             sync.RWMutex
+	cachedPlatform *Platform
+}
 
 // NewDetector creates a new platform detector
 func NewDetector() *Detector {
 	return &Detector{}
 }
 
-// DetectPlatform detects the current platform and available package managers
+// DetectPlatform detects the current platform and available package managers with caching
 func (d *Detector) DetectPlatform() (*Platform, error) {
+	// Check if we already have cached platform info
+	d.mu.RLock()
+	if d.cachedPlatform != nil {
+		cached := *d.cachedPlatform // Return a copy to prevent mutation
+		d.mu.RUnlock()
+		return &cached, nil
+	}
+	d.mu.RUnlock()
+
+	// Acquire write lock for detection
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// Double-check in case another goroutine populated the cache
+	if d.cachedPlatform != nil {
+		cached := *d.cachedPlatform
+		return &cached, nil
+	}
+
+	// Perform actual detection
 	platform := &Platform{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
@@ -56,6 +80,9 @@ func (d *Detector) DetectPlatform() (*Platform, error) {
 
 	// Detect available package managers
 	d.detectPackageManagers(platform)
+
+	// Cache the result
+	d.cachedPlatform = platform
 
 	return platform, nil
 }

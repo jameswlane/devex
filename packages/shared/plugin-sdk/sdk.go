@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -619,11 +620,25 @@ func (d *Downloader) UpdateRegistry() error {
 	return err
 }
 
-// fetchRegistry fetches the plugin registry with caching
+// getCacheDuration returns cache duration based on environment
+func (d *Downloader) getCacheDuration() time.Duration {
+	// Check for development environment
+	if env := os.Getenv("DEVEX_ENV"); env == "development" || env == "dev" {
+		return 5 * time.Minute // Shorter cache in development
+	}
+	if env := os.Getenv("NODE_ENV"); env == "development" {
+		return 5 * time.Minute
+	}
+	
+	return 1 * time.Hour // Default production cache duration
+}
+
+// fetchRegistry fetches the plugin registry with environment-aware caching
 func (d *Downloader) fetchRegistry() (*PluginRegistry, error) {
 	// Try to load from cache first
 	cachedRegistry := d.loadCachedRegistry()
-	if cachedRegistry != nil && time.Since(cachedRegistry.LastUpdated) < 1*time.Hour {
+	cacheDuration := d.getCacheDuration()
+	if cachedRegistry != nil && time.Since(cachedRegistry.LastUpdated) < cacheDuration {
 		return cachedRegistry, nil
 	}
 
@@ -798,6 +813,7 @@ type ExecutableManager struct {
 	cachedPlugins map[string]PluginMetadata
 	cacheTime     time.Time
 	loadTimeout   time.Duration
+	mu            sync.RWMutex
 }
 
 // NewExecutableManager creates a new executable manager with caching
@@ -805,7 +821,7 @@ func NewExecutableManager(pluginDir string) *ExecutableManager {
 	return &ExecutableManager{
 		pluginDir:     pluginDir,
 		cachedPlugins: make(map[string]PluginMetadata),
-		loadTimeout:   30 * time.Second,
+		loadTimeout:   10 * time.Second, // Reduced from 30s for better CLI responsiveness
 	}
 }
 
@@ -816,9 +832,30 @@ func (em *ExecutableManager) GetPluginDir() string {
 
 // ListPlugins returns installed plugins with caching
 func (em *ExecutableManager) ListPlugins() map[string]PluginMetadata {
-	// Return cached plugins if recent
+	// Check cached plugins with read lock
+	em.mu.RLock()
 	if time.Since(em.cacheTime) < 30*time.Second {
-		return em.cachedPlugins
+		// Return a copy to prevent external mutations
+		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
+		for k, v := range em.cachedPlugins {
+			result[k] = v
+		}
+		em.mu.RUnlock()
+		return result
+	}
+	em.mu.RUnlock()
+
+	// Acquire write lock for cache refresh
+	em.mu.Lock()
+	defer em.mu.Unlock()
+
+	// Double-check cache after acquiring write lock
+	if time.Since(em.cacheTime) < 30*time.Second {
+		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
+		for k, v := range em.cachedPlugins {
+			result[k] = v
+		}
+		return result
 	}
 
 	plugins := make(map[string]PluginMetadata)
@@ -939,7 +976,9 @@ func (em *ExecutableManager) RemovePlugin(pluginName string) error {
 	}
 
 	// Clear cache to force refresh
+	em.mu.Lock()
 	em.cachedPlugins = make(map[string]PluginMetadata)
+	em.mu.Unlock()
 	return nil
 }
 
@@ -978,7 +1017,9 @@ func (em *ExecutableManager) InstallPlugin(sourcePath, pluginName string) error 
 	}
 
 	// Clear cache to force refresh
+	em.mu.Lock()
 	em.cachedPlugins = make(map[string]PluginMetadata)
+	em.mu.Unlock()
 	// Note: ExecutableManager doesn't have a logger, this would be handled by the calling code
 	return nil
 }

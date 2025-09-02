@@ -198,5 +198,14 @@ func (p *APTPlugin) handleInfo(args []string) error {
 
 func main() {
 	plugin := NewAPTPlugin()
+	
+	// Handle args with potential panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "Plugin panic recovered: %v\n", r)
+			os.Exit(1)
+		}
+	}()
+	
 	sdk.HandleArgs(plugin, os.Args[1:])
 }
