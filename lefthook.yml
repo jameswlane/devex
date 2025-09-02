@@ -90,6 +90,19 @@ pre-commit:
       glob: '*.{js,ts,jsx,tsx}'
       run: pnpm exec biome check --write {staged_files}
       stage_fixed: true
+    plugin-changes-check:
+      run: |
+        echo "🔍 Checking for plugin changes..."
+        ./scripts/check-plugin-changes.sh
+    plugin-build-changed:
+      run: |
+        if ./scripts/check-plugin-changes.sh | grep -q "Changed plugins:"; then
+          echo "🔨 Building changed plugins..."
+          ./scripts/release-plugin-individual.sh build
+        else
+          echo "ℹ️ No plugin changes detected, skipping build"
+        fi
+      stage_fixed: true
 commit-msg:
   commands:
     commitlint:
@@ -121,18 +134,6 @@ pre-push:
     docs-build:
       root: 'apps/docs/'
       run: pnpm turbo run build --filter=docs
-    plugin-changes-check:
-      run: |
-        echo "🔍 Checking for plugin changes..."
-        ./scripts/check-plugin-changes.sh
-    plugin-build-changed:
-      run: |
-        if ./scripts/check-plugin-changes.sh | grep -q "Changed plugins:"; then
-          echo "🔨 Building changed plugins..."
-          ./scripts/release-plugin-individual.sh build
-        else
-          echo "ℹ️ No plugin changes detected, skipping build"
-        fi
 commands: &commands
   lint-go:
     root: 'apps/cli/'
