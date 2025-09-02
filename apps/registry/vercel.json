@@ -1,11 +1,5 @@
 {
 	"$schema": "https://openapi.vercel.sh/vercel.json",
-	"framework": null,
-	"functions": {
-		"api/**/*.js": {
-			"runtime": "@vercel/node@3"
-		}
-	},
 	"rewrites": [
 		{
 			"source": "/v1/registry.json",
