@@ -95,6 +95,9 @@ linters:
       # Allow secure file permissions
       - text: "(G301|G302|G306): .* permissions"
         linters: [gosec]
+      # Allow secure file permissions (alternative pattern)
+      - text: "G30[1-6]"
+        linters: [gosec]
       # Allow context issues during migration
       - text: "context.Context should be the first parameter"
         linters: [contextcheck]
@@ -104,12 +107,6 @@ issues:
   max-same-issues: 0
   # Don't make issues unique by line (can hide multiple issues on same line)
   uniq-by-line: false
-  # Exclude specific patterns during migration
-  exclude:
-    # Temporarily allow unused code in migration
-    - "is unused"
-    # Allow secure file permissions (false positives)  
-    - "G30[1-6]"
 run:
   # Timeout for analysis
   timeout: 5m
