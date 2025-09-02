@@ -158,3 +158,4 @@ The package.json should include DevEx-specific metadata:
 - Check plugin changes: `./scripts/check-plugin-changes.sh -v`
 - Test individual plugin: `./scripts/release-plugin-individual.sh test <plugin-name>`
 - Check version logic: `node scripts/determine-plugin-version.js check <plugin-name>`
+
