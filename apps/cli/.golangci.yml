@@ -105,13 +105,11 @@ issues:
   # Don't make issues unique by line (can hide multiple issues on same line)
   uniq-by-line: false
   # Exclude specific patterns during migration
-  exclude-rules:
+  exclude:
     # Temporarily allow unused code in migration
-    - linters: [unused]
-      text: "is unused"
-    # Allow secure file permissions (false positives)
-    - linters: [gosec]
-      text: "G30[1-6]"
+    - "is unused"
+    # Allow secure file permissions (false positives)  
+    - "G30[1-6]"
 run:
   # Timeout for analysis
   timeout: 5m
