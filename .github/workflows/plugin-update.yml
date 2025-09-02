@@ -1,8 +1,29 @@
 name: Plugin Registry Update
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/plugins/**'
+      - 'scripts/generate-registry.js'
+      - 'scripts/release-plugins.sh'
+      - '.github/workflows/plugin-update.yml'
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Release mode'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - all
+          - validate
+      plugins:
+        description: 'Specific plugins to release (comma-separated, empty for auto-detection)'
+        required: false
+        type: string
 jobs:
   update-registry:
     permissions:
@@ -14,31 +35,90 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'scripts/package-lock.json'
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.24.6
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('packages/plugins/**/go.sum') }}
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 10.15.1
+          run_install: false
       - name: Install dependencies
         run: |
           cd scripts
           npm install @octokit/rest
-      - name: Generate registry
+          # Install Task for plugin builds
+          go install github.com/go-task/task/v3/cmd/task@latest
+      - name: Determine release mode
+        id: mode
         run: |
-          node scripts/generate-registry.js ${{ github.event.release.tag_name || 'latest' }}
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+            echo "plugins=${{ github.event.inputs.plugins }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            echo "mode=registry-only" >> $GITHUB_OUTPUT
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "mode=auto" >> $GITHUB_OUTPUT
+          fi
+      - name: Build and Release Plugins
+        if: steps.mode.outputs.mode != 'registry-only'
+        run: |
+          chmod +x scripts/release-plugins.sh
+
+          case "${{ steps.mode.outputs.mode }}" in
+            "all")
+              ./scripts/release-plugins.sh all
+              ;;
+            "validate")
+              if [ -n "${{ steps.mode.outputs.plugins }}" ]; then
+                IFS=',' read -ra PLUGINS <<< "${{ steps.mode.outputs.plugins }}"
+                ./scripts/release-plugins.sh validate "${PLUGINS[@]}"
+              else
+                ./scripts/release-plugins.sh validate
+              fi
+              ;;
+            *)
+              ./scripts/release-plugins.sh auto
+              ;;
+          esac
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Deploy to Vercel
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Generate registry for existing release
+        if: steps.mode.outputs.mode == 'registry-only'
+        run: |
+          node scripts/generate-registry.js ${{ steps.mode.outputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy registry to Vercel
         run: |
           cd apps/registry
+          pnpm install
           npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - name: Commit updated registry
+        if: steps.mode.outputs.mode == 'registry-only'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add apps/registry/public/v1/registry.json
-          git diff --staged --quiet || git commit -m "chore: update plugin registry for ${{ github.event.release.tag_name }}"
+          git add apps/registry/public/v1/registry.json apps/registry/public/v1/index.json || true
+          git diff --staged --quiet || git commit -m "chore: update plugin registry for ${{ steps.mode.outputs.tag }}"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
