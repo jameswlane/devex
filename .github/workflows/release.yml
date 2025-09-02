@@ -127,6 +127,8 @@ jobs:
         run: |
           # Install Task for plugin builds
           go install github.com/go-task/task/v3/cmd/task@latest
+          # Install GoReleaser for plugin releases
+          go install github.com/goreleaser/goreleaser@latest
 
           # Release all plugins
           chmod +x scripts/release-plugins.sh
@@ -134,3 +136,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          OWNER: jameswlane
+          REPO: devex
