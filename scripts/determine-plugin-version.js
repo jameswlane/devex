@@ -27,9 +27,16 @@ class PluginVersionManager {
             if (!output) return [];
 
             return output.split('\n').map(line => {
-                const [hash, subject, body = ''] = line.split('|');
+                const parts = line.split('|');
+                const [hash, subject, body = ''] = parts;
+                
+                // Skip malformed lines
+                if (!hash || !subject) {
+                    return null;
+                }
+                
                 return { hash, subject, body };
-            });
+            }).filter(Boolean);
         } catch (error) {
             console.error(`Error getting commits for ${pluginPath}:`, error.message);
             return [];
@@ -49,7 +56,13 @@ class PluginVersionManager {
         };
 
         for (const commit of commits) {
-            const fullMessage = `${commit.subject}\n${commit.body}`;
+            // Skip commits with missing subject
+            if (!commit || !commit.subject) {
+                console.warn('Skipping commit with missing subject:', commit);
+                continue;
+            }
+            
+            const fullMessage = `${commit.subject}\n${commit.body || ''}`;
             
             // Check for breaking changes
             if (this.breakingChangeRegex.test(fullMessage)) {
@@ -155,16 +168,36 @@ class PluginVersionManager {
         const commits = this.getPluginCommits(pluginPath, lastTag);
         
         if (commits.length === 0 && !options.force) {
-            console.log(`No changes detected for ${pluginName}`);
-            return null;
+            // Check if this plugin has never been released (no tags)
+            if (!lastTag) {
+                // First release - return default version structure
+                const currentVersion = this.getCurrentVersion(pluginPath);
+                const newVersion = currentVersion === '0.0.0' ? '1.0.0' : currentVersion;
+                
+                return {
+                    plugin: pluginName,
+                    currentVersion,
+                    newVersion,
+                    bump: 'patch',
+                    changes: { breaking: [], features: [], fixes: [], other: [] },
+                    commits: 0,
+                    lastTag: null
+                };
+            } else {
+                console.log(`No changes detected for ${pluginName}`);
+                return null;
+            }
         }
 
-        // Analyze commits for version bump
+        // Analyze commits for version bump (handle empty commits gracefully)
         const { bump, changes } = this.analyzeCommits(commits);
         
         // Get current version and calculate new version
         const currentVersion = this.getCurrentVersion(pluginPath);
-        const newVersion = options.version || this.incrementVersion(currentVersion, bump);
+        
+        // If we have no commits but force is true, default to patch bump
+        const versionBump = commits.length === 0 ? 'patch' : bump;
+        const newVersion = options.version || this.incrementVersion(currentVersion, versionBump);
 
         // Update package.json if requested
         if (options.update) {
@@ -175,7 +208,7 @@ class PluginVersionManager {
             plugin: pluginName,
             currentVersion,
             newVersion,
-            bump,
+            bump: versionBump,
             changes,
             commits: commits.length,
             lastTag
@@ -222,72 +255,75 @@ if (require.main === module) {
     const command = args[0];
     const manager = new PluginVersionManager();
 
-    switch (command) {
-        case 'check': {
-            // Check version for a single plugin
-            const pluginName = args[1];
-            if (!pluginName) {
-                console.error('Usage: determine-plugin-version.js check <plugin-name>');
-                process.exit(1);
-            }
-
-            const result = manager.processPlugin(pluginName);
-            if (result) {
-                console.log(JSON.stringify(result, null, 2));
-            }
-            break;
-        }
-
-        case 'update': {
-            // Update version for a single plugin
-            const pluginName = args[1];
-            if (!pluginName) {
-                console.error('Usage: determine-plugin-version.js update <plugin-name>');
-                process.exit(1);
-            }
-
-            const result = manager.processPlugin(pluginName, { update: true });
-            if (result) {
-                console.log(`Updated ${pluginName} from ${result.currentVersion} to ${result.newVersion}`);
-                console.log(`Version bump: ${result.bump}`);
-                if (result.changes) {
-                    console.log('\nChangelog:');
-                    console.log(manager.generateChangelog(result.changes));
+    (async () => {
+        switch (command) {
+            case 'check': {
+                // Check version for a single plugin
+                const pluginName = args[1];
+                if (!pluginName) {
+                    console.error('Usage: determine-plugin-version.js check <plugin-name>');
+                    process.exit(1);
                 }
-            }
-            break;
-        }
 
-        case 'batch': {
-            // Process multiple plugins and output JSON
-            const plugins = args.slice(1);
-            const results = [];
-
-            for (const plugin of plugins) {
-                const result = manager.processPlugin(plugin);
+                const result = await manager.processPlugin(pluginName);
                 if (result) {
-                    results.push(result);
+                    console.log(JSON.stringify(result, null, 2));
+                } else {
+                    console.log('{}');
                 }
+                break;
             }
 
-            console.log(JSON.stringify(results, null, 2));
-            break;
-        }
+            case 'update': {
+                // Update version for a single plugin
+                const pluginName = args[1];
+                if (!pluginName) {
+                    console.error('Usage: determine-plugin-version.js update <plugin-name>');
+                    process.exit(1);
+                }
 
-        case 'update-all': {
-            // Update versions for all provided plugins
-            const plugins = args.slice(1);
-            const results = [];
-
-            for (const plugin of plugins) {
-                const result = manager.processPlugin(plugin, { update: true });
+                const result = await manager.processPlugin(pluginName, { update: true });
                 if (result) {
-                    results.push(result);
-                    console.log(`Updated ${plugin}: ${result.currentVersion} → ${result.newVersion} (${result.bump})`);
+                    console.log(`Updated ${pluginName} from ${result.currentVersion} to ${result.newVersion}`);
+                    console.log(`Version bump: ${result.bump}`);
+                    if (result.changes) {
+                        console.log('\nChangelog:');
+                        console.log(manager.generateChangelog(result.changes));
+                    }
                 }
+                break;
             }
-            break;
-        }
+
+            case 'batch': {
+                // Process multiple plugins and output JSON
+                const plugins = args.slice(1);
+                const results = [];
+
+                for (const plugin of plugins) {
+                    const result = await manager.processPlugin(plugin);
+                    if (result) {
+                        results.push(result);
+                    }
+                }
+
+                console.log(JSON.stringify(results, null, 2));
+                break;
+            }
+
+            case 'update-all': {
+                // Update versions for all provided plugins
+                const plugins = args.slice(1);
+                const results = [];
+
+                for (const plugin of plugins) {
+                    const result = await manager.processPlugin(plugin, { update: true });
+                    if (result) {
+                        results.push(result);
+                        console.log(`Updated ${plugin}: ${result.currentVersion} → ${result.newVersion} (${result.bump})`);
+                    }
+                }
+                break;
+            }
 
         default:
             console.log(`
@@ -312,8 +348,12 @@ Conventional Commit Types:
   - BREAKING CHANGE: in body (major bump)
   - Other types: patch bump
             `);
-            break;
-    }
+                break;
+        }
+    })().catch(err => {
+        console.error('Error:', err.message);
+        process.exit(1);
+    });
 }
 
 module.exports = PluginVersionManager;

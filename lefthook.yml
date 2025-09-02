@@ -42,6 +42,44 @@ pre-commit:
       glob: '*.go'
       run: golangci-lint run --fix
       stage_fixed: true
+    plugin-go-fmt:
+      root: 'packages/plugins/'
+      glob: '**/*.go'
+      run: |
+        for file in {staged_files}; do
+          plugin_dir=$(dirname "$file")
+          echo "Formatting Go files in $plugin_dir"
+          (cd "$plugin_dir" && gofmt -w *.go && goimports -w *.go)
+        done
+      stage_fixed: true
+    plugin-go-mod-tidy:
+      root: 'packages/plugins/'
+      glob: '{**/go.mod,**/main.go}'
+      run: |
+        for file in {staged_files}; do
+          plugin_dir=$(dirname "$file")
+          if [ -f "$plugin_dir/go.mod" ]; then
+            echo "Updating dependencies for $plugin_dir"
+            (cd "$plugin_dir" && go mod tidy)
+          fi
+        done
+      stage_fixed: true
+    plugin-package-json-check:
+      root: 'packages/plugins/'
+      glob: '**/package.json'
+      run: |
+        for file in {staged_files}; do
+          echo "Validating package.json: $file"
+          if ! jq empty "$file" >/dev/null 2>&1; then
+            echo "❌ Invalid JSON in $file"
+            exit 1
+          fi
+          # Check required fields
+          if ! jq -e '.name and .version and .description' "$file" >/dev/null; then
+            echo "❌ Missing required fields (name, version, description) in $file"
+            exit 1
+          fi
+        done
     biome-web:
       root: 'apps/web/'
       glob: '*.{js,ts,jsx,tsx}'
@@ -56,6 +94,18 @@ commit-msg:
   commands:
     commitlint:
       run: pnpm commitlint --edit $1
+post-commit:
+  commands:
+    plugin-status:
+      run: |
+        # Check if any plugin files were modified in the last commit
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/plugins/"; then
+          echo ""
+          echo "🔧 Plugin changes detected in your commit!"
+          echo "📋 Run 'lefthook run plugin-check' to see what plugins are ready for release"
+          echo "🔨 Run 'lefthook run plugin-build' to build all changed plugins locally"
+          echo ""
+        fi
 pre-push:
   parallel: true
   commands:
@@ -71,6 +121,18 @@ pre-push:
     docs-build:
       root: 'apps/docs/'
       run: pnpm turbo run build --filter=docs
+    plugin-changes-check:
+      run: |
+        echo "🔍 Checking for plugin changes..."
+        ./scripts/check-plugin-changes.sh
+    plugin-build-changed:
+      run: |
+        if ./scripts/check-plugin-changes.sh | grep -q "Changed plugins:"; then
+          echo "🔨 Building changed plugins..."
+          ./scripts/release-plugin-individual.sh build
+        else
+          echo "ℹ️ No plugin changes detected, skipping build"
+        fi
 commands: &commands
   lint-go:
     root: 'apps/cli/'
@@ -90,6 +152,41 @@ commands: &commands
     run: yamlfmt .
   lint-yaml:
     run: yamllint .
+  # Plugin Development Commands
+  # =========================
+  # For comprehensive plugin development help, see: docs/PLUGIN_DEVELOPMENT.md
+  # Quick overview: lefthook run plugin-status
+  plugin-check:
+    run: ./scripts/check-plugin-changes.sh
+  plugin-check-verbose:
+    run: ./scripts/check-plugin-changes.sh -v
+  plugin-check-all:
+    run: ./scripts/check-plugin-changes.sh -a
+  plugin-build:
+    run: ./scripts/release-plugin-individual.sh build
+  plugin-test:
+    run: |
+      read -p "Enter plugin name: " plugin
+      ./scripts/release-plugin-individual.sh test "$plugin"
+  plugin-version-check:
+    run: |
+      read -p "Enter plugin name: " plugin
+      node scripts/determine-plugin-version.js check "$plugin"
+  plugin-version-update:
+    run: |
+      read -p "Enter plugin name: " plugin
+      node scripts/determine-plugin-version.js update "$plugin"
+  plugin-tidy-all:
+    run: |
+      echo "🧹 Running go mod tidy on all plugins..."
+      find packages/plugins -name go.mod -execdir go mod tidy \;
+  plugin-format-all:
+    run: |
+      echo "🎨 Formatting all plugin Go files..."
+      find packages/plugins -name "*.go" -exec gofmt -w {} \;
+      find packages/plugins -name "*.go" -exec goimports -w {} \;
+  plugin-status:
+    run: ./scripts/plugin-dev-status.sh
 scripts:
   'commands/*':
     runner: bash
