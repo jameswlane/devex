@@ -3,9 +3,9 @@
 	"version": "1.0.0",
 	"description": "DevEx Plugin Registry API",
 	"scripts": {
-		"dev": "vercel dev",
-		"build": "echo 'API-only project - no build needed'",
-		"start": "vercel dev"
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start"
 	},
 	"dependencies": {
 		"@octokit/rest": "^22.0.0",
