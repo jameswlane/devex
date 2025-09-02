@@ -69,6 +69,21 @@ jobs:
 
           echo "::group::Building ${{ matrix.plugin }}"
 
+          # Update Go module dependencies
+          echo "Updating Go module dependencies..."
+          go mod tidy || {
+            echo "Failed to update dependencies for ${{ matrix.plugin }}"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          }
+
+          # Download dependencies to ensure they're available
+          go mod download || {
+            echo "Failed to download dependencies for ${{ matrix.plugin }}"
+            echo "success=false" >> $GITHUB_OUTPUT
+            exit 1
+          }
+
           # Run tests if they exist
           if [ -f "Taskfile.yml" ] && grep -q "test:" Taskfile.yml; then
             echo "Running tests..."

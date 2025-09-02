@@ -274,9 +274,18 @@ validate_plugins() {
             continue
         fi
 
+        # Update dependencies before building
+        echo "Updating dependencies for $plugin..."
+        cd "$plugin_dir"
+        if ! go mod tidy; then
+            echo -e "${RED}❌ Failed to update dependencies for plugin: $plugin${NC}"
+            failed=true
+            cd - > /dev/null
+            continue
+        fi
+
         # Try to build the plugin
         echo "Building $plugin for validation..."
-        cd "$plugin_dir"
         if ! go build -o /tmp/test-$plugin .; then
             echo -e "${RED}❌ Failed to build plugin: $plugin${NC}"
             failed=true

@@ -43,6 +43,15 @@ build_single_plugin() {
     (
         cd "$plugin_dir"
         
+        # Update dependencies
+        log "Updating dependencies for $plugin..."
+        if go mod tidy; then
+            log "${GREEN}✅ Dependencies updated for $plugin${NC}"
+        else
+            log "${RED}❌ Failed to update dependencies for $plugin${NC}"
+            return 1
+        fi
+        
         # Run tests if available
         if [ -f "Taskfile.yml" ] && grep -q "test:" Taskfile.yml; then
             log "Running tests for $plugin..."
