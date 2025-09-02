@@ -56,8 +56,8 @@ importers:
         specifier: 15.7.7
         version: 15.7.7(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       fumadocs-mdx:
-        specifier: 11.8.2
-        version: 11.8.2(acorn@8.15.0)(fumadocs-core@15.7.7(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)
+        specifier: 11.8.3
+        version: 11.8.3(fumadocs-core@15.7.7(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)
       fumadocs-ui:
         specifier: 15.7.7
         version: 15.7.7(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(tailwindcss@4.1.12)
@@ -657,8 +657,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@mdx-js/mdx@3.1.0':
-    resolution: {integrity: sha512-/QxEhPAvGwbQmy1Px8F899L5Uc2KZ6JtXwlCgJmjSTBedwOZkByYcBG4GceIGPXRDsmfxhHazuS+hlOShRLeDw==}
+  '@mdx-js/mdx@3.1.1':
+    resolution: {integrity: sha512-f6ZO2ifpwAQIpzGWaBQT2TXxPv6z3RBzQKpVftEWN78Vl/YweF1uwussDx8ECAXVtr3Rs89fKyG9YlzUs9DyGQ==}
 
   '@next/env@15.5.2':
     resolution: {integrity: sha512-Qe06ew4zt12LeO6N7j8/nULSOe3fMXE4dM6xgpBQNvdzyK1sv5y4oAP3bq4LamrvGCZtmRYnW8URFCeX5nFgGg==}
@@ -2223,8 +2223,9 @@ packages:
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
 
-  fdir@6.4.6:
-    resolution: {integrity: sha512-hiFoqpyZcfNm1yc4u8oWCf9A2c4D3QjCrks3zmoVKVxpQRzmPNar1hUJcBG2RQHvEVGDN+Jm81ZheVLAQMK6+w==}
+  fdir@6.5.0:
+    resolution: {integrity: sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==}
+    engines: {node: '>=12.0.0'}
     peerDependencies:
       picomatch: ^3 || ^4
     peerDependenciesMeta:
@@ -2313,8 +2314,8 @@ packages:
       react-router:
         optional: true
 
-  fumadocs-mdx@11.8.2:
-    resolution: {integrity: sha512-omv2jNrdXfZiAC2p6YeO3y3GYyQesMRzvsCDdgf7L/MbPIfgvtPkmRG2kL42dFEVsi45zwj0UugX6AG5IhDuUQ==}
+  fumadocs-mdx@11.8.3:
+    resolution: {integrity: sha512-ZHdWaeSHUq/5ZpfMOjClFc4ZVViMlA4RwfvauHH7Byz/wZIQhhRDXTuEcQumakOliytXXArua/BQFYmbNUhooA==}
     hasBin: true
     peerDependencies:
       '@fumadocs/mdx-remote': ^1.4.0
@@ -3554,8 +3555,10 @@ packages:
   recma-build-jsx@1.0.0:
     resolution: {integrity: sha512-8GtdyqaBcDfva+GUKDr3nev3VpKAhup1+RvkMvUxURHpW7QyIvk9F5wz7Vzo06CEMSilw6uArgRqhpiUcWp8ew==}
 
-  recma-jsx@1.0.0:
-    resolution: {integrity: sha512-5vwkv65qWwYxg+Atz95acp8DMu1JDSqdGkA2Of1j6rCreyFUE/gp15fC8MnGEuG1W68UKjM6x6+YTWIh7hZM/Q==}
+  recma-jsx@1.0.1:
+    resolution: {integrity: sha512-huSIy7VU2Z5OLv6oFLosQGGDqPqdO1iq6bWNAdhzMxSJP7RAso4fCZ1cKu8j9YHCZf3TPrq4dw3okhrylgcd7w==}
+    peerDependencies:
+      acorn: ^6.0.0 || ^7.0.0 || ^8.0.0
 
   recma-parse@1.0.0:
     resolution: {integrity: sha512-OYLsIGBB5Y5wjnSnQW6t3Xg7q3fQ7FWbw/vcXtORTnyaSFscOtABg+7Pnz6YZ6c27fG1/aN8CjfwoUEUIdwqWQ==}
@@ -3582,8 +3585,8 @@ packages:
   remark-gfm@4.0.1:
     resolution: {integrity: sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==}
 
-  remark-mdx@3.1.0:
-    resolution: {integrity: sha512-Ngl/H3YXyBV9RcRNdlYsZujAmhsxwzxpDzpDEhFBVAGthS4GDgnctpDjgFl/ULx5UEDzqtW1cyBSNKqYYrqLBA==}
+  remark-mdx@3.1.1:
+    resolution: {integrity: sha512-Pjj2IYlUY3+D8x00UJsIOg5BEvfMyeI+2uLPn9VO9Wg4MEtN/VTIq2NEJQfde9PnX15KgtHyl9S0BcTnWrIuWg==}
 
   remark-parse@11.0.0:
     resolution: {integrity: sha512-FCxlKLNGknS5ba/1lmpYijMUzX2esxW5xQqjWxw2eHFfS2MSdaHVINFmhjo+qN1WhZhNimq0dZATN9pH0IDrpA==}
@@ -4648,12 +4651,13 @@ snapshots:
       - encoding
       - supports-color
 
-  '@mdx-js/mdx@3.1.0(acorn@8.15.0)':
+  '@mdx-js/mdx@3.1.1':
     dependencies:
       '@types/estree': 1.0.8
       '@types/estree-jsx': 1.0.5
       '@types/hast': 3.0.4
       '@types/mdx': 2.0.13
+      acorn: 8.15.0
       collapse-white-space: 2.1.0
       devlop: 1.1.0
       estree-util-is-identifier-name: 3.0.0
@@ -4662,10 +4666,10 @@ snapshots:
       hast-util-to-jsx-runtime: 2.3.6
       markdown-extensions: 2.0.0
       recma-build-jsx: 1.0.0
-      recma-jsx: 1.0.0(acorn@8.15.0)
+      recma-jsx: 1.0.1(acorn@8.15.0)
       recma-stringify: 1.0.0
       rehype-recma: 1.0.0
-      remark-mdx: 3.1.0
+      remark-mdx: 3.1.1
       remark-parse: 11.0.0
       remark-rehype: 11.1.2
       source-map: 0.7.6
@@ -4675,7 +4679,6 @@ snapshots:
       unist-util-visit: 5.0.0
       vfile: 6.0.3
     transitivePeerDependencies:
-      - acorn
       - supports-color
 
   '@next/env@15.5.2': {}
@@ -6337,7 +6340,7 @@ snapshots:
     dependencies:
       pend: 1.2.0
 
-  fdir@6.4.6(picomatch@4.0.3):
+  fdir@6.5.0(picomatch@4.0.3):
     optionalDependencies:
       picomatch: 4.0.3
 
@@ -6427,9 +6430,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  fumadocs-mdx@11.8.2(acorn@8.15.0)(fumadocs-core@15.7.7(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1):
+  fumadocs-mdx@11.8.3(fumadocs-core@15.7.7(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1):
     dependencies:
-      '@mdx-js/mdx': 3.1.0(acorn@8.15.0)
+      '@mdx-js/mdx': 3.1.1
       '@standard-schema/spec': 1.0.0
       chokidar: 4.0.3
       esbuild: 0.25.9
@@ -6438,7 +6441,7 @@ snapshots:
       js-yaml: 4.1.0
       lru-cache: 11.1.0
       picocolors: 1.1.1
-      remark-mdx: 3.1.0
+      remark-mdx: 3.1.1
       remark-parse: 11.0.0
       tinyexec: 1.0.1
       tinyglobby: 0.2.14
@@ -6449,7 +6452,6 @@ snapshots:
       next: 15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       react: 19.1.1
     transitivePeerDependencies:
-      - acorn
       - supports-color
 
   fumadocs-ui@15.7.7(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(next@15.5.2(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(tailwindcss@4.1.12):
@@ -7812,15 +7814,14 @@ snapshots:
       estree-util-build-jsx: 3.0.1
       vfile: 6.0.3
 
-  recma-jsx@1.0.0(acorn@8.15.0):
+  recma-jsx@1.0.1(acorn@8.15.0):
     dependencies:
+      acorn: 8.15.0
       acorn-jsx: 5.3.2(acorn@8.15.0)
       estree-util-to-js: 2.0.0
       recma-parse: 1.0.0
       recma-stringify: 1.0.0
       unified: 11.0.5
-    transitivePeerDependencies:
-      - acorn
 
   recma-parse@1.0.0:
     dependencies:
@@ -7869,7 +7870,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  remark-mdx@3.1.0:
+  remark-mdx@3.1.1:
     dependencies:
       mdast-util-mdx: 3.0.0
       micromark-extension-mdxjs: 3.0.0
@@ -8242,7 +8243,7 @@ snapshots:
 
   tinyglobby@0.2.14:
     dependencies:
-      fdir: 6.4.6(picomatch@4.0.3)
+      fdir: 6.5.0(picomatch@4.0.3)
       picomatch: 4.0.3
 
   to-regex-range@5.0.1:
