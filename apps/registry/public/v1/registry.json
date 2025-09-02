@@ -1,0 +1,19 @@
+{
+	"version": "1.0.0",
+	"plugins": {
+		"package-manager-apt": {
+			"name": "APT Package Manager",
+			"version": "1.0.0",
+			"description": "Install packages using APT on Debian/Ubuntu systems",
+			"platform": "linux",
+			"installers": ["apt"]
+		},
+		"package-manager-dnf": {
+			"name": "DNF Package Manager",
+			"version": "1.0.0",
+			"description": "Install packages using DNF on Fedora/RHEL systems",
+			"platform": "linux",
+			"installers": ["dnf"]
+		}
+	}
+}
