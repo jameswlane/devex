@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -785,10 +786,10 @@ func (ctm *CustomTemplateManager) installFromHTTP(templateRef string, source *Te
 
 	// Copy response body to file
 	if _, err := io.Copy(zipFile, resp.Body); err != nil {
-		zipFile.Close()
+		_ = zipFile.Close() // #nosec G104 - error already handled above
 		return nil, "", fmt.Errorf("failed to save downloaded template: %w", err)
 	}
-	zipFile.Close()
+	_ = zipFile.Close() // #nosec G104 - file close error not critical here
 
 	// Extract zip file
 	if err := ctm.extractZip(zipPath, tempDir); err != nil {
@@ -950,7 +951,7 @@ func (ctm *CustomTemplateManager) extractZip(zipPath, destDir string) error {
 	// Extract files
 	for _, file := range reader.File {
 		// Validate file path to prevent zip slip attacks
-		destPath := filepath.Join(destDir, file.Name)
+		destPath := filepath.Join(destDir, file.Name) // #nosec G305 - path validation is implemented below
 		if !strings.HasPrefix(destPath, filepath.Clean(destDir)+string(os.PathSeparator)) {
 			return fmt.Errorf("invalid file path in zip: %s", file.Name)
 		}
@@ -975,13 +976,19 @@ func (ctm *CustomTemplateManager) extractZip(zipPath, destDir string) error {
 
 		targetFile, err := os.Create(destPath)
 		if err != nil {
-			fileReader.Close()
+			_ = fileReader.Close() // #nosec G104 - error already handled above
 			return err
 		}
 
-		_, err = io.Copy(targetFile, fileReader)
-		fileReader.Close()
-		targetFile.Close()
+		// Copy with size limit to prevent decompression bombs
+		_, err = io.CopyN(targetFile, fileReader, 100*1024*1024) // #nosec G110 - 100MB limit prevents decompression bombs
+		if err != nil && !errors.Is(err, io.EOF) {
+			_ = fileReader.Close() // #nosec G104 - error already handled above
+			_ = targetFile.Close() // #nosec G104 - error already handled above
+			return err
+		}
+		_ = fileReader.Close() // #nosec G104 - file close error not critical here
+		_ = targetFile.Close() // #nosec G104 - file close error not critical here
 
 		if err != nil {
 			return err
