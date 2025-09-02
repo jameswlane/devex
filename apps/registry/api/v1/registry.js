@@ -1,9 +1,7 @@
-export default function handler(req, res) {
-    // Enable CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+import fs from 'node:fs';
+import path from 'node:path';
 
+export default function handler(req, res) {
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;

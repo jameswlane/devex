@@ -1,24 +1,19 @@
 {
-	"version": 2,
-	"name": "devex-registry",
-	"builds": [
-		{
-			"src": "api/**/*.js",
-			"use": "@vercel/node"
-		},
-		{
-			"src": "public/**/*",
-			"use": "@vercel/static"
+	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"framework": null,
+	"functions": {
+		"api/**/*.js": {
+			"runtime": "@vercel/node@3"
 		}
-	],
-	"routes": [
+	},
+	"rewrites": [
 		{
-			"src": "/v1/registry.json",
-			"dest": "/api/v1/registry"
+			"source": "/v1/registry.json",
+			"destination": "/api/v1/registry"
 		},
 		{
-			"src": "/v1/plugins/(.*)",
-			"dest": "/api/v1/plugins/$1"
+			"source": "/v1/plugins/(.*)",
+			"destination": "/api/v1/plugins/$1"
 		}
 	],
 	"headers": [
@@ -36,8 +31,13 @@
 				{
 					"key": "Access-Control-Allow-Headers",
 					"value": "Content-Type"
+				},
+				{
+					"key": "Cache-Control",
+					"value": "public, s-maxage=300, stale-while-revalidate=86400"
 				}
 			]
 		}
-	]
+	],
+	"cleanUrls": true
 }
