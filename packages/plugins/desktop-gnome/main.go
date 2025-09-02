@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,7 +9,6 @@ import (
 	"time"
 
 	sdk "github.com/jameswlane/devex/packages/shared/plugin-sdk"
-	"gopkg.in/yaml.v2"
 )
 
 var version = "dev" // Set by goreleaser

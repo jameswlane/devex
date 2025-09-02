@@ -21,16 +21,16 @@ get_changed_plugins() {
     local changed_plugins=()
 
     if [ -z "$last_tag" ]; then
-        echo -e "${YELLOW}No previous tag found, releasing all plugins${NC}"
+        echo -e "${YELLOW}No previous tag found, releasing all plugins${NC}" >&2
         changed_plugins=($(find $PLUGINS_DIR -mindepth 1 -maxdepth 1 -type d -exec basename {} \;))
     else
-        echo "Checking for changes since $last_tag..."
-        local changed_files=$(git diff --name-only $last_tag..HEAD)
+        echo "Checking for changes since $last_tag..." >&2
+        local changed_files=$(git diff --name-only $last_tag..HEAD 2>/dev/null)
 
         for file in $changed_files; do
             if [[ $file == $PLUGINS_DIR/* ]]; then
                 local plugin_name=$(echo $file | cut -d'/' -f3)
-                if [[ ! " ${changed_plugins[@]} " =~ " ${plugin_name} " ]]; then
+                if [[ -n "$plugin_name" && ! " ${changed_plugins[@]} " =~ " ${plugin_name} " ]]; then
                     changed_plugins+=("$plugin_name")
                 fi
             fi
