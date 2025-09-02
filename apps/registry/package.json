@@ -1,0 +1,17 @@
+{
+	"name": "@devex/registry",
+	"version": "1.0.0",
+	"description": "DevEx Plugin Registry API",
+	"scripts": {
+		"dev": "vercel dev",
+		"build": "next build",
+		"start": "next start"
+	},
+	"dependencies": {
+		"@octokit/rest": "^22.0.0",
+		"next": "^15.5.2"
+	},
+	"devDependencies": {
+		"vercel": "^46.1.1"
+	}
+}

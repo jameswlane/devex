@@ -1,0 +1,42 @@
+{
+	"name": "@devex/plugin-tool-shell",
+	"version": "1.0.0",
+	"description": "Shell configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"shell",
+		"bash",
+		"zsh",
+		"fish"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/tool-shell"
+	},
+	"devex": {
+		"plugin": {
+			"type": "tool",
+			"platforms": [
+				"linux",
+				"darwin",
+				"windows"
+			],
+			"dependencies": [],
+			"priority": 7,
+			"supports": {
+				"setup": true,
+				"switch": true,
+				"config": true,
+				"backup": true
+			}
+		}
+	}
+}

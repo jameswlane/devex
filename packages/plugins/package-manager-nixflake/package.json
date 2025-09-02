@@ -1,0 +1,43 @@
+{
+	"name": "@devex/plugin-package-manager-nixflake",
+	"version": "1.0.0",
+	"description": "Nix Flake plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"nix",
+		"flake",
+		"functional"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/package-manager-nixflake"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"darwin",
+				"linux"
+			],
+			"dependencies": [
+				"nix"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

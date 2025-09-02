@@ -1,0 +1,40 @@
+{
+	"name": "@devex/plugin-tool-stackdetector",
+	"version": "1.0.0",
+	"description": "Development stack detection plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"development",
+		"stack",
+		"detection"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/tool-stackdetector"
+	},
+	"devex": {
+		"plugin": {
+			"type": "tool",
+			"platforms": [
+				"linux",
+				"darwin",
+				"windows"
+			],
+			"dependencies": [],
+			"priority": 3,
+			"supports": {
+				"detect": true,
+				"analyze": true,
+				"report": true
+			}
+		}
+	}
+}

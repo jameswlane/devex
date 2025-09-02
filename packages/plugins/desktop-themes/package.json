@@ -1,0 +1,40 @@
+{
+	"name": "@devex/plugin-desktop-themes",
+	"version": "1.0.0",
+	"description": "Desktop theme management plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"desktop",
+		"themes",
+		"customization"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/desktop-themes"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop",
+			"platforms": [
+				"linux",
+				"darwin"
+			],
+			"dependencies": [],
+			"priority": 4,
+			"supports": {
+				"apply": true,
+				"list": true,
+				"backup": true,
+				"restore": true
+			}
+		}
+	}
+}

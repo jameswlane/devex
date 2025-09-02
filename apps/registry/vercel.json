@@ -1,0 +1,43 @@
+{
+	"version": 2,
+	"name": "devex-registry",
+	"builds": [
+		{
+			"src": "api/**/*.js",
+			"use": "@vercel/node"
+		},
+		{
+			"src": "public/**/*",
+			"use": "@vercel/static"
+		}
+	],
+	"routes": [
+		{
+			"src": "/v1/registry.json",
+			"dest": "/api/v1/registry"
+		},
+		{
+			"src": "/v1/plugins/(.*)",
+			"dest": "/api/v1/plugins/$1"
+		}
+	],
+	"headers": [
+		{
+			"source": "/api/(.*)",
+			"headers": [
+				{
+					"key": "Access-Control-Allow-Origin",
+					"value": "*"
+				},
+				{
+					"key": "Access-Control-Allow-Methods",
+					"value": "GET, OPTIONS"
+				},
+				{
+					"key": "Access-Control-Allow-Headers",
+					"value": "Content-Type"
+				}
+			]
+		}
+	]
+}
