@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,63 @@ import (
 	"runtime"
 	"strings"
 	"time"
+)
+
+// DownloadError represents an error that occurred during plugin download
+type DownloadError struct {
+	Plugin string
+	Err    error
+}
+
+func (e *DownloadError) Error() string {
+	return fmt.Sprintf("failed to download plugin %s: %v", e.Plugin, e.Err)
+}
+
+func (e *DownloadError) Unwrap() error {
+	return e.Err
+}
+
+// MultiError represents multiple errors that occurred
+type MultiError struct {
+	Errors []error
+}
+
+func (e *MultiError) Error() string {
+	if len(e.Errors) == 0 {
+		return "no errors"
+	}
+	if len(e.Errors) == 1 {
+		return e.Errors[0].Error()
+	}
+	return fmt.Sprintf("%d errors occurred: %v", len(e.Errors), e.Errors[0])
+}
+
+func (e *MultiError) Unwrap() []error {
+	return e.Errors
+}
+
+// Add adds an error to the MultiError
+func (e *MultiError) Add(err error) {
+	if err != nil {
+		e.Errors = append(e.Errors, err)
+	}
+}
+
+// HasErrors returns true if there are any errors
+func (e *MultiError) HasErrors() bool {
+	return len(e.Errors) > 0
+}
+
+// DownloadStrategy defines how to handle download failures
+type DownloadStrategy int
+
+const (
+	// ContinueOnError continues downloading other plugins if one fails
+	ContinueOnError DownloadStrategy = iota
+	// FailOnError stops downloading if any plugin fails
+	FailOnError
+	// RequireCritical only fails if critical plugins fail
+	RequireCritical
 )
 
 // Logger interface for plugin SDK logging
@@ -82,14 +140,14 @@ func (l *DefaultLogger) ErrorMsg(msg string, args ...any) {
 // Info implements Logger interface
 func (l *DefaultLogger) Info(msg string, keyvals ...any) {
 	if !l.silent {
-		fmt.Printf("INFO: "+msg+"\n")
+		fmt.Printf("INFO: " + msg + "\n")
 	}
 }
 
 // Warn implements Logger interface
 func (l *DefaultLogger) Warn(msg string, keyvals ...any) {
 	if !l.silent {
-		fmt.Printf("WARN: "+msg+"\n")
+		fmt.Printf("WARN: " + msg + "\n")
 	}
 }
 
@@ -99,7 +157,7 @@ func (l *DefaultLogger) Error(msg string, err error, keyvals ...any) {
 		if err != nil {
 			fmt.Printf("ERROR: "+msg+" - %v\n", err)
 		} else {
-			fmt.Printf("ERROR: "+msg+"\n")
+			fmt.Printf("ERROR: " + msg + "\n")
 		}
 	}
 }
@@ -107,7 +165,7 @@ func (l *DefaultLogger) Error(msg string, err error, keyvals ...any) {
 // Debug implements Logger interface
 func (l *DefaultLogger) Debug(msg string, keyvals ...any) {
 	if !l.silent {
-		fmt.Printf("DEBUG: "+msg+"\n")
+		fmt.Printf("DEBUG: " + msg + "\n")
 	}
 }
 
@@ -139,7 +197,7 @@ type Plugin interface {
 // DesktopPlugin interface for desktop environment plugins
 type DesktopPlugin interface {
 	Plugin
-	
+
 	// Desktop-specific methods
 	IsAvailable() bool
 	GetDesktopEnvironment() string
@@ -291,8 +349,8 @@ type PluginMetadata struct {
 	PluginInfo
 	Path      string                    `json:"path"`
 	Platforms map[string]PlatformBinary `json:"platforms,omitempty"` // Platform-specific binaries
-	Priority  int                       `json:"priority,omitempty"`   // Installation priority
-	Type      string                    `json:"type,omitempty"`       // Plugin type (package-manager, desktop, etc.)
+	Priority  int                       `json:"priority,omitempty"`  // Installation priority
+	Type      string                    `json:"type,omitempty"`      // Plugin type (package-manager, desktop, etc.)
 }
 
 // PluginRegistry represents the plugin registry structure
@@ -321,6 +379,7 @@ type Downloader struct {
 	verifySignatures bool
 	publicKeyPath    string
 	logger           Logger
+	strategy         DownloadStrategy
 }
 
 // DownloaderConfig configures the plugin downloader
@@ -331,13 +390,14 @@ type DownloaderConfig struct {
 	VerifyChecksums  bool
 	VerifySignatures bool
 	PublicKeyPath    string
+	Strategy         DownloadStrategy
 }
 
 // NewDownloader creates a new plugin downloader with default security settings
 func NewDownloader(registryURL, pluginDir string) *Downloader {
 	homeDir, _ := os.UserHomeDir()
 	cacheDir := filepath.Join(homeDir, ".devex", "plugin-cache")
-	
+
 	return &Downloader{
 		registryURL:      registryURL,
 		pluginDir:        pluginDir,
@@ -346,6 +406,7 @@ func NewDownloader(registryURL, pluginDir string) *Downloader {
 		verifySignatures: false, // Signature verification optional for now
 		publicKeyPath:    "",
 		logger:           NewDefaultLogger(false), // Default logger
+		strategy:         ContinueOnError,        // Default to continue on error
 	}
 }
 
@@ -359,6 +420,7 @@ func NewSecureDownloader(config DownloaderConfig) *Downloader {
 		verifySignatures: config.VerifySignatures,
 		publicKeyPath:    config.PublicKeyPath,
 		logger:           NewDefaultLogger(false), // Default logger
+		strategy:         config.Strategy,
 	}
 }
 
@@ -374,6 +436,11 @@ func (d *Downloader) SetSilent(silent bool) {
 	if defaultLogger, ok := d.logger.(*DefaultLogger); ok {
 		defaultLogger.silent = silent
 	}
+}
+
+// SetStrategy sets the download strategy
+func (d *Downloader) SetStrategy(strategy DownloadStrategy) {
+	d.strategy = strategy
 }
 
 // GetAvailablePlugins returns available plugins from registry with caching
@@ -450,16 +517,96 @@ func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName s
 // DownloadRequiredPlugins downloads all required plugins for the platform with verification
 func (d *Downloader) DownloadRequiredPlugins(requiredPlugins []string) error {
 	ctx := context.Background()
+	return d.DownloadRequiredPluginsWithContext(ctx, requiredPlugins)
+}
+
+// DownloadRequiredPluginsWithOptions downloads plugins with custom options
+func (d *Downloader) DownloadRequiredPluginsWithOptions(requiredPlugins []string, criticalPlugins []string) error {
+	ctx := context.Background()
+	return d.DownloadRequiredPluginsWithContextAndOptions(ctx, requiredPlugins, criticalPlugins)
+}
+
+// DownloadRequiredPluginsWithContext downloads plugins with context support
+func (d *Downloader) DownloadRequiredPluginsWithContext(ctx context.Context, requiredPlugins []string) error {
+	return d.DownloadRequiredPluginsWithContextAndOptions(ctx, requiredPlugins, nil)
+}
+
+// DownloadRequiredPluginsWithContextAndOptions downloads plugins with full control
+func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Context, requiredPlugins []string, criticalPlugins []string) error {
 	if d.logger != nil {
 		d.logger.Printf("Downloading %d required plugins...\n", len(requiredPlugins))
 	}
-	
+
+	// Convert critical plugins to a map for quick lookup
+	criticalMap := make(map[string]bool)
+	for _, plugin := range criticalPlugins {
+		criticalMap[plugin] = true
+	}
+
+	multiErr := &MultiError{}
+	downloadedCount := 0
+
 	for _, pluginName := range requiredPlugins {
 		if err := d.DownloadPluginWithContext(ctx, pluginName); err != nil {
+			downloadErr := &DownloadError{Plugin: pluginName, Err: err}
+			multiErr.Add(downloadErr)
+			
 			if d.logger != nil {
 				d.logger.Warning("Failed to download plugin %s: %v", pluginName, err)
 			}
-			// Continue with other plugins rather than failing completely
+
+			// Check strategy and critical status
+			switch d.strategy {
+			case FailOnError:
+				// Return immediately on any error
+				return downloadErr
+			case RequireCritical:
+				// Return immediately if a critical plugin fails
+				if criticalMap[pluginName] {
+					return fmt.Errorf("critical plugin download failed: %w", downloadErr)
+				}
+			case ContinueOnError:
+				// Continue with next plugin
+				continue
+			}
+		} else {
+			downloadedCount++
+			if d.logger != nil {
+				d.logger.Success("Downloaded plugin %s", pluginName)
+			}
+		}
+	}
+
+	// Log summary
+	if d.logger != nil {
+		d.logger.Printf("Downloaded %d/%d plugins successfully\n", downloadedCount, len(requiredPlugins))
+	}
+
+	// Return appropriate error based on strategy
+	if multiErr.HasErrors() {
+		switch d.strategy {
+		case ContinueOnError:
+			// Log errors but don't fail
+			if d.logger != nil {
+				d.logger.Warning("Some plugins failed to download: %v", multiErr)
+			}
+			return nil
+		case RequireCritical:
+			// Check if any critical plugins failed
+			for _, err := range multiErr.Errors {
+				if downloadErr, ok := err.(*DownloadError); ok {
+					if criticalMap[downloadErr.Plugin] {
+						return multiErr
+					}
+				}
+			}
+			// No critical plugins failed
+			if d.logger != nil {
+				d.logger.Warning("Non-critical plugins failed to download: %v", multiErr)
+			}
+			return nil
+		default:
+			return multiErr
 		}
 	}
 
@@ -584,7 +731,7 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	defer tempFile.Close()
-	defer os.Remove(tempPath) // Cleanup on any error
+	defer func() { _ = os.Remove(tempPath) }()
 
 	// Download with checksum verification
 	hasher := sha256.New()
@@ -645,13 +792,12 @@ func (d *Downloader) isPluginUpToDate(pluginPath, expectedChecksum string) bool 
 	return actualChecksum == expectedChecksum
 }
 
-
 // ExecutableManager manages plugin executables with caching and timeouts
 type ExecutableManager struct {
-	pluginDir       string
-	cachedPlugins   map[string]PluginMetadata
-	cacheTime       time.Time
-	loadTimeout     time.Duration
+	pluginDir     string
+	cachedPlugins map[string]PluginMetadata
+	cacheTime     time.Time
+	loadTimeout   time.Duration
 }
 
 // NewExecutableManager creates a new executable manager with caching
@@ -676,7 +822,7 @@ func (em *ExecutableManager) ListPlugins() map[string]PluginMetadata {
 	}
 
 	plugins := make(map[string]PluginMetadata)
-	
+
 	// Scan plugin directory for executables
 	entries, err := os.ReadDir(em.pluginDir)
 	if err != nil {
@@ -689,9 +835,9 @@ func (em *ExecutableManager) ListPlugins() map[string]PluginMetadata {
 		}
 
 		name := entry.Name()
-		if strings.HasPrefix(name, "devex-plugin-") && 
-		   (runtime.GOOS != "windows" || strings.HasSuffix(name, ".exe")) {
-			
+		if strings.HasPrefix(name, "devex-plugin-") &&
+			(runtime.GOOS != "windows" || strings.HasSuffix(name, ".exe")) {
+
 			pluginName := strings.TrimPrefix(name, "devex-plugin-")
 			if runtime.GOOS == "windows" {
 				pluginName = strings.TrimSuffix(pluginName, ".exe")
@@ -708,7 +854,7 @@ func (em *ExecutableManager) ListPlugins() map[string]PluginMetadata {
 	// Cache results
 	em.cachedPlugins = plugins
 	em.cacheTime = time.Now()
-	
+
 	return plugins
 }
 
@@ -843,19 +989,37 @@ func (em *ExecutableManager) DiscoverPluginsWithContext(ctx context.Context) err
 	return em.DiscoverPlugins()
 }
 
-// DownloadRequiredPluginsWithContext downloads plugins with context support  
-func (d *Downloader) DownloadRequiredPluginsWithContext(ctx context.Context, plugins []string) error {
-	// Context-aware version - placeholder implementation
-	for _, plugin := range plugins {
-		if err := d.DownloadPluginWithContext(ctx, plugin); err != nil {
-			return fmt.Errorf("failed to download plugin %s: %w", plugin, err)
-		}
-	}
-	return nil
-}
 
 // RegisterCommands registers plugin commands (placeholder)
 func (em *ExecutableManager) RegisterCommands(rootCmd interface{}) error {
 	// Placeholder implementation - will register plugin commands after release
 	return nil
+}
+
+// IsDownloadError checks if an error is a DownloadError
+func IsDownloadError(err error) bool {
+	var downloadErr *DownloadError
+	return errors.As(err, &downloadErr)
+}
+
+// GetDownloadErrors extracts all DownloadErrors from a MultiError
+func GetDownloadErrors(err error) []*DownloadError {
+	var multiErr *MultiError
+	if !errors.As(err, &multiErr) {
+		// Check if it's a single download error
+		var downloadErr *DownloadError
+		if errors.As(err, &downloadErr) {
+			return []*DownloadError{downloadErr}
+		}
+		return nil
+	}
+
+	var downloadErrors []*DownloadError
+	for _, e := range multiErr.Errors {
+		var downloadErr *DownloadError
+		if errors.As(e, &downloadErr) {
+			downloadErrors = append(downloadErrors, downloadErr)
+		}
+	}
+	return downloadErrors
 }

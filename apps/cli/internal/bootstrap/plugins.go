@@ -29,6 +29,47 @@ type PluginBootstrap struct {
 	skipDownload bool
 }
 
+// GetRegistryURL returns the plugin registry URL from environment or default
+func GetRegistryURL() string {
+	// Check environment variable first
+	if url := os.Getenv("DEVEX_PLUGIN_REGISTRY_URL"); url != "" {
+		return url
+	}
+
+	// Check for registry URL in config file
+	if configURL := getRegistryURLFromConfig(); configURL != "" {
+		return configURL
+	}
+
+	// Fall back to default
+	return DefaultRegistryURL
+}
+
+// getRegistryURLFromConfig attempts to read registry URL from config file
+func getRegistryURLFromConfig() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+
+	// Check for config file
+	configPath := filepath.Join(homeDir, ".devex", "config.yaml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return ""
+	}
+
+	// Simple regex to extract registry URL from YAML
+	// This is a basic implementation - in production you'd use a proper YAML parser
+	re := regexp.MustCompile(`(?m)^\s*plugin_registry_url:\s*["']?([^"'\s]+)["']?`)
+	matches := re.FindSubmatch(data)
+	if len(matches) > 1 {
+		return string(matches[1])
+	}
+
+	return ""
+}
+
 // NewPluginBootstrap creates a new plugin bootstrap instance
 func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 	homeDir, err := os.UserHomeDir()
@@ -50,7 +91,15 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 		}
 	}
 
-	downloader := sdk.NewDownloader(DefaultRegistryURL, pluginDir)
+	// Get registry URL with fallback to default
+	registryURL := GetRegistryURL()
+
+	// Log the registry URL being used (only in non-test mode)
+	if !log.IsTestMode() && registryURL != DefaultRegistryURL {
+		log.Info("Using custom plugin registry", "url", registryURL)
+	}
+
+	downloader := sdk.NewDownloader(registryURL, pluginDir)
 
 	// Configure downloader logger based on test mode
 	if log.IsTestMode() {
@@ -196,7 +245,20 @@ func (b *PluginBootstrap) createPluginManagementCmd() *cobra.Command {
 		RunE:  b.handlePluginInfo,
 	}
 
-	cmd.AddCommand(listCmd, searchCmd, installCmd, removeCmd, updateCmd, infoCmd)
+	// plugin registry command
+	registryCmd := &cobra.Command{
+		Use:   "registry",
+		Short: "Show plugin registry configuration",
+		Long: `Show the current plugin registry URL configuration.
+		
+The registry URL can be configured via:
+1. Environment variable: DEVEX_PLUGIN_REGISTRY_URL
+2. Config file: ~/.devex/config.yaml (plugin_registry_url key)
+3. Default: https://registry.devex.sh/v1`,
+		RunE: b.handleRegistryInfo,
+	}
+
+	cmd.AddCommand(listCmd, searchCmd, installCmd, removeCmd, updateCmd, infoCmd, registryCmd)
 	return cmd
 }
 
@@ -401,6 +463,44 @@ func getCommandNames(commands []sdk.PluginCommand) []string {
 // Allows alphanumeric characters, hyphens, and underscores
 // Prevents directory traversal attacks and special characters
 var validPluginNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+
+// handleRegistryInfo shows registry configuration information
+func (b *PluginBootstrap) handleRegistryInfo(cmd *cobra.Command, args []string) error {
+	registryURL := GetRegistryURL()
+
+	fmt.Println("Plugin Registry Configuration")
+	fmt.Println("=============================")
+	fmt.Printf("Current URL: %s\n\n", registryURL)
+
+	// Check environment variable
+	if envURL := os.Getenv("DEVEX_PLUGIN_REGISTRY_URL"); envURL != "" {
+		fmt.Printf("✓ Environment variable set: DEVEX_PLUGIN_REGISTRY_URL=%s\n", envURL)
+	} else {
+		fmt.Println("✗ Environment variable not set: DEVEX_PLUGIN_REGISTRY_URL")
+	}
+
+	// Check config file
+	homeDir, _ := os.UserHomeDir()
+	configPath := filepath.Join(homeDir, ".devex", "config.yaml")
+	if configURL := getRegistryURLFromConfig(); configURL != "" {
+		fmt.Printf("✓ Config file setting: %s\n", configURL)
+		fmt.Printf("  Location: %s\n", configPath)
+	} else {
+		fmt.Printf("✗ No registry URL in config file: %s\n", configPath)
+	}
+
+	// Show default
+	fmt.Printf("\nDefault URL: %s\n", DefaultRegistryURL)
+
+	// Show example configuration
+	fmt.Println("\nTo use a custom registry:")
+	fmt.Println("1. Set environment variable:")
+	fmt.Println("   export DEVEX_PLUGIN_REGISTRY_URL=https://your-registry.com/v1")
+	fmt.Println("\n2. Or add to config file (~/.devex/config.yaml):")
+	fmt.Println("   plugin_registry_url: https://your-registry.com/v1")
+
+	return nil
+}
 
 // validatePluginName validates plugin name to prevent directory traversal and injection attacks
 func validatePluginName(pluginName string) error {
