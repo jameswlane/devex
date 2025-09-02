@@ -1,56 +1,146 @@
 # DevEx
 
-DevEx is a powerful CLI tool designed to streamline the setup and management of development environments. It simplifies the installation of applications, configuration of programming languages, and customization of themes.
+[![Go Version](https://img.shields.io/github/go-mod/go-version/jameswlane/devex/apps/cli)](https://golang.org/)
+[![License](https://img.shields.io/github/license/jameswlane/devex)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/jameswlane/devex)](https://github.com/jameswlane/devex/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
 
-This is a monorepo containing:
-- **CLI Tool** (`apps/cli/`) - The main DevEx CLI application
-- **Website** (`apps/web/`) - The official website at [devex.sh](https://devex.sh)
-- **Documentation** (`apps/docs/`) - Technical documentation site
+DevEx is a powerful, enterprise-grade CLI tool designed to streamline the setup and management of development environments across Linux, macOS, and Windows. With support for 36+ package managers and desktop environments, DevEx automates application installation, system configuration, and development workflow setup.
 
----
+## 🏗️ Monorepo Architecture
 
-## Features
+This is a modern monorepo containing:
 
-- **Custom Configuration Management**: Tailor application, GNOME extension, and programming language setups with YAML files.
-- **Automated Releases**: Leverage `commitizen`, `semantic-release`, and `goreleaser` for seamless versioning and publishing.
-- **Task Automation**: Use `Taskfile` for efficient script execution and workflow management.
-- **Community Support**: Engage with contributors through GitHub Issues, Discussions, and Wiki.
-- **Biome Formatting**: Standardize code with Biome for consistent formatting and linting.
-- **Comprehensive Website**: Access guides, documentation, and updates at [devex.sh](https://devex.sh).
+- **🔧 CLI Tool** (`apps/cli/`) - Enterprise Go CLI with Cobra + Viper architecture
+- **🌐 Website** (`apps/web/`) - Next.js marketing site at [devex.sh](https://devex.sh)  
+- **📚 Documentation** (`apps/docs/`) - Technical documentation with MDX
+- **🔌 Plugin System** (`packages/plugins/`) - 36 modular plugins for package managers and desktop environments
+- **📦 Shared SDK** (`packages/shared/`) - Common plugin development framework
 
----
+## ✨ Key Features
 
-## Getting Started
+- **🔌 Plugin Architecture**: 36 specialized plugins for package managers (apt, dnf, pacman, brew, etc.) and desktop environments
+- **🏢 Enterprise-Ready**: Built with Cobra CLI framework, Viper configuration, and 12-Factor App methodology
+- **⚡ Cross-Platform**: Native support for Linux distributions, macOS, and Windows
+- **🎯 Smart Detection**: Automatic platform, distribution, and desktop environment detection
+- **📋 Configuration Management**: YAML-based configuration with hierarchical overrides
+- **🚀 Rapid Development**: 6-day sprint methodology with automated testing and deployment
+
+## 🚀 Quick Start
+
+### One-Line Installation
+
+```bash
+# Install DevEx CLI
+curl -fsSL https://devex.sh/install | bash
+```
+
+### Basic Usage
+
+```bash
+# Install development environment
+devex install
+
+# Install specific categories
+devex install --categories development,databases
+
+# Configure desktop environment
+devex system apply
+
+# List available applications
+devex list apps
+```
+
+## 🔌 Plugin System
+
+DevEx features a comprehensive plugin architecture with 36 specialized plugins:
+
+### Package Manager Plugins
+- **Linux**: apt, dnf, pacman, yay, zypper, emerge, eopkg, xbps, apk, rpm, deb
+- **Universal**: flatpak, snap, appimage, mise, docker, pip, curlpipe
+- **Cross-platform**: brew (macOS/Linux)
+- **Nix**: nixpkgs, nixflake
+
+### Desktop Environment Plugins
+- **GNOME**, **KDE Plasma**, **XFCE**, **MATE**, **Cinnamon**
+- **LXQt**, **Budgie**, **Pantheon**, **COSMIC**
+- **Themes & Fonts**: Centralized theming and font management
+
+### System Plugins
+- **Git Configuration**: Automated Git setup and credential management
+- **Shell Setup**: Bash, Zsh, Fish configuration
+- **System Setup**: Core system configuration and optimization
+- **Stack Detection**: Automatic project stack detection and setup
+
+## 🏢 Enterprise Architecture
+
+DevEx follows enterprise patterns and best practices:
+
+### CLI Framework
+- **Cobra**: Command structure and flag management
+- **Viper**: Hierarchical configuration (flags > env > config > defaults)
+- **12-Factor App**: Configuration, logging, and process management
+- **Context Propagation**: Proper cancellation and timeout handling
+
+### Testing & Quality
+- **Ginkgo BDD**: Behavior-driven development testing
+- **golangci-lint**: Comprehensive Go linting
+- **lefthook**: Git hooks for quality gates
+- **govulncheck**: Security vulnerability scanning
+
+### Development Workflow
+- **6-Day Sprints**: Rapid iteration and delivery cycles
+- **Automated Testing**: Comprehensive test coverage with CI/CD
+- **Semantic Versioning**: Automated releases with semantic-release
+- **Plugin Versioning**: Independent plugin release management
+
+## 💻 Development Setup
 
 ### Prerequisites
 
-- **Go**: Version 1.23 or later (for CLI development)
-- **Node.js**: Version 18.x or later (for website and docs)
-- **pnpm**: Version 9.x or later (for workspace management)
-- **Mise**: Install from the [Mise GitHub page](https://github.com/mise/mise)
+- **Go**: Version 1.24+ (CLI development)
+- **Node.js**: Version 18+ (website and docs)  
+- **pnpm**: Version 9+ (workspace management)
+- **Task**: Task runner for CLI development
+- **lefthook**: Git hooks (installed via pnpm)
 
-### Installation
+### Development Installation
 
-#### CLI Tool
-To install the DevEx CLI:
+#### Full Monorepo Setup
 
 ```bash
+# Clone repository
+git clone https://github.com/jameswlane/devex.git
+cd devex
+
+# Install workspace dependencies
+pnpm install
+
+# Install CLI locally for testing
 cd apps/cli
 task install
 ```
 
-#### Development Setup (Full Monorepo)
-To set up the entire development environment:
+#### CLI Development Workflow
 
 ```bash
-# Install workspace dependencies
-pnpm install
+cd apps/cli
 
-# Build all projects
-pnpm build
+# Default workflow (lint + test)
+task
 
-# Start development servers
-pnpm dev
+# Development commands
+task build:local    # Build for local testing
+task test          # Run all tests
+task test:ginkgo   # Run Ginkgo BDD tests
+task lint          # Run golangci-lint
+task lint:fix      # Auto-fix linting issues
+task vulncheck     # Security vulnerability check
+
+# Plugin development
+lefthook run plugin-check        # Check plugin changes
+lefthook run plugin-build       # Build all changed plugins
+lefthook run plugin-test        # Test specific plugin
 ```
 
 ---
@@ -99,17 +189,32 @@ prettier --write "**/*.{yaml,md}"
 
 ---
 
-## Monorepo Structure
+## 📁 Project Structure
 
 ```
 devex/
 ├── apps/
-│   ├── cli/           # DevEx CLI tool (Go)
-│   ├── web/           # Main website (Next.js)
-│   └── docs/          # Documentation site (MDX)
-├── packages/          # Shared packages (future use)
-├── pnpm-workspace.yaml
-└── package.json       # Root workspace configuration
+│   ├── cli/                    # DevEx CLI tool (Go)
+│   │   ├── cmd/               # Cobra command definitions
+│   │   ├── pkg/               # Public packages
+│   │   ├── internal/          # Private application code
+│   │   ├── config/            # Default YAML configurations
+│   │   └── Taskfile.yml       # CLI-specific tasks
+│   ├── web/                   # Marketing website (Next.js)
+│   └── docs/                  # Documentation site (MDX)
+├── packages/
+│   ├── plugins/               # Plugin system (36 plugins)
+│   │   ├── package-manager-*/ # Package manager plugins
+│   │   ├── desktop-*/         # Desktop environment plugins
+│   │   ├── tool-*/           # Development tool plugins
+│   │   └── system-setup/     # System configuration plugin
+│   └── shared/
+│       └── plugin-sdk/       # Common plugin development framework
+├── scripts/                   # Build and release automation
+├── .github/                   # GitHub Actions workflows
+├── lefthook.yml              # Git hooks configuration
+├── pnpm-workspace.yaml       # Workspace configuration
+└── package.json              # Root dependencies and scripts
 ```
 
 ## Development Commands
@@ -230,56 +335,134 @@ pnpm build
 
 ---
 
-## Automated Releases
+## 🚀 Release Management
 
-DevEx uses `semantic-release` for automated versioning and releases. The monorepo structure allows for independent versioning of each application.
+DevEx uses comprehensive automated release management:
 
-Releases are triggered automatically on the main branch when commits follow conventional commit patterns:
-- `feat:` - new features (minor version bump)
-- `fix:` - bug fixes (patch version bump)
-- `BREAKING CHANGE:` - breaking changes (major version bump)
+### CLI Releases
+- **GoReleaser**: Automated binary builds for multiple platforms
+- **GitHub Releases**: Automatic changelog generation and asset publishing
+- **Semantic Versioning**: Conventional commit-based version bumping
+
+### Plugin Releases
+- **Individual Versioning**: Each of the 36 plugins versions independently
+- **Parallel Builds**: Multi-threaded plugin compilation
+- **Automated Registry**: Plugin registry updates with version tracking
+
+### Commit Conventions
+- `feat:` - New features (minor version bump)
+- `fix:` - Bug fixes (patch version bump)  
+- `feat!:` or `BREAKING CHANGE:` - Breaking changes (major version bump)
+- `docs:`, `style:`, `refactor:`, `test:`, `chore:` - No version bump
+
+### Release Triggers
+```bash
+# Feature release (minor version)
+git commit -m "feat: add new plugin system"
+
+# Bug fix release (patch version)  
+git commit -m "fix: resolve installation issue"
+
+# Breaking change release (major version)
+git commit -m "feat!: redesign configuration system"
+```
 
 ---
 
-## Community and Support
+## 🌟 Platform Support
 
-### GitHub Features
+### Operating Systems
+- **Linux**: Ubuntu, Debian, Fedora, CentOS, Arch, openSUSE, Gentoo, Void, Alpine
+- **macOS**: Intel and Apple Silicon support
+- **Windows**: Native Windows support (planned)
 
-- **[Issues](https://github.com/jameswlane/devex/issues)**: Report bugs or request features.
-- **[Discussions](https://github.com/jameswlane/devex/discussions)**: Ask questions or share ideas.
-- **[Docs](https://docs.devex.sh)**: View documentation.
-- **[Projects](https://github.com/jameswlane/devex/projects)**: Track project progress.
-- **[Wiki](https://github.com/jameswlane/devex/wiki)**: Access in-depth documentation.
-- **[Security](https://github.com/jameswlane/devex/security)**: Report vulnerabilities.
-- **[Pulse](https://github.com/jameswlane/devex/pulse)**: View project activity.
+### Package Managers
+- **Linux**: apt, dnf, pacman, yay, zypper, emerge, eopkg, xbps, apk
+- **Universal**: flatpak, snap, appimage, docker, pip, mise
+- **Cross-platform**: brew (macOS/Linux)
+- **Nix**: nixpkgs, nixflake
+- **Binary**: curlpipe, rpm, deb
 
-### Website
+### Desktop Environments  
+- **GNOME**, **KDE Plasma**, **XFCE**, **MATE**, **Cinnamon**
+- **LXQt**, **Budgie**, **Pantheon**, **COSMIC**
 
-Visit the official website at [devex.sh](https://devex.sh) for documentation, guides, and updates.
+## 🤝 Community & Support
+
+### 📞 Getting Help
+- **[Issues](https://github.com/jameswlane/devex/issues)**: Bug reports and feature requests
+- **[Discussions](https://github.com/jameswlane/devex/discussions)**: Community Q&A and ideas  
+- **[Documentation](https://docs.devex.sh)**: Comprehensive guides and API docs
+- **[Website](https://devex.sh)**: Official website with tutorials and updates
+
+### 🏗️ Development Resources
+- **[Projects](https://github.com/jameswlane/devex/projects)**: Roadmap and progress tracking
+- **[Wiki](https://github.com/jameswlane/devex/wiki)**: In-depth technical documentation
+- **[Security](https://github.com/jameswlane/devex/security)**: Vulnerability reporting
+- **[Pulse](https://github.com/jameswlane/devex/pulse)**: Project activity and metrics
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
-Contributions are welcome! Refer to the [Contributing Guide](.github/CONTRIBUTING.md) for details.
+We welcome contributions! DevEx follows enterprise development practices:
+
+### Getting Started
+1. **Fork** the repository
+2. **Clone** your fork: `git clone https://github.com/yourusername/devex.git`
+3. **Install** dependencies: `pnpm install`
+4. **Create** a feature branch: `git checkout -b feat/your-feature`
+5. **Develop** using our CLI workflow: `cd apps/cli && task`
+6. **Test** thoroughly: `task test && task lint`
+7. **Commit** with conventional commits: `git commit -m "feat: add new feature"`
+8. **Push** and create a **Pull Request**
+
+### Development Standards
+- **Quality Gates**: All commits must pass linting, testing, and security checks
+- **Conventional Commits**: Required for automated versioning
+- **Test Coverage**: Maintain comprehensive test coverage with Ginkgo BDD
+- **Documentation**: Update docs for user-facing changes
+
+### Plugin Development
+```bash
+# Check plugin changes
+lefthook run plugin-check
+
+# Build and test plugins
+lefthook run plugin-build
+lefthook run plugin-test [plugin-name]
+
+# Plugin versioning
+node scripts/determine-plugin-version.js update [plugin-name]
+```
+
+Refer to the [Contributing Guide](.github/CONTRIBUTING.md) for detailed guidelines.
+
+---
+
+## 📄 Legal & Security
+
+### License
+DevEx is licensed under the [GNU GPL v3 License](LICENSE), ensuring it remains free and open source.
+
+### Security Policy
+For security vulnerabilities, please refer to our [Security Policy](SECURITY.md) and report issues privately.
 
 ### Code of Conduct
-
-We expect all contributors to adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
-
----
-
-## License
-
-DevEx is licensed under the [GNU GPL v3 License](LICENSE).
+We maintain a welcoming community following our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
-## Security
+## 🤖 AI-Assisted Development
 
-For security concerns, please refer to our [Security Policy](SECURITY.md).
+This project leverages AI-assisted development tools to enhance productivity and code quality while maintaining human oversight and decision-making. [Learn more about our AI usage](./AI_USAGE.md).
 
 ---
 
-**Note:** This project uses AI-assisted tools for certain tasks.  
-[Learn more about our AI usage here.](./AI_USAGE.md)
+<div align="center">
+
+### 🚀 Ready to streamline your development environment?
+
+**[Install DevEx](https://devex.sh)** • **[Browse Docs](https://docs.devex.sh)** • **[Join Discussions](https://github.com/jameswlane/devex/discussions)**
+
+</div>
