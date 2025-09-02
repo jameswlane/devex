@@ -130,6 +130,9 @@ importers:
       '@biomejs/biome':
         specifier: 2.2.2
         version: 2.2.2
+      '@tailwindcss/postcss':
+        specifier: 4.1.12
+        version: 4.1.12
       '@types/node':
         specifier: 22.18.0
         version: 22.18.0
