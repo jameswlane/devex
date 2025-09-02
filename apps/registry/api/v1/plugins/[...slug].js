@@ -4,10 +4,6 @@ import path from 'node:path';
 export default function handler(req, res) {
     const { slug } = req.query;
 
-    // Enable CORS
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-
     if (req.method === 'OPTIONS') {
         res.status(200).end();
         return;
