@@ -12,6 +12,6 @@
 		"next": "^15.5.2"
 	},
 	"devDependencies": {
-		"vercel": "^46.1.1"
+		"vercel": "^47.0.0"
 	}
 }
