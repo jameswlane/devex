@@ -1,0 +1,37 @@
+version: '3'
+vars:
+  PLUGIN_NAME: devex-plugin-package-manager-apt
+tasks:
+  build:
+    desc: Build APT plugin for all platforms
+    cmds:
+      - mkdir -p dist
+      - |
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION}}" \
+        -o dist/{{.PLUGIN_NAME}}-linux-amd64 .
+      - |
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION}}" \
+        -o dist/{{.PLUGIN_NAME}}-linux-arm64 .
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v ./...
+  lint:
+    desc: Run linters
+    cmds:
+      - golangci-lint run
+  install:local:
+    desc: Install plugin locally for testing
+    cmds:
+      - task: build:single
+      - mkdir -p ~/.devex/plugins
+      - cp {{.PLUGIN_NAME}} ~/.devex/plugins/
+  build:single:
+    desc: Build for current platform
+    cmds:
+      - go build -ldflags="-s -w" -o {{.PLUGIN_NAME}} .
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf dist/
+      - rm -f {{.PLUGIN_NAME}}

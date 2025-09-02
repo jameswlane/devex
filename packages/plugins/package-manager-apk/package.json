@@ -1,0 +1,48 @@
+{
+	"name": "@devex/plugin-package-manager-apk",
+	"version": "1.0.0",
+	"description": "APK package manager plugin for Alpine Linux",
+	"main": "main.go",
+	"scripts": {
+		"build": "task build",
+		"test": "task test",
+		"lint": "task lint"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"apk",
+		"package-manager",
+		"alpine",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/plugins/package-manager-apk"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"distros": [
+				"alpine"
+			],
+			"dependencies": [
+				"apk"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

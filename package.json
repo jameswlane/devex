@@ -23,23 +23,27 @@
 		"web:build": "turbo build --filter=web",
 		"web:dev": "turbo dev --filter=web",
 		"docs:build": "turbo build --filter=docs",
-		"docs:dev": "turbo dev --filter=docs"
+		"docs:dev": "turbo dev --filter=docs",
+		"goreleaser:generate": "node scripts/generate-goreleaser.js",
+		"prerelease": "npm run goreleaser:generate"
 	},
 	"keywords": [],
 	"author": "James W Lane",
 	"license": "GPL-3.0",
-	"packageManager": "pnpm@10.14.0",
+	"packageManager": "pnpm@10.15.1",
 	"devDependencies": {
 		"@biomejs/biome": "2.2.2",
 		"@commitlint/config-conventional": "^19.8.1",
 		"@commitlint/format": "^19.8.1",
+		"@octokit/rest": "^22.0.0",
 		"@semantic-release/changelog": "^6.0.3",
 		"@semantic-release/git": "^10.0.1",
-		"@semantic-release/github": "^11.0.4",
+		"@semantic-release/github": "^11.0.5",
 		"@semantic-release/release-notes-generator": "^14.0.3",
 		"commitlint": "^19.8.0",
 		"conventional-changelog-conventionalcommits": "^9.1.0",
+		"js-yaml": "^4.1.0",
 		"semantic-release": "^24.2.7",
-		"turbo": "^2.5.5"
+		"turbo": "^2.5.6"
 	}
 }

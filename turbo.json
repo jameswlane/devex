@@ -5,7 +5,16 @@
 	"tasks": {
 		"build": {
 			"dependsOn": ["^build"],
-			"outputs": [".next/**", "!.next/cache/**", "bin/**", "out/**"],
+			"outputs": [
+				".next/**",
+				"!.next/cache/**",
+				"bin/**",
+				"out/**",
+				"dist/**",
+				"build/**",
+				"*.exe",
+				"devex-plugin-*"
+			],
 			"inputs": [
 				"src/**",
 				"cmd/**",
@@ -14,7 +23,8 @@
 				"go.mod",
 				"go.sum",
 				"Taskfile.yml"
-			]
+			],
+			"env": ["GOOS", "GOARCH", "CGO_ENABLED"]
 		},
 		"build:go": {
 			"dependsOn": ["^build:go"],
@@ -110,6 +120,11 @@
 		"start": {
 			"dependsOn": ["build"],
 			"cache": false
+		},
+		"release": {
+			"dependsOn": ["build", "test", "lint"],
+			"outputs": ["dist/**"],
+			"env": ["GITHUB_TOKEN", "GORELEASER_KEY"]
 		}
 	},
 	"globalEnv": ["CI", "VERCEL_URL"]

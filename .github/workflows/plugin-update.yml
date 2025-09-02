@@ -1,0 +1,44 @@
+name: Plugin Registry Update
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+jobs:
+  update-registry:
+    permissions:
+      contents: write
+      packages: read
+      actions: read
+      security-events: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: |
+          cd scripts
+          npm install @octokit/rest
+      - name: Generate registry
+        run: |
+          node scripts/generate-registry.js ${{ github.event.release.tag_name || 'latest' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to Vercel
+        run: |
+          cd apps/registry
+          npx vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      - name: Commit updated registry
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add apps/registry/public/v1/registry.json
+          git diff --staged --quiet || git commit -m "chore: update plugin registry for ${{ github.event.release.tag_name }}"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
