@@ -424,9 +424,29 @@ func (s *CrossPlatformSettings) ToLegacySettings() Settings {
 	// Convert dotfiles configs
 	legacy.GitConfig = append(legacy.GitConfig, s.Dotfiles.Git...)
 
-	// Convert desktop environment configs (placeholder for now)
-	// TODO: Implement proper desktop environment config conversion
-	// when GNOME/KDE/etc configs are properly structured
+	// Convert desktop environment configs
+	// Convert GNOME settings and extensions to legacy format
+	if len(s.DesktopEnvironments.GNOME.Settings) > 0 {
+		legacy.GnomeSettings = append(legacy.GnomeSettings, s.DesktopEnvironments.GNOME.Settings...)
+	}
+	if len(s.DesktopEnvironments.GNOME.Extensions) > 0 {
+		legacy.GnomeExt = append(legacy.GnomeExt, s.DesktopEnvironments.GNOME.Extensions...)
+	}
+	if len(s.DesktopEnvironments.GNOME.Dock) > 0 {
+		legacy.Dock = append(legacy.Dock, s.DesktopEnvironments.GNOME.Dock...)
+	}
+	if len(s.DesktopEnvironments.GNOME.Themes) > 0 {
+		legacy.Themes = append(legacy.Themes, s.DesktopEnvironments.GNOME.Themes...)
+	}
+
+	// Convert KDE settings to legacy format if available
+	if len(s.DesktopEnvironments.KDE.Settings) > 0 {
+		// KDE settings can be mapped to GNOME settings structure for legacy compatibility
+		legacy.GnomeSettings = append(legacy.GnomeSettings, s.DesktopEnvironments.KDE.Settings...)
+	}
+	if len(s.DesktopEnvironments.KDE.Themes) > 0 {
+		legacy.Themes = append(legacy.Themes, s.DesktopEnvironments.KDE.Themes...)
+	}
 
 	return legacy
 }

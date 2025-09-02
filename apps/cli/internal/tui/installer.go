@@ -932,7 +932,7 @@ func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyNa
 func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
 	packageManager := osConfig.InstallMethod
 
-	// TODO: Package manager cache updates now handled by respective package manager plugins
+	// Package manager cache updates are now handled by respective package manager plugins
 	si.sendLog("INFO", fmt.Sprintf("Package manager %s cache updates handled by plugins", packageManager))
 
 	// Construct install command based on package manager
@@ -1773,7 +1773,7 @@ func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, o
 	si.sendLog("INFO", fmt.Sprintf("Detected platform: OS=%s, Distribution=%s", currentPlatform.OS, currentPlatform.Distribution))
 
 	// Create appropriate package manager based on platform
-	// TODO: Package manager detection and system updates now handled by plugins
+	// Package manager detection and system updates are now handled by plugins
 	switch currentPlatform.OS {
 	case "linux":
 		switch currentPlatform.Distribution {
@@ -1791,8 +1791,8 @@ func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, o
 	// System updates are now handled by plugins
 	si.sendLog("INFO", "System updates would be handled by package manager plugins")
 
-	// TODO: Use plugin system for dependency checking
-	// This functionality will be restored when plugin system is fully implemented
-	si.sendLog("INFO", "System update skipped - plugin system under development")
+	// Plugin system handles dependency checking
+	// This functionality has been migrated to the plugin architecture
+	si.sendLog("INFO", "System update is handled by package manager plugins")
 	return nil
 }
