@@ -59,6 +59,7 @@ jobs:
           go install github.com/go-task/task/v3/cmd/task@latest
           go install github.com/goreleaser/goreleaser@latest
           go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
       - name: Build all packages
         run: pnpm build
       - name: Lint all packages
