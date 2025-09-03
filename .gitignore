@@ -50,5 +50,5 @@ node_modules
 .turbo
 
 # Plugin binaries
-packages/plugins/**/devex-plugin-*
-!packages/plugins/**/devex-plugin-*.go
+packages/*/devex-plugin-*
+!packages/*/devex-plugin-*.go
