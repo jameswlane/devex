@@ -82,16 +82,16 @@ func (p *SystemSetupPlugin) Execute(command string, args []string) error {
 
 func (p *SystemSetupPlugin) handleConfigure(args []string) error {
 	fmt.Printf("Configuring system (%s)...\n", runtime.GOOS)
-	
+
 	// Display system information
 	fmt.Printf("Operating System: %s\n", runtime.GOOS)
 	fmt.Printf("Architecture: %s\n", runtime.GOARCH)
-	
+
 	hostname, err := os.Hostname()
 	if err == nil {
 		fmt.Printf("Hostname: %s\n", hostname)
 	}
-	
+
 	// Configure based on OS
 	switch runtime.GOOS {
 	case "linux":
@@ -107,7 +107,7 @@ func (p *SystemSetupPlugin) handleConfigure(args []string) error {
 
 func (p *SystemSetupPlugin) configureLinux(args []string) error {
 	fmt.Println("\nConfiguring Linux system settings...")
-	
+
 	configs := []SystemConfig{
 		{
 			Name:        "Increase file watcher limit",
@@ -128,12 +128,12 @@ func (p *SystemSetupPlugin) configureLinux(args []string) error {
 			Apply:       p.applyDevDirectories,
 		},
 	}
-	
+
 	// Check and optionally apply each configuration
 	for _, config := range configs {
 		fmt.Printf("\n%s:\n", config.Name)
 		fmt.Printf("  %s\n", config.Description)
-		
+
 		if config.Check() {
 			fmt.Println("  ✓ Already configured")
 		} else {
@@ -147,17 +147,17 @@ func (p *SystemSetupPlugin) configureLinux(args []string) error {
 			}
 		}
 	}
-	
+
 	if len(args) == 0 || args[0] != "--apply" {
 		fmt.Println("\nTo apply these configurations, run: system-setup configure --apply")
 	}
-	
+
 	return nil
 }
 
 func (p *SystemSetupPlugin) configureMacOS(args []string) error {
 	fmt.Println("\nConfiguring macOS system settings...")
-	
+
 	configs := []SystemConfig{
 		{
 			Name:        "Show hidden files in Finder",
@@ -178,12 +178,12 @@ func (p *SystemSetupPlugin) configureMacOS(args []string) error {
 			Apply:       p.applyGatekeeper,
 		},
 	}
-	
+
 	// Check and optionally apply each configuration
 	for _, config := range configs {
 		fmt.Printf("\n%s:\n", config.Name)
 		fmt.Printf("  %s\n", config.Description)
-		
+
 		if config.Check() {
 			fmt.Println("  ✓ Already configured")
 		} else {
@@ -197,17 +197,17 @@ func (p *SystemSetupPlugin) configureMacOS(args []string) error {
 			}
 		}
 	}
-	
+
 	if len(args) == 0 || args[0] != "--apply" {
 		fmt.Println("\nTo apply these configurations, run: system-setup configure --apply")
 	}
-	
+
 	return nil
 }
 
 func (p *SystemSetupPlugin) configureWindows(args []string) error {
 	fmt.Println("\nConfiguring Windows system settings...")
-	
+
 	configs := []SystemConfig{
 		{
 			Name:        "Enable developer mode",
@@ -228,12 +228,12 @@ func (p *SystemSetupPlugin) configureWindows(args []string) error {
 			Apply:       p.applyWSL,
 		},
 	}
-	
+
 	// Check and optionally apply each configuration
 	for _, config := range configs {
 		fmt.Printf("\n%s:\n", config.Name)
 		fmt.Printf("  %s\n", config.Description)
-		
+
 		if config.Check() {
 			fmt.Println("  ✓ Already configured")
 		} else {
@@ -247,29 +247,29 @@ func (p *SystemSetupPlugin) configureWindows(args []string) error {
 			}
 		}
 	}
-	
+
 	if len(args) == 0 || args[0] != "--apply" {
 		fmt.Println("\nTo apply these configurations, run: system-setup configure --apply")
 	}
-	
+
 	return nil
 }
 
 func (p *SystemSetupPlugin) handleApply(args []string) error {
 	fmt.Println("Applying system configuration changes...")
-	
+
 	// Call configure with --apply flag
 	return p.handleConfigure([]string{"--apply"})
 }
 
 func (p *SystemSetupPlugin) handleValidate(args []string) error {
 	fmt.Println("Validating system configuration...")
-	
+
 	// Basic system validation
 	fmt.Println("System Validation Report:")
 	fmt.Printf("✓ Operating System: %s\n", runtime.GOOS)
 	fmt.Printf("✓ Architecture: %s\n", runtime.GOARCH)
-	
+
 	// Check if running as root (on Unix systems)
 	if runtime.GOOS != "windows" {
 		uid := os.Getuid()
@@ -279,37 +279,37 @@ func (p *SystemSetupPlugin) handleValidate(args []string) error {
 			fmt.Printf("✓ Running as user ID: %d\n", uid)
 		}
 	}
-	
+
 	// TODO: Implement comprehensive system validation
 	return nil
 }
 
 func (p *SystemSetupPlugin) handleBackup(args []string) error {
 	fmt.Println("Backing up system configuration...")
-	
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
-	
+
 	// Create backup directory
 	backupDir := filepath.Join(homeDir, ".devex", "backups", "system")
 	timestamp := time.Now().Format("20060102-150405")
 	backupPath := filepath.Join(backupDir, timestamp)
-	
+
 	if err := os.MkdirAll(backupPath, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
-	
+
 	// Backup system information
 	sysInfo := fmt.Sprintf("OS: %s\nArch: %s\nHostname: %s\nBackup Time: %s\n",
 		runtime.GOOS, runtime.GOARCH, getHostname(), timestamp)
-	
+
 	infoFile := filepath.Join(backupPath, "system-info.txt")
 	if err := os.WriteFile(infoFile, []byte(sysInfo), 0644); err != nil {
 		return fmt.Errorf("failed to write system info: %w", err)
 	}
-	
+
 	// Backup configuration files based on OS
 	switch runtime.GOOS {
 	case "linux":
@@ -319,7 +319,7 @@ func (p *SystemSetupPlugin) handleBackup(args []string) error {
 	case "windows":
 		p.backupWindowsConfigs(backupPath)
 	}
-	
+
 	fmt.Printf("\nBackup completed: %s\n", backupPath)
 	return nil
 }
@@ -342,7 +342,7 @@ func (p *SystemSetupPlugin) applyFileWatcherLimit() error {
 		}
 		return err
 	}
-	
+
 	// Make permanent
 	sysctlConf := "/etc/sysctl.d/99-devex.conf"
 	content := "fs.inotify.max_user_watches=524288\n"
@@ -366,7 +366,7 @@ func (p *SystemSetupPlugin) applySwappiness() error {
 		}
 		return err
 	}
-	
+
 	// Make permanent
 	sysctlConf := "/etc/sysctl.d/99-devex.conf"
 	content := "vm.swappiness=10\n"
@@ -380,7 +380,7 @@ func (p *SystemSetupPlugin) checkDevDirectories() bool {
 		filepath.Join(homeDir, "Projects"),
 		filepath.Join(homeDir, ".devex"),
 	}
-	
+
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			return false
@@ -398,7 +398,7 @@ func (p *SystemSetupPlugin) applyDevDirectories() error {
 		filepath.Join(homeDir, ".devex", "backups"),
 		filepath.Join(homeDir, ".devex", "configs"),
 	}
-	
+
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create %s: %w", dir, err)
@@ -489,11 +489,13 @@ func (p *SystemSetupPlugin) backupLinuxConfigs(backupPath string) {
 		"/etc/sysctl.d/",
 		"/etc/security/limits.conf",
 	}
-	
+
 	for _, config := range configs {
 		if _, err := os.Stat(config); err == nil {
 			name := strings.ReplaceAll(config, "/", "_")
-			sdk.ExecCommand(false, "cp", "-r", config, filepath.Join(backupPath, name))
+			if err := sdk.ExecCommand(false, "cp", "-r", config, filepath.Join(backupPath, name)); err != nil {
+				fmt.Printf("Warning: Failed to backup %s: %v\n", config, err)
+			}
 		}
 	}
 }
@@ -505,12 +507,14 @@ func (p *SystemSetupPlugin) backupMacOSConfigs(backupPath string) {
 		"com.apple.dock",
 		"com.apple.Terminal",
 	}
-	
+
 	for _, pref := range prefs {
 		output, err := sdk.RunCommand("defaults", "read", pref)
 		if err == nil {
 			prefFile := filepath.Join(backupPath, pref+".plist")
-			os.WriteFile(prefFile, []byte(output), 0644)
+			if err := os.WriteFile(prefFile, []byte(output), 0644); err != nil {
+				fmt.Printf("Warning: Failed to write preference file %s: %v\n", prefFile, err)
+			}
 		}
 	}
 }
@@ -520,10 +524,12 @@ func (p *SystemSetupPlugin) backupWindowsConfigs(backupPath string) {
 	keys := []string{
 		"HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock",
 	}
-	
+
 	for _, key := range keys {
 		name := strings.ReplaceAll(key, "\\", "_") + ".reg"
-		sdk.ExecCommand(false, "reg", "export", key, filepath.Join(backupPath, name))
+		if err := sdk.ExecCommand(false, "reg", "export", key, filepath.Join(backupPath, name)); err != nil {
+			fmt.Printf("Warning: Failed to export registry key %s: %v\n", key, err)
+		}
 	}
 }
 

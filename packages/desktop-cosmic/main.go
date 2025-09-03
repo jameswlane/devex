@@ -109,7 +109,7 @@ func isCosmicAvailable() bool {
 	desktop := os.Getenv("XDG_CURRENT_DESKTOP")
 	sessionType := os.Getenv("XDG_SESSION_DESKTOP")
 	compositor := os.Getenv("XDG_SESSION_TYPE")
-	
+
 	return strings.Contains(strings.ToLower(desktop), "cosmic") ||
 		strings.Contains(strings.ToLower(sessionType), "cosmic") ||
 		(compositor == "wayland" && sdk.CommandExists("cosmic-comp"))
@@ -121,11 +121,13 @@ func (p *CosmicPlugin) handleConfigure(args []string) error {
 
 	// Create COSMIC config directories if they don't exist
 	configDir := filepath.Join(os.Getenv("HOME"), ".config", "cosmic")
-	os.MkdirAll(configDir, 0755)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create COSMIC config directory: %w", err)
+	}
 
 	// Basic COSMIC configuration
 	fmt.Println("✓ Created COSMIC configuration directory")
-	
+
 	// Configure panel
 	if err := p.configureCosmicPanel(); err != nil {
 		fmt.Printf("Warning: Failed to configure panel: %v\n", err)
@@ -275,7 +277,7 @@ func (p *CosmicPlugin) handleSetBackground(args []string) error {
 	// Update COSMIC background configuration
 	configDir := filepath.Join(os.Getenv("HOME"), ".config", "cosmic")
 	desktopConfig := filepath.Join(configDir, "com.system76.CosmicBackground.ron")
-	
+
 	// Create new background config
 	backgroundSettings := fmt.Sprintf(`(
     wallpaper: Some("%s"),
@@ -402,7 +404,9 @@ func (p *CosmicPlugin) handleRestore(args []string) error {
 	fmt.Print("Continue? [y/N]: ")
 
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil {
+		return fmt.Errorf("failed to read user input: %w", err)
+	}
 	if strings.ToLower(response) != "y" {
 		fmt.Println("Restore cancelled.")
 		return nil

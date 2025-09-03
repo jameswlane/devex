@@ -48,10 +48,13 @@ pre-commit:
       run: |
         for file in {staged_files}; do
           plugin_dir=$(dirname "$file")
-          if [[ "$plugin_dir" != *"plugin-sdk"* ]] && [[ "$plugin_dir" != *"apps"* ]]; then
-            echo "Formatting Go files in $plugin_dir"
-            (cd "$plugin_dir" && gofmt -w *.go 2>/dev/null && goimports -w *.go 2>/dev/null)
-          fi
+          case "$plugin_dir" in
+            *plugin-sdk*|*apps*) ;;
+            *)
+              echo "Formatting Go files in $plugin_dir"
+              (cd "$plugin_dir" && gofmt -w *.go 2>/dev/null && goimports -w *.go 2>/dev/null)
+              ;;
+          esac
         done
       stage_fixed: true
     plugin-go-mod-tidy:
@@ -60,9 +63,14 @@ pre-commit:
       run: |
         for file in {staged_files}; do
           plugin_dir=$(dirname "$file")
-          if [ -f "$plugin_dir/go.mod" ] && [[ "$plugin_dir" != *"apps"* ]]; then
-            echo "Updating dependencies for $plugin_dir"
-            (cd "$plugin_dir" && go mod tidy)
+          if [ -f "$plugin_dir/go.mod" ]; then
+            case "$plugin_dir" in
+              *apps*) ;;
+              *)
+                echo "Updating dependencies for $plugin_dir"
+                (cd "$plugin_dir" && go mod tidy)
+                ;;
+            esac
           fi
         done
       stage_fixed: true
@@ -71,21 +79,23 @@ pre-commit:
       glob: '**/package.json'
       run: |
         for file in {staged_files}; do
-          # Skip root package.json and app package.json files
-          if [[ "$file" != "package.json" ]] && [[ "$file" != *"apps/"* ]]; then
-            echo "Validating package.json: $file"
-            if ! jq empty "$file" >/dev/null 2>&1; then
-              echo "❌ Invalid JSON in $file"
-              exit 1
-            fi
-            # Check required fields for plugin packages
-            if [[ "$file" == *"packages/"* ]] && [[ "$file" != *"plugin-sdk"* ]]; then
-              if ! jq -e '.name and .version and .description' "$file" >/dev/null; then
-                echo "❌ Missing required fields (name, version, description) in $file"
-                exit 1
-              fi
-            fi
+          case "$file" in
+            "package.json"|*"apps/"*) continue ;;
+          esac
+          echo "Validating package.json: $file"
+          if ! jq empty "$file" >/dev/null 2>&1; then
+            echo "❌ Invalid JSON in $file" && exit 1
           fi
+          case "$file" in
+            *"packages/"*)
+              case "$file" in
+                *"plugin-sdk"*) continue ;;
+              esac
+              if ! jq -e '.name and .version and .description' "$file" >/dev/null; then
+                echo "❌ Missing required fields in $file" && exit 1
+              fi
+              ;;
+          esac
         done
     biome-web:
       root: 'apps/web/'
@@ -105,7 +115,7 @@ pre-commit:
     turborepo-lint-changed:
       run: |
         echo "🧹 Linting changed packages with Turborepo..."
-        pnpm lint --filter="...[HEAD~1]"
+        pnpm lint --filter="...[HEAD~1]" --concurrency=1
       stage_fixed: true
 commit-msg:
   commands:
@@ -128,14 +138,55 @@ pre-push:
   parallel: true
   commands:
     turborepo-build:
-      run: pnpm build
+      run: |
+        echo "🏗️ Building changed packages only for faster pre-push..."
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+          pnpm build --filter="...[HEAD~1]" || {
+            echo "❌ Build failed - see details above"
+            echo "💡 Fix the build issues and try again"
+            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
+            exit 1
+          }
+        else
+          echo "✅ No package changes detected, skipping build"
+        fi
     turborepo-lint:
-      run: pnpm lint
+      run: |
+        echo "🧹 Linting changed packages only for faster pre-push..."
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+          pnpm lint --filter="...[HEAD~1]" --concurrency=1 || {
+            echo "❌ Lint failed - see details above"
+            echo "💡 Fix lint issues with: pnpm lint --filter=\"...[HEAD~1]\" --fix --concurrency=1"
+            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
+            exit 1
+          }
+        else
+          echo "✅ No package changes detected, skipping lint"
+        fi
     turborepo-test:
-      run: pnpm test
+      run: |
+        echo "🧪 Testing changed packages only for faster pre-push..."
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+          pnpm test --filter="...[HEAD~1]" || {
+            echo "❌ Tests failed - see details above"
+            echo "💡 Fix the failing tests and try again"
+            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
+            exit 1
+          }
+        else
+          echo "✅ No package changes detected, skipping tests"
+        fi
     go-vulncheck:
+      skip: no matching push files
       root: 'apps/cli/'
-      run: govulncheck ./...
+      glob: '*.go'
+      run: |
+        echo "🔐 Checking for security vulnerabilities..."
+        govulncheck ./... || {
+          echo "⚠️ Security vulnerabilities found - consider fixing"
+          echo "🚀 Run 'git push --no-verify' to bypass if needed"
+          exit 1
+        }
 commands: &commands
   turborepo-lint-cli:
     run: pnpm lint --filter=cli

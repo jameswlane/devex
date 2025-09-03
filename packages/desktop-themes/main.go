@@ -58,9 +58,9 @@ func NewDesktopThemesPlugin() *DesktopThemesPlugin {
 func (p *DesktopThemesPlugin) Execute(command string, args []string) error {
 	// Check if we're on a supported desktop environment
 	if runtime.GOOS == "windows" {
-		return fmt.Errorf("Windows theming not yet supported")
+		return fmt.Errorf("windows theming not yet supported")
 	}
-	
+
 	switch command {
 	case "apply":
 		return p.handleApply(args)
@@ -79,21 +79,21 @@ func (p *DesktopThemesPlugin) handleApply(args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("theme apply requires a theme name")
 	}
-	
+
 	themeName := args[0]
 	fmt.Printf("Applying desktop theme: %s\n", themeName)
-	
+
 	// Detect desktop environment
 	desktop := p.detectDesktopEnvironment()
 	fmt.Printf("Desktop environment: %s\n", desktop)
-	
+
 	// TODO: Implement theme application based on desktop environment
 	return fmt.Errorf("theme application not yet implemented in plugin")
 }
 
 func (p *DesktopThemesPlugin) handleList(args []string) error {
 	fmt.Println("Available desktop themes:")
-	
+
 	// Basic theme list (would be expanded with actual theme detection)
 	themes := []string{
 		"dark",
@@ -104,11 +104,11 @@ func (p *DesktopThemesPlugin) handleList(args []string) error {
 		"arc",
 		"numix",
 	}
-	
+
 	for _, theme := range themes {
 		fmt.Printf("  - %s\n", theme)
 	}
-	
+
 	// TODO: Implement dynamic theme discovery
 	fmt.Println("\nNote: Theme discovery not yet fully implemented")
 	return nil
@@ -116,14 +116,14 @@ func (p *DesktopThemesPlugin) handleList(args []string) error {
 
 func (p *DesktopThemesPlugin) handleBackup(args []string) error {
 	fmt.Println("Backing up current desktop theme...")
-	
+
 	// TODO: Implement theme backup functionality
 	return fmt.Errorf("theme backup not yet implemented in plugin")
 }
 
 func (p *DesktopThemesPlugin) handleRestore(args []string) error {
 	fmt.Println("Restoring desktop theme from backup...")
-	
+
 	// TODO: Implement theme restoration functionality
 	return fmt.Errorf("theme restore not yet implemented in plugin")
 }
@@ -133,11 +133,11 @@ func (p *DesktopThemesPlugin) detectDesktopEnvironment() string {
 	if desktop := os.Getenv("XDG_CURRENT_DESKTOP"); desktop != "" {
 		return strings.ToLower(desktop)
 	}
-	
+
 	if desktop := os.Getenv("DESKTOP_SESSION"); desktop != "" {
 		return strings.ToLower(desktop)
 	}
-	
+
 	// Check for running processes (basic detection)
 	desktops := []string{"gnome-shell", "kded5", "xfce4-session", "lxsession"}
 	for _, desktop := range desktops {
@@ -156,7 +156,7 @@ func (p *DesktopThemesPlugin) detectDesktopEnvironment() string {
 			}
 		}
 	}
-	
+
 	return "unknown"
 }
 

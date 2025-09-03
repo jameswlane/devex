@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
 	github.com/fatih/color v1.18.0
-	github.com/jameswlane/devex/packages/shared/plugin-sdk v0.0.0-00010101000000-000000000000
+	github.com/jameswlane/devex/packages/plugin-sdk v0.0.0-00010101000000-000000000000
 	github.com/mattn/go-sqlite3 v1.14.29
 	github.com/muesli/reflow v0.3.0
 	github.com/onsi/ginkgo/v2 v2.23.4
@@ -31,6 +31,7 @@ require (
 )
 
 require (
+	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/alecthomas/chroma/v2 v2.14.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
@@ -41,6 +42,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.13 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
+	github.com/cloudflare/circl v1.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dlclark/regexp2 v1.11.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
@@ -94,4 +96,4 @@ require (
 	golang.org/x/tools v0.34.0 // indirect
 )
 
-replace github.com/jameswlane/devex/packages/shared/plugin-sdk => ../../packages/shared/plugin-sdk
+replace github.com/jameswlane/devex/packages/plugin-sdk => ../../packages/plugin-sdk

@@ -75,7 +75,7 @@ func NewCinnamonPlugin() *CinnamonPlugin {
 func (p *CinnamonPlugin) Execute(command string, args []string) error {
 	// Check if Cinnamon is available
 	if !isCinnamonAvailable() {
-		return fmt.Errorf("Cinnamon desktop environment is not available on this system")
+		return fmt.Errorf("cinnamon desktop environment is not available on this system")
 	}
 
 	switch command {
@@ -339,7 +339,9 @@ func (p *CinnamonPlugin) handleRestore(args []string) error {
 	fmt.Print("Continue? [y/N]: ")
 
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil {
+		return fmt.Errorf("failed to read user input: %w", err)
+	}
 	if strings.ToLower(response) != "y" {
 		fmt.Println("Restore cancelled.")
 		return nil

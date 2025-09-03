@@ -11,7 +11,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
-	sdk "github.com/jameswlane/devex/packages/shared/plugin-sdk"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )

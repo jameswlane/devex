@@ -116,7 +116,7 @@ func (p *KDEPlugin) handleConfigure(args []string) error {
 
 	// Apply default configurations using kwriteconfig5
 	configs := []struct {
-		file string
+		file  string
 		group string
 		key   string
 		value string
@@ -329,7 +329,10 @@ func (p *KDEPlugin) handleRestore(args []string) error {
 	fmt.Print("Continue? [y/N]: ")
 
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return err
+	}
 	if strings.ToLower(response) != "y" {
 		fmt.Println("Restore cancelled.")
 		return nil
@@ -370,15 +373,20 @@ func setKDEWallpaper(wallpaperPath string) error {
 // restartPlasmaShell restarts the Plasma Shell
 func restartPlasmaShell() error {
 	// Kill plasmashell
-	exec.Command("killall", "plasmashell").Run()
-	
+	if err := exec.Command("killall", "plasmashell").Run(); err != nil {
+		// Ignore error if plasmashell is not running
+		fmt.Printf("Note: plasmashell may not have been running: %v\n", err)
+	}
+
 	// Wait a moment
 	time.Sleep(2 * time.Second)
-	
+
 	// Start plasmashell
 	cmd := exec.Command("plasmashell")
-	cmd.Start()
-	
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start plasmashell: %w", err)
+	}
+
 	return nil
 }
 

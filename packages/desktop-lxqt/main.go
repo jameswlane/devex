@@ -118,11 +118,13 @@ func (p *LXQtPlugin) handleConfigure(args []string) error {
 
 	// Create config directories if they don't exist
 	configDir := filepath.Join(os.Getenv("HOME"), ".config", "lxqt")
-	os.MkdirAll(configDir, 0755)
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
 
 	// Basic LXQt configuration
 	fmt.Println("✓ Created LXQt configuration directory")
-	
+
 	// Configure panel
 	if err := p.configureLXQtPanel(); err != nil {
 		fmt.Printf("Warning: Failed to configure panel: %v\n", err)
@@ -271,13 +273,13 @@ func (p *LXQtPlugin) handleSetBackground(args []string) error {
 		// Update desktop.conf manually
 		configDir := filepath.Join(os.Getenv("HOME"), ".config", "lxqt")
 		desktopConfig := filepath.Join(configDir, "desktop.conf")
-		
+
 		// Read current config
 		content := fmt.Sprintf(`[General]
 wallpaper=%s
 wallpaperMode=stretch
 `, absPath)
-		
+
 		if err := os.WriteFile(desktopConfig, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to update desktop config: %w", err)
 		}
@@ -448,7 +450,10 @@ func (p *LXQtPlugin) handleRestore(args []string) error {
 	fmt.Print("Continue? [y/N]: ")
 
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil {
+		fmt.Printf("Error reading input: %v\n", err)
+		return err
+	}
 	if strings.ToLower(response) != "y" {
 		fmt.Println("Restore cancelled.")
 		return nil

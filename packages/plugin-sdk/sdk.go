@@ -655,7 +655,7 @@ func (d *Downloader) fetchRegistry() (*PluginRegistry, error) {
 		}
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("registry server returned HTTP %d", resp.StatusCode)
@@ -733,7 +733,7 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	if err != nil {
 		return fmt.Errorf("failed to download plugin: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
@@ -745,7 +745,7 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer tempFile.Close()
+	defer func() { _ = tempFile.Close() }()
 	defer func() { _ = os.Remove(tempPath) }()
 
 	// Download with checksum verification
@@ -796,7 +796,7 @@ func (d *Downloader) isPluginUpToDate(pluginPath, expectedChecksum string) bool 
 	if err != nil {
 		return false
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	hasher := sha256.New()
 	if _, err := io.Copy(hasher, file); err != nil {
@@ -999,13 +999,13 @@ func (em *ExecutableManager) InstallPlugin(sourcePath, pluginName string) error 
 	if err != nil {
 		return fmt.Errorf("failed to open source plugin: %w", err)
 	}
-	defer sourceFile.Close()
+	defer func() { _ = sourceFile.Close() }()
 
 	destFile, err := os.Create(pluginPath)
 	if err != nil {
 		return fmt.Errorf("failed to create destination plugin: %w", err)
 	}
-	defer destFile.Close()
+	defer func() { _ = destFile.Close() }()
 
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		return fmt.Errorf("failed to copy plugin: %w", err)

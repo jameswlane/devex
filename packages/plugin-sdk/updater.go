@@ -193,7 +193,7 @@ func (bu *BackgroundUpdater) checkAndUpdatePlugins(ctx context.Context) error {
 
 	if updatedCount > 0 {
 		// Refresh plugin cache after updates
-		bu.manager.DiscoverPlugins()
+		_ = bu.manager.DiscoverPlugins()
 	}
 
 	return nil

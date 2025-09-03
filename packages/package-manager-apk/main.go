@@ -30,9 +30,9 @@ func NewAPKPlugin() *APKPlugin {
 				Description: "Install packages using APK",
 				Usage:       "Install one or more packages with dependency resolution",
 				Flags: map[string]string{
-					"no-cache":   "Do not use cached packages",
-					"update":     "Update repositories before installing",
-					"virtual":    "Create a virtual package",
+					"no-cache": "Do not use cached packages",
+					"update":   "Update repositories before installing",
+					"virtual":  "Create a virtual package",
 				},
 			},
 			{
@@ -66,8 +66,8 @@ func NewAPKPlugin() *APKPlugin {
 				Description: "List packages",
 				Usage:       "List installed packages or available packages",
 				Flags: map[string]string{
-					"installed": "List only installed packages",
-					"available": "List available packages",
+					"installed":  "List only installed packages",
+					"available":  "List available packages",
 					"upgradable": "List upgradable packages",
 				},
 			},
@@ -86,8 +86,6 @@ func NewAPKPlugin() *APKPlugin {
 
 // Execute handles command execution
 func (p *APKPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
 	switch command {
 	case "install":
 		return p.handleInstall(args)

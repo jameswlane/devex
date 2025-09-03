@@ -75,7 +75,7 @@ func NewPantheonPlugin() *PantheonPlugin {
 func (p *PantheonPlugin) Execute(command string, args []string) error {
 	// Check if Pantheon is available
 	if !isPantheonAvailable() {
-		return fmt.Errorf("Pantheon desktop environment is not available on this system")
+		return fmt.Errorf("pantheon desktop environment is not available on this system")
 	}
 
 	switch command {
@@ -346,7 +346,7 @@ func (p *PantheonPlugin) handleBackup(args []string) error {
 			fmt.Printf("Warning: Failed to dump %s: %v\n", schema, err)
 			continue
 		}
-		
+
 		allOutput.WriteString(fmt.Sprintf("\n# Schema: %s\n", schema))
 		allOutput.Write(output)
 	}
@@ -378,7 +378,9 @@ func (p *PantheonPlugin) handleRestore(args []string) error {
 	fmt.Print("Continue? [y/N]: ")
 
 	var response string
-	fmt.Scanln(&response)
+	if _, err := fmt.Scanln(&response); err != nil {
+		return fmt.Errorf("failed to read user input: %w", err)
+	}
 	if strings.ToLower(response) != "y" {
 		fmt.Println("Restore cancelled.")
 		return nil

@@ -267,7 +267,7 @@ func (c *RegistryClient) authenticatedRequest(ctx context.Context, method, path 
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -339,7 +339,7 @@ func (r *RateLimitInfo) IsRateLimited() bool {
 // TimeUntilReset returns the duration until rate limit resets
 func (r *RateLimitInfo) TimeUntilReset() time.Duration {
 	resetTime := time.Unix(r.ResetAt, 0)
-	return resetTime.Sub(time.Now())
+	return time.Until(resetTime)
 }
 
 // Enhanced Downloader with secure registry client

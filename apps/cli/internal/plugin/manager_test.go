@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	sdk "github.com/jameswlane/devex/packages/shared/plugin-sdk"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var _ = Describe("ExecutableManager", func() {

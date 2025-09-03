@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/openpgp"
-	"golang.org/x/crypto/openpgp/armor"
-	"golang.org/x/crypto/openpgp/packet"
+	"github.com/ProtonMail/go-crypto/openpgp"
+	"github.com/ProtonMail/go-crypto/openpgp/armor"
+	"github.com/ProtonMail/go-crypto/openpgp/packet"
 )
 
 // GPGVerifier handles GPG signature verification for plugins
@@ -94,7 +94,7 @@ func (v *GPGVerifier) VerifySignature(filePath, signaturePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file for verification: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Read the signature file
 	sigData, err := os.ReadFile(signaturePath)
@@ -110,7 +110,7 @@ func (v *GPGVerifier) VerifySignature(filePath, signaturePath string) error {
 	}
 
 	// Verify the signature
-	_, err = openpgp.CheckDetachedSignature(v.publicKeyRing, file, sigReader)
+	_, err = openpgp.CheckDetachedSignature(v.publicKeyRing, file, sigReader, nil)
 	if err != nil {
 		return fmt.Errorf("signature verification failed: %w", err)
 	}
@@ -131,14 +131,14 @@ func (v *GPGVerifier) VerifySignatureFromURL(filePath, signatureURL string) erro
 	if err != nil {
 		return fmt.Errorf("failed to create temp signature file: %w", err)
 	}
-	defer os.Remove(tempSig.Name())
-	defer tempSig.Close()
+	defer func() { _ = os.Remove(tempSig.Name()) }()
+	defer func() { _ = tempSig.Close() }()
 
 	if _, err := tempSig.Write(sigData); err != nil {
 		return fmt.Errorf("failed to write signature to temp file: %w", err)
 	}
 
-	tempSig.Close() // Close before verification
+	_ = tempSig.Close() // Close before verification
 
 	return v.VerifySignature(filePath, tempSig.Name())
 }
@@ -150,7 +150,7 @@ func (v *GPGVerifier) downloadKey(keyURL string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to download key: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download key: HTTP %d", resp.StatusCode)
@@ -166,7 +166,7 @@ func (v *GPGVerifier) downloadSignature(sigURL string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to download signature: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download signature: HTTP %d", resp.StatusCode)
@@ -271,7 +271,7 @@ func (d *Downloader) verifyWithSystemGPG(pluginPath, signatureURL string) error 
 	if err != nil {
 		return fmt.Errorf("failed to download signature: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("signature not available: HTTP %d", resp.StatusCode)
@@ -282,14 +282,14 @@ func (d *Downloader) verifyWithSystemGPG(pluginPath, signatureURL string) error 
 	if err != nil {
 		return fmt.Errorf("failed to create temp signature file: %w", err)
 	}
-	defer os.Remove(tempSig.Name())
-	defer tempSig.Close()
+	defer func() { _ = os.Remove(tempSig.Name()) }()
+	defer func() { _ = tempSig.Close() }()
 
 	if _, err := io.Copy(tempSig, resp.Body); err != nil {
 		return fmt.Errorf("failed to save signature: %w", err)
 	}
 
-	tempSig.Close() // Close before verification
+	_ = tempSig.Close() // Close before verification
 
 	// Verify signature
 	if err := verifier.VerifyDetachedSignature(pluginPath, tempSig.Name()); err != nil {
