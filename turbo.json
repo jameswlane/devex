@@ -79,13 +79,13 @@
 				"go.sum",
 				"**/*_test.go"
 			],
-			"outputs": ["coverage.out", "test-results.json"],
+			"outputs": [],
 			"cache": true
 		},
 		"test:go": {
 			"dependsOn": ["build:go"],
 			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
-			"outputs": ["coverage.out"],
+			"outputs": [],
 			"cache": true
 		},
 		"test:ginkgo": {
