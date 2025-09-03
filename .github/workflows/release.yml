@@ -91,8 +91,6 @@ jobs:
   release:
     needs: [test, web]
     runs-on: ubuntu-latest
-    # Only run if this is not a package-specific release
-    if: "!(contains(github.event.head_commit.message, 'feat(') || contains(github.event.head_commit.message, 'fix('))"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -169,7 +167,41 @@ jobs:
           go-version: '1.23'
       - name: Detect changed packages
         id: detect
-        run: "commit_msg=\"${{ github.event.head_commit.message }}\"\necho \"Commit message: $commit_msg\"\n\n# Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)\nif [[ $commit_msg =~ (feat|fix)\\(([^)]+)\\): ]]; then\n  package_name=\"${BASH_REMATCH[2]}\"\n  echo \"Detected package: $package_name\"\n  echo \"package_name=$package_name\" >> $GITHUB_OUTPUT\n  \n  # Determine package type and location\n  if [ \"$package_name\" = \"plugin-sdk\" ]; then\n    echo \"package_type=go-module\" >> $GITHUB_OUTPUT\n    echo \"package_path=packages/plugin-sdk\" >> $GITHUB_OUTPUT\n  elif [ -d \"packages/plugins/$package_name\" ]; then\n    echo \"package_type=plugin\" >> $GITHUB_OUTPUT  \n    echo \"package_path=packages/plugins/$package_name\" >> $GITHUB_OUTPUT\n  elif [ -d \"packages/$package_name\" ]; then\n    echo \"package_type=package\" >> $GITHUB_OUTPUT\n    echo \"package_path=packages/$package_name\" >> $GITHUB_OUTPUT\n  else\n    echo \"Package not found: $package_name\"\n    exit 1\n  fi\n  \n  # Determine version bump type\n  if [[ $commit_msg == feat* ]]; then\n    echo \"bump=minor\" >> $GITHUB_OUTPUT\n  else\n    echo \"bump=patch\" >> $GITHUB_OUTPUT\n  fi\nelse\n  echo \"No package specified in commit message\"\n  exit 0\nfi\n"
+        run: |
+          commit_msg="${{ github.event.head_commit.message }}"
+          echo "Commit message: $commit_msg"
+
+          # Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)
+          if [[ $commit_msg =~ (feat|fix)\(([^)]+)\): ]]; then
+            package_name="${BASH_REMATCH[2]}"
+            echo "Detected package: $package_name"
+            echo "package_name=$package_name" >> $GITHUB_OUTPUT
+
+            # Determine package type and location
+            if [ "$package_name" = "plugin-sdk" ]; then
+              echo "package_type=go-module" >> $GITHUB_OUTPUT
+              echo "package_path=packages/plugin-sdk" >> $GITHUB_OUTPUT
+            elif [ -d "packages/plugins/$package_name" ]; then
+              echo "package_type=plugin" >> $GITHUB_OUTPUT
+              echo "package_path=packages/plugins/$package_name" >> $GITHUB_OUTPUT
+            elif [ -d "packages/$package_name" ]; then
+              echo "package_type=package" >> $GITHUB_OUTPUT
+              echo "package_path=packages/$package_name" >> $GITHUB_OUTPUT
+            else
+              echo "Package not found: $package_name"
+              exit 1
+            fi
+
+            # Determine version bump type
+            if [[ $commit_msg == feat* ]]; then
+              echo "bump=minor" >> $GITHUB_OUTPUT
+            else
+              echo "bump=patch" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "No package specified in commit message"
+            exit 0
+          fi
       - name: Handle Go Module Release (plugin-sdk)
         if: steps.detect.outputs.package_type == 'go-module'
         run: |
