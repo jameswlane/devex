@@ -22,6 +22,8 @@ var (
 	Exit    = os.Exit
 )
 
+// Version updated for plugin SDK integration release
+
 func main() {
 	// Determine debug mode from command line arguments or environment
 	debugMode := isDebugMode()
