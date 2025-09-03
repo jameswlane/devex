@@ -5,6 +5,7 @@ on:
       - main
     paths:
       - 'apps/cli/**'
+      - 'packages/**'
       - '.github/workflows/release.yml'
 permissions:
   contents: write
@@ -151,3 +152,100 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           OWNER: jameswlane
           REPO: devex
+  # Package Release - handles releases for different package types
+  package-release:
+    runs-on: ubuntu-latest
+    if: contains(github.event.head_commit.message, 'feat(') || contains(github.event.head_commit.message, 'fix(')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Detect changed packages
+        id: detect
+        run: "commit_msg=\"${{ github.event.head_commit.message }}\"\necho \"Commit message: $commit_msg\"\n\n# Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)\nif [[ $commit_msg =~ (feat|fix)\\(([^)]+)\\): ]]; then\n  package_name=\"${BASH_REMATCH[2]}\"\n  echo \"Detected package: $package_name\"\n  echo \"package_name=$package_name\" >> $GITHUB_OUTPUT\n  \n  # Determine package type and location\n  if [ \"$package_name\" = \"plugin-sdk\" ]; then\n    echo \"package_type=go-module\" >> $GITHUB_OUTPUT\n    echo \"package_path=packages/plugin-sdk\" >> $GITHUB_OUTPUT\n  elif [ -d \"packages/plugins/$package_name\" ]; then\n    echo \"package_type=plugin\" >> $GITHUB_OUTPUT  \n    echo \"package_path=packages/plugins/$package_name\" >> $GITHUB_OUTPUT\n  elif [ -d \"packages/$package_name\" ]; then\n    echo \"package_type=package\" >> $GITHUB_OUTPUT\n    echo \"package_path=packages/$package_name\" >> $GITHUB_OUTPUT\n  else\n    echo \"Package not found: $package_name\"\n    exit 1\n  fi\n  \n  # Determine version bump type\n  if [[ $commit_msg == feat* ]]; then\n    echo \"bump=minor\" >> $GITHUB_OUTPUT\n  else\n    echo \"bump=patch\" >> $GITHUB_OUTPUT\n  fi\nelse\n  echo \"No package specified in commit message\"\n  exit 0\nfi\n"
+      - name: Handle Go Module Release (plugin-sdk)
+        if: steps.detect.outputs.package_type == 'go-module'
+        run: |
+          cd ${{ steps.detect.outputs.package_path }}
+
+          echo "📦 Processing Go module: ${{ steps.detect.outputs.package_name }}"
+
+          # Install dependencies and run tests
+          go mod download
+          go run github.com/onsi/ginkgo/v2/ginkgo run .
+          go vet ./...
+
+          # Get latest tag for this package
+          package_name="${{ steps.detect.outputs.package_name }}"
+          latest_tag=$(git tag -l "${package_name}/v*" | sort -V | tail -n1 || echo "${package_name}/v0.0.0")
+          current_version=${latest_tag#${package_name}/v}
+
+          echo "Current version: $current_version"
+
+          # Calculate new version
+          IFS='.' read -ra VERSION_PARTS <<< "$current_version"
+          major=${VERSION_PARTS[0]:-0}
+          minor=${VERSION_PARTS[1]:-0}
+          patch=${VERSION_PARTS[2]:-0}
+
+          if [ "${{ steps.detect.outputs.bump }}" = "minor" ]; then
+            minor=$((minor + 1))
+            patch=0
+          else
+            patch=$((patch + 1))
+          fi
+
+          new_version="$major.$minor.$patch"
+          new_tag="${package_name}/v$new_version"
+
+          echo "New version: $new_version"
+          echo "New tag: $new_tag"
+
+          # Create and push tag
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$new_tag" -m "$package_name release $new_version
+
+          ${{ github.event.head_commit.message }}
+
+          Installation:
+          go get github.com/jameswlane/devex/packages/$package_name@$new_tag"
+
+          git push origin "$new_tag"
+
+          # Create GitHub Release
+          gh release create "$new_tag" \
+            --title "$package_name v$new_version" \
+            --notes "# DevEx $package_name v$new_version
+
+          ${{ github.event.head_commit.message }}
+
+          ## Installation
+
+          \`\`\`bash
+          go get github.com/jameswlane/devex/packages/$package_name@$new_tag
+          \`\`\`"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Handle Plugin Release
+        if: steps.detect.outputs.package_type == 'plugin'
+        run: |
+          echo "🔌 Processing plugin: ${{ steps.detect.outputs.package_name }}"
+
+          # Use existing plugin release system
+          chmod +x scripts/release-plugin-individual.sh
+          ./scripts/release-plugin-individual.sh ${{ steps.detect.outputs.package_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Handle Other Package Release
+        if: steps.detect.outputs.package_type == 'package'
+        run: |
+          echo "📁 Processing package: ${{ steps.detect.outputs.package_name }}"
+          echo "Package type 'package' handling not yet implemented"
+          # Future: Add logic for other package types

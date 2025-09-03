@@ -7,6 +7,7 @@ rules:
       - .github/*
       - apps/cli/config/*
       - apps/cli/test/configs/cross-platform/applications.yaml
+      - packages/plugin-sdk/.goreleaser.yml
   truthy:
     ignore:
       - .github/*

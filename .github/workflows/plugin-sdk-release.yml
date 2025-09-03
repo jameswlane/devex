@@ -1,0 +1,95 @@
+name: Plugin SDK Release
+on:
+  push:
+    tags:
+      - 'plugin-sdk/v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/plugin-sdk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Install dependencies
+        run: go mod download
+      - name: Run tests
+        run: go run github.com/onsi/ginkgo/v2/ginkgo run .
+      - name: Run go vet
+        run: go vet ./...
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: packages/plugin-sdk
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/plugin-sdk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+          workdir: packages/plugin-sdk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  publish-go-module:
+    needs: release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/plugin-sdk
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/plugin-sdk/}" >> $GITHUB_OUTPUT
+          fi
+      - name: Set module proxy environment
+        run: |
+          echo "GOPROXY=proxy.golang.org,direct" >> $GITHUB_ENV
+          echo "GOSUMDB=sum.golang.org" >> $GITHUB_ENV
+      - name: Trigger Go module update
+        run: |
+          # The Go module proxy will automatically fetch the new version
+          # when it's tagged, but we can trigger it explicitly
+          curl -f "https://proxy.golang.org/github.com/jameswlane/devex/packages/plugin-sdk/@v/${{ steps.version.outputs.VERSION }}.info" || true
+      - name: Verify module availability
+        run: |
+          # Wait a bit for the module proxy to index the new version
+          sleep 30
+          go list -m github.com/jameswlane/devex/packages/plugin-sdk@${{ steps.version.outputs.VERSION }} || echo "Module not yet available on proxy"
