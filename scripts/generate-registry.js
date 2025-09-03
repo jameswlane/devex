@@ -77,7 +77,7 @@ class RegistryGenerator {
             const { data: release } = await this.octokit.rest.repos.getReleaseByTag({
                 owner: OWNER,
                 repo: REPO,
-                tag: version.startsWith('v') ? version : `v${version}`
+                tag: version
             });
             return release;
         } catch (error) {
@@ -135,7 +135,6 @@ class RegistryGenerator {
                 __dirname,
                 '..',
                 'packages',
-                'plugins',
                 pluginName,
                 'package.json'
             );
