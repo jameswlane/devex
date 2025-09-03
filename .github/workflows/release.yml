@@ -173,7 +173,7 @@ jobs:
           echo "Commit message: $commit_msg"
 
           # Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)
-          if [[ $commit_msg =~ (feat|fix)\(([^)]+)\): ]]; then
+          if [[ "$commit_msg" =~ ^(feat|fix)\(([^)]+)\): ]]; then
             package_name="${BASH_REMATCH[2]}"
             echo "Detected package: $package_name"
             echo "package_name=$package_name" >> $GITHUB_OUTPUT
@@ -182,9 +182,6 @@ jobs:
             if [ "$package_name" = "plugin-sdk" ]; then
               echo "package_type=go-module" >> $GITHUB_OUTPUT
               echo "package_path=packages/plugin-sdk" >> $GITHUB_OUTPUT
-            elif [ -d "packages/plugins/$package_name" ]; then
-              echo "package_type=plugin" >> $GITHUB_OUTPUT
-              echo "package_path=packages/plugins/$package_name" >> $GITHUB_OUTPUT
             elif [ -d "packages/$package_name" ]; then
               echo "package_type=package" >> $GITHUB_OUTPUT
               echo "package_path=packages/$package_name" >> $GITHUB_OUTPUT
@@ -194,7 +191,7 @@ jobs:
             fi
 
             # Determine version bump type
-            if [[ $commit_msg == feat* ]]; then
+            if [[ "$commit_msg" == feat* ]]; then
               echo "bump=minor" >> $GITHUB_OUTPUT
             else
               echo "bump=patch" >> $GITHUB_OUTPUT
