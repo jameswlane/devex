@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'packages/plugins/**'
+      - 'packages/**'
       - 'scripts/generate-registry.js'
       - 'scripts/release-plugins.sh'
       - 'scripts/release-plugin-individual.sh'
@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0
       - name: Detect plugins to build
         id: set-matrix
-        run: "# Function to get all plugins\nget_all_plugins() {\n  find packages/plugins -mindepth 1 -maxdepth 1 -type d -exec basename {} \\; | sort\n}\n\n# Function to get changed plugins\nget_changed_plugins() {\n  local last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo \"\")\n  \n  if [ -z \"$last_tag\" ]; then\n    get_all_plugins\n  else\n    git diff --name-only $last_tag..HEAD | \\\n      grep \"^packages/plugins/\" | \\\n      cut -d'/' -f3 | \\\n      sort -u\n  fi\n}\n\n# Determine plugins based on input\nif [ -n \"${{ github.event.inputs.plugins }}\" ]; then\n  # Manual input\n  IFS=',' read -ra PLUGINS <<< \"${{ github.event.inputs.plugins }}\"\n  plugin_list=()\n  for p in \"${PLUGINS[@]}\"; do\n    plugin_list+=(\"$(echo $p | xargs)\")\n  done\nelif [ \"${{ github.event_name }}\" = \"workflow_dispatch\" ]; then\n  # Manual run without specific plugins - build all\n  plugin_list=($(get_all_plugins))\nelse\n  # Auto-detect changed plugins\n  plugin_list=($(get_changed_plugins))\nfi\n\n# Create matrix JSON\nif [ ${#plugin_list[@]} -gt 0 ]; then\n  matrix_json=$(printf '%s\\n' \"${plugin_list[@]}\" | jq -R . | jq -s -c '{plugin: .}')\n  echo \"matrix=$matrix_json\" >> $GITHUB_OUTPUT\n  echo \"has-changes=true\" >> $GITHUB_OUTPUT\n  echo \"Building plugins: ${plugin_list[*]}\"\nelse\n  echo \"matrix={\\\"plugin\\\":[]}\" >> $GITHUB_OUTPUT\n  echo \"has-changes=false\" >> $GITHUB_OUTPUT\n  echo \"No plugins to build\"\nfi\n"
+        run: "# Function to get all plugins\nget_all_plugins() {\n  find packages -mindepth 1 -maxdepth 1 -type d -name 'tool-*' -o -name 'desktop-*' -o -name 'package-manager-*' | xargs -I {} basename {} | sort\n}\n\n# Function to get changed plugins\nget_changed_plugins() {\n  local last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo \"\")\n  \n  if [ -z \"$last_tag\" ]; then\n    get_all_plugins\n  else\n    git diff --name-only $last_tag..HEAD | \\\n      grep \"^packages/\" | \\\n      grep -E \"(tool-|desktop-|package-manager-)\" | \\\n      cut -d'/' -f2 | \\\n      sort -u\n  fi\n}\n\n# Determine plugins based on input\nif [ -n \"${{ github.event.inputs.plugins }}\" ]; then\n  # Manual input\n  IFS=',' read -ra PLUGINS <<< \"${{ github.event.inputs.plugins }}\"\n  plugin_list=()\n  for p in \"${PLUGINS[@]}\"; do\n    plugin_list+=(\"$(echo $p | xargs)\")\n  done\nelif [ \"${{ github.event_name }}\" = \"workflow_dispatch\" ]; then\n  # Manual run without specific plugins - build all\n  plugin_list=($(get_all_plugins))\nelse\n  # Auto-detect changed plugins\n  plugin_list=($(get_changed_plugins))\nfi\n\n# Create matrix JSON\nif [ ${#plugin_list[@]} -gt 0 ]; then\n  matrix_json=$(printf '%s\\n' \"${plugin_list[@]}\" | jq -R . | jq -s -c '{plugin: .}')\n  echo \"matrix=$matrix_json\" >> $GITHUB_OUTPUT\n  echo \"has-changes=true\" >> $GITHUB_OUTPUT\n  echo \"Building plugins: ${plugin_list[*]}\"\nelse\n  echo \"matrix={\\\"plugin\\\":[]}\" >> $GITHUB_OUTPUT\n  echo \"has-changes=false\" >> $GITHUB_OUTPUT\n  echo \"No plugins to build\"\nfi\n"
   # Build and validate plugins in parallel
   build-plugin:
     needs: detect-plugins
@@ -59,13 +59,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.plugin }}-${{ hashFiles(format('packages/plugins/{0}/go.sum', matrix.plugin)) }}
+          key: ${{ runner.os }}-go-${{ matrix.plugin }}-${{ hashFiles(format('packages/{0}/go.sum', matrix.plugin)) }}
       - name: Install Task
         run: go install github.com/go-task/task/v3/cmd/task@latest
       - name: Build and test plugin
         id: build
         run: |
-          cd packages/plugins/${{ matrix.plugin }}
+          cd packages/${{ matrix.plugin }}
 
           echo "::group::Building ${{ matrix.plugin }}"
 
@@ -118,7 +118,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: plugin-${{ matrix.plugin }}
-          path: packages/plugins/${{ matrix.plugin }}/devex-plugin-${{ matrix.plugin }}
+          path: packages/${{ matrix.plugin }}/devex-plugin-${{ matrix.plugin }}
           retention-days: 1
   # Release successful plugins
   release-plugins:
@@ -193,12 +193,12 @@ jobs:
           fi
       - name: Determine plugin versions
         id: versions
-        run: "successful_plugins='${{ steps.list-plugins.outputs.successful_plugins }}'\n\n# Process each plugin to determine version\necho '{}' > plugin_versions.json\nfor plugin in $(echo \"$successful_plugins\" | jq -r '.[]'); do\n  echo \"Determining version for $plugin...\"\n  \n  # Get version info with better error handling\n  set +e\n  version_info=$(node scripts/determine-plugin-version.js check \"$plugin\" 2>&1)\n  exit_code=$?\n  set -e\n  \n  if [ $exit_code -eq 0 ] && [ -n \"$version_info\" ] && [ \"$version_info\" != \"null\" ]; then\n    echo \"Version info for $plugin: $version_info\"\n    new_version=$(echo \"$version_info\" | jq -r '.newVersion // \"1.0.0\"')\n    \n    # Update package.json with new version\n    echo \"Updating $plugin to version $new_version\"\n    node scripts/determine-plugin-version.js update \"$plugin\" || echo \"Warning: Failed to update $plugin package.json\"\n    \n    # Add to versions JSON\n    jq --arg p \"$plugin\" --arg v \"$new_version\" '.[$p] = $v' plugin_versions.json > tmp.json && mv tmp.json plugin_versions.json\n    \n    echo \"Plugin $plugin: $new_version\"\n  else\n    echo \"No version info for $plugin, using default 1.0.0\"\n    # Use default version for plugins with no changes\n    jq --arg p \"$plugin\" --arg v \"1.0.0\" '.[$p] = $v' plugin_versions.json > tmp.json && mv tmp.json plugin_versions.json\n  fi\ndone\n\nplugin_versions=$(cat plugin_versions.json)\necho \"plugin_versions=$plugin_versions\" >> $GITHUB_OUTPUT\n\n# Commit version updates if any\nif [ -n \"$(git status --porcelain packages/plugins/*/package.json)\" ]; then\n  git config --local user.email \"action@github.com\"\n  git config --local user.name \"GitHub Action\"\n  git add packages/plugins/*/package.json\n  git commit -m \"chore: bump plugin versions based on conventional commits\n  \n  $(echo \"$successful_plugins\" | jq -r '.[]' | while read plugin; do\n    version=$(echo \"$plugin_versions\" | jq -r --arg p \"$plugin\" '.[$p] // \"\"')\n    [ -n \"$version\" ] && echo \"- $plugin: v$version\"\n  done)\"\nfi\n"
+        run: "successful_plugins='${{ steps.list-plugins.outputs.successful_plugins }}'\n\n# Process each plugin to determine version\necho '{}' > plugin_versions.json\nfor plugin in $(echo \"$successful_plugins\" | jq -r '.[]'); do\n  echo \"Determining version for $plugin...\"\n  \n  # Get version info with better error handling\n  set +e\n  version_info=$(node scripts/determine-plugin-version.js check \"$plugin\" 2>&1)\n  exit_code=$?\n  set -e\n  \n  if [ $exit_code -eq 0 ] && [ -n \"$version_info\" ] && [ \"$version_info\" != \"null\" ]; then\n    echo \"Version info for $plugin: $version_info\"\n    new_version=$(echo \"$version_info\" | jq -r '.newVersion // \"1.0.0\"')\n    \n    # Update package.json with new version\n    echo \"Updating $plugin to version $new_version\"\n    node scripts/determine-plugin-version.js update \"$plugin\" || echo \"Warning: Failed to update $plugin package.json\"\n    \n    # Add to versions JSON\n    jq --arg p \"$plugin\" --arg v \"$new_version\" '.[$p] = $v' plugin_versions.json > tmp.json && mv tmp.json plugin_versions.json\n    \n    echo \"Plugin $plugin: $new_version\"\n  else\n    echo \"No version info for $plugin, using default 1.0.0\"\n    # Use default version for plugins with no changes\n    jq --arg p \"$plugin\" --arg v \"1.0.0\" '.[$p] = $v' plugin_versions.json > tmp.json && mv tmp.json plugin_versions.json\n  fi\ndone\n\nplugin_versions=$(cat plugin_versions.json)\necho \"plugin_versions=$plugin_versions\" >> $GITHUB_OUTPUT\n\n# Commit version updates if any\nif [ -n \"$(git status --porcelain packages/*/package.json)\" ]; then\n  git config --local user.email \"action@github.com\"\n  git config --local user.name \"GitHub Action\"\n  git add packages/*/package.json\n  git commit -m \"chore: bump plugin versions based on conventional commits\n  \n  $(echo \"$successful_plugins\" | jq -r '.[]' | while read plugin; do\n    version=$(echo \"$plugin_versions\" | jq -r --arg p \"$plugin\" '.[$p] // \"\"')\n    [ -n \"$version\" ] && echo \"- $plugin: v$version\"\n  done)\"\nfi\n"
       - name: Create individual releases
         if: steps.prepare-release.outputs.release_mode == 'individual' && steps.prepare-release.outputs.release_mode != 'dry-run'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: "successful_plugins='${{ steps.list-plugins.outputs.successful_plugins }}'\nplugin_versions='${{ steps.versions.outputs.plugin_versions }}'\n\nfor plugin in $(echo \"$successful_plugins\" | jq -r '.[]'); do\n  echo \"::group::Releasing $plugin\"\n  \n  # Get the semantic version for this plugin\n  version=$(echo \"$plugin_versions\" | jq -r --arg p \"$plugin\" '.[$p] // \"0.1.0\"')\n  \n  # Create plugin-specific goreleaser config\n  cat > .goreleaser.$plugin.yml << EOF\nversion: 2\nproject_name: devex-plugin-$plugin\n\nbuilds:\n  - id: $plugin\n    main: ./packages/plugins/$plugin\n    binary: devex-plugin-$plugin\n    env:\n      - CGO_ENABLED=0\n    goos:\n      - linux\n      - darwin\n      - windows\n    goarch:\n      - amd64\n      - arm64\n    ldflags:\n      - -s -w\n      - -X main.version={{.Version}}\n\narchives:\n  - format: tar.gz\n    format_overrides:\n      - goos: windows\n        format: zip\n    name_template: \"{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}\"\n\nchecksum:\n  name_template: 'checksums.txt'\n\nrelease:\n  github:\n    owner: jameswlane\n    name: devex\n  name_template: \"Plugin {{ .ProjectName }} v{{ .Version }}\"\n  mode: append\nEOF\n  \n  # Create a semantic version tag for this plugin\n  plugin_tag=\"${plugin}-v${version}\"\n  \n  # Check if tag already exists\n  if git rev-parse \"$plugin_tag\" >/dev/null 2>&1; then\n    echo \"Tag $plugin_tag already exists, skipping release for $plugin\"\n    rm .goreleaser.$plugin.yml\n    echo \"::endgroup::\"\n    continue\n  fi\n  \n  # Create annotated tag\n  git tag -a \"$plugin_tag\" -m \"Release $plugin v$version\"\n  \n  # Run goreleaser for this plugin\n  goreleaser release --config .goreleaser.$plugin.yml --clean || {\n    echo \"::warning::Failed to release $plugin\"\n  }\n  \n  rm .goreleaser.$plugin.yml\n  echo \"::endgroup::\"\ndone\n"
+        run: "successful_plugins='${{ steps.list-plugins.outputs.successful_plugins }}'\nplugin_versions='${{ steps.versions.outputs.plugin_versions }}'\n\nfor plugin in $(echo \"$successful_plugins\" | jq -r '.[]'); do\n  echo \"::group::Releasing $plugin\"\n  \n  # Get the semantic version for this plugin\n  version=$(echo \"$plugin_versions\" | jq -r --arg p \"$plugin\" '.[$p] // \"0.1.0\"')\n  \n  # Create plugin-specific goreleaser config\n  cat > .goreleaser.$plugin.yml << EOF\nversion: 2\nproject_name: devex-plugin-$plugin\n\nbuilds:\n  - id: $plugin\n    main: ./packages/$plugin\n    binary: devex-plugin-$plugin\n    env:\n      - CGO_ENABLED=0\n    goos:\n      - linux\n      - darwin\n      - windows\n    goarch:\n      - amd64\n      - arm64\n    ldflags:\n      - -s -w\n      - -X main.version={{.Version}}\n\narchives:\n  - format: tar.gz\n    format_overrides:\n      - goos: windows\n        format: zip\n    name_template: \"{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}\"\n\nchecksum:\n  name_template: 'checksums.txt'\n\nrelease:\n  github:\n    owner: jameswlane\n    name: devex\n  name_template: \"Plugin {{ .ProjectName }} v{{ .Version }}\"\n  mode: append\nEOF\n  \n  # Create a semantic version tag for this plugin\n  plugin_tag=\"${plugin}-v${version}\"\n  \n  # Check if tag already exists\n  if git rev-parse \"$plugin_tag\" >/dev/null 2>&1; then\n    echo \"Tag $plugin_tag already exists, skipping release for $plugin\"\n    rm .goreleaser.$plugin.yml\n    echo \"::endgroup::\"\n    continue\n  fi\n  \n  # Create annotated tag\n  git tag -a \"$plugin_tag\" -m \"Release $plugin v$version\"\n  \n  # Run goreleaser for this plugin\n  goreleaser release --config .goreleaser.$plugin.yml --clean || {\n    echo \"::warning::Failed to release $plugin\"\n  }\n  \n  rm .goreleaser.$plugin.yml\n  echo \"::endgroup::\"\ndone\n"
       - name: Create single release for all plugins
         if: steps.prepare-release.outputs.release_mode == 'single-release' && steps.prepare-release.outputs.release_mode != 'dry-run'
         env:
@@ -219,7 +219,7 @@ jobs:
           for plugin in $(echo "$successful_plugins" | jq -r '.[]'); do
             cat >> .goreleaser.all.yml << EOF
             - id: $plugin
-              main: ./packages/plugins/$plugin
+              main: ./packages/$plugin
               binary: devex-plugin-$plugin
               env:
                 - CGO_ENABLED=0
@@ -291,7 +291,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get latest tags for actual plugins only (exclude plugin-sdk)
-          latest_tags=$(git tag -l | grep -E '^(plugin-|packages/plugins/)' | grep -v '^plugin-sdk/' | sort -V | tail -20)
+          latest_tags=$(git tag -l | grep -E '^(plugin-|packages/)' | grep -v '^plugin-sdk/' | sort -V | tail -20)
 
           # Generate registry for each tag
           for tag in $latest_tags; do
