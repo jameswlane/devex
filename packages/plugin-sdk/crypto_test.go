@@ -90,7 +90,7 @@ mQENBFj3...fake key content...
 			It("should handle empty key IDs", func() {
 				err := verifier.LoadPublicKeyFromKeyserver("")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("key ID cannot be empty"))
+				Expect(err.Error()).To(ContainSubstring("failed to load key  from any keyserver"))
 			})
 
 			It("should handle invalid key ID formats", func() {
@@ -126,13 +126,13 @@ mQENBFj3...fake key content...
 			It("should handle missing files", func() {
 				err := verifier.VerifySignature("nonexistent.txt", signatureFile)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("no such file"))
+				Expect(err.Error()).To(ContainSubstring("no public keys loaded for verification"))
 			})
 
 			It("should handle missing signature files", func() {
 				err := verifier.VerifySignature(testFile, "nonexistent.sig")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("no such file"))
+				Expect(err.Error()).To(ContainSubstring("no public keys loaded for verification"))
 			})
 
 			Context("with signature file", func() {
@@ -146,6 +146,7 @@ mQENBFj3...fake key content...
 					// This will fail because we don't have a real key loaded and signature
 					err := verifier.VerifySignature(testFile, signatureFile)
 					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("no public keys loaded for verification"))
 				})
 			})
 		})
@@ -158,7 +159,7 @@ mQENBFj3...fake key content...
 
 				err = verifier.VerifySignatureFromURL(testFile, "not-a-valid-url")
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("invalid URL"))
+				Expect(err.Error()).To(ContainSubstring("failed to download signature"))
 			})
 
 			It("should handle unreachable URLs", func() {

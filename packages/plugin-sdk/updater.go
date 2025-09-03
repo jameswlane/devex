@@ -82,6 +82,8 @@ func (bu *BackgroundUpdater) Stop() {
 	
 	bu.running = false
 	close(bu.stopChan)
+	// Recreate stopChan for subsequent starts
+	bu.stopChan = make(chan struct{})
 }
 
 // IsRunning returns whether the updater is currently running
@@ -107,6 +109,11 @@ func (bu *BackgroundUpdater) CheckForUpdatesNow(ctx context.Context) error {
 func (bu *BackgroundUpdater) updateLoop(ctx context.Context) {
 	ticker := time.NewTicker(bu.updateInterval)
 	defer ticker.Stop()
+	defer func() {
+		bu.mu.Lock()
+		bu.running = false
+		bu.mu.Unlock()
+	}()
 
 	// Do initial update check
 	if err := bu.checkAndUpdatePlugins(ctx); err != nil {

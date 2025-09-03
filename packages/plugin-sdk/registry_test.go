@@ -26,11 +26,11 @@ var _ = Describe("Registry Client", func() {
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Default handler - individual tests can override by starting new servers
 			switch r.URL.Path {
-			case "/api/v1/plugins":
+			case "/v1/registry":
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, `{"success": true, "data": []}`)
-			case "/api/v1/plugins/test-plugin":
+				_, _ = fmt.Fprint(w, `{"success": true, "data": {"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}}`)
+			case "/v1/plugins/test-plugin":
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_, _ = fmt.Fprint(w, `{
@@ -170,12 +170,19 @@ var _ = Describe("Registry Client", func() {
 			// Test that requests include proper authentication headers
 			server.Close()
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				authHeader := r.Header.Get("Authorization")
-				Expect(authHeader).To(ContainSubstring("Bearer"))
+				apiKey := r.Header.Get("X-API-Key")
+				timestamp := r.Header.Get("X-Timestamp")
+				signature := r.Header.Get("X-Signature")
+				// Check for HMAC authentication headers (don't use Ginkgo assertions in HTTP handlers)
+				if apiKey == "" || timestamp == "" || signature == "" {
+					w.WriteHeader(http.StatusUnauthorized)
+					_, _ = fmt.Fprint(w, `{"success": false, "error": "Unauthorized"}`)
+					return
+				}
 				
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, `{"success": true, "data": []}`)
+				_, _ = fmt.Fprint(w, `{"success": true, "data": {"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}}`)
 			}))
 
 			config := sdk.RegistryConfig{
@@ -212,7 +219,7 @@ var _ = Describe("Registry Client", func() {
 
 			_, err := client.GetRegistry(ctx)
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("rate limit"))
+			Expect(err.Error()).To(ContainSubstring("Rate limit exceeded"))
 		})
 	})
 

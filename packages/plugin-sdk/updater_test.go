@@ -236,11 +236,11 @@ var _ = Describe("Update Interval Parsing", func() {
 				input    string
 				expected time.Duration
 			}{
-				{"1m", 1 * time.Minute},
-				{"5m", 5 * time.Minute},
+				{"1m", time.Hour},     // clamped to minimum 1 hour
+				{"5m", time.Hour},     // clamped to minimum 1 hour
 				{"1h", 1 * time.Hour},
 				{"2h", 2 * time.Hour},
-				{"30s", 30 * time.Second},
+				{"30s", time.Hour},    // clamped to minimum 1 hour
 			}
 
 			for _, tc := range testCases {
@@ -255,8 +255,6 @@ var _ = Describe("Update Interval Parsing", func() {
 			invalidInputs := []string{
 				"",
 				"invalid",
-				"-1m",
-				"0",
 				"1x", // invalid unit
 				"abc",
 			}
@@ -266,18 +264,35 @@ var _ = Describe("Update Interval Parsing", func() {
 				_, err := sdk.ParseUpdateInterval(input)
 				Expect(err).To(HaveOccurred())
 			}
+
+			// Test negative values (these should be clamped to 1h minimum)
+			By("handling clamped input: -1m")
+			duration, err := sdk.ParseUpdateInterval("-1m")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(duration).To(Equal(time.Hour))
+
+			// Test zero (this should be valid but clamped to 1h)
+			By("handling edge case: 0")
+			duration, err = sdk.ParseUpdateInterval("0")
+			Expect(err).ToNot(HaveOccurred())
+			Expect(duration).To(Equal(time.Hour))
 		})
 
 		It("should handle edge cases", func() {
-			// Very large intervals
+			// Normal intervals within range
 			duration, err := sdk.ParseUpdateInterval("24h")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(duration).To(Equal(24 * time.Hour))
 
-			// Very small intervals
+			// Very small intervals (clamped to 1h minimum)
 			duration, err = sdk.ParseUpdateInterval("1s")
 			Expect(err).ToNot(HaveOccurred())
-			Expect(duration).To(Equal(1 * time.Second))
+			Expect(duration).To(Equal(time.Hour))
+
+			// Very large intervals (clamped to 7 days maximum)
+			duration, err = sdk.ParseUpdateInterval("720h") // 30 days
+			Expect(err).ToNot(HaveOccurred())
+			Expect(duration).To(Equal(7 * 24 * time.Hour))
 		})
 	})
 })
