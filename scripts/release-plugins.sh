@@ -245,7 +245,7 @@ update_registry() {
     if [ -n "$VERCEL_TOKEN" ]; then
         echo -e "${GREEN}Deploying registry to Vercel...${NC}"
         cd $REGISTRY_DIR
-        npx vercel --prod --token $VERCEL_TOKEN
+        npx vercel --prod --yes --token $VERCEL_TOKEN
         cd - > /dev/null
     fi
 }

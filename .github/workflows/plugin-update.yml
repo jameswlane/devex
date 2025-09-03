@@ -303,7 +303,7 @@ jobs:
         run: |
           cd apps/registry
           pnpm install
-          npx vercel --prod --token "$VERCEL_TOKEN"
+          npx vercel --prod --yes --token "$VERCEL_TOKEN"
       - name: Skip Vercel deployment
         if: ${{ env.VERCEL_TOKEN == '' }}
         run: |
