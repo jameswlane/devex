@@ -1,0 +1,53 @@
+{
+	"name": "@devex/desktop-gnome",
+	"version": "1.0.0",
+	"description": "GNOME desktop environment configuration plugin for DevEx CLI",
+	"private": true,
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-gnome main.go",
+		"test": "go test ./...",
+		"dev": "go build -race -o devex-plugin-desktop-gnome main.go",
+		"lint": "golangci-lint run",
+		"mod": "go mod tidy"
+	},
+	"dependencies": {
+		"@devex/plugin-sdk": "workspace:*"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"gnome",
+		"desktop",
+		"linux",
+		"gtk"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-gnome"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "gnome",
+			"dependencies": [
+				"gsettings",
+				"dconf"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"extensions": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
+}

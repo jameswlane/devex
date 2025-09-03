@@ -158,6 +158,92 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
+  packages/desktop-budgie: {}
+
+  packages/desktop-cinnamon: {}
+
+  packages/desktop-cosmic: {}
+
+  packages/desktop-fonts: {}
+
+  packages/desktop-gnome:
+    dependencies:
+      '@devex/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+
+  packages/desktop-kde: {}
+
+  packages/desktop-lxqt: {}
+
+  packages/desktop-mate: {}
+
+  packages/desktop-pantheon: {}
+
+  packages/desktop-themes: {}
+
+  packages/desktop-xfce: {}
+
+  packages/package-manager-apk: {}
+
+  packages/package-manager-appimage: {}
+
+  packages/package-manager-apt:
+    dependencies:
+      '@devex/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+
+  packages/package-manager-brew: {}
+
+  packages/package-manager-curlpipe: {}
+
+  packages/package-manager-deb: {}
+
+  packages/package-manager-dnf: {}
+
+  packages/package-manager-docker: {}
+
+  packages/package-manager-emerge: {}
+
+  packages/package-manager-eopkg: {}
+
+  packages/package-manager-flatpak: {}
+
+  packages/package-manager-mise: {}
+
+  packages/package-manager-nixflake: {}
+
+  packages/package-manager-nixpkgs: {}
+
+  packages/package-manager-pacman: {}
+
+  packages/package-manager-pip: {}
+
+  packages/package-manager-rpm: {}
+
+  packages/package-manager-snap: {}
+
+  packages/package-manager-xbps: {}
+
+  packages/package-manager-yay: {}
+
+  packages/package-manager-zypper: {}
+
+  packages/plugin-sdk: {}
+
+  packages/system-setup:
+    dependencies:
+      '@devex/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
+
+  packages/tool-git: {}
+
+  packages/tool-shell: {}
+
+  packages/tool-stackdetector: {}
+
 packages:
 
   '@alloc/quick-lru@5.2.0':

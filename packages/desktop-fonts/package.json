@@ -1,0 +1,44 @@
+{
+	"name": "@devex/desktop-fonts",
+	"private": true,
+	"version": "1.0.0",
+	"description": "Desktop font management plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-fonts main.go",
+		"dev": "go build -race -o devex-plugin-desktop-fonts main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"desktop",
+		"fonts",
+		"customization"
+	],
+	"author": "DevEx Team",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-fonts"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop",
+			"platforms": [
+				"linux",
+				"darwin"
+			],
+			"dependencies": [
+				"fc-cache"
+			],
+			"priority": 5,
+			"supports": {
+				"install": true,
+				"list": true,
+				"cache-refresh": true
+			}
+		}
+	}
+}
