@@ -214,7 +214,7 @@ func (v *SystemGPGVerifier) VerifyDetachedSignature(filePath, signaturePath stri
 func (d *Downloader) verifyPluginSignature(pluginPath, downloadURL string) error {
 	if d.publicKeyPath == "" {
 		if d.logger != nil {
-			d.logger.Warning("No public key configured for signature verification")
+			d.logger.Warning("Plugin signature verification skipped: no public key configured. To enable verification, set publicKeyPath in DownloaderConfig")
 		}
 		return nil
 	}
