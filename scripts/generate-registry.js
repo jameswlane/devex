@@ -212,7 +212,18 @@ async function main() {
     const version = process.argv[2];
     if (!version) {
         console.error('Usage: node generate-registry.js <version>');
+        console.error('');
+        console.error('This script generates a plugin registry from GitHub releases containing plugin binaries.');
+        console.error('It should only be used with plugin releases, not library releases like plugin-sdk.');
+        console.error('');
+        console.error('Expected release assets: devex-plugin-*_v1.0.0_platform_arch.tar.gz');
         process.exit(1);
+    }
+
+    // Skip plugin-sdk releases as they are Go modules, not executable plugins
+    if (version.startsWith('plugin-sdk/')) {
+        console.log(`Skipping plugin-sdk release ${version} - this is a Go module, not an executable plugin`);
+        process.exit(0);
     }
 
     try {

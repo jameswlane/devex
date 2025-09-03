@@ -290,14 +290,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get latest tags for all plugins
-          latest_tags=$(git tag -l | grep -E '^(plugin-|packages/plugins/)' | sort -V | tail -20)
+          # Get latest tags for actual plugins only (exclude plugin-sdk)
+          latest_tags=$(git tag -l | grep -E '^(plugin-|packages/plugins/)' | grep -v '^plugin-sdk/' | sort -V | tail -20)
 
           # Generate registry for each tag
           for tag in $latest_tags; do
             echo "Processing tag: $tag"
             node scripts/generate-registry.js "$tag" || echo "::warning::Failed to process $tag"
           done
+
+          # Log what we're excluding for transparency
+          excluded_tags=$(git tag -l | grep '^plugin-sdk/')
+          if [ -n "$excluded_tags" ]; then
+            echo "::notice::Excluded plugin-sdk tags from registry (these are Go modules, not plugins): $excluded_tags"
+          fi
       - name: Deploy registry to Vercel
         if: ${{ env.VERCEL_TOKEN != '' }}
         run: |
