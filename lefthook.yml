@@ -43,41 +43,48 @@ pre-commit:
       run: golangci-lint run --fix
       stage_fixed: true
     plugin-go-fmt:
-      root: 'packages/plugins/'
+      root: 'packages/'
       glob: '**/*.go'
       run: |
         for file in {staged_files}; do
           plugin_dir=$(dirname "$file")
-          echo "Formatting Go files in $plugin_dir"
-          (cd "$plugin_dir" && gofmt -w *.go && goimports -w *.go)
+          if [[ "$plugin_dir" != *"plugin-sdk"* ]] && [[ "$plugin_dir" != *"apps"* ]]; then
+            echo "Formatting Go files in $plugin_dir"
+            (cd "$plugin_dir" && gofmt -w *.go 2>/dev/null && goimports -w *.go 2>/dev/null)
+          fi
         done
       stage_fixed: true
     plugin-go-mod-tidy:
-      root: 'packages/plugins/'
+      root: 'packages/'
       glob: '{**/go.mod,**/main.go}'
       run: |
         for file in {staged_files}; do
           plugin_dir=$(dirname "$file")
-          if [ -f "$plugin_dir/go.mod" ]; then
+          if [ -f "$plugin_dir/go.mod" ] && [[ "$plugin_dir" != *"apps"* ]]; then
             echo "Updating dependencies for $plugin_dir"
             (cd "$plugin_dir" && go mod tidy)
           fi
         done
       stage_fixed: true
     plugin-package-json-check:
-      root: 'packages/plugins/'
+      root: 'packages/'
       glob: '**/package.json'
       run: |
         for file in {staged_files}; do
-          echo "Validating package.json: $file"
-          if ! jq empty "$file" >/dev/null 2>&1; then
-            echo "❌ Invalid JSON in $file"
-            exit 1
-          fi
-          # Check required fields
-          if ! jq -e '.name and .version and .description' "$file" >/dev/null; then
-            echo "❌ Missing required fields (name, version, description) in $file"
-            exit 1
+          # Skip root package.json and app package.json files
+          if [[ "$file" != "package.json" ]] && [[ "$file" != *"apps/"* ]]; then
+            echo "Validating package.json: $file"
+            if ! jq empty "$file" >/dev/null 2>&1; then
+              echo "❌ Invalid JSON in $file"
+              exit 1
+            fi
+            # Check required fields for plugin packages
+            if [[ "$file" == *"packages/"* ]] && [[ "$file" != *"plugin-sdk"* ]]; then
+              if ! jq -e '.name and .version and .description' "$file" >/dev/null; then
+                echo "❌ Missing required fields (name, version, description) in $file"
+                exit 1
+              fi
+            fi
           fi
         done
     biome-web:
@@ -90,18 +97,15 @@ pre-commit:
       glob: '*.{js,ts,jsx,tsx}'
       run: pnpm exec biome check --write {staged_files}
       stage_fixed: true
-    plugin-changes-check:
+    turborepo-build-changed:
       run: |
-        echo "🔍 Checking for plugin changes..."
-        ./scripts/check-plugin-changes.sh
-    plugin-build-changed:
+        echo "🔨 Building changed packages with Turborepo..."
+        pnpm build --filter="...[HEAD~1]"
+      stage_fixed: true
+    turborepo-lint-changed:
       run: |
-        if ./scripts/check-plugin-changes.sh | grep -q "Changed plugins:"; then
-          echo "🔨 Building changed plugins..."
-          ./scripts/release-plugin-individual.sh build
-        else
-          echo "ℹ️ No plugin changes detected, skipping build"
-        fi
+        echo "🧹 Linting changed packages with Turborepo..."
+        pnpm lint --filter="...[HEAD~1]"
       stage_fixed: true
 commit-msg:
   commands:
@@ -109,38 +113,34 @@ commit-msg:
       run: pnpm commitlint --edit $1
 post-commit:
   commands:
-    plugin-status:
+    package-status:
       run: |
-        # Check if any plugin files were modified in the last commit
-        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/plugins/"; then
+        # Check if any package files were modified in the last commit
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/"; then
           echo ""
-          echo "🔧 Plugin changes detected in your commit!"
-          echo "📋 Run 'lefthook run plugin-check' to see what plugins are ready for release"
-          echo "🔨 Run 'lefthook run plugin-build' to build all changed plugins locally"
+          echo "🔧 Package changes detected in your commit!"
+          echo "📋 Run 'pnpm build --filter=\"...[HEAD~1]\"' to build changed packages"
+          echo "🧹 Run 'pnpm lint --filter=\"...[HEAD~1]\"' to lint changed packages"
+          echo "🧪 Run 'pnpm test --filter=\"...[HEAD~1]\"' to test changed packages"
           echo ""
         fi
 pre-push:
   parallel: true
   commands:
-    go-test:
-      root: 'apps/cli/'
-      run: ginkgo run -r --timeout=2m
+    turborepo-build:
+      run: pnpm build
+    turborepo-lint:
+      run: pnpm lint
+    turborepo-test:
+      run: pnpm test
     go-vulncheck:
       root: 'apps/cli/'
       run: govulncheck ./...
-    web-build:
-      root: 'apps/web/'
-      run: pnpm turbo run build --filter=web
-    docs-build:
-      root: 'apps/docs/'
-      run: pnpm turbo run build --filter=docs
 commands: &commands
-  lint-go:
-    root: 'apps/cli/'
-    run: golangci-lint run
-  test-go:
-    root: 'apps/cli/'
-    run: ginkgo -r
+  turborepo-lint-cli:
+    run: pnpm lint --filter=cli
+  turborepo-test-cli:
+    run: pnpm test --filter=cli
   format-all:
     run: pnpm exec biome check --write .
   lint-web:
@@ -153,41 +153,36 @@ commands: &commands
     run: yamlfmt .
   lint-yaml:
     run: yamllint .
-  # Plugin Development Commands
-  # =========================
-  # For comprehensive plugin development help, see: docs/PLUGIN_DEVELOPMENT.md
-  # Quick overview: lefthook run plugin-status
-  plugin-check:
-    run: ./scripts/check-plugin-changes.sh
-  plugin-check-verbose:
-    run: ./scripts/check-plugin-changes.sh -v
-  plugin-check-all:
-    run: ./scripts/check-plugin-changes.sh -a
-  plugin-build:
-    run: ./scripts/release-plugin-individual.sh build
-  plugin-test:
+  # Turborepo Development Commands
+  # ==============================
+  turborepo-build-all:
+    run: pnpm build
+  turborepo-build-changed:
+    run: pnpm build --filter="...[HEAD~1]"
+  turborepo-lint-all:
+    run: pnpm lint
+  turborepo-lint-changed:
+    run: pnpm lint --filter="...[HEAD~1]"
+  turborepo-test-all:
+    run: pnpm test
+  turborepo-test-changed:
+    run: pnpm test --filter="...[HEAD~1]"
+  package-status:
     run: |
-      read -p "Enter plugin name: " plugin
-      ./scripts/release-plugin-individual.sh test "$plugin"
-  plugin-version-check:
+      echo "📦 Package Status:"
+      echo "Build all: pnpm build"
+      echo "Build changed: pnpm build --filter=\"...[HEAD~1]\""
+      echo "Test all: pnpm test"
+      echo "Lint all: pnpm lint"
+  package-tidy-all:
     run: |
-      read -p "Enter plugin name: " plugin
-      node scripts/determine-plugin-version.js check "$plugin"
-  plugin-version-update:
+      echo "🧹 Running go mod tidy on all packages..."
+      find packages -name go.mod -not -path "*/node_modules/*" -execdir go mod tidy \;
+  package-format-all:
     run: |
-      read -p "Enter plugin name: " plugin
-      node scripts/determine-plugin-version.js update "$plugin"
-  plugin-tidy-all:
-    run: |
-      echo "🧹 Running go mod tidy on all plugins..."
-      find packages/plugins -name go.mod -execdir go mod tidy \;
-  plugin-format-all:
-    run: |
-      echo "🎨 Formatting all plugin Go files..."
-      find packages/plugins -name "*.go" -exec gofmt -w {} \;
-      find packages/plugins -name "*.go" -exec goimports -w {} \;
-  plugin-status:
-    run: ./scripts/plugin-dev-status.sh
+      echo "🎨 Formatting all package Go files..."
+      find packages -name "*.go" -not -path "*/node_modules/*" -exec gofmt -w {} \;
+      find packages -name "*.go" -not -path "*/node_modules/*" -exec goimports -w {} \;
 scripts:
   'commands/*':
     runner: bash
