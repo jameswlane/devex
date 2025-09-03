@@ -32,6 +32,13 @@ jobs:
           go-version: 1.24.6
       - name: Install Task
         run: go install github.com/go-task/task/v3/cmd/task@latest
+      - uses: pnpm/action-setup@v4
+        name: Install pnpm
+        with:
+          version: 10.15.1
+          run_install: false
+      - name: Install GoReleaser
+        run: go install github.com/goreleaser/goreleaser@latest
       - name: Lint CLI
         uses: golangci/golangci-lint-action@v8
         with:
