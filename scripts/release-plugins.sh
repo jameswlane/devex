@@ -415,6 +415,7 @@ EOF
 
 # Check required tools
 check_requirements() {
+    local command_name="$1"
     local missing=()
 
     command -v node >/dev/null || missing+=("node")
@@ -429,12 +430,13 @@ check_requirements() {
         exit 1
     fi
 
-    if [ -z "$GITHUB_TOKEN" ]; then
+    # Only require GITHUB_TOKEN for release commands, not for validate
+    if [ "$command_name" != "validate" ] && [ -z "$GITHUB_TOKEN" ]; then
         echo -e "${RED}GITHUB_TOKEN environment variable is required${NC}"
         exit 1
     fi
 }
 
 # Run checks and main function
-check_requirements
+check_requirements "${1:-auto}"
 main "$@"
