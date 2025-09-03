@@ -1,12 +1,14 @@
 // packages/plugins/package-manager-apt/main.go
 package main
 
+// Build timestamp: 2025-09-03 17:41:19
+
 import (
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/jameswlane/devex/packages/plugin-sdk"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
@@ -198,7 +200,7 @@ func (p *APTPlugin) handleInfo(args []string) error {
 
 func main() {
 	plugin := NewAPTPlugin()
-	
+
 	// Handle args with potential panic recovery
 	defer func() {
 		if r := recover(); r != nil {
@@ -206,6 +208,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	
+
 	sdk.HandleArgs(plugin, os.Args[1:])
 }

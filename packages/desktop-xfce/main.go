@@ -1,5 +1,7 @@
 package main
 
+// Build timestamp: 2025-09-03 17:41:19
+
 import (
 	"fmt"
 	"os"
@@ -330,7 +332,7 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 		if channel == "" {
 			continue
 		}
-		
+
 		// Get all properties for this channel
 		cmd := exec.Command("xfconf-query", "-c", channel, "-l")
 		props, err := cmd.Output()
@@ -339,22 +341,22 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 		}
 
 		backupContent += fmt.Sprintf("  <channel name=\"%s\">\n", channel)
-		
+
 		for _, prop := range strings.Split(strings.TrimSpace(string(props)), "\n") {
 			if prop == "" {
 				continue
 			}
-			
+
 			// Get the value for this property
 			cmd := exec.Command("xfconf-query", "-c", channel, "-p", prop)
 			value, err := cmd.Output()
 			if err != nil {
 				continue
 			}
-			
+
 			backupContent += fmt.Sprintf("    <property name=\"%s\" value=\"%s\"/>\n", prop, strings.TrimSpace(string(value)))
 		}
-		
+
 		backupContent += "  </channel>\n"
 	}
 
@@ -396,7 +398,7 @@ func (p *XFCEPlugin) handleRestore(args []string) error {
 	fmt.Println("Note: XFCE backup restoration requires manual configuration.")
 	fmt.Println("Please refer to the backup file for settings to restore manually.")
 	fmt.Printf("Backup file location: %s\n", backupFile)
-	
+
 	return nil
 }
 

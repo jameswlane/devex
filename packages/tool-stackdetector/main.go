@@ -1,5 +1,7 @@
 package main
 
+// Build timestamp: 2025-09-03 17:41:19
+
 import (
 	"fmt"
 	"os"
@@ -68,21 +70,21 @@ func (p *StackDetectorPlugin) handleDetect(args []string) error {
 	if len(args) > 0 {
 		dir = args[0]
 	}
-	
+
 	fmt.Printf("Detecting development stack in: %s\n", dir)
-	
+
 	// Basic file-based detection
 	stack := p.detectStack(dir)
 	if len(stack) == 0 {
 		fmt.Println("No recognizable technology stack detected")
 		return nil
 	}
-	
+
 	fmt.Println("Detected technologies:")
 	for _, tech := range stack {
 		fmt.Printf("  - %s\n", tech)
 	}
-	
+
 	return nil
 }
 
@@ -91,9 +93,9 @@ func (p *StackDetectorPlugin) handleAnalyze(args []string) error {
 	if len(args) > 0 {
 		dir = args[0]
 	}
-	
+
 	fmt.Printf("Analyzing project structure in: %s\n", dir)
-	
+
 	// TODO: Implement deep project analysis
 	return fmt.Errorf("project analysis not yet implemented in plugin")
 }
@@ -103,38 +105,38 @@ func (p *StackDetectorPlugin) handleReport(args []string) error {
 	if len(args) > 0 {
 		dir = args[0]
 	}
-	
+
 	fmt.Printf("Generating stack report for: %s\n", dir)
-	
+
 	// TODO: Implement detailed report generation
 	return fmt.Errorf("report generation not yet implemented in plugin")
 }
 
 func (p *StackDetectorPlugin) detectStack(dir string) []string {
 	var detected []string
-	
+
 	// Common configuration files and their associated technologies
 	detectors := map[string]string{
-		"package.json":     "Node.js",
-		"requirements.txt": "Python",
-		"Pipfile":          "Python (Pipenv)",
-		"pyproject.toml":   "Python (Poetry)",
-		"Cargo.toml":       "Rust",
-		"go.mod":           "Go",
-		"composer.json":    "PHP",
-		"pom.xml":          "Java (Maven)",
-		"build.gradle":     "Java/Kotlin (Gradle)",
-		"Gemfile":          "Ruby",
-		"mix.exs":          "Elixir",
-		"pubspec.yaml":     "Dart/Flutter",
-		"Dockerfile":       "Docker",
+		"package.json":       "Node.js",
+		"requirements.txt":   "Python",
+		"Pipfile":            "Python (Pipenv)",
+		"pyproject.toml":     "Python (Poetry)",
+		"Cargo.toml":         "Rust",
+		"go.mod":             "Go",
+		"composer.json":      "PHP",
+		"pom.xml":            "Java (Maven)",
+		"build.gradle":       "Java/Kotlin (Gradle)",
+		"Gemfile":            "Ruby",
+		"mix.exs":            "Elixir",
+		"pubspec.yaml":       "Dart/Flutter",
+		"Dockerfile":         "Docker",
 		"docker-compose.yml": "Docker Compose",
-		".terraform":       "Terraform",
-		"yarn.lock":        "Node.js (Yarn)",
-		"package-lock.json": "Node.js (npm)",
-		"tsconfig.json":    "TypeScript",
+		".terraform":         "Terraform",
+		"yarn.lock":          "Node.js (Yarn)",
+		"package-lock.json":  "Node.js (npm)",
+		"tsconfig.json":      "TypeScript",
 	}
-	
+
 	// Check for files
 	for file, tech := range detectors {
 		path := filepath.Join(dir, file)
@@ -142,7 +144,7 @@ func (p *StackDetectorPlugin) detectStack(dir string) []string {
 			detected = append(detected, tech)
 		}
 	}
-	
+
 	// Check for directories
 	dirDetectors := map[string]string{
 		"node_modules": "Node.js",
@@ -154,7 +156,7 @@ func (p *StackDetectorPlugin) detectStack(dir string) []string {
 		".next":        "Next.js",
 		".nuxt":        "Nuxt.js",
 	}
-	
+
 	for dirName, tech := range dirDetectors {
 		path := filepath.Join(dir, dirName)
 		if info, err := os.Stat(path); err == nil && info.IsDir() {
@@ -164,7 +166,7 @@ func (p *StackDetectorPlugin) detectStack(dir string) []string {
 			}
 		}
 	}
-	
+
 	return detected
 }
 

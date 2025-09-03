@@ -1,5 +1,7 @@
 package main
 
+// Build timestamp: 2025-09-03 17:41:19
+
 import (
 	"fmt"
 	"os"
@@ -219,7 +221,6 @@ func (p *DockerPlugin) handleStatus(args []string) error {
 	fmt.Println("✅ Docker is available and daemon is running")
 	return sdk.ExecCommand(false, "docker", "version")
 }
-
 
 func main() {
 	plugin := NewDockerPlugin()

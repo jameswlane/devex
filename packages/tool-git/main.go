@@ -1,5 +1,7 @@
 package main
 
+// Build timestamp: 2025-09-03 17:41:19
+
 import (
 	"fmt"
 	"os"
@@ -69,10 +71,10 @@ func (p *GitPlugin) Execute(command string, args []string) error {
 
 func (p *GitPlugin) handleConfig(args []string) error {
 	fmt.Println("Configuring Git...")
-	
+
 	// Check for command line arguments for name and email
 	var fullName, email string
-	
+
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--name":
@@ -87,7 +89,7 @@ func (p *GitPlugin) handleConfig(args []string) error {
 			}
 		}
 	}
-	
+
 	// If not provided via args, get current values or prompt
 	if fullName == "" {
 		currentName, _ := sdk.RunCommand("git", "config", "--global", "user.name")
@@ -103,7 +105,7 @@ func (p *GitPlugin) handleConfig(args []string) error {
 			}
 		}
 	}
-	
+
 	if email == "" {
 		currentEmail, _ := sdk.RunCommand("git", "config", "--global", "user.email")
 		currentEmail = strings.TrimSpace(currentEmail)
@@ -118,7 +120,7 @@ func (p *GitPlugin) handleConfig(args []string) error {
 			}
 		}
 	}
-	
+
 	// Set git configuration
 	if fullName != "" {
 		if err := sdk.ExecCommand(false, "git", "config", "--global", "user.name", fullName); err != nil {
@@ -126,46 +128,46 @@ func (p *GitPlugin) handleConfig(args []string) error {
 		}
 		fmt.Printf("Set git user name: %s\n", fullName)
 	}
-	
+
 	if email != "" {
 		if err := sdk.ExecCommand(false, "git", "config", "--global", "user.email", email); err != nil {
 			return fmt.Errorf("failed to set git user email: %w", err)
 		}
 		fmt.Printf("Set git user email: %s\n", email)
 	}
-	
+
 	// Set default branch name
 	if err := sdk.ExecCommand(false, "git", "config", "--global", "init.defaultBranch", "main"); err != nil {
 		fmt.Printf("Warning: failed to set default branch name: %v\n", err)
 	} else {
 		fmt.Println("Set default branch name to 'main'")
 	}
-	
+
 	// Set other useful defaults
 	configs := map[string]string{
-		"core.editor":              "vim",
-		"color.ui":                 "auto",
-		"pull.rebase":              "false",
-		"push.default":             "simple",
-		"credential.helper":        "cache --timeout=3600",
-		"merge.conflictstyle":      "diff3",
-		"diff.colorMoved":          "default",
-		"fetch.prune":              "true",
+		"core.editor":         "vim",
+		"color.ui":            "auto",
+		"pull.rebase":         "false",
+		"push.default":        "simple",
+		"credential.helper":   "cache --timeout=3600",
+		"merge.conflictstyle": "diff3",
+		"diff.colorMoved":     "default",
+		"fetch.prune":         "true",
 	}
-	
+
 	for key, value := range configs {
 		if err := sdk.ExecCommand(false, "git", "config", "--global", key, value); err != nil {
 			fmt.Printf("Warning: failed to set %s: %v\n", key, err)
 		}
 	}
-	
+
 	fmt.Println("\nGit configuration complete!")
 	return nil
 }
 
 func (p *GitPlugin) handleAliases(args []string) error {
 	fmt.Println("Installing Git aliases...")
-	
+
 	// Define useful git aliases
 	aliases := map[string]string{
 		"st":       "status",
@@ -208,7 +210,7 @@ func (p *GitPlugin) handleAliases(args []string) error {
 		"svnd":     "svn dcommit",
 		"svnl":     "svn log --oneline --show-commit",
 	}
-	
+
 	// Install each alias
 	installed := 0
 	for alias, command := range aliases {
@@ -218,34 +220,34 @@ func (p *GitPlugin) handleAliases(args []string) error {
 			installed++
 		}
 	}
-	
+
 	fmt.Printf("\nInstalled %d git aliases!\n", installed)
 	fmt.Println("Use 'git la' to list all aliases")
-	
+
 	return nil
 }
 
 func (p *GitPlugin) handleStatus(args []string) error {
 	fmt.Println("Git Configuration Status:")
-	
+
 	// Show git version
 	output, err := sdk.RunCommand("git", "--version")
 	if err != nil {
 		return fmt.Errorf("failed to get git version: %w", err)
 	}
 	fmt.Printf("Version: %s\n", strings.TrimSpace(output))
-	
+
 	// Show user configuration
 	user, err := sdk.RunCommand("git", "config", "--global", "user.name")
 	if err == nil {
 		fmt.Printf("User Name: %s\n", strings.TrimSpace(user))
 	}
-	
+
 	email, err := sdk.RunCommand("git", "config", "--global", "user.email")
 	if err == nil {
 		fmt.Printf("User Email: %s\n", strings.TrimSpace(email))
 	}
-	
+
 	return nil
 }
 
