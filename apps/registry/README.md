@@ -394,7 +394,7 @@ pnpm db:generate
 
 ## 📄 License
 
-The DevEx Plugin Registry is licensed under the [GNU GPL v3 License](../../LICENSE).
+The DevEx Plugin Registry is licensed under the [Apache-2.0 License](../../LICENSE).
 
 ---
 

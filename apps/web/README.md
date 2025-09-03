@@ -438,7 +438,7 @@ export function Hero() {
 
 ## 📄 License
 
-The DevEx Website is licensed under the [GNU GPL v3 License](../../LICENSE).
+The DevEx Website is licensed under the [Apache-2.0 License](../../LICENSE).
 
 ---
 

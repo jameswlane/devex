@@ -443,7 +443,7 @@ Refer to the [Contributing Guide](.github/CONTRIBUTING.md) for detailed guidelin
 ## 📄 Legal & Security
 
 ### License
-DevEx is licensed under the [GNU GPL v3 License](LICENSE), ensuring it remains free and open source.
+DevEx is licensed under the [Apache-2.0 License](LICENSE), ensuring it remains free and open source.
 
 ### Security Policy
 For security vulnerabilities, please refer to our [Security Policy](SECURITY.md) and report issues privately.

@@ -76,4 +76,4 @@ dnf:
 
 ## 📄 License
 
-Licensed under the [GNU GPL v3 License](../../../LICENSE).
+Licensed under the [Apache-2.0 License](../../../LICENSE).

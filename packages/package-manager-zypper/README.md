@@ -42,7 +42,7 @@ devex package-manager zypper search -t pattern
 
 ## 📄 License
 
-Licensed under the [GNU GPL v3 License](../../../LICENSE).
+Licensed under the [Apache-2.0 License](../../../LICENSE).
 
 ---
 

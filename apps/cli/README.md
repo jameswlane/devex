@@ -291,7 +291,7 @@ git commit -m "feat!: redesign configuration system"
 
 ## 📄 License
 
-This project is licensed under the [GNU GPL v3 License](../../LICENSE).
+This project is licensed under the [Apache-2.0 License](../../LICENSE).
 
 ---
 

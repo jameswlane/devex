@@ -378,7 +378,7 @@ pnpm spell-check
 
 ## 📄 License
 
-This documentation is licensed under the [GNU GPL v3 License](../../LICENSE).
+This documentation is licensed under the [Apache-2.0 License](../../LICENSE).
 
 ---
 
