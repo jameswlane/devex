@@ -161,7 +161,7 @@ class PluginVersionManager {
      * Process a single plugin
      */
     async processPlugin(pluginName, options = {}) {
-        const pluginPath = `packages/plugins/${pluginName}`;
+        const pluginPath = `packages/${pluginName}`;
         const lastTag = options.lastTag || this.getLastPluginTag(pluginName);
         
         // Get commits since last release
