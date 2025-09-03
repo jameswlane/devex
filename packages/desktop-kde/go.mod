@@ -10,7 +10,7 @@ require github.com/jameswlane/devex/packages/plugin-sdk v0.0.0-00010101000000-00
 
 require (
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
-	github.com/cloudflare/circl v1.6.0 // indirect
+	github.com/cloudflare/circl v1.6.1 // indirect
 	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 )
