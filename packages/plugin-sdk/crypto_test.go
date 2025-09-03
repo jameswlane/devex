@@ -123,13 +123,13 @@ mQENBFj3...fake key content...
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should handle missing files", func() {
+			It("should handle missing files when no keys loaded", func() {
 				err := verifier.VerifySignature("nonexistent.txt", signatureFile)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no public keys loaded for verification"))
 			})
 
-			It("should handle missing signature files", func() {
+			It("should handle missing signature files when no keys loaded", func() {
 				err := verifier.VerifySignature(testFile, "nonexistent.sig")
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no public keys loaded for verification"))
