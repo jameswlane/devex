@@ -176,8 +176,9 @@ jobs:
           )
           echo "Commit message: $commit_msg"
 
-          # Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)
-          if [[ "$commit_msg" =~ ^(feat|fix)\(([^)]+)\): ]]; then
+          # Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)  
+          regex='^(feat|fix)\(([^)]+)\):'
+          if [[ "$commit_msg" =~ $regex ]]; then
             package_name="${BASH_REMATCH[2]}"
             echo "Detected package: $package_name"
             echo "package_name=$package_name" >> $GITHUB_OUTPUT
