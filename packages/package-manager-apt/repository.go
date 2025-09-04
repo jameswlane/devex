@@ -175,8 +175,10 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 
 	// Validate paths before removal - fail if paths are invalid
 	if err := a.validateFilePath(sourceFile); err != nil {
-		a.logger.Warning("Invalid source file path, skipping removal: %v", err)
-		errors = append(errors, fmt.Sprintf("Invalid source file path, skipping removal: %v", err))
+		errMsg := fmt.Sprintf("Invalid source file path, skipping removal: %v", err)
+		a.logger.ErrorMsg(errMsg)
+		fmt.Fprintf(os.Stderr, "%s\n", errMsg) // Direct stderr for test capture
+		errors = append(errors, errMsg)
 	} else {
 		// Remove source file
 		if err := sdk.ExecCommand(true, "rm", "-f", sourceFile); err != nil {
@@ -189,8 +191,10 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 
 	// Validate key path before removal - fail if paths are invalid
 	if err := a.validateFilePath(keyPath); err != nil {
-		a.logger.Warning("Invalid key file path, skipping removal: %v", err)
-		errors = append(errors, fmt.Sprintf("Invalid key file path, skipping removal: %v", err))
+		errMsg := fmt.Sprintf("Invalid key file path, skipping removal: %v", err)
+		a.logger.ErrorMsg(errMsg)
+		fmt.Fprintf(os.Stderr, "%s\n", errMsg) // Direct stderr for test capture
+		errors = append(errors, errMsg)
 	} else {
 		// Remove key file
 		if err := sdk.ExecCommand(true, "rm", "-f", keyPath); err != nil {
