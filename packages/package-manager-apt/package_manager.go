@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -178,24 +178,16 @@ func (a *APTInstaller) handleInstall(args []string) error {
 		a.logger.Warning("Failed to update package lists: %v", err)
 	}
 
-	// Check availability of packages
-	for _, pkg := range args {
-		if err := a.validatePackageAvailability(pkg); err != nil {
-			return fmt.Errorf("package validation failed for '%s': %w", pkg, err)
-		}
-
-		// Check if already installed
-		if installed, err := a.isPackageInstalled(pkg); err == nil && installed {
-			a.logger.Printf("Package %s is already installed, skipping\\n", pkg)
-			continue
-		}
+	// Check availability of packages in parallel
+	if err := a.validatePackagesParallel(args); err != nil {
+		return err
 	}
 
 	// Install packages
 	aptCmd := a.getAPTCommand()
 	cmdArgs := append([]string{"install", "-y"}, args...)
 	if err := sdk.ExecCommand(true, aptCmd, cmdArgs...); err != nil {
-		return fmt.Errorf("failed to install packages: %w", err)
+		return fmt.Errorf("failed to install packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
 	// Verify installation
@@ -248,7 +240,7 @@ func (a *APTInstaller) handleRemove(args []string) error {
 	aptCmd := a.getAPTCommand()
 	cmdArgs := append([]string{"remove", "-y"}, packagesToRemove...)
 	if err := sdk.ExecCommand(true, aptCmd, cmdArgs...); err != nil {
-		return fmt.Errorf("failed to remove packages: %w", err)
+		return fmt.Errorf("failed to remove packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
 	a.logger.Success("Successfully removed packages: %s", strings.Join(packagesToRemove, ", "))
@@ -357,7 +349,79 @@ func (a *APTInstaller) handleIsInstalled(args []string) error {
 	}
 
 	if !allInstalled {
-		os.Exit(1)
+		return fmt.Errorf("one or more packages are not installed")
 	}
 	return nil
+}
+
+// validatePackagesParallel validates multiple packages concurrently for better performance
+func (a *APTInstaller) validatePackagesParallel(packages []string) error {
+	type validationResult struct {
+		pkg       string
+		err       error
+		installed bool
+	}
+
+	const maxWorkers = 5 // Limit concurrent operations to avoid overwhelming the system
+	workers := maxWorkers
+	if len(packages) < workers {
+		workers = len(packages)
+	}
+
+	packagesChan := make(chan string, len(packages))
+	resultsChan := make(chan validationResult, len(packages))
+
+	// Start worker goroutines
+	var wg sync.WaitGroup
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for pkg := range packagesChan {
+				result := validationResult{pkg: pkg}
+
+				// Validate package availability
+				if err := a.validatePackageAvailability(pkg); err != nil {
+					result.err = fmt.Errorf("package validation failed for '%s': %w", pkg, err)
+					resultsChan <- result
+					continue
+				}
+
+				// Check if already installed
+				if installed, err := a.isPackageInstalled(pkg); err == nil {
+					result.installed = installed
+				}
+
+				resultsChan <- result
+			}
+		}()
+	}
+
+	// Send packages to workers
+	for _, pkg := range packages {
+		packagesChan <- pkg
+	}
+	close(packagesChan)
+
+	// Wait for all workers to finish
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results
+	var firstError error
+	installedPackages := make(map[string]bool)
+
+	for result := range resultsChan {
+		if result.err != nil && firstError == nil {
+			firstError = result.err
+		}
+		if result.installed {
+			installedPackages[result.pkg] = true
+			a.logger.Printf("Package %s is already installed, skipping\n", result.pkg)
+		}
+	}
+
+	return firstError
 }

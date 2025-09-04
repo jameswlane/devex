@@ -92,7 +92,7 @@ func (a *APTInstaller) addRepositorySource(source APTSource) error {
 	// Create sources.list.d directory if it doesn't exist
 	sourcesDir := filepath.Dir(source.SourceFile)
 	if err := os.MkdirAll(sourcesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create sources directory: %w", err)
+		return fmt.Errorf("failed to create sources directory '%s' for repository configuration: %w", sourcesDir, err)
 	}
 
 	// Write the source line to file securely
@@ -101,12 +101,25 @@ func (a *APTInstaller) addRepositorySource(source APTSource) error {
 		return fmt.Errorf("failed to write temporary source file: %w", err)
 	}
 
+	// Validate paths before moving files
+	if err := a.validateFilePath(tempFile); err != nil {
+		return fmt.Errorf("invalid temporary file path: %w", err)
+	}
+	if err := a.validateFilePath(source.SourceFile); err != nil {
+		return fmt.Errorf("invalid destination file path: %w", err)
+	}
+
 	// Move temporary file to final location with sudo
 	if err := sdk.ExecCommand(true, "mv", tempFile, source.SourceFile); err != nil {
 		if rmErr := os.Remove(tempFile); rmErr != nil {
 			a.logger.Warning("Failed to remove temporary file: %v", rmErr)
 		}
-		return fmt.Errorf("failed to install repository source: %w", err)
+		return fmt.Errorf("failed to install repository source from '%s' to '%s': %w", tempFile, source.SourceFile, err)
+	}
+
+	// Validate file path before setting permissions
+	if err := a.validateFilePath(source.SourceFile); err != nil {
+		return fmt.Errorf("invalid source file path for chmod: %w", err)
 	}
 
 	// Set proper permissions
@@ -158,23 +171,45 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 
 	a.logger.Printf("Removing repository: %s\n", sourceFile)
 
-	// Remove source file
-	if err := sdk.ExecCommand(true, "rm", "-f", sourceFile); err != nil {
-		a.logger.Warning("Failed to remove source file: %v", err)
+	var errors []string
+
+	// Validate paths before removal - fail if paths are invalid
+	if err := a.validateFilePath(sourceFile); err != nil {
+		a.logger.Warning("Invalid source file path, skipping removal: %v", err)
+		errors = append(errors, fmt.Sprintf("Invalid source file path, skipping removal: %v", err))
 	} else {
-		a.logger.Success("Removed source file: %s", sourceFile)
+		// Remove source file
+		if err := sdk.ExecCommand(true, "rm", "-f", sourceFile); err != nil {
+			a.logger.Warning("Failed to remove source file: %v", err)
+			errors = append(errors, fmt.Sprintf("Failed to remove source file: %v", err))
+		} else {
+			a.logger.Success("Removed source file: %s", sourceFile)
+		}
 	}
 
-	// Remove key file
-	if err := sdk.ExecCommand(true, "rm", "-f", keyPath); err != nil {
-		a.logger.Warning("Failed to remove key file: %v", err)
+	// Validate key path before removal - fail if paths are invalid
+	if err := a.validateFilePath(keyPath); err != nil {
+		a.logger.Warning("Invalid key file path, skipping removal: %v", err)
+		errors = append(errors, fmt.Sprintf("Invalid key file path, skipping removal: %v", err))
 	} else {
-		a.logger.Success("Removed key file: %s", keyPath)
+		// Remove key file
+		if err := sdk.ExecCommand(true, "rm", "-f", keyPath); err != nil {
+			a.logger.Warning("Failed to remove key file: %v", err)
+			errors = append(errors, fmt.Sprintf("Failed to remove key file: %v", err))
+		} else {
+			a.logger.Success("Removed key file: %s", keyPath)
+		}
 	}
 
 	// Update package lists
 	if err := a.handleUpdate([]string{}); err != nil {
 		a.logger.Warning("Failed to update package lists after removing repository: %v", err)
+	}
+
+	// If there were validation errors, log them but don't fail the entire operation
+	// This allows graceful handling of invalid paths while still proceeding
+	if len(errors) > 0 {
+		a.logger.Warning("Repository removal completed with validation warnings: %s", strings.Join(errors, "; "))
 	}
 
 	a.logger.Success("Repository removal completed")
