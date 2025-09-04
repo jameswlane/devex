@@ -5,9 +5,9 @@
 	"private": true,
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-package-manager-apt main.go",
+		"build": "go build -o devex-plugin-package-manager-apt .",
 		"test": "go test ./...",
-		"dev": "go build -race -o devex-plugin-package-manager-apt main.go",
+		"dev": "go build -race -o devex-plugin-package-manager-apt .",
 		"lint": "golangci-lint run",
 		"mod": "go mod tidy"
 	},
