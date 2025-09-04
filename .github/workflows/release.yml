@@ -169,7 +169,11 @@ jobs:
       - name: Detect changed packages
         id: detect
         run: |
-          commit_msg="${{ github.event.head_commit.message }}"
+          # Properly escape the commit message to avoid shell parsing issues
+          commit_msg=$(cat <<'EOF'
+          ${{ github.event.head_commit.message }}
+          EOF
+          )
           echo "Commit message: $commit_msg"
 
           # Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)
