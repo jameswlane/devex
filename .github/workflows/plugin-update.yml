@@ -340,6 +340,7 @@ jobs:
     needs: [detect-plugins, build-plugin, release-plugins, update-registry]
     if: always()
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Build Summary
         run: |
