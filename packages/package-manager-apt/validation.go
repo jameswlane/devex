@@ -15,7 +15,7 @@ func (a *APTInstaller) validatePackageName(packageName string) error {
 	}
 
 	// Check for dangerous characters
-	dangerousPattern := regexp.MustCompile(`[;&|$(){}[\\]<>*?~\\s]`)
+	dangerousPattern := regexp.MustCompile(`[;&|$(){}\[\]<>*?~\s]`)
 	if dangerousPattern.MatchString(packageName) {
 		return fmt.Errorf("package name contains invalid characters")
 	}
