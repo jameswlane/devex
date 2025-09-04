@@ -120,6 +120,7 @@ run:
   concurrency: 0 # 0 = auto-detect
 output:
   # Sort results by linter for easier review
+  sort-results: true
   sort-order:
     - linter
     - severity
