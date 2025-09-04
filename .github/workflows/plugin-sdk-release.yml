@@ -41,6 +41,8 @@ jobs:
           version: latest
           working-directory: packages/plugin-sdk
   release:
+    permissions:
+      contents: write
     needs: test
     runs-on: ubuntu-latest
     defaults:
