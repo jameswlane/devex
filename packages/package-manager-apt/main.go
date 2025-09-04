@@ -1,4 +1,3 @@
-// packages/plugins/package-manager-apt/main.go
 package main
 
 // Build timestamp: 2025-09-03 17:41:19
@@ -6,20 +5,14 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
 
-// APTPlugin implements the APT package manager
-type APTPlugin struct {
-	*sdk.PackageManagerPlugin
-}
-
 // NewAPTPlugin creates a new APT plugin
-func NewAPTPlugin() *APTPlugin {
+func NewAPTPlugin() *APTInstaller {
 	info := sdk.PluginInfo{
 		Name:        "package-manager-apt",
 		Version:     version,
@@ -80,122 +73,44 @@ func NewAPTPlugin() *APTPlugin {
 				Description: "Show package information",
 				Usage:       "Display detailed information about a package",
 			},
+			{
+				Name:        "is-installed",
+				Description: "Check if a package is installed",
+				Usage:       "Returns exit code 0 if package is installed, 1 if not",
+			},
+			{
+				Name:        "add-repository",
+				Description: "Add a new APT repository with GPG key",
+				Usage:       "Add repository with automatic GPG key handling and validation",
+				Flags: map[string]string{
+					"key-url":         "URL to download the GPG key",
+					"key-path":        "Local path to store the GPG key",
+					"source-line":     "APT source line to add",
+					"source-file":     "File to store the source line",
+					"require-dearmor": "Convert ASCII-armored key to binary format",
+				},
+			},
+			{
+				Name:        "remove-repository",
+				Description: "Remove an APT repository and its GPG key",
+				Usage:       "Remove repository source file and associated GPG key",
+				Flags: map[string]string{
+					"source-file": "Source file to remove",
+					"key-path":    "GPG key file to remove",
+				},
+			},
+			{
+				Name:        "validate-repository",
+				Description: "Validate repository configuration and GPG keys",
+				Usage:       "Check that repository sources and keys are properly configured",
+			},
 		},
 	}
 
-	return &APTPlugin{
+	return &APTInstaller{
 		PackageManagerPlugin: sdk.NewPackageManagerPlugin(info, "apt"),
+		logger:               sdk.NewDefaultLogger(false),
 	}
-}
-
-// Execute handles command execution
-func (p *APTPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
-	switch command {
-	case "install":
-		return p.handleInstall(args)
-	case "remove":
-		return p.handleRemove(args)
-	case "update":
-		return p.handleUpdate(args)
-	case "upgrade":
-		return p.handleUpgrade(args)
-	case "search":
-		return p.handleSearch(args)
-	case "list":
-		return p.handleList(args)
-	case "info":
-		return p.handleInfo(args)
-	default:
-		return fmt.Errorf("unknown command: %s", command)
-	}
-}
-
-func (p *APTPlugin) handleInstall(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	// Update package lists first
-	fmt.Println("Updating package lists...")
-	if err := sdk.ExecCommand(true, "apt", "update"); err != nil {
-		fmt.Printf("Warning: failed to update package lists: %v\n", err)
-	}
-
-	// Install packages
-	cmdArgs := append([]string{"install", "-y"}, args...)
-	return sdk.ExecCommand(true, "apt", cmdArgs...)
-}
-
-func (p *APTPlugin) handleRemove(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	cmdArgs := append([]string{"remove", "-y"}, args...)
-	return sdk.ExecCommand(true, "apt", cmdArgs...)
-}
-
-func (p *APTPlugin) handleUpdate(args []string) error {
-	fmt.Println("Updating package lists...")
-	return sdk.ExecCommand(true, "apt", "update")
-}
-
-func (p *APTPlugin) handleUpgrade(args []string) error {
-	fmt.Println("Upgrading installed packages...")
-
-	// Update first
-	if err := sdk.ExecCommand(true, "apt", "update"); err != nil {
-		return fmt.Errorf("failed to update package lists: %w", err)
-	}
-
-	// Then upgrade
-	return sdk.ExecCommand(true, "apt", "upgrade", "-y")
-}
-
-func (p *APTPlugin) handleSearch(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
-	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommand(false, "apt", "search", searchTerm)
-}
-
-func (p *APTPlugin) handleList(args []string) error {
-	if len(args) == 0 {
-		// List all installed packages
-		return sdk.ExecCommand(false, "apt", "list", "--installed")
-	}
-
-	// Handle flags or search terms
-	cmdArgs := append([]string{"list"}, args...)
-	return sdk.ExecCommand(false, "apt", cmdArgs...)
-}
-
-func (p *APTPlugin) handleInfo(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no package specified")
-	}
-
-	for _, pkg := range args {
-		fmt.Printf("Package information for: %s\n", pkg)
-		if err := sdk.ExecCommand(false, "apt", "show", pkg); err != nil {
-			fmt.Printf("Failed to get info for %s: %v\n", pkg, err)
-		}
-		if len(args) > 1 {
-			fmt.Println("---")
-		}
-	}
-
-	return nil
 }
 
 func main() {
