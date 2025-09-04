@@ -1,4 +1,6 @@
 name: Plugin SDK Release
+permissions:
+  contents: read
 on:
   push:
     branches:
@@ -39,6 +41,8 @@ jobs:
           version: latest
           working-directory: packages/plugin-sdk
   release:
+    permissions:
+      contents: write
     needs: test
     runs-on: ubuntu-latest
     defaults:
