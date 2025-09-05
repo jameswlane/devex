@@ -1,0 +1,9 @@
+name: Java
+description: Java programming language
+category: Programming Languages
+install_method: mise
+install_command: java@latest
+uninstall_command: java
+default: false
+dependencies:
+  - mise

@@ -1,0 +1,9 @@
+name: Python
+description: Python programming language
+category: Programming Languages
+install_method: mise
+install_command: python@latest
+uninstall_command: python
+default: false
+dependencies:
+  - mise

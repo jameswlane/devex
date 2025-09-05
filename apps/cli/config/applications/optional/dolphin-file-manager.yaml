@@ -1,0 +1,9 @@
+name: Dolphin File Manager
+description: KDE file manager
+category: Optional Apps
+desktop_environments:
+  - kde
+linux:
+  install_method: apt
+  install_command: dolphin
+  uninstall_command: dolphin

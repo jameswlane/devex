@@ -1,0 +1,4 @@
+name: Cascadia Mono
+method: url
+url: https://github.com/ryanoasis/nerd-fonts/releases/latest/download/CascadiaMono.zip
+destination: ~/.local/share/fonts

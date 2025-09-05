@@ -1,0 +1,147 @@
+settings:
+  - name: Tactile
+    settings:
+      - key: org.gnome.shell.extensions.tactile col-0
+        value: 1
+      - key: org.gnome.shell.extensions.tactile col-1
+        value: 2
+      - key: org.gnome.shell.extensions.tactile col-2
+        value: 1
+      - key: org.gnome.shell.extensions.tactile col-3
+        value: 0
+      - key: org.gnome.shell.extensions.tactile row-0
+        value: 1
+      - key: org.gnome.shell.extensions.tactile row-1
+        value: 1
+      - key: org.gnome.shell.extensions.tactile gap-size
+        value: 32
+  - name: Just Perfection
+    settings:
+      - key: org.gnome.shell.extensions.just-perfection animation
+        value: 2
+      - key: org.gnome.shell.extensions.just-perfection dash-app-running
+        value: true
+      - key: org.gnome.shell.extensions.just-perfection workspace
+        value: true
+      - key: org.gnome.shell.extensions.just-perfection workspace-popup
+        value: false
+  - name: Blur My Shell
+    settings:
+      - key: org.gnome.shell.extensions.blur-my-shell.appfolder blur
+        value: false
+      - key: org.gnome.shell.extensions.blur-my-shell.lockscreen blur
+        value: false
+      - key: org.gnome.shell.extensions.blur-my-shell.screenshot blur
+        value: false
+      - key: org.gnome.shell.extensions.blur-my-shell.window-list blur
+        value: false
+      - key: org.gnome.shell.extensions.blur-my-shell.panel brightness
+        value: 0.6
+      - key: org.gnome.shell.extensions.blur-my-shell.panel sigma
+        value: 30
+      - key: org.gnome.shell.extensions.blur-my-shell.overview blur
+        value: true
+      - key: org.gnome.shell.extensions.blur-my-shell.dash-to-dock blur
+        value: true
+      - key: org.gnome.shell.extensions.blur-my-shell.dash-to-dock brightness
+        value: 0.6
+      - key: org.gnome.shell.extensions.blur-my-shell.dash-to-dock sigma
+        value: 30
+      - key: org.gnome.shell.extensions.blur-my-shell.dash-to-dock static-blur
+        value: true
+      - key: org.gnome.shell.extensions.blur-my-shell.dash-to-dock style-dash-to-dock
+        value: 0
+  - name: Space Bar
+    settings:
+      - key: org.gnome.shell.extensions.space-bar.behavior smart-workspace-names
+        value: false
+      - key: org.gnome.shell.extensions.space-bar.shortcuts enable-activate-workspace-shortcuts
+        value: false
+      - key: org.gnome.shell.extensions.space-bar.shortcuts enable-move-to-workspace-shortcuts
+        value: true
+      - key: org.gnome.shell.extensions.space-bar.shortcuts open-menu
+        value: '@as []'
+  - name: Tweaks
+    settings:
+      - key: org.gnome.mutter center-new-windows
+        value: true
+  - name: Monospace Font
+    settings:
+      - key: org.gnome.desktop.interface monospace-font-name
+        value: CaskaydiaMono Nerd Font 10
+  - name: Keybindings
+    settings:
+      - key: org.gnome.desktop.wm.keybindings close
+        value: '[''<Super>w'']'
+      - key: org.gnome.desktop.wm.keybindings maximize
+        value: '[''<Super>Up'']'
+      - key: org.gnome.desktop.wm.keybindings begin-resize
+        value: '[''<Super>BackSpace'']'
+      - key: org.gnome.settings-daemon.plugins.media-keys next
+        value: '[''<Shift>AudioPlay'']'
+      - key: org.gnome.desktop.wm.keybindings toggle-fullscreen
+        value: '[''<Shift>F11'']'
+  - name: Workspaces
+    settings:
+      - key: org.gnome.mutter dynamic-workspaces
+        value: false
+      - key: org.gnome.desktop.wm.preferences num-workspaces
+        value: 6
+  - name: Pinned Apps Keybindings
+    settings:
+      - key: org.gnome.shell.keybindings switch-to-application-1
+        value: '[''<Alt>1'']'
+      - key: org.gnome.shell.keybindings switch-to-application-2
+        value: '[''<Alt>2'']'
+      - key: org.gnome.shell.keybindings switch-to-application-3
+        value: '[''<Alt>3'']'
+      - key: org.gnome.shell.keybindings switch-to-application-4
+        value: '[''<Alt>4'']'
+      - key: org.gnome.shell.keybindings switch-to-application-5
+        value: '[''<Alt>5'']'
+      - key: org.gnome.shell.keybindings switch-to-application-6
+        value: '[''<Alt>6'']'
+      - key: org.gnome.shell.keybindings switch-to-application-7
+        value: '[''<Alt>7'']'
+      - key: org.gnome.shell.keybindings switch-to-application-8
+        value: '[''<Alt>8'']'
+      - key: org.gnome.shell.keybindings switch-to-application-9
+        value: '[''<Alt>9'']'
+  - name: Workspace Keybindings
+    settings:
+      - key: org.gnome.desktop.wm.keybindings switch-to-workspace-1
+        value: '[''<Super>1'']'
+      - key: org.gnome.desktop.wm.keybindings switch-to-workspace-2
+        value: '[''<Super>2'']'
+      - key: org.gnome.desktop.wm.keybindings switch-to-workspace-3
+        value: '[''<Super>3'']'
+      - key: org.gnome.desktop.wm.keybindings switch-to-workspace-4
+        value: '[''<Super>4'']'
+      - key: org.gnome.desktop.wm.keybindings switch-to-workspace-5
+        value: '[''<Super>5'']'
+      - key: org.gnome.desktop.wm.keybindings switch-to-workspace-6
+        value: '[''<Super>6'']'
+  - name: Custom Keybindings
+    settings:
+      - key: org.gnome.settings-daemon.plugins.media-keys custom-keybindings
+        value: '[''/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/'', ''/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/'', ''/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/'', ''/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/'']'
+      - key: org.gnome.desktop.wm.keybindings switch-input-source
+        value: '@as []'
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name
+        value: ulauncher-toggle
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command
+        value: ulauncher-toggle
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding
+        value: <Super>space
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ name
+        value: Flameshot
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ command
+        value: sh -c -- 'flameshot gui'
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/ binding
+        value: <Control>Print
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/ name
+        value: new chrome
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/ command
+        value: google-chrome
+      - key: org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/ binding
+        value: <Shift><Alt>1

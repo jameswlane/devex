@@ -33,9 +33,9 @@ func getCachedPlatform() platform.DetectionResult {
 }
 
 // GetAppList retrieves the list of apps from the settings.
-func GetAppList(settings Settings) ([]types.AppConfig, error) {
+func GetAppList(settings CrossPlatformSettings) ([]types.AppConfig, error) {
 	log.Info("Retrieving app list")
-	return settings.Apps, nil
+	return settings.GetApplications(), nil
 }
 
 // ValidateApp checks the validity of an individual app.
@@ -51,12 +51,13 @@ func ValidateApp(app types.AppConfig) error {
 }
 
 // ListAppsByCategory filters apps by categories.
-func ListAppsByCategory(settings Settings, categories []string) ([]types.AppConfig, error) {
+func ListAppsByCategory(settings CrossPlatformSettings, categories []string) ([]types.AppConfig, error) {
 	log.Info("Filtering apps by categories", "categories", categories)
 
+	apps := settings.GetApplications()
 	// Pre-allocate slice with reasonable capacity based on app count
-	filteredApps := make([]types.AppConfig, 0, len(settings.Apps)/2)
-	for _, app := range settings.Apps {
+	filteredApps := make([]types.AppConfig, 0, len(apps)/2)
+	for _, app := range apps {
 		for _, category := range categories {
 			if app.Category == category {
 				filteredApps = append(filteredApps, app)

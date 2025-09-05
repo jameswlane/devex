@@ -1,0 +1,6 @@
+name: curl
+description: A tool to transfer data from or to a server
+category: dependency
+linux:
+  install_method: apt
+  install_command: curl

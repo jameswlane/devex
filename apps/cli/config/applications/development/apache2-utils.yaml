@@ -1,0 +1,63 @@
+name: apache2-utils
+description: Apache HTTP Server utilities (htpasswd, ab, etc.)
+category: Utilities
+default: true
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: apache2-utils
+  uninstall_command: apache2-utils
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  alternatives:
+    - install_method: dnf
+      install_command: httpd-tools
+      uninstall_command: httpd-tools
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: centos
+        - os: rhel
+    - install_method: pacman
+      install_command: apache-tools
+      uninstall_command: apache-tools
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: apache2-utils
+      uninstall_command: apache2-utils
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+    - install_method: emerge
+      install_command: app-admin/apache-tools
+      uninstall_command: app-admin/apache-tools
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: apk
+      install_command: apache2-utils
+      uninstall_command: apache2-utils
+      official_support: true
+      platform_requirements:
+        - os: alpine
+macos:
+  install_method: brew
+  install_command: httpie
+  uninstall_command: httpie
+  official_support: false
+windows:
+  install_method: chocolatey
+  install_command: apache-httpd
+  uninstall_command: apache-httpd
+  official_support: false
+freebsd:
+  install_method: pkg
+  install_command: apache24
+  uninstall_command: apache24
+  official_support: true

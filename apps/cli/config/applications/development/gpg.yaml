@@ -1,0 +1,6 @@
+name: gpg
+description: A tool for secure communication and data storage
+category: Dependency
+linux:
+  install_method: apt
+  install_command: gpg

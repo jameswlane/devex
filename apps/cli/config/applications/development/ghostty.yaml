@@ -1,0 +1,107 @@
+name: Ghostty
+description: GPU-accelerated cross-platform terminal emulator with rich features
+category: Terminal Emulators
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: ghostty
+  uninstall_command: ghostty
+  brew_cask: true
+  official_support: false
+linux:
+  install_method: apt
+  install_command: ghostty
+  uninstall_command: ghostty
+  official_support: false
+  alternatives:
+    - install_method: apk
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: alpine
+    - install_method: pacman
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: arch
+    - install_method: yay
+      install_command: ghostty-git
+      uninstall_command: ghostty-git
+      official_support: true
+      platform_requirements:
+        - os: arch
+    - install_method: emerge
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: nixpkgs
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: nixflake
+      install_command: github:ghostty-org/ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: zypper
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+    - install_method: eopkg
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: solus
+    - install_method: xbps
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: apt
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: false
+      platform_requirements:
+        - os: debian
+          version: '12'
+        - os: ubuntu
+          version: '22.04'
+      apt_sources:
+        - key_source: https://download.opensuse.org/repositories/home:clayrisser:bookworm/Debian_12/Release.key
+          key_name: /etc/apt/trusted.gpg.d/home_clayrisser_bookworm.gpg
+          source_repo: deb http://download.opensuse.org/repositories/home:/clayrisser:/bookworm/Debian_12/ /
+          source_name: /etc/apt/sources.list.d/home:clayrisser:bookworm.list
+          require_dearmor: true
+    - install_method: dnf
+      install_command: ghostty
+      uninstall_command: ghostty
+      official_support: false
+      platform_requirements:
+        - os: fedora
+      pre_install:
+        - shell: dnf copr enable scottames/ghostty
+    - install_method: snap
+      install_command: ghostty --classic
+      uninstall_command: ghostty
+      official_support: false
+    - install_method: appimage
+      install_command: Ghostty.AppImage
+      uninstall_command: Ghostty.AppImage
+      download_url: https://github.com/ghostty-appimage/ghostty-appimage/releases/latest
+      destination: ~/Applications/
+      official_support: false
+      post_install:
+        - shell: chmod +x ~/Applications/Ghostty.AppImage

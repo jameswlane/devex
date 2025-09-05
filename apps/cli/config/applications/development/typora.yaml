@@ -1,0 +1,23 @@
+name: Typora
+description: A minimal and configurable markdown editor
+category: Text Editors
+default: false
+linux:
+  install_method: apt
+  install_command: typora
+  apt_sources:
+    - key_source: https://typora.io/linux/public-key.asc
+      key_name: /etc/apt/trusted.gpg.d/typora.asc
+      source_repo: deb https://typora.io/linux ./
+      source_name: /etc/apt/sources.list.d/typora.list
+  post_install:
+    - command: mkdir -p ~/.config/Typora/themes
+  themes:
+    - name: Standard Theme
+      files:
+        - source: ~/.local/share/devex/themes/typora/ia_typora.css
+          destination: ~/.config/Typora/themes/ia_typora.css
+    - name: Night Theme
+      files:
+        - source: ~/.local/share/devex/themes/typora/ia_typora_night.css
+          destination: ~/.config/Typora/themes/ia_typora_night.css

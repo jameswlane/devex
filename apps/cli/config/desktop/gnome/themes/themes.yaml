@@ -1,0 +1,9 @@
+themes:
+  - name: Tokyo Night
+    theme_color: purple
+    theme_background: assets/themes/tokyo-night/background.jpg
+    neovim_colorscheme: assets/themes/tokyo-night/neovim.lua
+  - name: Kanagawa
+    theme_color: purple
+    theme_background: assets/themes/kanagawa/background.jpg
+    neovim_colorscheme: assets/themes/kanagawa/neovim.lua

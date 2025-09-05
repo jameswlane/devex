@@ -1,0 +1,6 @@
+name: git
+description: A distributed version control system
+category: Dependency
+linux:
+  install_method: apt
+  install_command: git

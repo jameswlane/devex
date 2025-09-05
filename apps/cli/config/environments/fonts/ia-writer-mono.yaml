@@ -1,0 +1,5 @@
+name: iA Writer Mono
+method: url
+url: https://github.com/iaolo/iA-Fonts/archive/refs/heads/master.zip
+extract_path: iA-Fonts-master/iA Writer Mono/Static
+destination: ~/.local/share/fonts

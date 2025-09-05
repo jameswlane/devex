@@ -1,0 +1,66 @@
+name: plocate
+description: A much faster locate based on posting lists
+category: Utilities
+default: true
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: plocate
+  uninstall_command: plocate
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  post_install:
+    - shell: sudo updatedb
+  alternatives:
+    - install_method: dnf
+      install_command: plocate
+      uninstall_command: plocate
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: centos
+        - os: rhel
+    - install_method: pacman
+      install_command: plocate
+      uninstall_command: plocate
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: plocate
+      uninstall_command: plocate
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+    - install_method: emerge
+      install_command: sys-apps/plocate
+      uninstall_command: sys-apps/plocate
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: xbps
+      install_command: plocate
+      uninstall_command: plocate
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: apk
+      install_command: plocate
+      uninstall_command: plocate
+      official_support: true
+      platform_requirements:
+        - os: alpine
+freebsd:
+  install_method: pkg
+  install_command: plocate
+  uninstall_command: plocate
+  official_support: true
+macos:
+  install_method: brew
+  install_command: plocate
+  uninstall_command: plocate
+  official_support: false

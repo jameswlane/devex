@@ -1,0 +1,71 @@
+name: btop
+description: A resource monitor that shows usage and stats for processor, memory, disks, network and processes
+category: System Monitoring
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: btop
+  uninstall_command: btop
+  official_support: true
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/btop/btop.conf
+      destination: ~/.config/btop/btop.conf
+    - source: ~/.local/share/devex/assets/themes/btop/tokyo-night/btop.theme
+      destination: ~/.config/btop/themes/tokyo-night.theme
+  alternatives:
+    - install_method: dnf
+      install_command: btop
+      uninstall_command: btop
+      official_support: true
+      platform_requirements:
+        - os: fedora
+    - install_method: dnf
+      install_command: btop
+      uninstall_command: btop
+      official_support: true
+      platform_requirements:
+        - os: rhel
+        - os: rocky
+        - os: almalinux
+      pre_install:
+        - shell: dnf install -y epel-release
+    - install_method: zypper
+      install_command: btop
+      uninstall_command: btop
+      official_support: true
+      platform_requirements:
+        - os: opensuse-tumbleweed
+    - install_method: snap
+      install_command: btop
+      uninstall_command: btop
+      official_support: true
+      post_install:
+        - shell: snap connect btop:removable-media
+    - install_method: snap
+      install_command: btop-desktop
+      uninstall_command: btop-desktop
+      official_support: true
+      post_install:
+        - shell: snap connect btop-desktop:removable-media
+macos:
+  install_method: brew
+  install_command: btop
+  uninstall_command: btop
+  official_support: true
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/btop/btop.conf
+      destination: ~/.config/btop/btop.conf
+    - source: ~/.local/share/devex/assets/themes/btop/tokyo-night/btop.theme
+      destination: ~/.config/btop/themes/tokyo-night.theme
+freebsd:
+  install_method: pkg
+  install_command: btop
+  uninstall_command: btop
+  official_support: true
+netbsd:
+  install_method: pkg_add
+  install_command: btop
+  uninstall_command: btop
+  official_support: true

@@ -1,0 +1,109 @@
+name: zoxide
+description: A smarter cd command inspired by z and autojump
+category: Utilities
+default: true
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: zoxide
+  uninstall_command: zoxide
+  official_support: true
+  post_install:
+    - shell: echo 'eval "$(zoxide init zsh)"' >> ~/.zshrc
+  alternatives:
+    - install_method: macports
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+windows:
+  install_method: winget
+  install_command: ajeetdsouza.zoxide
+  uninstall_command: ajeetdsouza.zoxide
+  official_support: true
+  alternatives:
+    - install_method: chocolatey
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+    - install_method: scoop
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+linux:
+  install_method: apt
+  install_command: zoxide
+  uninstall_command: zoxide
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  post_install:
+    - shell: echo 'eval "$(zoxide init bash)"' >> ~/.bashrc
+    - shell: echo 'eval "$(zoxide init zsh)"' >> ~/.zshrc
+  alternatives:
+    - install_method: dnf
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: centos
+        - os: rhel
+    - install_method: pacman
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+    - install_method: emerge
+      install_command: app-shells/zoxide
+      uninstall_command: app-shells/zoxide
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: eopkg
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: solus
+    - install_method: xbps
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: apk
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: alpine
+    - install_method: nixpkgs
+      install_command: zoxide
+      uninstall_command: zoxide
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: cargo
+      install_command: zoxide --locked
+      uninstall_command: zoxide
+      official_support: true
+freebsd:
+  install_method: pkg
+  install_command: zoxide
+  uninstall_command: zoxide
+  official_support: true
+openbsd:
+  install_method: pkg_add
+  install_command: zoxide
+  uninstall_command: zoxide
+  official_support: true

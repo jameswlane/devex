@@ -1,0 +1,8 @@
+aliases:
+  co: 'checkout'
+  br: 'branch'
+  ci: 'commit'
+  st: 'status'
+settings:
+  pull:
+    rebase: true

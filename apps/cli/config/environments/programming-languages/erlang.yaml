@@ -1,0 +1,9 @@
+name: Erlang
+description: A programming language used to build massively scalable soft real-time systems
+category: Programming Languages
+install_method: mise
+install_command: erlang@latest
+uninstall_command: erlang
+default: false
+dependencies:
+  - mise
