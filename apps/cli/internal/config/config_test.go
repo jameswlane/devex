@@ -57,9 +57,9 @@ var _ = Describe("Config", func() {
 		})
 	})
 
-	Context("LoadSettings", func() {
-		It("loads settings successfully", func() {
-			settings, err := config.LoadSettings("testdata/settings.yaml")
+	Context("LoadCrossPlatformSettings", func() {
+		It("loads cross-platform settings successfully", func() {
+			settings, err := config.LoadCrossPlatformSettings("testdata")
 			Expect(err).ToNot(HaveOccurred())
 			Expect(settings).ToNot(BeNil())
 		})
