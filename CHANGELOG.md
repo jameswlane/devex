@@ -1,3 +1,102 @@
+## [2.0.0](https://github.com/jameswlane/devex/compare/1.0.0...2.0.0) (2025-09-05)
+
+### ⚠ BREAKING CHANGES
+
+* Configuration loading now uses directory structure instead of monolithic YAML files
+
+* feat(config): complete migration to file-per-application structure
+
+- Migrated all monolithic YAML config files to individual app files
+- Implemented directory-based loading with fixed processing order
+- Added alphabetical file processing with prefix-based ordering
+- Created 59 individual configuration files organized by category
+- Removed old monolithic config files
+- Verified CLI functionality with new configuration structure
+- All categories and applications load correctly
+
+This change improves maintainability and makes it easier for users
+to share configurations.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+* fix(config): implement comprehensive security and performance improvements
+
+Security Enhancements:
+- Add filename sanitization to prevent path traversal attacks
+- Implement path validation for all config file operations
+- Add input sanitization for configuration keys
+- Validate file permissions and existence before processing
+
+Performance Optimizations:
+- Implement parallel loading for large config directories (>5 files)
+- Add file modification time caching to avoid unnecessary reloads
+- Extract file reading utility to reduce code duplication
+- Optimize memory usage with proper Viper instance cleanup
+- Pre-allocate slices for better memory performance
+
+Configuration System Improvements:
+- Fix alphabetical loading to ensure consistent processing order
+- Add comprehensive YAML schema validation for all config types
+- Implement detailed error reporting with file and field context
+- Add validation for application, environment, system, and desktop configs
+
+Testing & Documentation:
+- Add comprehensive security and error handling tests
+- Create detailed configuration system documentation
+- Add validation test coverage for edge cases
+- Include performance benchmarking capabilities
+
+This addresses all code review concerns including security vulnerabilities,
+resource management issues, and missing test coverage while maintaining
+backward compatibility and improving overall system robustness.
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+* feat(config): enhance security, performance, and remove backward compatibility
+
+- **Security Enhancements:**
+  - Add maximum file size limits (10MB) to prevent DoS attacks
+  - Implement cache TTL (1 hour) and size limits (10k files) for security
+  - Add goroutine limits (10 concurrent) for parallel loading protection
+  - Enhanced file size validation in both cache and loading functions
+
+- **Performance Improvements:**
+  - Add comprehensive benchmark tests for parallel vs sequential loading
+  - Implement filepath.WalkDir optimization with depth limiting for recursive traversal
+  - Add intelligent caching with LRU eviction and TTL-based expiration
+  - Optimize goroutine usage with semaphore pattern for controlled concurrency
+
+- **Testing Coverage:**
+  - Add 96 comprehensive test cases (up from 88)
+  - Add cache invalidation edge case testing (race conditions, symlinks, permissions)
+  - Add recursive directory traversal tests with depth limiting
+  - Add benchmark tests covering performance characteristics
+  - All tests passing with zero linting issues
+
+- **Architecture Cleanup:**
+  - Remove legacy Settings struct and backward compatibility code
+  - Remove deprecated LoadSettings() function and ToLegacySettings() method
+  - Update function signatures to use CrossPlatformSettings consistently
+  - Simplify codebase by eliminating dual format support
+
+- **Security Constants Added:**
+  - maxCachedFiles = 10000 (prevent unbounded cache growth)
+  - cacheTTL = 1 hour (automatic cache expiration)
+  - maxFileSize = 10MB (DoS prevention)
+  - maxConcurrentLoaders = 10 (goroutine limits)
+
+🤖 Generated with [Claude Code](https://claude.ai/code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
+### Features
+
+* File-per-Application Configuration with Alphabetical Loading ([#185](https://github.com/jameswlane/devex/issues/185)) ([67e3469](https://github.com/jameswlane/devex/commit/67e3469f1640e27f9edaf955675c41d8e1609a5a))
+
 ## 1.0.0 (2025-09-05)
 
 ### ⚠ BREAKING CHANGES
