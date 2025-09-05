@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -186,15 +185,23 @@ func (rv *RequirementsValidator) validateMemoryRequirement(minMemoryMB int) Vali
 func (rv *RequirementsValidator) validateDiskSpaceRequirement(minDiskSpaceMB int) ValidationResult {
 	log.Debug("Validating disk space requirement", "required_mb", minDiskSpaceMB)
 
-	// Get disk usage for current directory
-	var stat syscall.Statfs_t
-	err := syscall.Statfs(".", &stat)
-	if err != nil {
-		return ValidationResult{
-			Requirement: fmt.Sprintf("Disk space >= %d MB", minDiskSpaceMB),
-			Status:      ValidationWarning,
-			Message:     "Could not determine available disk space",
-			Suggestion:  "Manually verify sufficient disk space is available",
+	// Get disk usage for current directory using platform-specific implementation
+	availableMBFromSyscall, err := getDiskSpaceInfo(".")
+	if err == nil {
+		// Use syscall result if successful
+		if availableMBFromSyscall >= minDiskSpaceMB {
+			return ValidationResult{
+				Requirement: fmt.Sprintf("Disk space >= %d MB", minDiskSpaceMB),
+				Status:      ValidationPassed,
+				Message:     fmt.Sprintf("Available disk space: %d MB", availableMBFromSyscall),
+			}
+		} else {
+			return ValidationResult{
+				Requirement: fmt.Sprintf("Disk space >= %d MB", minDiskSpaceMB),
+				Status:      ValidationFailed,
+				Message:     fmt.Sprintf("Insufficient disk space. Available: %d MB, Required: %d MB", availableMBFromSyscall, minDiskSpaceMB),
+				Suggestion:  fmt.Sprintf("Free up at least %d MB of disk space", minDiskSpaceMB-availableMBFromSyscall),
+			}
 		}
 	}
 

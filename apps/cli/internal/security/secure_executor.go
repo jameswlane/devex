@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"syscall"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -96,11 +95,8 @@ func (sce *SecureCommandExecutor) ExecuteCommand(ctx context.Context, command st
 	// Execute the command
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
 
-	// Set process group for better signal handling
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-		Pgid:    0,
-	}
+	// Set platform-specific process attributes
+	setPlatformSpecificAttrs(cmd)
 
 	output, err := cmd.CombinedOutput()
 	return string(output), err
