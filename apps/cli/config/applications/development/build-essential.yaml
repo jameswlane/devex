@@ -1,0 +1,131 @@
+name: Build Essential
+description: Essential development tools and libraries for building software
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: autoconf bison clang pkg-config openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql-client postgresql
+  uninstall_command: autoconf bison clang pkg-config openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql-client postgresql
+  official_support: true
+  pre_install:
+    - shell: xcode-select --install || true
+  alternatives:
+    - install_method: macports
+      install_command: autoconf bison clang pkgconfig openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis3 sqlite3 mysql8 postgresql16
+      uninstall_command: autoconf bison clang pkgconfig openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis3 sqlite3 mysql8 postgresql16
+      official_support: true
+      pre_install:
+        - shell: sudo port selfupdate
+windows:
+  install_method: chocolatey
+  install_command: visualstudio2022buildtools visualstudio2022-workload-vctools pkgconfiglite openssl zlib sqlite mysql.utilities postgresql redis-64
+  uninstall_command: visualstudio2022buildtools visualstudio2022-workload-vctools pkgconfiglite openssl zlib sqlite mysql.utilities postgresql redis-64
+  official_support: true
+  alternatives:
+    - install_method: winget
+      install_command: Microsoft.VisualStudio.2022.BuildTools
+      uninstall_command: Microsoft.VisualStudio.2022.BuildTools
+      official_support: true
+      post_install:
+        - shell: winget install Git.Git
+        - shell: winget install OpenJS.NodeJS
+        - shell: winget install Python.Python.3.11
+    - install_method: scoop
+      install_command: gcc make cmake pkg-config openssl sqlite postgresql redis
+      uninstall_command: gcc make cmake pkg-config openssl sqlite postgresql redis
+      official_support: false
+      pre_install:
+        - shell: scoop bucket add main
+        - shell: scoop bucket add extras
+linux:
+  install_method: apt
+  install_command: build-essential pkg-config autoconf bison clang rustc libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev libjemalloc2 libvips-dev imagemagick libmagickwand-dev mupdf mupdf-tools gir1.2-gtop-2.0 gir1.2-clutter-1.0 redis-tools sqlite3 libsqlite3-0 libmysqlclient-dev libpq-dev postgresql-client postgresql-client-common
+  uninstall_command: build-essential pkg-config autoconf bison clang rustc libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev libjemalloc2 libvips-dev imagemagick libmagickwand-dev mupdf mupdf-tools gir1.2-gtop-2.0 gir1.2-clutter-1.0 redis-tools sqlite3 libsqlite3-0 libmysqlclient-dev libpq-dev postgresql-client postgresql-client-common
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  alternatives:
+    - install_method: dnf
+      install_command: '@development-tools pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel'
+      uninstall_command: '@development-tools pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel'
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: centos
+          version: 8+
+        - os: rhel
+          version: 8+
+        - os: amazonlinux
+          version: 2+
+      pre_install:
+        - shell: dnf groupinstall -y "Development Tools"
+    - install_method: pacman
+      install_command: base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql
+      uninstall_command: base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: patterns-devel-base-devel_basis pkg-config autoconf bison clang rust libopenssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel libvips-devel ImageMagick-devel mupdf redis sqlite3-devel libmysqlclient-devel postgresql-devel
+      uninstall_command: patterns-devel-base-devel_basis pkg-config autoconf bison clang rust libopenssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel libvips-devel ImageMagick-devel mupdf redis sqlite3-devel libmysqlclient-devel postgresql-devel
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+        - os: suse
+    - install_method: emerge
+      install_command: sys-devel/autoconf sys-devel/bison sys-devel/clang dev-lang/rust dev-libs/openssl sys-libs/readline sys-libs/zlib dev-libs/libyaml sys-libs/ncurses dev-libs/libffi sys-libs/gdbm dev-libs/jemalloc media-libs/vips media-gfx/imagemagick app-text/mupdf dev-db/redis dev-db/sqlite dev-db/mysql dev-db/postgresql
+      uninstall_command: sys-devel/autoconf sys-devel/bison sys-devel/clang dev-lang/rust dev-libs/openssl sys-libs/readline sys-libs/zlib dev-libs/libyaml sys-libs/ncurses dev-libs/libffi sys-libs/gdbm dev-libs/jemalloc media-libs/vips media-gfx/imagemagick app-text/mupdf dev-db/redis dev-db/sqlite dev-db/mysql dev-db/postgresql
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: eopkg
+      install_command: system.devel autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel imagemagick-devel mupdf-devel redis sqlite3-devel mysql-devel postgresql-devel
+      uninstall_command: system.devel autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel imagemagick-devel mupdf-devel redis sqlite3-devel mysql-devel postgresql-devel
+      official_support: true
+      platform_requirements:
+        - os: solus
+    - install_method: xbps
+      install_command: base-devel pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf redis sqlite-devel mysql-devel postgresql-libs
+      uninstall_command: base-devel pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf redis sqlite-devel mysql-devel postgresql-libs
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: apk
+      install_command: build-base pkgconfig autoconf bison clang rust openssl-dev readline-dev zlib-dev yaml-dev ncurses-dev libffi-dev gdbm-dev jemalloc-dev vips-dev imagemagick-dev mupdf-dev redis sqlite-dev mysql-dev postgresql-dev
+      uninstall_command: build-base pkgconfig autoconf bison clang rust openssl-dev readline-dev zlib-dev yaml-dev ncurses-dev libffi-dev gdbm-dev jemalloc-dev vips-dev imagemagick-dev mupdf-dev redis sqlite-dev mysql-dev postgresql-dev
+      official_support: true
+      platform_requirements:
+        - os: alpine
+    - install_method: nixpkgs
+      install_command: gcc gnumake cmake pkg-config autoconf bison clang rustc openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql80 postgresql
+      uninstall_command: gcc gnumake cmake pkg-config autoconf bison clang rustc openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql80 postgresql
+      official_support: true
+      platform_requirements:
+        - os: nixos
+freebsd:
+  install_method: pkg
+  install_command: autotools bison clang rust openssl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql80-client postgresql16-client
+  uninstall_command: autotools bison clang rust openssl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql80-client postgresql16-client
+  official_support: true
+  alternatives:
+    - install_method: ports
+      install_command: build-essential
+      uninstall_command: build-essential
+      official_support: true
+      pre_install:
+        - shell: cd /usr/ports/devel && make install clean
+openbsd:
+  install_method: pkg_add
+  install_command: autoconf bison clang rust libressl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql-client postgresql-client
+  uninstall_command: autoconf bison clang rust libressl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql-client postgresql-client
+  official_support: true
+system_requirements:
+  min_memory_mb: 2048
+  min_disk_space_mb: 5120
+  required_commands:
+    - make
+    - gcc

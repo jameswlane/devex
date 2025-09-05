@@ -1,0 +1,12 @@
+name: Redis
+description: Redis in-memory data structure store
+category: Databases
+default: false
+all_platforms:
+  install_method: docker
+  install_command: redis:7
+  docker_options:
+    ports:
+      - 127.0.0.1:6379:6379
+    container_name: redis
+    restart_policy: unless-stopped

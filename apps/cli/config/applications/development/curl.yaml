@@ -1,39 +1,6 @@
 name: curl
-description: 'Command line tool and library for transferring data with URLs'
-category: 'Networking'
-default: true
-desktop_environments: ['all']
+description: A tool to transfer data from or to a server
+category: dependency
 linux:
-  install_method: 'apt'
-  install_command: 'curl'
-  uninstall_command: 'curl'
-  official_support: true
-  platform_requirements:
-    - os: 'debian'
-    - os: 'ubuntu'
-  alternatives:
-    - install_method: 'dnf'
-      install_command: 'curl'
-      uninstall_command: 'curl'
-      official_support: true
-      platform_requirements:
-        - os: 'fedora'
-        - os: 'rhel'
-        - os: 'centos'
-    - install_method: 'pacman'
-      install_command: 'curl'
-      uninstall_command: 'curl'
-      official_support: true
-      platform_requirements:
-        - os: 'arch'
-        - os: 'manjaro'
-macos:
-  install_method: 'brew'
-  install_command: 'curl'
-  uninstall_command: 'curl'
-  official_support: true
-windows:
-  install_method: 'winget'
-  install_command: 'cURL.cURL'
-  uninstall_command: 'cURL.cURL'
-  official_support: true
+  install_method: apt
+  install_command: curl

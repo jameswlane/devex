@@ -1,0 +1,14 @@
+name: PostgreSQL
+description: PostgreSQL relational database system
+category: Databases
+default: false
+all_platforms:
+  install_method: docker
+  install_command: postgres:16
+  docker_options:
+    ports:
+      - 127.0.0.1:5432:5432
+    container_name: postgres16
+    environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    restart_policy: unless-stopped

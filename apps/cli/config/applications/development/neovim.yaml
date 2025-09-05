@@ -1,0 +1,280 @@
+name: Neovim
+description: Vim-fork focused on extensibility and usability
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: neovim
+  uninstall_command: neovim
+  official_support: true
+  dependencies:
+    - git
+    - curl
+    - fzf
+  alternatives:
+    - install_method: macports
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      pre_install:
+        - shell: sudo port selfupdate
+    - install_method: curlpipe
+      download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-macos-arm64.tar.gz
+      destination: /usr/local
+      official_support: true
+      platform_requirements:
+        - arch: arm64
+      pre_install:
+        - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-macos-arm64.tar.gz
+        - shell: tar xzf nvim-macos-arm64.tar.gz
+      post_install:
+        - shell: sudo mv nvim-macos-arm64 /usr/local/ && rm -f nvim-macos-arm64.tar.gz
+        - shell: echo "export PATH=\$PATH:/usr/local/nvim-macos-arm64/bin" >> ~/.zshrc
+    - install_method: curlpipe
+      download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-macos-x86_64.tar.gz
+      destination: /usr/local
+      official_support: true
+      platform_requirements:
+        - arch: x86_64
+      pre_install:
+        - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-macos-x86_64.tar.gz
+        - shell: tar xzf nvim-macos-x86_64.tar.gz
+      post_install:
+        - shell: sudo mv nvim-macos-x86_64 /usr/local/ && rm -f nvim-macos-x86_64.tar.gz
+        - shell: echo "export PATH=\$PATH:/usr/local/nvim-macos-x86_64/bin" >> ~/.zshrc
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
+      destination: ~/.config/nvim/init.vim
+    - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
+      destination: ~/.config/nvim/lazy.toml
+    - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
+      destination: ~/.config/nvim/plugin/after/transparency.lua
+    - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
+      destination: ~/.config/nvim/lazyvim.json
+windows:
+  install_method: winget
+  install_command: Neovim.Neovim
+  uninstall_command: Neovim.Neovim
+  official_support: true
+  system_requirements:
+    required_env_vars:
+      - PATH
+  dependencies:
+    - git
+  alternatives:
+    - install_method: chocolatey
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+    - install_method: scoop
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      pre_install:
+        - shell: scoop bucket add main
+    - install_method: curlpipe
+      download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-win64.zip
+      destination: C:\Program Files\nvim
+      official_support: true
+      pre_install:
+        - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-win64.zip
+        - shell: powershell -Command "Expand-Archive nvim-win64.zip -DestinationPath \"C:\Program Files\""
+      post_install:
+        - shell: setx PATH "%PATH%;C:\Program Files\nvim\bin"
+        - shell: del nvim-win64.zip
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
+      destination: '%LOCALAPPDATA%/nvim/init.vim'
+    - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
+      destination: '%LOCALAPPDATA%/nvim/lazy.toml'
+linux:
+  install_method: curlpipe
+  download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+  destination: /opt
+  official_support: true
+  dependencies:
+    - git
+    - curl
+    - fzf
+  pre_install:
+    - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+    - shell: sudo rm -rf /opt/nvim
+  post_install:
+    - shell: sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz && rm -f nvim-linux-x86_64.tar.gz
+    - shell: echo "export PATH=\$PATH:/opt/nvim-linux-x86_64/bin" >> ~/.bashrc
+    - shell: echo "export PATH=\$PATH:/opt/nvim-linux-x86_64/bin" >> ~/.zshrc
+    - shell: git clone https://github.com/LazyVim/starter ~/.config/nvim || true
+    - shell: rm -rf ~/.config/nvim/.git
+    - shell: mkdir -p ~/.config/nvim/plugin/after
+  alternatives:
+    - install_method: apt
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      platform_requirements:
+        - os: debian
+        - os: ubuntu
+      dependencies:
+        - python3-neovim
+    - install_method: apt
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: false
+      platform_requirements:
+        - os: ubuntu
+      pre_install:
+        - shell: sudo apt-get install software-properties-common
+        - shell: sudo add-apt-repository ppa:neovim-ppa/stable
+        - shell: sudo apt-get update
+      dependencies:
+        - python3-neovim
+        - python3-dev
+        - python3-pip
+    - install_method: dnf
+      install_command: neovim python3-neovim
+      uninstall_command: neovim python3-neovim
+      official_support: true
+      platform_requirements:
+        - os: fedora
+          version: 25+
+        - os: centos
+          version: 8+
+        - os: rhel
+          version: 8+
+    - install_method: dnf
+      install_command: neovim python3-neovim
+      uninstall_command: neovim python3-neovim
+      official_support: false
+      platform_requirements:
+        - os: fedora
+      pre_install:
+        - shell: dnf copr enable agriffis/neovim-nightly
+    - install_method: yum
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      platform_requirements:
+        - os: centos
+          version: 8+
+        - os: rhel
+          version: 8+
+      pre_install:
+        - shell: yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+    - install_method: pacman
+      install_command: neovim python-pynvim
+      uninstall_command: neovim python-pynvim
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: neovim python-neovim python3-neovim
+      uninstall_command: neovim python-neovim python3-neovim
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+        - os: suse
+    - install_method: emerge
+      install_command: app-editors/neovim
+      uninstall_command: app-editors/neovim
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: eopkg
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      platform_requirements:
+        - os: solus
+    - install_method: xbps
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: apk
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      platform_requirements:
+        - os: alpine
+    - install_method: nixpkgs
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: snap
+      install_command: nvim --classic
+      uninstall_command: nvim
+      official_support: true
+    - install_method: snap
+      install_command: --edge nvim --classic
+      uninstall_command: nvim
+      official_support: true
+    - install_method: flatpak
+      install_command: io.neovim.nvim
+      uninstall_command: io.neovim.nvim
+      official_support: true
+      pre_install:
+        - shell: flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+    - install_method: appimage
+      download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage
+      destination: /opt/nvim
+      official_support: true
+      pre_install:
+        - shell: curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage
+        - shell: chmod u+x nvim-linux-x86_64.appimage
+        - shell: mkdir -p /opt/nvim
+      post_install:
+        - shell: sudo mv nvim-linux-x86_64.appimage /opt/nvim/nvim
+        - shell: echo "export PATH=\$PATH:/opt/nvim/" >> ~/.bashrc
+        - shell: echo "export PATH=\$PATH:/opt/nvim/" >> ~/.zshrc
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
+      destination: ~/.config/nvim/init.vim
+    - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
+      destination: ~/.config/nvim/lazy.toml
+    - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
+      destination: ~/.config/nvim/plugin/after/transparency.lua
+    - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
+      destination: ~/.config/nvim/lazyvim.json
+freebsd:
+  install_method: pkg
+  install_command: neovim py36-pynvim
+  uninstall_command: neovim py36-pynvim
+  official_support: true
+  alternatives:
+    - install_method: ports
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      pre_install:
+        - shell: cd /usr/ports/editors/neovim/ && make install clean
+openbsd:
+  install_method: pkg_add
+  install_command: neovim
+  uninstall_command: neovim
+  official_support: true
+  alternatives:
+    - install_method: ports
+      install_command: neovim
+      uninstall_command: neovim
+      official_support: true
+      pre_install:
+        - shell: cd /usr/ports/editors/neovim/ && make install
+system_requirements:
+  required_commands:
+    - git
+    - curl
+themes:
+  - name: Tokyo Night
+    theme_color: '#1A1B26'
+    theme_background: dark
+    files:
+      - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
+        destination: ~/.config/nvim/lua/plugins/theme.lua
+      - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
+        destination: ~/.config/gnome-shell/themes/tokyo-night.css

@@ -1,9 +1,0 @@
-name: Node.js
-description: 'JavaScript runtime built on Chrome''s V8 JavaScript engine'
-category: 'Programming Languages'
-install_method: 'mise'
-install_command: 'node@lts'
-uninstall_command: 'node'
-default: true
-dependencies:
-  - 'mise'

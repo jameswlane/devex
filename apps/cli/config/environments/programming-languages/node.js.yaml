@@ -1,0 +1,9 @@
+name: Node.js
+description: Node.js runtime
+category: Programming Languages
+install_method: mise
+install_command: node@lts
+uninstall_command: node
+default: false
+dependencies:
+  - mise

@@ -1,0 +1,9 @@
+name: GNOME Extensions
+description: Browser extension for managing GNOME Shell extensions
+category: Optional Apps
+desktop_environments:
+  - gnome
+linux:
+  install_method: apt
+  install_command: chrome-gnome-shell
+  uninstall_command: chrome-gnome-shell

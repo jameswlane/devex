@@ -1,0 +1,135 @@
+name: GitHub CLI
+description: GitHub official command line tool
+category: Development Tools
+default: true
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: gh
+  uninstall_command: gh
+  official_support: true
+  alternatives:
+    - install_method: macports
+      install_command: gh
+      uninstall_command: gh
+      official_support: false
+windows:
+  install_method: winget
+  install_command: GitHub.cli
+  uninstall_command: GitHub.cli
+  official_support: true
+  alternatives:
+    - install_method: chocolatey
+      install_command: gh
+      uninstall_command: gh
+      official_support: false
+    - install_method: scoop
+      install_command: gh
+      uninstall_command: gh
+      official_support: false
+linux:
+  install_method: apt
+  install_command: gh
+  uninstall_command: gh
+  official_support: true
+  apt_sources:
+    - key_source: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+      key_name: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+      key_fingerprint: 23F3D4EA75716F8B2E1A5E1A50F32B5B1B4A2C1C
+      source_repo: deb [arch=%ARCHITECTURE% signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main
+      source_name: /etc/apt/sources.list.d/github-cli.list
+  platform_requirements:
+    - os: debian
+      dependencies:
+        - curl
+        - gnupg
+    - os: ubuntu
+      dependencies:
+        - curl
+        - gnupg
+  alternatives:
+    - install_method: dnf
+      install_command: gh
+      uninstall_command: gh
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - version: 41+
+      pre_install:
+        - shell: dnf install dnf5-plugins
+        - shell: dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo
+    - install_method: dnf
+      install_command: gh
+      uninstall_command: gh
+      official_support: true
+      platform_requirements:
+        - os: rhel
+          version: 9+
+        - os: centos
+          version: 9+
+      pre_install:
+        - shell: dnf install 'dnf-command(config-manager)'
+        - shell: dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+    - install_method: yum
+      install_command: gh
+      uninstall_command: gh
+      official_support: true
+      platform_requirements:
+        - os: amazonlinux
+          version: '2'
+      pre_install:
+        - shell: type -p yum-config-manager >/dev/null || yum install yum-utils
+        - shell: yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+    - install_method: zypper
+      install_command: gh
+      uninstall_command: gh
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+        - os: suse
+      pre_install:
+        - shell: zypper addrepo https://cli.github.com/packages/rpm/gh-cli.repo
+        - shell: zypper ref
+    - install_method: pacman
+      install_command: github-cli
+      uninstall_command: github-cli
+      official_support: false
+      platform_requirements:
+        - os: arch
+    - install_method: emerge
+      install_command: github-cli
+      uninstall_command: github-cli
+      official_support: false
+      platform_requirements:
+        - os: gentoo
+    - install_method: xbps
+      install_command: github-cli
+      uninstall_command: github-cli
+      official_support: false
+      platform_requirements:
+        - os: void
+    - install_method: pkg
+      install_command: gh
+      uninstall_command: gh
+      official_support: false
+      platform_requirements:
+        - os: freebsd
+    - install_method: pkg_add
+      install_command: github-cli
+      uninstall_command: github-cli
+      official_support: false
+      platform_requirements:
+        - os: openbsd
+    - install_method: nixpkgs
+      install_command: gh
+      uninstall_command: gh
+      official_support: false
+      platform_requirements:
+        - os: nixos
+    - install_method: apk
+      install_command: github-cli
+      uninstall_command: github-cli
+      official_support: false
+      platform_requirements:
+        - os: alpine

@@ -1,0 +1,9 @@
+name: Zig
+description: ''
+category: Programming Languages
+install_method: mise
+install_command: zig@latest
+uninstall_command: zig
+default: false
+dependencies:
+  - mise

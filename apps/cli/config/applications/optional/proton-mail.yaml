@@ -1,0 +1,11 @@
+name: Proton Mail
+description: Secure email app by Proton
+category: Optional Apps
+desktop_environments:
+  - all
+linux:
+  install_method: deb
+  install_command: wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb
+  uninstall_command: sudo apt remove protonmail-desktop-beta
+  dependencies:
+    - apt

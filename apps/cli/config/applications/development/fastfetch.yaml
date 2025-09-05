@@ -1,0 +1,123 @@
+name: Fastfetch
+description: A maintained, feature-rich and performance-oriented, neofetch-like system information tool.
+category: System Utilities
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: fastfetch
+  uninstall_command: fastfetch
+  official_support: true
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/fastfetch/fastfetch.jsonc
+      destination: ~/.config/fastfetch/config.jsonc
+  alternatives:
+    - install_method: macports
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+windows:
+  install_method: winget
+  install_command: fastfetch
+  uninstall_command: fastfetch
+  official_support: true
+  alternatives:
+    - install_method: scoop
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+    - install_method: chocolatey
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+linux:
+  install_method: deb
+  install_command: fastfetch
+  uninstall_command: fastfetch
+  download_url: https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-%ARCHITECTURE%.deb
+  official_support: true
+  platform_requirements:
+    - os: debian
+      version: 11+
+    - os: ubuntu
+      version: 20.04+
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/fastfetch/fastfetch.jsonc
+      destination: ~/.config/fastfetch/config.jsonc
+  post_install:
+    - shell: export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r
+  alternatives:
+    - install_method: apt
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: debian
+          version: 13+
+    - install_method: pacman
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: arch
+    - install_method: dnf
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: fedora
+    - install_method: emerge
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: apk
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: alpine
+    - install_method: nixpkgs
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: zypper
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+    - install_method: eopkg
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: solus
+    - install_method: xbps
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: brew
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: linux
+    - install_method: pkg
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: freebsd
+    - install_method: pkg_add
+      install_command: fastfetch
+      uninstall_command: fastfetch
+      official_support: true
+      platform_requirements:
+        - os: openbsd
