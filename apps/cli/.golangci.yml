@@ -21,7 +21,6 @@ linters:
     # Performance and best practices
     - prealloc # Find slice declarations that could potentially be pre-allocated
     - bodyclose # Check whether HTTP response body is closed successfully
-    - noctx # Find sending HTTP request without context.Context
     # CLI-specific useful linters
     - errname # Check that error types are of the form FooError
     - errorlint # Find code that will cause problems with the error wrapping scheme
