@@ -122,16 +122,15 @@ output:
   sort-results: true
   sort-order:
     - linter
-    - severity
     - file
-severity:
+    # severity:
   # Set default severity
-  default: error
+  # default: error
   # Set specific severities for certain linters
-  rules:
-    - linters:
-        - revive
-      severity: warning
-    - linters:
-        - unused
-      severity: warning # Make unused warnings instead of errors during migration
+  # rules:
+  #   - linters:
+  #       - revive
+  #     severity: warning
+  #   - linters:
+  #       - unused
+  #     severity: warning # Make unused warnings instead of errors during migration
