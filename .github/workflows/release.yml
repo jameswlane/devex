@@ -59,9 +59,14 @@ jobs:
           go install github.com/go-task/task/v3/cmd/task@latest
           go install github.com/goreleaser/goreleaser@latest
           go install github.com/onsi/ginkgo/v2/ginkgo@latest
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
       - name: Build all packages
         run: pnpm build
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.4.0
+          install-mode: goinstall
+          args: --version
       - name: Lint all packages
         run: pnpm turbo lint --concurrency=1
       - name: Test all packages
