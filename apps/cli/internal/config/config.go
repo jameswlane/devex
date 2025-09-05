@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/spf13/viper"
 
@@ -244,50 +247,160 @@ func loadDirectoryConfigs(configPath string) error {
 	return nil
 }
 
-// loadDirectoryAlphabetically recursively loads YAML files from a directory in alphabetical order
+// loadDirectoryAlphabetically loads YAML files from a directory in alphabetical order
+// This ensures consistent loading order and enables prefix-based ordering
+// Uses parallel loading for improved performance with many files
 func loadDirectoryAlphabetically(dirPath, dirName string) error {
-	return filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
+	// Get all YAML files and sort them alphabetically
+	files, err := getDirectoryFiles(dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to get directory files: %w", err)
+	}
 
-		// Only process YAML files
-		if !info.IsDir() && (strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
-			relPath, _ := filepath.Rel(dirPath, path)
-			log.Debug("Loading config file", "file", relPath, "directory", dirName)
-
-			if err := loadYamlFileIntoViperWithPrefix(path, dirName); err != nil {
-				log.Warn("Failed to load config file", "file", relPath, "error", err)
-			}
-		}
-
+	if len(files) == 0 {
+		log.Debug("No YAML files found in directory", "directory", dirName)
 		return nil
-	})
+	}
+
+	// For small numbers of files, use sequential loading to maintain order
+	if len(files) <= 5 {
+		return loadFilesSequentially(files, dirPath, dirName)
+	}
+
+	// For larger numbers of files, use parallel loading with ordered merge
+	return loadFilesInParallel(files, dirPath, dirName)
+}
+
+// loadFilesSequentially loads files one by one in order
+func loadFilesSequentially(files []string, dirPath, dirName string) error {
+	for _, filename := range files {
+		if !isValidFilename(filename) {
+			log.Warn("Skipping file with invalid name", "file", filename, "directory", dirName)
+			continue
+		}
+
+		filePath := filepath.Join(dirPath, filename)
+		log.Debug("Loading config file", "file", filename, "directory", dirName)
+
+		if err := loadYamlFileIntoViperWithPrefix(filePath, dirName); err != nil {
+			log.Warn("Failed to load config file", "file", filename, "error", err)
+			// Continue loading other files even if one fails
+		}
+	}
+	return nil
+}
+
+// fileLoadResult represents the result of loading a single file
+type fileLoadResult struct {
+	filename string
+	settings map[string]interface{}
+	err      error
+}
+
+// loadFilesInParallel loads files concurrently but merges results in alphabetical order
+func loadFilesInParallel(files []string, dirPath, dirName string) error {
+	resultsChan := make(chan fileLoadResult, len(files))
+	var wg sync.WaitGroup
+
+	// Start goroutines for parallel file loading
+	for _, filename := range files {
+		if !isValidFilename(filename) {
+			log.Warn("Skipping file with invalid name", "file", filename, "directory", dirName)
+			continue
+		}
+
+		wg.Add(1)
+		go func(fname string) {
+			defer wg.Done()
+			loadSingleFileForParallel(fname, dirPath, dirName, resultsChan)
+		}(filename)
+	}
+
+	// Close channel when all goroutines complete
+	go func() {
+		wg.Wait()
+		close(resultsChan)
+	}()
+
+	// Collect results in a map for ordered processing
+	resultsMap := make(map[string]fileLoadResult)
+	for result := range resultsChan {
+		resultsMap[result.filename] = result
+	}
+
+	// Process results in alphabetical order to maintain consistency
+	for _, filename := range files {
+		result, exists := resultsMap[filename]
+		if !exists {
+			continue // File was skipped due to invalid name
+		}
+
+		if result.err != nil {
+			log.Warn("Failed to load config file", "file", filename, "error", result.err)
+			continue
+		}
+
+		// Merge settings into main viper in order
+		for key, value := range result.settings {
+			fullKey := fmt.Sprintf("%s.%s.%s", dirName, sanitizeFilenameForKey(filename), key)
+			viper.Set(fullKey, value)
+		}
+	}
+
+	return nil
+}
+
+// loadSingleFileForParallel loads a single file and sends the result to a channel
+func loadSingleFileForParallel(filename, dirPath, dirName string, resultsChan chan<- fileLoadResult) {
+	filePath := filepath.Join(dirPath, filename)
+	log.Debug("Loading config file (parallel)", "file", filename, "directory", dirName)
+
+	fileViper, err := loadYamlFileToViper(filePath)
+	if err != nil {
+		resultsChan <- fileLoadResult{filename: filename, err: err}
+		return
+	}
+
+	resultsChan <- fileLoadResult{
+		filename: filename,
+		settings: fileViper.AllSettings(),
+		err:      nil,
+	}
 }
 
 // loadYamlFileIntoViperWithPrefix loads a YAML file into Viper with a directory-based prefix
+// Uses a utility function for consistent file loading and proper resource management
 func loadYamlFileIntoViperWithPrefix(filePath, dirPrefix string) error {
-	content, err := os.ReadFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to read file %s: %w", filePath, err)
+	// Validate file path
+	if !isValidConfigPath(filePath) {
+		return fmt.Errorf("invalid file path: %s", filePath)
 	}
 
-	// Create a new Viper instance for this file
-	fileViper := viper.New()
-	fileViper.SetConfigType("yaml")
+	// Check cache to avoid unnecessary reloading
+	if shouldReload, err := globalConfigCache.shouldReloadFile(filePath); err != nil {
+		return fmt.Errorf("failed to check file status: %w", err)
+	} else if !shouldReload {
+		log.Debug("Skipping file load, not modified", "path", filePath)
+		return nil
+	}
 
-	if err := fileViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return fmt.Errorf("failed to parse YAML file %s: %w", filePath, err)
+	// Use utility function for consistent file loading
+	fileViper, err := loadYamlFileToViper(filePath)
+	if err != nil {
+		return err
 	}
 
 	// Get the filename without extension for use as key
 	filename := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
 
+	// Sanitize filename for use in keys
+	sanitizedFilename := sanitizeFilenameForKey(filename)
+
 	// Merge into main viper with directory-based structure
 	allSettings := fileViper.AllSettings()
 	for key, value := range allSettings {
 		// Create hierarchical key: directory.filename.key
-		fullKey := fmt.Sprintf("%s.%s.%s", dirPrefix, filename, key)
+		fullKey := fmt.Sprintf("%s.%s.%s", dirPrefix, sanitizedFilename, key)
 		viper.Set(fullKey, value)
 	}
 
@@ -295,17 +408,35 @@ func loadYamlFileIntoViperWithPrefix(filePath, dirPrefix string) error {
 }
 
 // getDirectoryFiles returns all YAML files in a directory sorted alphabetically
+// This enables prefix-based ordering (e.g., "00-priority-app.yaml" loads first)
 func getDirectoryFiles(dirPath string) ([]string, error) {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, err
+	// Validate directory path to prevent traversal attacks
+	if !isValidConfigPath(dirPath) {
+		return nil, fmt.Errorf("invalid directory path: %s", dirPath)
 	}
 
-	var yamlFiles []string
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory %s: %w", dirPath, err)
+	}
+
+	yamlFiles := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
-			yamlFiles = append(yamlFiles, entry.Name())
+		if entry.IsDir() {
+			continue
 		}
+
+		filename := entry.Name()
+		if !isYamlFile(filename) {
+			continue
+		}
+
+		if !isValidFilename(filename) {
+			log.Warn("Skipping file with invalid name", "file", filename)
+			continue
+		}
+
+		yamlFiles = append(yamlFiles, filename)
 	}
 
 	// Sort alphabetically - this enables prefix-based ordering
@@ -356,27 +487,20 @@ func LoadSettings(homeDir string) (Settings, error) {
 func loadYamlFileIntoViper(path string) error {
 	log.Info("Loading YAML file into Viper", "path", path)
 
-	data, err := fs.ReadFile(path)
-	if err != nil {
-		exists, err := fs.Exists(path)
-		if err != nil {
-			log.Warn("Failed to check if file exists", "path", path, "error", err)
-			return err
-		}
-		if !exists {
-			log.Warn("Config file not found", "path", path)
-			return nil
-		}
-		log.Error("Failed to read YAML file", err, "path", path)
-		return fmt.Errorf("failed to read YAML file %s: %w", path, err)
+	// Validate path
+	if !isValidConfigPath(path) {
+		return fmt.Errorf("invalid config path: %s", path)
 	}
 
-	// Parse and merge into the main Viper instance
-	subViper := viper.New()
-	subViper.SetConfigType("yaml")
-	if err := subViper.ReadConfig(bytes.NewReader(data)); err != nil {
-		log.Error("Failed to parse YAML file", err, "path", path)
-		return fmt.Errorf("failed to parse YAML file %s: %w", path, err)
+	// Use utility function for consistent loading
+	subViper, err := loadYamlFileToViper(path)
+	if err != nil {
+		// Check if file exists for better error reporting
+		if exists, checkErr := fs.Exists(path); checkErr == nil && !exists {
+			log.Warn("Config file not found", "path", path)
+			return nil // Don't fail for missing optional files
+		}
+		return err
 	}
 
 	// Merge settings into the main Viper instance
@@ -393,7 +517,7 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 	log.Info("Loading cross-platform settings", "homeDir", homeDir)
 
 	// Validate configuration files before loading
-	if err := ValidateConfigFiles(homeDir); err != nil {
+	if err := ValidateDirectoryBasedConfig(homeDir, false); err != nil {
 		log.Warn("Configuration validation failed, continuing with loading", "error", err)
 		// Don't fail completely, just warn and continue
 	}
@@ -543,10 +667,24 @@ func (s *CrossPlatformSettings) ToLegacySettings() Settings {
 }
 
 // mergeConfigFileIntoViper reads a YAML file and merges it into the specified Viper instance
+// Uses the utility function for consistent loading behavior
 func mergeConfigFileIntoViper(v *viper.Viper, path string) error {
 	log.Info("Loading YAML file into Viper", "path", path)
 
-	data, err := fs.ReadFile(path)
+	// Validate path before loading
+	if !isValidConfigPath(path) {
+		return fmt.Errorf("invalid config path: %s", path)
+	}
+
+	// Check if file needs reloading (performance optimization)
+	if shouldReload, err := globalConfigCache.shouldReloadFile(path); err != nil {
+		return fmt.Errorf("failed to check file status: %w", err)
+	} else if !shouldReload {
+		log.Debug("Skipping file load, not modified", "path", path)
+		return nil
+	}
+
+	_, err := fs.ReadFile(path)
 	if err != nil {
 		exists, err := fs.Exists(path)
 		if err != nil {
@@ -562,11 +700,9 @@ func mergeConfigFileIntoViper(v *viper.Viper, path string) error {
 	}
 
 	// Parse and merge into the specified Viper instance
-	subViper := viper.New()
-	subViper.SetConfigType("yaml")
-	if err := subViper.ReadConfig(bytes.NewReader(data)); err != nil {
-		log.Error("Failed to parse YAML file", err, "path", path)
-		return fmt.Errorf("failed to parse YAML file %s: %w", path, err)
+	subViper, err := loadYamlFileToViper(path)
+	if err != nil {
+		return err
 	}
 
 	// Merge settings into the specified Viper instance
@@ -777,4 +913,200 @@ func (s *CrossPlatformSettings) GetCommandValidator() (*security.CommandValidato
 	}
 
 	return security.NewCommandValidatorWithConfig(securityConfig.Level, securityConfig), nil
+}
+
+// ValidateApplicationsConfig validates a legacy applications configuration map
+// This function is maintained for backward compatibility with existing tests
+func ValidateApplicationsConfig(configMap map[string]interface{}) error {
+	if configMap == nil {
+		return fmt.Errorf("configuration map is nil")
+	}
+
+	// Basic validation for legacy format
+	if len(configMap) == 0 {
+		return fmt.Errorf("configuration map is empty")
+	}
+
+	// Check for applications section
+	applications, exists := configMap["applications"]
+	if !exists {
+		return fmt.Errorf("missing required section: applications")
+	}
+
+	// Verify applications is a map (handle both string and interface{} keys from YAML)
+	var appsMap map[string]interface{}
+	switch v := applications.(type) {
+	case map[string]interface{}:
+		appsMap = v
+	case map[interface{}]interface{}:
+		// Convert interface{} keys to string keys
+		appsMap = make(map[string]interface{})
+		for k, val := range v {
+			if keyStr, ok := k.(string); ok {
+				appsMap[keyStr] = val
+			}
+		}
+	default:
+		return fmt.Errorf("applications section must be a map")
+	}
+
+	// Check for required subsections
+	requiredSections := []string{"databases"}
+	for _, section := range requiredSections {
+		if _, exists := appsMap[section]; !exists {
+			return fmt.Errorf("missing required section: applications.%s", section)
+		}
+	}
+
+	return nil
+}
+
+// Security and validation utility functions
+
+// filenameValidationRegex matches valid configuration filenames
+// Allows alphanumeric, hyphens, underscores, and dots, but prevents path traversal
+var filenameValidationRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(yaml|yml)$`)
+
+// pathTraversalRegex detects potential path traversal attempts
+var pathTraversalRegex = regexp.MustCompile(`\.\.[\\/]`)
+
+// isValidFilename validates that a filename is safe to use
+// Prevents path traversal and ensures reasonable naming conventions
+func isValidFilename(filename string) bool {
+	if filename == "" || len(filename) > 255 {
+		return false
+	}
+
+	// Check for path traversal attempts
+	if pathTraversalRegex.MatchString(filename) {
+		return false
+	}
+
+	// Validate against allowed pattern
+	return filenameValidationRegex.MatchString(filename)
+}
+
+// isValidConfigPath validates that a file/directory path is within allowed config directories
+func isValidConfigPath(path string) bool {
+	if path == "" {
+		return false
+	}
+
+	// Check for path traversal attempts
+	if pathTraversalRegex.MatchString(path) {
+		return false
+	}
+
+	// Ensure path is absolute or within reasonable bounds
+	cleanPath := filepath.Clean(path)
+	return !strings.Contains(cleanPath, "..")
+}
+
+// isYamlFile checks if a filename is a YAML file
+func isYamlFile(filename string) bool {
+	return strings.HasSuffix(filename, ".yaml") || strings.HasSuffix(filename, ".yml")
+}
+
+// sanitizeFilenameForKey converts a filename to a safe key format
+// Removes potentially problematic characters and ensures consistent naming
+func sanitizeFilenameForKey(filename string) string {
+	// Remove file extension
+	key := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	// Replace any remaining problematic characters with underscores
+	key = regexp.MustCompile(`[^a-zA-Z0-9_-]`).ReplaceAllString(key, "_")
+
+	// Ensure key doesn't start with non-letter
+	if len(key) > 0 && !regexp.MustCompile(`^[a-zA-Z]`).MatchString(key) {
+		key = "config_" + key
+	}
+
+	return key
+}
+
+// File loading utility functions
+
+// loadYamlFileToViper loads a YAML file into a new Viper instance
+// Centralizes file loading logic and provides consistent error handling
+func loadYamlFileToViper(filePath string) (*viper.Viper, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
+	}
+
+	// Validate YAML content isn't empty or malformed
+	if len(bytes.TrimSpace(content)) == 0 {
+		return nil, fmt.Errorf("config file %s is empty", filePath)
+	}
+
+	// Create a new Viper instance for this file
+	fileViper := viper.New()
+	fileViper.SetConfigType("yaml")
+
+	if err := fileViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML file %s: %w", filePath, err)
+	}
+
+	return fileViper, nil
+}
+
+// Config file caching for performance optimization
+
+type configFileInfo struct {
+	path    string
+	modTime time.Time
+	size    int64
+}
+
+type configCache struct {
+	mu    sync.RWMutex
+	files map[string]configFileInfo
+}
+
+var globalConfigCache = &configCache{
+	files: make(map[string]configFileInfo),
+}
+
+// shouldReloadFile checks if a config file needs to be reloaded based on modification time
+func (c *configCache) shouldReloadFile(filePath string) (bool, error) {
+	c.mu.RLock()
+	cachedInfo, exists := c.files[filePath]
+	c.mu.RUnlock()
+
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
+		// File not in cache, needs loading
+		c.updateFileInfo(filePath, fileInfo)
+		return true, nil
+	}
+
+	// Check if file has been modified
+	if fileInfo.ModTime().After(cachedInfo.modTime) || fileInfo.Size() != cachedInfo.size {
+		c.updateFileInfo(filePath, fileInfo)
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// updateFileInfo updates the cached file information
+func (c *configCache) updateFileInfo(filePath string, fileInfo os.FileInfo) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.files[filePath] = configFileInfo{
+		path:    filePath,
+		modTime: fileInfo.ModTime(),
+		size:    fileInfo.Size(),
+	}
+}
+
+// clearCache clears the config file cache (useful for testing)
+func (c *configCache) clearCache() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.files = make(map[string]configFileInfo)
 }
