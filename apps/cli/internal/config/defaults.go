@@ -7,7 +7,16 @@ const (
 	DefaultShellTimeout  = 30 // seconds
 )
 
-// DefaultFiles defines standard configuration file paths (legacy)
+// ConfigDirectories defines the processing order for configuration directories
+// Order is important: system configs load first, desktop configs load last
+var ConfigDirectories = []string{
+	"system",       // Core system configs (git, ssh, terminal, global settings)
+	"environments", // Programming languages, fonts, shell configs
+	"applications", // Application configurations
+	"desktop",      // Desktop environment configs (loaded last)
+}
+
+// DefaultFiles defines standard configuration file paths (legacy - deprecated)
 var DefaultFiles = []string{
 	"apps.yaml",
 	"databases.yaml",
@@ -21,7 +30,7 @@ var DefaultFiles = []string{
 	"themes.yaml",
 }
 
-// CrossPlatformFiles defines the new consolidated configuration files
+// CrossPlatformFiles defines the new consolidated configuration files (legacy - deprecated)
 var CrossPlatformFiles = []string{
 	"terminal.yaml",
 	"terminal-optional.yaml",

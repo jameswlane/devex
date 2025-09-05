@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -217,31 +218,121 @@ func (s *CrossPlatformSettings) GetDefaultApps() []types.CrossPlatformApp {
 	return defaultApps
 }
 
+// loadDirectoryConfigs loads configuration files from directories in the specified order
+// Directories are processed in the order defined by ConfigDirectories
+// Within each directory, YAML files are processed alphabetically
+func loadDirectoryConfigs(configPath string) error {
+	log.Info("Loading directory-based configuration", "path", configPath)
+
+	// Process directories in the specified order
+	for _, dirName := range ConfigDirectories {
+		dirPath := filepath.Join(configPath, dirName)
+
+		// Check if directory exists
+		if info, err := os.Stat(dirPath); err != nil || !info.IsDir() {
+			log.Debug("Skipping directory (not found or not a directory)", "dir", dirName)
+			continue
+		}
+
+		log.Info("Processing config directory", "directory", dirName)
+
+		if err := loadDirectoryAlphabetically(dirPath, dirName); err != nil {
+			log.Warn("Error processing directory", "directory", dirName, "error", err)
+		}
+	}
+
+	return nil
+}
+
+// loadDirectoryAlphabetically recursively loads YAML files from a directory in alphabetical order
+func loadDirectoryAlphabetically(dirPath, dirName string) error {
+	return filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Only process YAML files
+		if !info.IsDir() && (strings.HasSuffix(path, ".yaml") || strings.HasSuffix(path, ".yml")) {
+			relPath, _ := filepath.Rel(dirPath, path)
+			log.Debug("Loading config file", "file", relPath, "directory", dirName)
+
+			if err := loadYamlFileIntoViperWithPrefix(path, dirName); err != nil {
+				log.Warn("Failed to load config file", "file", relPath, "error", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// loadYamlFileIntoViperWithPrefix loads a YAML file into Viper with a directory-based prefix
+func loadYamlFileIntoViperWithPrefix(filePath, dirPrefix string) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file %s: %w", filePath, err)
+	}
+
+	// Create a new Viper instance for this file
+	fileViper := viper.New()
+	fileViper.SetConfigType("yaml")
+
+	if err := fileViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return fmt.Errorf("failed to parse YAML file %s: %w", filePath, err)
+	}
+
+	// Get the filename without extension for use as key
+	filename := strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+
+	// Merge into main viper with directory-based structure
+	allSettings := fileViper.AllSettings()
+	for key, value := range allSettings {
+		// Create hierarchical key: directory.filename.key
+		fullKey := fmt.Sprintf("%s.%s.%s", dirPrefix, filename, key)
+		viper.Set(fullKey, value)
+	}
+
+	return nil
+}
+
+// getDirectoryFiles returns all YAML files in a directory sorted alphabetically
+func getDirectoryFiles(dirPath string) ([]string, error) {
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var yamlFiles []string
+	for _, entry := range entries {
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+			yamlFiles = append(yamlFiles, entry.Name())
+		}
+	}
+
+	// Sort alphabetically - this enables prefix-based ordering
+	sort.Strings(yamlFiles)
+
+	return yamlFiles, nil
+}
+
 func LoadSettings(homeDir string) (Settings, error) {
 	log.Info("Loading settings", "homeDir", homeDir)
 
 	viper.SetConfigType("yaml")
 
-	// Paths for default configurations
+	// Paths for directory-based configurations
 	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
 	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
 
-	// Load default configs directly into the main Viper instance
-	for _, file := range DefaultFiles {
-		defaultPath := filepath.Join(defaultConfigPath, file)
-		if err := loadYamlFileIntoViper(defaultPath); err != nil {
-			log.Warn("Failed to load default config; skipping", "file", file, "error", err)
-		}
+	// Load default directory-based configs
+	if err := loadDirectoryConfigs(defaultConfigPath); err != nil {
+		log.Warn("Failed to load default directory configs", "error", err)
 	}
 
-	// Apply overrides from ~/.devex directory
-	for _, file := range DefaultFiles {
-		overridePath := filepath.Join(overrideConfigPath, file)
-		if exists, err := fs.Stat(overridePath); err == nil && exists != nil {
-			log.Info("Applying override", "file", overridePath)
-			if err := loadYamlFileIntoViper(overridePath); err != nil {
-				log.Warn("Failed to apply override; skipping", "file", overridePath, "error", err)
-			}
+	// Apply overrides from ~/.devex directory (same structure)
+	if info, err := os.Stat(overrideConfigPath); err == nil && info.IsDir() {
+		log.Info("Loading override directory configs", "path", overrideConfigPath)
+		if err := loadDirectoryConfigs(overrideConfigPath); err != nil {
+			log.Warn("Failed to load override directory configs", "error", err)
 		}
 	}
 

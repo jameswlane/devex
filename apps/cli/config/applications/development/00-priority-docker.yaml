@@ -1,0 +1,24 @@
+name: docker
+description: 'Platform for developing, shipping, and running applications in containers'
+category: 'Development'
+default: true
+desktop_environments: ['all']
+linux:
+  install_method: 'docker'
+  install_command: 'docker'
+  uninstall_command: 'docker'
+  official_support: true
+  post_install:
+    - shell: 'systemctl enable docker'
+    - shell: 'systemctl start docker'
+    - shell: 'usermod -aG docker $USER'
+macos:
+  install_method: 'brew'
+  install_command: 'docker'
+  uninstall_command: 'docker'
+  official_support: true
+windows:
+  install_method: 'winget'
+  install_command: 'Docker.DockerDesktop'
+  uninstall_command: 'Docker.DockerDesktop'
+  official_support: true
