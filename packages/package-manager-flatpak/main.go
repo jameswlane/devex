@@ -1,129 +1,126 @@
 package main
 
-// Build timestamp: 2025-09-03 17:41:19
+// Build timestamp: 2025-09-06
 
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
 
-// FlatpakPlugin implements the Flatpak package manager
-type FlatpakPlugin struct {
-	*sdk.PackageManagerPlugin
-}
-
 // NewFlatpakPlugin creates a new Flatpak plugin
-func NewFlatpakPlugin() *FlatpakPlugin {
+func NewFlatpakPlugin() *FlatpakInstaller {
 	info := sdk.PluginInfo{
 		Name:        "package-manager-flatpak",
 		Version:     version,
-		Description: "Flatpak universal package manager",
+		Description: "Flatpak universal package manager with system installation support",
 		Author:      "DevEx Team",
 		Repository:  "https://github.com/jameswlane/devex",
-		Tags:        []string{"flatpak", "universal", "linux"},
+		Tags:        []string{"package-manager", "flatpak", "universal", "linux", "sandboxed"},
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
-				Description: "Install packages using Flatpak",
-				Usage:       "Install one or more packages with dependency resolution",
+				Description: "Install Flatpak applications",
+				Usage:       "Install applications from configured remotes",
+				Flags: map[string]string{
+					"user":   "Install for current user only (default)",
+					"system": "Install system-wide",
+					"remote": "Specify remote to install from",
+					"yes":    "Automatically answer yes to prompts",
+				},
 			},
 			{
 				Name:        "remove",
-				Description: "Remove packages using Flatpak",
-				Usage:       "Remove one or more packages from the system",
+				Description: "Remove Flatpak applications",
+				Usage:       "Remove installed applications",
+				Flags: map[string]string{
+					"unused": "Remove unused runtimes after removal",
+				},
 			},
 			{
 				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Update installed applications and runtimes",
+				Usage:       "Update all installed applications and runtimes",
 			},
 			{
 				Name:        "search",
-				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Description: "Search for applications",
+				Usage:       "Search for applications across all configured remotes",
 			},
 			{
 				Name:        "list",
-				Description: "List packages",
-				Usage:       "List installed packages",
+				Description: "List installed applications",
+				Usage:       "Show installed applications and runtimes",
+				Flags: map[string]string{
+					"app":     "List only applications",
+					"runtime": "List only runtimes",
+				},
+			},
+			{
+				Name:        "remote-add",
+				Description: "Add a new remote repository",
+				Usage:       "Add remote repository for applications",
+				Flags: map[string]string{
+					"if-not-exists": "Don't fail if remote already exists",
+					"gpg-import":    "Import GPG key for remote",
+				},
+			},
+			{
+				Name:        "remote-remove",
+				Description: "Remove a remote repository",
+				Usage:       "Remove remote repository",
+			},
+			{
+				Name:        "remote-list",
+				Description: "List configured remotes",
+				Usage:       "Show all configured remote repositories",
+			},
+			{
+				Name:        "is-installed",
+				Description: "Check if application is installed",
+				Usage:       "Returns exit code 0 if installed, 1 if not",
+			},
+			{
+				Name:        "info",
+				Description: "Show application information",
+				Usage:       "Display detailed information about an application",
+			},
+			{
+				Name:        "ensure-installed",
+				Description: "Install Flatpak system-wide if not present",
+				Usage:       "Install Flatpak package manager on systems that don't have it",
+			},
+			{
+				Name:        "add-flathub",
+				Description: "Add Flathub repository",
+				Usage:       "Add the main Flathub repository for applications",
+				Flags: map[string]string{
+					"user":   "Add for current user only",
+					"system": "Add system-wide",
+				},
 			},
 		},
 	}
 
-	return &FlatpakPlugin{
+	return &FlatpakInstaller{
 		PackageManagerPlugin: sdk.NewPackageManagerPlugin(info, "flatpak"),
+		logger:               sdk.NewDefaultLogger(false),
 	}
-}
-
-// Execute handles command execution
-func (p *FlatpakPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
-	switch command {
-	case "install":
-		return p.handleInstall(args)
-	case "remove":
-		return p.handleRemove(args)
-	case "update":
-		return p.handleUpdate(args)
-	case "search":
-		return p.handleSearch(args)
-	case "list":
-		return p.handleList(args)
-	default:
-		return fmt.Errorf("unknown command: %s", command)
-	}
-}
-
-func (p *FlatpakPlugin) handleInstall(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "flatpak", cmdArgs...)
-}
-
-func (p *FlatpakPlugin) handleRemove(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "flatpak", cmdArgs...)
-}
-
-func (p *FlatpakPlugin) handleUpdate(args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "flatpak", "update")
-}
-
-func (p *FlatpakPlugin) handleSearch(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
-	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommand(false, "flatpak", "search", searchTerm)
-}
-
-func (p *FlatpakPlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "flatpak", "list")
 }
 
 func main() {
 	plugin := NewFlatpakPlugin()
+	
+	// Handle args with panic recovery
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "Plugin panic recovered: %v\n", r)
+			os.Exit(1)
+		}
+	}()
+	
 	sdk.HandleArgs(plugin, os.Args[1:])
 }
