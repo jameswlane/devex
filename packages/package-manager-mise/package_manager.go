@@ -12,6 +12,11 @@ type MisePlugin struct {
 	logger sdk.Logger
 }
 
+// InitLogger sets the logger for the plugin
+func (m *MisePlugin) InitLogger(logger sdk.Logger) {
+	m.logger = logger
+}
+
 // Execute handles command execution
 func (m *MisePlugin) Execute(command string, args []string) error {
 	// Ensure Mise is available
@@ -19,19 +24,19 @@ func (m *MisePlugin) Execute(command string, args []string) error {
 
 	switch command {
 	case "install":
-		return m.handleInstall(args)
+		return m.HandleInstall(args)
 	case "remove":
-		return m.handleRemove(args)
+		return m.HandleRemove(args)
 	case "update":
-		return m.handleUpdate(args)
+		return m.HandleUpdate(args)
 	case "search":
-		return m.handleSearch(args)
+		return m.HandleSearch(args)
 	case "list":
-		return m.handleList(args)
+		return m.HandleList(args)
 	case "ensure-installed":
-		return m.handleEnsureInstalled(args)
+		return m.HandleEnsureInstalled(args)
 	case "is-installed":
-		return m.handleIsInstalled(args)
+		return m.HandleIsInstalled(args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}

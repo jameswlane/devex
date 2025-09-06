@@ -9,8 +9,8 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
-// handleEnsureInstalled ensures Mise is installed on the system
-func (m *MisePlugin) handleEnsureInstalled(args []string) error {
+// HandleEnsureInstalled ensures Mise is installed on the system
+func (m *MisePlugin) HandleEnsureInstalled(args []string) error {
 	m.logger.Println("Checking if Mise is installed...")
 
 	// Check if mise is already in PATH

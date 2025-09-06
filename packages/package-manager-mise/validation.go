@@ -11,8 +11,8 @@ const (
 	MaxToolNameLength = 100
 )
 
-// validateMiseCommand validates tool specifications to prevent command injection
-func (m *MisePlugin) validateMiseCommand(toolSpec string) error {
+// ValidateToolSpec validates tool specifications to prevent command injection
+func (m *MisePlugin) ValidateToolSpec(toolSpec string) error {
 	// Basic validation
 	if toolSpec == "" {
 		return fmt.Errorf("tool specification cannot be empty")
@@ -25,8 +25,11 @@ func (m *MisePlugin) validateMiseCommand(toolSpec string) error {
 
 	// Check for null bytes and control characters
 	for _, r := range toolSpec {
-		if r == 0 || (r < 32 && r != 9 && r != 10 && r != 13) { // Allow tab, LF, CR
-			return fmt.Errorf("tool specification contains invalid characters")
+		if r == 0 {
+			return fmt.Errorf("tool specification contains null bytes")
+		}
+		if r < 32 && r != 9 && r != 10 && r != 13 { // Allow tab, LF, CR
+			return fmt.Errorf("tool specification contains invalid control characters")
 		}
 	}
 
@@ -34,20 +37,20 @@ func (m *MisePlugin) validateMiseCommand(toolSpec string) error {
 	dangerousChars := []string{";", "&", "|", "$", "`", "(", ")", "{", "}", "<", ">", "*", "?", "~", "\\n", "\\r"}
 	for _, char := range dangerousChars {
 		if strings.Contains(toolSpec, char) {
-			return fmt.Errorf("tool specification contains invalid characters")
+			return fmt.Errorf("tool specification contains potentially dangerous character: %s", char)
 		}
 	}
 
 	// Validate tool specification format (tool@version or just tool)
-	if err := m.validateToolSpecFormat(toolSpec); err != nil {
+	if err := m.ValidateToolSpecFormat(toolSpec); err != nil {
 		return fmt.Errorf("invalid tool specification format: %w", err)
 	}
 
 	return nil
 }
 
-// validateToolSpecFormat validates the format of tool specifications
-func (m *MisePlugin) validateToolSpecFormat(toolSpec string) error {
+// ValidateToolSpecFormat validates the format of tool specifications
+func (m *MisePlugin) ValidateToolSpecFormat(toolSpec string) error {
 	// Valid formats:
 	// - tool (e.g., "node", "python")
 	// - tool@version (e.g., "node@18", "python@3.11")
@@ -66,10 +69,10 @@ func (m *MisePlugin) validateToolSpecFormat(toolSpec string) error {
 		return fmt.Errorf("tool name cannot be empty")
 	}
 
-	// Tool name should only contain alphanumeric characters, hyphens, and underscores
-	toolNameRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+	// Tool name should start with a letter and contain only alphanumeric characters, hyphens, and underscores
+	toolNameRegex := regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
 	if !toolNameRegex.MatchString(toolName) {
-		return fmt.Errorf("tool name contains invalid characters (only alphanumeric, hyphens, and underscores allowed)")
+		return fmt.Errorf("tool name must start with a letter and contain only alphanumeric, hyphens, and underscores")
 	}
 
 	// If version is specified, validate it
@@ -84,11 +87,72 @@ func (m *MisePlugin) validateToolSpecFormat(toolSpec string) error {
 			return nil
 		}
 
-		// Allow common version patterns (e.g., "18", "3.11", "1.0.0", "v1.2.3")
-		versionRegex := regexp.MustCompile(`^v?[0-9]+(\.[0-9]+)*([a-zA-Z0-9_.-]*)?$`)
+		// Allow common version patterns (e.g., "18", "3.11", "1.0.0", "v1.2.3", "^1.70.0", "~2.0.0")
+		versionRegex := regexp.MustCompile(`^[~^]?v?[0-9]+(\.[0-9]+)*([a-zA-Z0-9_.-]*)?$`)
 		if !versionRegex.MatchString(version) {
 			return fmt.Errorf("invalid version format")
 		}
+	}
+
+	return nil
+}
+
+// ValidateShellType validates shell type to ensure it's supported
+func (m *MisePlugin) ValidateShellType(shellType string) error {
+	if shellType == "" {
+		return fmt.Errorf("shell type cannot be empty")
+	}
+
+	// Check for dangerous characters
+	if strings.ContainsAny(shellType, ";|&`$(){}[]<>\\") {
+		return fmt.Errorf("shell type contains invalid characters")
+	}
+
+	// Validate against supported shells
+	supportedShells := []string{"bash", "zsh", "fish"}
+	for _, supported := range supportedShells {
+		if shellType == supported {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("unsupported shell type: %s (supported: bash, zsh, fish)", shellType)
+}
+
+// ValidateCommandArg validates individual command arguments
+func (m *MisePlugin) ValidateCommandArg(arg string) error {
+	if arg == "" {
+		return fmt.Errorf("argument cannot be empty")
+	}
+
+	// Check for null bytes
+	for _, r := range arg {
+		if r == 0 {
+			return fmt.Errorf("argument contains null bytes")
+		}
+	}
+
+	// Check for shell metacharacters that could be used for command injection
+	dangerousChars := []string{";", "&", "|", "`", "$", "(", ")", "<", ">"}
+	for _, char := range dangerousChars {
+		if strings.Contains(arg, char) {
+			return fmt.Errorf("argument contains potentially dangerous character: %s", char)
+		}
+	}
+
+	return nil
+}
+
+// ValidateEnvironmentVar validates environment variable names
+func (m *MisePlugin) ValidateEnvironmentVar(varName string) error {
+	if varName == "" {
+		return fmt.Errorf("environment variable name cannot be empty")
+	}
+
+	// Environment variable names should match the pattern [A-Z_][A-Z0-9_]*
+	envVarRegex := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	if !envVarRegex.MatchString(varName) {
+		return fmt.Errorf("invalid environment variable name: must start with letter or underscore and contain only letters, numbers, and underscores")
 	}
 
 	return nil
