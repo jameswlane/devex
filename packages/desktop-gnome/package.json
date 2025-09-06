@@ -5,9 +5,9 @@
 	"private": true,
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-desktop-gnome main.go",
+		"build": "go build -o devex-plugin-desktop-gnome *.go",
 		"test": "go test ./...",
-		"dev": "go build -race -o devex-plugin-desktop-gnome main.go",
+		"dev": "go build -race -o devex-plugin-desktop-gnome *.go",
 		"lint": "golangci-lint run",
 		"mod": "go mod tidy"
 	},
