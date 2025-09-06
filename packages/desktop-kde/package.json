@@ -5,8 +5,8 @@
 	"description": "KDE Plasma desktop environment configuration plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-desktop-kde main.go",
-		"dev": "go build -race -o devex-plugin-desktop-kde main.go",
+		"build": "go build -o devex-plugin-desktop-kde *.go",
+		"dev": "go build -race -o devex-plugin-desktop-kde *.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",
 		"mod": "go mod tidy"

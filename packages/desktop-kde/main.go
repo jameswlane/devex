@@ -1,14 +1,10 @@
 package main
 
-// Build timestamp: 2025-09-03 17:41:19
-
 import (
+	"context"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
-	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -18,6 +14,11 @@ var version = "dev" // Set by goreleaser
 // KDEPlugin implements KDE Plasma desktop environment configuration
 type KDEPlugin struct {
 	*sdk.BasePlugin
+	desktop *DesktopManager
+	widgets *WidgetManager
+	fonts   *FontManager
+	themes  *ThemeManager
+	backup  *BackupManager
 }
 
 // NewKDEPlugin creates a new KDE plugin
@@ -51,9 +52,44 @@ func NewKDEPlugin() *KDEPlugin {
 				Usage:       "Install and configure KDE Plasma desktop widgets",
 			},
 			{
+				Name:        "list-widgets",
+				Description: "List installed widgets",
+				Usage:       "List all installed KDE Plasma widgets",
+			},
+			{
+				Name:        "remove-widget",
+				Description: "Remove a widget",
+				Usage:       "Remove a specific KDE Plasma widget",
+			},
+			{
+				Name:        "configure-widget",
+				Description: "Configure widget settings",
+				Usage:       "Get help on configuring KDE Plasma widgets",
+			},
+			{
 				Name:        "apply-theme",
 				Description: "Apply KDE themes",
 				Usage:       "Apply Qt, KDE, and Plasma themes",
+			},
+			{
+				Name:        "install-fonts",
+				Description: "Install and configure fonts",
+				Usage:       "Install development fonts and configure KDE font settings",
+			},
+			{
+				Name:        "configure-fonts",
+				Description: "Configure font settings",
+				Usage:       "Set system and monospace fonts for KDE Plasma",
+			},
+			{
+				Name:        "list-themes",
+				Description: "List available themes",
+				Usage:       "List installed Plasma, Qt, and color schemes",
+			},
+			{
+				Name:        "restart-plasma",
+				Description: "Restart Plasma Shell",
+				Usage:       "Restart KDE Plasma Shell to apply changes",
 			},
 			{
 				Name:        "backup",
@@ -65,11 +101,21 @@ func NewKDEPlugin() *KDEPlugin {
 				Description: "Restore KDE settings from backup",
 				Usage:       "Restore KDE configuration from a previous backup",
 			},
+			{
+				Name:        "list-backups",
+				Description: "List available backups",
+				Usage:       "List all available KDE configuration backups",
+			},
 		},
 	}
 
 	return &KDEPlugin{
 		BasePlugin: sdk.NewBasePlugin(info),
+		desktop:    NewDesktopManager(),
+		widgets:    NewWidgetManager(),
+		fonts:      NewFontManager(),
+		themes:     NewThemeManager(),
+		backup:     NewBackupManager(),
 	}
 }
 
@@ -80,21 +126,39 @@ func (p *KDEPlugin) Execute(command string, args []string) error {
 		return fmt.Errorf("KDE Plasma desktop environment is not available on this system")
 	}
 
+	ctx := context.Background()
+
 	switch command {
 	case "configure":
-		return p.handleConfigure(args)
+		return p.desktop.Configure(ctx, args)
 	case "set-background":
-		return p.handleSetBackground(args)
+		return p.desktop.SetBackground(ctx, args)
 	case "configure-panel":
-		return p.handleConfigurePanel(args)
+		return p.desktop.ConfigurePanel(ctx, args)
+	case "restart-plasma":
+		return p.desktop.RestartPlasma(ctx, args)
 	case "install-widgets":
-		return p.handleInstallWidgets(args)
+		return p.widgets.InstallWidgets(ctx, args)
+	case "list-widgets":
+		return p.widgets.ListWidgets(ctx, args)
+	case "remove-widget":
+		return p.widgets.RemoveWidget(ctx, args)
+	case "configure-widget":
+		return p.widgets.ConfigureWidget(ctx, args)
 	case "apply-theme":
-		return p.handleApplyTheme(args)
+		return p.themes.ApplyTheme(ctx, args)
+	case "install-fonts":
+		return p.fonts.InstallFonts(ctx, args)
+	case "configure-fonts":
+		return p.fonts.ConfigureFonts(ctx, args)
+	case "list-themes":
+		return p.themes.ListThemes(ctx, args)
 	case "backup":
-		return p.handleBackup(args)
+		return p.backup.CreateBackup(ctx, args)
 	case "restore":
-		return p.handleRestore(args)
+		return p.backup.RestoreBackup(ctx, args)
+	case "list-backups":
+		return p.backup.ListBackups(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
@@ -102,294 +166,18 @@ func (p *KDEPlugin) Execute(command string, args []string) error {
 
 // isKDEAvailable checks if KDE is available
 func isKDEAvailable() bool {
-	// Check if kwriteconfig5 is available
+	// Check if KDE tools are available
 	if !sdk.CommandExists("kwriteconfig5") {
 		return false
 	}
 
 	// Check if we're in a KDE session
 	desktop := os.Getenv("XDG_CURRENT_DESKTOP")
-	return strings.Contains(strings.ToLower(desktop), "kde")
-}
+	session := os.Getenv("DESKTOP_SESSION")
 
-// handleConfigure applies comprehensive KDE configuration
-func (p *KDEPlugin) handleConfigure(args []string) error {
-	fmt.Println("Configuring KDE Plasma desktop environment...")
-
-	// Apply default configurations using kwriteconfig5
-	configs := []struct {
-		file  string
-		group string
-		key   string
-		value string
-	}{
-		// Taskbar settings
-		{"plasma-org.kde.plasma.desktop-appletsrc", "Containments][1][General", "showToolTips", "true"},
-		// Window decorations
-		{"kwinrc", "org.kde.kdecoration2", "theme", "Breeze"},
-		// Enable compositing
-		{"kwinrc", "Compositing", "Enabled", "true"},
-		// Desktop effects
-		{"kwinrc", "Plugins", "blurEnabled", "true"},
-		// Panel auto-hide
-		{"plasma-org.kde.plasma.desktop-appletsrc", "Containments][1][General", "visibility", "0"},
-	}
-
-	for _, config := range configs {
-		if err := setKDESetting(config.file, config.group, config.key, config.value); err != nil {
-			fmt.Printf("Warning: Failed to set %s.%s.%s: %v\n", config.file, config.group, config.key, err)
-		} else {
-			fmt.Printf("✓ Set %s.%s to %s\n", config.group, config.key, config.value)
-		}
-	}
-
-	// Restart plasmashell to apply changes
-	fmt.Println("Restarting Plasma Shell to apply changes...")
-	if err := restartPlasmaShell(); err != nil {
-		fmt.Printf("Warning: Failed to restart Plasma Shell: %v\n", err)
-	}
-
-	fmt.Println("KDE Plasma configuration complete!")
-	return nil
-}
-
-// handleSetBackground sets the desktop wallpaper
-func (p *KDEPlugin) handleSetBackground(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("please provide a path to the wallpaper image")
-	}
-
-	wallpaperPath := args[0]
-
-	// Check if file exists
-	if _, err := os.Stat(wallpaperPath); err != nil {
-		return fmt.Errorf("wallpaper file not found: %s", wallpaperPath)
-	}
-
-	// Get absolute path
-	absPath, err := filepath.Abs(wallpaperPath)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %w", err)
-	}
-
-	// Set wallpaper using qdbus
-	if err := setKDEWallpaper(absPath); err != nil {
-		return fmt.Errorf("failed to set wallpaper: %w", err)
-	}
-
-	fmt.Printf("✓ Wallpaper set to: %s\n", wallpaperPath)
-	return nil
-}
-
-// handleConfigurePanel configures the KDE panel
-func (p *KDEPlugin) handleConfigurePanel(args []string) error {
-	fmt.Println("Configuring KDE Plasma panel...")
-
-	// Panel configurations
-	panelConfigs := []struct {
-		file  string
-		group string
-		key   string
-		value string
-	}{
-		{"plasma-org.kde.plasma.desktop-appletsrc", "Containments][1][General", "formfactor", "2"},
-		{"plasma-org.kde.plasma.desktop-appletsrc", "Containments][1][General", "immutability", "1"},
-		{"plasma-org.kde.plasma.desktop-appletsrc", "Containments][1][General", "location", "4"},
-		{"plasma-org.kde.plasma.desktop-appletsrc", "Containments][1][General", "plugin", "org.kde.panel"},
-	}
-
-	for _, config := range panelConfigs {
-		if err := setKDESetting(config.file, config.group, config.key, config.value); err != nil {
-			fmt.Printf("Warning: Failed to set panel setting %s: %v\n", config.key, err)
-		} else {
-			fmt.Printf("✓ Set panel %s to %s\n", config.key, config.value)
-		}
-	}
-
-	fmt.Println("Panel configuration complete!")
-	return nil
-}
-
-// handleInstallWidgets provides information about KDE widgets
-func (p *KDEPlugin) handleInstallWidgets(args []string) error {
-	fmt.Println("Installing KDE Plasma widgets...")
-
-	// Recommended widgets
-	widgets := []struct {
-		name        string
-		description string
-		command     string
-	}{
-		{
-			name:        "System Monitor",
-			description: "CPU, memory, and network monitoring",
-			command:     "org.kde.plasma.systemmonitor",
-		},
-		{
-			name:        "Weather Widget",
-			description: "Weather information display",
-			command:     "org.kde.plasma.weather",
-		},
-		{
-			name:        "Digital Clock",
-			description: "Enhanced clock with date",
-			command:     "org.kde.plasma.digitalclock",
-		},
-	}
-
-	fmt.Println("\nRecommended widgets:")
-	for i, widget := range widgets {
-		fmt.Printf("%d. %s - %s\n", i+1, widget.name, widget.description)
-	}
-
-	fmt.Println("\nNote: Widgets can be added through:")
-	fmt.Println("1. Right-click on desktop -> Add Widgets")
-	fmt.Println("2. System Settings -> Workspace -> Desktop Behavior -> Desktop Effects")
-	fmt.Println("3. Or install from KDE Store: https://store.kde.org/")
-
-	return nil
-}
-
-// handleApplyTheme applies KDE themes
-func (p *KDEPlugin) handleApplyTheme(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("please provide a theme name")
-	}
-
-	themeName := args[0]
-	fmt.Printf("Applying KDE theme: %s\n", themeName)
-
-	// Apply various theme components
-	themeConfigs := []struct {
-		file  string
-		group string
-		key   string
-		value string
-	}{
-		{"kdeglobals", "General", "ColorScheme", themeName},
-		{"kdeglobals", "Icons", "Theme", themeName + "Icons"},
-		{"kwinrc", "org.kde.kdecoration2", "theme", themeName},
-		{"plasmarc", "Theme", "name", themeName},
-	}
-
-	for _, config := range themeConfigs {
-		if err := setKDESetting(config.file, config.group, config.key, config.value); err != nil {
-			fmt.Printf("Warning: Failed to set theme component %s: %v\n", config.key, err)
-		} else {
-			fmt.Printf("✓ Applied %s theme to %s\n", themeName, config.key)
-		}
-	}
-
-	fmt.Printf("✓ Theme '%s' applied successfully!\n", themeName)
-	fmt.Println("You may need to log out and back in for all changes to take effect.")
-	return nil
-}
-
-// handleBackup creates a backup of KDE settings
-func (p *KDEPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "kde")
-	if len(args) > 0 {
-		backupDir = args[0]
-	}
-
-	// Create backup directory
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return fmt.Errorf("failed to create backup directory: %w", err)
-	}
-
-	timestamp := strings.ReplaceAll(strings.ReplaceAll(strings.Split(time.Now().Format(time.RFC3339), "T")[0], ":", "-"), " ", "_")
-	backupFile := filepath.Join(backupDir, fmt.Sprintf("kde-settings-%s.tar.gz", timestamp))
-
-	fmt.Printf("Creating backup at: %s\n", backupFile)
-
-	// Backup KDE configuration directory
-	configDir := filepath.Join(os.Getenv("HOME"), ".config")
-	cmd := exec.Command("tar", "-czf", backupFile, "-C", configDir, ".")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create backup: %w", err)
-	}
-
-	fmt.Printf("✓ Backup created successfully: %s\n", backupFile)
-	return nil
-}
-
-// handleRestore restores KDE settings from backup
-func (p *KDEPlugin) handleRestore(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("please provide path to backup file")
-	}
-
-	backupFile := args[0]
-
-	// Check if file exists
-	if _, err := os.Stat(backupFile); err != nil {
-		return fmt.Errorf("backup file not found: %s", backupFile)
-	}
-
-	fmt.Printf("Restoring from backup: %s\n", backupFile)
-	fmt.Println("WARNING: This will overwrite your current KDE settings!")
-	fmt.Print("Continue? [y/N]: ")
-
-	var response string
-	if _, err := fmt.Scanln(&response); err != nil {
-		fmt.Printf("Error reading input: %v\n", err)
-		return err
-	}
-	if strings.ToLower(response) != "y" {
-		fmt.Println("Restore cancelled.")
-		return nil
-	}
-
-	// Extract backup to config directory
-	configDir := filepath.Join(os.Getenv("HOME"), ".config")
-	cmd := exec.Command("tar", "-xzf", backupFile, "-C", configDir)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to restore backup: %w", err)
-	}
-
-	fmt.Println("✓ Settings restored successfully!")
-	fmt.Println("You may need to log out and back in for all changes to take effect.")
-	return nil
-}
-
-// setKDESetting sets a KDE setting using kwriteconfig5
-func setKDESetting(file, group, key, value string) error {
-	cmd := exec.Command("kwriteconfig5", "--file", file, "--group", group, "--key", key, value)
-	return cmd.Run()
-}
-
-// setKDEWallpaper sets the wallpaper using qdbus
-func setKDEWallpaper(wallpaperPath string) error {
-	// Get the current desktop number
-	cmd := exec.Command("qdbus", "org.kde.plasmashell", "/PlasmaShell", "org.kde.PlasmaShell.evaluateScript",
-		fmt.Sprintf(`var allDesktops = desktops();
-		for (i=0;i<allDesktops.length;i++) {
-			d = allDesktops[i];
-			d.wallpaperPlugin = "org.kde.image";
-			d.currentConfigGroup = Array("Wallpaper", "org.kde.image", "General");
-			d.writeConfig("Image", "file://%s");
-		}`, wallpaperPath))
-	return cmd.Run()
-}
-
-// restartPlasmaShell restarts the Plasma Shell
-func restartPlasmaShell() error {
-	// Kill plasmashell
-	if err := exec.Command("killall", "plasmashell").Run(); err != nil {
-		// Ignore error if plasmashell is not running
-		fmt.Printf("Note: plasmashell may not have been running: %v\n", err)
-	}
-
-	// Wait a moment
-	time.Sleep(2 * time.Second)
-
-	// Start plasmashell
-	cmd := exec.Command("plasmashell")
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start plasmashell: %w", err)
-	}
-
-	return nil
+	return strings.Contains(strings.ToLower(desktop), "kde") ||
+		strings.Contains(strings.ToLower(session), "kde") ||
+		strings.Contains(strings.ToLower(session), "plasma")
 }
 
 func main() {
