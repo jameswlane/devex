@@ -56,6 +56,21 @@ func NewGNOMEPlugin() *GNOMEPlugin {
 				Usage:       "Apply GTK, icon, and GNOME Shell themes",
 			},
 			{
+				Name:        "install-fonts",
+				Description: "Install and configure fonts",
+				Usage:       "Install development fonts and configure GNOME font settings",
+			},
+			{
+				Name:        "configure-fonts",
+				Description: "Configure font settings",
+				Usage:       "Set system, document, and monospace fonts for GNOME",
+			},
+			{
+				Name:        "list-themes",
+				Description: "List available themes",
+				Usage:       "List installed GTK, Shell, and icon themes",
+			},
+			{
 				Name:        "backup",
 				Description: "Backup current GNOME settings",
 				Usage:       "Create a backup of current GNOME configuration",
@@ -91,6 +106,12 @@ func (p *GNOMEPlugin) Execute(command string, args []string) error {
 		return p.handleInstallExtensions(args)
 	case "apply-theme":
 		return p.handleApplyTheme(args)
+	case "install-fonts":
+		return p.handleInstallFonts(args)
+	case "configure-fonts":
+		return p.handleConfigureFonts(args)
+	case "list-themes":
+		return p.handleListThemes(args)
 	case "backup":
 		return p.handleBackup(args)
 	case "restore":
@@ -383,6 +404,263 @@ type GnomeExtension struct {
 type SchemaFile struct {
 	Source      string `yaml:"source"`
 	Destination string `yaml:"destination"`
+}
+
+// handleInstallFonts installs development fonts for GNOME
+func (p *GNOMEPlugin) handleInstallFonts(args []string) error {
+	fmt.Println("Installing fonts for GNOME desktop...")
+
+	// Default development fonts if none specified
+	var fontPackages []string
+	if len(args) == 0 {
+		fontPackages = []string{
+			"fonts-firacode",
+			"fonts-jetbrains-mono",
+			"fonts-hack",
+			"fonts-source-code-pro",
+			"fonts-inconsolata",
+			"fonts-cascadia-code",
+			"fonts-ubuntu",
+			"fonts-liberation",
+		}
+		fmt.Println("Installing default development fonts...")
+	} else {
+		// Map common font names to package names
+		fontMap := map[string]string{
+			"firacode":      "fonts-firacode",
+			"jetbrains":     "fonts-jetbrains-mono",
+			"jetbrainsmono": "fonts-jetbrains-mono",
+			"hack":          "fonts-hack",
+			"sourcecodepro": "fonts-source-code-pro",
+			"inconsolata":   "fonts-inconsolata",
+			"cascadia":      "fonts-cascadia-code",
+			"ubuntu":        "fonts-ubuntu",
+			"liberation":    "fonts-liberation",
+			"noto":          "fonts-noto",
+			"roboto":        "fonts-roboto",
+		}
+
+		for _, fontName := range args {
+			if packageName, ok := fontMap[strings.ToLower(fontName)]; ok {
+				fontPackages = append(fontPackages, packageName)
+			} else {
+				// Assume it's already a package name
+				fontPackages = append(fontPackages, fontName)
+			}
+		}
+	}
+
+	// Detect package manager and install
+	var installCmd []string
+	if sdk.CommandExists("apt-get") {
+		installCmd = append([]string{"apt-get", "install", "-y"}, fontPackages...)
+	} else if sdk.CommandExists("dnf") {
+		installCmd = append([]string{"dnf", "install", "-y"}, fontPackages...)
+	} else if sdk.CommandExists("pacman") {
+		installCmd = append([]string{"pacman", "-S", "--noconfirm"}, fontPackages...)
+	} else if sdk.CommandExists("zypper") {
+		installCmd = append([]string{"zypper", "install", "-y"}, fontPackages...)
+	} else {
+		return fmt.Errorf("no supported package manager found")
+	}
+
+	fmt.Printf("Installing: %s\n", strings.Join(fontPackages, ", "))
+	if err := sdk.ExecCommand(true, installCmd[0], installCmd[1:]...); err != nil {
+		return fmt.Errorf("failed to install fonts: %w", err)
+	}
+
+	// Refresh font cache
+	fmt.Println("Refreshing font cache...")
+	if sdk.CommandExists("fc-cache") {
+		if err := sdk.ExecCommand(false, "fc-cache", "-f", "-v"); err != nil {
+			fmt.Printf("Warning: Failed to refresh font cache: %v\n", err)
+		}
+	}
+
+	fmt.Println("✓ Fonts installed successfully!")
+	return nil
+}
+
+// handleConfigureFonts sets GNOME font preferences
+func (p *GNOMEPlugin) handleConfigureFonts(args []string) error {
+	fmt.Println("Configuring GNOME font settings...")
+
+	// Default font configuration
+	fontSettings := []struct {
+		schema string
+		key    string
+		value  string
+		desc   string
+	}{
+		{
+			schema: "org.gnome.desktop.interface",
+			key:    "font-name",
+			value:  "Ubuntu 11",
+			desc:   "System font",
+		},
+		{
+			schema: "org.gnome.desktop.interface",
+			key:    "document-font-name",
+			value:  "Sans 11",
+			desc:   "Document font",
+		},
+		{
+			schema: "org.gnome.desktop.interface",
+			key:    "monospace-font-name",
+			value:  "JetBrains Mono 10",
+			desc:   "Monospace font",
+		},
+		{
+			schema: "org.gnome.desktop.wm.preferences",
+			key:    "titlebar-font",
+			value:  "Ubuntu Bold 11",
+			desc:   "Window title font",
+		},
+		{
+			schema: "org.gnome.desktop.interface",
+			key:    "font-antialiasing",
+			value:  "rgba",
+			desc:   "Font antialiasing",
+		},
+		{
+			schema: "org.gnome.desktop.interface",
+			key:    "font-hinting",
+			value:  "slight",
+			desc:   "Font hinting",
+		},
+	}
+
+	// Allow custom monospace font as first argument
+	if len(args) > 0 {
+		monospaceFont := args[0]
+		// Find and update monospace font setting
+		for i, setting := range fontSettings {
+			if setting.key == "monospace-font-name" {
+				fontSettings[i].value = monospaceFont
+				break
+			}
+		}
+	}
+
+	// Apply font settings
+	for _, setting := range fontSettings {
+		if err := setGSetting(setting.schema, setting.key, setting.value); err != nil {
+			fmt.Printf("Warning: Failed to set %s: %v\n", setting.desc, err)
+		} else {
+			fmt.Printf("✓ Set %s to %s\n", setting.desc, setting.value)
+		}
+	}
+
+	fmt.Println("\nFont configuration complete!")
+	fmt.Println("You may need to restart applications for changes to take effect.")
+	return nil
+}
+
+// handleListThemes lists available GNOME themes
+func (p *GNOMEPlugin) handleListThemes(args []string) error {
+	fmt.Println("Available GNOME themes:")
+
+	// Check GTK themes
+	fmt.Println("GTK Themes:")
+	gtkThemeDirs := []string{
+		"/usr/share/themes",
+		fmt.Sprintf("%s/.themes", os.Getenv("HOME")),
+		fmt.Sprintf("%s/.local/share/themes", os.Getenv("HOME")),
+	}
+
+	gtkThemes := make(map[string]bool)
+	for _, dir := range gtkThemeDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					// Check if it's a GTK theme (has gtk-3.0 or gtk-4.0 folder)
+					themePath := filepath.Join(dir, entry.Name())
+					if _, err := os.Stat(filepath.Join(themePath, "gtk-3.0")); err == nil {
+						gtkThemes[entry.Name()] = true
+					} else if _, err := os.Stat(filepath.Join(themePath, "gtk-4.0")); err == nil {
+						gtkThemes[entry.Name()] = true
+					}
+				}
+			}
+		}
+	}
+
+	for theme := range gtkThemes {
+		fmt.Printf("  - %s\n", theme)
+	}
+
+	// Check Shell themes
+	fmt.Println("\nShell Themes:")
+	shellThemeDirs := []string{
+		"/usr/share/gnome-shell/theme",
+		fmt.Sprintf("%s/.themes", os.Getenv("HOME")),
+		fmt.Sprintf("%s/.local/share/themes", os.Getenv("HOME")),
+	}
+
+	shellThemes := make(map[string]bool)
+	for _, dir := range shellThemeDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					// Check if it's a Shell theme (has gnome-shell folder)
+					themePath := filepath.Join(dir, entry.Name())
+					if _, err := os.Stat(filepath.Join(themePath, "gnome-shell")); err == nil {
+						shellThemes[entry.Name()] = true
+					}
+				}
+			}
+		}
+	}
+
+	for theme := range shellThemes {
+		fmt.Printf("  - %s\n", theme)
+	}
+
+	// Check Icon themes
+	fmt.Println("\nIcon Themes:")
+	iconThemeDirs := []string{
+		"/usr/share/icons",
+		fmt.Sprintf("%s/.icons", os.Getenv("HOME")),
+		fmt.Sprintf("%s/.local/share/icons", os.Getenv("HOME")),
+	}
+
+	iconThemes := make(map[string]bool)
+	for _, dir := range iconThemeDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					// Check if it's an icon theme (has index.theme)
+					themePath := filepath.Join(dir, entry.Name())
+					if _, err := os.Stat(filepath.Join(themePath, "index.theme")); err == nil {
+						iconThemes[entry.Name()] = true
+					}
+				}
+			}
+		}
+	}
+
+	for theme := range iconThemes {
+		fmt.Printf("  - %s\n", theme)
+	}
+
+	// Show current theme settings
+	fmt.Println("\nCurrent theme settings:")
+	cmd := exec.Command("gsettings", "get", "org.gnome.desktop.interface", "gtk-theme")
+	if output, err := cmd.Output(); err == nil {
+		fmt.Printf("  GTK Theme: %s", output)
+	}
+
+	cmd = exec.Command("gsettings", "get", "org.gnome.desktop.interface", "icon-theme")
+	if output, err := cmd.Output(); err == nil {
+		fmt.Printf("  Icon Theme: %s", output)
+	}
+
+	cmd = exec.Command("gsettings", "get", "org.gnome.shell.extensions.user-theme", "name")
+	if output, err := cmd.Output(); err == nil {
+		fmt.Printf("  Shell Theme: %s", output)
+	}
+
+	return nil
 }
 
 func main() {

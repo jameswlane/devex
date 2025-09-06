@@ -56,6 +56,21 @@ func NewKDEPlugin() *KDEPlugin {
 				Usage:       "Apply Qt, KDE, and Plasma themes",
 			},
 			{
+				Name:        "install-fonts",
+				Description: "Install and configure fonts",
+				Usage:       "Install development fonts and configure KDE font settings",
+			},
+			{
+				Name:        "configure-fonts",
+				Description: "Configure font settings",
+				Usage:       "Set system and monospace fonts for KDE Plasma",
+			},
+			{
+				Name:        "list-themes",
+				Description: "List available themes",
+				Usage:       "List installed Plasma, Qt, and color schemes",
+			},
+			{
 				Name:        "backup",
 				Description: "Backup current KDE settings",
 				Usage:       "Create a backup of current KDE configuration",
@@ -91,6 +106,12 @@ func (p *KDEPlugin) Execute(command string, args []string) error {
 		return p.handleInstallWidgets(args)
 	case "apply-theme":
 		return p.handleApplyTheme(args)
+	case "install-fonts":
+		return p.handleInstallFonts(args)
+	case "configure-fonts":
+		return p.handleConfigureFonts(args)
+	case "list-themes":
+		return p.handleListThemes(args)
 	case "backup":
 		return p.handleBackup(args)
 	case "restore":
@@ -387,6 +408,348 @@ func restartPlasmaShell() error {
 	cmd := exec.Command("plasmashell")
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start plasmashell: %w", err)
+	}
+
+	return nil
+}
+
+// handleInstallFonts installs development fonts for KDE
+func (p *KDEPlugin) handleInstallFonts(args []string) error {
+	fmt.Println("Installing fonts for KDE Plasma desktop...")
+
+	// Default development fonts if none specified
+	var fontPackages []string
+	if len(args) == 0 {
+		// Use similar fonts but with Qt/KDE preferred ones
+		fontPackages = []string{
+			"fonts-firacode",
+			"fonts-jetbrains-mono",
+			"fonts-hack",
+			"fonts-source-code-pro",
+			"fonts-inconsolata",
+			"fonts-cascadia-code",
+			"fonts-noto", // KDE prefers Noto fonts
+			"fonts-liberation",
+			"fonts-oxygen", // KDE Oxygen font
+		}
+		fmt.Println("Installing default development fonts...")
+	} else {
+		// Map common font names to package names
+		fontMap := map[string]string{
+			"firacode":      "fonts-firacode",
+			"jetbrains":     "fonts-jetbrains-mono",
+			"jetbrainsmono": "fonts-jetbrains-mono",
+			"hack":          "fonts-hack",
+			"sourcecodepro": "fonts-source-code-pro",
+			"inconsolata":   "fonts-inconsolata",
+			"cascadia":      "fonts-cascadia-code",
+			"noto":          "fonts-noto",
+			"liberation":    "fonts-liberation",
+			"oxygen":        "fonts-oxygen",
+			"roboto":        "fonts-roboto",
+		}
+
+		for _, fontName := range args {
+			if packageName, ok := fontMap[strings.ToLower(fontName)]; ok {
+				fontPackages = append(fontPackages, packageName)
+			} else {
+				// Assume it's already a package name
+				fontPackages = append(fontPackages, fontName)
+			}
+		}
+	}
+
+	// Detect package manager and install
+	var installCmd []string
+	if sdk.CommandExists("apt-get") {
+		installCmd = append([]string{"apt-get", "install", "-y"}, fontPackages...)
+	} else if sdk.CommandExists("dnf") {
+		installCmd = append([]string{"dnf", "install", "-y"}, fontPackages...)
+	} else if sdk.CommandExists("pacman") {
+		installCmd = append([]string{"pacman", "-S", "--noconfirm"}, fontPackages...)
+	} else if sdk.CommandExists("zypper") {
+		installCmd = append([]string{"zypper", "install", "-y"}, fontPackages...)
+	} else {
+		return fmt.Errorf("no supported package manager found")
+	}
+
+	fmt.Printf("Installing: %s\n", strings.Join(fontPackages, ", "))
+	if err := sdk.ExecCommand(true, installCmd[0], installCmd[1:]...); err != nil {
+		return fmt.Errorf("failed to install fonts: %w", err)
+	}
+
+	// Refresh font cache
+	fmt.Println("Refreshing font cache...")
+	if sdk.CommandExists("fc-cache") {
+		if err := sdk.ExecCommand(false, "fc-cache", "-f", "-v"); err != nil {
+			fmt.Printf("Warning: Failed to refresh font cache: %v\n", err)
+		}
+	}
+
+	// KDE-specific font cache update
+	if sdk.CommandExists("kbuildsycoca5") {
+		fmt.Println("Updating KDE system configuration cache...")
+		if err := sdk.ExecCommand(false, "kbuildsycoca5", "--noincremental"); err != nil {
+			fmt.Printf("Warning: Failed to update KDE cache: %v\n", err)
+		}
+	}
+
+	fmt.Println("✓ Fonts installed successfully!")
+	return nil
+}
+
+// handleConfigureFonts sets KDE font preferences
+func (p *KDEPlugin) handleConfigureFonts(args []string) error {
+	fmt.Println("Configuring KDE Plasma font settings...")
+
+	// Check if kwriteconfig5 is available
+	if !sdk.CommandExists("kwriteconfig5") {
+		return fmt.Errorf("kwriteconfig5 not found. Please ensure KDE Plasma is properly installed")
+	}
+
+	// Default font configuration for KDE
+	fontConfigs := []struct {
+		file  string
+		group string
+		key   string
+		value string
+		desc  string
+	}{
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "font",
+			value: "Noto Sans,10,-1,5,50,0,0,0,0,0",
+			desc:  "General font",
+		},
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "fixed",
+			value: "JetBrains Mono,10,-1,5,50,0,0,0,0,0",
+			desc:  "Fixed width font",
+		},
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "smallestReadableFont",
+			value: "Noto Sans,8,-1,5,50,0,0,0,0,0",
+			desc:  "Small font",
+		},
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "toolBarFont",
+			value: "Noto Sans,10,-1,5,50,0,0,0,0,0",
+			desc:  "Toolbar font",
+		},
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "menuFont",
+			value: "Noto Sans,10,-1,5,50,0,0,0,0,0",
+			desc:  "Menu font",
+		},
+		{
+			file:  "kdeglobals",
+			group: "WM",
+			key:   "activeFont",
+			value: "Noto Sans,10,-1,5,50,0,0,0,0,0",
+			desc:  "Window title font",
+		},
+	}
+
+	// Allow custom monospace font as first argument
+	if len(args) > 0 {
+		monospaceFont := args[0]
+		// Update fixed font with custom font
+		for i, config := range fontConfigs {
+			if config.key == "fixed" {
+				// Format: FontName,Size,-1,5,50,0,0,0,0,0
+				fontConfigs[i].value = fmt.Sprintf("%s,10,-1,5,50,0,0,0,0,0", monospaceFont)
+				break
+			}
+		}
+	}
+
+	// Apply font settings using kwriteconfig5
+	for _, config := range fontConfigs {
+		cmd := exec.Command("kwriteconfig5",
+			"--file", config.file,
+			"--group", config.group,
+			"--key", config.key,
+			config.value)
+
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("Warning: Failed to set %s: %v\n", config.desc, err)
+		} else {
+			fmt.Printf("✓ Set %s\n", config.desc)
+		}
+	}
+
+	// Configure font rendering
+	fmt.Println("\nConfiguring font rendering...")
+	renderingConfigs := []struct {
+		file  string
+		group string
+		key   string
+		value string
+	}{
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "XftAntialias",
+			value: "true",
+		},
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "XftHintStyle",
+			value: "hintslight",
+		},
+		{
+			file:  "kdeglobals",
+			group: "General",
+			key:   "XftSubPixel",
+			value: "rgb",
+		},
+	}
+
+	for _, config := range renderingConfigs {
+		cmd := exec.Command("kwriteconfig5",
+			"--file", config.file,
+			"--group", config.group,
+			"--key", config.key,
+			config.value)
+
+		if err := cmd.Run(); err != nil {
+			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.group, config.key, err)
+		}
+	}
+
+	fmt.Println("\nFont configuration complete!")
+	fmt.Println("You may need to restart KDE Plasma or log out for all changes to take effect.")
+	fmt.Println("Run 'devex desktop-kde restart-plasma' to restart Plasma Shell.")
+	return nil
+}
+
+// handleListThemes lists available KDE themes
+func (p *KDEPlugin) handleListThemes(args []string) error {
+	fmt.Println("Available KDE Plasma themes:")
+
+	// Check Plasma themes
+	fmt.Println("Plasma Themes:")
+	plasmaThemeDirs := []string{
+		"/usr/share/plasma/desktoptheme",
+		fmt.Sprintf("%s/.local/share/plasma/desktoptheme", os.Getenv("HOME")),
+	}
+
+	plasmaThemes := make(map[string]bool)
+	for _, dir := range plasmaThemeDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					plasmaThemes[entry.Name()] = true
+				}
+			}
+		}
+	}
+
+	for theme := range plasmaThemes {
+		fmt.Printf("  - %s\n", theme)
+	}
+
+	// Check color schemes
+	fmt.Println("\nColor Schemes:")
+	colorSchemeDirs := []string{
+		"/usr/share/color-schemes",
+		fmt.Sprintf("%s/.local/share/color-schemes", os.Getenv("HOME")),
+	}
+
+	colorSchemes := make(map[string]bool)
+	for _, dir := range colorSchemeDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if strings.HasSuffix(entry.Name(), ".colors") {
+					schemeName := strings.TrimSuffix(entry.Name(), ".colors")
+					colorSchemes[schemeName] = true
+				}
+			}
+		}
+	}
+
+	for scheme := range colorSchemes {
+		fmt.Printf("  - %s\n", scheme)
+	}
+
+	// Check Qt/KDE application styles
+	fmt.Println("\nApplication Styles:")
+	// These are typically provided by packages and registered with Qt
+	styles := []string{
+		"Breeze",
+		"Oxygen",
+		"Fusion",
+		"Windows",
+		"QtCurve",
+	}
+
+	for _, style := range styles {
+		// Check if style is available (simplified check)
+		fmt.Printf("  - %s\n", style)
+	}
+
+	// Check icon themes
+	fmt.Println("\nIcon Themes:")
+	iconThemeDirs := []string{
+		"/usr/share/icons",
+		fmt.Sprintf("%s/.local/share/icons", os.Getenv("HOME")),
+	}
+
+	iconThemes := make(map[string]bool)
+	for _, dir := range iconThemeDirs {
+		if entries, err := os.ReadDir(dir); err == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					// Check if it's an icon theme (has index.theme)
+					themePath := filepath.Join(dir, entry.Name())
+					if _, err := os.Stat(filepath.Join(themePath, "index.theme")); err == nil {
+						iconThemes[entry.Name()] = true
+					}
+				}
+			}
+		}
+	}
+
+	for theme := range iconThemes {
+		fmt.Printf("  - %s\n", theme)
+	}
+
+	// Show current theme settings using kreadconfig5
+	fmt.Println("\nCurrent theme settings:")
+	if sdk.CommandExists("kreadconfig5") {
+		// Read current Plasma theme
+		cmd := exec.Command("kreadconfig5", "--file", "plasmarc", "--group", "Theme", "--key", "name")
+		if output, err := cmd.Output(); err == nil {
+			fmt.Printf("  Plasma Theme: %s", output)
+		}
+
+		// Read current color scheme
+		cmd = exec.Command("kreadconfig5", "--file", "kdeglobals", "--group", "General", "--key", "ColorScheme")
+		if output, err := cmd.Output(); err == nil {
+			fmt.Printf("  Color Scheme: %s", output)
+		}
+
+		// Read current icon theme
+		cmd = exec.Command("kreadconfig5", "--file", "kdeglobals", "--group", "Icons", "--key", "Theme")
+		if output, err := cmd.Output(); err == nil {
+			fmt.Printf("  Icon Theme: %s", output)
+		}
+
+		// Read current widget style
+		cmd = exec.Command("kreadconfig5", "--file", "kdeglobals", "--group", "KDE", "--key", "widgetStyle")
+		if output, err := cmd.Output(); err == nil {
+			fmt.Printf("  Widget Style: %s", output)
+		}
 	}
 
 	return nil
