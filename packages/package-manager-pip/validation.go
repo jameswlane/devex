@@ -144,7 +144,7 @@ func (p *PipPlugin) validateFilePath(filePath string) error {
 
 	// Clean and validate the path
 	cleanPath := filepath.Clean(filePath)
-	
+
 	// Prevent directory traversal attacks
 	if strings.Contains(cleanPath, "..") {
 		return fmt.Errorf("file path contains directory traversal")
@@ -156,9 +156,9 @@ func (p *PipPlugin) validateFilePath(filePath string) error {
 	}
 
 	// Validate file extension for requirements files
-	if strings.HasSuffix(strings.ToLower(cleanPath), ".txt") || 
-	   strings.HasSuffix(strings.ToLower(cleanPath), ".in") ||
-	   strings.HasSuffix(strings.ToLower(cleanPath), ".pip") {
+	if strings.HasSuffix(strings.ToLower(cleanPath), ".txt") ||
+		strings.HasSuffix(strings.ToLower(cleanPath), ".in") ||
+		strings.HasSuffix(strings.ToLower(cleanPath), ".pip") {
 		return nil // Valid requirements file extensions
 	}
 
@@ -168,52 +168,4 @@ func (p *PipPlugin) validateFilePath(filePath string) error {
 	}
 
 	return fmt.Errorf("invalid file extension for requirements file")
-}
-
-// validateCommand validates command arguments to prevent injection
-func (p *PipPlugin) validateCommand(args []string) error {
-	for _, arg := range args {
-		if err := p.validateCommandArg(arg); err != nil {
-			return fmt.Errorf("invalid command argument '%s': %w", arg, err)
-		}
-	}
-	return nil
-}
-
-// validateCommandArg validates individual command arguments
-func (p *PipPlugin) validateCommandArg(arg string) error {
-	if arg == "" {
-		return fmt.Errorf("argument cannot be empty")
-	}
-
-	// Check for null bytes and dangerous control characters
-	for _, r := range arg {
-		if r == 0 {
-			return fmt.Errorf("argument contains null bytes")
-		}
-	}
-
-	// Check for shell metacharacters that could be used for command injection
-	dangerousChars := []string{";", "&", "|", "`", "$", "(", ")", "<", ">", "\\"}
-	for _, char := range dangerousChars {
-		if strings.Contains(arg, char) {
-			return fmt.Errorf("argument contains potentially dangerous character: %s", char)
-		}
-	}
-
-	return nil
-}
-
-// sanitizeOutput sanitizes command output for safe logging
-func (p *PipPlugin) sanitizeOutput(output string) string {
-	// Remove null bytes
-	output = strings.ReplaceAll(output, "\x00", "")
-	
-	// Limit output length for logging
-	const maxLogLength = 1000
-	if len(output) > maxLogLength {
-		output = output[:maxLogLength] + "...[truncated]"
-	}
-	
-	return output
 }

@@ -8,12 +8,6 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
-// PipPlugin implements the Pip package manager
-type PipPlugin struct {
-	*sdk.PackageManagerPlugin
-	logger sdk.Logger
-}
-
 // Execute handles command execution
 func (p *PipPlugin) Execute(command string, args []string) error {
 	switch command {
@@ -78,7 +72,7 @@ func (p *PipPlugin) handleInstall(args []string) error {
 
 	// Build install command with appropriate flags
 	cmdArgs := []string{"install"}
-	
+
 	// Process flags
 	processedArgs := []string{}
 	for _, arg := range args {
@@ -91,7 +85,7 @@ func (p *PipPlugin) handleInstall(args []string) error {
 			processedArgs = append(processedArgs, arg)
 		}
 	}
-	
+
 	cmdArgs = append(cmdArgs, processedArgs...)
 	return sdk.ExecCommand(true, "pip", cmdArgs...)
 }
@@ -121,7 +115,7 @@ func (p *PipPlugin) handleRemove(args []string) error {
 
 	// Build uninstall command
 	cmdArgs := []string{"uninstall"}
-	
+
 	// Process flags
 	processedArgs := []string{}
 	for _, arg := range args {
@@ -132,7 +126,7 @@ func (p *PipPlugin) handleRemove(args []string) error {
 			processedArgs = append(processedArgs, arg)
 		}
 	}
-	
+
 	cmdArgs = append(cmdArgs, processedArgs...)
 	return sdk.ExecCommand(true, "pip", cmdArgs...)
 }
@@ -144,7 +138,7 @@ func (p *PipPlugin) handleUpdate(args []string) error {
 	if err := sdk.ExecCommand(true, "pip", "install", "--upgrade", "pip"); err != nil {
 		p.logger.Warning("Failed to update pip: %v", err)
 	}
-	
+
 	// Check for --all flag to update all packages
 	for _, arg := range args {
 		if arg == "--all" {
@@ -152,7 +146,7 @@ func (p *PipPlugin) handleUpdate(args []string) error {
 			return p.updateAllPackages()
 		}
 	}
-	
+
 	// If specific packages provided, update them
 	if len(args) > 0 {
 		// Validate package names
@@ -165,14 +159,14 @@ func (p *PipPlugin) handleUpdate(args []string) error {
 				processedArgs = append(processedArgs, arg)
 			}
 		}
-		
+
 		if len(processedArgs) > 0 {
 			p.logger.Printf("Updating packages: %s\n", strings.Join(processedArgs, ", "))
 			cmdArgs := append([]string{"install", "--upgrade"}, processedArgs...)
 			return sdk.ExecCommand(true, "pip", cmdArgs...)
 		}
 	}
-	
+
 	p.logger.Printf("Pip updated. Use --all flag to update all installed packages.\n")
 	return nil
 }
@@ -189,24 +183,24 @@ func (p *PipPlugin) handleSearch(args []string) error {
 	}
 
 	p.logger.Printf("Searching for: %s\n", searchTerm)
-	
+
 	// Note: pip search was disabled by PyPI, so we provide alternative
 	p.logger.Printf("Note: pip search is no longer available. Try searching at https://pypi.org/search/?q=%s\n", strings.ReplaceAll(searchTerm, " ", "+"))
-	
+
 	// Try to use pip index if available (pip >= 21.2)
 	if err := sdk.ExecCommand(false, "pip", "index", "versions", searchTerm); err != nil {
 		// Fallback: just show the PyPI URL
 		p.logger.Printf("Search online at: https://pypi.org/search/?q=%s\n", strings.ReplaceAll(searchTerm, " ", "+"))
 		return nil
 	}
-	
+
 	return nil
 }
 
 // handleList lists installed Python packages
 func (p *PipPlugin) handleList(args []string) error {
 	cmdArgs := []string{"list"}
-	
+
 	// Process flags
 	for _, arg := range args {
 		switch arg {
@@ -219,14 +213,14 @@ func (p *PipPlugin) handleList(args []string) error {
 			cmdArgs = append(cmdArgs, "--format", arg)
 		}
 	}
-	
+
 	// Show virtual environment status
 	if p.isVirtualEnvActive() {
 		p.logger.Printf("📦 Virtual environment active\n")
 	} else {
 		p.logger.Printf("🐍 System Python packages\n")
 	}
-	
+
 	return sdk.ExecCommand(false, "pip", cmdArgs...)
 }
 
@@ -235,12 +229,12 @@ func (p *PipPlugin) handleIsInstalled(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package specified")
 	}
-	
+
 	packageName := args[0]
 	if err := p.validatePackageName(packageName); err != nil {
 		return fmt.Errorf("invalid package name: %w", err)
 	}
-	
+
 	if err := sdk.ExecCommand(false, "pip", "show", packageName); err != nil {
 		p.logger.Printf("Package %s is not installed\n", packageName)
 		os.Exit(1)
@@ -248,7 +242,7 @@ func (p *PipPlugin) handleIsInstalled(args []string) error {
 		p.logger.Printf("Package %s is installed\n", packageName)
 		os.Exit(0)
 	}
-	
+
 	return nil
 }
 
@@ -259,19 +253,19 @@ func (p *PipPlugin) updateAllPackages() error {
 	if err != nil {
 		return fmt.Errorf("failed to get outdated packages: %w", err)
 	}
-	
+
 	if strings.TrimSpace(output) == "" {
 		p.logger.Printf("All packages are up to date\n")
 		return nil
 	}
-	
+
 	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		// Extract package name (format: package==version)
 		if parts := strings.Split(line, "=="); len(parts) >= 1 {
 			packageName := parts[0]
@@ -281,7 +275,7 @@ func (p *PipPlugin) updateAllPackages() error {
 			}
 		}
 	}
-	
+
 	p.logger.Success("Package updates completed")
 	return nil
 }
