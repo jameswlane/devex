@@ -1,127 +1,64 @@
 package main
 
-// Build timestamp: 2025-09-03 17:41:19
+// Build timestamp: 2025-09-06
 
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
 
-// AppimagePlugin implements the AppImage package manager
-type AppimagePlugin struct {
-	*sdk.PackageManagerPlugin
-}
-
 // NewAppimagePlugin creates a new AppImage plugin
 func NewAppimagePlugin() *AppimagePlugin {
 	info := sdk.PluginInfo{
 		Name:        "package-manager-appimage",
 		Version:     version,
-		Description: "AppImage package manager for Linux",
+		Description: "AppImage package manager for Linux with desktop integration",
 		Author:      "DevEx Team",
 		Repository:  "https://github.com/jameswlane/devex",
-		Tags:        []string{"appimage", "linux"},
+		Tags:        []string{"package-manager", "appimage", "linux", "portable", "gui"},
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
-				Description: "Install packages using AppImage",
-				Usage:       "Install one or more packages with dependency resolution",
+				Description: "Install AppImage applications",
+				Usage:       "Download and install AppImage with format: '<download_url> <binary_name>'",
+				Flags: map[string]string{
+					"gui": "Install to ~/Applications for GUI apps (default)",
+					"cli": "Install to ~/.local/bin for CLI tools",
+				},
 			},
 			{
 				Name:        "remove",
-				Description: "Remove packages using AppImage",
-				Usage:       "Remove one or more packages from the system",
-			},
-			{
-				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
-			},
-			{
-				Name:        "search",
-				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Description: "Remove AppImage applications",
+				Usage:       "Remove installed AppImage binaries and desktop entries",
 			},
 			{
 				Name:        "list",
-				Description: "List packages",
-				Usage:       "List installed packages",
+				Description: "List installed AppImages",
+				Usage:       "List AppImages installed in ~/Applications and ~/.local/bin",
+			},
+			{
+				Name:        "is-installed",
+				Description: "Check if an AppImage is installed",
+				Usage:       "Returns exit code 0 if AppImage is installed, 1 if not",
+			},
+			{
+				Name:        "validate-url",
+				Description: "Validate AppImage download URL",
+				Usage:       "Check if URL is accessible and points to valid AppImage",
 			},
 		},
 	}
 
 	return &AppimagePlugin{
 		PackageManagerPlugin: sdk.NewPackageManagerPlugin(info, "AppImage"),
+		logger:               sdk.NewDefaultLogger(false),
 	}
 }
 
-// Execute handles command execution
-func (p *AppimagePlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
-	switch command {
-	case "install":
-		return p.handleInstall(args)
-	case "remove":
-		return p.handleRemove(args)
-	case "update":
-		return p.handleUpdate(args)
-	case "search":
-		return p.handleSearch(args)
-	case "list":
-		return p.handleList(args)
-	default:
-		return fmt.Errorf("unknown command: %s", command)
-	}
-}
-
-func (p *AppimagePlugin) handleInstall(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "AppImage", cmdArgs...)
-}
-
-func (p *AppimagePlugin) handleRemove(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "AppImage", cmdArgs...)
-}
-
-func (p *AppimagePlugin) handleUpdate(args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "AppImage", "update")
-}
-
-func (p *AppimagePlugin) handleSearch(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
-	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommand(false, "AppImage", "search", searchTerm)
-}
-
-func (p *AppimagePlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "AppImage", "list")
-}
 
 func main() {
 	plugin := NewAppimagePlugin()
