@@ -8,8 +8,8 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
-// handleInstall installs development tools using Mise
-func (m *MisePlugin) handleInstall(args []string) error {
+// HandleInstall installs development tools using Mise
+func (m *MisePlugin) HandleInstall(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tools specified")
 	}
@@ -17,14 +17,20 @@ func (m *MisePlugin) handleInstall(args []string) error {
 	m.logger.Printf("Installing tools with Mise: %s\n", strings.Join(args, ", "))
 
 	for _, tool := range args {
-		if err := m.validateMiseCommand(tool); err != nil {
+		if err := m.ValidateToolSpec(tool); err != nil {
 			return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 		}
 
 		// Check if global flag is set
 		globalFlag := "--global"
-		if os.Getenv("MISE_LOCAL") == "1" {
-			globalFlag = "--local"
+		miseLocal := os.Getenv("MISE_LOCAL")
+		if miseLocal != "" {
+			// Validate environment variable value to prevent manipulation
+			if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
+				m.logger.Warning("Invalid MISE_LOCAL value '%s', using default --global", miseLocal)
+			} else if miseLocal == "1" || miseLocal == "true" {
+				globalFlag = "--local"
+			}
 		}
 
 		// Install the tool
@@ -38,8 +44,8 @@ func (m *MisePlugin) handleInstall(args []string) error {
 	return nil
 }
 
-// handleRemove removes development tools using Mise
-func (m *MisePlugin) handleRemove(args []string) error {
+// HandleRemove removes development tools using Mise
+func (m *MisePlugin) HandleRemove(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tools specified")
 	}
@@ -47,7 +53,7 @@ func (m *MisePlugin) handleRemove(args []string) error {
 	m.logger.Printf("Removing tools with Mise: %s\n", strings.Join(args, ", "))
 
 	for _, tool := range args {
-		if err := m.validateMiseCommand(tool); err != nil {
+		if err := m.ValidateToolSpec(tool); err != nil {
 			return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 		}
 
@@ -63,8 +69,8 @@ func (m *MisePlugin) handleRemove(args []string) error {
 	return nil
 }
 
-// handleUpdate updates Mise plugins and tool versions
-func (m *MisePlugin) handleUpdate(args []string) error {
+// HandleUpdate updates Mise plugins and tool versions
+func (m *MisePlugin) HandleUpdate(args []string) error {
 	m.logger.Println("Updating Mise plugins and tools...")
 
 	// Update plugins
@@ -81,13 +87,17 @@ func (m *MisePlugin) handleUpdate(args []string) error {
 	return nil
 }
 
-// handleSearch searches for available tools
-func (m *MisePlugin) handleSearch(args []string) error {
+// HandleSearch searches for available tools
+func (m *MisePlugin) HandleSearch(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
 
 	searchTerm := strings.Join(args, " ")
+	// Validate search term
+	if err := m.ValidateCommandArg(searchTerm); err != nil {
+		return fmt.Errorf("invalid search term: %w", err)
+	}
 	m.logger.Printf("Searching for tools: %s\n", searchTerm)
 
 	// Search for plugins
@@ -98,8 +108,8 @@ func (m *MisePlugin) handleSearch(args []string) error {
 	return nil
 }
 
-// handleList lists installed tools
-func (m *MisePlugin) handleList(args []string) error {
+// HandleList lists installed tools
+func (m *MisePlugin) HandleList(args []string) error {
 	m.logger.Println("Listing installed tools...")
 
 	// Parse flags
@@ -130,14 +140,14 @@ func (m *MisePlugin) handleList(args []string) error {
 	return sdk.ExecCommand(false, "mise", "ls")
 }
 
-// handleIsInstalled checks if a tool is installed
-func (m *MisePlugin) handleIsInstalled(args []string) error {
+// HandleIsInstalled checks if a tool is installed
+func (m *MisePlugin) HandleIsInstalled(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tool specified")
 	}
 
 	tool := args[0]
-	if err := m.validateMiseCommand(tool); err != nil {
+	if err := m.ValidateToolSpec(tool); err != nil {
 		return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 	}
 
