@@ -1,127 +1,94 @@
 package main
 
-// Build timestamp: 2025-09-03 17:41:19
+// Build timestamp: 2025-09-06
 
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
 
-// PipPlugin implements the Pip package manager
-type PipPlugin struct {
-	*sdk.PackageManagerPlugin
-}
-
 // NewPipPlugin creates a new Pip plugin
 func NewPipPlugin() *PipPlugin {
 	info := sdk.PluginInfo{
 		Name:        "package-manager-pip",
 		Version:     version,
-		Description: "Python package installer",
+		Description: "Python package installer with virtual environment support",
 		Author:      "DevEx Team",
 		Repository:  "https://github.com/jameswlane/devex",
-		Tags:        []string{"pip", "python", "packages"},
+		Tags:        []string{"package-manager", "pip", "python", "packages", "virtual-environment"},
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
-				Description: "Install packages using Pip",
-				Usage:       "Install one or more packages with dependency resolution",
+				Description: "Install Python packages using Pip",
+				Usage:       "Install packages with virtual environment detection",
+				Flags: map[string]string{
+					"user":         "Install to user directory",
+					"system":       "Force system-wide installation",
+					"requirements": "Install from requirements.txt file",
+					"upgrade":      "Upgrade packages to latest versions",
+				},
 			},
 			{
 				Name:        "remove",
-				Description: "Remove packages using Pip",
-				Usage:       "Remove one or more packages from the system",
+				Description: "Remove Python packages using Pip",
+				Usage:       "Remove packages with dependency cleanup",
+				Flags: map[string]string{
+					"yes": "Automatically confirm removal",
+				},
 			},
 			{
 				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Update installed packages",
+				Usage:       "Update pip and installed packages to latest versions",
+				Flags: map[string]string{
+					"all": "Update all installed packages",
+				},
 			},
 			{
 				Name:        "search",
-				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Description: "Search for Python packages",
+				Usage:       "Search PyPI for packages (note: search may be limited)",
 			},
 			{
 				Name:        "list",
-				Description: "List packages",
-				Usage:       "List installed packages",
+				Description: "List installed packages",
+				Usage:       "List installed Python packages",
+				Flags: map[string]string{
+					"outdated": "Show only outdated packages",
+					"format":   "Output format (columns, freeze, json)",
+				},
+			},
+			{
+				Name:        "is-installed",
+				Description: "Check if a package is installed",
+				Usage:       "Returns exit code 0 if package is installed, 1 if not",
+			},
+			{
+				Name:        "create-venv",
+				Description: "Create a virtual environment",
+				Usage:       "Create a Python virtual environment in current directory",
+				Flags: map[string]string{
+					"name": "Virtual environment name (default: venv)",
+				},
+			},
+			{
+				Name:        "freeze",
+				Description: "Generate requirements.txt",
+				Usage:       "Generate requirements.txt from installed packages",
 			},
 		},
 	}
 
 	return &PipPlugin{
 		PackageManagerPlugin: sdk.NewPackageManagerPlugin(info, "pip"),
+		logger:               sdk.NewDefaultLogger(false),
 	}
 }
 
-// Execute handles command execution
-func (p *PipPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
-	switch command {
-	case "install":
-		return p.handleInstall(args)
-	case "remove":
-		return p.handleRemove(args)
-	case "update":
-		return p.handleUpdate(args)
-	case "search":
-		return p.handleSearch(args)
-	case "list":
-		return p.handleList(args)
-	default:
-		return fmt.Errorf("unknown command: %s", command)
-	}
-}
-
-func (p *PipPlugin) handleInstall(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "pip", cmdArgs...)
-}
-
-func (p *PipPlugin) handleRemove(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "pip", cmdArgs...)
-}
-
-func (p *PipPlugin) handleUpdate(args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "pip", "update")
-}
-
-func (p *PipPlugin) handleSearch(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
-	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommand(false, "pip", "search", searchTerm)
-}
-
-func (p *PipPlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "pip", "list")
-}
 
 func main() {
 	plugin := NewPipPlugin()
