@@ -1,126 +1,76 @@
 package main
 
-// Build timestamp: 2025-09-03 17:41:19
+// Build timestamp: 2025-09-06
 
 import (
-	"fmt"
 	"os"
-	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
 
-// MisePlugin implements the Mise package manager
-type MisePlugin struct {
-	*sdk.PackageManagerPlugin
-}
-
 // NewMisePlugin creates a new Mise plugin
 func NewMisePlugin() *MisePlugin {
 	info := sdk.PluginInfo{
 		Name:        "package-manager-mise",
 		Version:     version,
-		Description: "Mise development tool version manager",
+		Description: "Mise development tool version manager with multi-language support",
 		Author:      "DevEx Team",
 		Repository:  "https://github.com/jameswlane/devex",
-		Tags:        []string{"mise", "tools", "development"},
+		Tags:        []string{"package-manager", "mise", "tools", "development", "version-manager"},
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
-				Description: "Install packages using Mise",
-				Usage:       "Install one or more packages with dependency resolution",
+				Description: "Install development tools using Mise",
+				Usage:       "Install language versions with 'language@version' format (e.g., node@18, python@3.11)",
+				Flags: map[string]string{
+					"global": "Set as global version (default)",
+					"local":  "Set as local version for current directory",
+				},
 			},
 			{
 				Name:        "remove",
-				Description: "Remove packages using Mise",
-				Usage:       "Remove one or more packages from the system",
+				Description: "Remove development tools using Mise",
+				Usage:       "Remove language versions from system",
 			},
 			{
 				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Update Mise plugins and tool versions",
+				Usage:       "Update Mise plugins and installed tools",
 			},
 			{
 				Name:        "search",
-				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Description: "Search for available tools",
+				Usage:       "Search for available development tools and versions",
 			},
 			{
 				Name:        "list",
-				Description: "List packages",
-				Usage:       "List installed packages",
+				Description: "List installed tools",
+				Usage:       "List installed development tools and their versions",
+				Flags: map[string]string{
+					"all":      "Show all available versions for each tool",
+					"current":  "Show only currently active versions",
+					"outdated": "Show outdated tools that can be updated",
+				},
+			},
+			{
+				Name:        "ensure-installed",
+				Description: "Ensure Mise is installed on the system",
+				Usage:       "Install Mise using the official installation script",
+			},
+			{
+				Name:        "is-installed",
+				Description: "Check if a tool is installed",
+				Usage:       "Returns exit code 0 if tool is installed, 1 if not",
 			},
 		},
 	}
 
 	return &MisePlugin{
 		PackageManagerPlugin: sdk.NewPackageManagerPlugin(info, "mise"),
+		logger:               sdk.NewDefaultLogger(false),
 	}
-}
-
-// Execute handles command execution
-func (p *MisePlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
-	switch command {
-	case "install":
-		return p.handleInstall(args)
-	case "remove":
-		return p.handleRemove(args)
-	case "update":
-		return p.handleUpdate(args)
-	case "search":
-		return p.handleSearch(args)
-	case "list":
-		return p.handleList(args)
-	default:
-		return fmt.Errorf("unknown command: %s", command)
-	}
-}
-
-func (p *MisePlugin) handleInstall(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "mise", cmdArgs...)
-}
-
-func (p *MisePlugin) handleRemove(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
-	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "mise", cmdArgs...)
-}
-
-func (p *MisePlugin) handleUpdate(args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "mise", "update")
-}
-
-func (p *MisePlugin) handleSearch(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
-	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommand(false, "mise", "search", searchTerm)
-}
-
-func (p *MisePlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "mise", "list")
 }
 
 func main() {
