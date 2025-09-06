@@ -11,7 +11,7 @@ import (
 // handleCreateVenv creates a Python virtual environment
 func (p *PipPlugin) handleCreateVenv(args []string) error {
 	venvName := "venv"
-	
+
 	// Process arguments for custom venv name
 	for i, arg := range args {
 		if arg == "--name" && i+1 < len(args) {
@@ -22,19 +22,19 @@ func (p *PipPlugin) handleCreateVenv(args []string) error {
 			break
 		}
 	}
-	
+
 	// Validate the venv name
 	if err := p.validateVenvName(venvName); err != nil {
 		return fmt.Errorf("invalid virtual environment name: %w", err)
 	}
-	
+
 	p.logger.Printf("Creating virtual environment: %s\n", venvName)
-	
+
 	// Check if venv already exists
 	if _, err := os.Stat(venvName); err == nil {
 		return fmt.Errorf("virtual environment '%s' already exists", venvName)
 	}
-	
+
 	// Create virtual environment
 	if err := sdk.ExecCommand(true, "python3", "-m", "venv", venvName); err != nil {
 		// Try python if python3 is not available
@@ -42,7 +42,7 @@ func (p *PipPlugin) handleCreateVenv(args []string) error {
 			return fmt.Errorf("failed to create virtual environment: %w (also tried python: %v)", err, err2)
 		}
 	}
-	
+
 	p.logger.Success("Virtual environment '%s' created successfully", venvName)
 	p.logger.Printf("To activate: source %s/bin/activate (Linux/Mac) or %s\\Scripts\\activate (Windows)\n", venvName, venvName)
 	return nil
@@ -54,55 +54,18 @@ func (p *PipPlugin) isVirtualEnvActive() bool {
 	if os.Getenv("VIRTUAL_ENV") != "" {
 		return true
 	}
-	
+
 	// Check CONDA_DEFAULT_ENV for conda environments
 	if os.Getenv("CONDA_DEFAULT_ENV") != "" {
 		return true
 	}
-	
+
 	// Check if pip executable is in a virtual environment path
 	if output, err := sdk.ExecCommandOutput("which", "pip"); err == nil {
 		if strings.Contains(output, "venv") || strings.Contains(output, "virtualenv") || strings.Contains(output, "conda") {
 			return true
 		}
 	}
-	
+
 	return false
-}
-
-// getVirtualEnvInfo returns information about the active virtual environment
-func (p *PipPlugin) getVirtualEnvInfo() (string, string) {
-	// Get virtual environment path
-	venvPath := os.Getenv("VIRTUAL_ENV")
-	if venvPath != "" {
-		// Extract name from path
-		parts := strings.Split(venvPath, "/")
-		if len(parts) > 0 {
-			return parts[len(parts)-1], venvPath
-		}
-	}
-	
-	// Check conda environment
-	condaEnv := os.Getenv("CONDA_DEFAULT_ENV")
-	if condaEnv != "" {
-		condaPrefix := os.Getenv("CONDA_PREFIX")
-		return condaEnv, condaPrefix
-	}
-	
-	return "", ""
-}
-
-// ensurePythonAvailable checks if Python is available
-func (p *PipPlugin) ensurePythonAvailable() error {
-	// Check for python3 first
-	if sdk.CommandExists("python3") {
-		return nil
-	}
-	
-	// Check for python
-	if sdk.CommandExists("python") {
-		return nil
-	}
-	
-	return fmt.Errorf("Python is not installed or not available in PATH")
 }

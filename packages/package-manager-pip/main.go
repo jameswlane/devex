@@ -3,13 +3,18 @@ package main
 // Build timestamp: 2025-09-06
 
 import (
-	"fmt"
 	"os"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var version = "dev" // Set by goreleaser
+
+// PipPlugin implements the Pip package manager
+type PipPlugin struct {
+	*sdk.PackageManagerPlugin
+	logger sdk.Logger
+}
 
 // NewPipPlugin creates a new Pip plugin
 func NewPipPlugin() *PipPlugin {
@@ -88,7 +93,6 @@ func NewPipPlugin() *PipPlugin {
 		logger:               sdk.NewDefaultLogger(false),
 	}
 }
-
 
 func main() {
 	plugin := NewPipPlugin()
