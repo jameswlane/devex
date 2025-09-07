@@ -86,7 +86,7 @@ var _ = Describe("Shell Tool", func() {
 				for _, cmd := range dangerousCommands {
 					err := plugin.Execute(cmd, []string{})
 					Expect(err).To(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring("unknown command"))
+					Expect(err.Error()).To(ContainSubstring("potentially dangerous character"))
 				}
 			})
 		})
