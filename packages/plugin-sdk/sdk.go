@@ -354,11 +354,6 @@ func RequireSudo() bool {
 	return CommandExists("sudo") && os.Getuid() != 0
 }
 
-// ExecCommand executes a command with optional sudo
-// Deprecated: Use ExecCommandWithContext for better cancellation support
-func ExecCommand(useSudo bool, name string, args ...string) error {
-	return ExecCommandWithContext(context.Background(), useSudo, name, args...)
-}
 
 // ExecCommandWithContext executes a command with context support for cancellation
 func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args ...string) error {
@@ -378,11 +373,6 @@ func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args
 	return cmd.Run()
 }
 
-// ExecCommandOutput executes a command and returns output
-// Deprecated: Use ExecCommandOutputWithContext for better cancellation support  
-func ExecCommandOutput(name string, args ...string) (string, error) {
-	return ExecCommandOutputWithContext(context.Background(), name, args...)
-}
 
 // ExecCommandOutputWithContext executes a command and returns output with context support
 func ExecCommandOutputWithContext(ctx context.Context, name string, args ...string) (string, error) {
@@ -546,14 +536,6 @@ func FileExists(path string) bool {
 	return err == nil
 }
 
-// GetEnv gets an environment variable with a default value
-// Deprecated: Use SafeGetEnvWithDefault for security validation
-func GetEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 // RunCommand runs a command and returns its output
 func RunCommand(name string, args ...string) (string, error) {

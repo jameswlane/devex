@@ -1168,7 +1168,15 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			log.Info("Falling back to direct installer")
 			fmt.Printf("Attempting direct installation as fallback...\n")
 
-			if err := installers.InstallCrossPlatformApps(apps, m.settings, m.repo); err != nil {
+			var errors []string
+			for _, app := range apps {
+				if err := installers.InstallCrossPlatformApp(app, m.settings, m.repo); err != nil {
+					errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+				}
+			}
+			if len(errors) > 0 {
+				err := fmt.Errorf("installation failures: %s", strings.Join(errors, "; "))
+				_ = err
 				log.Error("Direct installer also failed", err)
 				fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
 				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
@@ -1471,7 +1479,15 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 	printAutomatedSetupPlan()
 
 	// Use the regular installer system for non-interactive mode
-	if err := installers.InstallCrossPlatformApps(apps, settings, repo); err != nil {
+	var errors []string
+	for _, app := range apps {
+		if err := installers.InstallCrossPlatformApp(app, settings, repo); err != nil {
+			errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+		}
+	}
+
+	if len(errors) > 0 {
+		err := fmt.Errorf("automated installation failed: %s", strings.Join(errors, "; "))
 		log.Error("Automated installation failed", err)
 		fmt.Printf("⚠️  Installation failed: %v\n", err)
 		return err

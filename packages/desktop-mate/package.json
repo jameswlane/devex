@@ -5,7 +5,7 @@
 	"description": "MATE desktop environment configuration plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-desktop-mate main.go",
+		"build": "go build -o devex-plugin-desktop-mate .",
 		"dev": "go build -race -o devex-plugin-desktop-mate main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

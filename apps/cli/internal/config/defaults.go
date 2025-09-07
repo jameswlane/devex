@@ -16,21 +16,7 @@ var ConfigDirectories = []string{
 	"desktop",      // Desktop environment configs (loaded last)
 }
 
-// DefaultFiles defines standard configuration file paths (legacy - deprecated)
-var DefaultFiles = []string{
-	"apps.yaml",
-	"databases.yaml",
-	"dock.yaml",
-	"fonts.yaml",
-	"git_config.yaml",
-	"gnome_extensions.yaml",
-	"gnome_settings.yaml",
-	"optional_apps.yaml",
-	"programming_languages.yaml",
-	"themes.yaml",
-}
-
-// CrossPlatformFiles defines the new consolidated configuration files (legacy - deprecated)
+// CrossPlatformFiles defines the current consolidated configuration files
 var CrossPlatformFiles = []string{
 	"terminal.yaml",
 	"terminal-optional.yaml",

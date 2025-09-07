@@ -41,14 +41,4 @@ var _ = Describe("Installers Package", func() {
 		})
 	})
 
-	Describe("RemoveConflictingPackages", func() {
-		It("removes conflicting packages successfully", func() {
-			conflicts := []string{"conflict1", "conflict2"}
-			err := installers.RemoveConflictingPackages(conflicts)
-			Expect(err).ToNot(HaveOccurred())
-
-			// Verify the correct command was executed
-			Expect(mockUtils.Commands).To(ContainElement("sudo apt-get remove -y conflict1 conflict2"))
-		})
-	})
 })

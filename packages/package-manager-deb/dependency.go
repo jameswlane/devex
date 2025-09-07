@@ -11,7 +11,8 @@ import (
 // getMissingDependencies checks for missing dependencies of a .deb package
 func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) {
 	// Get package dependencies
-	output, err := sdk.ExecCommandOutput("dpkg-deb", "-f", debFile, "Depends")
+	ctx := context.Background()
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "dpkg-deb", "-f", debFile, "Depends")
 	if err != nil {
 		return nil, err
 	}

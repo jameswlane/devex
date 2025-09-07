@@ -5,7 +5,7 @@
 	"private": true,
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-system-setup main.go",
+		"build": "go build -o devex-plugin-system-setup .",
 		"test": "go test ./...",
 		"dev": "go build -race -o devex-plugin-system-setup main.go",
 		"lint": "golangci-lint run",

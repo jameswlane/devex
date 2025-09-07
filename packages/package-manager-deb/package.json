@@ -5,7 +5,7 @@
 	"description": "DEB plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-package-manager-deb main.go",
+		"build": "go build -o devex-plugin-package-manager-deb .",
 		"dev": "go build -race -o devex-plugin-package-manager-deb main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

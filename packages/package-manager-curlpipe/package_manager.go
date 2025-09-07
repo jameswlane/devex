@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -15,26 +16,27 @@ type CurlpipePlugin struct {
 
 // Execute handles command execution
 func (p *CurlpipePlugin) Execute(command string, args []string) error {
+	ctx := context.Background()
 	switch command {
 	case "validate-url":
-		return p.handleValidateURL(args)
+		return p.handleValidateURL(ctx, args)
 	case "list-trusted":
-		return p.handleListTrusted(args)
+		return p.handleListTrusted(ctx, args)
 	case "preview":
-		return p.handlePreview(args)
+		return p.handlePreview(ctx, args)
 	case "install":
 		p.EnsureAvailable()
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
 		p.EnsureAvailable()
-		return p.handleRemove(args)
+		return p.handleRemove(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
 // handleInstall executes installation scripts from URLs
-func (p *CurlpipePlugin) handleInstall(args []string) error {
+func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no URLs specified for installation")
 	}
@@ -84,7 +86,7 @@ func (p *CurlpipePlugin) handleInstall(args []string) error {
 		// Execute the installation script
 		p.logger.Printf("Executing script from: %s\n", scriptURL)
 		curlCmd := fmt.Sprintf("curl -fsSL %s | sh", scriptURL)
-		if err := sdk.ExecCommand(true, "bash", "-c", curlCmd); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, true, "bash", "-c", curlCmd); err != nil {
 			return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
 		}
 
@@ -99,7 +101,7 @@ func (p *CurlpipePlugin) handleInstall(args []string) error {
 }
 
 // handleRemove handles removal requests (limited support for curl pipe)
-func (p *CurlpipePlugin) handleRemove(args []string) error {
+func (p *CurlpipePlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no applications specified")
 	}
@@ -119,7 +121,7 @@ func (p *CurlpipePlugin) handleRemove(args []string) error {
 }
 
 // handleValidateURL validates URLs for installation
-func (p *CurlpipePlugin) handleValidateURL(args []string) error {
+func (p *CurlpipePlugin) handleValidateURL(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no URL specified")
 	}
@@ -141,7 +143,7 @@ func (p *CurlpipePlugin) handleValidateURL(args []string) error {
 }
 
 // handleListTrusted lists all trusted domains
-func (p *CurlpipePlugin) handleListTrusted(args []string) error {
+func (p *CurlpipePlugin) handleListTrusted(ctx context.Context, args []string) error {
 	p.logger.Printf("Trusted domains for curl pipe installations:\n")
 	trustedDomains := p.GetTrustedDomains()
 	for i, domain := range trustedDomains {

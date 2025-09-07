@@ -297,7 +297,8 @@ func (d *DebInstaller) handleExtract(ctx context.Context, args []string) error {
 // isPackageInstalled checks if a package is installed
 func (d *DebInstaller) isPackageInstalled(packageName string) (bool, error) {
 	// Use dpkg-query to check if the package is installed
-	output, err := sdk.ExecCommandOutput("dpkg-query", "-W", "-f=${Status}", packageName)
+	ctx := context.Background()
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "dpkg-query", "-W", "-f=${Status}", packageName)
 	if err != nil {
 		// Package not found
 		return false, nil

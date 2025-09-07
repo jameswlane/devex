@@ -52,7 +52,8 @@ func (p *ShellPlugin) ValidateShell(shell string) error {
 
 // getShellPath finds the installation path of the specified shell
 func (p *ShellPlugin) getShellPath(shell string) (string, error) {
-	shellPath, err := sdk.ExecCommandOutput("which", shell)
+	ctx := context.Background()
+	shellPath, err := sdk.ExecCommandOutputWithContext(ctx, "which", shell)
 	if err != nil {
 		return "", fmt.Errorf("shell %s is not installed", shell)
 	}

@@ -31,6 +31,16 @@ var _ = Describe("APT Package Manager Integration Tests", func() {
 		tmpDir, err = os.MkdirTemp("", "apt-integration-test-")
 		Expect(err).NotTo(HaveOccurred())
 
+		// Ensure cleanup even on test failure
+		DeferCleanup(func() {
+			if cancelFunc != nil {
+				cancelFunc()
+			}
+			if tmpDir != "" {
+				_ = os.RemoveAll(tmpDir)
+			}
+		})
+
 		// Initialize plugin
 		plugin = main.NewAPTPlugin()
 	})

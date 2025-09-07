@@ -5,7 +5,7 @@
 	"description": "Eopkg plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-package-manager-eopkg main.go",
+		"build": "go build -o devex-plugin-package-manager-eopkg .",
 		"dev": "go build -race -o devex-plugin-package-manager-eopkg main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",
