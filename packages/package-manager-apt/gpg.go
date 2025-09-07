@@ -45,19 +45,6 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		return fmt.Errorf("failed to create keyring directory '%s' for GPG key storage: %w", keyringDir, err)
 	}
 
-	// Skip actual HTTP download in test mode for external URLs only
-	// Allow localhost/127.0.0.1 for test server
-	testMode, err := sdk.SafeGetEnv("APT_PLUGIN_TEST_MODE")
-	if err != nil {
-		a.getLogger().Warning("APT_PLUGIN_TEST_MODE environment variable validation failed: %v", err)
-		testMode = "" // Default to empty/disabled
-	}
-	if testMode == "1" {
-		if !strings.Contains(source.KeyURL, "127.0.0.1") && !strings.Contains(source.KeyURL, "localhost") {
-			return fmt.Errorf("failed to download GPG key from '%s': HTTP 404", source.KeyURL)
-		}
-	}
-
 	// Download the key using HTTP client
 	downloadCtx, cancel := context.WithTimeout(ctx, GPGKeyDownloadTimeout)
 	defer cancel()
