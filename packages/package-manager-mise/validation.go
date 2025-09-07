@@ -20,7 +20,7 @@ func (m *MisePlugin) ValidateToolSpec(toolSpec string) error {
 
 	// Check length
 	if len(toolSpec) > MaxToolNameLength {
-		return fmt.Errorf("tool specification too long (max %d characters)", MaxToolNameLength)
+		return fmt.Errorf("tool specification exceeds maximum length")
 	}
 
 	// Check for null bytes and control characters
@@ -87,8 +87,9 @@ func (m *MisePlugin) ValidateToolSpecFormat(toolSpec string) error {
 			return nil
 		}
 
-		// Allow common version patterns (e.g., "18", "3.11", "1.0.0", "v1.2.3", "^1.70.0", "~2.0.0")
-		versionRegex := regexp.MustCompile(`^[~^]?v?[0-9]+(\.[0-9]+)*([a-zA-Z0-9_.-]*)?$`)
+		// Allow common version patterns with safer regex to prevent ReDoS
+		// Limit complexity and use more specific patterns
+		versionRegex := regexp.MustCompile(`^[~^]?v?[0-9]{1,3}(?:\.[0-9]{1,3}){0,3}(?:[a-zA-Z0-9_.-]{0,20})?$`)
 		if !versionRegex.MatchString(version) {
 			return fmt.Errorf("invalid version format")
 		}

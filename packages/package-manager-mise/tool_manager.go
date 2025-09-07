@@ -17,30 +17,55 @@ func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 
 	m.logger.Printf("Installing tools with Mise: %s\n", strings.Join(args, ", "))
 
+	// Validate all tools first
 	for _, tool := range args {
 		if err := m.ValidateToolSpec(tool); err != nil {
 			return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 		}
+	}
 
-		// Check if global flag is set
-		globalFlag := "--global"
-		miseLocal := os.Getenv("MISE_LOCAL")
-		if miseLocal != "" {
-			// Validate environment variable value to prevent manipulation
-			if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
-				m.logger.Warning("Invalid MISE_LOCAL value '%s', using default --global", miseLocal)
-			} else if miseLocal == "1" || miseLocal == "true" {
-				globalFlag = "--local"
+	// Check if global flag is set
+	globalFlag := "--global"
+	miseLocal := os.Getenv("MISE_LOCAL")
+	if miseLocal != "" {
+		// Validate environment variable value to prevent manipulation
+		if miseLocal != "1" && miseLocal != "true" && miseLocal != "0" && miseLocal != "false" {
+			m.logger.Warning("Invalid MISE_LOCAL value, using default --global")
+		} else if miseLocal == "1" || miseLocal == "true" {
+			globalFlag = "--local"
+		}
+	}
+
+	// Use parallel installer for multiple tools
+	if len(args) > 1 {
+		parallelInstaller := NewParallelInstaller(m.logger)
+
+		// Progress callback
+		progressCallback := func(completed, failed, total int) {
+			m.logger.Info("Installation progress", "completed", completed, "failed", failed, "total", total)
+		}
+
+		results, err := parallelInstaller.InstallToolsWithProgress(ctx, args, globalFlag, progressCallback)
+
+		// Report results
+		for _, result := range results {
+			if result.Success {
+				m.logger.Success("Installed tool: %s (took %v)", result.Tool, result.Duration)
+			} else {
+				m.logger.Error("Failed to install tool", result.Error, "tool", result.Tool)
 			}
 		}
 
-		// Install the tool
-		if err := sdk.ExecCommandWithContext(ctx, false, "mise", "install", globalFlag, tool); err != nil {
-			return fmt.Errorf("failed to install tool '%s': %w", tool, err)
-		}
-
-		m.logger.Success("Installed tool: %s", tool)
+		return err
 	}
+
+	// Single tool installation (sequential)
+	tool := args[0]
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", "install", globalFlag, tool); err != nil {
+		return fmt.Errorf("failed to install tool '%s': %w", tool, err)
+	}
+
+	m.logger.Success("Installed tool: %s", tool)
 
 	return nil
 }
@@ -53,20 +78,38 @@ func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 
 	m.logger.Printf("Removing tools with Mise: %s\n", strings.Join(args, ", "))
 
+	// Validate all tools first
 	for _, tool := range args {
 		if err := m.ValidateToolSpec(tool); err != nil {
 			return fmt.Errorf("invalid tool specification '%s': %w", tool, err)
 		}
-
-		// Remove the tool
-		if err := sdk.ExecCommandWithContext(ctx, false, "mise", "uninstall", tool); err != nil {
-			m.logger.Warning("Failed to remove tool '%s': %v", tool, err)
-			continue
-		}
-
-		m.logger.Success("Removed tool: %s", tool)
 	}
 
+	// Use parallel remover for multiple tools
+	if len(args) > 1 {
+		parallelInstaller := NewParallelInstaller(m.logger)
+		results, err := parallelInstaller.RemoveTools(ctx, args)
+
+		// Report results
+		for _, result := range results {
+			if result.Success {
+				m.logger.Success("Removed tool: %s (took %v)", result.Tool, result.Duration)
+			} else {
+				m.logger.Warning("Failed to remove tool '%s': %v", result.Tool, result.Error)
+			}
+		}
+
+		return err
+	}
+
+	// Single tool removal (sequential)
+	tool := args[0]
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", "uninstall", tool); err != nil {
+		m.logger.Warning("Failed to remove tool '%s': %v", tool, err)
+		return err
+	}
+
+	m.logger.Success("Removed tool: %s", tool)
 	return nil
 }
 
