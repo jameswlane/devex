@@ -17,6 +17,11 @@ const (
 	MaxFilePathLength = 4096
 )
 
+// ValidatePackageName validates package names to prevent command injection (exported for testing)
+func (a *APTInstaller) ValidatePackageName(packageName string) error {
+	return a.validatePackageName(packageName)
+}
+
 // validatePackageName validates package names to prevent command injection
 func (a *APTInstaller) validatePackageName(packageName string) error {
 	// Basic package name validation
@@ -54,6 +59,11 @@ func (a *APTInstaller) validatePackageName(packageName string) error {
 	}
 
 	return nil
+}
+
+// ValidateAptRepo ensures the repository string is valid (exported for testing)
+func (a *APTInstaller) ValidateAptRepo(repo string) error {
+	return a.validateAptRepo(repo)
 }
 
 // validateAptRepo ensures the repository string is valid
@@ -155,6 +165,11 @@ func (a *APTInstaller) containsSuspiciousCharacters(repo string) bool {
 	return false
 }
 
+// ValidateFilePath validates file paths to prevent directory traversal and dangerous paths (exported for testing)
+func (a *APTInstaller) ValidateFilePath(path string) error {
+	return a.validateFilePath(path)
+}
+
 // validateFilePath validates file paths to prevent directory traversal and dangerous paths
 func (a *APTInstaller) validateFilePath(path string) error {
 	if path == "" {
@@ -216,6 +231,11 @@ func (a *APTInstaller) validateFilePath(path string) error {
 	}
 
 	return nil
+}
+
+// ValidateKeyURL validates GPG key URLs to prevent command injection (exported for testing)
+func (a *APTInstaller) ValidateKeyURL(keyURL string) error {
+	return a.validateKeyURL(keyURL)
 }
 
 // validateKeyURL validates GPG key URLs to prevent command injection
