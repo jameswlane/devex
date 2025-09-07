@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,10 +9,10 @@ import (
 )
 
 // handleBackup creates timestamped backups of shell configuration files
-func (p *ShellPlugin) handleBackup(args []string) error {
+func (p *ShellPlugin) handleBackup(ctx context.Context, args []string) error {
 	fmt.Println("Backing up shell configuration...")
 
-	currentShell := p.detectCurrentShell()
+	currentShell := p.DetectCurrentShell()
 	if currentShell == "unknown" {
 		return fmt.Errorf("could not detect current shell")
 	}
@@ -27,13 +28,13 @@ func (p *ShellPlugin) handleBackup(args []string) error {
 		return fmt.Errorf("unsupported shell: %s", currentShell)
 	}
 
-	// Create backup directory
+	// Create a backup directory
 	backupPath, err := p.createBackupDirectory(homeDir)
 	if err != nil {
 		return err
 	}
 
-	// Backup each file
+	// Back up each file
 	backedUpCount, err := p.backupFiles(filesToBackup, backupPath)
 	if err != nil {
 		return err
@@ -45,7 +46,7 @@ func (p *ShellPlugin) handleBackup(args []string) error {
 	return nil
 }
 
-// getFilesToBackup returns the list of files to backup for the given shell
+// getFilesToBackup returns the list of files to back up for the given shell
 func (p *ShellPlugin) getFilesToBackup(shell, homeDir string) []string {
 	switch shell {
 	case "bash":

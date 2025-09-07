@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -27,48 +28,50 @@ type APTInstaller struct {
 
 // Execute handles command execution
 func (a *APTInstaller) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	// Ensure APT is available
 	a.EnsureAvailable()
 
 	switch command {
 	case "install":
-		return a.handleInstall(args)
+		return a.handleInstall(ctx, args)
 	case "remove":
-		return a.handleRemove(args)
+		return a.handleRemove(ctx, args)
 	case "update":
-		return a.handleUpdate(args)
+		return a.handleUpdate(ctx, args)
 	case "upgrade":
-		return a.handleUpgrade(args)
+		return a.handleUpgrade(ctx, args)
 	case "search":
-		return a.handleSearch(args)
+		return a.handleSearch(ctx, args)
 	case "list":
-		return a.handleList(args)
+		return a.handleList(ctx, args)
 	case "info":
-		return a.handleInfo(args)
+		return a.handleInfo(ctx, args)
 	case "is-installed":
-		return a.handleIsInstalled(args)
+		return a.handleIsInstalled(ctx, args)
 	case "add-repository":
-		return a.handleAddRepository(args)
+		return a.handleAddRepository(ctx, args)
 	case "remove-repository":
-		return a.handleRemoveRepository(args)
+		return a.handleRemoveRepository(ctx, args)
 	case "validate-repository":
-		return a.handleValidateRepository(args)
+		return a.handleValidateRepository(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-// getAPTVersion detects the APT version with caching
-func (a *APTInstaller) getAPTVersion() (*APTVersion, error) {
+// GetAPTVersion detects the APT version with caching
+func (a *APTInstaller) GetAPTVersion() (*APTVersion, error) {
 	if a.versionCached && a.aptVersion != nil {
 		return a.aptVersion, nil
 	}
 
 	// Try apt --version first (available in APT 1.0+)
-	output, err := sdk.ExecCommandOutput("apt", "--version")
+	output, err := a.ExecManagerCommandOutput("search", "--version")
 	if err != nil {
 		// Fallback to apt-get --version
-		output, err = sdk.ExecCommandOutput("apt-get", "--version")
+		output, err = sdk.ExecCommandOutputWithTimeoutAndOperation(a.GetTimeout("search"), "search", "apt-get", "--version")
 		if err != nil {
 			return nil, fmt.Errorf("failed to detect APT version: %w", err)
 		}
@@ -103,9 +106,9 @@ func (a *APTInstaller) getAPTVersion() (*APTVersion, error) {
 	return a.aptVersion, nil
 }
 
-// getAPTCommand returns the appropriate APT command based on version
-func (a *APTInstaller) getAPTCommand() string {
-	if version, err := a.getAPTVersion(); err == nil && version.Major < 1 {
+// GetAPTCommand returns the appropriate APT command based on version
+func (a *APTInstaller) GetAPTCommand() string {
+	if version, err := a.GetAPTVersion(); err == nil && version.Major < 1 {
 		return "apt-get"
 	}
 	return "apt"
@@ -118,7 +121,7 @@ func (a *APTInstaller) isPackageInstalled(packageName string) (bool, error) {
 	}
 
 	// Use dpkg-query to check if package is installed
-	output, err := sdk.ExecCommandOutput("dpkg-query", "-W", "-f=${Status}", packageName)
+	output, err := sdk.ExecCommandOutputWithTimeoutAndOperation(a.GetTimeout("search"), "search", "dpkg-query", "-W", "-f=${Status}", packageName)
 	if err != nil {
 		// Package not found
 		return false, nil
@@ -135,7 +138,7 @@ func (a *APTInstaller) validatePackageAvailability(packageName string) error {
 	}
 
 	// Use apt-cache policy to check package availability
-	output, err := sdk.ExecCommandOutput("apt-cache", "policy", packageName)
+	output, err := sdk.ExecCommandOutputWithTimeoutAndOperation(a.GetTimeout("search"), "search", "apt-cache", "policy", packageName)
 	if err != nil {
 		return fmt.Errorf("failed to check package availability: %w", err)
 	}
@@ -158,7 +161,7 @@ func (a *APTInstaller) validatePackageAvailability(packageName string) error {
 }
 
 // handleInstall installs packages
-func (a *APTInstaller) handleInstall(args []string) error {
+func (a *APTInstaller) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -174,7 +177,7 @@ func (a *APTInstaller) handleInstall(args []string) error {
 
 	// Update package lists first
 	a.logger.Println("Updating package lists...")
-	if err := sdk.ExecCommand(true, "apt", "update"); err != nil {
+	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
 		a.logger.Warning("Failed to update package lists: %v", err)
 	}
 
@@ -184,9 +187,8 @@ func (a *APTInstaller) handleInstall(args []string) error {
 	}
 
 	// Install packages
-	aptCmd := a.getAPTCommand()
 	cmdArgs := append([]string{"install", "-y"}, args...)
-	if err := sdk.ExecCommand(true, aptCmd, cmdArgs...); err != nil {
+	if err := a.ExecManagerCommand("install", true, cmdArgs...); err != nil {
 		return fmt.Errorf("failed to install packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
@@ -204,7 +206,7 @@ func (a *APTInstaller) handleInstall(args []string) error {
 }
 
 // handleRemove removes packages
-func (a *APTInstaller) handleRemove(args []string) error {
+func (a *APTInstaller) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -237,9 +239,8 @@ func (a *APTInstaller) handleRemove(args []string) error {
 	}
 
 	// Remove packages
-	aptCmd := a.getAPTCommand()
 	cmdArgs := append([]string{"remove", "-y"}, packagesToRemove...)
-	if err := sdk.ExecCommand(true, aptCmd, cmdArgs...); err != nil {
+	if err := a.ExecManagerCommand("remove", true, cmdArgs...); err != nil {
 		return fmt.Errorf("failed to remove packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
@@ -248,9 +249,9 @@ func (a *APTInstaller) handleRemove(args []string) error {
 }
 
 // handleUpdate updates package lists
-func (a *APTInstaller) handleUpdate(args []string) error {
+func (a *APTInstaller) handleUpdate(ctx context.Context, args []string) error {
 	a.logger.Println("Updating package lists...")
-	if err := sdk.ExecCommand(true, "apt", "update"); err != nil {
+	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
 		return fmt.Errorf("failed to update package lists: %w", err)
 	}
 	a.logger.Success("Package lists updated successfully")
@@ -258,16 +259,16 @@ func (a *APTInstaller) handleUpdate(args []string) error {
 }
 
 // handleUpgrade upgrades installed packages
-func (a *APTInstaller) handleUpgrade(args []string) error {
+func (a *APTInstaller) handleUpgrade(ctx context.Context, args []string) error {
 	a.logger.Println("Upgrading installed packages...")
 
 	// Update first
-	if err := sdk.ExecCommand(true, "apt", "update"); err != nil {
+	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
 		return fmt.Errorf("failed to update package lists: %w", err)
 	}
 
 	// Then upgrade
-	if err := sdk.ExecCommand(true, "apt", "upgrade", "-y"); err != nil {
+	if err := a.ExecManagerCommand("upgrade", true, "upgrade", "-y"); err != nil {
 		return fmt.Errorf("failed to upgrade packages: %w", err)
 	}
 
@@ -276,7 +277,7 @@ func (a *APTInstaller) handleUpgrade(args []string) error {
 }
 
 // handleSearch searches for packages
-func (a *APTInstaller) handleSearch(args []string) error {
+func (a *APTInstaller) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -284,23 +285,23 @@ func (a *APTInstaller) handleSearch(args []string) error {
 	searchTerm := strings.Join(args, " ")
 	a.logger.Printf("Searching for: %s\\n", searchTerm)
 
-	return sdk.ExecCommand(false, "apt", "search", searchTerm)
+	return a.ExecManagerCommand("search", false, "search", searchTerm)
 }
 
 // handleList lists packages
-func (a *APTInstaller) handleList(args []string) error {
+func (a *APTInstaller) handleList(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		// List all installed packages
-		return sdk.ExecCommand(false, "apt", "list", "--installed")
+		return a.ExecManagerCommand("search", false, "list", "--installed")
 	}
 
 	// Handle flags or search terms
 	cmdArgs := append([]string{"list"}, args...)
-	return sdk.ExecCommand(false, "apt", cmdArgs...)
+	return a.ExecManagerCommand("search", false, cmdArgs...)
 }
 
 // handleInfo shows package information
-func (a *APTInstaller) handleInfo(args []string) error {
+func (a *APTInstaller) handleInfo(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package specified")
 	}
@@ -311,7 +312,7 @@ func (a *APTInstaller) handleInfo(args []string) error {
 		}
 
 		a.logger.Printf("Package information for: %s\\n", pkg)
-		if err := sdk.ExecCommand(false, "apt", "show", pkg); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "apt", "show", pkg); err != nil {
 			a.logger.ErrorMsg("Failed to get info for %s: %v", pkg, err)
 		}
 
@@ -324,7 +325,7 @@ func (a *APTInstaller) handleInfo(args []string) error {
 }
 
 // handleIsInstalled checks if packages are installed
-func (a *APTInstaller) handleIsInstalled(args []string) error {
+func (a *APTInstaller) handleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}

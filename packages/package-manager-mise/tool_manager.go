@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 // HandleInstall installs development tools using Mise
-func (m *MisePlugin) HandleInstall(args []string) error {
+func (m *MisePlugin) HandleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tools specified")
 	}
@@ -34,7 +35,7 @@ func (m *MisePlugin) HandleInstall(args []string) error {
 		}
 
 		// Install the tool
-		if err := sdk.ExecCommand(false, "mise", "install", globalFlag, tool); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "mise", "install", globalFlag, tool); err != nil {
 			return fmt.Errorf("failed to install tool '%s': %w", tool, err)
 		}
 
@@ -45,7 +46,7 @@ func (m *MisePlugin) HandleInstall(args []string) error {
 }
 
 // HandleRemove removes development tools using Mise
-func (m *MisePlugin) HandleRemove(args []string) error {
+func (m *MisePlugin) HandleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tools specified")
 	}
@@ -58,7 +59,7 @@ func (m *MisePlugin) HandleRemove(args []string) error {
 		}
 
 		// Remove the tool
-		if err := sdk.ExecCommand(false, "mise", "uninstall", tool); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "mise", "uninstall", tool); err != nil {
 			m.logger.Warning("Failed to remove tool '%s': %v", tool, err)
 			continue
 		}
@@ -70,16 +71,16 @@ func (m *MisePlugin) HandleRemove(args []string) error {
 }
 
 // HandleUpdate updates Mise plugins and tool versions
-func (m *MisePlugin) HandleUpdate(args []string) error {
+func (m *MisePlugin) HandleUpdate(ctx context.Context, args []string) error {
 	m.logger.Println("Updating Mise plugins and tools...")
 
 	// Update plugins
-	if err := sdk.ExecCommand(false, "mise", "plugins", "update"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", "plugins", "update"); err != nil {
 		m.logger.Warning("Failed to update plugins: %v", err)
 	}
 
 	// Update tools to latest versions
-	if err := sdk.ExecCommand(false, "mise", "upgrade"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", "upgrade"); err != nil {
 		return fmt.Errorf("failed to update tools: %w", err)
 	}
 
@@ -88,7 +89,7 @@ func (m *MisePlugin) HandleUpdate(args []string) error {
 }
 
 // HandleSearch searches for available tools
-func (m *MisePlugin) HandleSearch(args []string) error {
+func (m *MisePlugin) HandleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -101,7 +102,7 @@ func (m *MisePlugin) HandleSearch(args []string) error {
 	m.logger.Printf("Searching for tools: %s\n", searchTerm)
 
 	// Search for plugins
-	if err := sdk.ExecCommand(false, "mise", "plugins", "ls-remote", searchTerm); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "mise", "plugins", "ls-remote", searchTerm); err != nil {
 		return fmt.Errorf("failed to search for tools: %w", err)
 	}
 
@@ -109,7 +110,7 @@ func (m *MisePlugin) HandleSearch(args []string) error {
 }
 
 // HandleList lists installed tools
-func (m *MisePlugin) HandleList(args []string) error {
+func (m *MisePlugin) HandleList(ctx context.Context, args []string) error {
 	m.logger.Println("Listing installed tools...")
 
 	// Parse flags
@@ -129,19 +130,19 @@ func (m *MisePlugin) HandleList(args []string) error {
 	}
 
 	if showAll {
-		return sdk.ExecCommand(false, "mise", "ls", "--all")
+		return sdk.ExecCommandWithContext(ctx, false, "mise", "ls", "--all")
 	} else if showCurrent {
-		return sdk.ExecCommand(false, "mise", "current")
+		return sdk.ExecCommandWithContext(ctx, false, "mise", "current")
 	} else if showOutdated {
-		return sdk.ExecCommand(false, "mise", "outdated")
+		return sdk.ExecCommandWithContext(ctx, false, "mise", "outdated")
 	}
 
 	// Default: show installed tools
-	return sdk.ExecCommand(false, "mise", "ls")
+	return sdk.ExecCommandWithContext(ctx, false, "mise", "ls")
 }
 
 // HandleIsInstalled checks if a tool is installed
-func (m *MisePlugin) HandleIsInstalled(args []string) error {
+func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no tool specified")
 	}
@@ -152,7 +153,7 @@ func (m *MisePlugin) HandleIsInstalled(args []string) error {
 	}
 
 	// Check if tool is installed
-	output, err := sdk.ExecCommandOutput("mise", "current", tool)
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "current", tool)
 	if err != nil || strings.TrimSpace(output) == "" {
 		return fmt.Errorf("tool '%s' is not installed", tool)
 	}

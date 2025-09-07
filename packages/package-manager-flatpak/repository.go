@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,13 +9,13 @@ import (
 )
 
 // handleAddFlathub adds the Flathub repository
-func (f *FlatpakInstaller) handleAddFlathub(args []string) error {
+func (f *FlatpakInstaller) handleAddFlathub(ctx context.Context, args []string) error {
 	f.EnsureAvailable()
 
 	f.logger.Printf("Adding Flathub repository...\n")
 
 	// Check if Flathub is already added
-	output, err := sdk.ExecCommandOutput("flatpak", "remote-list")
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "remote-list")
 	if err != nil {
 		f.logger.Warning("Failed to check existing remotes: %v", err)
 	} else if strings.Contains(output, "flathub") {
@@ -24,10 +25,10 @@ func (f *FlatpakInstaller) handleAddFlathub(args []string) error {
 
 	// Add Flathub remote
 	flathubURL := "https://dl.flathub.org/repo/flathub.flatpakrepo"
-	
+
 	// Determine installation level (user vs system)
 	installArgs := []string{"remote-add", "--if-not-exists", "flathub", flathubURL}
-	
+
 	// Check for explicit user/system flags
 	systemWide := false
 	for _, arg := range args {
@@ -38,7 +39,7 @@ func (f *FlatpakInstaller) handleAddFlathub(args []string) error {
 		}
 	}
 
-	if err := sdk.ExecCommand(systemWide, "flatpak", installArgs...); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, systemWide, "flatpak", installArgs...); err != nil {
 		return fmt.Errorf("failed to add Flathub repository: %w", err)
 	}
 
@@ -47,7 +48,7 @@ func (f *FlatpakInstaller) handleAddFlathub(args []string) error {
 }
 
 // handleRemoteAdd adds a new remote repository
-func (f *FlatpakInstaller) handleRemoteAdd(args []string) error {
+func (f *FlatpakInstaller) handleRemoteAdd(ctx context.Context, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("remote-add requires: <name> <url>")
 	}
@@ -67,14 +68,14 @@ func (f *FlatpakInstaller) handleRemoteAdd(args []string) error {
 	f.logger.Printf("Adding remote: %s (%s)\n", remoteName, remoteURL)
 
 	addArgs := []string{"remote-add", "--if-not-exists", remoteName, remoteURL}
-	
+
 	// Check for system-wide installation flag
 	systemWide := f.hasSystemFlag(args[2:])
 	if systemWide {
 		addArgs = []string{"remote-add", "--if-not-exists", "--system", remoteName, remoteURL}
 	}
 
-	if err := sdk.ExecCommand(systemWide, "flatpak", addArgs...); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, systemWide, "flatpak", addArgs...); err != nil {
 		return fmt.Errorf("failed to add remote %s: %w", remoteName, err)
 	}
 
@@ -83,7 +84,7 @@ func (f *FlatpakInstaller) handleRemoteAdd(args []string) error {
 }
 
 // handleRemoteRemove removes a remote repository
-func (f *FlatpakInstaller) handleRemoteRemove(args []string) error {
+func (f *FlatpakInstaller) handleRemoteRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no remote name specified")
 	}
@@ -96,14 +97,14 @@ func (f *FlatpakInstaller) handleRemoteRemove(args []string) error {
 	f.logger.Printf("Removing remote: %s\n", remoteName)
 
 	// Check if remote exists
-	if exists, err := f.remoteExists(remoteName); err != nil {
+	if exists, err := f.remoteExists(ctx, remoteName); err != nil {
 		f.logger.Warning("Failed to check if remote exists: %v", err)
 	} else if !exists {
 		f.logger.Printf("Remote %s does not exist, skipping\n", remoteName)
 		return nil
 	}
 
-	if err := sdk.ExecCommand(false, "flatpak", "remote-delete", remoteName); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", "remote-delete", remoteName); err != nil {
 		return fmt.Errorf("failed to remove remote %s: %w", remoteName, err)
 	}
 
@@ -112,14 +113,14 @@ func (f *FlatpakInstaller) handleRemoteRemove(args []string) error {
 }
 
 // handleRemoteList lists configured remotes
-func (f *FlatpakInstaller) handleRemoteList(args []string) error {
+func (f *FlatpakInstaller) handleRemoteList(ctx context.Context, args []string) error {
 	f.logger.Println("Configured Flatpak remotes:")
-	return sdk.ExecCommand(false, "flatpak", "remote-list")
+	return sdk.ExecCommandWithContext(ctx, false, "flatpak", "remote-list")
 }
 
 // remoteExists checks if a remote repository exists
-func (f *FlatpakInstaller) remoteExists(remoteName string) (bool, error) {
-	output, err := sdk.ExecCommandOutput("flatpak", "remote-list")
+func (f *FlatpakInstaller) remoteExists(ctx context.Context, remoteName string) (bool, error) {
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "remote-list")
 	if err != nil {
 		return false, err
 	}
@@ -145,17 +146,17 @@ func (f *FlatpakInstaller) hasSystemFlag(args []string) bool {
 	return false
 }
 
-// getFlathubURL returns the standard Flathub repository URL
-func (f *FlatpakInstaller) getFlathubURL() string {
+// GetFlathubURL returns the standard Flathub repository URL
+func (f *FlatpakInstaller) GetFlathubURL() string {
 	return "https://dl.flathub.org/repo/flathub.flatpakrepo"
 }
 
-// getKDEAppsURL returns the KDE Apps repository URL
-func (f *FlatpakInstaller) getKDEAppsURL() string {
+// GetKDEAppsURL returns the KDE Apps repository URL
+func (f *FlatpakInstaller) GetKDEAppsURL() string {
 	return "https://distribute.kde.org/kdeapps.flatpakrepo"
 }
 
-// getGnomeNightlyURL returns the GNOME Nightly repository URL
-func (f *FlatpakInstaller) getGnomeNightlyURL() string {
+// GetGnomeNightlyURL returns the GNOME Nightly repository URL
+func (f *FlatpakInstaller) GetGnomeNightlyURL() string {
 	return "https://nightly.gnome.org/gnome-nightly.flatpakrepo"
 }

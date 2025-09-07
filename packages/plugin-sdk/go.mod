@@ -1,6 +1,6 @@
 module github.com/jameswlane/devex/packages/plugin-sdk
 
-go 1.23.0
+go 1.24
 
 require (
 	github.com/onsi/ginkgo/v2 v2.25.2

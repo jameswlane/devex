@@ -4,21 +4,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
 // StackReport represents a comprehensive stack report
 type StackReport struct {
-	GeneratedAt     time.Time        `json:"generated_at"`
-	ProjectPath     string           `json:"project_path"`
-	Technologies    []Technology     `json:"technologies"`
-	Dependencies    []Dependency     `json:"dependencies"`
-	ProjectSize     ProjectSize      `json:"project_size"`
-	Recommendations []string         `json:"recommendations"`
-	Issues          []string         `json:"issues"`
-	Summary         ReportSummary    `json:"summary"`
+	GeneratedAt     time.Time     `json:"generated_at"`
+	ProjectPath     string        `json:"project_path"`
+	Technologies    []Technology  `json:"technologies"`
+	Dependencies    []Dependency  `json:"dependencies"`
+	ProjectSize     ProjectSize   `json:"project_size"`
+	Recommendations []string      `json:"recommendations"`
+	Issues          []string      `json:"issues"`
+	Summary         ReportSummary `json:"summary"`
 }
 
 // ReportSummary provides high-level project insights
@@ -63,7 +62,7 @@ func (p *StackDetectorPlugin) handleReport(args []string) error {
 	}
 
 	// Validate directory
-	if err := p.validateDirectory(dir); err != nil {
+	if err := p.ValidateDirectory(dir); err != nil {
 		return err
 	}
 
@@ -118,16 +117,16 @@ func (p *StackDetectorPlugin) generateReportSummary(analysis *ProjectAnalysis) R
 
 	// Determine primary language
 	summary.PrimaryLanguage = p.determinePrimaryLanguage(analysis.Technologies)
-	
+
 	// Determine project type
 	summary.ProjectType = p.determineProjectType(analysis.Technologies)
-	
+
 	// Assess complexity level
 	summary.ComplexityLevel = p.assessComplexityLevel(analysis)
-	
+
 	// Assess maturity level
 	summary.MaturityLevel = p.assessMaturityLevel(analysis)
-	
+
 	// Generate recommended action
 	summary.RecommendedAction = p.generateRecommendedAction(analysis)
 
@@ -357,7 +356,7 @@ summary:
   maturity_level: %s
   recommended_action: %s
 technologies:
-`, 
+`,
 		report.GeneratedAt.Format(time.RFC3339),
 		report.ProjectPath,
 		report.Summary.PrimaryLanguage,
@@ -367,7 +366,7 @@ technologies:
 		report.Summary.RecommendedAction)
 
 	for _, tech := range report.Technologies {
-		yaml += fmt.Sprintf("  - name: %s\n    category: %s\n    confidence: %d\n", 
+		yaml += fmt.Sprintf("  - name: %s\n    category: %s\n    confidence: %d\n",
 			tech.Name, tech.Category, tech.Confidence)
 	}
 

@@ -43,7 +43,7 @@ func (p *CurlpipePlugin) handleInstall(args []string) error {
 	dryRun := false
 	force := false
 	scriptURLs := []string{}
-	
+
 	for _, arg := range args {
 		switch arg {
 		case "--dry-run":
@@ -54,17 +54,17 @@ func (p *CurlpipePlugin) handleInstall(args []string) error {
 			scriptURLs = append(scriptURLs, arg)
 		}
 	}
-	
+
 	if len(scriptURLs) == 0 {
 		return fmt.Errorf("no URLs specified for installation")
 	}
 
 	// Validate all URLs first
 	for _, scriptURL := range scriptURLs {
-		if err := p.validateScriptURL(scriptURL); err != nil {
+		if err := p.ValidateScriptURL(scriptURL); err != nil {
 			return fmt.Errorf("invalid URL '%s': %w", scriptURL, err)
 		}
-		
+
 		// Validate trusted domain unless forced
 		if !force {
 			if err := p.validateTrustedDomain(scriptURL); err != nil {
@@ -74,22 +74,22 @@ func (p *CurlpipePlugin) handleInstall(args []string) error {
 	}
 
 	p.logger.Printf("Executing installation scripts: %s\n", strings.Join(scriptURLs, ", "))
-	
+
 	for _, scriptURL := range scriptURLs {
 		if dryRun {
 			p.logger.Printf("[DRY RUN] Would execute: curl -fsSL %s | sh\n", scriptURL)
 			continue
 		}
-		
+
 		// Execute the installation script
 		p.logger.Printf("Executing script from: %s\n", scriptURL)
 		curlCmd := fmt.Sprintf("curl -fsSL %s | sh", scriptURL)
 		if err := sdk.ExecCommand(true, "bash", "-c", curlCmd); err != nil {
 			return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
 		}
-		
+
 		p.logger.Success("Successfully executed script from %s", scriptURL)
-		
+
 		// Track installation (extract app name from URL)
 		appName := p.extractAppNameFromURL(scriptURL)
 		p.logger.Debug("Tracking installation: %s", appName)
@@ -114,7 +114,7 @@ func (p *CurlpipePlugin) handleRemove(args []string) error {
 	p.logger.Printf("Note: Curl pipe installations typically don't provide uninstall scripts\n")
 	p.logger.Printf("The following applications cannot be automatically uninstalled: %s\n", strings.Join(args, ", "))
 	p.logger.Printf("Manual removal may be required - check application documentation.\n")
-	
+
 	return nil
 }
 
@@ -123,27 +123,27 @@ func (p *CurlpipePlugin) handleValidateURL(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no URL specified")
 	}
-	
+
 	for _, scriptURL := range args {
-		if err := p.validateScriptURL(scriptURL); err != nil {
+		if err := p.ValidateScriptURL(scriptURL); err != nil {
 			p.logger.Printf("❌ %s: Invalid URL format - %v\n", scriptURL, err)
 			continue
 		}
-		
+
 		if err := p.validateTrustedDomain(scriptURL); err != nil {
 			p.logger.Printf("⚠️ %s: Untrusted domain - %v\n", scriptURL, err)
 		} else {
 			p.logger.Printf("✅ %s: Trusted domain\n", scriptURL)
 		}
 	}
-	
+
 	return nil
 }
 
 // handleListTrusted lists all trusted domains
 func (p *CurlpipePlugin) handleListTrusted(args []string) error {
 	p.logger.Printf("Trusted domains for curl pipe installations:\n")
-	trustedDomains := p.getTrustedDomains()
+	trustedDomains := p.GetTrustedDomains()
 	for i, domain := range trustedDomains {
 		p.logger.Printf("%d. %s\n", i+1, domain)
 	}

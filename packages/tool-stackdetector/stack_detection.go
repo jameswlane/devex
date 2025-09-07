@@ -14,14 +14,14 @@ func (p *StackDetectorPlugin) handleDetect(args []string) error {
 	}
 
 	// Validate directory
-	if err := p.validateDirectory(dir); err != nil {
+	if err := p.ValidateDirectory(dir); err != nil {
 		return err
 	}
 
 	fmt.Printf("🔍 Detecting development stack in: %s\n", dir)
 
 	// Perform detection
-	technologies := p.detectStack(dir)
+	technologies := p.DetectStack(dir)
 	if len(technologies) == 0 {
 		fmt.Println("❌ No recognizable technology stack detected")
 		fmt.Println("💡 This might be a new project or use uncommon technologies")
@@ -34,8 +34,8 @@ func (p *StackDetectorPlugin) handleDetect(args []string) error {
 	return nil
 }
 
-// validateDirectory ensures the target directory exists and is accessible
-func (p *StackDetectorPlugin) validateDirectory(dir string) error {
+// ValidateDirectory ensures the target directory exists and is accessible
+func (p *StackDetectorPlugin) ValidateDirectory(dir string) error {
 	absPath, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("invalid directory path: %w", err)
@@ -65,7 +65,7 @@ func (p *StackDetectorPlugin) displayDetectionResults(technologies []Technology)
 
 	// Display by category
 	categoryOrder := []string{"Language", "Runtime", "Framework", "Build System", "Package Manager", "Build Tool", "CSS Framework", "Containerization", "Orchestration", "Version Control", "Dependencies", "Build Output", "Virtual Environment", "Linting", "Code Formatting"}
-	
+
 	for _, category := range categoryOrder {
 		if techs, exists := categories[category]; exists {
 			fmt.Printf("📂 %s:\n", category)

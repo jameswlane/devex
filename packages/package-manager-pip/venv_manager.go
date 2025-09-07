@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -9,7 +10,7 @@ import (
 )
 
 // handleCreateVenv creates a Python virtual environment
-func (p *PipPlugin) handleCreateVenv(args []string) error {
+func (p *PipPlugin) handleCreateVenv(ctx context.Context, args []string) error {
 	venvName := "venv"
 
 	// Process arguments for custom venv name
@@ -36,9 +37,9 @@ func (p *PipPlugin) handleCreateVenv(args []string) error {
 	}
 
 	// Create virtual environment
-	if err := sdk.ExecCommand(true, "python3", "-m", "venv", venvName); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "python3", "-m", "venv", venvName); err != nil {
 		// Try python if python3 is not available
-		if err2 := sdk.ExecCommand(true, "python", "-m", "venv", venvName); err2 != nil {
+		if err2 := sdk.ExecCommandWithContext(ctx, true, "python", "-m", "venv", venvName); err2 != nil {
 			return fmt.Errorf("failed to create virtual environment: %w (also tried python: %v)", err, err2)
 		}
 	}
@@ -49,7 +50,7 @@ func (p *PipPlugin) handleCreateVenv(args []string) error {
 }
 
 // isVirtualEnvActive checks if a virtual environment is currently active
-func (p *PipPlugin) isVirtualEnvActive() bool {
+func (p *PipPlugin) isVirtualEnvActive(ctx context.Context) bool {
 	// Check VIRTUAL_ENV environment variable
 	if os.Getenv("VIRTUAL_ENV") != "" {
 		return true
@@ -61,7 +62,7 @@ func (p *PipPlugin) isVirtualEnvActive() bool {
 	}
 
 	// Check if pip executable is in a virtual environment path
-	if output, err := sdk.ExecCommandOutput("which", "pip"); err == nil {
+	if output, err := sdk.ExecCommandOutputWithContext(ctx, "which", "pip"); err == nil {
 		if strings.Contains(output, "venv") || strings.Contains(output, "virtualenv") || strings.Contains(output, "conda") {
 			return true
 		}

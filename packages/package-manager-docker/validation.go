@@ -17,8 +17,8 @@ const (
 	MaxCommandLength = 1000
 )
 
-// validateImageName validates Docker image names
-func (d *DockerInstaller) validateImageName(imageName string) error {
+// ValidateImageName validates Docker image names
+func (d *DockerInstaller) ValidateImageName(imageName string) error {
 	if imageName == "" {
 		return fmt.Errorf("image name cannot be empty")
 	}
@@ -44,8 +44,8 @@ func (d *DockerInstaller) validateImageName(imageName string) error {
 	return nil
 }
 
-// validateContainerName validates Docker container names
-func (d *DockerInstaller) validateContainerName(containerName string) error {
+// ValidateContainerName validates Docker container names
+func (d *DockerInstaller) ValidateContainerName(containerName string) error {
 	if containerName == "" {
 		return fmt.Errorf("container name cannot be empty")
 	}
@@ -70,18 +70,18 @@ func (d *DockerInstaller) validateContainerName(containerName string) error {
 	return nil
 }
 
-// validateCommand validates command arguments to prevent injection
-func (d *DockerInstaller) validateCommand(args []string) error {
+// ValidateCommand validates command arguments to prevent injection
+func (d *DockerInstaller) ValidateCommand(args []string) error {
 	for _, arg := range args {
-		if err := d.validateCommandArg(arg); err != nil {
+		if err := d.ValidateCommandArg(arg); err != nil {
 			return fmt.Errorf("invalid command argument '%s': %w", arg, err)
 		}
 	}
 	return nil
 }
 
-// validateCommandArg validates individual command arguments
-func (d *DockerInstaller) validateCommandArg(arg string) error {
+// ValidateCommandArg validates individual command arguments
+func (d *DockerInstaller) ValidateCommandArg(arg string) error {
 	if arg == "" {
 		return fmt.Errorf("argument cannot be empty")
 	}
@@ -108,8 +108,8 @@ func (d *DockerInstaller) validateCommandArg(arg string) error {
 	return nil
 }
 
-// validatePortMapping validates Docker port mappings
-func (d *DockerInstaller) validatePortMapping(portMapping string) error {
+// ValidatePortMapping validates Docker port mappings
+func (d *DockerInstaller) ValidatePortMapping(portMapping string) error {
 	if portMapping == "" {
 		return fmt.Errorf("port mapping cannot be empty")
 	}
@@ -123,16 +123,16 @@ func (d *DockerInstaller) validatePortMapping(portMapping string) error {
 	return nil
 }
 
-// sanitizeOutput sanitizes command output for safe logging
-func (d *DockerInstaller) sanitizeOutput(output string) string {
+// SanitizeOutput sanitizes command output for safe logging
+func (d *DockerInstaller) SanitizeOutput(output string) string {
 	// Remove null bytes
 	output = strings.ReplaceAll(output, "\x00", "")
-	
+
 	// Limit output length for logging
 	const maxLogLength = 1000
 	if len(output) > maxLogLength {
 		output = output[:maxLogLength] + "...[truncated]"
 	}
-	
+
 	return output
 }

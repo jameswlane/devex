@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ type APTSource struct {
 }
 
 // handleAddRepository adds a new APT repository with GPG key management
-func (a *APTInstaller) handleAddRepository(args []string) error {
+func (a *APTInstaller) handleAddRepository(ctx context.Context, args []string) error {
 	a.logger.Printf("Adding APT repository...\n")
 
 	// For now, we'll implement basic repository addition
@@ -44,22 +45,22 @@ func (a *APTInstaller) handleAddRepository(args []string) error {
 	}
 
 	// Step 2: Download and install GPG key
-	if err := a.downloadAndInstallGPGKey(source); err != nil {
+	if err := a.downloadAndInstallGPGKey(ctx, source); err != nil {
 		return fmt.Errorf("failed to install GPG key: %w", err)
 	}
 
 	// Step 3: Add repository source
-	if err := a.addRepositorySource(source); err != nil {
+	if err := a.addRepositorySource(ctx, source); err != nil {
 		return fmt.Errorf("failed to add repository source: %w", err)
 	}
 
 	// Step 4: Update package lists
-	if err := a.handleUpdate([]string{}); err != nil {
+	if err := a.handleUpdate(ctx, []string{}); err != nil {
 		a.logger.Warning("Failed to update package lists after adding repository: %v", err)
 	}
 
 	// Step 5: Validate the repository
-	if err := a.validateRepositorySource(source); err != nil {
+	if err := a.validateRepositorySource(ctx, source); err != nil {
 		a.logger.Warning("Repository validation failed: %v", err)
 		return fmt.Errorf("repository added but validation failed: %w", err)
 	}
@@ -69,7 +70,7 @@ func (a *APTInstaller) handleAddRepository(args []string) error {
 }
 
 // addRepositorySource adds the repository source line to the system
-func (a *APTInstaller) addRepositorySource(source APTSource) error {
+func (a *APTInstaller) addRepositorySource(ctx context.Context, source APTSource) error {
 	a.logger.Printf("Adding repository source to %s\n", source.SourceFile)
 
 	// Check if source file already exists
@@ -110,7 +111,7 @@ func (a *APTInstaller) addRepositorySource(source APTSource) error {
 	}
 
 	// Move temporary file to final location with sudo
-	if err := sdk.ExecCommand(true, "mv", tempFile, source.SourceFile); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "mv", tempFile, source.SourceFile); err != nil {
 		if rmErr := os.Remove(tempFile); rmErr != nil {
 			a.logger.Warning("Failed to remove temporary file: %v", rmErr)
 		}
@@ -123,7 +124,7 @@ func (a *APTInstaller) addRepositorySource(source APTSource) error {
 	}
 
 	// Set proper permissions
-	if err := sdk.ExecCommand(true, "chmod", "644", source.SourceFile); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "chmod", "644", source.SourceFile); err != nil {
 		a.logger.Warning("Failed to set source file permissions: %v", err)
 	}
 
@@ -132,7 +133,7 @@ func (a *APTInstaller) addRepositorySource(source APTSource) error {
 }
 
 // validateRepositorySource validates that the repository and key are properly configured
-func (a *APTInstaller) validateRepositorySource(source APTSource) error {
+func (a *APTInstaller) validateRepositorySource(ctx context.Context, source APTSource) error {
 	a.logger.Printf("Validating repository configuration\n")
 
 	// Check if key file exists
@@ -152,7 +153,7 @@ func (a *APTInstaller) validateRepositorySource(source APTSource) error {
 
 	// Test APT configuration
 	a.logger.Debug("Testing APT configuration validity")
-	if err := sdk.ExecCommand(false, "apt-get", "update", "-o", "Dir::Etc::sourcelist=/dev/null", "-o", fmt.Sprintf("Dir::Etc::sourceparts=%s", filepath.Dir(source.SourceFile))); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "apt-get", "update", "-o", "Dir::Etc::sourcelist=/dev/null", "-o", fmt.Sprintf("Dir::Etc::sourceparts=%s", filepath.Dir(source.SourceFile))); err != nil {
 		return fmt.Errorf("repository configuration test failed: %w", err)
 	}
 
@@ -161,7 +162,7 @@ func (a *APTInstaller) validateRepositorySource(source APTSource) error {
 }
 
 // handleRemoveRepository removes a repository and its associated GPG key
-func (a *APTInstaller) handleRemoveRepository(args []string) error {
+func (a *APTInstaller) handleRemoveRepository(ctx context.Context, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("remove-repository requires: source-file key-path")
 	}
@@ -181,7 +182,7 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 		errors = append(errors, errMsg)
 	} else {
 		// Remove source file
-		if err := sdk.ExecCommand(true, "rm", "-f", sourceFile); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, true, "rm", "-f", sourceFile); err != nil {
 			a.logger.Warning("Failed to remove source file: %v", err)
 			errors = append(errors, fmt.Sprintf("Failed to remove source file: %v", err))
 		} else {
@@ -197,7 +198,7 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 		errors = append(errors, errMsg)
 	} else {
 		// Remove key file
-		if err := sdk.ExecCommand(true, "rm", "-f", keyPath); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, true, "rm", "-f", keyPath); err != nil {
 			a.logger.Warning("Failed to remove key file: %v", err)
 			errors = append(errors, fmt.Sprintf("Failed to remove key file: %v", err))
 		} else {
@@ -206,7 +207,7 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 	}
 
 	// Update package lists
-	if err := a.handleUpdate([]string{}); err != nil {
+	if err := a.handleUpdate(ctx, []string{}); err != nil {
 		a.logger.Warning("Failed to update package lists after removing repository: %v", err)
 	}
 
@@ -221,16 +222,16 @@ func (a *APTInstaller) handleRemoveRepository(args []string) error {
 }
 
 // handleValidateRepository validates existing repository configurations
-func (a *APTInstaller) handleValidateRepository(args []string) error {
+func (a *APTInstaller) handleValidateRepository(ctx context.Context, args []string) error {
 	a.logger.Printf("Validating repository configurations\n")
 
 	// Check if APT configuration is valid
-	if err := sdk.ExecCommand(false, "apt-get", "check"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "apt-get", "check"); err != nil {
 		return fmt.Errorf("APT configuration validation failed: %w", err)
 	}
 
 	// Check for broken repositories
-	output, err := sdk.ExecCommandOutput("apt-get", "update")
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "apt-get", "update")
 	if err != nil {
 		a.logger.Warning("Some repositories may have issues: %v", err)
 		if strings.Contains(output, "NO_PUBKEY") {
@@ -244,7 +245,7 @@ func (a *APTInstaller) handleValidateRepository(args []string) error {
 
 	// List configured repositories
 	a.logger.Printf("Configured repositories:\n")
-	if err := sdk.ExecCommand(false, "apt-cache", "policy"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "apt-cache", "policy"); err != nil {
 		a.logger.Warning("Failed to list repository policies: %v", err)
 	}
 

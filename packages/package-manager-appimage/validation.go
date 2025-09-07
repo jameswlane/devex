@@ -117,29 +117,29 @@ func (p *AppimagePlugin) validateBinaryName(binaryName string) error {
 	return nil
 }
 
-// validateInstallLocation validates installation location
-func (p *AppimagePlugin) validateInstallLocation(location string) error {
+// ValidateInstallLocation validates installation location
+func (p *AppimagePlugin) ValidateInstallLocation(location string) error {
 	validLocations := []string{"gui", "cli"}
-	
+
 	for _, valid := range validLocations {
 		if location == valid {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("invalid install location '%s', must be 'gui' or 'cli'", location)
 }
 
-// sanitizeOutput sanitizes command output for safe logging
-func (p *AppimagePlugin) sanitizeOutput(output string) string {
+// SanitizeOutput sanitizes command output for safe logging
+func (p *AppimagePlugin) SanitizeOutput(output string) string {
 	// Remove null bytes
 	output = strings.ReplaceAll(output, "\x00", "")
-	
+
 	// Limit output length for logging
 	const maxLogLength = 1000
 	if len(output) > maxLogLength {
 		output = output[:maxLogLength] + "...[truncated]"
 	}
-	
+
 	return output
 }

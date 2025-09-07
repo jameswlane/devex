@@ -3,6 +3,7 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -64,23 +65,25 @@ func NewPacmanPlugin() *PacmanPlugin {
 func (p *PacmanPlugin) Execute(command string, args []string) error {
 	p.EnsureAvailable()
 
+	ctx := context.Background()
+
 	switch command {
 	case "install":
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
-		return p.handleRemove(args)
+		return p.handleRemove(ctx, args)
 	case "update":
-		return p.handleUpdate(args)
+		return p.handleUpdate(ctx, args)
 	case "search":
-		return p.handleSearch(args)
+		return p.handleSearch(ctx, args)
 	case "list":
-		return p.handleList(args)
+		return p.handleList(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (p *PacmanPlugin) handleInstall(args []string) error {
+func (p *PacmanPlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -89,10 +92,10 @@ func (p *PacmanPlugin) handleInstall(args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "pacman", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "pacman", cmdArgs...)
 }
 
-func (p *PacmanPlugin) handleRemove(args []string) error {
+func (p *PacmanPlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -100,15 +103,15 @@ func (p *PacmanPlugin) handleRemove(args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "pacman", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "pacman", cmdArgs...)
 }
 
-func (p *PacmanPlugin) handleUpdate(args []string) error {
+func (p *PacmanPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "pacman", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "pacman", "update")
 }
 
-func (p *PacmanPlugin) handleSearch(args []string) error {
+func (p *PacmanPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -116,11 +119,11 @@ func (p *PacmanPlugin) handleSearch(args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommand(false, "pacman", "search", searchTerm)
+	return sdk.ExecCommandWithContext(ctx, false, "pacman", "search", searchTerm)
 }
 
-func (p *PacmanPlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "pacman", "list")
+func (p *PacmanPlugin) handleList(ctx context.Context, args []string) error {
+	return sdk.ExecCommandWithContext(ctx, false, "pacman", "list")
 }
 
 func main() {

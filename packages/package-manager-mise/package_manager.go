@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -19,24 +20,26 @@ func (m *MisePlugin) InitLogger(logger sdk.Logger) {
 
 // Execute handles command execution
 func (m *MisePlugin) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	// Ensure Mise is available
 	m.EnsureAvailable()
 
 	switch command {
 	case "install":
-		return m.HandleInstall(args)
+		return m.HandleInstall(ctx, args)
 	case "remove":
-		return m.HandleRemove(args)
+		return m.HandleRemove(ctx, args)
 	case "update":
-		return m.HandleUpdate(args)
+		return m.HandleUpdate(ctx, args)
 	case "search":
-		return m.HandleSearch(args)
+		return m.HandleSearch(ctx, args)
 	case "list":
-		return m.HandleList(args)
+		return m.HandleList(ctx, args)
 	case "ensure-installed":
-		return m.HandleEnsureInstalled(args)
+		return m.HandleEnsureInstalled(ctx, args)
 	case "is-installed":
-		return m.HandleIsInstalled(args)
+		return m.HandleIsInstalled(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}

@@ -1,17 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
 // handleConfig displays and manages current shell configuration settings
-func (p *ShellPlugin) handleConfig(args []string) error {
+func (p *ShellPlugin) handleConfig(ctx context.Context, args []string) error {
 	fmt.Println("Shell Configuration Status:")
 
-	currentShell := p.detectCurrentShell()
+	currentShell := p.DetectCurrentShell()
 	if currentShell == "unknown" {
 		return fmt.Errorf("could not detect current shell")
 	}
@@ -25,14 +25,14 @@ func (p *ShellPlugin) handleConfig(args []string) error {
 	fmt.Printf("Current shell: %s\n", currentShell)
 
 	// Get configuration file path
-	rcFile := p.getShellConfigFile(currentShell, homeDir)
+	rcFile := p.GetShellConfigFile(currentShell, homeDir)
 	if rcFile == "" {
 		return fmt.Errorf("unsupported shell: %s", currentShell)
 	}
 
 	fmt.Printf("Configuration file: %s\n", rcFile)
 
-	// Check if configuration file exists
+	// Check if a configuration file exists
 	if err := p.checkConfigurationStatus(rcFile); err != nil {
 		return err
 	}

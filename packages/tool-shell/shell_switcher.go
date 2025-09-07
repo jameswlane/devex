@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,7 +9,7 @@ import (
 )
 
 // handleSwitch changes the default shell to the specified target shell
-func (p *ShellPlugin) handleSwitch(args []string) error {
+func (p *ShellPlugin) handleSwitch(ctx context.Context, args []string) error {
 	if len(args) < 1 {
 		return fmt.Errorf("shell switch requires a target shell (bash, zsh, fish)")
 	}
@@ -17,18 +18,18 @@ func (p *ShellPlugin) handleSwitch(args []string) error {
 	fmt.Printf("Switching to %s shell...\n", targetShell)
 
 	// Validate target shell
-	if err := p.validateShell(targetShell); err != nil {
+	if err := p.ValidateShell(targetShell); err != nil {
 		return err
 	}
 
-	// Check if target shell is installed
+	// Check if the target shell is installed
 	shellPath, err := p.getShellPath(targetShell)
 	if err != nil {
 		return err
 	}
 
 	// Change default shell
-	if err := p.changeDefaultShell(shellPath); err != nil {
+	if err := p.changeDefaultShell(ctx, shellPath); err != nil {
 		return err
 	}
 
@@ -38,8 +39,8 @@ func (p *ShellPlugin) handleSwitch(args []string) error {
 	return nil
 }
 
-// validateShell validates that the target shell is supported
-func (p *ShellPlugin) validateShell(shell string) error {
+// ValidateShell validates that the target shell is supported
+func (p *ShellPlugin) ValidateShell(shell string) error {
 	validShells := []string{"bash", "zsh", "fish"}
 	for _, validShell := range validShells {
 		if shell == validShell {
@@ -59,9 +60,9 @@ func (p *ShellPlugin) getShellPath(shell string) (string, error) {
 }
 
 // changeDefaultShell changes the user's default shell using chsh
-func (p *ShellPlugin) changeDefaultShell(shellPath string) error {
+func (p *ShellPlugin) changeDefaultShell(ctx context.Context, shellPath string) error {
 	fmt.Printf("Changing default shell to %s...\n", shellPath)
-	if err := sdk.ExecCommand(true, "chsh", "-s", shellPath); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "chsh", "-s", shellPath); err != nil {
 		return fmt.Errorf("failed to change shell: %w", err)
 	}
 	return nil

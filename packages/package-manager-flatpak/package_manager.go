@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -25,11 +26,13 @@ type FlatpakVersion struct {
 
 // Execute handles command execution
 func (f *FlatpakInstaller) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	switch command {
 	case "ensure-installed":
-		return f.handleEnsureInstalled(args)
+		return f.handleEnsureInstalled(ctx, args)
 	case "add-flathub":
-		return f.handleAddFlathub(args)
+		return f.handleAddFlathub(ctx, args)
 	}
 
 	// For all other commands, ensure Flatpak is available
@@ -37,25 +40,25 @@ func (f *FlatpakInstaller) Execute(command string, args []string) error {
 
 	switch command {
 	case "install":
-		return f.handleInstall(args)
+		return f.handleInstall(ctx, args)
 	case "remove":
-		return f.handleRemove(args)
+		return f.handleRemove(ctx, args)
 	case "update":
-		return f.handleUpdate(args)
+		return f.handleUpdate(ctx, args)
 	case "search":
-		return f.handleSearch(args)
+		return f.handleSearch(ctx, args)
 	case "list":
-		return f.handleList(args)
+		return f.handleList(ctx, args)
 	case "remote-add":
-		return f.handleRemoteAdd(args)
+		return f.handleRemoteAdd(ctx, args)
 	case "remote-remove":
-		return f.handleRemoteRemove(args)
+		return f.handleRemoteRemove(ctx, args)
 	case "remote-list":
-		return f.handleRemoteList(args)
+		return f.handleRemoteList(ctx, args)
 	case "is-installed":
-		return f.handleIsInstalled(args)
+		return f.handleIsInstalled(ctx, args)
 	case "info":
-		return f.handleInfo(args)
+		return f.handleInfo(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
@@ -67,7 +70,7 @@ func (f *FlatpakInstaller) getFlatpakVersion() (*FlatpakVersion, error) {
 		return f.flatpakVersion, nil
 	}
 
-	output, err := sdk.ExecCommandOutput("flatpak", "--version")
+	output, err := sdk.ExecCommandOutputWithContext(context.Background(), "flatpak", "--version")
 	if err != nil {
 		return nil, fmt.Errorf("failed to detect Flatpak version: %w", err)
 	}
@@ -85,9 +88,9 @@ func (f *FlatpakInstaller) getFlatpakVersion() (*FlatpakVersion, error) {
 	}
 
 	var major, minor, patch int
-	fmt.Sscanf(matches[1], "%d", &major)
-	fmt.Sscanf(matches[2], "%d", &minor)
-	fmt.Sscanf(matches[3], "%d", &patch)
+	_, _ = fmt.Sscanf(matches[1], "%d", &major)
+	_, _ = fmt.Sscanf(matches[2], "%d", &minor)
+	_, _ = fmt.Sscanf(matches[3], "%d", &patch)
 
 	f.flatpakVersion = &FlatpakVersion{
 		Major: major,
@@ -112,7 +115,7 @@ func parseFlatpakCommand(command string) (remote string, appID string) {
 }
 
 // handleInstall installs Flatpak applications
-func (f *FlatpakInstaller) handleInstall(args []string) error {
+func (f *FlatpakInstaller) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no applications specified")
 	}
@@ -126,9 +129,9 @@ func (f *FlatpakInstaller) handleInstall(args []string) error {
 
 		// Parse app command
 		remote, appID := parseFlatpakCommand(app)
-		
+
 		// Check if already installed
-		if installed, _ := f.isAppInstalled(appID); installed {
+		if installed, _ := f.isAppInstalled(ctx, appID); installed {
 			f.logger.Printf("Application %s is already installed, skipping\n", appID)
 			continue
 		}
@@ -142,7 +145,7 @@ func (f *FlatpakInstaller) handleInstall(args []string) error {
 		}
 
 		f.logger.Printf("Installing %s...\n", appID)
-		if err := sdk.ExecCommand(false, "flatpak", installCmd...); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", installCmd...); err != nil {
 			return fmt.Errorf("failed to install %s: %w", appID, err)
 		}
 	}
@@ -152,7 +155,7 @@ func (f *FlatpakInstaller) handleInstall(args []string) error {
 }
 
 // handleRemove removes Flatpak applications
-func (f *FlatpakInstaller) handleRemove(args []string) error {
+func (f *FlatpakInstaller) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no applications specified")
 	}
@@ -164,13 +167,13 @@ func (f *FlatpakInstaller) handleRemove(args []string) error {
 			return fmt.Errorf("invalid application ID '%s': %w", app, err)
 		}
 
-		if installed, _ := f.isAppInstalled(app); !installed {
+		if installed, _ := f.isAppInstalled(ctx, app); !installed {
 			f.logger.Printf("Application %s is not installed, skipping\n", app)
 			continue
 		}
 
 		f.logger.Printf("Removing %s...\n", app)
-		if err := sdk.ExecCommand(false, "flatpak", "uninstall", "-y", app); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", "uninstall", "-y", app); err != nil {
 			return fmt.Errorf("failed to remove %s: %w", app, err)
 		}
 	}
@@ -180,10 +183,10 @@ func (f *FlatpakInstaller) handleRemove(args []string) error {
 }
 
 // handleUpdate updates all installed applications and runtimes
-func (f *FlatpakInstaller) handleUpdate(args []string) error {
+func (f *FlatpakInstaller) handleUpdate(ctx context.Context, args []string) error {
 	f.logger.Println("Updating all installed applications and runtimes...")
-	
-	if err := sdk.ExecCommand(false, "flatpak", "update", "-y"); err != nil {
+
+	if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", "update", "-y"); err != nil {
 		return fmt.Errorf("failed to update applications: %w", err)
 	}
 
@@ -192,7 +195,7 @@ func (f *FlatpakInstaller) handleUpdate(args []string) error {
 }
 
 // handleSearch searches for applications
-func (f *FlatpakInstaller) handleSearch(args []string) error {
+func (f *FlatpakInstaller) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -203,14 +206,14 @@ func (f *FlatpakInstaller) handleSearch(args []string) error {
 	}
 
 	f.logger.Printf("Searching for: %s\n", searchTerm)
-	return sdk.ExecCommand(false, "flatpak", "search", searchTerm)
+	return sdk.ExecCommandWithContext(ctx, false, "flatpak", "search", searchTerm)
 }
 
 // handleList lists installed applications
-func (f *FlatpakInstaller) handleList(args []string) error {
+func (f *FlatpakInstaller) handleList(ctx context.Context, args []string) error {
 	// Default to listing applications
 	listArgs := []string{"list", "--app"}
-	
+
 	// Handle specific flags
 	for _, arg := range args {
 		switch arg {
@@ -221,11 +224,11 @@ func (f *FlatpakInstaller) handleList(args []string) error {
 		}
 	}
 
-	return sdk.ExecCommand(false, "flatpak", listArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "flatpak", listArgs...)
 }
 
 // handleIsInstalled checks if applications are installed
-func (f *FlatpakInstaller) handleIsInstalled(args []string) error {
+func (f *FlatpakInstaller) handleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no applications specified")
 	}
@@ -236,7 +239,7 @@ func (f *FlatpakInstaller) handleIsInstalled(args []string) error {
 			return fmt.Errorf("invalid application ID '%s': %w", app, err)
 		}
 
-		installed, err := f.isAppInstalled(app)
+		installed, err := f.isAppInstalled(ctx, app)
 		if err != nil {
 			return fmt.Errorf("failed to check installation status of %s: %w", app, err)
 		}
@@ -256,7 +259,7 @@ func (f *FlatpakInstaller) handleIsInstalled(args []string) error {
 }
 
 // handleInfo shows application information
-func (f *FlatpakInstaller) handleInfo(args []string) error {
+func (f *FlatpakInstaller) handleInfo(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no application specified")
 	}
@@ -267,11 +270,11 @@ func (f *FlatpakInstaller) handleInfo(args []string) error {
 		}
 
 		f.logger.Printf("Information for: %s\n", app)
-		
-		if err := sdk.ExecCommand(false, "flatpak", "info", app); err != nil {
+
+		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", "info", app); err != nil {
 			f.logger.ErrorMsg("Failed to get info for %s: %v", app, err)
 		}
-		
+
 		if i < len(args)-1 {
 			fmt.Println("---")
 		}
@@ -281,8 +284,8 @@ func (f *FlatpakInstaller) handleInfo(args []string) error {
 }
 
 // isAppInstalled checks if a Flatpak application is installed
-func (f *FlatpakInstaller) isAppInstalled(appID string) (bool, error) {
-	output, err := sdk.ExecCommandOutput("flatpak", "list", "--app")
+func (f *FlatpakInstaller) isAppInstalled(ctx context.Context, appID string) (bool, error) {
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "flatpak", "list", "--app")
 	if err != nil {
 		return false, err
 	}

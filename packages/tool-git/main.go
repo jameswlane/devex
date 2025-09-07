@@ -47,7 +47,6 @@ func NewGitPlugin() *GitPlugin {
 	}
 }
 
-
 func main() {
 	plugin := NewGitPlugin()
 	sdk.HandleArgs(plugin, os.Args[1:])

@@ -2,14 +2,7 @@ package main
 
 import (
 	"fmt"
-
-	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
-
-// StackDetectorPlugin implements the Stack detection plugin
-type StackDetectorPlugin struct {
-	*sdk.BasePlugin
-}
 
 // Execute handles command execution
 func (p *StackDetectorPlugin) Execute(command string, args []string) error {

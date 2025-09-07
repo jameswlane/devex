@@ -26,10 +26,10 @@ func NewDebPlugin() *DebInstaller {
 				Description: "Install .deb packages from file or URL",
 				Usage:       "Install one or more .deb packages with automatic dependency resolution",
 				Flags: map[string]string{
-					"force":          "Force installation even if dependencies are missing",
-					"no-deps":        "Skip dependency installation",
-					"download-only":  "Download packages without installing",
-					"target-dir":     "Directory to download packages to",
+					"force":         "Force installation even if dependencies are missing",
+					"no-deps":       "Skip dependency installation",
+					"download-only": "Download packages without installing",
+					"target-dir":    "Directory to download packages to",
 				},
 			},
 			{
@@ -79,7 +79,7 @@ func NewDebPlugin() *DebInstaller {
 
 func main() {
 	plugin := NewDebPlugin()
-	
+
 	// Handle args with panic recovery
 	defer func() {
 		if r := recover(); r != nil {
@@ -87,6 +87,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	
+
 	sdk.HandleArgs(plugin, os.Args[1:])
 }

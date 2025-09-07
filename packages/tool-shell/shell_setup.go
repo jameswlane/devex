@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,11 +9,11 @@ import (
 )
 
 // handleSetup initializes shell configuration with sensible defaults
-func (p *ShellPlugin) handleSetup(args []string) error {
+func (p *ShellPlugin) handleSetup(ctx context.Context, args []string) error {
 	fmt.Println("Setting up shell configuration...")
 
 	// Detect current shell
-	currentShell := p.detectCurrentShell()
+	currentShell := p.DetectCurrentShell()
 	fmt.Printf("Current shell: %s\n", currentShell)
 
 	if currentShell == "unknown" {
@@ -25,12 +26,12 @@ func (p *ShellPlugin) handleSetup(args []string) error {
 	}
 
 	// Get shell configuration file path
-	rcFile := p.getShellConfigFile(currentShell, homeDir)
+	rcFile := p.GetShellConfigFile(currentShell, homeDir)
 	if rcFile == "" {
 		return fmt.Errorf("unsupported shell: %s", currentShell)
 	}
 
-	// Create RC file if it doesn't exist
+	// Create an RC file if it doesn't exist
 	if err := p.createShellConfigFile(currentShell, rcFile); err != nil {
 		return err
 	}
@@ -43,8 +44,8 @@ func (p *ShellPlugin) handleSetup(args []string) error {
 	return nil
 }
 
-// getShellConfigFile returns the configuration file path for the given shell
-func (p *ShellPlugin) getShellConfigFile(shell, homeDir string) string {
+// GetShellConfigFile returns the configuration file path for the given shell
+func (p *ShellPlugin) GetShellConfigFile(shell, homeDir string) string {
 	switch shell {
 	case "bash":
 		return filepath.Join(homeDir, ".bashrc")
@@ -60,7 +61,7 @@ func (p *ShellPlugin) getShellConfigFile(shell, homeDir string) string {
 // createShellConfigFile creates the shell configuration file if it doesn't exist
 func (p *ShellPlugin) createShellConfigFile(shell, rcFile string) error {
 	if _, err := os.Stat(rcFile); os.IsNotExist(err) {
-		// Create parent directory for fish
+		// Create a parent directory for fish
 		if shell == "fish" {
 			fishDir := filepath.Dir(rcFile)
 			if err := os.MkdirAll(fishDir, 0755); err != nil {
@@ -80,7 +81,7 @@ func (p *ShellPlugin) createShellConfigFile(shell, rcFile string) error {
 // addShellConfigurations adds DevEx configurations to the shell RC file
 func (p *ShellPlugin) addShellConfigurations(shell, rcFile string) error {
 	// Get shell-specific configurations
-	configs := p.getShellConfigs(shell)
+	configs := p.GetShellConfigs(shell)
 
 	// Read existing content
 	content, err := os.ReadFile(rcFile)
@@ -121,8 +122,8 @@ func (p *ShellPlugin) addShellConfigurations(shell, rcFile string) error {
 	return nil
 }
 
-// getShellConfigs returns shell-specific configurations
-func (p *ShellPlugin) getShellConfigs(shell string) []string {
+// GetShellConfigs returns shell-specific configurations
+func (p *ShellPlugin) GetShellConfigs(shell string) []string {
 	switch shell {
 	case "bash":
 		return []string{

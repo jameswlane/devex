@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,11 +11,11 @@ import (
 )
 
 // HandleEnsureInstalled ensures Mise is installed on the system
-func (m *MisePlugin) HandleEnsureInstalled(args []string) error {
+func (m *MisePlugin) HandleEnsureInstalled(ctx context.Context, args []string) error {
 	m.logger.Println("Checking if Mise is installed...")
 
 	// Check if mise is already in PATH
-	if err := sdk.ExecCommand(false, "which", "mise"); err == nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "which", "mise"); err == nil {
 		m.logger.Success("Mise is already installed")
 		return nil
 	}
@@ -22,7 +23,7 @@ func (m *MisePlugin) HandleEnsureInstalled(args []string) error {
 	m.logger.Println("Mise not found, installing...")
 
 	// Install Mise using the official installation script
-	if err := m.installMise(); err != nil {
+	if err := m.installMise(ctx); err != nil {
 		return fmt.Errorf("failed to install Mise: %w", err)
 	}
 
@@ -37,12 +38,12 @@ func (m *MisePlugin) HandleEnsureInstalled(args []string) error {
 }
 
 // installMise installs Mise using the official installation script
-func (m *MisePlugin) installMise() error {
+func (m *MisePlugin) installMise(ctx context.Context) error {
 	m.logger.Println("Downloading and installing Mise...")
 
 	// Use curl to download and execute the installation script
 	installCmd := "curl https://mise.run | sh"
-	if err := sdk.ExecCommand(false, "sh", "-c", installCmd); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "sh", "-c", installCmd); err != nil {
 		return fmt.Errorf("failed to download and install Mise: %w", err)
 	}
 
@@ -57,9 +58,10 @@ func (m *MisePlugin) configureShellIntegration() error {
 	}
 
 	// Detect shell and configure accordingly
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash" // Default fallback
+	shell, err := sdk.SafeGetEnvWithDefault("SHELL", "/bin/bash")
+	if err != nil {
+		m.logger.Warning("SHELL environment variable validation failed: %v, using default", err)
+		shell = "/bin/bash"
 	}
 
 	shellName := filepath.Base(shell)

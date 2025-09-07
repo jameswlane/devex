@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -15,31 +16,33 @@ type DebInstaller struct {
 
 // Execute handles command execution
 func (d *DebInstaller) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	// Ensure dpkg is available
 	d.EnsureAvailable()
 
 	switch command {
 	case "install":
-		return d.handleInstall(args)
+		return d.handleInstall(ctx, args)
 	case "remove":
-		return d.handleRemove(args)
+		return d.handleRemove(ctx, args)
 	case "info":
-		return d.handleInfo(args)
+		return d.handleInfo(ctx, args)
 	case "list-files":
-		return d.handleListFiles(args)
+		return d.handleListFiles(ctx, args)
 	case "verify":
-		return d.handleVerify(args)
+		return d.handleVerify(ctx, args)
 	case "is-installed":
-		return d.handleIsInstalled(args)
+		return d.handleIsInstalled(ctx, args)
 	case "extract":
-		return d.handleExtract(args)
+		return d.handleExtract(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
 // handleInstall installs .deb packages with dependency resolution
-func (d *DebInstaller) handleInstall(args []string) error {
+func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -89,7 +92,7 @@ func (d *DebInstaller) handleInstall(args []string) error {
 	if len(missingDeps) > 0 {
 		d.logger.Printf("Installing missing dependencies: %v\n", mapKeys(missingDeps))
 		depList := mapKeys(missingDeps)
-		if err := d.installDependencies(depList); err != nil {
+		if err := d.installDependencies(ctx, depList); err != nil {
 			d.logger.Warning("Failed to install some dependencies: %v", err)
 			// Continue anyway, dpkg will handle it
 		}
@@ -98,10 +101,10 @@ func (d *DebInstaller) handleInstall(args []string) error {
 	// Install the .deb packages
 	for _, debFile := range debFiles {
 		d.logger.Printf("Installing package: %s\n", debFile)
-		if err := sdk.ExecCommand(true, "dpkg", "-i", debFile); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, true, "dpkg", "-i", debFile); err != nil {
 			// Try to fix broken dependencies
 			d.logger.Warning("Installation failed, attempting to fix dependencies...")
-			if fixErr := sdk.ExecCommand(true, "apt-get", "install", "-f", "-y"); fixErr != nil {
+			if fixErr := sdk.ExecCommandWithContext(ctx, true, "apt-get", "install", "-f", "-y"); fixErr != nil {
 				d.logger.ErrorMsg("Failed to fix dependencies: %v", fixErr)
 			}
 			return fmt.Errorf("failed to install %s: %w", debFile, err)
@@ -118,7 +121,7 @@ func (d *DebInstaller) handleInstall(args []string) error {
 }
 
 // handleRemove removes installed packages
-func (d *DebInstaller) handleRemove(args []string) error {
+func (d *DebInstaller) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -130,14 +133,14 @@ func (d *DebInstaller) handleRemove(args []string) error {
 			return fmt.Errorf("invalid package name '%s': %w", pkg, err)
 		}
 
-		// Check if package is installed
+		// Check if the package is installed
 		if installed, _ := d.isPackageInstalled(pkg); !installed {
 			d.logger.Printf("Package %s is not installed, skipping\n", pkg)
 			continue
 		}
 
 		// Remove the package
-		if err := sdk.ExecCommand(true, "dpkg", "-r", pkg); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, true, "dpkg", "-r", pkg); err != nil {
 			return fmt.Errorf("failed to remove package %s: %w", pkg, err)
 		}
 	}
@@ -147,26 +150,26 @@ func (d *DebInstaller) handleRemove(args []string) error {
 }
 
 // handleInfo shows information about a .deb package
-func (d *DebInstaller) handleInfo(args []string) error {
+func (d *DebInstaller) handleInfo(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package file specified")
 	}
 
 	for _, debFile := range args {
 		d.logger.Printf("Package information for: %s\n", debFile)
-		
+
 		// Check if it's a file or installed package
 		if d.isLocalFile(debFile) {
-			if err := sdk.ExecCommand(false, "dpkg-deb", "-I", debFile); err != nil {
+			if err := sdk.ExecCommandWithContext(ctx, false, "dpkg-deb", "-I", debFile); err != nil {
 				return fmt.Errorf("failed to get info for %s: %w", debFile, err)
 			}
 		} else {
-			// Try as installed package
-			if err := sdk.ExecCommand(false, "dpkg", "-s", debFile); err != nil {
+			// Try as an installed package
+			if err := sdk.ExecCommandWithContext(ctx, false, "dpkg", "-s", debFile); err != nil {
 				return fmt.Errorf("package %s not found (neither as file nor installed package)", debFile)
 			}
 		}
-		
+
 		if len(args) > 1 {
 			fmt.Println("---")
 		}
@@ -176,26 +179,26 @@ func (d *DebInstaller) handleInfo(args []string) error {
 }
 
 // handleListFiles lists files in a .deb package
-func (d *DebInstaller) handleListFiles(args []string) error {
+func (d *DebInstaller) handleListFiles(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package file specified")
 	}
 
 	for _, debFile := range args {
 		d.logger.Printf("Files in package: %s\n", debFile)
-		
+
 		// Check if it's a file or installed package
 		if d.isLocalFile(debFile) {
-			if err := sdk.ExecCommand(false, "dpkg-deb", "-c", debFile); err != nil {
+			if err := sdk.ExecCommandWithContext(ctx, false, "dpkg-deb", "-c", debFile); err != nil {
 				return fmt.Errorf("failed to list files for %s: %w", debFile, err)
 			}
 		} else {
-			// Try as installed package
-			if err := sdk.ExecCommand(false, "dpkg", "-L", debFile); err != nil {
+			// Try as an installed package
+			if err := sdk.ExecCommandWithContext(ctx, false, "dpkg", "-L", debFile); err != nil {
 				return fmt.Errorf("package %s not found (neither as file nor installed package)", debFile)
 			}
 		}
-		
+
 		if len(args) > 1 {
 			fmt.Println("---")
 		}
@@ -205,7 +208,7 @@ func (d *DebInstaller) handleListFiles(args []string) error {
 }
 
 // handleVerify verifies package integrity and dependencies
-func (d *DebInstaller) handleVerify(args []string) error {
+func (d *DebInstaller) handleVerify(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package file specified")
 	}
@@ -218,7 +221,7 @@ func (d *DebInstaller) handleVerify(args []string) error {
 		d.logger.Printf("Verifying package: %s\n", debFile)
 
 		// Check package integrity
-		if err := sdk.ExecCommand(false, "dpkg-deb", "--info", debFile); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "dpkg-deb", "--info", debFile); err != nil {
 			d.logger.ErrorMsg("Package integrity check failed for %s", debFile)
 			return err
 		}
@@ -238,7 +241,7 @@ func (d *DebInstaller) handleVerify(args []string) error {
 }
 
 // handleIsInstalled checks if packages are installed
-func (d *DebInstaller) handleIsInstalled(args []string) error {
+func (d *DebInstaller) handleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -269,7 +272,7 @@ func (d *DebInstaller) handleIsInstalled(args []string) error {
 }
 
 // handleExtract extracts .deb package contents without installing
-func (d *DebInstaller) handleExtract(args []string) error {
+func (d *DebInstaller) handleExtract(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package file specified")
 	}
@@ -288,12 +291,12 @@ func (d *DebInstaller) handleExtract(args []string) error {
 		}
 	}
 
-	return d.extractPackage(debFile, targetDir)
+	return d.extractPackage(ctx, debFile, targetDir)
 }
 
 // isPackageInstalled checks if a package is installed
 func (d *DebInstaller) isPackageInstalled(packageName string) (bool, error) {
-	// Use dpkg-query to check if package is installed
+	// Use dpkg-query to check if the package is installed
 	output, err := sdk.ExecCommandOutput("dpkg-query", "-W", "-f=${Status}", packageName)
 	if err != nil {
 		// Package not found

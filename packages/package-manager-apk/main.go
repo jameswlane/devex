@@ -3,6 +3,7 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -88,27 +89,29 @@ func NewAPKPlugin() *APKPlugin {
 
 // Execute handles command execution
 func (p *APKPlugin) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	switch command {
 	case "install":
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
-		return p.handleRemove(args)
+		return p.handleRemove(ctx, args)
 	case "update":
-		return p.handleUpdate(args)
+		return p.handleUpdate(ctx, args)
 	case "upgrade":
-		return p.handleUpgrade(args)
+		return p.handleUpgrade(ctx, args)
 	case "search":
-		return p.handleSearch(args)
+		return p.handleSearch(ctx, args)
 	case "list":
-		return p.handleList(args)
+		return p.handleList(ctx, args)
 	case "info":
-		return p.handleInfo(args)
+		return p.handleInfo(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (p *APKPlugin) handleInstall(args []string) error {
+func (p *APKPlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -117,16 +120,16 @@ func (p *APKPlugin) handleInstall(args []string) error {
 
 	// Update repositories first
 	fmt.Println("Updating package repositories...")
-	if err := sdk.ExecCommand(true, "apk", "update"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "apk", "update"); err != nil {
 		fmt.Printf("Warning: failed to update repositories: %v\n", err)
 	}
 
 	// Install packages
 	cmdArgs := append([]string{"add", "--no-cache"}, args...)
-	return sdk.ExecCommand(true, "apk", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "apk", cmdArgs...)
 }
 
-func (p *APKPlugin) handleRemove(args []string) error {
+func (p *APKPlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -134,27 +137,27 @@ func (p *APKPlugin) handleRemove(args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"del"}, args...)
-	return sdk.ExecCommand(true, "apk", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "apk", cmdArgs...)
 }
 
-func (p *APKPlugin) handleUpdate(args []string) error {
+func (p *APKPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "apk", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "apk", "update")
 }
 
-func (p *APKPlugin) handleUpgrade(args []string) error {
+func (p *APKPlugin) handleUpgrade(ctx context.Context, args []string) error {
 	fmt.Println("Upgrading installed packages...")
 
 	// Update first
-	if err := sdk.ExecCommand(true, "apk", "update"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "apk", "update"); err != nil {
 		return fmt.Errorf("failed to update repositories: %w", err)
 	}
 
 	// Then upgrade
-	return sdk.ExecCommand(true, "apk", "upgrade")
+	return sdk.ExecCommandWithContext(ctx, true, "apk", "upgrade")
 }
 
-func (p *APKPlugin) handleSearch(args []string) error {
+func (p *APKPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -162,28 +165,28 @@ func (p *APKPlugin) handleSearch(args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommand(false, "apk", "search", searchTerm)
+	return sdk.ExecCommandWithContext(ctx, false, "apk", "search", searchTerm)
 }
 
-func (p *APKPlugin) handleList(args []string) error {
+func (p *APKPlugin) handleList(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		// List all installed packages
-		return sdk.ExecCommand(false, "apk", "list", "--installed")
+		return sdk.ExecCommandWithContext(ctx, false, "apk", "list", "--installed")
 	}
 
 	// Handle specific arguments
 	cmdArgs := append([]string{"list"}, args...)
-	return sdk.ExecCommand(false, "apk", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "apk", cmdArgs...)
 }
 
-func (p *APKPlugin) handleInfo(args []string) error {
+func (p *APKPlugin) handleInfo(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package specified")
 	}
 
 	for _, pkg := range args {
 		fmt.Printf("Package information for: %s\n", pkg)
-		if err := sdk.ExecCommand(false, "apk", "info", pkg); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "apk", "info", pkg); err != nil {
 			fmt.Printf("Failed to get info for %s: %v\n", pkg, err)
 		}
 		if len(args) > 1 {

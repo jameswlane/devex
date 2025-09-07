@@ -13,7 +13,7 @@ import (
 func (p *AppimagePlugin) installAppImage(downloadURL, binaryName, installLocation string) error {
 	homeDir := os.Getenv("HOME")
 	var installDir string
-	
+
 	// Determine installation directory
 	switch installLocation {
 	case "gui":
@@ -23,26 +23,26 @@ func (p *AppimagePlugin) installAppImage(downloadURL, binaryName, installLocatio
 	default:
 		installDir = filepath.Join(homeDir, "Applications")
 	}
-	
+
 	// Create installation directory if it doesn't exist
 	if err := os.MkdirAll(installDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create installation directory: %w", err)
 	}
-	
+
 	binaryPath := filepath.Join(installDir, binaryName)
-	
+
 	p.logger.Printf("Downloading AppImage to: %s\n", binaryPath)
-	
+
 	// Download the AppImage
 	if err := p.downloadFile(downloadURL, binaryPath); err != nil {
 		return fmt.Errorf("failed to download AppImage: %w", err)
 	}
-	
+
 	// Set executable permissions
 	if err := os.Chmod(binaryPath, 0o755); err != nil {
 		return fmt.Errorf("failed to set permissions on AppImage: %w", err)
 	}
-	
+
 	// Create desktop entry for GUI apps
 	if installLocation == "gui" {
 		if err := p.createDesktopEntry(binaryName, binaryPath); err != nil {
@@ -50,7 +50,7 @@ func (p *AppimagePlugin) installAppImage(downloadURL, binaryName, installLocatio
 			// Non-fatal error
 		}
 	}
-	
+
 	return nil
 }
 
@@ -60,28 +60,28 @@ func (p *AppimagePlugin) downloadFile(url, filepath string) error {
 	client := &http.Client{
 		Timeout: 5 * time.Minute, // 5 minute timeout for large AppImages
 	}
-	
+
 	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)
 	}
-	defer resp.Body.Close()
-	
+	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
-	
+
 	out, err := os.Create(filepath)
 	if err != nil {
 		return fmt.Errorf("failed to create file: %w", err)
 	}
-	defer out.Close()
-	
+	defer func() { _ = out.Close() }()
+
 	_, err = io.Copy(out, resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -103,7 +103,7 @@ func (p *AppimagePlugin) validateURLAccessibility(downloadURL string) error {
 	if err != nil {
 		return fmt.Errorf("URL is not accessible: %w (hint: check internet connection and URL validity)", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return fmt.Errorf("URL returned status %d: %s (hint: check if the download link is valid)", resp.StatusCode, resp.Status)

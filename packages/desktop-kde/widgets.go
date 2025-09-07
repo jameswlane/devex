@@ -49,7 +49,7 @@ func (wm *WidgetManager) ListWidgets(ctx context.Context, args []string) error {
 
 	// List installed plasmoids
 	fmt.Println("\nInstalled Plasmoids:")
-	if err := sdk.ExecCommand(false, "plasmapkg2", "--list"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "plasmapkg2", "--list"); err != nil {
 		fmt.Printf("Warning: Failed to list installed plasmoids: %v\n", err)
 	}
 
@@ -69,7 +69,7 @@ func (wm *WidgetManager) RemoveWidget(ctx context.Context, args []string) error 
 		return fmt.Errorf("plasmapkg2 tool not found")
 	}
 
-	if err := sdk.ExecCommand(false, "plasmapkg2", "--remove", widgetName); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "plasmapkg2", "--remove", widgetName); err != nil {
 		return fmt.Errorf("failed to remove widget %s: %w", widgetName, err)
 	}
 

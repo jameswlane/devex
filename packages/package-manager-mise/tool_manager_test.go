@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"context"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -41,13 +42,13 @@ var _ = Describe("Tool Manager", func() {
 
 		Context("with invalid tools", func() {
 			It("should return error for empty tool list", func() {
-				err := plugin.HandleInstall([]string{})
+				err := plugin.HandleInstall(context.Background(), []string{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no tools specified"))
 			})
 
 			It("should return error for invalid tool specification", func() {
-				err := plugin.HandleInstall([]string{"tool;echo hacked"})
+				err := plugin.HandleInstall(context.Background(), []string{"tool;echo hacked"})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid tool specification"))
 			})
@@ -77,13 +78,13 @@ var _ = Describe("Tool Manager", func() {
 
 		Context("with invalid tools", func() {
 			It("should return error for empty tool list", func() {
-				err := plugin.HandleRemove([]string{})
+				err := plugin.HandleRemove(context.Background(), []string{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no tools specified"))
 			})
 
 			It("should return error for invalid tool specification", func() {
-				err := plugin.HandleRemove([]string{"tool;rm -rf /"})
+				err := plugin.HandleRemove(context.Background(), []string{"tool;rm -rf /"})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid tool specification"))
 			})
@@ -109,13 +110,13 @@ var _ = Describe("Tool Manager", func() {
 
 		Context("with invalid search terms", func() {
 			It("should return error for empty search term", func() {
-				err := plugin.HandleSearch([]string{})
+				err := plugin.HandleSearch(context.Background(), []string{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no search term specified"))
 			})
 
 			It("should validate search term for dangerous characters", func() {
-				err := plugin.HandleSearch([]string{"node;echo"})
+				err := plugin.HandleSearch(context.Background(), []string{"node;echo"})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid search term"))
 			})
@@ -145,13 +146,13 @@ var _ = Describe("Tool Manager", func() {
 
 		Context("with invalid tool", func() {
 			It("should return error for empty tool", func() {
-				err := plugin.HandleIsInstalled([]string{})
+				err := plugin.HandleIsInstalled(context.Background(), []string{})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no tool specified"))
 			})
 
 			It("should validate tool specification", func() {
-				err := plugin.HandleIsInstalled([]string{"tool;echo"})
+				err := plugin.HandleIsInstalled(context.Background(), []string{"tool;echo"})
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("invalid tool specification"))
 			})
@@ -160,7 +161,7 @@ var _ = Describe("Tool Manager", func() {
 
 	Describe("Error Handling", func() {
 		It("should provide actionable error messages", func() {
-			err := plugin.HandleInstall([]string{"tool;echo hacked"})
+			err := plugin.HandleInstall(context.Background(), []string{"tool;echo hacked"})
 			Expect(err).To(HaveOccurred())
 			// Error message should be clear and actionable
 			Expect(err.Error()).To(ContainSubstring("invalid"))

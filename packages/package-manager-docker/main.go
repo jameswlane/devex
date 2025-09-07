@@ -26,12 +26,12 @@ func NewDockerPlugin() *DockerInstaller {
 				Description: "Install and run Docker containers",
 				Usage:       "Install Docker containers or Docker Engine",
 				Flags: map[string]string{
-					"name":    "Name for the container",
-					"port":    "Port mapping (e.g., 8080:80)",
-					"env":     "Environment variables",
-					"volume":  "Volume mounts",
-					"detach":  "Run container in background",
-					"engine":  "Install Docker Engine instead of containers",
+					"name":   "Name for the container",
+					"port":   "Port mapping (e.g., 8080:80)",
+					"env":    "Environment variables",
+					"volume": "Volume mounts",
+					"detach": "Run container in background",
+					"engine": "Install Docker Engine instead of containers",
 				},
 			},
 			{
@@ -89,10 +89,10 @@ func NewDockerPlugin() *DockerInstaller {
 				Description: "Build Docker image",
 				Usage:       "Build Docker image from Dockerfile",
 				Flags: map[string]string{
-					"tag":        "Name and optionally tag for the image",
-					"file":       "Path to Dockerfile",
-					"context":    "Build context directory",
-					"no-cache":   "Don't use cache when building",
+					"tag":      "Name and optionally tag for the image",
+					"file":     "Path to Dockerfile",
+					"context":  "Build context directory",
+					"no-cache": "Don't use cache when building",
 				},
 			},
 			{
@@ -136,9 +136,9 @@ func NewDockerPlugin() *DockerInstaller {
 				Description: "Docker Compose operations",
 				Usage:       "Manage multi-container applications with Docker Compose",
 				Flags: map[string]string{
-					"file":     "Compose file path",
-					"project":  "Project name",
-					"detach":   "Run in background",
+					"file":    "Compose file path",
+					"project": "Project name",
+					"detach":  "Run in background",
 				},
 			},
 		},
@@ -150,10 +150,9 @@ func NewDockerPlugin() *DockerInstaller {
 	}
 }
 
-
 func main() {
 	plugin := NewDockerPlugin()
-	
+
 	// Handle args with panic recovery
 	defer func() {
 		if r := recover(); r != nil {
@@ -161,6 +160,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	
+
 	sdk.HandleArgs(plugin, os.Args[1:])
 }

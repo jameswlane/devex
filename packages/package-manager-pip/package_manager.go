@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -10,45 +11,47 @@ import (
 
 // Execute handles command execution
 func (p *PipPlugin) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	switch command {
 	case "is-installed":
-		return p.handleIsInstalled(args)
+		return p.handleIsInstalled(ctx, args)
 	case "create-venv":
-		return p.handleCreateVenv(args)
+		return p.handleCreateVenv(ctx, args)
 	case "freeze":
-		return p.handleFreeze(args)
+		return p.handleFreeze(ctx, args)
 	case "install":
 		p.EnsureAvailable()
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
 		p.EnsureAvailable()
-		return p.handleRemove(args)
+		return p.handleRemove(ctx, args)
 	case "update":
 		p.EnsureAvailable()
-		return p.handleUpdate(args)
+		return p.handleUpdate(ctx, args)
 	case "search":
 		p.EnsureAvailable()
-		return p.handleSearch(args)
+		return p.handleSearch(ctx, args)
 	case "list":
 		p.EnsureAvailable()
-		return p.handleList(args)
+		return p.handleList(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
 // handleInstall installs Python packages
-func (p *PipPlugin) handleInstall(args []string) error {
+func (p *PipPlugin) handleInstall(ctx context.Context, args []string) error {
 	// Check for requirements.txt installation
 	if len(args) > 0 && (args[0] == "-r" || args[0] == "--requirement") {
-		return p.installFromRequirements(args[1:])
+		return p.installFromRequirements(ctx, args[1:])
 	}
 
 	// Check if requirements.txt exists in current directory
 	if len(args) == 0 {
 		if _, err := os.Stat("requirements.txt"); err == nil {
 			p.logger.Printf("Found requirements.txt, installing from file...\n")
-			return p.installFromRequirements([]string{"requirements.txt"})
+			return p.installFromRequirements(ctx, []string{"requirements.txt"})
 		}
 		return fmt.Errorf("no packages specified and no requirements.txt found")
 	}
@@ -61,7 +64,7 @@ func (p *PipPlugin) handleInstall(args []string) error {
 	}
 
 	// Detect virtual environment
-	venvActive := p.isVirtualEnvActive()
+	venvActive := p.isVirtualEnvActive(ctx)
 	if venvActive {
 		p.logger.Printf("📦 Installing in virtual environment\n")
 	} else {
@@ -87,11 +90,11 @@ func (p *PipPlugin) handleInstall(args []string) error {
 	}
 
 	cmdArgs = append(cmdArgs, processedArgs...)
-	return sdk.ExecCommand(true, "pip", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "pip", cmdArgs...)
 }
 
 // handleRemove removes Python packages
-func (p *PipPlugin) handleRemove(args []string) error {
+func (p *PipPlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -104,7 +107,7 @@ func (p *PipPlugin) handleRemove(args []string) error {
 	}
 
 	// Detect virtual environment
-	venvActive := p.isVirtualEnvActive()
+	venvActive := p.isVirtualEnvActive(ctx)
 	if venvActive {
 		p.logger.Printf("📦 Removing from virtual environment\n")
 	} else {
@@ -128,14 +131,14 @@ func (p *PipPlugin) handleRemove(args []string) error {
 	}
 
 	cmdArgs = append(cmdArgs, processedArgs...)
-	return sdk.ExecCommand(true, "pip", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "pip", cmdArgs...)
 }
 
 // handleUpdate updates Python packages
-func (p *PipPlugin) handleUpdate(args []string) error {
+func (p *PipPlugin) handleUpdate(ctx context.Context, args []string) error {
 	// First update pip itself
 	p.logger.Printf("Updating pip...\n")
-	if err := sdk.ExecCommand(true, "pip", "install", "--upgrade", "pip"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "pip", "install", "--upgrade", "pip"); err != nil {
 		p.logger.Warning("Failed to update pip: %v", err)
 	}
 
@@ -143,7 +146,7 @@ func (p *PipPlugin) handleUpdate(args []string) error {
 	for _, arg := range args {
 		if arg == "--all" {
 			p.logger.Printf("Updating all installed packages...\n")
-			return p.updateAllPackages()
+			return p.updateAllPackages(ctx)
 		}
 	}
 
@@ -163,7 +166,7 @@ func (p *PipPlugin) handleUpdate(args []string) error {
 		if len(processedArgs) > 0 {
 			p.logger.Printf("Updating packages: %s\n", strings.Join(processedArgs, ", "))
 			cmdArgs := append([]string{"install", "--upgrade"}, processedArgs...)
-			return sdk.ExecCommand(true, "pip", cmdArgs...)
+			return sdk.ExecCommandWithContext(ctx, true, "pip", cmdArgs...)
 		}
 	}
 
@@ -172,7 +175,7 @@ func (p *PipPlugin) handleUpdate(args []string) error {
 }
 
 // handleSearch searches for Python packages
-func (p *PipPlugin) handleSearch(args []string) error {
+func (p *PipPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -188,7 +191,7 @@ func (p *PipPlugin) handleSearch(args []string) error {
 	p.logger.Printf("Note: pip search is no longer available. Try searching at https://pypi.org/search/?q=%s\n", strings.ReplaceAll(searchTerm, " ", "+"))
 
 	// Try to use pip index if available (pip >= 21.2)
-	if err := sdk.ExecCommand(false, "pip", "index", "versions", searchTerm); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "pip", "index", "versions", searchTerm); err != nil {
 		// Fallback: just show the PyPI URL
 		p.logger.Printf("Search online at: https://pypi.org/search/?q=%s\n", strings.ReplaceAll(searchTerm, " ", "+"))
 		return nil
@@ -198,7 +201,7 @@ func (p *PipPlugin) handleSearch(args []string) error {
 }
 
 // handleList lists installed Python packages
-func (p *PipPlugin) handleList(args []string) error {
+func (p *PipPlugin) handleList(ctx context.Context, args []string) error {
 	cmdArgs := []string{"list"}
 
 	// Process flags
@@ -215,17 +218,17 @@ func (p *PipPlugin) handleList(args []string) error {
 	}
 
 	// Show virtual environment status
-	if p.isVirtualEnvActive() {
+	if p.isVirtualEnvActive(ctx) {
 		p.logger.Printf("📦 Virtual environment active\n")
 	} else {
 		p.logger.Printf("🐍 System Python packages\n")
 	}
 
-	return sdk.ExecCommand(false, "pip", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "pip", cmdArgs...)
 }
 
 // handleIsInstalled checks if a package is installed
-func (p *PipPlugin) handleIsInstalled(args []string) error {
+func (p *PipPlugin) handleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no package specified")
 	}
@@ -235,7 +238,7 @@ func (p *PipPlugin) handleIsInstalled(args []string) error {
 		return fmt.Errorf("invalid package name: %w", err)
 	}
 
-	if err := sdk.ExecCommand(false, "pip", "show", packageName); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "pip", "show", packageName); err != nil {
 		p.logger.Printf("Package %s is not installed\n", packageName)
 		os.Exit(1)
 	} else {
@@ -247,9 +250,9 @@ func (p *PipPlugin) handleIsInstalled(args []string) error {
 }
 
 // updateAllPackages updates all installed packages
-func (p *PipPlugin) updateAllPackages() error {
+func (p *PipPlugin) updateAllPackages(ctx context.Context) error {
 	// Get list of installed packages
-	output, err := sdk.ExecCommandOutput("pip", "list", "--outdated", "--format=freeze")
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "pip", "list", "--outdated", "--format=freeze")
 	if err != nil {
 		return fmt.Errorf("failed to get outdated packages: %w", err)
 	}
@@ -270,7 +273,7 @@ func (p *PipPlugin) updateAllPackages() error {
 		if parts := strings.Split(line, "=="); len(parts) >= 1 {
 			packageName := parts[0]
 			p.logger.Printf("Updating %s...\n", packageName)
-			if err := sdk.ExecCommand(true, "pip", "install", "--upgrade", packageName); err != nil {
+			if err := sdk.ExecCommandWithContext(ctx, true, "pip", "install", "--upgrade", packageName); err != nil {
 				p.logger.Warning("Failed to update %s: %v", packageName, err)
 			}
 		}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,11 +10,11 @@ import (
 )
 
 // handleFreeze generates a requirements.txt file from installed packages
-func (p *PipPlugin) handleFreeze(args []string) error {
+func (p *PipPlugin) handleFreeze(ctx context.Context, args []string) error {
 	p.logger.Printf("Generating requirements.txt...\n")
 
 	// Generate requirements and save to file
-	output, err := sdk.ExecCommandOutput("pip", "freeze")
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "pip", "freeze")
 	if err != nil {
 		return fmt.Errorf("failed to generate requirements: %w", err)
 	}
@@ -46,7 +47,7 @@ func (p *PipPlugin) handleFreeze(args []string) error {
 }
 
 // installFromRequirements installs packages from a requirements.txt file
-func (p *PipPlugin) installFromRequirements(files []string) error {
+func (p *PipPlugin) installFromRequirements(ctx context.Context, files []string) error {
 	if len(files) == 0 {
 		return fmt.Errorf("no requirements file specified")
 	}
@@ -61,5 +62,5 @@ func (p *PipPlugin) installFromRequirements(files []string) error {
 	}
 
 	p.logger.Printf("Installing from %s...\n", requirementsFile)
-	return sdk.ExecCommand(true, "pip", "install", "-r", requirementsFile)
+	return sdk.ExecCommandWithContext(ctx, true, "pip", "install", "-r", requirementsFile)
 }

@@ -20,7 +20,7 @@ const (
 
 // downloadAndInstallGPGKey downloads a GPG key and installs it to the system
 // Based on the original robust implementation with plugin SDK integration
-func (a *APTInstaller) downloadAndInstallGPGKey(source APTSource) error {
+func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTSource) error {
 	a.logger.Printf("Downloading GPG key from %s\n", source.KeyURL)
 
 	// Validate key path first - must fail for security issues
@@ -47,17 +47,22 @@ func (a *APTInstaller) downloadAndInstallGPGKey(source APTSource) error {
 
 	// Skip actual HTTP download in test mode for external URLs only
 	// Allow localhost/127.0.0.1 for test server
-	if os.Getenv("APT_PLUGIN_TEST_MODE") == "1" {
+	testMode, err := sdk.SafeGetEnv("APT_PLUGIN_TEST_MODE")
+	if err != nil {
+		a.logger.Warning("APT_PLUGIN_TEST_MODE environment variable validation failed: %v", err)
+		testMode = "" // Default to empty/disabled
+	}
+	if testMode == "1" {
 		if !strings.Contains(source.KeyURL, "127.0.0.1") && !strings.Contains(source.KeyURL, "localhost") {
 			return fmt.Errorf("failed to download GPG key from '%s': HTTP 404", source.KeyURL)
 		}
 	}
 
 	// Download the key using HTTP client
-	ctx, cancel := context.WithTimeout(context.Background(), GPGKeyDownloadTimeout)
+	downloadCtx, cancel := context.WithTimeout(ctx, GPGKeyDownloadTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", source.KeyURL, nil)
+	req, err := http.NewRequestWithContext(downloadCtx, "GET", source.KeyURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -133,7 +138,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(source APTSource) error {
 		}
 
 		// Use gpg to dearmor the key
-		if err := sdk.ExecCommand(false, "gpg", "--dearmor", "-o", source.KeyPath, tempFileName); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "gpg", "--dearmor", "-o", source.KeyPath, tempFileName); err != nil {
 			return fmt.Errorf("failed to dearmor GPG key from '%s' to '%s': %w", source.KeyURL, source.KeyPath, err)
 		}
 	} else {
@@ -192,7 +197,7 @@ func (a *APTInstaller) validateGPGKeyFormat(keyPath string, requireDearmor bool)
 
 	if requireDearmor {
 		// For binary keys, check if it's a valid GPG keyring
-		output, err := sdk.ExecCommandOutput("file", keyPath)
+		output, err := sdk.ExecCommandOutputWithContext(context.Background(), "file", keyPath)
 		if err != nil {
 			return fmt.Errorf("failed to check key file format: %w", err)
 		}

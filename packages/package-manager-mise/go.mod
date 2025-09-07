@@ -1,12 +1,14 @@
 module github.com/jameswlane/devex/packages/package-manager-mise
 
-go 1.23.0
+go 1.24
 
 require (
 	github.com/jameswlane/devex/packages/plugin-sdk v0.0.1
 	github.com/onsi/ginkgo/v2 v2.25.2
 	github.com/onsi/gomega v1.38.2
 )
+
+replace github.com/jameswlane/devex/packages/plugin-sdk => ../plugin-sdk
 
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
