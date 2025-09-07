@@ -20,7 +20,7 @@ func (m *MisePlugin) ValidateToolSpec(toolSpec string) error {
 
 	// Check length
 	if len(toolSpec) > MaxToolNameLength {
-		return fmt.Errorf("tool specification exceeds maximum length")
+		return fmt.Errorf("tool specification too long")
 	}
 
 	// Check for null bytes and control characters
