@@ -69,28 +69,21 @@ var _ = Describe("Background Updater", func() {
 	Describe("Lifecycle Management", func() {
 		Context("starting and stopping", func() {
 			It("should start successfully", func() {
-				ctx, cancel := context.WithCancel(context.Background())
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 
-				go func() {
-					defer GinkgoRecover()
-					err := updater.Start(ctx)
-					// Expect either no error or context cancellation
-					if err != nil {
-						Expect(err.Error()).To(ContainSubstring("context"))
-					}
-				}()
+				err := updater.Start(ctx)
+				Expect(err).ToNot(HaveOccurred())
 
-				// Give it a moment to start
-				Eventually(func() bool {
-					return updater.IsRunning()
-				}, time.Second, 100*time.Millisecond).Should(BeTrue())
+				// Should be running immediately after Start() call
+				Expect(updater.IsRunning()).To(BeTrue())
 
-				cancel() // Cancel context to stop gracefully
+				// Stop the updater
+				updater.Stop()
 				
 				Eventually(func() bool {
 					return updater.IsRunning()
-				}, time.Second, 100*time.Millisecond).Should(BeFalse())
+				}, 500*time.Millisecond, 50*time.Millisecond).Should(BeFalse())
 			})
 
 			It("should stop gracefully", func() {
