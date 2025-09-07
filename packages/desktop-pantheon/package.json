@@ -5,7 +5,7 @@
 	"description": "Pantheon desktop environment configuration plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-desktop-pantheon main.go",
+		"build": "go build -o devex-plugin-desktop-pantheon .",
 		"dev": "go build -race -o devex-plugin-desktop-pantheon main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

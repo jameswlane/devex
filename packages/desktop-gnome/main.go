@@ -149,11 +149,6 @@ func isGNOMEAvailable() bool {
 	return strings.Contains(strings.ToLower(desktop), "gnome")
 }
 
-// setGSetting sets a GNOME setting using gsettings (deprecated - use context version)
-func setGSetting(schema, key, value string) error {
-	return setGSettingWithContext(context.Background(), schema, key, value)
-}
-
 // setGSettingWithContext sets a GNOME setting using gsettings with context support
 func setGSettingWithContext(ctx context.Context, schema, key, value string) error {
 	cmd := exec.CommandContext(ctx, "gsettings", "set", schema, key, value)

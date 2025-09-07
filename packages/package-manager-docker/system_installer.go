@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -22,7 +23,9 @@ func (d *DockerInstaller) handleEnsureInstalled(ctx context.Context, args []stri
 		if err := d.startDockerService(ctx); err != nil {
 			d.logger.Warning("Failed to start Docker service: %v", err)
 		}
-		if d.isDockerDaemonRunning() {
+
+		// Wait for daemon to start with retry mechanism
+		if d.waitForDockerDaemon(ctx) {
 			d.logger.Success("Docker service started successfully")
 			return nil
 		}
@@ -203,6 +206,30 @@ func (d *DockerInstaller) startDockerService(ctx context.Context) error {
 	}
 
 	return fmt.Errorf("no service management system found")
+}
+
+// waitForDockerDaemon waits for Docker daemon to become available with retry mechanism
+func (d *DockerInstaller) waitForDockerDaemon(ctx context.Context) bool {
+	maxRetries := 10
+	retryDelay := 2 * time.Second
+
+	d.logger.Printf("Waiting for Docker daemon to start...")
+
+	for i := 0; i < maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			d.logger.Warning("Context cancelled while waiting for Docker daemon")
+			return false
+		case <-time.After(retryDelay):
+			if d.isDockerDaemonRunning() {
+				return true
+			}
+			d.logger.Printf("Attempt %d/%d: Docker daemon not ready yet, retrying...", i+1, maxRetries)
+		}
+	}
+
+	d.logger.Warning("Docker daemon failed to start within timeout period")
+	return false
 }
 
 // addUserToDockerGroup adds the current user to the docker group

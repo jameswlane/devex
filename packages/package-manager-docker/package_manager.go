@@ -1,3 +1,17 @@
+// Package main implements the Docker package manager plugin for the DevEx CLI.
+// This plugin provides comprehensive Docker container and image management capabilities
+// along with automated Docker Engine installation and configuration.
+//
+// The plugin supports:
+//   - Docker Engine installation on multiple Linux distributions
+//   - Container lifecycle management (create, start, stop, remove)
+//   - Image management (pull, push, build, remove)
+//   - Docker Compose integration
+//   - User group management for Docker access
+//   - System service management
+//
+// Security features include input validation, trusted registry enforcement,
+// and proper error handling with context cancellation support.
 package main
 
 import (

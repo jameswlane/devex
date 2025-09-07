@@ -50,19 +50,19 @@ func (tm *ThemeManager) ApplyTheme(ctx context.Context, args []string) error {
 	fmt.Printf("Applying theme: %s\n", themeName)
 
 	// Apply GTK theme
-	if err := setGSetting("org.gnome.desktop.interface", "gtk-theme", themeName); err != nil {
+	if err := setGSettingWithContext(ctx, "org.gnome.desktop.interface", "gtk-theme", themeName); err != nil {
 		return fmt.Errorf("failed to set GTK theme: %w", err)
 	}
 
 	// Apply icon theme (if it's an icon theme)
 	if strings.Contains(strings.ToLower(themeName), "icon") {
-		if err := setGSetting("org.gnome.desktop.interface", "icon-theme", themeName); err != nil {
+		if err := setGSettingWithContext(ctx, "org.gnome.desktop.interface", "icon-theme", themeName); err != nil {
 			fmt.Printf("Warning: Failed to set icon theme: %v\n", err)
 		}
 	}
 
 	// Apply shell theme (requires user-theme extension)
-	if err := setGSetting("org.gnome.shell.extensions.user-theme", "name", themeName); err != nil {
+	if err := setGSettingWithContext(ctx, "org.gnome.shell.extensions.user-theme", "name", themeName); err != nil {
 		fmt.Printf("Note: Failed to set shell theme. User Theme extension may not be installed.\n")
 	}
 

@@ -5,7 +5,7 @@
 	"description": "Homebrew plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-package-manager-brew main.go",
+		"build": "go build -o devex-plugin-package-manager-brew .",
 		"dev": "go build -race -o devex-plugin-package-manager-brew main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,7 +9,7 @@ import (
 )
 
 // handlePreview downloads and displays a script before execution
-func (p *CurlpipePlugin) handlePreview(args []string) error {
+func (p *CurlpipePlugin) handlePreview(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no URL specified")
 	}
@@ -32,7 +33,7 @@ func (p *CurlpipePlugin) handlePreview(args []string) error {
 	p.logger.Printf("%s\n", strings.Repeat("=", 60))
 
 	// Download and display the script
-	if err := p.downloadScript(scriptURL); err != nil {
+	if err := p.downloadScript(ctx, scriptURL); err != nil {
 		return fmt.Errorf("failed to download script from '%s': %w", scriptURL, err)
 	}
 
@@ -42,14 +43,14 @@ func (p *CurlpipePlugin) handlePreview(args []string) error {
 }
 
 // downloadScript downloads a script from the given URL
-func (p *CurlpipePlugin) downloadScript(scriptURL string) error {
+func (p *CurlpipePlugin) downloadScript(ctx context.Context, scriptURL string) error {
 	// Use curl to download the script content
-	return sdk.ExecCommand(false, "curl", "-fsSL", scriptURL)
+	return sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", scriptURL)
 }
 
 // DownloadScriptToString downloads a script and returns its content as a string
-func (p *CurlpipePlugin) DownloadScriptToString(scriptURL string) (string, error) {
-	output, err := sdk.ExecCommandOutput("curl", "-fsSL", scriptURL)
+func (p *CurlpipePlugin) DownloadScriptToString(ctx context.Context, scriptURL string) (string, error) {
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "curl", "-fsSL", scriptURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download script: %w", err)
 	}
@@ -102,11 +103,11 @@ func (p *CurlpipePlugin) ValidateScriptContent(content string) error {
 }
 
 // ExecuteScriptFromURL downloads and executes a script from URL with validation
-func (p *CurlpipePlugin) ExecuteScriptFromURL(scriptURL string) error {
+func (p *CurlpipePlugin) ExecuteScriptFromURL(ctx context.Context, scriptURL string) error {
 	p.logger.Printf("Executing script from: %s\n", scriptURL)
 
 	// First download and validate the script content
-	scriptContent, err := p.DownloadScriptToString(scriptURL)
+	scriptContent, err := p.DownloadScriptToString(ctx, scriptURL)
 	if err != nil {
 		return fmt.Errorf("failed to download script for validation: %w", err)
 	}
@@ -124,7 +125,7 @@ func (p *CurlpipePlugin) ExecuteScriptFromURL(scriptURL string) error {
 	p.logger.Printf("Script content validated successfully, proceeding with execution\n")
 
 	// Execute the validated script using bash with the script content
-	if err := sdk.ExecCommand(true, "bash", "-c", scriptContent); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "bash", "-c", scriptContent); err != nil {
 		return fmt.Errorf("failed to execute script: %w", err)
 	}
 

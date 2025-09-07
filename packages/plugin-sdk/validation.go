@@ -686,7 +686,7 @@ func validatePipIndexURL(value string) error {
 	
 	// Must be HTTPS for security
 	if !strings.HasPrefix(value, "https://") {
-		return fmt.Errorf("PIP index URL must use HTTPS: %s", value)
+		return fmt.Errorf("pip index URL must use HTTPS: '%s'", value)
 	}
 	
 	// Check for suspicious domains

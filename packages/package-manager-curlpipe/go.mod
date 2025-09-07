@@ -1,6 +1,8 @@
 module github.com/jameswlane/devex/packages/package-manager-curlpipe
 
-go 1.23.0
+go 1.24
+
+toolchain go1.24.6
 
 require (
 	github.com/jameswlane/devex/packages/plugin-sdk v0.0.1
@@ -24,3 +26,5 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 )
+
+replace github.com/jameswlane/devex/packages/plugin-sdk => ../plugin-sdk

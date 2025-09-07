@@ -5,7 +5,7 @@
 	"description": "LXQt desktop environment configuration plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-desktop-lxqt main.go",
+		"build": "go build -o devex-plugin-desktop-lxqt .",
 		"dev": "go build -race -o devex-plugin-desktop-lxqt main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

@@ -5,7 +5,7 @@
 	"description": "Git configuration plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-tool-git main.go",
+		"build": "go build -o devex-plugin-tool-git .",
 		"dev": "go build -race -o devex-plugin-tool-git main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

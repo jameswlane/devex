@@ -5,7 +5,7 @@
 	"description": "Zypper plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-package-manager-zypper main.go",
+		"build": "go build -o devex-plugin-package-manager-zypper .",
 		"dev": "go build -race -o devex-plugin-package-manager-zypper main.go",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",

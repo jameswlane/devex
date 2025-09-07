@@ -5,8 +5,8 @@
 	"description": "Development stack detection plugin for DevEx CLI",
 	"main": "main.go",
 	"scripts": {
-		"build": "go build -o devex-plugin-tool-stackdetector main.go",
-		"dev": "go build -race -o devex-plugin-tool-stackdetector main.go",
+		"build": "go build -o devex-plugin-tool-stackdetector .",
+		"dev": "go build -race -o devex-plugin-tool-stackdetector .",
 		"test": "go test ./...",
 		"lint": "golangci-lint run",
 		"mod": "go mod tidy"

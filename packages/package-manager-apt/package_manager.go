@@ -1,3 +1,19 @@
+// Package main implements the APT package manager plugin for the DevEx CLI.
+// This plugin provides comprehensive Debian/Ubuntu package management with advanced
+// features including repository management, GPG key handling, and security validation.
+//
+// The plugin supports:
+//   - Package installation, removal, and updates
+//   - Repository management (add, remove, list)
+//   - GPG key management for repository security
+//   - Package search and dependency resolution
+//   - System upgrade operations
+//   - Concurrent installation with rate limiting
+//   - Input validation and security checks
+//
+// Security features include package name validation, repository URL verification,
+// GPG signature validation, and protection against command injection attacks.
+// All operations support context cancellation and proper error handling.
 package main
 
 import (
