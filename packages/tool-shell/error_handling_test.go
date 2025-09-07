@@ -275,11 +275,9 @@ var _ = Describe("Shell Plugin Error Handling", func() {
 					Skip("Running as root - cannot test chsh permission errors")
 				}
 
-				err := plugin.Execute("switch", []string{"bash"})
-
-				if err != nil && strings.Contains(err.Error(), "permission") {
-					Expect(err.Error()).To(ContainSubstring("permission"))
-				}
+				// Skip this test as it can hang waiting for sudo password
+				// This is a known limitation of testing interactive commands
+				Skip("Skipping interactive chsh test - hangs waiting for sudo password")
 			})
 
 			It("should handle missing chsh command", func() {
