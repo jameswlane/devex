@@ -58,7 +58,6 @@ func NewStackDetectorPlugin() *StackDetectorPlugin {
 	}
 }
 
-
 func main() {
 	plugin := NewStackDetectorPlugin()
 	sdk.HandleArgs(plugin, os.Args[1:])

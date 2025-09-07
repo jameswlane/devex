@@ -3,7 +3,6 @@ package main
 // Build timestamp: 2025-09-06
 
 import (
-	"fmt"
 	"os"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -58,7 +57,6 @@ func NewCurlpipePlugin() *CurlpipePlugin {
 		logger:               sdk.NewDefaultLogger(false),
 	}
 }
-
 
 func main() {
 	plugin := NewCurlpipePlugin()

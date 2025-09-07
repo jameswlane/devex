@@ -1,6 +1,6 @@
 module github.com/jameswlane/devex/packages/desktop-budgie
 
-go 1.23.0
+go 1.24
 
 require github.com/jameswlane/devex/packages/plugin-sdk v0.0.1
 

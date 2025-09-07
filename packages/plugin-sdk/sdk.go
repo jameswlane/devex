@@ -141,14 +141,14 @@ func (l *DefaultLogger) ErrorMsg(msg string, args ...any) {
 // Info implements Logger interface
 func (l *DefaultLogger) Info(msg string, keyvals ...any) {
 	if !l.silent {
-		fmt.Printf("INFO: " + msg + "\n")
+		fmt.Print("INFO: " + msg + "\n")
 	}
 }
 
 // Warn implements Logger interface
 func (l *DefaultLogger) Warn(msg string, keyvals ...any) {
 	if !l.silent {
-		fmt.Printf("WARN: " + msg + "\n")
+		fmt.Print("WARN: " + msg + "\n")
 	}
 }
 
@@ -156,9 +156,9 @@ func (l *DefaultLogger) Warn(msg string, keyvals ...any) {
 func (l *DefaultLogger) Error(msg string, err error, keyvals ...any) {
 	if !l.silent {
 		if err != nil {
-			fmt.Printf("ERROR: "+msg+" - %v\n", err)
+			fmt.Printf("ERROR: %s - %v\n", msg, err)
 		} else {
-			fmt.Printf("ERROR: " + msg + "\n")
+			fmt.Print("ERROR: " + msg + "\n")
 		}
 	}
 }
@@ -166,8 +166,82 @@ func (l *DefaultLogger) Error(msg string, err error, keyvals ...any) {
 // Debug implements Logger interface
 func (l *DefaultLogger) Debug(msg string, keyvals ...any) {
 	if !l.silent {
-		fmt.Printf("DEBUG: " + msg + "\n")
+		fmt.Print("DEBUG: " + msg + "\n")
 	}
+}
+
+// TimeoutConfig represents timeout configuration for different operation types
+type TimeoutConfig struct {
+	// Default timeout for all operations
+	Default time.Duration `json:"default"`
+	// Install operation timeout
+	Install time.Duration `json:"install"`
+	// Update operation timeout  
+	Update time.Duration `json:"update"`
+	// Upgrade operation timeout
+	Upgrade time.Duration `json:"upgrade"`
+	// Search operation timeout
+	Search time.Duration `json:"search"`
+	// Network operation timeout
+	Network time.Duration `json:"network"`
+	// Build operation timeout
+	Build time.Duration `json:"build"`
+	// Shell command timeout
+	Shell time.Duration `json:"shell"`
+}
+
+// DefaultTimeouts provides sensible default timeout values
+func DefaultTimeouts() TimeoutConfig {
+	return TimeoutConfig{
+		Default: 5 * time.Minute,
+		Install: 10 * time.Minute,
+		Update:  2 * time.Minute,
+		Upgrade: 15 * time.Minute,
+		Search:  30 * time.Second,
+		Network: 1 * time.Minute,
+		Build:   30 * time.Minute,
+		Shell:   5 * time.Minute,
+	}
+}
+
+// GetTimeout returns the appropriate timeout for an operation type
+func (tc TimeoutConfig) GetTimeout(operationType string) time.Duration {
+	switch strings.ToLower(operationType) {
+	case "install":
+		if tc.Install > 0 {
+			return tc.Install
+		}
+	case "update":
+		if tc.Update > 0 {
+			return tc.Update
+		}
+	case "upgrade":
+		if tc.Upgrade > 0 {
+			return tc.Upgrade
+		}
+	case "search":
+		if tc.Search > 0 {
+			return tc.Search
+		}
+	case "network":
+		if tc.Network > 0 {
+			return tc.Network
+		}
+	case "build":
+		if tc.Build > 0 {
+			return tc.Build
+		}
+	case "shell":
+		if tc.Shell > 0 {
+			return tc.Shell
+		}
+	}
+	
+	if tc.Default > 0 {
+		return tc.Default
+	}
+	
+	return DefaultTimeouts().Default
 }
 
 // PluginInfo represents the standard plugin information
@@ -179,6 +253,8 @@ type PluginInfo struct {
 	Author      string          `json:"author,omitempty"`
 	Repository  string          `json:"repository,omitempty"`
 	Tags        []string        `json:"tags,omitempty"`
+	// Timeout configuration for plugin operations
+	Timeouts    TimeoutConfig   `json:"timeouts,omitempty"`
 }
 
 // PluginCommand represents a command provided by a plugin
@@ -206,17 +282,55 @@ type DesktopPlugin interface {
 
 // BasePlugin provides common functionality for plugins
 type BasePlugin struct {
-	info PluginInfo
+	info     PluginInfo
+	logger   Logger
+	timeouts TimeoutConfig
 }
 
 // NewBasePlugin creates a new base plugin
 func NewBasePlugin(info PluginInfo) *BasePlugin {
-	return &BasePlugin{info: info}
+	timeouts := info.Timeouts
+	if timeouts.Default == 0 {
+		timeouts = DefaultTimeouts()
+	}
+	
+	return &BasePlugin{
+		info:     info,
+		logger:   NewDefaultLogger(false),
+		timeouts: timeouts,
+	}
 }
 
 // Info returns the plugin information
 func (p *BasePlugin) Info() PluginInfo {
 	return p.info
+}
+
+// GetLogger returns the plugin's logger
+func (p *BasePlugin) GetLogger() Logger {
+	return p.logger
+}
+
+// SetLogger sets a custom logger for the plugin
+func (p *BasePlugin) SetLogger(logger Logger) {
+	if logger != nil {
+		p.logger = logger
+	}
+}
+
+// GetTimeouts returns the plugin's timeout configuration
+func (p *BasePlugin) GetTimeouts() TimeoutConfig {
+	return p.timeouts
+}
+
+// SetTimeouts sets custom timeout configuration for the plugin
+func (p *BasePlugin) SetTimeouts(timeouts TimeoutConfig) {
+	p.timeouts = timeouts
+}
+
+// GetTimeout returns the appropriate timeout for an operation type
+func (p *BasePlugin) GetTimeout(operationType string) time.Duration {
+	return p.timeouts.GetTimeout(operationType)
 }
 
 // OutputPluginInfo outputs plugin info as JSON (for --plugin-info)
@@ -241,14 +355,20 @@ func RequireSudo() bool {
 }
 
 // ExecCommand executes a command with optional sudo
+// Deprecated: Use ExecCommandWithContext for better cancellation support
 func ExecCommand(useSudo bool, name string, args ...string) error {
+	return ExecCommandWithContext(context.Background(), useSudo, name, args...)
+}
+
+// ExecCommandWithContext executes a command with context support for cancellation
+func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args ...string) error {
 	var cmd *exec.Cmd
 
 	if useSudo && RequireSudo() {
 		cmdArgs := append([]string{name}, args...)
-		cmd = exec.Command("sudo", cmdArgs...)
+		cmd = exec.CommandContext(ctx, "sudo", cmdArgs...)
 	} else {
-		cmd = exec.Command(name, args...)
+		cmd = exec.CommandContext(ctx, name, args...)
 	}
 
 	cmd.Stdout = os.Stdout
@@ -259,10 +379,99 @@ func ExecCommand(useSudo bool, name string, args ...string) error {
 }
 
 // ExecCommandOutput executes a command and returns output
+// Deprecated: Use ExecCommandOutputWithContext for better cancellation support  
 func ExecCommandOutput(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	return ExecCommandOutputWithContext(context.Background(), name, args...)
+}
+
+// ExecCommandOutputWithContext executes a command and returns output with context support
+func ExecCommandOutputWithContext(ctx context.Context, name string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
 	output, err := cmd.Output()
 	return string(output), err
+}
+
+// TimeoutError represents a command execution timeout error
+type TimeoutError struct {
+	Command   string
+	Args      []string
+	Timeout   time.Duration
+	Operation string
+}
+
+func (e *TimeoutError) Error() string {
+	if e.Operation != "" {
+		return fmt.Sprintf("command '%s %s' timed out after %v during %s operation", 
+			e.Command, strings.Join(e.Args, " "), e.Timeout, e.Operation)
+	}
+	return fmt.Sprintf("command '%s %s' timed out after %v", 
+		e.Command, strings.Join(e.Args, " "), e.Timeout)
+}
+
+// ExecCommandWithTimeout executes a command with a specific timeout
+func ExecCommandWithTimeout(timeout time.Duration, useSudo bool, name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	err := ExecCommandWithContext(ctx, useSudo, name, args...)
+	if ctx.Err() == context.DeadlineExceeded {
+		return &TimeoutError{
+			Command: name,
+			Args:    args,
+			Timeout: timeout,
+		}
+	}
+	return err
+}
+
+// ExecCommandWithTimeoutAndOperation executes a command with timeout and operation context
+func ExecCommandWithTimeoutAndOperation(timeout time.Duration, operation string, useSudo bool, name string, args ...string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	err := ExecCommandWithContext(ctx, useSudo, name, args...)
+	if ctx.Err() == context.DeadlineExceeded {
+		return &TimeoutError{
+			Command:   name,
+			Args:      args,
+			Timeout:   timeout,
+			Operation: operation,
+		}
+	}
+	return err
+}
+
+// ExecCommandOutputWithTimeout executes a command and returns output with timeout
+func ExecCommandOutputWithTimeout(timeout time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	output, err := ExecCommandOutputWithContext(ctx, name, args...)
+	if ctx.Err() == context.DeadlineExceeded {
+		return output, &TimeoutError{
+			Command: name,
+			Args:    args,
+			Timeout: timeout,
+		}
+	}
+	return output, err
+}
+
+// ExecCommandOutputWithTimeoutAndOperation executes a command and returns output with timeout and operation context
+func ExecCommandOutputWithTimeoutAndOperation(timeout time.Duration, operation string, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	
+	output, err := ExecCommandOutputWithContext(ctx, name, args...)
+	if ctx.Err() == context.DeadlineExceeded {
+		return output, &TimeoutError{
+			Command:   name,
+			Args:      args,
+			Timeout:   timeout,
+			Operation: operation,
+		}
+	}
+	return output, err
 }
 
 // PackageManagerPlugin provides common functionality for package manager plugins
@@ -290,6 +499,18 @@ func (p *PackageManagerPlugin) EnsureAvailable() {
 		fmt.Fprintf(os.Stderr, "Error: %s is not available on this system\n", p.managerCommand)
 		os.Exit(1)
 	}
+}
+
+// ExecManagerCommand executes a package manager command with timeout
+func (p *PackageManagerPlugin) ExecManagerCommand(operation string, useSudo bool, args ...string) error {
+	timeout := p.GetTimeout(operation)
+	return ExecCommandWithTimeoutAndOperation(timeout, operation, useSudo, p.managerCommand, args...)
+}
+
+// ExecManagerCommandOutput executes a package manager command and returns output with timeout
+func (p *PackageManagerPlugin) ExecManagerCommandOutput(operation string, args ...string) (string, error) {
+	timeout := p.GetTimeout(operation)
+	return ExecCommandOutputWithTimeoutAndOperation(timeout, operation, p.managerCommand, args...)
 }
 
 // HandleArgs provides standard argument handling for plugins
@@ -326,6 +547,7 @@ func FileExists(path string) bool {
 }
 
 // GetEnv gets an environment variable with a default value
+// Deprecated: Use SafeGetEnvWithDefault for security validation
 func GetEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -622,11 +844,11 @@ func (d *Downloader) UpdateRegistry() error {
 
 // getCacheDuration returns cache duration based on environment
 func (d *Downloader) getCacheDuration() time.Duration {
-	// Check for development environment
-	if env := os.Getenv("DEVEX_ENV"); env == "development" || env == "dev" {
+	// Check for development environment with validation
+	if env, err := SafeGetEnv("DEVEX_ENV"); err == nil && (env == "development" || env == "dev") {
 		return 5 * time.Minute // Shorter cache in development
 	}
-	if env := os.Getenv("NODE_ENV"); env == "development" {
+	if env, err := SafeGetEnv("NODE_ENV"); err == nil && env == "development" {
 		return 5 * time.Minute
 	}
 	

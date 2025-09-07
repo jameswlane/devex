@@ -39,16 +39,16 @@ func (d *DebInstaller) validatePackageName(packageName string) error {
 	}
 
 	// Debian package name validation
-	// Package names must consist of lowercase letters (a-z), digits (0-9), 
+	// Package names must consist of lowercase letters (a-z), digits (0-9),
 	// plus (+) and minus (-) signs, and periods (.)
 	validPackageNameRegex := regexp.MustCompile(`^[a-z0-9+.-]+$`)
 	if !validPackageNameRegex.MatchString(packageName) {
-		return fmt.Errorf("invalid package name format: must contain only lowercase letters, digits, +, -, and .")
+		return fmt.Errorf("invalid package name format: must contain only lowercase letters, digits, +, -, and")
 	}
 
 	// Package names cannot start with a hyphen or period
 	if strings.HasPrefix(packageName, "-") || strings.HasPrefix(packageName, ".") {
-		return fmt.Errorf("package name cannot start with - or .")
+		return fmt.Errorf("package name cannot start with - or")
 	}
 
 	return nil
@@ -138,18 +138,18 @@ func (d *DebInstaller) validateURL(rawURL string) error {
 	return nil
 }
 
-// validateCommand validates command arguments to prevent injection
-func (d *DebInstaller) validateCommand(args []string) error {
+// ValidateCommand validates command arguments to prevent injection
+func (d *DebInstaller) ValidateCommand(args []string) error {
 	for _, arg := range args {
-		if err := d.validateCommandArg(arg); err != nil {
+		if err := d.ValidateCommandArg(arg); err != nil {
 			return fmt.Errorf("invalid command argument '%s': %w", arg, err)
 		}
 	}
 	return nil
 }
 
-// validateCommandArg validates individual command arguments
-func (d *DebInstaller) validateCommandArg(arg string) error {
+// ValidateCommandArg validates individual command arguments
+func (d *DebInstaller) ValidateCommandArg(arg string) error {
 	if arg == "" {
 		return fmt.Errorf("argument cannot be empty")
 	}
@@ -172,16 +172,16 @@ func (d *DebInstaller) validateCommandArg(arg string) error {
 	return nil
 }
 
-// sanitizeOutput sanitizes command output for safe logging
-func (d *DebInstaller) sanitizeOutput(output string) string {
+// SanitizeOutput sanitizes command output for safe logging
+func (d *DebInstaller) SanitizeOutput(output string) string {
 	// Remove null bytes
 	output = strings.ReplaceAll(output, "\x00", "")
-	
+
 	// Limit output length for logging
 	const maxLogLength = 1000
 	if len(output) > maxLogLength {
 		output = output[:maxLogLength] + "...[truncated]"
 	}
-	
+
 	return output
 }

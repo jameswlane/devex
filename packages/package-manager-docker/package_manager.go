@@ -1,8 +1,8 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"os/exec"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -15,11 +15,13 @@ type DockerInstaller struct {
 
 // Execute handles command execution
 func (d *DockerInstaller) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	switch command {
 	case "ensure-installed":
-		return d.handleEnsureInstalled(args)
+		return d.handleEnsureInstalled(ctx, args)
 	case "status":
-		return d.handleStatus(args)
+		return d.handleStatus(ctx, args)
 	}
 
 	// For all other commands, ensure Docker is available
@@ -27,35 +29,35 @@ func (d *DockerInstaller) Execute(command string, args []string) error {
 
 	switch command {
 	case "install":
-		return d.handleInstall(args)
+		return d.handleInstall(ctx, args)
 	case "remove":
-		return d.handleRemove(args)
+		return d.handleRemove(ctx, args)
 	case "start":
-		return d.handleStart(args)
+		return d.handleStart(ctx, args)
 	case "stop":
-		return d.handleStop(args)
+		return d.handleStop(ctx, args)
 	case "restart":
-		return d.handleRestart(args)
+		return d.handleRestart(ctx, args)
 	case "list":
-		return d.handleList(args)
+		return d.handleList(ctx, args)
 	case "logs":
-		return d.handleLogs(args)
+		return d.handleLogs(ctx, args)
 	case "exec":
-		return d.handleExec(args)
+		return d.handleExec(ctx, args)
 	case "build":
-		return d.handleBuild(args)
+		return d.handleBuild(ctx, args)
 	case "pull":
-		return d.handlePull(args)
+		return d.handlePull(ctx, args)
 	case "push":
-		return d.handlePush(args)
+		return d.handlePush(ctx, args)
 	case "images":
-		return d.handleImages(args)
+		return d.handleImages(ctx, args)
 	case "rmi":
-		return d.handleRmi(args)
+		return d.handleRmi(ctx, args)
 	case "compose":
-		return d.handleCompose(args)
+		return d.handleCompose(ctx, args)
 	default:
-		return fmt.Errorf("unknown command: %s", command)
+		return fmt.Errorf("unknown command: '%s'", command)
 	}
 }
 
@@ -66,27 +68,27 @@ func (d *DockerInstaller) isDockerAvailable() bool {
 
 // isDockerDaemonRunning checks if Docker daemon is running
 func (d *DockerInstaller) isDockerDaemonRunning() bool {
-	cmd := exec.Command("docker", "info")
-	return cmd.Run() == nil
+	err := d.ExecManagerCommand("search", false, "info")
+	return err == nil
 }
 
 // handleStatus checks Docker daemon status
-func (d *DockerInstaller) handleStatus(args []string) error {
+func (d *DockerInstaller) handleStatus(ctx context.Context, args []string) error {
 	if !d.isDockerAvailable() {
 		d.logger.ErrorMsg("Docker is not installed")
-		return fmt.Errorf("Docker is not installed")
+		return fmt.Errorf("docker is not installed on this system")
 	}
 
 	if d.isDockerDaemonRunning() {
 		d.logger.Success("Docker daemon is running")
-		
+
 		// Show Docker version
-		if err := sdk.ExecCommand(false, "docker", "version"); err != nil {
+		if err := d.ExecManagerCommand("search", false, "version"); err != nil {
 			d.logger.Warning("Failed to get Docker version: %v", err)
 		}
 		return nil
 	}
 
 	d.logger.ErrorMsg("Docker daemon is not running")
-	return fmt.Errorf("Docker daemon is not running")
+	return fmt.Errorf("docker daemon is not running")
 }

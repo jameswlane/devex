@@ -113,7 +113,7 @@ func NewFlatpakPlugin() *FlatpakInstaller {
 
 func main() {
 	plugin := NewFlatpakPlugin()
-	
+
 	// Handle args with panic recovery
 	defer func() {
 		if r := recover(); r != nil {
@@ -121,6 +121,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	
+
 	sdk.HandleArgs(plugin, os.Args[1:])
 }

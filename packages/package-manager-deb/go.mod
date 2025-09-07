@@ -1,8 +1,10 @@
 module github.com/jameswlane/devex/packages/package-manager-deb
 
-go 1.23.0
+go 1.24
 
 require github.com/jameswlane/devex/packages/plugin-sdk v0.0.1
+
+replace github.com/jameswlane/devex/packages/plugin-sdk => ../plugin-sdk
 
 require (
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect

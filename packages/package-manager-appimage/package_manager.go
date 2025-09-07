@@ -47,12 +47,12 @@ func (p *AppimagePlugin) handleInstall(args []string) error {
 
 	downloadURL := args[0]
 	binaryName := args[1]
-	
+
 	// Validate parameters first
 	if err := p.validateAppImageParameters(downloadURL, binaryName); err != nil {
 		return fmt.Errorf("parameter validation failed: %w", err)
 	}
-	
+
 	// Parse flags
 	installLocation := "gui" // default to GUI apps
 	for i := 2; i < len(args); i++ {
@@ -118,7 +118,7 @@ func (p *AppimagePlugin) handleRemove(args []string) error {
 		desktopPath := filepath.Join(os.Getenv("HOME"), ".local", "share", "applications", binaryName+".desktop")
 
 		removed := false
-		
+
 		// Try GUI location
 		if _, err := os.Stat(guiPath); err == nil {
 			if err := os.Remove(guiPath); err != nil {
@@ -185,12 +185,12 @@ func (p *AppimagePlugin) handleIsInstalled(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no AppImage name specified")
 	}
-	
+
 	binaryName := args[0]
 	if err := p.validateBinaryName(binaryName); err != nil {
 		return fmt.Errorf("invalid binary name: %w", err)
 	}
-	
+
 	if installed, err := p.isAppImageInstalled(binaryName); err != nil {
 		p.logger.Printf("Error checking if AppImage %s is installed: %v\n", binaryName, err)
 		os.Exit(1)
@@ -201,7 +201,7 @@ func (p *AppimagePlugin) handleIsInstalled(args []string) error {
 		p.logger.Printf("AppImage %s is not installed\n", binaryName)
 		os.Exit(1)
 	}
-	
+
 	return nil
 }
 
@@ -210,24 +210,24 @@ func (p *AppimagePlugin) handleValidateURL(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no URL specified")
 	}
-	
+
 	for _, downloadURL := range args {
 		p.logger.Printf("Validating URL: %s\n", downloadURL)
-		
+
 		if err := p.validateURLAccessibility(downloadURL); err != nil {
 			p.logger.Printf("❌ %s: %v\n", downloadURL, err)
 		} else {
 			p.logger.Printf("✅ %s: URL is accessible\n", downloadURL)
 		}
 	}
-	
+
 	return nil
 }
 
 // isAppImageInstalled checks if an AppImage is installed in either location
 func (p *AppimagePlugin) isAppImageInstalled(binaryName string) (bool, error) {
 	homeDir := os.Getenv("HOME")
-	
+
 	// Check GUI location
 	guiPath := filepath.Join(homeDir, "Applications", binaryName)
 	if info, err := os.Stat(guiPath); err == nil {
@@ -257,29 +257,29 @@ func (p *AppimagePlugin) listAppImagesInDir(dir string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	count := 0
 	for _, file := range files {
 		if file.IsDir() {
 			continue
 		}
-		
+
 		// Check if file is executable
 		info, err := file.Info()
 		if err != nil {
 			continue
 		}
-		
+
 		if info.Mode()&0o111 != 0 {
 			p.logger.Printf("  %s (%s)\n", file.Name(), p.formatFileSize(info.Size()))
 			count++
 		}
 	}
-	
+
 	if count == 0 {
 		p.logger.Printf("  (No AppImages found)\n")
 	}
-	
+
 	return nil
 }
 

@@ -3,6 +3,7 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -64,23 +65,25 @@ func NewNixpkgsPlugin() *NixpkgsPlugin {
 func (p *NixpkgsPlugin) Execute(command string, args []string) error {
 	p.EnsureAvailable()
 
+	ctx := context.Background()
+
 	switch command {
 	case "install":
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
-		return p.handleRemove(args)
+		return p.handleRemove(ctx, args)
 	case "update":
-		return p.handleUpdate(args)
+		return p.handleUpdate(ctx, args)
 	case "search":
-		return p.handleSearch(args)
+		return p.handleSearch(ctx, args)
 	case "list":
-		return p.handleList(args)
+		return p.handleList(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (p *NixpkgsPlugin) handleInstall(args []string) error {
+func (p *NixpkgsPlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -89,10 +92,10 @@ func (p *NixpkgsPlugin) handleInstall(args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "nix-env", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "nix-env", cmdArgs...)
 }
 
-func (p *NixpkgsPlugin) handleRemove(args []string) error {
+func (p *NixpkgsPlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -100,15 +103,15 @@ func (p *NixpkgsPlugin) handleRemove(args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "nix-env", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "nix-env", cmdArgs...)
 }
 
-func (p *NixpkgsPlugin) handleUpdate(args []string) error {
+func (p *NixpkgsPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "nix-env", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "nix-env", "update")
 }
 
-func (p *NixpkgsPlugin) handleSearch(args []string) error {
+func (p *NixpkgsPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -116,11 +119,11 @@ func (p *NixpkgsPlugin) handleSearch(args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommand(false, "nix-env", "search", searchTerm)
+	return sdk.ExecCommandWithContext(ctx, false, "nix-env", "search", searchTerm)
 }
 
-func (p *NixpkgsPlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "nix-env", "list")
+func (p *NixpkgsPlugin) handleList(ctx context.Context, args []string) error {
+	return sdk.ExecCommandWithContext(ctx, false, "nix-env", "list")
 }
 
 func main() {

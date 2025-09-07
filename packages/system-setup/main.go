@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -66,21 +67,23 @@ func NewSystemSetupPlugin() *SystemSetupPlugin {
 
 // Execute handles command execution
 func (p *SystemSetupPlugin) Execute(command string, args []string) error {
+	ctx := context.Background()
+
 	switch command {
 	case "configure":
-		return p.handleConfigure(args)
+		return p.handleConfigure(ctx, args)
 	case "apply":
-		return p.handleApply(args)
+		return p.handleApply(ctx, args)
 	case "validate":
-		return p.handleValidate(args)
+		return p.handleValidate(ctx, args)
 	case "backup":
-		return p.handleBackup(args)
+		return p.handleBackup(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (p *SystemSetupPlugin) handleConfigure(args []string) error {
+func (p *SystemSetupPlugin) handleConfigure(ctx context.Context, args []string) error {
 	fmt.Printf("Configuring system (%s)...\n", runtime.GOOS)
 
 	// Display system information
@@ -95,17 +98,17 @@ func (p *SystemSetupPlugin) handleConfigure(args []string) error {
 	// Configure based on OS
 	switch runtime.GOOS {
 	case "linux":
-		return p.configureLinux(args)
+		return p.configureLinux(ctx, args)
 	case "darwin":
-		return p.configureMacOS(args)
+		return p.configureMacOS(ctx, args)
 	case "windows":
-		return p.configureWindows(args)
+		return p.configureWindows(ctx, args)
 	default:
 		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
 	}
 }
 
-func (p *SystemSetupPlugin) configureLinux(args []string) error {
+func (p *SystemSetupPlugin) configureLinux(ctx context.Context, args []string) error {
 	fmt.Println("\nConfiguring Linux system settings...")
 
 	configs := []SystemConfig{
@@ -155,7 +158,7 @@ func (p *SystemSetupPlugin) configureLinux(args []string) error {
 	return nil
 }
 
-func (p *SystemSetupPlugin) configureMacOS(args []string) error {
+func (p *SystemSetupPlugin) configureMacOS(ctx context.Context, args []string) error {
 	fmt.Println("\nConfiguring macOS system settings...")
 
 	configs := []SystemConfig{
@@ -205,7 +208,7 @@ func (p *SystemSetupPlugin) configureMacOS(args []string) error {
 	return nil
 }
 
-func (p *SystemSetupPlugin) configureWindows(args []string) error {
+func (p *SystemSetupPlugin) configureWindows(ctx context.Context, args []string) error {
 	fmt.Println("\nConfiguring Windows system settings...")
 
 	configs := []SystemConfig{
@@ -255,14 +258,14 @@ func (p *SystemSetupPlugin) configureWindows(args []string) error {
 	return nil
 }
 
-func (p *SystemSetupPlugin) handleApply(args []string) error {
+func (p *SystemSetupPlugin) handleApply(ctx context.Context, args []string) error {
 	fmt.Println("Applying system configuration changes...")
 
 	// Call configure with --apply flag
-	return p.handleConfigure([]string{"--apply"})
+	return p.handleConfigure(ctx, []string{"--apply"})
 }
 
-func (p *SystemSetupPlugin) handleValidate(args []string) error {
+func (p *SystemSetupPlugin) handleValidate(ctx context.Context, args []string) error {
 	fmt.Println("Validating system configuration...")
 
 	// Basic system validation
@@ -284,7 +287,7 @@ func (p *SystemSetupPlugin) handleValidate(args []string) error {
 	return nil
 }
 
-func (p *SystemSetupPlugin) handleBackup(args []string) error {
+func (p *SystemSetupPlugin) handleBackup(ctx context.Context, args []string) error {
 	fmt.Println("Backing up system configuration...")
 
 	homeDir, err := os.UserHomeDir()
@@ -292,7 +295,7 @@ func (p *SystemSetupPlugin) handleBackup(args []string) error {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	// Create backup directory
+	// Create a backup directory
 	backupDir := filepath.Join(homeDir, ".devex", "backups", "system")
 	timestamp := time.Now().Format("20060102-150405")
 	backupPath := filepath.Join(backupDir, timestamp)
@@ -346,7 +349,7 @@ func (p *SystemSetupPlugin) applyFileWatcherLimit() error {
 	// Make permanent
 	sysctlConf := "/etc/sysctl.d/99-devex.conf"
 	content := "fs.inotify.max_user_watches=524288\n"
-	return sdk.ExecCommand(true, "sh", "-c", fmt.Sprintf("echo '%s' > %s", content, sysctlConf))
+	return sdk.ExecCommandWithContext(context.Background(), true, "sh", "-c", fmt.Sprintf("echo '%s' > %s", content, sysctlConf))
 }
 
 func (p *SystemSetupPlugin) checkSwappiness() bool {
@@ -370,7 +373,7 @@ func (p *SystemSetupPlugin) applySwappiness() error {
 	// Make permanent
 	sysctlConf := "/etc/sysctl.d/99-devex.conf"
 	content := "vm.swappiness=10\n"
-	return sdk.ExecCommand(true, "sh", "-c", fmt.Sprintf("echo '%s' >> %s", content, sysctlConf))
+	return sdk.ExecCommandWithContext(context.Background(), true, "sh", "-c", fmt.Sprintf("echo '%s' >> %s", content, sysctlConf))
 }
 
 func (p *SystemSetupPlugin) checkDevDirectories() bool {
@@ -417,10 +420,10 @@ func (p *SystemSetupPlugin) checkFinderHiddenFiles() bool {
 }
 
 func (p *SystemSetupPlugin) applyFinderHiddenFiles() error {
-	if err := sdk.ExecCommand(false, "defaults", "write", "com.apple.finder", "AppleShowAllFiles", "YES"); err != nil {
+	if err := sdk.ExecCommandWithContext(context.Background(), false, "defaults", "write", "com.apple.finder", "AppleShowAllFiles", "YES"); err != nil {
 		return err
 	}
-	return sdk.ExecCommand(false, "killall", "Finder")
+	return sdk.ExecCommandWithContext(context.Background(), false, "killall", "Finder")
 }
 
 func (p *SystemSetupPlugin) checkDeveloperMode() bool {
@@ -432,7 +435,7 @@ func (p *SystemSetupPlugin) checkDeveloperMode() bool {
 }
 
 func (p *SystemSetupPlugin) applyDeveloperMode() error {
-	return sdk.ExecCommand(true, "DevToolsSecurity", "-enable")
+	return sdk.ExecCommandWithContext(context.Background(), true, "DevToolsSecurity", "-enable")
 }
 
 func (p *SystemSetupPlugin) checkGatekeeper() bool {
@@ -445,7 +448,7 @@ func (p *SystemSetupPlugin) checkGatekeeper() bool {
 
 func (p *SystemSetupPlugin) applyGatekeeper() error {
 	fmt.Println("WARNING: This will disable Gatekeeper security. Use with caution!")
-	return sdk.ExecCommand(true, "spctl", "--master-disable")
+	return sdk.ExecCommandWithContext(context.Background(), true, "spctl", "--master-disable")
 }
 
 // Helper functions for Windows
@@ -459,7 +462,7 @@ func (p *SystemSetupPlugin) checkWindowsDeveloperMode() bool {
 }
 
 func (p *SystemSetupPlugin) applyWindowsDeveloperMode() error {
-	return sdk.ExecCommand(true, "reg", "add", "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock", "/v", "AllowDevelopmentWithoutDevLicense", "/t", "REG_DWORD", "/d", "1", "/f")
+	return sdk.ExecCommandWithContext(context.Background(), true, "reg", "add", "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\AppModelUnlock", "/v", "AllowDevelopmentWithoutDevLicense", "/t", "REG_DWORD", "/d", "1", "/f")
 }
 
 func (p *SystemSetupPlugin) checkWindowsTerminal() bool {
@@ -468,7 +471,7 @@ func (p *SystemSetupPlugin) checkWindowsTerminal() bool {
 
 func (p *SystemSetupPlugin) applyWindowsTerminal() error {
 	if sdk.CommandExists("winget") {
-		return sdk.ExecCommand(false, "winget", "install", "Microsoft.WindowsTerminal")
+		return sdk.ExecCommandWithContext(context.Background(), false, "winget", "install", "Microsoft.WindowsTerminal")
 	}
 	return fmt.Errorf("winget not available to install Windows Terminal")
 }
@@ -479,7 +482,7 @@ func (p *SystemSetupPlugin) checkWSL() bool {
 }
 
 func (p *SystemSetupPlugin) applyWSL() error {
-	return sdk.ExecCommand(true, "wsl", "--install")
+	return sdk.ExecCommandWithContext(context.Background(), true, "wsl", "--install")
 }
 
 // Backup helper functions
@@ -493,7 +496,7 @@ func (p *SystemSetupPlugin) backupLinuxConfigs(backupPath string) {
 	for _, config := range configs {
 		if _, err := os.Stat(config); err == nil {
 			name := strings.ReplaceAll(config, "/", "_")
-			if err := sdk.ExecCommand(false, "cp", "-r", config, filepath.Join(backupPath, name)); err != nil {
+			if err := sdk.ExecCommandWithContext(context.Background(), false, "cp", "-r", config, filepath.Join(backupPath, name)); err != nil {
 				fmt.Printf("Warning: Failed to backup %s: %v\n", config, err)
 			}
 		}
@@ -527,7 +530,7 @@ func (p *SystemSetupPlugin) backupWindowsConfigs(backupPath string) {
 
 	for _, key := range keys {
 		name := strings.ReplaceAll(key, "\\", "_") + ".reg"
-		if err := sdk.ExecCommand(false, "reg", "export", key, filepath.Join(backupPath, name)); err != nil {
+		if err := sdk.ExecCommandWithContext(context.Background(), false, "reg", "export", key, filepath.Join(backupPath, name)); err != nil {
 			fmt.Printf("Warning: Failed to export registry key %s: %v\n", key, err)
 		}
 	}

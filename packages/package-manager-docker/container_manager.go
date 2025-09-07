@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -8,7 +9,7 @@ import (
 )
 
 // handleInstall handles container installation/running
-func (d *DockerInstaller) handleInstall(args []string) error {
+func (d *DockerInstaller) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no image specified")
 	}
@@ -18,11 +19,11 @@ func (d *DockerInstaller) handleInstall(args []string) error {
 
 	// Build docker run command
 	runCmd := []string{"run", "-d"}
-	
+
 	// Add image
 	runCmd = append(runCmd, image)
 
-	if err := sdk.ExecCommand(false, "docker", runCmd...); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "docker", runCmd...); err != nil {
 		return fmt.Errorf("failed to run container: %w", err)
 	}
 
@@ -31,7 +32,7 @@ func (d *DockerInstaller) handleInstall(args []string) error {
 }
 
 // handleRemove removes containers
-func (d *DockerInstaller) handleRemove(args []string) error {
+func (d *DockerInstaller) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no containers specified")
 	}
@@ -40,12 +41,12 @@ func (d *DockerInstaller) handleRemove(args []string) error {
 
 	for _, container := range args {
 		// Stop container first
-		if err := sdk.ExecCommand(false, "docker", "stop", container); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "docker", "stop", container); err != nil {
 			d.logger.Warning("Failed to stop container %s: %v", container, err)
 		}
 
 		// Remove container
-		if err := sdk.ExecCommand(false, "docker", "rm", container); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "docker", "rm", container); err != nil {
 			return fmt.Errorf("failed to remove container %s: %w", container, err)
 		}
 	}
@@ -55,34 +56,34 @@ func (d *DockerInstaller) handleRemove(args []string) error {
 }
 
 // handleStart starts stopped containers
-func (d *DockerInstaller) handleStart(args []string) error {
+func (d *DockerInstaller) handleStart(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no containers specified")
 	}
 	cmdArgs := append([]string{"start"}, args...)
-	return sdk.ExecCommand(false, "docker", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
 
 // handleStop stops running containers
-func (d *DockerInstaller) handleStop(args []string) error {
+func (d *DockerInstaller) handleStop(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no containers specified")
 	}
 	cmdArgs := append([]string{"stop"}, args...)
-	return sdk.ExecCommand(false, "docker", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
 
 // handleRestart restarts containers
-func (d *DockerInstaller) handleRestart(args []string) error {
+func (d *DockerInstaller) handleRestart(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no containers specified")
 	}
 	cmdArgs := append([]string{"restart"}, args...)
-	return sdk.ExecCommand(false, "docker", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
 
 // handleList lists containers
-func (d *DockerInstaller) handleList(args []string) error {
+func (d *DockerInstaller) handleList(ctx context.Context, args []string) error {
 	listArgs := []string{"ps"}
 	for _, arg := range args {
 		if arg == "--all" || arg == "-a" {
@@ -90,23 +91,23 @@ func (d *DockerInstaller) handleList(args []string) error {
 			break
 		}
 	}
-	return sdk.ExecCommand(false, "docker", listArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "docker", listArgs...)
 }
 
 // handleLogs shows container logs
-func (d *DockerInstaller) handleLogs(args []string) error {
+func (d *DockerInstaller) handleLogs(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no container specified")
 	}
 	cmdArgs := append([]string{"logs"}, args...)
-	return sdk.ExecCommand(false, "docker", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
 
 // handleExec executes commands in containers
-func (d *DockerInstaller) handleExec(args []string) error {
+func (d *DockerInstaller) handleExec(ctx context.Context, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("exec requires container and command")
 	}
 	cmdArgs := append([]string{"exec", "-it"}, args...)
-	return sdk.ExecCommand(false, "docker", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }

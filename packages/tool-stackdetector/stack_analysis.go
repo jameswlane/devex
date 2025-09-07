@@ -9,19 +9,19 @@ import (
 
 // ProjectAnalysis represents comprehensive project analysis results
 type ProjectAnalysis struct {
-	Technologies   []Technology
-	Dependencies   []Dependency
-	ProjectSize    ProjectSize
+	Technologies    []Technology
+	Dependencies    []Dependency
+	ProjectSize     ProjectSize
 	Recommendations []string
-	Issues         []string
+	Issues          []string
 }
 
 // Dependency represents a project dependency
 type Dependency struct {
-	Name     string
-	Version  string
-	Type     string // "direct", "dev", "peer"
-	Source   string // file where found
+	Name    string
+	Version string
+	Type    string // "direct", "dev", "peer"
+	Source  string // file where found
 }
 
 // ProjectSize represents project size metrics
@@ -48,7 +48,7 @@ func (p *StackDetectorPlugin) handleAnalyze(args []string) error {
 	}
 
 	// Validate directory
-	if err := p.validateDirectory(dir); err != nil {
+	if err := p.ValidateDirectory(dir); err != nil {
 		return err
 	}
 
@@ -71,7 +71,7 @@ func (p *StackDetectorPlugin) performProjectAnalysis(dir string) (*ProjectAnalys
 	analysis := &ProjectAnalysis{}
 
 	// Technology detection
-	analysis.Technologies = p.detectStack(dir)
+	analysis.Technologies = p.DetectStack(dir)
 
 	// Dependency analysis
 	var err error
@@ -131,10 +131,10 @@ func (p *StackDetectorPlugin) analyzePackageJson(path string) ([]Dependency, err
 	}
 
 	var dependencies []Dependency
-	
+
 	// Simple parsing - in a real implementation, use JSON parsing
 	contentStr := string(content)
-	
+
 	// Extract dependencies section (simplified)
 	if strings.Contains(contentStr, "\"dependencies\"") {
 		// This is a simplified approach - proper JSON parsing would be better
@@ -157,7 +157,7 @@ func (p *StackDetectorPlugin) analyzeRequirementsTxt(path string) ([]Dependency,
 
 	var dependencies []Dependency
 	lines := strings.Split(string(content), "\n")
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line != "" && !strings.HasPrefix(line, "#") {
@@ -167,7 +167,7 @@ func (p *StackDetectorPlugin) analyzeRequirementsTxt(path string) ([]Dependency,
 			if len(parts) > 1 {
 				version = parts[1]
 			}
-			
+
 			dependencies = append(dependencies, Dependency{
 				Name:    name,
 				Version: version,
@@ -222,11 +222,11 @@ func (p *StackDetectorPlugin) analyzeProjectSize(dir string) (ProjectSize, error
 		// Skip hidden directories and common ignore patterns
 		if info.IsDir() {
 			name := info.Name()
-			if strings.HasPrefix(name, ".") || 
-			   name == "node_modules" || 
-			   name == "vendor" || 
-			   name == "target" ||
-			   name == "dist" {
+			if strings.HasPrefix(name, ".") ||
+				name == "node_modules" ||
+				name == "vendor" ||
+				name == "target" ||
+				name == "dist" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -258,13 +258,13 @@ func (p *StackDetectorPlugin) generateRecommendations(analysis *ProjectAnalysis)
 	hasDocker := false
 	hasCI := false
 	hasLinting := false
-	
+
 	for _, tech := range analysis.Technologies {
 		if strings.Contains(strings.ToLower(tech.Name), "docker") {
 			hasDocker = true
 		}
 		if strings.Contains(strings.ToLower(tech.Name), "eslint") ||
-		   strings.Contains(strings.ToLower(tech.Name), "prettier") {
+			strings.Contains(strings.ToLower(tech.Name), "prettier") {
 			hasLinting = true
 		}
 	}
@@ -305,7 +305,7 @@ func (p *StackDetectorPlugin) identifyIssues(dir string, analysis *ProjectAnalys
 			depFiles++
 		}
 	}
-	
+
 	if depFiles > 2 {
 		issues = append(issues, "Multiple package managers detected - this may cause dependency conflicts")
 	}

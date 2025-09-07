@@ -4,31 +4,98 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // Technology represents a detected technology with its metadata
 type Technology struct {
 	Name        string
 	Category    string
-	Confidence  int    // 1-10 scale
+	Confidence  int // 1-10 scale
 	Description string
 	Files       []string
 }
 
-// detectStack performs comprehensive stack detection in the given directory
-func (p *StackDetectorPlugin) detectStack(dir string) []Technology {
+// statCache provides thread-safe caching for os.Stat() calls to improve performance
+type statCache struct {
+	cache map[string]statResult
+	mutex sync.RWMutex
+}
+
+// statResult represents a cached stat result
+type statResult struct {
+	info  os.FileInfo
+	err   error
+	isDir bool
+}
+
+// newStatCache creates a new stat cache instance
+func newStatCache() *statCache {
+	return &statCache{
+		cache: make(map[string]statResult),
+	}
+}
+
+// stat performs a cached os.Stat() call
+func (sc *statCache) stat(path string) (os.FileInfo, error) {
+	sc.mutex.RLock()
+	if result, exists := sc.cache[path]; exists {
+		sc.mutex.RUnlock()
+		return result.info, result.err
+	}
+	sc.mutex.RUnlock()
+
+	// Perform actual stat call
+	info, err := os.Stat(path)
+
+	// Cache the result
+	sc.mutex.Lock()
+	sc.cache[path] = statResult{
+		info:  info,
+		err:   err,
+		isDir: info != nil && info.IsDir(),
+	}
+	sc.mutex.Unlock()
+
+	return info, err
+}
+
+// fileExists checks if a file exists using cached stat results
+func (sc *statCache) fileExists(path string) bool {
+	_, err := sc.stat(path)
+	return err == nil
+}
+
+// isDir checks if a path is a directory using cached stat results
+func (sc *statCache) isDir(path string) bool {
+	sc.mutex.RLock()
+	if result, exists := sc.cache[path]; exists {
+		sc.mutex.RUnlock()
+		return result.isDir
+	}
+	sc.mutex.RUnlock()
+
+	info, err := sc.stat(path)
+	return err == nil && info.IsDir()
+}
+
+// DetectStack performs comprehensive stack detection in the given directory
+func (p *StackDetectorPlugin) DetectStack(dir string) []Technology {
 	var detected []Technology
 
+	// Create a stat cache for this detection session
+	cache := newStatCache()
+
 	// File-based detection
-	fileDetections := p.detectByFiles(dir)
+	fileDetections := p.detectByFiles(dir, cache)
 	detected = append(detected, fileDetections...)
 
 	// Directory-based detection
-	dirDetections := p.detectByDirectories(dir)
+	dirDetections := p.detectByDirectories(dir, cache)
 	detected = append(detected, dirDetections...)
 
 	// Content-based detection (for more specific technologies)
-	contentDetections := p.detectByContent(dir)
+	contentDetections := p.detectByContent(dir, cache)
 	detected = append(detected, contentDetections...)
 
 	// Remove duplicates and sort by confidence
@@ -37,8 +104,8 @@ func (p *StackDetectorPlugin) detectStack(dir string) []Technology {
 	return detected
 }
 
-// detectByFiles detects technologies based on presence of specific files
-func (p *StackDetectorPlugin) detectByFiles(dir string) []Technology {
+// detectByFiles detects technologies based on the presence of specific files
+func (p *StackDetectorPlugin) detectByFiles(dir string, cache *statCache) []Technology {
 	var detected []Technology
 
 	// Enhanced file detectors with categories and confidence levels
@@ -168,7 +235,7 @@ func (p *StackDetectorPlugin) detectByFiles(dir string) []Technology {
 	// Check for files
 	for file, tech := range fileDetectors {
 		path := filepath.Join(dir, file)
-		if _, err := os.Stat(path); err == nil {
+		if cache.fileExists(path) {
 			tech.Files = []string{file}
 			detected = append(detected, tech)
 		}
@@ -177,8 +244,8 @@ func (p *StackDetectorPlugin) detectByFiles(dir string) []Technology {
 	return detected
 }
 
-// detectByDirectories detects technologies based on presence of specific directories
-func (p *StackDetectorPlugin) detectByDirectories(dir string) []Technology {
+// detectByDirectories detects technologies based on the presence of specific directories
+func (p *StackDetectorPlugin) detectByDirectories(dir string, cache *statCache) []Technology {
 	var detected []Technology
 
 	dirDetectors := map[string]Technology{
@@ -240,7 +307,7 @@ func (p *StackDetectorPlugin) detectByDirectories(dir string) []Technology {
 
 	for dirName, tech := range dirDetectors {
 		path := filepath.Join(dir, dirName)
-		if info, err := os.Stat(path); err == nil && info.IsDir() {
+		if cache.isDir(path) {
 			tech.Files = []string{dirName + "/"}
 			detected = append(detected, tech)
 		}
@@ -250,24 +317,24 @@ func (p *StackDetectorPlugin) detectByDirectories(dir string) []Technology {
 }
 
 // detectByContent performs content-based detection for more specific identification
-func (p *StackDetectorPlugin) detectByContent(dir string) []Technology {
+func (p *StackDetectorPlugin) detectByContent(dir string, cache *statCache) []Technology {
 	var detected []Technology
 
 	// Check package.json for specific frameworks
-	if packageTech := p.detectFromPackageJson(dir); packageTech != nil {
+	if packageTech := p.detectFromPackageJson(dir, cache); packageTech != nil {
 		detected = append(detected, *packageTech)
 	}
 
 	// Check for specific configuration patterns
-	detected = append(detected, p.detectFrameworkConfigs(dir)...)
+	detected = append(detected, p.detectFrameworkConfigs(dir, cache)...)
 
 	return detected
 }
 
 // detectFromPackageJson analyzes package.json content for framework detection
-func (p *StackDetectorPlugin) detectFromPackageJson(dir string) *Technology {
+func (p *StackDetectorPlugin) detectFromPackageJson(dir string, cache *statCache) *Technology {
 	packagePath := filepath.Join(dir, "package.json")
-	if _, err := os.Stat(packagePath); err != nil {
+	if !cache.fileExists(packagePath) {
 		return nil
 	}
 
@@ -323,7 +390,7 @@ func (p *StackDetectorPlugin) detectFromPackageJson(dir string) *Technology {
 }
 
 // detectFrameworkConfigs detects specific framework configuration files
-func (p *StackDetectorPlugin) detectFrameworkConfigs(dir string) []Technology {
+func (p *StackDetectorPlugin) detectFrameworkConfigs(dir string, cache *statCache) []Technology {
 	var detected []Technology
 
 	configDetectors := map[string]Technology{
@@ -366,7 +433,7 @@ func (p *StackDetectorPlugin) detectFrameworkConfigs(dir string) []Technology {
 	}
 
 	for configFile, tech := range configDetectors {
-		if p.configFileExists(dir, configFile) {
+		if p.configFileExists(dir, configFile, cache) {
 			tech.Files = []string{configFile}
 			detected = append(detected, tech)
 		}
@@ -376,12 +443,12 @@ func (p *StackDetectorPlugin) detectFrameworkConfigs(dir string) []Technology {
 }
 
 // configFileExists checks if a configuration file exists with various extensions
-func (p *StackDetectorPlugin) configFileExists(dir, baseFile string) bool {
+func (p *StackDetectorPlugin) configFileExists(dir, baseFile string, cache *statCache) bool {
 	extensions := []string{"", ".js", ".ts", ".json", ".yaml", ".yml"}
-	
+
 	for _, ext := range extensions {
 		path := filepath.Join(dir, baseFile+ext)
-		if _, err := os.Stat(path); err == nil {
+		if cache.fileExists(path) {
 			return true
 		}
 	}

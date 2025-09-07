@@ -304,22 +304,22 @@ func Printf(format string, args ...any) {
 // Println outputs a message with newline to stdout if not in silent/test mode, otherwise logs it.
 func Println(msg string, args ...any) {
 	if len(args) > 0 {
-		Print(fmt.Sprintf(msg, args...) + "\n")
+		Print("%s", fmt.Sprintf(msg, args...)+"\n")
 	} else {
-		Print(msg + "\n")
+		Print("%s", msg+"\n")
 	}
 }
 
 // Success prints a success message with green checkmark (if colors supported).
 func Success(msg string, args ...any) {
 	formattedMsg := fmt.Sprintf("✅ "+msg, args...)
-	Print(formattedMsg + "\n")
+	Print("%s", formattedMsg+"\n")
 }
 
 // Warning prints a warning message with yellow warning icon.
 func Warning(msg string, args ...any) {
 	formattedMsg := fmt.Sprintf("⚠️  "+msg, args...)
-	Print(formattedMsg + "\n")
+	Print("%s", formattedMsg+"\n")
 	// Also log as warning
 	if logger != nil {
 		logger.logWithContext(log.WarnLevel, strings.TrimSpace(formattedMsg))
@@ -329,7 +329,7 @@ func Warning(msg string, args ...any) {
 // ErrorMsg prints an error message with red cross icon.
 func ErrorMsg(msg string, args ...any) {
 	formattedMsg := fmt.Sprintf("❌ "+msg, args...)
-	Print(formattedMsg + "\n")
+	Print("%s", formattedMsg+"\n")
 	// Also log as error
 	if logger != nil {
 		logger.logWithContext(log.ErrorLevel, strings.TrimSpace(formattedMsg))

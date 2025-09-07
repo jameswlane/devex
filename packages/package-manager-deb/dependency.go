@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -29,7 +30,7 @@ func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) 
 		if idx := strings.IndexAny(dep, " ("); idx > 0 {
 			dep = dep[:idx]
 		}
-		
+
 		// Skip if it's an OR dependency (contains |)
 		if strings.Contains(dep, "|") {
 			parts := strings.Split(dep, "|")
@@ -59,7 +60,7 @@ func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) 
 }
 
 // installDependencies installs missing dependencies using apt
-func (d *DebInstaller) installDependencies(deps []string) error {
+func (d *DebInstaller) installDependencies(ctx context.Context, deps []string) error {
 	if len(deps) == 0 {
 		return nil
 	}
@@ -73,13 +74,13 @@ func (d *DebInstaller) installDependencies(deps []string) error {
 
 	// Update package lists first
 	d.logger.Println("Updating package lists...")
-	if err := sdk.ExecCommand(true, "apt-get", "update"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update"); err != nil {
 		d.logger.Warning("Failed to update package lists: %v", err)
 	}
 
 	// Install dependencies
 	cmdArgs := append([]string{"install", "-y"}, deps...)
-	if err := sdk.ExecCommand(true, "apt-get", cmdArgs...); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", cmdArgs...); err != nil {
 		return fmt.Errorf("failed to install dependencies: %w", err)
 	}
 

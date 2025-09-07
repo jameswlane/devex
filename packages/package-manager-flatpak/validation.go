@@ -161,13 +161,13 @@ func (f *FlatpakInstaller) isValidFlatpakID(appID string) bool {
 		if part == "" {
 			return false
 		}
-		
+
 		// Check if part contains only valid characters
 		validPartRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 		if !validPartRegex.MatchString(part) {
 			return false
 		}
-		
+
 		// Parts cannot start with a digit
 		if len(part) > 0 && part[0] >= '0' && part[0] <= '9' {
 			return false
@@ -177,32 +177,32 @@ func (f *FlatpakInstaller) isValidFlatpakID(appID string) bool {
 	return true
 }
 
-// sanitizeOutput sanitizes command output for safe logging
-func (f *FlatpakInstaller) sanitizeOutput(output string) string {
+// SanitizeOutput sanitizes command output for safe logging
+func (f *FlatpakInstaller) SanitizeOutput(output string) string {
 	// Remove null bytes
 	output = strings.ReplaceAll(output, "\x00", "")
-	
+
 	// Limit output length for logging
 	const maxLogLength = 1000
 	if len(output) > maxLogLength {
 		output = output[:maxLogLength] + "...[truncated]"
 	}
-	
+
 	return output
 }
 
-// validateCommand validates command arguments to prevent injection
-func (f *FlatpakInstaller) validateCommand(args []string) error {
+// ValidateCommand validates command arguments to prevent injection
+func (f *FlatpakInstaller) ValidateCommand(args []string) error {
 	for _, arg := range args {
-		if err := f.validateCommandArg(arg); err != nil {
+		if err := f.ValidateCommandArg(arg); err != nil {
 			return fmt.Errorf("invalid command argument '%s': %w", arg, err)
 		}
 	}
 	return nil
 }
 
-// validateCommandArg validates individual command arguments
-func (f *FlatpakInstaller) validateCommandArg(arg string) error {
+// ValidateCommandArg validates individual command arguments
+func (f *FlatpakInstaller) ValidateCommandArg(arg string) error {
 	if arg == "" {
 		return fmt.Errorf("argument cannot be empty")
 	}

@@ -18,8 +18,8 @@ const (
 	MaxCommandLength = 1000
 )
 
-// validateURL validates URL format and basic security checks
-func (p *CurlpipePlugin) validateURL(inputURL string) error {
+// ValidateURL validates URL format and basic security checks
+func (p *CurlpipePlugin) ValidateURL(inputURL string) error {
 	if inputURL == "" {
 		return fmt.Errorf("URL cannot be empty")
 	}
@@ -96,18 +96,18 @@ func (p *CurlpipePlugin) validateAppName(appName string) error {
 	return nil
 }
 
-// validateCommand validates command arguments to prevent injection
-func (p *CurlpipePlugin) validateCommand(args []string) error {
+// ValidateCommand validates command arguments to prevent injection
+func (p *CurlpipePlugin) ValidateCommand(args []string) error {
 	for _, arg := range args {
-		if err := p.validateCommandArg(arg); err != nil {
+		if err := p.ValidateCommandArg(arg); err != nil {
 			return fmt.Errorf("invalid command argument '%s': %w", arg, err)
 		}
 	}
 	return nil
 }
 
-// validateCommandArg validates individual command arguments
-func (p *CurlpipePlugin) validateCommandArg(arg string) error {
+// ValidateCommandArg validates individual command arguments
+func (p *CurlpipePlugin) ValidateCommandArg(arg string) error {
 	if arg == "" {
 		return fmt.Errorf("argument cannot be empty")
 	}
@@ -137,15 +137,15 @@ func (p *CurlpipePlugin) validateCommandArg(arg string) error {
 	return nil
 }
 
-// validateFileExtension validates file extensions for script files
-func (p *CurlpipePlugin) validateFileExtension(filename string) error {
+// ValidateFileExtension validates file extensions for script files
+func (p *CurlpipePlugin) ValidateFileExtension(filename string) error {
 	if filename == "" {
 		return fmt.Errorf("filename cannot be empty")
 	}
 
 	// Common script extensions that are generally safe
 	safeExtensions := []string{".sh", ".bash", ".py", ".rb", ".js", ".pl"}
-	
+
 	for _, ext := range safeExtensions {
 		if strings.HasSuffix(strings.ToLower(filename), ext) {
 			return nil
@@ -160,22 +160,22 @@ func (p *CurlpipePlugin) validateFileExtension(filename string) error {
 	return fmt.Errorf("potentially unsafe file extension")
 }
 
-// sanitizeOutput sanitizes command output for safe logging
-func (p *CurlpipePlugin) sanitizeOutput(output string) string {
+// SanitizeOutput sanitizes command output for safe logging
+func (p *CurlpipePlugin) SanitizeOutput(output string) string {
 	// Remove null bytes
 	output = strings.ReplaceAll(output, "\x00", "")
-	
+
 	// Limit output length for logging
 	const maxLogLength = 1000
 	if len(output) > maxLogLength {
 		output = output[:maxLogLength] + "...[truncated]"
 	}
-	
+
 	return output
 }
 
-// validateScriptPath validates script paths to prevent directory traversal
-func (p *CurlpipePlugin) validateScriptPath(path string) error {
+// ValidateScriptPath validates script paths to prevent directory traversal
+func (p *CurlpipePlugin) ValidateScriptPath(path string) error {
 	if path == "" {
 		return fmt.Errorf("script path cannot be empty")
 	}
@@ -193,15 +193,103 @@ func (p *CurlpipePlugin) validateScriptPath(path string) error {
 	return nil
 }
 
-// isValidScriptType checks if the script type is allowed
-func (p *CurlpipePlugin) isValidScriptType(scriptType string) bool {
+// IsValidScriptType checks if the script type is allowed
+func (p *CurlpipePlugin) IsValidScriptType(scriptType string) bool {
 	allowedTypes := []string{"sh", "bash", "shell", "script", "install"}
-	
+
 	for _, allowed := range allowedTypes {
 		if strings.EqualFold(scriptType, allowed) {
 			return true
 		}
 	}
-	
+
 	return false
+}
+
+// ValidateScriptSecurity performs runtime security validation on script content
+func (p *CurlpipePlugin) ValidateScriptSecurity(content string) error {
+	if content == "" {
+		return fmt.Errorf("script content is empty")
+	}
+
+	// Check for obviously destructive commands
+	destructivePatterns := []struct {
+		pattern     *regexp.Regexp
+		description string
+	}{
+		{regexp.MustCompile(`\brm\s+(-[rfRF]*\s+)*(/|/home|/usr|/var|/etc|/boot|/opt)\s*$`), "destructive file removal"},
+		{regexp.MustCompile(`\bdd\s+.*\bof=/dev/(sd[a-z]|hd[a-z]|nvme\d+n\d+)\b`), "disk overwrite command"},
+		{regexp.MustCompile(`\bmkfs(\.[a-zA-Z0-9]+)?\s+/dev/`), "filesystem format command"},
+		{regexp.MustCompile(`:\(\)\{.*:\|:&.*\};:`), "fork bomb pattern"},
+		{regexp.MustCompile(`\bchmod\s+000\s+/`), "permission destruction"},
+		{regexp.MustCompile(`\bchown\s+root:\s*/`), "ownership change to root"},
+		{regexp.MustCompile(`\b(nc|netcat)\s+.*\s-e\s`), "netcat shell backdoor"},
+		{regexp.MustCompile(`/dev/(tcp|udp)/.*/.*/exec`), "network shell backdoor"},
+	}
+
+	for _, pattern := range destructivePatterns {
+		if pattern.pattern.MatchString(content) {
+			return fmt.Errorf("script contains potentially destructive pattern: %s", pattern.description)
+		}
+	}
+
+	// Check for suspicious network activity
+	suspiciousNetworkPatterns := []struct {
+		pattern     *regexp.Regexp
+		description string
+	}{
+		{regexp.MustCompile(`\b(wget|curl).*\|\s*(bash|sh|python|perl|ruby)\b`), "chained network download execution"},
+		{regexp.MustCompile(`\b(nc|netcat).*-l.*-p\s+\d+\b`), "listening network service"},
+		{regexp.MustCompile(`\bssh\s+.*@.*\s.*\s&\s*$`), "background SSH connection"},
+		{regexp.MustCompile(`\bcrontab\s+.*<<.*EOF`), "cron job installation"},
+	}
+
+	for _, pattern := range suspiciousNetworkPatterns {
+		if pattern.pattern.MatchString(content) {
+			p.logger.Printf("⚠️  Warning: Script contains suspicious network pattern: %s\n", pattern.description)
+		}
+	}
+
+	// Check for privilege escalation attempts
+	privEscPatterns := []struct {
+		pattern     *regexp.Regexp
+		description string
+	}{
+		{regexp.MustCompile(`\bsu\s+-\s+root\b`), "root privilege escalation"},
+		{regexp.MustCompile(`\bsudo\s+su\s+-\b`), "sudo privilege escalation"},
+		{regexp.MustCompile(`\bpasswd\s+root\b`), "root password change"},
+		{regexp.MustCompile(`\buseradd.*-G.*sudo\b`), "sudo group addition"},
+		{regexp.MustCompile(`\bsetuid\(\s*0\s*\)`), "setuid root call"},
+	}
+
+	for _, pattern := range privEscPatterns {
+		if pattern.pattern.MatchString(content) {
+			p.logger.Printf("⚠️  Warning: Script contains privilege escalation pattern: %s\n", pattern.description)
+		}
+	}
+
+	// Check script size limits for performance
+	const maxScriptSize = 10 * 1024 * 1024 // 10MB
+	if len(content) > maxScriptSize {
+		return fmt.Errorf("script size %d bytes exceeds maximum allowed size %d bytes", len(content), maxScriptSize)
+	}
+
+	// Check for excessive nested commands
+	if strings.Count(content, "$(") > 50 || strings.Count(content, "`") > 50 {
+		return fmt.Errorf("script contains excessive command substitution, possible obfuscation")
+	}
+
+	// Check for binary content (likely malicious or corrupted)
+	nonPrintableCount := 0
+	for _, r := range content {
+		if r < 32 && r != 9 && r != 10 && r != 13 { // Not tab, newline, or carriage return
+			nonPrintableCount++
+		}
+	}
+
+	if nonPrintableCount > len(content)/100 { // More than 1% non-printable
+		return fmt.Errorf("script contains excessive non-printable characters, possibly binary content")
+	}
+
+	return nil
 }

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // downloadDebFile downloads a .deb file from a URL
@@ -20,20 +23,20 @@ func (d *DebInstaller) downloadDebFile(url string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	d.logger.Debug("Downloading to temporary file: %s", tmpFile.Name())
 
 	// Download the file
 	resp, err := http.Get(url)
 	if err != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
@@ -46,7 +49,7 @@ func (d *DebInstaller) downloadDebFile(url string) (string, error) {
 	// Copy the response body to the file
 	_, err = io.Copy(tmpFile, resp.Body)
 	if err != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to save file: %w", err)
 	}
 
@@ -55,7 +58,7 @@ func (d *DebInstaller) downloadDebFile(url string) (string, error) {
 }
 
 // extractPackage extracts a .deb package to a target directory
-func (d *DebInstaller) extractPackage(debFile, targetDir string) error {
+func (d *DebInstaller) extractPackage(ctx context.Context, debFile, targetDir string) error {
 	// Create target directory if it doesn't exist
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
@@ -75,7 +78,7 @@ func (d *DebInstaller) extractPackage(debFile, targetDir string) error {
 	}
 
 	// Extract the package
-	if err := sdk.ExecCommand(false, "dpkg-deb", "-x", absDebFile, absTargetDir); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "dpkg-deb", "-x", absDebFile, absTargetDir); err != nil {
 		return fmt.Errorf("failed to extract package: %w", err)
 	}
 

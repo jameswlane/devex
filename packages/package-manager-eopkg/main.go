@@ -3,6 +3,7 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -64,23 +65,25 @@ func NewEopkgPlugin() *EopkgPlugin {
 func (p *EopkgPlugin) Execute(command string, args []string) error {
 	p.EnsureAvailable()
 
+	ctx := context.Background()
+
 	switch command {
 	case "install":
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
-		return p.handleRemove(args)
+		return p.handleRemove(ctx, args)
 	case "update":
-		return p.handleUpdate(args)
+		return p.handleUpdate(ctx, args)
 	case "search":
-		return p.handleSearch(args)
+		return p.handleSearch(ctx, args)
 	case "list":
-		return p.handleList(args)
+		return p.handleList(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (p *EopkgPlugin) handleInstall(args []string) error {
+func (p *EopkgPlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -89,10 +92,10 @@ func (p *EopkgPlugin) handleInstall(args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommand(true, "eopkg", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "eopkg", cmdArgs...)
 }
 
-func (p *EopkgPlugin) handleRemove(args []string) error {
+func (p *EopkgPlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -100,15 +103,15 @@ func (p *EopkgPlugin) handleRemove(args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommand(true, "eopkg", cmdArgs...)
+	return sdk.ExecCommandWithContext(ctx, true, "eopkg", cmdArgs...)
 }
 
-func (p *EopkgPlugin) handleUpdate(args []string) error {
+func (p *EopkgPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommand(true, "eopkg", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "eopkg", "update")
 }
 
-func (p *EopkgPlugin) handleSearch(args []string) error {
+func (p *EopkgPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
@@ -116,11 +119,11 @@ func (p *EopkgPlugin) handleSearch(args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommand(false, "eopkg", "search", searchTerm)
+	return sdk.ExecCommandWithContext(ctx, false, "eopkg", "search", searchTerm)
 }
 
-func (p *EopkgPlugin) handleList(args []string) error {
-	return sdk.ExecCommand(false, "eopkg", "list")
+func (p *EopkgPlugin) handleList(ctx context.Context, args []string) error {
+	return sdk.ExecCommandWithContext(ctx, false, "eopkg", "list")
 }
 
 func main() {

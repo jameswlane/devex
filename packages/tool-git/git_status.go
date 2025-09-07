@@ -1,35 +1,36 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
-// handleStatus displays current Git configuration and version information
-func (p *GitPlugin) handleStatus(args []string) error {
+// HandleStatus displays the current Git configuration and version information
+func (p *GitPlugin) HandleStatus(ctx context.Context, args []string) error {
 	fmt.Println("Git Configuration Status:")
 
 	// Show Git version
-	if err := p.showGitVersion(); err != nil {
+	if err := p.ShowGitVersion(); err != nil {
 		return err
 	}
 
 	// Show user configuration
-	p.showUserConfig()
+	p.ShowUserConfig()
 
 	// Show key configuration settings
-	p.showKeyConfigs()
+	p.ShowKeyConfigs()
 
 	// Show installed aliases count
-	p.showAliasesCount()
+	p.ShowAliasesCount()
 
 	return nil
 }
 
-// showGitVersion displays the installed Git version
-func (p *GitPlugin) showGitVersion() error {
+// ShowGitVersion displays the installed Git version
+func (p *GitPlugin) ShowGitVersion() error {
 	output, err := sdk.RunCommand("git", "--version")
 	if err != nil {
 		return fmt.Errorf("failed to get git version: %w", err)
@@ -38,25 +39,25 @@ func (p *GitPlugin) showGitVersion() error {
 	return nil
 }
 
-// showUserConfig displays the current user name and email configuration
-func (p *GitPlugin) showUserConfig() {
+// ShowUserConfig displays the current username and email configuration
+func (p *GitPlugin) ShowUserConfig() {
 	// Show user name
-	if user := p.getCurrentConfig("user.name"); user != "" {
+	if user := p.GetCurrentConfig("user.name"); user != "" {
 		fmt.Printf("User Name: %s\n", user)
 	} else {
 		fmt.Println("User Name: Not configured")
 	}
 
 	// Show user email
-	if email := p.getCurrentConfig("user.email"); email != "" {
+	if email := p.GetCurrentConfig("user.email"); email != "" {
 		fmt.Printf("User Email: %s\n", email)
 	} else {
 		fmt.Println("User Email: Not configured")
 	}
 }
 
-// showKeyConfigs displays important Git configuration settings
-func (p *GitPlugin) showKeyConfigs() {
+// ShowKeyConfigs displays important Git configuration settings
+func (p *GitPlugin) ShowKeyConfigs() {
 	keyConfigs := []string{
 		"init.defaultBranch",
 		"core.editor",
@@ -67,7 +68,7 @@ func (p *GitPlugin) showKeyConfigs() {
 
 	fmt.Println("\nKey Configuration Settings:")
 	for _, key := range keyConfigs {
-		if value := p.getCurrentConfig(key); value != "" {
+		if value := p.GetCurrentConfig(key); value != "" {
 			fmt.Printf("  %s: %s\n", key, value)
 		} else {
 			fmt.Printf("  %s: Not set\n", key)
@@ -75,8 +76,8 @@ func (p *GitPlugin) showKeyConfigs() {
 	}
 }
 
-// showAliasesCount displays the number of configured Git aliases
-func (p *GitPlugin) showAliasesCount() {
+// ShowAliasesCount displays the number of configured Git aliases
+func (p *GitPlugin) ShowAliasesCount() {
 	output, err := sdk.RunCommand("git", "config", "--global", "--get-regexp", "^alias\\.")
 	if err != nil {
 		fmt.Println("\nAliases: None configured")

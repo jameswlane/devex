@@ -9,7 +9,7 @@ import (
 // Trusted domains for curl pipe installations
 var trustedDomains = []string{
 	"get.docker.com",
-	"sh.rustup.rs", 
+	"sh.rustup.rs",
 	"raw.githubusercontent.com",
 	"github.com",
 	"install.python-poetry.org",
@@ -23,14 +23,14 @@ var trustedDomains = []string{
 	"bun.sh",
 }
 
-// getTrustedDomains returns the list of trusted domains
-func (p *CurlpipePlugin) getTrustedDomains() []string {
+// GetTrustedDomains returns the list of trusted domains
+func (p *CurlpipePlugin) GetTrustedDomains() []string {
 	return trustedDomains
 }
 
-// validateScriptURL validates the format of a script URL
-func (p *CurlpipePlugin) validateScriptURL(scriptURL string) error {
-	if err := p.validateURL(scriptURL); err != nil {
+// ValidateScriptURL validates the format of a script URL
+func (p *CurlpipePlugin) ValidateScriptURL(scriptURL string) error {
+	if err := p.ValidateURL(scriptURL); err != nil {
 		return err
 	}
 
@@ -38,12 +38,12 @@ func (p *CurlpipePlugin) validateScriptURL(scriptURL string) error {
 	if err != nil {
 		return fmt.Errorf("invalid URL format: %w", err)
 	}
-	
+
 	// Additional validation for script URLs
 	if parsedURL.Scheme != "https" && parsedURL.Scheme != "http" {
 		return fmt.Errorf("URL must use HTTP or HTTPS protocol")
 	}
-	
+
 	if parsedURL.Host == "" {
 		return fmt.Errorf("URL must have a valid host")
 	}
@@ -61,7 +61,7 @@ func (p *CurlpipePlugin) validateScriptURL(scriptURL string) error {
 			return fmt.Errorf("access to private IP ranges is not allowed")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -71,21 +71,21 @@ func (p *CurlpipePlugin) validateTrustedDomain(scriptURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse URL: %w", err)
 	}
-	
+
 	host := parsedURL.Host
-	
+
 	// Check if host matches any trusted domain
 	for _, trusted := range trustedDomains {
 		if host == trusted || strings.HasSuffix(host, "."+trusted) {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("domain '%s' is not in the trusted domains list", host)
 }
 
-// isTrustedDomain checks if a domain is in the trusted list
-func (p *CurlpipePlugin) isTrustedDomain(domain string) bool {
+// IsTrustedDomain checks if a domain is in the trusted list
+func (p *CurlpipePlugin) IsTrustedDomain(domain string) bool {
 	for _, trusted := range trustedDomains {
 		if domain == trusted || strings.HasSuffix(domain, "."+trusted) {
 			return true
@@ -100,11 +100,11 @@ func (p *CurlpipePlugin) extractAppNameFromURL(scriptURL string) string {
 	if err != nil {
 		return "unknown"
 	}
-	
+
 	// Extract from common patterns
 	host := parsedURL.Host
 	path := parsedURL.Path
-	
+
 	// Common patterns for app names
 	if strings.Contains(host, "get.") {
 		// get.docker.com -> docker
@@ -113,7 +113,7 @@ func (p *CurlpipePlugin) extractAppNameFromURL(scriptURL string) string {
 			return parts[1]
 		}
 	}
-	
+
 	if strings.Contains(path, "/install") {
 		// Extract from path like /install/docker.sh
 		parts := strings.Split(path, "/")
@@ -123,31 +123,31 @@ func (p *CurlpipePlugin) extractAppNameFromURL(scriptURL string) string {
 			}
 		}
 	}
-	
+
 	// Extract from specific known patterns
 	if strings.Contains(host, "rustup") {
 		return "rust"
 	}
-	
+
 	if strings.Contains(host, "deno") {
 		return "deno"
 	}
-	
+
 	if strings.Contains(host, "bun") {
 		return "bun"
 	}
-	
+
 	// Fallback: use host domain
 	parts := strings.Split(host, ".")
 	if len(parts) >= 2 {
 		return parts[len(parts)-2] // Second-to-last part of domain
 	}
-	
+
 	return "unknown"
 }
 
-// validateDomainName validates domain name format
-func (p *CurlpipePlugin) validateDomainName(domain string) error {
+// ValidateDomainName validates domain name format
+func (p *CurlpipePlugin) ValidateDomainName(domain string) error {
 	if domain == "" {
 		return fmt.Errorf("domain cannot be empty")
 	}
@@ -163,7 +163,7 @@ func (p *CurlpipePlugin) validateDomainName(domain string) error {
 
 	// Check for valid characters
 	for _, r := range domain {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '-') {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '.' && r != '-' {
 			return fmt.Errorf("domain contains invalid characters")
 		}
 	}

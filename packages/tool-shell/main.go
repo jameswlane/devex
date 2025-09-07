@@ -56,7 +56,6 @@ func NewShellPlugin() *ShellPlugin {
 	}
 }
 
-
 func main() {
 	plugin := NewShellPlugin()
 	sdk.HandleArgs(plugin, os.Args[1:])
