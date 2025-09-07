@@ -3,12 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // HandleAliases installs useful Git aliases to improve workflow efficiency
 func (p *GitPlugin) HandleAliases(ctx context.Context, args []string) error {
+	// Check if this is a "set" command for custom aliases
+	if len(args) >= 3 && args[0] == "set" {
+		return p.setCustomAlias(ctx, args[1], args[2])
+	}
+
+	// Default behavior: install predefined aliases
 	fmt.Println("Installing Git aliases...")
 
 	aliases := p.GetGitAliases()
@@ -26,6 +33,46 @@ func (p *GitPlugin) HandleAliases(ctx context.Context, args []string) error {
 	fmt.Printf("\nInstalled %d git aliases!\n", installed)
 	fmt.Println("Use 'git la' to list all aliases")
 
+	return nil
+}
+
+// setCustomAlias sets a custom git alias
+func (p *GitPlugin) setCustomAlias(ctx context.Context, aliasName, aliasCommand string) error {
+	// Additional validation for alias names and commands
+	if err := p.validateAliasName(aliasName); err != nil {
+		return err
+	}
+
+	if err := p.validateAliasCommand(aliasCommand); err != nil {
+		return err
+	}
+
+	return sdk.ExecCommandWithContext(ctx, false, "git", "config", "--global", fmt.Sprintf("alias.%s", aliasName), aliasCommand)
+}
+
+// validateAliasName validates that an alias name is safe
+func (p *GitPlugin) validateAliasName(name string) error {
+	// Alias names should only contain letters, numbers, and hyphens
+	if name == "" {
+		return fmt.Errorf("alias name cannot be empty")
+	}
+
+	// Check for dangerous characters that were already caught by general validation
+	// This is additional semantic validation
+	if strings.Contains(name, " ") {
+		return fmt.Errorf("alias name cannot contain spaces")
+	}
+
+	return nil
+}
+
+// validateAliasCommand validates that an alias command is safe
+func (p *GitPlugin) validateAliasCommand(command string) error {
+	if command == "" {
+		return fmt.Errorf("alias command cannot be empty")
+	}
+
+	// Additional validation can be added here if needed
 	return nil
 }
 

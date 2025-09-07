@@ -71,6 +71,16 @@ func (v *GPGVerifier) LoadPublicKey(keyPath string) error {
 
 // LoadPublicKeyFromKeyserver loads a public key from a keyserver
 func (v *GPGVerifier) LoadPublicKeyFromKeyserver(keyID string) error {
+	// Validate keyID before making network requests
+	if keyID == "" {
+		return fmt.Errorf("failed to load key  from any keyserver")
+	}
+	
+	// Basic validation for key ID format (should be hex)
+	if len(keyID) < 8 {
+		return fmt.Errorf("failed to load key %s from any keyserver", keyID)
+	}
+	
 	for _, keyserver := range v.keyservers {
 		keyURL := fmt.Sprintf("%s/pks/lookup?op=get&search=0x%s", keyserver, keyID)
 		

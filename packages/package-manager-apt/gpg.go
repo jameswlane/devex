@@ -21,7 +21,7 @@ const (
 // downloadAndInstallGPGKey downloads a GPG key and installs it to the system
 // Based on the original robust implementation with plugin SDK integration
 func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTSource) error {
-	a.logger.Printf("Downloading GPG key from %s\n", source.KeyURL)
+	a.getLogger().Printf("Downloading GPG key from %s\n", source.KeyURL)
 
 	// Validate key path first - must fail for security issues
 	if err := a.validateFilePath(source.KeyPath); err != nil {
@@ -35,7 +35,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 
 	// Check if the GPG key file already exists
 	if _, err := os.Stat(source.KeyPath); err == nil {
-		a.logger.Printf("GPG key already exists at %s, skipping download\n", source.KeyPath)
+		a.getLogger().Printf("GPG key already exists at %s, skipping download\n", source.KeyPath)
 		return nil
 	}
 
@@ -49,7 +49,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 	// Allow localhost/127.0.0.1 for test server
 	testMode, err := sdk.SafeGetEnv("APT_PLUGIN_TEST_MODE")
 	if err != nil {
-		a.logger.Warning("APT_PLUGIN_TEST_MODE environment variable validation failed: %v", err)
+		a.getLogger().Warning("APT_PLUGIN_TEST_MODE environment variable validation failed: %v", err)
 		testMode = "" // Default to empty/disabled
 	}
 	if testMode == "1" {
@@ -74,7 +74,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			a.logger.Warning("Failed to close response body: %v", err)
+			a.getLogger().Warning("Failed to close response body: %v", err)
 		}
 	}()
 
@@ -84,7 +84,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 
 	// Process the key based on dearmor requirement
 	if source.RequireDearmor {
-		a.logger.Debug("Converting ASCII-armored key to binary format")
+		a.getLogger().Debug("Converting ASCII-armored key to binary format")
 
 		// Create secure temporary file for GPG key
 		tempFile, err := os.CreateTemp("", "repo_key_*.asc")
@@ -94,7 +94,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		tempFileName := tempFile.Name()
 		defer func() {
 			if err := os.Remove(tempFileName); err != nil {
-				a.logger.Warning("Failed to remove temporary file: %v", err)
+				a.getLogger().Warning("Failed to remove temporary file: %v", err)
 			}
 		}()
 
@@ -102,7 +102,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		bytesWritten, err := io.Copy(tempFile, resp.Body)
 		if err != nil {
 			if closeErr := tempFile.Close(); closeErr != nil {
-				a.logger.Warning("Failed to close temporary file after copy error: %v", closeErr)
+				a.getLogger().Warning("Failed to close temporary file after copy error: %v", closeErr)
 			}
 			return fmt.Errorf("failed to stream GPG key to temporary file: %w", err)
 		}
@@ -110,7 +110,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		// Validate that we actually received some data
 		if bytesWritten == 0 {
 			if closeErr := tempFile.Close(); closeErr != nil {
-				a.logger.Warning("Failed to close temporary file after empty response: %v", closeErr)
+				a.getLogger().Warning("Failed to close temporary file after empty response: %v", closeErr)
 			}
 			return fmt.Errorf("received empty response for GPG key from '%s'", source.KeyURL)
 		}
@@ -154,7 +154,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		}
 		defer func() {
 			if closeErr := keyFile.Close(); closeErr != nil {
-				a.logger.Warning("Failed to close key file: %v", closeErr)
+				a.getLogger().Warning("Failed to close key file: %v", closeErr)
 			}
 		}()
 
@@ -180,7 +180,7 @@ func (a *APTInstaller) downloadAndInstallGPGKey(ctx context.Context, source APTS
 		return fmt.Errorf("GPG key not found after installation: %w", err)
 	}
 
-	a.logger.Success("GPG key installed to %s", source.KeyPath)
+	a.getLogger().Success("GPG key installed to %s", source.KeyPath)
 	return nil
 }
 

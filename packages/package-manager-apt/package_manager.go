@@ -42,6 +42,20 @@ type APTInstaller struct {
 	versionCached bool
 }
 
+// SetLogger sets the logger for the APT installer
+func (a *APTInstaller) SetLogger(logger sdk.Logger) {
+	a.logger = logger
+}
+
+// getLogger returns the logger, or a silent logger if none is set
+func (a *APTInstaller) getLogger() sdk.Logger {
+	if a.logger != nil {
+		return a.logger
+	}
+	// Return a silent logger to prevent nil pointer dereferences
+	return sdk.NewDefaultLogger(true)
+}
+
 // Execute handles command execution
 func (a *APTInstaller) Execute(command string, args []string) error {
 	ctx := context.Background()
@@ -118,7 +132,7 @@ func (a *APTInstaller) GetAPTVersion() (*APTVersion, error) {
 	}
 	a.versionCached = true
 
-	a.logger.Debug("Detected APT version", "version", fmt.Sprintf("%d.%d.%d", major, minor, patch))
+	a.getLogger().Debug("Detected APT version", "version", fmt.Sprintf("%d.%d.%d", major, minor, patch))
 	return a.aptVersion, nil
 }
 
@@ -172,7 +186,7 @@ func (a *APTInstaller) validatePackageAvailability(packageName string) error {
 		return fmt.Errorf("no installable candidate found for package '%s'", packageName)
 	}
 
-	a.logger.Debug("Package availability validated", "package", packageName)
+	a.getLogger().Debug("Package availability validated", "package", packageName)
 	return nil
 }
 
@@ -182,7 +196,7 @@ func (a *APTInstaller) handleInstall(ctx context.Context, args []string) error {
 		return fmt.Errorf("no packages specified")
 	}
 
-	a.logger.Printf("Installing packages: %s\\n", strings.Join(args, ", "))
+	a.getLogger().Printf("Installing packages: %s\\n", strings.Join(args, ", "))
 
 	// Validate all package names first
 	for _, pkg := range args {
@@ -192,9 +206,9 @@ func (a *APTInstaller) handleInstall(ctx context.Context, args []string) error {
 	}
 
 	// Update package lists first
-	a.logger.Println("Updating package lists...")
+	a.getLogger().Println("Updating package lists...")
 	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
-		a.logger.Warning("Failed to update package lists: %v", err)
+		a.getLogger().Warning("Failed to update package lists: %v", err)
 	}
 
 	// Check availability of packages in parallel
@@ -211,13 +225,13 @@ func (a *APTInstaller) handleInstall(ctx context.Context, args []string) error {
 	// Verify installation
 	for _, pkg := range args {
 		if installed, err := a.isPackageInstalled(pkg); err != nil {
-			a.logger.Warning("Failed to verify installation of %s: %v", pkg, err)
+			a.getLogger().Warning("Failed to verify installation of %s: %v", pkg, err)
 		} else if !installed {
 			return fmt.Errorf("installation verification failed for package: %s", pkg)
 		}
 	}
 
-	a.logger.Success("Successfully installed packages: %s", strings.Join(args, ", "))
+	a.getLogger().Success("Successfully installed packages: %s", strings.Join(args, ", "))
 	return nil
 }
 
@@ -227,7 +241,7 @@ func (a *APTInstaller) handleRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("no packages specified")
 	}
 
-	a.logger.Printf("Removing packages: %s\\n", strings.Join(args, ", "))
+	a.getLogger().Printf("Removing packages: %s\\n", strings.Join(args, ", "))
 
 	// Validate all package names first
 	for _, pkg := range args {
@@ -240,17 +254,17 @@ func (a *APTInstaller) handleRemove(ctx context.Context, args []string) error {
 	var packagesToRemove []string
 	for _, pkg := range args {
 		if installed, err := a.isPackageInstalled(pkg); err != nil {
-			a.logger.Warning("Failed to check installation status of %s: %v", pkg, err)
+			a.getLogger().Warning("Failed to check installation status of %s: %v", pkg, err)
 			packagesToRemove = append(packagesToRemove, pkg) // Include anyway
 		} else if installed {
 			packagesToRemove = append(packagesToRemove, pkg)
 		} else {
-			a.logger.Printf("Package %s is not installed, skipping\\n", pkg)
+			a.getLogger().Printf("Package %s is not installed, skipping\\n", pkg)
 		}
 	}
 
 	if len(packagesToRemove) == 0 {
-		a.logger.Println("No packages to remove")
+		a.getLogger().Println("No packages to remove")
 		return nil
 	}
 
@@ -260,23 +274,23 @@ func (a *APTInstaller) handleRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to remove packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
-	a.logger.Success("Successfully removed packages: %s", strings.Join(packagesToRemove, ", "))
+	a.getLogger().Success("Successfully removed packages: %s", strings.Join(packagesToRemove, ", "))
 	return nil
 }
 
 // handleUpdate updates package lists
 func (a *APTInstaller) handleUpdate(ctx context.Context, args []string) error {
-	a.logger.Println("Updating package lists...")
+	a.getLogger().Println("Updating package lists...")
 	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
 		return fmt.Errorf("failed to update package lists: %w", err)
 	}
-	a.logger.Success("Package lists updated successfully")
+	a.getLogger().Success("Package lists updated successfully")
 	return nil
 }
 
 // handleUpgrade upgrades installed packages
 func (a *APTInstaller) handleUpgrade(ctx context.Context, args []string) error {
-	a.logger.Println("Upgrading installed packages...")
+	a.getLogger().Println("Upgrading installed packages...")
 
 	// Update first
 	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
@@ -288,7 +302,7 @@ func (a *APTInstaller) handleUpgrade(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to upgrade packages: %w", err)
 	}
 
-	a.logger.Success("Packages upgraded successfully")
+	a.getLogger().Success("Packages upgraded successfully")
 	return nil
 }
 
@@ -299,7 +313,7 @@ func (a *APTInstaller) handleSearch(ctx context.Context, args []string) error {
 	}
 
 	searchTerm := strings.Join(args, " ")
-	a.logger.Printf("Searching for: %s\\n", searchTerm)
+	a.getLogger().Printf("Searching for: %s\\n", searchTerm)
 
 	return a.ExecManagerCommand("search", false, "search", searchTerm)
 }
@@ -327,9 +341,9 @@ func (a *APTInstaller) handleInfo(ctx context.Context, args []string) error {
 			return fmt.Errorf("invalid package name '%s': %w", pkg, err)
 		}
 
-		a.logger.Printf("Package information for: %s\\n", pkg)
+		a.getLogger().Printf("Package information for: %s\\n", pkg)
 		if err := sdk.ExecCommandWithContext(ctx, false, "apt", "show", pkg); err != nil {
-			a.logger.ErrorMsg("Failed to get info for %s: %v", pkg, err)
+			a.getLogger().ErrorMsg("Failed to get info for %s: %v", pkg, err)
 		}
 
 		if i < len(args)-1 {
@@ -358,9 +372,9 @@ func (a *APTInstaller) handleIsInstalled(ctx context.Context, args []string) err
 		}
 
 		if installed {
-			a.logger.Success("Package %s is installed", pkg)
+			a.getLogger().Success("Package %s is installed", pkg)
 		} else {
-			a.logger.ErrorMsg("Package %s is not installed", pkg)
+			a.getLogger().ErrorMsg("Package %s is not installed", pkg)
 			allInstalled = false
 		}
 	}
@@ -436,7 +450,7 @@ func (a *APTInstaller) validatePackagesParallel(packages []string) error {
 		}
 		if result.installed {
 			installedPackages[result.pkg] = true
-			a.logger.Printf("Package %s is already installed, skipping\n", result.pkg)
+			a.getLogger().Printf("Package %s is already installed, skipping\n", result.pkg)
 		}
 	}
 

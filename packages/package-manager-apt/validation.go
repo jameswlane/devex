@@ -59,7 +59,7 @@ func (a *APTInstaller) validatePackageName(packageName string) error {
 // validateAptRepo ensures the repository string is valid
 // Based on the original robust validation with plugin SDK integration
 func (a *APTInstaller) validateAptRepo(repo string) error {
-	a.logger.Debug("Validating APT repository", "repo", repo)
+	a.getLogger().Debug("Validating APT repository", "repo", repo)
 
 	if repo == "" {
 		return fmt.Errorf("repository string cannot be empty")
@@ -84,7 +84,7 @@ func (a *APTInstaller) validateAptRepo(repo string) error {
 		return fmt.Errorf("repository string contains suspicious characters: %s", repo)
 	}
 
-	a.logger.Debug("Repository validation passed", "repo", repo)
+	a.getLogger().Debug("Repository validation passed", "repo", repo)
 	return nil
 }
 
