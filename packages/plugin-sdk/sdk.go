@@ -1,3 +1,4 @@
+// Package sdk provides core functionality for DevEx plugin development and management
 package sdk
 
 import (
