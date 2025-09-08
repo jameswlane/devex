@@ -149,7 +149,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       - name: Detect changed packages
         id: detect
         run: "# Properly escape the commit message to avoid shell parsing issues\ncommit_msg=$(cat <<'EOF'\n${{ github.event.head_commit.message }}\nEOF\n)\necho \"Commit message: $commit_msg\"\n\n# Extract package name from commit message (e.g., feat(plugin-sdk): -> plugin-sdk)  \nregex='^(feat|fix)\\(([^)]+)\\):'\nif [[ \"$commit_msg\" =~ $regex ]]; then\n  package_name=\"${BASH_REMATCH[2]}\"\n  echo \"Detected package: $package_name\"\n  \n  # Skip non-package scopes (CI, docs, etc.)\n  non_package_scopes=(\"ci\" \"docs\" \"deps\" \"build\" \"test\" \"chore\" \"style\" \"refactor\" \"cli\" \"web\")\n  for scope in \"${non_package_scopes[@]}\"; do\n    if [ \"$package_name\" = \"$scope\" ]; then\n      echo \"Skipping non-package scope: $package_name\"\n      exit 0\n    fi\n  done\n  \n  echo \"package_name=$package_name\" >> $GITHUB_OUTPUT\n\n  # Determine package type and location\n  if [ \"$package_name\" = \"plugin-sdk\" ]; then\n    echo \"package_type=go-module\" >> $GITHUB_OUTPUT\n    echo \"package_path=packages/plugin-sdk\" >> $GITHUB_OUTPUT\n  elif [ -d \"packages/$package_name\" ]; then\n    echo \"package_type=package\" >> $GITHUB_OUTPUT\n    echo \"package_path=packages/$package_name\" >> $GITHUB_OUTPUT\n  else\n    echo \"Package not found: $package_name\"\n    exit 1\n  fi\n\n  # Determine version bump type\n  if [[ \"$commit_msg\" == feat* ]]; then\n    echo \"bump=minor\" >> $GITHUB_OUTPUT\n  else\n    echo \"bump=patch\" >> $GITHUB_OUTPUT\n  fi\nelse\n  echo \"No package specified in commit message\"\n  exit 0\nfi\n"
@@ -162,7 +162,7 @@ jobs:
 
           # Install dependencies and run tests
           go mod download
-          go run github.com/onsi/ginkgo/v2/ginkgo run .
+          go test -v ./...
           go vet ./...
 
           # Get latest tag for this package

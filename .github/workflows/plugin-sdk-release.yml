@@ -28,11 +28,11 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       - name: Install dependencies
         run: go mod download
       - name: Run tests
-        run: go run github.com/onsi/ginkgo/v2/ginkgo run .
+        run: go test -v ./...
       - name: Run go vet
         run: go vet ./...
       - name: Run golangci-lint
@@ -55,7 +55,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -78,7 +78,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.24'
       - name: Get version from tag
         id: version
         run: |
