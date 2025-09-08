@@ -1,20 +1,20 @@
-name: CLI Build, Test, and Release
+name: CLI Build, Lint, and Test
 on:
   push:
     branches:
       - main
     paths:
       - 'apps/cli/**'
-      - '.github/workflows/cli-release.yml'
+      - '.github/workflows/cli-ci.yml'
+  pull_request:
+    paths:
+      - 'apps/cli/**'
+      - '.github/workflows/cli-ci.yml'
 permissions:
-  contents: write
-  packages: write
-  issues: write
-  pull-requests: write
-  id-token: write
+  contents: read
 jobs:
-  # Build, lint, and test with Turborepo
-  test:
+  # Build, lint, and test CLI with Turborepo
+  cli-test:
     runs-on: ubuntu-latest
     # env:
     # Add Turborepo Remote Caching if needed
@@ -64,8 +64,8 @@ jobs:
         run: pnpm turbo lint --concurrency=1
       - name: Test all packages
         run: pnpm test
-  # Build web apps on Linux
-  web:
+  # Build web apps
+  web-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -86,55 +86,3 @@ jobs:
         run: pnpm turbo run build --filter=web
       - name: Build docs
         run: pnpm turbo run build --filter=docs
-  # Release with cross-compilation via GoReleaser
-  release:
-    needs: [test, web]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Fetch all tags
-        run: git fetch --tags
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 10.15.1
-          run_install: false
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm install
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm run semantic-release
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.24.6
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-      - name: Login to Docker
-        run: docker login docker.pkg.github.com -u docker -p ${{ secrets.GITHUB_TOKEN }}
-      - name: Release CLI with GoReleaser
-        uses: goreleaser/goreleaser-action@v6
-        with:
-          distribution: goreleaser-pro
-          version: '~> v2'
-          args: release --clean
-          workdir: apps/cli
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          # NOTE: Plugin releases are handled by plugin-release.yml workflow
-          # Plugin SDK releases are handled by plugin-sdk-release.yml workflow
-          # This workflow focuses only on the main CLI application

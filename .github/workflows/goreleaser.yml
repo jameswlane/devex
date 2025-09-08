@@ -1,4 +1,4 @@
-name: GoReleaser Pro Unified Release
+name: DevEx Unified Release
 on:
   push:
     tags:
