@@ -1,6 +1,5 @@
 # DevEx XBPS Package Manager Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![Void Linux](https://img.shields.io/badge/Void%20Linux-Package%20Manager-478061?logo=voidlinux)](https://docs.voidlinux.org/xbps/)
