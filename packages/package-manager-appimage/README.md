@@ -1,6 +1,5 @@
 # DevEx AppImage Package Manager Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![AppImage](https://img.shields.io/badge/AppImage-Portable%20Apps-326CE5?logo=appimage)](https://appimage.org/)
