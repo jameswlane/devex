@@ -2,7 +2,9 @@
 
 [![License](https://img.shields.io/github/license/jameswlane/devex)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/jameswlane/devex)](https://github.com/jameswlane/devex/releases)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/cli-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
+[![CLI Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/cli-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
+[![Plugins Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/plugins-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
+[![SDK Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/sdk-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
 
 DevEx is a powerful, enterprise-grade CLI tool designed to streamline the setup and management of development environments across Linux, macOS, and Windows. With support for 36+ package managers and desktop environments, DevEx automates application installation, system configuration, and development workflow setup.
 
@@ -11,7 +13,7 @@ DevEx is a powerful, enterprise-grade CLI tool designed to streamline the setup 
 This is a modern monorepo containing:
 
 - **🔧 CLI Tool** (`apps/cli/`) - Enterprise Go CLI with Cobra + Viper architecture
-- **🌐 Website** (`apps/web/`) - Next.js marketing site at [devex.sh](https://devex.sh)  
+- **🌐 Website** (`apps/web/`) - Marketing site at [devex.sh](https://devex.sh)  
 - **📚 Documentation** (`apps/docs/`) - Technical documentation with MDX
 - **🔌 Plugin System** (`packages/plugins/`) - 36 modular plugins for package managers and desktop environments
 - **📦 Shared SDK** (`packages/shared/`) - Common plugin development framework
