@@ -162,7 +162,8 @@ jobs:
 
           # Install dependencies and run tests
           go mod download
-          go test -v ./...
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
+          ginkgo run .
           go vet ./...
 
           # Get latest tag for this package
