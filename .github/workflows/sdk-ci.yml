@@ -27,7 +27,9 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install dependencies
-        run: go mod download
+        run: |
+          go mod download
+          go install github.com/onsi/ginkgo/v2/ginkgo@latest
       - name: Lint SDK
         run: golangci-lint run
       - name: Run go vet
