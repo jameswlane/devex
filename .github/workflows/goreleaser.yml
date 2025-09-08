@@ -1,0 +1,85 @@
+name: GoReleaser Pro Unified Release
+on:
+  push:
+    tags:
+      # Main CLI releases
+      - 'v*'
+      # Plugin SDK releases
+      - 'plugin-sdk/v*'
+      # Individual plugin releases
+      - 'plugin-*-v*'
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Determine release type and config
+        id: release-config
+        run: "TAG=\"${GITHUB_REF#refs/tags/}\"\necho \"Current tag: $TAG\"\n\n# Determine which .goreleaser.yml to use based on tag prefix\nif [[ \"$TAG\" == v* ]] && [[ \"$TAG\" != */* ]]; then\n  # Main CLI release (v1.2.3)\n  echo \"Release type: Main CLI\"\n  echo \"config_file=.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=cli\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == plugin-sdk/v* ]]; then\n  # Plugin SDK release (plugin-sdk/v1.2.3)\n  echo \"Release type: Plugin SDK\"\n  echo \"config_file=packages/plugin-sdk/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=sdk\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == plugin-*-v* ]]; then\n  # Individual plugin release (plugin-package-manager-apt-v1.2.3)\n  # Extract plugin name from tag - everything between 'plugin-' and '-v'\n  PLUGIN_NAME=$(echo \"$TAG\" | sed -E 's/^plugin-(.+)-v[0-9]+\\.[0-9]+\\.[0-9]+.*$/\\1/')\n  echo \"Release type: Plugin - $PLUGIN_NAME\"\n  echo \"config_file=packages/$PLUGIN_NAME/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=plugin\" >> $GITHUB_OUTPUT\n  echo \"plugin_name=$PLUGIN_NAME\" >> $GITHUB_OUTPUT\n  \nelse\n  echo \"Unknown tag format: $TAG\"\n  echo \"Expected formats:\"\n  echo \"  CLI: v1.2.3\"\n  echo \"  SDK: plugin-sdk/v1.2.3\"\n  echo \"  Plugin: plugin-<name>-v1.2.3\"\n  exit 1\nfi\n"
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Run tests for plugin SDK
+        if: steps.release-config.outputs.release_type == 'sdk'
+        run: |
+          cd packages/plugin-sdk
+          go mod download
+          go test ./...
+      - name: Run tests for plugin
+        if: steps.release-config.outputs.release_type == 'plugin'
+        run: |
+          cd packages/${{ steps.release-config.outputs.plugin_name }}
+          go mod tidy
+          go build -v -o test-build .
+          ./test-build --plugin-info || true
+          rm test-build
+      - name: Run GoReleaser Pro
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser-pro
+          version: '~> v2'
+          args: release --clean -f ${{ steps.release-config.outputs.config_file }}
+          workdir: ${{ steps.release-config.outputs.working_dir }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+      - name: Publish Go module (SDK only)
+        if: steps.release-config.outputs.release_type == 'sdk'
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/plugin-sdk/v}"
+          echo "Publishing Plugin SDK v$VERSION to Go module proxy"
+
+          # Trigger Go module proxy update
+          curl -f "https://proxy.golang.org/github.com/jameswlane/devex/packages/plugin-sdk/@v/${VERSION}.info" || true
+
+          # Wait and verify
+          sleep 30
+          go list -m github.com/jameswlane/devex/packages/plugin-sdk@v${VERSION} || echo "Module not yet available on proxy"
+      - name: Update plugin registry (plugins only)
+        if: steps.release-config.outputs.release_type == 'plugin'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Install dependencies for registry script
+          cd scripts
+          npm install @octokit/rest
+          cd ..
+
+          # Generate registry with the new plugin release
+          TAG="${GITHUB_REF#refs/tags/}"
+          node scripts/generate-registry.js "$TAG" || echo "::warning::Failed to update registry for $TAG"

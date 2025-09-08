@@ -1,7 +1,7 @@
 version: 2
 project_name: devex-plugin-system-setup
 monorepo:
-  tag_prefix: plugin/
+  tag_prefix: plugin-system-setup-
   dir: packages/system-setup
 builds:
   - id: plugin-system-setup
@@ -52,8 +52,3 @@ release:
   mode: replace
   draft: false
   prerelease: auto
-after:
-  hooks:
-    - cmd: node ../../scripts/generate-registry.js {{ .Commit }}
-      env:
-        - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}

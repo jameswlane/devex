@@ -1,7 +1,7 @@
 version: 2
 project_name: devex-plugin-package-manager-eopkg
 monorepo:
-  tag_prefix: plugin/
+  tag_prefix: plugin-package-manager-eopkg-
   dir: packages/package-manager-eopkg
 builds:
   - id: plugin-package-manager-eopkg
@@ -50,8 +50,3 @@ release:
   mode: replace
   draft: false
   prerelease: auto
-after:
-  hooks:
-    - cmd: node ../../scripts/generate-registry.js {{ .Commit }}
-      env:
-        - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
