@@ -1,6 +1,5 @@
 # DevEx System Setup Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![System](https://img.shields.io/badge/System-Setup-28A745?logo=linux)](https://github.com/jameswlane/devex)
