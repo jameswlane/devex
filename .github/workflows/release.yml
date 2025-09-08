@@ -135,24 +135,8 @@ jobs:
           workdir: apps/cli
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and Release Plugins
-        run: |
-          # Install Task for plugin builds
-          go install github.com/go-task/task/v3/cmd/task@latest
-          # Install GoReleaser for plugin releases
-          go install github.com/goreleaser/goreleaser@latest
-
-          # Build all plugins with Turborepo first
-          pnpm build --filter="@devex/*"
-
-          # Release all plugins
-          chmod +x scripts/release-plugins.sh
-          ./scripts/release-plugins.sh all
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          OWNER: jameswlane
-          REPO: devex
+          # NOTE: Plugin releases are now handled by the individual plugin-release workflow
+          # This job now focuses only on the main CLI release
   # Package Release - handles releases for different package types
   package-release:
     runs-on: ubuntu-latest
