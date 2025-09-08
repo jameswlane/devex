@@ -1,6 +1,5 @@
 # DevEx
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/jameswlane/devex/apps/cli)](https://golang.org/)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/jameswlane/devex)](https://github.com/jameswlane/devex/releases)
 [![Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
