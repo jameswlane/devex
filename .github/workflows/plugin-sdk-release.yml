@@ -42,9 +42,6 @@ jobs:
       contents: write
     needs: test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/plugin-sdk
     steps:
       - uses: actions/checkout@v4
         with:
@@ -114,6 +111,8 @@ jobs:
           # Output for next steps
           echo "version=$new_version" >> $GITHUB_OUTPUT
           echo "tag=$new_tag" >> $GITHUB_OUTPUT
+      - name: Fetch all tags
+        run: git fetch --tags --force
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -127,9 +126,6 @@ jobs:
   publish-go-module:
     needs: release
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: packages/plugin-sdk
     steps:
       - uses: actions/checkout@v4
         with:
