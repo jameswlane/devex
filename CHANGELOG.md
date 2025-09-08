@@ -1,3 +1,11 @@
+## [0.26.3](https://github.com/jameswlane/devex/compare/0.26.2...0.26.3) (2025-09-08)
+
+
+### Bug Fixes
+
+* complete GoReleaser Pro upgrade implementation ([94482a5](https://github.com/jameswlane/devex/commit/94482a53c11f980cc93fd624ba1d24b9018b4465))
+* resolve GoReleaser Pro workflow errors ([d5217bf](https://github.com/jameswlane/devex/commit/d5217bf8b1be33cf29478aa139fcae5724768f8f))
+
 ## [0.26.2](https://github.com/jameswlane/devex/compare/0.26.1...0.26.2) (2025-09-08)
 
 
