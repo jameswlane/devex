@@ -1,4 +1,4 @@
-name: Parallel Plugin Build and Deploy
+name: Plugin Registry Update
 permissions:
   contents: read
 on:
@@ -9,7 +9,7 @@ on:
       - 'scripts/generate-registry.js'
       - 'scripts/release-plugins.sh'
       - 'scripts/release-plugin-individual.sh'
-      - '.github/workflows/plugin-update.yml'
+      - '.github/workflows/plugin-registry-update.yml'
   workflow_dispatch:
     inputs:
       plugins:

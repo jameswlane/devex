@@ -1,4 +1,4 @@
-name: Individual Plugin Releases
+name: Plugin Releases (Individual)
 on:
   push:
     branches:
