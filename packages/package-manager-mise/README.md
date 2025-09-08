@@ -1,6 +1,5 @@
 # DevEx Mise Package Manager Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![Mise](https://img.shields.io/badge/Mise-Dev%20Tools-FF6B6B?logo=rust)](https://mise.jdx.dev/)
