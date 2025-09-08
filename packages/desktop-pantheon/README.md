@@ -1,6 +1,5 @@
 # DevEx Desktop Pantheon Plugin
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/jameswlane/devex)](https://golang.org/)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](https://github.com/jameswlane/devex/blob/main/LICENSE)
 [![Plugin Version](https://img.shields.io/badge/plugin-v1.0.0-blue)](https://github.com/jameswlane/devex/tree/main/packages/plugins/desktop-pantheon)
 [![DevEx Compatibility](https://img.shields.io/badge/devex-compatible-green)](https://github.com/jameswlane/devex)
