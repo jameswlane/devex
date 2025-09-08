@@ -1,6 +1,5 @@
 # DevEx APT Package Manager Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![APT](https://img.shields.io/badge/APT-Package%20Manager-e95420?logo=ubuntu)](https://wiki.debian.org/Apt)
