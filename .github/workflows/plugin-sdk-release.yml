@@ -3,10 +3,6 @@ permissions:
   contents: read
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'packages/plugin-sdk/**'
     tags:
       - 'plugin-sdk/v*.*.*'
   workflow_dispatch:
