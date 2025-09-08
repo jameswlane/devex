@@ -1,3 +1,11 @@
+## [0.26.2](https://github.com/jameswlane/devex/compare/0.26.1...0.26.2) (2025-09-08)
+
+
+### Bug Fixes
+
+* **plugin-sdk:** add package documentation comment ([88110ee](https://github.com/jameswlane/devex/commit/88110eef794d22698c48ab8aa27e051efc6c49ca))
+* **workflows:** correct plugin-sdk release trigger conditions ([c866d7f](https://github.com/jameswlane/devex/commit/c866d7f0d318ff39ab253a72641235bef963d8dd))
+
 ## [0.26.1](https://github.com/jameswlane/devex/compare/0.26.0...0.26.1) (2025-09-08)
 
 
