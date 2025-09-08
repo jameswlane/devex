@@ -1,3 +1,28 @@
+# [0.26.0](https://github.com/jameswlane/devex/compare/0.25.0...0.26.0) (2025-09-08)
+
+
+### Bug Fixes
+
+* align validation error message with test expectations ([d3602f7](https://github.com/jameswlane/devex/commit/d3602f78aec65b5815ebf13e0bfdf931665176a0))
+* **ci:** supressed breaking change ([a1c901d](https://github.com/jameswlane/devex/commit/a1c901d19edb29c2ab8eb9856bf3146c40b79aa1))
+* correct build commands for flatpak and curlpipe plugins ([bd33f23](https://github.com/jameswlane/devex/commit/bd33f23b7252a1c72743f4bb79a7770a9e622562))
+* implement comprehensive test mode safety for APT plugin ([d4aaf9a](https://github.com/jameswlane/devex/commit/d4aaf9afdf1dbb87190aa784ed658ce042b7db68))
+* resolve all plugin build issues and deprecated SDK calls ([b01e568](https://github.com/jameswlane/devex/commit/b01e5680271608a6a532ddcbeb305511a8fdd3ac))
+* resolve build issues in package-manager-pip plugin ([deba1ad](https://github.com/jameswlane/devex/commit/deba1ad06c1119bef38b1b6725851b146dfd13fb))
+* resolve CI pipeline issues in release workflows ([ef47fad](https://github.com/jameswlane/devex/commit/ef47fad1fab20c00355a86b859fffddbd7fe90d0))
+* resolve failing tests in tool-git, plugin-sdk, and tool-shell ([ca2e58f](https://github.com/jameswlane/devex/commit/ca2e58ff7e02b996c71137faa757214876facf45))
+* resolve package-manager-apt null pointer dereference panics ([2b2d1b6](https://github.com/jameswlane/devex/commit/2b2d1b61ba2ffdfe5949673c497c232faa9e98d4))
+* resolve remaining test failures in tool-shell and plugin-sdk ([1059224](https://github.com/jameswlane/devex/commit/105922487e7aeb0d3f36e4a0cbfb2767696005f3))
+* restore Ginkgo BDD testing in CI workflows ([87c3809](https://github.com/jameswlane/devex/commit/87c380958df352fc3abbe3b21b2dda0cfd273624))
+
+
+### Features
+
+* comprehensive DevEx CLI security and testing infrastructure overhaul ([873e9d6](https://github.com/jameswlane/devex/commit/873e9d6ff08f1e5edadf61a13072f7c700585f24))
+* implement comprehensive security improvements across plugins ([d0b8dff](https://github.com/jameswlane/devex/commit/d0b8dff6d4330d2396b12ca20b5767af825ec58f))
+* implement individual plugin release system with GoReleaser ([557d34c](https://github.com/jameswlane/devex/commit/557d34c64095d646404b5324c8070652b57bc6b3))
+* **plugins:** enhance package-manager-deb plugin with comprehensive functionality ([ea94c0e](https://github.com/jameswlane/devex/commit/ea94c0ee173c1e6ce47e11e32854e1366f264c13))
+
 ## [2.0.0](https://github.com/jameswlane/devex/compare/1.0.0...2.0.0) (2025-09-05)
 
 ### ⚠ BREAKING CHANGES
