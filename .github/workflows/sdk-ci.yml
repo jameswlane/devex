@@ -39,7 +39,7 @@ jobs:
       - name: Run Ginkgo tests
         run: |
           echo "Running comprehensive Plugin SDK tests with Ginkgo..."
-          ginkgo run . -v --randomize-all --fail-on-pending
+          ginkgo run -v --randomize-all --fail-on-pending .
       - name: Run standard Go tests (fallback)
         if: failure()
         run: |
