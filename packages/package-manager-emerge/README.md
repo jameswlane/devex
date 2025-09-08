@@ -1,6 +1,5 @@
 # DevEx Emerge Package Manager Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![Gentoo](https://img.shields.io/badge/Gentoo-Portage-54487A?logo=gentoo)](https://wiki.gentoo.org/wiki/Portage)
