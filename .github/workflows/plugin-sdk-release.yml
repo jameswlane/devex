@@ -120,7 +120,6 @@ jobs:
           distribution: goreleaser-pro
           version: latest
           args: release --clean
-          workdir: packages/plugin-sdk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution

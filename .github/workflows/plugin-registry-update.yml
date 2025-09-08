@@ -282,7 +282,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get latest tags for actual plugins only (exclude plugin-sdk)
-          latest_tags=$(git tag -l | grep -E '^(plugin-|packages/)' | grep -v '^packages/plugin-sdk/' | sort -V | tail -20)
+          latest_tags=$(git tag -l | grep -E '^(plugin-|packages/)' | grep -v '^plugin-sdk/' | sort -V | tail -20)
 
           # Check if we have any plugin tags to process
           if [ -z "$latest_tags" ]; then
@@ -302,7 +302,7 @@ jobs:
           done
 
           # Log what we're excluding for transparency
-          excluded_tags=$(git tag -l | grep '^packages/plugin-sdk/')
+          excluded_tags=$(git tag -l | grep '^plugin-sdk/')
           if [ -n "$excluded_tags" ]; then
             echo "::notice::Excluded plugin-sdk tags from registry (these are Go modules, not plugins): $excluded_tags"
           fi
