@@ -73,17 +73,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: jdx/mise-action@v3
         with:
-          go-version: '1.24'
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.plugin }}-${{ hashFiles(format('packages/{0}/go.sum', matrix.plugin)) }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          version: latest
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Test plugin ${{ matrix.plugin }}
         run: |
           cd packages/${{ matrix.plugin }}
@@ -94,13 +89,7 @@ jobs:
           echo "::endgroup::"
 
           echo "::group::Linting ${{ matrix.plugin }}"
-          if command -v golangci-lint >/dev/null 2>&1; then
-            golangci-lint run
-          else
-            # Install golangci-lint if not available
-            go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-            golangci-lint run
-          fi
+          golangci-lint run
           echo "::endgroup::"
 
           echo "::group::Building ${{ matrix.plugin }}"
@@ -125,20 +114,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: jdx/mise-action@v3
         with:
-          go-version: '1.24'
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 10.15.1
-          run_install: false
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
+          version: latest
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install dependencies
         run: pnpm install
       - name: Build all plugins with Turborepo

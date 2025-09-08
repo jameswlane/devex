@@ -32,32 +32,14 @@ jobs:
           key: ${{ runner.os }}-turbo-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-turbo-
-      - name: Install Go
-        uses: actions/setup-go@v5
+      - uses: jdx/mise-action@v3
         with:
-          go-version: 1.24.6
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 10.15.1
-          run_install: false
-      - name: Setup Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
+          version: latest
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install dependencies
         run: pnpm install
-      - name: Install global tools
-        run: |
-          go install github.com/go-task/task/v3/cmd/task@latest
-          go install github.com/onsi/ginkgo/v2/ginkgo@latest
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
       - name: Build all packages
         run: pnpm build
       - name: Lint all packages
@@ -70,16 +52,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
+      - uses: jdx/mise-action@v3
         with:
-          version: 10.15.1
-          run_install: false
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'pnpm'
+          version: latest
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install dependencies
         run: pnpm install
       - name: Build web app

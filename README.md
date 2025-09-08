@@ -2,9 +2,10 @@
 
 [![License](https://img.shields.io/github/license/jameswlane/devex)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/jameswlane/devex)](https://github.com/jameswlane/devex/releases)
-[![CLI Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/cli-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
-[![Plugins Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/plugins-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
-[![SDK Build Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/sdk-ci.yml?branch=main)](https://github.com/jameswlane/devex/actions)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/cli-ci.yml?label=CLI%20Build)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/plugins-ci.yml?label=Plugins%20Build)
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/sdk-ci.yml?label=SDK%20Build)
+
 
 DevEx is a powerful, enterprise-grade CLI tool designed to streamline the setup and management of development environments across Linux, macOS, and Windows. With support for 36+ package managers and desktop environments, DevEx automates application installation, system configuration, and development workflow setup.
 
@@ -13,7 +14,7 @@ DevEx is a powerful, enterprise-grade CLI tool designed to streamline the setup 
 This is a modern monorepo containing:
 
 - **🔧 CLI Tool** (`apps/cli/`) - Enterprise Go CLI with Cobra + Viper architecture
-- **🌐 Website** (`apps/web/`) - Marketing site at [devex.sh](https://devex.sh)  
+- **🌐 Website** (`apps/web/`) - Marketing site at [devex.sh](https://devex.sh)
 - **📚 Documentation** (`apps/docs/`) - Technical documentation with MDX
 - **🔌 Plugin System** (`packages/plugins/`) - 36 modular plugins for package managers and desktop environments
 - **📦 Shared SDK** (`packages/shared/`) - Common plugin development framework
@@ -100,7 +101,7 @@ DevEx follows enterprise patterns and best practices:
 ### Prerequisites
 
 - **Go**: Version 1.24+ (CLI development)
-- **Node.js**: Version 18+ (website and docs)  
+- **Node.js**: Version 18+ (website and docs)
 - **pnpm**: Version 9+ (workspace management)
 - **Task**: Task runner for CLI development
 - **lefthook**: Git hooks (installed via pnpm)
@@ -352,7 +353,7 @@ DevEx uses comprehensive automated release management:
 
 ### Commit Conventions
 - `feat:` - New features (minor version bump)
-- `fix:` - Bug fixes (patch version bump)  
+- `fix:` - Bug fixes (patch version bump)
 - `feat!:` or `BREAKING CHANGE:` - Breaking changes (major version bump)
 - `docs:`, `style:`, `refactor:`, `test:`, `chore:` - No version bump
 
@@ -361,7 +362,7 @@ DevEx uses comprehensive automated release management:
 # Feature release (minor version)
 git commit -m "feat: add new plugin system"
 
-# Bug fix release (patch version)  
+# Bug fix release (patch version)
 git commit -m "fix: resolve installation issue"
 
 # Breaking change release (major version)
@@ -384,7 +385,7 @@ git commit -m "feat!: redesign configuration system"
 - **Nix**: nixpkgs, nixflake
 - **Binary**: curlpipe, rpm, deb
 
-### Desktop Environments  
+### Desktop Environments
 - **GNOME**, **KDE Plasma**, **XFCE**, **MATE**, **Cinnamon**
 - **LXQt**, **Budgie**, **Pantheon**, **COSMIC**
 
@@ -392,7 +393,7 @@ git commit -m "feat!: redesign configuration system"
 
 ### 📞 Getting Help
 - **[Issues](https://github.com/jameswlane/devex/issues)**: Bug reports and feature requests
-- **[Discussions](https://github.com/jameswlane/devex/discussions)**: Community Q&A and ideas  
+- **[Discussions](https://github.com/jameswlane/devex/discussions)**: Community Q&A and ideas
 - **[Documentation](https://docs.devex.sh)**: Comprehensive guides and API docs
 - **[Website](https://devex.sh)**: Official website with tutorials and updates
 

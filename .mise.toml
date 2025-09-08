@@ -1,8 +1,9 @@
 [tools]
 go = "1.24.6"
+pnpm = "10.15.1"
 node = "22"
 lefthook = "latest"
 golangci-lint = "latest"
-goreleaser = "latest"
 yamlfmt = "latest"
 yamllint = "latest"
+biome = "latest"
