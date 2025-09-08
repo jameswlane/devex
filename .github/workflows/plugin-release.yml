@@ -1,0 +1,151 @@
+name: Individual Plugin Releases
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+      - '.github/workflows/plugin-release.yml'
+  workflow_dispatch:
+    inputs:
+      plugin_name:
+        description: 'Plugin name to release (e.g., package-manager-apt)'
+        required: true
+        type: string
+      version:
+        description: 'Version to release (e.g., v1.2.3)'
+        required: false
+        type: string
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+  id-token: write
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      changed-plugins: ${{ steps.changes.outputs.plugins }}
+      plugin-matrix: ${{ steps.matrix.outputs.plugins }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Detect changed plugins
+        id: changes
+        run: "if [ \"${{ github.event_name }}\" = \"workflow_dispatch\" ]; then\n  # Manual trigger - release specific plugin\n  echo \"plugins=${{ github.event.inputs.plugin_name }}\" >> $GITHUB_OUTPUT\nelse\n  # Auto-detect changed plugins from commits\n  changed_files=$(git diff --name-only HEAD~1 HEAD)\n  changed_plugins=()\n  \n  for file in $changed_files; do\n    if [[ $file == packages/* ]]; then\n      plugin_dir=$(echo $file | cut -d'/' -f2)\n      # Skip plugin-sdk and ensure plugin has main.go and .goreleaser.yml\n      if [ \"$plugin_dir\" != \"plugin-sdk\" ] && \\\n         [ -f \"packages/$plugin_dir/main.go\" ] && \\\n         [ -f \"packages/$plugin_dir/.goreleaser.yml\" ]; then\n        if [[ ! \" ${changed_plugins[@]} \" =~ \" $plugin_dir \" ]]; then\n          changed_plugins+=(\"$plugin_dir\")\n        fi\n      fi\n    fi\n  done\n  \n  # Convert to JSON array for matrix\n  plugins_json=$(printf '%s\\n' \"${changed_plugins[@]}\" | jq -R -s -c 'split(\"\\n\")[:-1]')\n  echo \"plugins=$plugins_json\" >> $GITHUB_OUTPUT\nfi\n"
+      - name: Create matrix
+        id: matrix
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "plugins=[\"${{ github.event.inputs.plugin_name }}\"]" >> $GITHUB_OUTPUT
+          else
+            echo "plugins=${{ steps.changes.outputs.plugins }}" >> $GITHUB_OUTPUT
+          fi
+  release-plugin:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.plugin-matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJson(needs.detect-changes.outputs.plugin-matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+      - name: Validate plugin
+        run: |
+          cd packages/${{ matrix.plugin }}
+
+          # Check if plugin directory and files exist
+          if [ ! -f "main.go" ]; then
+            echo "❌ main.go not found for plugin: ${{ matrix.plugin }}"
+            exit 1
+          fi
+
+          if [ ! -f ".goreleaser.yml" ]; then
+            echo "❌ .goreleaser.yml not found for plugin: ${{ matrix.plugin }}"
+            exit 1
+          fi
+
+          # Update dependencies
+          echo "📦 Updating dependencies..."
+          go mod tidy
+
+          # Build plugin to validate
+          echo "🔨 Building plugin..."
+          go build -v -o "devex-plugin-${{ matrix.plugin }}" .
+
+          # Test plugin info command
+          echo "🧪 Testing plugin info..."
+          if ./devex-plugin-${{ matrix.plugin }} --plugin-info > /dev/null; then
+            echo "✅ Plugin ${{ matrix.plugin }} validated successfully"
+          else
+            echo "❌ Plugin info test failed for: ${{ matrix.plugin }}"
+            exit 1
+          fi
+      - name: Determine version
+        id: version
+        run: "cd packages/${{ matrix.plugin }}\n\nif [ \"${{ github.event_name }}\" = \"workflow_dispatch\" ] && [ -n \"${{ github.event.inputs.version }}\" ]; then\n  # Use manually specified version\n  version=\"${{ github.event.inputs.version }}\"\n  # Remove 'v' prefix if present\n  version=${version#v}\nelse\n  # Auto-generate version based on latest tag\n  plugin_name=\"${{ matrix.plugin }}\"\n  latest_tag=$(git tag -l \"plugin-${plugin_name}-v*\" | sort -V | tail -n1 || echo \"\")\n  \n  if [ -z \"$latest_tag\" ]; then\n    version=\"0.1.0\"\n  else\n    # Extract version number and increment patch\n    current_version=${latest_tag#plugin-${plugin_name}-v}\n    IFS='.' read -ra VERSION_PARTS <<< \"$current_version\"\n    major=${VERSION_PARTS[0]:-0}\n    minor=${VERSION_PARTS[1]:-0}\n    patch=${VERSION_PARTS[2]:-0}\n    patch=$((patch + 1))\n    version=\"$major.$minor.$patch\"\n  fi\nfi\n\necho \"version=$version\" >> $GITHUB_OUTPUT\necho \"tag=plugin-${{ matrix.plugin }}-v$version\" >> $GITHUB_OUTPUT\necho \"📋 Plugin: ${{ matrix.plugin }}\"\necho \"🔖 Version: $version\"\necho \"🏷️  Tag: plugin-${{ matrix.plugin }}-v$version\"\n"
+      - name: Create and push tag
+        run: |
+          cd packages/${{ matrix.plugin }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ matrix.plugin }} v${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+      - name: Release plugin with GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --clean
+          workdir: packages/${{ matrix.plugin }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pass version as environment variable for GoReleaser
+          PLUGIN_VERSION: ${{ steps.version.outputs.version }}
+      - name: Update plugin registry
+        run: |
+          echo "🔄 Plugin ${{ matrix.plugin }} v${{ steps.version.outputs.version }} released successfully"
+          echo "📦 Assets published to GitHub Releases"
+          echo "🚀 Plugin available for download"
+  summary:
+    needs: [detect-changes, release-plugin]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release Summary
+        run: |
+          echo "## 🎉 Plugin Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ needs.detect-changes.outputs.plugin-matrix }}" = "[]" ]; then
+            echo "No plugin changes detected - no releases created." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Released Plugins:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            plugins='${{ needs.detect-changes.outputs.plugin-matrix }}'
+            echo $plugins | jq -r '.[]' | while read plugin; do
+              echo "- ✅ **$plugin**" >> $GITHUB_STEP_SUMMARY
+            done
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Quick Start" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download the latest plugin releases from the [Releases page](https://github.com/jameswlane/devex/releases)." >> $GITHUB_STEP_SUMMARY
