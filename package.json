@@ -32,7 +32,7 @@
 	"license": "GPL-3.0",
 	"packageManager": "pnpm@10.15.1",
 	"devDependencies": {
-		"@biomejs/biome": "2.2.2",
+		"@biomejs/biome": "2.2.3",
 		"@commitlint/config-conventional": "^19.8.1",
 		"@commitlint/format": "^19.8.1",
 		"@octokit/rest": "^22.0.0",
