@@ -1,6 +1,5 @@
 # DevEx DEB Package Manager Plugin
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
 [![Plugin Version](https://img.shields.io/badge/Version-1.0.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![Debian](https://img.shields.io/badge/Debian-Package%20Format-A81D33?logo=debian)](https://www.debian.org/doc/debian-policy/)
