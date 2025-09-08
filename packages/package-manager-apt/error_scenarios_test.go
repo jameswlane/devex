@@ -62,12 +62,12 @@ var _ = Describe("APT Error Scenarios", func() {
 				unreachableRepo := "deb https://192.0.2.1/ubuntu focal main"
 				err := plugin.ValidateAptRepo(unreachableRepo)
 
-				// Validation should pass for properly formatted repo string
+				// Validation should pass for a properly formatted repo string
 				Expect(err).To(Not(HaveOccurred()))
 			})
 
 			It("should handle DNS resolution failures", func() {
-				// Test with non-existent domain
+				// Test with a non-existent domain
 				nonExistentURL := "https://this-domain-definitely-does-not-exist-12345.invalid/key.gpg"
 				err := plugin.ValidateKeyURL(nonExistentURL)
 
@@ -76,11 +76,11 @@ var _ = Describe("APT Error Scenarios", func() {
 			})
 
 			It("should handle slow network responses", func() {
-				// Create a context with very short timeout
+				// Create a context with a very short timeout
 				shortCtx, shortCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 				defer shortCancel()
 
-				// Simulate operation that would timeout
+				// Simulate operation that would time out
 				select {
 				case <-time.After(10 * time.Millisecond):
 					Fail("Operation should have been cancelled by context")
@@ -109,7 +109,7 @@ var _ = Describe("APT Error Scenarios", func() {
 
 				// URL validation should pass
 				Expect(err).To(Not(HaveOccurred()))
-				// Actual download would need retry logic
+				// Actual download would need to retry logic
 			})
 
 			It("should handle malformed HTTP responses", func() {
@@ -148,7 +148,7 @@ var _ = Describe("APT Error Scenarios", func() {
 
 			It("should handle connection resets", func() {
 				// Test that validation is resilient to connection issues
-				// by validating multiple URLs in sequence
+				// by validating multiple URLs in a sequence
 				urls := []string{
 					"https://example.com/key1.gpg",
 					"https://example.com/key2.gpg",
@@ -300,7 +300,7 @@ var _ = Describe("APT Error Scenarios", func() {
 
 		Context("when operations are cancelled mid-execution", func() {
 			It("should handle context cancellation gracefully", func() {
-				// Create a context that will be cancelled
+				// Create a context that will be canceled
 				cancelCtx, cancelFunc := context.WithCancel(context.Background())
 
 				// Start validation in a goroutine
@@ -311,10 +311,10 @@ var _ = Describe("APT Error Scenarios", func() {
 					// Simulate some work
 					time.Sleep(10 * time.Millisecond)
 
-					// Check if context is cancelled
+					// Check if context is canceled
 					select {
 					case <-cancelCtx.Done():
-						// Context cancelled as expected
+						// Context canceled as expected
 						done <- true
 					default:
 						// Continue with validation
@@ -327,7 +327,7 @@ var _ = Describe("APT Error Scenarios", func() {
 				time.Sleep(5 * time.Millisecond)
 				cancelFunc()
 
-				// Wait for goroutine to complete
+				// Wait for the goroutine to complete
 				wasCancelled := <-done
 				Expect(wasCancelled).To(BeTrue())
 			})
@@ -340,7 +340,7 @@ var _ = Describe("APT Error Scenarios", func() {
 					// Check if we should stop processing
 					select {
 					case <-ctx.Done():
-						// Exit the loop if context is cancelled
+						// Exit the loop if context is canceled
 						goto done
 					default:
 						err := plugin.ValidatePackageName(pkg)
@@ -351,7 +351,7 @@ var _ = Describe("APT Error Scenarios", func() {
 				}
 
 			done:
-				// All should be processed since context wasn't cancelled
+				// All should be processed since context wasn't canceled
 				Expect(processed).To(Equal(3))
 			})
 		})
@@ -483,7 +483,7 @@ var _ = Describe("APT Error Scenarios", func() {
 			})
 
 			It("should handle path validation without file system access", func() {
-				// These paths don't exist but validation should work
+				// These paths don't exist, but validation should work
 				nonExistentPaths := []string{
 					"/tmp/definitely-does-not-exist-12345.gpg",
 					"/var/tmp/another-non-existent-file.list",
