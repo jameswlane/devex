@@ -1,6 +1,10 @@
 name: Plugin Registry Update
 permissions:
-  contents: read
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+  id-token: write
 on:
   push:
     branches: [main]
@@ -10,21 +14,6 @@ on:
       - 'scripts/release-plugins.sh'
       - 'scripts/release-plugin-individual.sh'
       - '.github/workflows/plugin-registry-update.yml'
-  workflow_dispatch:
-    inputs:
-      plugins:
-        description: 'Specific plugins to build (comma-separated, empty for all)'
-        required: false
-        type: string
-      release_mode:
-        description: 'Release mode'
-        required: false
-        default: 'individual'
-        type: choice
-        options:
-          - individual
-          - single-release
-          - dry-run
 jobs:
   # Determine which plugins to build
   detect-plugins:

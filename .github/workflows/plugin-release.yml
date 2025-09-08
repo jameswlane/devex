@@ -6,16 +6,6 @@ on:
     paths:
       - 'packages/**'
       - '.github/workflows/plugin-release.yml'
-  workflow_dispatch:
-    inputs:
-      plugin_name:
-        description: 'Plugin name to release (e.g., package-manager-apt)'
-        required: true
-        type: string
-      version:
-        description: 'Version to release (e.g., v1.2.3)'
-        required: false
-        type: string
 permissions:
   contents: write
   packages: write
@@ -111,12 +101,14 @@ jobs:
       - name: Release plugin with GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          distribution: goreleaser
+          distribution: goreleaser-pro
           version: '~> v2'
           args: release --clean
           workdir: packages/${{ matrix.plugin }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           # Pass version as environment variable for GoReleaser
           PLUGIN_VERSION: ${{ steps.version.outputs.version }}
       - name: Update plugin registry

@@ -1,5 +1,8 @@
 version: 2
 project_name: __PLUGIN_NAME__
+monorepo:
+  tag_prefix: plugin/
+  dir: packages/__PATH_TO_PLUGIN__
 builds:
   - id: __PLUGIN_ID__
     main: .
@@ -46,3 +49,8 @@ release:
   mode: replace
   draft: false
   prerelease: auto
+after:
+  hooks:
+    - cmd: node ../../scripts/generate-registry.js {{ .Commit }}
+      env:
+        - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}

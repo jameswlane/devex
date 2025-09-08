@@ -1,5 +1,8 @@
 version: 2
 project_name: devex-plugin-desktop-kde
+monorepo:
+  tag_prefix: plugin/
+  dir: packages/desktop-kde
 builds:
   - id: plugin-desktop-kde
     main: .
@@ -47,3 +50,8 @@ release:
   mode: replace
   draft: false
   prerelease: auto
+after:
+  hooks:
+    - cmd: node ../../scripts/generate-registry.js {{ .Commit }}
+      env:
+        - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}

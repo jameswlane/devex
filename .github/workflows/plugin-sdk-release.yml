@@ -1,16 +1,15 @@
 name: Plugin SDK Release
 permissions:
-  contents: read
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+  id-token: write
 on:
   push:
-    tags:
-      - 'plugin-sdk/v*.*.*'
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release (e.g., v1.0.0)'
-        required: true
-        type: string
+    paths:
+      - 'packages/plugin-sdk'
+      - '.github/workflows/plugin-sdk-release.yml'
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -54,15 +53,78 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+      - name: Calculate next version and create tag
+        id: version
+        run: |
+          # Get the latest plugin-sdk tag
+          latest_tag=$(git tag -l "plugin-sdk/v*" | sort -V | tail -n1 || echo "")
+
+          if [ -z "$latest_tag" ]; then
+            # No existing tags, start with v0.1.0
+            new_version="0.1.0"
+          else
+            # Extract current version (remove plugin-sdk/v prefix)
+            current_version=${latest_tag#plugin-sdk/v}
+            echo "Current version: $current_version"
+
+            # Parse version components
+            IFS='.' read -ra VERSION_PARTS <<< "$current_version"
+            major=${VERSION_PARTS[0]:-0}
+            minor=${VERSION_PARTS[1]:-0}
+            patch=${VERSION_PARTS[2]:-0}
+
+            # Analyze recent commits to determine bump type
+            commit_messages=$(git log --format=%s --since="24 hours ago" -- packages/plugin-sdk/ | head -5)
+
+            if echo "$commit_messages" | grep -qE '^feat\(plugin-sdk\)!:|BREAKING CHANGE:'; then
+              # Major version bump for breaking changes
+              major=$((major + 1))
+              minor=0
+              patch=0
+            elif echo "$commit_messages" | grep -qE '^feat\(plugin-sdk\):'; then
+              # Minor version bump for new features
+              minor=$((minor + 1))
+              patch=0
+            else
+              # Patch version bump for fixes and other changes
+              patch=$((patch + 1))
+            fi
+
+            new_version="$major.$minor.$patch"
+          fi
+
+          new_tag="plugin-sdk/v$new_version"
+          echo "New version: $new_version"
+          echo "New tag: $new_tag"
+
+          # Create and push the tag
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$new_tag" -m "Plugin SDK v$new_version
+
+          Automated release based on changes to packages/plugin-sdk/
+
+          🤖 Generated with [Claude Code](https://claude.ai/code)
+
+          Co-Authored-By: Claude <noreply@anthropic.com>"
+
+          git push origin "$new_tag"
+
+          # Output for next steps
+          echo "version=$new_version" >> $GITHUB_OUTPUT
+          echo "tag=$new_tag" >> $GITHUB_OUTPUT
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          distribution: goreleaser
+          distribution: goreleaser-pro
           version: latest
           args: release --clean
           workdir: packages/plugin-sdk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
   publish-go-module:
     needs: release
     runs-on: ubuntu-latest
@@ -83,7 +145,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/plugin-sdk/}" >> $GITHUB_OUTPUT
+            echo "VERSION=${GITHUB_REF#refs/tags/plugin-sdk/v}" >> $GITHUB_OUTPUT
           fi
       - name: Set module proxy environment
         run: |

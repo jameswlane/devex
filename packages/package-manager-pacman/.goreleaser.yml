@@ -1,5 +1,8 @@
 version: 2
 project_name: devex-plugin-package-manager-pacman
+monorepo:
+  tag_prefix: plugin/
+  dir: packages/package-manager-pacman
 builds:
   - id: plugin-package-manager-pacman
     main: .
@@ -47,3 +50,8 @@ release:
   mode: replace
   draft: false
   prerelease: auto
+after:
+  hooks:
+    - cmd: node ../../scripts/generate-registry.js {{ .Commit }}
+      env:
+        - GITHUB_TOKEN={{ .Env.GITHUB_TOKEN }}
