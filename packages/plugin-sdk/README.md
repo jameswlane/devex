@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![Plugin SDK](https://img.shields.io/badge/Plugin-SDK-8A2BE2?logo=go)](https://github.com/jameswlane/devex)
 
-Shared Software Development Kit for creating DevEx plugins. Provides common interfaces, utilities, and tools for building consistent, high-quality plugins across the DevEx ecosystem.
+The official Software Development Kit for creating DevEx plugins. Provides common interfaces, utilities, and tools for building consistent, high-quality plugins across the DevEx ecosystem.
 
 ## 🚀 Features
 
