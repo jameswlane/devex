@@ -1,4 +1,4 @@
-name: issue closed
+name: Issue Closed
 on:
   issues:
     types: [closed]

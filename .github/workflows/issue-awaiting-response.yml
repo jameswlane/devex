@@ -1,4 +1,4 @@
-name: issue awaiting response
+name: Issue Awaiting Response
 permissions:
   contents: read
   issues: write

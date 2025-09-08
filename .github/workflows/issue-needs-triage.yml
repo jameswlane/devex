@@ -1,4 +1,4 @@
-name: issue needs triage
+name: Issue Needs Triage
 on:
   issues:
     types: [opened]
