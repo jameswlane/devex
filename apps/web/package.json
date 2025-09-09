@@ -1,5 +1,5 @@
 {
-	"name": "web",
+	"name": "@devex/web",
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
@@ -23,7 +23,6 @@
 		"@types/react": "19.1.12",
 		"@types/react-dom": "19.1.9",
 		"autoprefixer": "10.4.21",
-		"docs": "0.3.2-canary.0",
 		"postcss": "8.5.6",
 		"shadcn": "^3.1.0",
 		"tailwindcss": "4.1.13",
