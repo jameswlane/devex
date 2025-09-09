@@ -1,17 +1,13 @@
 name: Release
-
 on:
   push:
     branches:
       - main
-
 concurrency: ${{ github.workflow }}-${{ github.ref }}
-
 permissions:
   contents: write
   pull-requests: write
   packages: write
-
 jobs:
   release:
     name: Release
@@ -22,67 +18,22 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
           version: 9
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Create Release Pull Request or Create Tags
-        id: changesets
-        uses: changesets/action@v1
-        with:
-          title: "🚀 Release"
-          commit: "chore: version packages"
-          version: pnpm changeset:version
-          publish: pnpm changeset:publish
+      - name: Determine changed packages and create releases
+        id: auto-release
+        run: "# Install dependencies first\npnpm install --frozen-lockfile\n\n# Set up git user\ngit config user.name \"github-actions[bot]\"\ngit config user.email \"github-actions[bot]@users.noreply.github.com\"\n\n# Get the last tag or use initial commit\nLAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)\necho \"Last tag: $LAST_TAG\"\n\n# Check what files changed since last tag\nCHANGED_FILES=$(git diff --name-only $LAST_TAG..HEAD || git diff --name-only --cached)\necho \"Changed files: $CHANGED_FILES\"\n\n# Check for conventional commits since last tag\nCOMMITS=$(git log $LAST_TAG..HEAD --pretty=format:\"%s\" --no-merges | grep -E \"^(feat|fix|perf|refactor)(\\([^)]+\\))?: \" || echo \"\")\n\nif [ -z \"$COMMITS\" ]; then\n  echo \"No conventional commits found since last release\"\n  echo \"has_release=false\" >> $GITHUB_OUTPUT\n  exit 0\nfi\n\necho \"Found conventional commits:\"\necho \"$COMMITS\"\n\n# Determine version bump (major, minor, patch)\nBUMP_TYPE=\"patch\"\nif echo \"$COMMITS\" | grep -q \"BREAKING CHANGE\\|!:\"; then\n  BUMP_TYPE=\"major\"\nelif echo \"$COMMITS\" | grep -q \"^feat\"; then\n  BUMP_TYPE=\"minor\"\nfi\n\necho \"Determined bump type: $BUMP_TYPE\"\n\n# Determine affected packages based on changed files\nPACKAGES_TO_RELEASE=\"\"\n\n# Check CLI changes\nif echo \"$CHANGED_FILES\" | grep -q \"^apps/cli/\"; then\n  PACKAGES_TO_RELEASE=\"$PACKAGES_TO_RELEASE @devex/cli\"\nfi\n\n# Check Plugin SDK changes  \nif echo \"$CHANGED_FILES\" | grep -q \"^packages/plugin-sdk/\"; then\n  PACKAGES_TO_RELEASE=\"$PACKAGES_TO_RELEASE @devex/plugin-sdk\"\nfi\n\n# Check other plugin package changes\nfor dir in packages/*/; do\n  if [ \"$dir\" != \"packages/plugin-sdk/\" ]; then\n    PACKAGE_NAME=$(basename \"$dir\")\n    if echo \"$CHANGED_FILES\" | grep -q \"^$dir\"; then\n      PACKAGES_TO_RELEASE=\"$PACKAGES_TO_RELEASE @devex/$PACKAGE_NAME\"\n    fi\n  fi\ndone\n\nPACKAGES_TO_RELEASE=$(echo \"$PACKAGES_TO_RELEASE\" | xargs)\necho \"Packages to release: $PACKAGES_TO_RELEASE\"\n\nif [ -z \"$PACKAGES_TO_RELEASE\" ]; then\n  echo \"No packages affected by changes\"\n  echo \"has_release=false\" >> $GITHUB_OUTPUT\n  exit 0\nfi\n\necho \"has_release=true\" >> $GITHUB_OUTPUT\necho \"packages=$PACKAGES_TO_RELEASE\" >> $GITHUB_OUTPUT\necho \"bump_type=$BUMP_TYPE\" >> $GITHUB_OUTPUT\n"
+      - name: Create tags and trigger releases
+        if: steps.auto-release.outputs.has_release == 'true'
+        run: "PACKAGES=\"${{ steps.auto-release.outputs.packages }}\"\nBUMP_TYPE=\"${{ steps.auto-release.outputs.bump_type }}\"\n\nfor PACKAGE in $PACKAGES; do\n  echo \"Processing package: $PACKAGE\"\n  \n  # Get current version from package.json if it exists\n  CURRENT_VERSION=\"0.0.0\"\n  case \"$PACKAGE\" in\n    \"@devex/cli\")\n      if [ -f \"apps/cli/package.json\" ]; then\n        CURRENT_VERSION=$(jq -r '.version // \"0.0.0\"' apps/cli/package.json)\n      fi\n      ;;\n    \"@devex/plugin-sdk\")\n      if [ -f \"packages/plugin-sdk/package.json\" ]; then\n        CURRENT_VERSION=$(jq -r '.version // \"0.0.0\"' packages/plugin-sdk/package.json)\n      fi\n      ;;\n    @devex/*)\n      PACKAGE_DIR=\"packages/$(echo \"$PACKAGE\" | sed 's/@devex\\///')\"\n      if [ -f \"$PACKAGE_DIR/package.json\" ]; then\n        CURRENT_VERSION=$(jq -r '.version // \"0.0.0\"' \"$PACKAGE_DIR/package.json\")\n      fi\n      ;;\n  esac\n  \n  # Calculate new version\n  IFS='.' read -r major minor patch <<< \"$CURRENT_VERSION\"\n  case \"$BUMP_TYPE\" in\n    \"major\")\n      NEW_VERSION=\"$((major + 1)).0.0\"\n      ;;\n    \"minor\") \n      NEW_VERSION=\"$major.$((minor + 1)).0\"\n      ;;\n    \"patch\")\n      NEW_VERSION=\"$major.$minor.$((patch + 1))\"\n      ;;\n  esac\n  \n  echo \"Bumping $PACKAGE from $CURRENT_VERSION to $NEW_VERSION\"\n  \n  # Create appropriate tag for GoReleaser\n  case \"$PACKAGE\" in\n    \"@devex/cli\")\n      TAG=\"@devex/cli@$NEW_VERSION\"\n      echo \"Creating CLI tag: $TAG\"\n      git tag -a \"$TAG\" -m \"Release DevEx CLI $NEW_VERSION\"\n      git push origin \"$TAG\"\n      ;;\n    \"@devex/plugin-sdk\")\n      TAG=\"@devex/plugin-sdk@$NEW_VERSION\"\n      echo \"Creating Plugin SDK tag: $TAG\" \n      git tag -a \"$TAG\" -m \"Release Plugin SDK $NEW_VERSION\"\n      git push origin \"$TAG\"\n      ;;\n    @devex/*)\n      TAG=\"$PACKAGE@$NEW_VERSION\"\n      PLUGIN_NAME=$(echo \"$PACKAGE\" | sed 's/@devex\\///')\n      echo \"Creating plugin tag: $TAG\"\n      git tag -a \"$TAG\" -m \"Release $PLUGIN_NAME plugin $NEW_VERSION\"\n      git push origin \"$TAG\"\n      ;;\n  esac\n  \n  # Update package.json with new version\n  case \"$PACKAGE\" in\n    \"@devex/cli\")\n      if [ -f \"apps/cli/package.json\" ]; then\n        jq \".version = \\\"$NEW_VERSION\\\"\" apps/cli/package.json > apps/cli/package.json.tmp\n        mv apps/cli/package.json.tmp apps/cli/package.json\n      fi\n      ;;\n    \"@devex/plugin-sdk\")\n      if [ -f \"packages/plugin-sdk/package.json\" ]; then\n        jq \".version = \\\"$NEW_VERSION\\\"\" packages/plugin-sdk/package.json > packages/plugin-sdk/package.json.tmp\n        mv packages/plugin-sdk/package.json.tmp packages/plugin-sdk/package.json\n      fi\n      ;;\n    @devex/*)\n      PACKAGE_DIR=\"packages/$(echo \"$PACKAGE\" | sed 's/@devex\\///')\"\n      if [ -f \"$PACKAGE_DIR/package.json\" ]; then\n        jq \".version = \\\"$NEW_VERSION\\\"\" \"$PACKAGE_DIR/package.json\" > \"$PACKAGE_DIR/package.json.tmp\"\n        mv \"$PACKAGE_DIR/package.json.tmp\" \"$PACKAGE_DIR/package.json\"\n      fi\n      ;;\n  esac\ndone\n\n# Commit version updates\nif git diff --quiet; then\n  echo \"No version files to commit\"\nelse\n  git add -A\n  git commit -m \"chore: update package versions [skip ci]\"\n  git push origin main\nfi\n\necho \"🎉 All tags created! GoReleaser workflows will be triggered automatically.\"\n"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Git tags for GoReleaser
-        if: steps.changesets.outputs.published == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          echo "Published packages:"
-          echo '${{ steps.changesets.outputs.publishedPackages }}' | jq '.'
-
-          # Create tags for GoReleaser
-          echo '${{ steps.changesets.outputs.publishedPackages }}' | jq -c '.[]' | while read -r pkg; do
-            NAME=$(echo "$pkg" | jq -r '.name')
-            VERSION=$(echo "$pkg" | jq -r '.version')
-
-            case "$NAME" in
-              "@devex/cli")
-                TAG="v$VERSION"
-                echo "Creating CLI tag: $TAG"
-                git tag -a "$TAG" -m "Release DevEx CLI $VERSION"
-                git push origin "$TAG"
-                ;;
-              "@devex/plugin-sdk")
-                TAG="plugin-sdk/v$VERSION"
-                echo "Creating Plugin SDK tag: $TAG"
-                git tag -a "$TAG" -m "Release Plugin SDK $VERSION"
-                git push origin "$TAG"
-                ;;
-              @devex/plugin-*)
-                PLUGIN_NAME=$(echo "$NAME" | sed 's/@devex\/plugin-//')
-                TAG="plugin-${PLUGIN_NAME}-v${VERSION}"
-                echo "Creating plugin tag: $TAG"
-                git tag -a "$TAG" -m "Release $PLUGIN_NAME plugin $VERSION"
-                git push origin "$TAG"
-                ;;
-            esac
-          done
-
-          echo "🎉 All tags created! GoReleaser workflows will be triggered automatically."
