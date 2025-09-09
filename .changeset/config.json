@@ -1,0 +1,20 @@
+{
+	"$schema": "https://unpkg.com/@changesets/config@3.0.0/schema.json",
+	"changelog": [
+		"@changesets/changelog-github",
+		{
+			"repo": "jameswlane/devex"
+		}
+	],
+	"commit": false,
+	"fixed": [],
+	"linked": [["@devex/cli", "@devex/plugin-sdk"]],
+	"access": "public",
+	"baseBranch": "main",
+	"updateInternalDependencies": "patch",
+	"ignore": ["@devex/docs", "@devex/web", "@devex/registry"],
+	"privatePackages": {
+		"version": true,
+		"tag": true
+	}
+}
