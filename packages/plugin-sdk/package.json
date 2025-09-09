@@ -1,18 +1,18 @@
 {
-	"name": "@devex/plugin-sdk",
-	"version": "1.0.0",
-	"description": "Shared SDK for DevEx plugins",
-	"private": true,
-	"scripts": {
-		"build": "go build ./...",
-		"test": "ginkgo run .",
-		"lint": "golangci-lint run",
-		"mod": "go mod tidy"
-	},
-	"keywords": [
-		"devex",
-		"plugin",
-		"sdk",
-		"go"
-	]
+  "name": "@devex/plugin-sdk",
+  "version": "1.1.0",
+  "description": "Shared SDK for DevEx plugins",
+  "private": true,
+  "scripts": {
+    "build": "go build ./...",
+    "test": "ginkgo run .",
+    "lint": "golangci-lint run",
+    "mod": "go mod tidy"
+  },
+  "keywords": [
+    "devex",
+    "plugin",
+    "sdk",
+    "go"
+  ]
 }
