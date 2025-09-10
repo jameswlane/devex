@@ -12,8 +12,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
 // Constants for default configuration values
@@ -53,14 +54,15 @@ type RegistryClient struct {
 	userAgent   string
 	cache       *MemoryCache
 	logger      Logger
-	searchIndex *SearchIndex
-	indexMu     sync.RWMutex
+	searchIndex unsafe.Pointer // *SearchIndex - atomic pointer for lock-free reads
 }
 
-// SearchIndex provides efficient searching capabilities
+// SearchIndex provides efficient searching capabilities with pre-sorted data
 type SearchIndex struct {
-	tagIndex  map[string][]string // tag -> plugin names
-	nameIndex map[string]bool     // normalized names for fast lookup
+	tagIndex    map[string][]string // tag -> plugin names (pre-sorted)
+	nameIndex   map[string]bool     // normalized names for fast lookup
+	allPlugins  []PluginMetadata    // all plugins pre-sorted alphabetically
+	pluginIndex map[string]int      // plugin name -> index in allPlugins for O(1) lookup
 }
 
 var _ Registry = (*RegistryClient)(nil) // Compile-time interface check
@@ -203,9 +205,14 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 	// Parse the last updated timestamp
 	lastUpdated, err := time.Parse(time.RFC3339, registryResp.LastUpdated)
 	if err != nil {
-		// Use zero time for invalid timestamps to clearly indicate the issue
-		c.logger.Warn("failed to parse last_updated timestamp, using zero time", "error", err, "value", registryResp.LastUpdated)
-		lastUpdated = time.Time{} // Zero time clearly indicates invalid/missing timestamp
+		// Use Unix epoch as fallback to avoid downstream time-based logic issues
+		// This is a known reference point that won't break time comparisons
+		fallbackTime := time.Unix(0, 0) // January 1, 1970 UTC
+		c.logger.Warn("failed to parse last_updated timestamp, using Unix epoch fallback", 
+			"error", err, 
+			"value", registryResp.LastUpdated,
+			"fallback", fallbackTime.Format(time.RFC3339))
+		lastUpdated = fallbackTime
 	}
 
 	// Convert to PluginRegistry format
@@ -263,42 +270,59 @@ func (c *RegistryClient) GetPlugin(ctx context.Context, pluginName string) (*Plu
 // updateSearchIndex updates the cached search index from the registry
 func (c *RegistryClient) updateSearchIndex(registry *PluginRegistry) {
 	index := &SearchIndex{
-		tagIndex:  make(map[string][]string),
-		nameIndex: make(map[string]bool),
+		tagIndex:    make(map[string][]string),
+		nameIndex:   make(map[string]bool),
+		allPlugins:  make([]PluginMetadata, 0, len(registry.Plugins)),
+		pluginIndex: make(map[string]int),
 	}
 	
-	for name, plugin := range registry.Plugins {
+	// Build sorted list of all plugins
+	for _, plugin := range registry.Plugins {
+		index.allPlugins = append(index.allPlugins, plugin)
+	}
+	
+	// Sort all plugins alphabetically for consistent ordering
+	sort.Slice(index.allPlugins, func(i, j int) bool {
+		return index.allPlugins[i].Name < index.allPlugins[j].Name
+	})
+	
+	// Build lookup indexes
+	for i, plugin := range index.allPlugins {
+		// Plugin name -> index mapping for O(1) lookup
+		index.pluginIndex[plugin.Name] = i
+		
 		// Index normalized plugin names
 		normalizedName := strings.ToLower(plugin.Name)
 		index.nameIndex[normalizedName] = true
 		
-		// Index tags
+		// Index tags with pre-sorted plugin names
 		for _, tag := range plugin.Tags {
 			normalizedTag := strings.ToLower(tag)
-			index.tagIndex[normalizedTag] = append(index.tagIndex[normalizedTag], name)
+			index.tagIndex[normalizedTag] = append(index.tagIndex[normalizedTag], plugin.Name)
 		}
 	}
 	
-	c.indexMu.Lock()
-	c.searchIndex = index
-	c.indexMu.Unlock()
+	// Sort plugin names within each tag for consistent ordering
+	for tag := range index.tagIndex {
+		sort.Strings(index.tagIndex[tag])
+	}
+	
+	// Atomically update the search index pointer for lock-free reads
+	atomic.StorePointer(&c.searchIndex, unsafe.Pointer(index))
 }
 
 // getSearchIndex returns the cached search index or builds one if not available
 func (c *RegistryClient) getSearchIndex(registry *PluginRegistry) *SearchIndex {
-	c.indexMu.RLock()
-	if c.searchIndex != nil {
-		defer c.indexMu.RUnlock()
-		return c.searchIndex
+	// Atomically load the search index pointer for lock-free reads
+	if ptr := atomic.LoadPointer(&c.searchIndex); ptr != nil {
+		return (*SearchIndex)(ptr)
 	}
-	c.indexMu.RUnlock()
 	
 	// Build index if not cached
 	c.updateSearchIndex(registry)
 	
-	c.indexMu.RLock()
-	defer c.indexMu.RUnlock()
-	return c.searchIndex
+	// Load again after building
+	return (*SearchIndex)(atomic.LoadPointer(&c.searchIndex))
 }
 
 // matchesQuery checks if a plugin matches the search query
@@ -333,87 +357,98 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 		limit = DefaultSearchLimit
 	}
 
-	var results []PluginMetadata
-	
 	// Get cached search index for efficiency
 	searchIndex := c.getSearchIndex(registry)
 	query = strings.ToLower(query)
 	
+	var results []PluginMetadata
+	
 	// If we have tag filters, use the index for efficient lookup
 	if len(tags) > 0 {
-		candidateNames := make(map[string]bool)
+		candidateIndices := make(map[int]bool)
 		
-		// Find plugins that match any of the tags
+		// Find plugins that match any of the tags using pre-sorted data
 		for _, searchTag := range tags {
 			normalizedTag := strings.ToLower(searchTag)
 			if pluginNames, exists := searchIndex.tagIndex[normalizedTag]; exists {
+				// Plugin names are already sorted, get their indices efficiently
 				for _, name := range pluginNames {
-					candidateNames[name] = true
+					if idx, exists := searchIndex.pluginIndex[name]; exists {
+						candidateIndices[idx] = true
+					}
 				}
 			}
 		}
 		
-		// Collect all matching candidates first
-		var candidates []PluginMetadata
-		for pluginName := range candidateNames {
-			plugin := registry.Plugins[pluginName]
+		// Collect indices in sorted order for deterministic results
+		sortedIndices := make([]int, 0, len(candidateIndices))
+		for idx := range candidateIndices {
+			sortedIndices = append(sortedIndices, idx)
+		}
+		sort.Ints(sortedIndices)
+		
+		// Apply query filter and relevance scoring using pre-sorted data
+		exactMatches := make([]PluginMetadata, 0)
+		otherMatches := make([]PluginMetadata, 0)
+		
+		for _, idx := range sortedIndices {
+			plugin := searchIndex.allPlugins[idx]
 			if query == "" || c.matchesQuery(plugin, query) {
-				candidates = append(candidates, plugin)
+				// Separate exact matches for relevance scoring
+				if strings.EqualFold(plugin.Name, query) {
+					exactMatches = append(exactMatches, plugin)
+				} else {
+					otherMatches = append(otherMatches, plugin)
+				}
+				
+				// Early exit if we have enough results
+				if len(exactMatches)+len(otherMatches) >= limit {
+					break
+				}
 			}
 		}
 		
-		// Sort candidates for deterministic results
-		sort.Slice(candidates, func(i, j int) bool {
-			// Sort by relevance score (exact name match first), then alphabetically
-			iExact := strings.EqualFold(candidates[i].Name, query)
-			jExact := strings.EqualFold(candidates[j].Name, query)
-			
-			if iExact && !jExact {
-				return true
+		// Combine results with exact matches first (already sorted)
+		results = append(results, exactMatches...)
+		if len(results) < limit && len(otherMatches) > 0 {
+			remaining := limit - len(results)
+			if remaining > len(otherMatches) {
+				remaining = len(otherMatches)
 			}
-			if !iExact && jExact {
-				return false
-			}
-			
-			return candidates[i].Name < candidates[j].Name
-		})
-		
-		// Apply limit after sorting
-		if len(candidates) > limit {
-			candidates = candidates[:limit]
+			results = append(results, otherMatches[:remaining]...)
 		}
-		results = candidates
 		
 	} else {
-		// No tag filter, search all plugins
-		var candidates []PluginMetadata
-		for _, plugin := range registry.Plugins {
+		// No tag filter, use pre-sorted all plugins list
+		exactMatches := make([]PluginMetadata, 0)
+		otherMatches := make([]PluginMetadata, 0)
+		
+		// Search through pre-sorted plugins
+		for _, plugin := range searchIndex.allPlugins {
 			if query == "" || c.matchesQuery(plugin, query) {
-				candidates = append(candidates, plugin)
+				// Separate exact matches for relevance scoring
+				if strings.EqualFold(plugin.Name, query) {
+					exactMatches = append(exactMatches, plugin)
+				} else {
+					otherMatches = append(otherMatches, plugin)
+				}
+				
+				// Early exit if we have enough results
+				if len(exactMatches)+len(otherMatches) >= limit {
+					break
+				}
 			}
 		}
 		
-		// Sort candidates for deterministic results
-		sort.Slice(candidates, func(i, j int) bool {
-			// Sort by relevance score (exact name match first), then alphabetically
-			iExact := strings.EqualFold(candidates[i].Name, query)
-			jExact := strings.EqualFold(candidates[j].Name, query)
-			
-			if iExact && !jExact {
-				return true
+		// Combine results with exact matches first (already sorted)
+		results = append(results, exactMatches...)
+		if len(results) < limit && len(otherMatches) > 0 {
+			remaining := limit - len(results)
+			if remaining > len(otherMatches) {
+				remaining = len(otherMatches)
 			}
-			if !iExact && jExact {
-				return false
-			}
-			
-			return candidates[i].Name < candidates[j].Name
-		})
-		
-		// Apply limit after sorting
-		if len(candidates) > limit {
-			candidates = candidates[:limit]
+			results = append(results, otherMatches[:remaining]...)
 		}
-		results = candidates
 	}
 
 	// Ensure we return an empty slice, not nil
