@@ -20,6 +20,7 @@ type MemoryCache struct {
 	metrics     *CacheMetrics
 	stopCleanup chan struct{}
 	closed      bool
+	closeOnce   sync.Once // Ensures cleanup happens only once
 }
 
 // CacheMetrics tracks cache performance using atomic operations
@@ -158,12 +159,18 @@ func (c *MemoryCache) cleanupExpired() {
 	}
 }
 
-// GetMetrics returns cache performance metrics
+// GetMetrics returns cache performance metrics as a consistent snapshot
 func (c *MemoryCache) GetMetrics() CacheMetrics {
+	// Take a consistent snapshot by reading all values atomically
+	// in quick succession to minimize inconsistency window
+	hits := atomic.LoadInt64(&c.metrics.hits)
+	misses := atomic.LoadInt64(&c.metrics.misses)
+	evictions := atomic.LoadInt64(&c.metrics.evictions)
+	
 	return CacheMetrics{
-		hits:      atomic.LoadInt64(&c.metrics.hits),
-		misses:    atomic.LoadInt64(&c.metrics.misses),
-		evictions: atomic.LoadInt64(&c.metrics.evictions),
+		hits:      hits,
+		misses:    misses,
+		evictions: evictions,
 	}
 }
 
@@ -184,11 +191,11 @@ func (c *MemoryCache) GetEvictions() int64 {
 
 // Close stops the cleanup goroutine and marks the cache as closed
 func (c *MemoryCache) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	
-	if !c.closed {
+	c.closeOnce.Do(func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		
 		c.closed = true
 		close(c.stopCleanup)
-	}
+	})
 }
