@@ -10,7 +10,9 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -46,11 +48,13 @@ func (e *RegistryError) Unwrap() error {
 // This client connects to a simplified registry API that does not require authentication.
 // It implements the Registry interface for easy testing and mocking.
 type RegistryClient struct {
-	baseURL   string
-	client    *http.Client
-	userAgent string
-	cache     *MemoryCache
-	logger    Logger
+	baseURL     string
+	client      *http.Client
+	userAgent   string
+	cache       *MemoryCache
+	logger      Logger
+	searchIndex *SearchIndex
+	indexMu     sync.RWMutex
 }
 
 // SearchIndex provides efficient searching capabilities
@@ -63,11 +67,14 @@ var _ Registry = (*RegistryClient)(nil) // Compile-time interface check
 
 // RegistryConfig configures the registry client for simple, read-only access
 type RegistryConfig struct {
-	BaseURL   string        // Base URL of the registry API (defaults to DefaultBaseURL)
-	Timeout   time.Duration // HTTP timeout (defaults to DefaultTimeout)
-	UserAgent string        // User agent string (defaults to DefaultUserAgent)
-	CacheTTL  time.Duration // Cache TTL (defaults to DefaultCacheTTL)
-	Logger    Logger        // Logger for debugging (optional)
+	BaseURL           string        // Base URL of the registry API (defaults to DefaultBaseURL)
+	Timeout           time.Duration // HTTP timeout (defaults to DefaultTimeout)
+	UserAgent         string        // User agent string (defaults to DefaultUserAgent)
+	CacheTTL          time.Duration // Cache TTL (defaults to DefaultCacheTTL)
+	Logger            Logger        // Logger for debugging (optional)
+	MaxIdleConns      int           // Maximum idle connections (defaults to 10)
+	MaxIdleConnsPerHost int         // Maximum idle connections per host (defaults to 2)
+	IdleConnTimeout   time.Duration // Idle connection timeout (defaults to 30s)
 }
 
 // NewRegistryClient creates a new registry client for simple, read-only access.
@@ -101,14 +108,33 @@ func NewRegistryClient(config RegistryConfig) (*RegistryClient, error) {
 		config.Logger = NewDefaultLogger(false)
 	}
 	
+	// Set connection pooling defaults
+	if config.MaxIdleConns == 0 {
+		config.MaxIdleConns = 10
+	}
+	if config.MaxIdleConnsPerHost == 0 {
+		config.MaxIdleConnsPerHost = 2
+	}
+	if config.IdleConnTimeout == 0 {
+		config.IdleConnTimeout = 30 * time.Second
+	}
+	
+	// Create HTTP client with connection pooling
+	transport := &http.Transport{
+		MaxIdleConns:        config.MaxIdleConns,
+		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
+		IdleConnTimeout:     config.IdleConnTimeout,
+	}
+	
 	return &RegistryClient{
 		baseURL:   strings.TrimSuffix(config.BaseURL, "/"),
 		userAgent: config.UserAgent,
 		client: &http.Client{
-			Timeout: config.Timeout,
+			Timeout:   config.Timeout,
+			Transport: transport,
 		},
-		cache:     NewMemoryCache(config.CacheTTL),
-		logger:    config.Logger,
+		cache:  NewMemoryCache(config.CacheTTL),
+		logger: config.Logger,
 	}, nil
 }
 
@@ -177,9 +203,9 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 	// Parse the last updated timestamp
 	lastUpdated, err := time.Parse(time.RFC3339, registryResp.LastUpdated)
 	if err != nil {
-		// Log the error but don't fail
-		c.logger.Warn("failed to parse last_updated timestamp", "error", err, "value", registryResp.LastUpdated)
-		lastUpdated = time.Now()
+		// Use zero time for invalid timestamps to clearly indicate the issue
+		c.logger.Warn("failed to parse last_updated timestamp, using zero time", "error", err, "value", registryResp.LastUpdated)
+		lastUpdated = time.Time{} // Zero time clearly indicates invalid/missing timestamp
 	}
 
 	// Convert to PluginRegistry format
@@ -192,6 +218,9 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 
 	// Cache the result
 	c.cache.Set(cacheKey, registry)
+	
+	// Update search index
+	c.updateSearchIndex(registry)
 	
 	return registry, nil
 }
@@ -231,8 +260,8 @@ func (c *RegistryClient) GetPlugin(ctx context.Context, pluginName string) (*Plu
 	return &pluginInfo, nil
 }
 
-// buildSearchIndex creates an optimized search index from the registry
-func (c *RegistryClient) buildSearchIndex(registry *PluginRegistry) *SearchIndex {
+// updateSearchIndex updates the cached search index from the registry
+func (c *RegistryClient) updateSearchIndex(registry *PluginRegistry) {
 	index := &SearchIndex{
 		tagIndex:  make(map[string][]string),
 		nameIndex: make(map[string]bool),
@@ -250,7 +279,26 @@ func (c *RegistryClient) buildSearchIndex(registry *PluginRegistry) *SearchIndex
 		}
 	}
 	
-	return index
+	c.indexMu.Lock()
+	c.searchIndex = index
+	c.indexMu.Unlock()
+}
+
+// getSearchIndex returns the cached search index or builds one if not available
+func (c *RegistryClient) getSearchIndex(registry *PluginRegistry) *SearchIndex {
+	c.indexMu.RLock()
+	if c.searchIndex != nil {
+		defer c.indexMu.RUnlock()
+		return c.searchIndex
+	}
+	c.indexMu.RUnlock()
+	
+	// Build index if not cached
+	c.updateSearchIndex(registry)
+	
+	c.indexMu.RLock()
+	defer c.indexMu.RUnlock()
+	return c.searchIndex
 }
 
 // matchesQuery checks if a plugin matches the search query
@@ -287,8 +335,8 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 
 	var results []PluginMetadata
 	
-	// Build search index for efficiency
-	searchIndex := c.buildSearchIndex(registry)
+	// Get cached search index for efficiency
+	searchIndex := c.getSearchIndex(registry)
 	query = strings.ToLower(query)
 	
 	// If we have tag filters, use the index for efficient lookup
@@ -305,26 +353,67 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 			}
 		}
 		
-		// Filter candidates by query
+		// Collect all matching candidates first
+		var candidates []PluginMetadata
 		for pluginName := range candidateNames {
 			plugin := registry.Plugins[pluginName]
 			if query == "" || c.matchesQuery(plugin, query) {
-				results = append(results, plugin)
-				if len(results) >= limit {
-					break
-				}
+				candidates = append(candidates, plugin)
 			}
 		}
+		
+		// Sort candidates for deterministic results
+		sort.Slice(candidates, func(i, j int) bool {
+			// Sort by relevance score (exact name match first), then alphabetically
+			iExact := strings.EqualFold(candidates[i].Name, query)
+			jExact := strings.EqualFold(candidates[j].Name, query)
+			
+			if iExact && !jExact {
+				return true
+			}
+			if !iExact && jExact {
+				return false
+			}
+			
+			return candidates[i].Name < candidates[j].Name
+		})
+		
+		// Apply limit after sorting
+		if len(candidates) > limit {
+			candidates = candidates[:limit]
+		}
+		results = candidates
+		
 	} else {
 		// No tag filter, search all plugins
+		var candidates []PluginMetadata
 		for _, plugin := range registry.Plugins {
 			if query == "" || c.matchesQuery(plugin, query) {
-				results = append(results, plugin)
-				if len(results) >= limit {
-					break
-				}
+				candidates = append(candidates, plugin)
 			}
 		}
+		
+		// Sort candidates for deterministic results
+		sort.Slice(candidates, func(i, j int) bool {
+			// Sort by relevance score (exact name match first), then alphabetically
+			iExact := strings.EqualFold(candidates[i].Name, query)
+			jExact := strings.EqualFold(candidates[j].Name, query)
+			
+			if iExact && !jExact {
+				return true
+			}
+			if !iExact && jExact {
+				return false
+			}
+			
+			return candidates[i].Name < candidates[j].Name
+		})
+		
+		// Apply limit after sorting
+		if len(candidates) > limit {
+			candidates = candidates[:limit]
+		}
+		results = candidates
 	}
 
 	// Ensure we return an empty slice, not nil

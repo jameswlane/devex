@@ -128,19 +128,30 @@ func (c *MemoryCache) cleanupExpired() {
 	for {
 		select {
 		case <-ticker.C:
-			c.mu.Lock()
+			// Collect expired keys first with read lock to minimize contention
+			expiredKeys := make([]string, 0)
+			c.mu.RLock()
 			if c.closed {
-				c.mu.Unlock()
+				c.mu.RUnlock()
 				return
 			}
 			now := time.Now()
 			for key, entry := range c.items {
 				if now.After(entry.ExpiresAt) {
+					expiredKeys = append(expiredKeys, key)
+				}
+			}
+			c.mu.RUnlock()
+
+			// Batch delete expired keys with write lock
+			if len(expiredKeys) > 0 {
+				c.mu.Lock()
+				for _, key := range expiredKeys {
 					delete(c.items, key)
 					atomic.AddInt64(&c.metrics.evictions, 1)
 				}
+				c.mu.Unlock()
 			}
-			c.mu.Unlock()
 		case <-c.stopCleanup:
 			return
 		}
