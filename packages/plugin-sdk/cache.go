@@ -19,7 +19,7 @@ type MemoryCache struct {
 	ttl         time.Duration
 	metrics     *CacheMetrics
 	stopCleanup chan struct{}
-	closed      bool
+	closed      int32     // atomic bool: 0 = open, 1 = closed
 	closeOnce   sync.Once // Ensures cleanup happens only once
 }
 
@@ -37,7 +37,7 @@ func NewMemoryCache(ttl time.Duration) *MemoryCache {
 		ttl:         ttl,
 		metrics:     &CacheMetrics{},
 		stopCleanup: make(chan struct{}),
-		closed:      false,
+		closed:      0, // 0 = open, 1 = closed
 	}
 	
 	// Start cleanup goroutine
@@ -48,14 +48,14 @@ func NewMemoryCache(ttl time.Duration) *MemoryCache {
 
 // Get retrieves a value from the cache
 func (c *MemoryCache) Get(key string) (interface{}, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	
-	// Check if cache is closed
-	if c.closed {
+	// Fast atomic check for closed state without lock
+	if atomic.LoadInt32(&c.closed) == 1 {
 		atomic.AddInt64(&c.metrics.misses, 1)
 		return nil, false
 	}
+	
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	
 	entry, exists := c.items[key]
 	if !exists {
@@ -75,13 +75,13 @@ func (c *MemoryCache) Get(key string) (interface{}, bool) {
 
 // Set stores a value in the cache with the configured TTL
 func (c *MemoryCache) Set(key string, value interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	
-	// Don't set if cache is closed
-	if c.closed {
+	// Fast atomic check for closed state without lock
+	if atomic.LoadInt32(&c.closed) == 1 {
 		return
 	}
+	
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	
 	c.items[key] = CacheEntry{
 		Value:     value,
@@ -91,13 +91,13 @@ func (c *MemoryCache) Set(key string, value interface{}) {
 
 // SetWithTTL stores a value in the cache with a custom TTL
 func (c *MemoryCache) SetWithTTL(key string, value interface{}, ttl time.Duration) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	
-	// Don't set if cache is closed
-	if c.closed {
+	// Fast atomic check for closed state without lock
+	if atomic.LoadInt32(&c.closed) == 1 {
 		return
 	}
+	
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	
 	c.items[key] = CacheEntry{
 		Value:     value,
@@ -129,13 +129,14 @@ func (c *MemoryCache) cleanupExpired() {
 	for {
 		select {
 		case <-ticker.C:
+			// Fast atomic check for closed state without lock
+			if atomic.LoadInt32(&c.closed) == 1 {
+				return
+			}
+			
 			// Collect expired keys first with read lock to minimize contention
 			expiredKeys := make([]string, 0)
 			c.mu.RLock()
-			if c.closed {
-				c.mu.RUnlock()
-				return
-			}
 			now := time.Now()
 			for key, entry := range c.items {
 				if now.After(entry.ExpiresAt) {
@@ -192,10 +193,8 @@ func (c *MemoryCache) GetEvictions() int64 {
 // Close stops the cleanup goroutine and marks the cache as closed
 func (c *MemoryCache) Close() {
 	c.closeOnce.Do(func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		
-		c.closed = true
+		// Atomically mark as closed first to prevent new operations
+		atomic.StoreInt32(&c.closed, 1)
 		close(c.stopCleanup)
 	})
 }

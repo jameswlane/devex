@@ -19,12 +19,15 @@ import (
 
 // Constants for default configuration values
 const (
-	DefaultBaseURL      = "https://registry.devex.sh"
-	DefaultTimeout      = 30 * time.Second
-	DefaultUserAgent    = "devex-cli/1.0"
-	DefaultSearchLimit  = 100
-	DefaultCacheTTL     = 5 * time.Minute
-	MaxPluginNameLength = 100
+	DefaultBaseURL           = "https://registry.devex.sh"
+	DefaultTimeout           = 30 * time.Second
+	DefaultUserAgent         = "devex-cli/1.0"
+	DefaultSearchLimit       = 100
+	DefaultCacheTTL          = 5 * time.Minute
+	MaxPluginNameLength      = 100
+	DefaultMaxIdleConns      = 10
+	DefaultMaxIdleConnsPerHost = 2
+	DefaultIdleConnTimeout   = 30 * time.Second
 )
 
 // RegistryError represents an error from the registry API
@@ -112,13 +115,13 @@ func NewRegistryClient(config RegistryConfig) (*RegistryClient, error) {
 	
 	// Set connection pooling defaults
 	if config.MaxIdleConns == 0 {
-		config.MaxIdleConns = 10
+		config.MaxIdleConns = DefaultMaxIdleConns
 	}
 	if config.MaxIdleConnsPerHost == 0 {
-		config.MaxIdleConnsPerHost = 2
+		config.MaxIdleConnsPerHost = DefaultMaxIdleConnsPerHost
 	}
 	if config.IdleConnTimeout == 0 {
-		config.IdleConnTimeout = 30 * time.Second
+		config.IdleConnTimeout = DefaultIdleConnTimeout
 	}
 	
 	// Create HTTP client with connection pooling
@@ -206,12 +209,15 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 	lastUpdated, err := time.Parse(time.RFC3339, registryResp.LastUpdated)
 	if err != nil {
 		// Use Unix epoch as fallback to avoid downstream time-based logic issues
-		// This is a known reference point that won't break time comparisons
-		fallbackTime := time.Unix(0, 0) // January 1, 1970 UTC
-		c.logger.Warn("failed to parse last_updated timestamp, using Unix epoch fallback", 
-			"error", err, 
-			"value", registryResp.LastUpdated,
-			"fallback", fallbackTime.Format(time.RFC3339))
+		// This is a known reference point (January 1, 1970 UTC) that won't break time comparisons
+		fallbackTime := time.Unix(0, 0)
+		c.logger.Warn("timestamp parsing failed, applying Unix epoch fallback to prevent time logic errors", 
+			"operation", "parse_registry_timestamp",
+			"parse_error", err.Error(), 
+			"invalid_value", registryResp.LastUpdated,
+			"fallback_time", fallbackTime.Format(time.RFC3339),
+			"fallback_unix", fallbackTime.Unix(),
+			"impact", "registry will appear as very old, may trigger unnecessary updates")
 		lastUpdated = fallbackTime
 	}
 
@@ -325,6 +331,14 @@ func (c *RegistryClient) getSearchIndex(registry *PluginRegistry) *SearchIndex {
 	return (*SearchIndex)(atomic.LoadPointer(&c.searchIndex))
 }
 
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // matchesQuery checks if a plugin matches the search query
 func (c *RegistryClient) matchesQuery(plugin PluginMetadata, query string) bool {
 	return strings.Contains(strings.ToLower(plugin.Name), query) ||
@@ -388,8 +402,9 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 		sort.Ints(sortedIndices)
 		
 		// Apply query filter and relevance scoring using pre-sorted data
-		exactMatches := make([]PluginMetadata, 0)
-		otherMatches := make([]PluginMetadata, 0)
+		// Pre-allocate slices with reasonable capacity to reduce allocations
+		exactMatches := make([]PluginMetadata, 0, min(limit/4, 8))     // Assume ~25% exact matches max
+		otherMatches := make([]PluginMetadata, 0, min(limit*3/4, 32))  // Remaining capacity
 		
 		for _, idx := range sortedIndices {
 			plugin := searchIndex.allPlugins[idx]
@@ -420,8 +435,9 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 		
 	} else {
 		// No tag filter, use pre-sorted all plugins list
-		exactMatches := make([]PluginMetadata, 0)
-		otherMatches := make([]PluginMetadata, 0)
+		// Pre-allocate slices with reasonable capacity to reduce allocations
+		exactMatches := make([]PluginMetadata, 0, min(limit/4, 8))     // Assume ~25% exact matches max
+		otherMatches := make([]PluginMetadata, 0, min(limit*3/4, 32))  // Remaining capacity
 		
 		// Search through pre-sorted plugins
 		for _, plugin := range searchIndex.allPlugins {
