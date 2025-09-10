@@ -254,6 +254,107 @@ var _ = Describe("Registry Client", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
+
+	Describe("SearchPlugins", func() {
+		BeforeEach(func() {
+			server.Close()
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v1/registry":
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_, _ = fmt.Fprint(w, `{
+						"base_url": "https://registry.example.com",
+						"version": "1.0",
+						"last_updated": "2023-01-01T00:00:00Z",
+						"plugins": {
+							"git-helper": {
+								"name": "git-helper",
+								"description": "Git workflow helper tool",
+								"tags": ["git", "development", "tool"]
+							},
+							"docker-manager": {
+								"name": "docker-manager", 
+								"description": "Docker container management utility",
+								"tags": ["docker", "containers", "tool"]
+							},
+							"code-formatter": {
+								"name": "code-formatter",
+								"description": "Code formatting and linting tool",
+								"tags": ["formatting", "development", "utility"]
+							}
+						}
+					}`)
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+
+			config := sdk.RegistryConfig{
+				BaseURL:   server.URL,
+				Timeout:   30 * time.Second,
+			}
+			var err error
+			client, err = sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should search plugins by name", func() {
+			plugins, err := client.SearchPlugins(ctx, "git", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("git-helper"))
+		})
+
+		It("should search plugins by description", func() {
+			plugins, err := client.SearchPlugins(ctx, "docker", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("docker-manager"))
+		})
+
+		It("should search plugins by tags", func() {
+			plugins, err := client.SearchPlugins(ctx, "", []string{"development"}, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(2))
+			
+			names := []string{plugins[0].Name, plugins[1].Name}
+			Expect(names).To(ContainElement("git-helper"))
+			Expect(names).To(ContainElement("code-formatter"))
+		})
+
+		It("should return empty results for no matches", func() {
+			plugins, err := client.SearchPlugins(ctx, "nonexistent", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(BeEmpty())
+		})
+
+		It("should respect search limit", func() {
+			plugins, err := client.SearchPlugins(ctx, "", []string{"tool"}, 1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+		})
+
+		It("should handle case insensitive search", func() {
+			plugins, err := client.SearchPlugins(ctx, "GIT", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("git-helper"))
+		})
+
+		It("should combine query and tag filters", func() {
+			plugins, err := client.SearchPlugins(ctx, "helper", []string{"development"}, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("git-helper"))
+		})
+
+		It("should handle empty query with no tags", func() {
+			plugins, err := client.SearchPlugins(ctx, "", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(3))
+		})
+	})
 })
 
 var _ = Describe("Secure Downloader", func() {
