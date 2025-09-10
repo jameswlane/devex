@@ -11,6 +11,14 @@ import (
 	"time"
 )
 
+// Constants for default configuration values
+const (
+	DefaultBaseURL      = "https://registry.devex.sh"
+	DefaultTimeout      = 30 * time.Second
+	DefaultUserAgent    = "devex-cli/1.0"
+	DefaultSearchLimit  = 100
+)
+
 // RegistryError represents an error from the registry API
 type RegistryError struct {
 	HTTPStatus int
@@ -39,9 +47,9 @@ type RegistryClient struct {
 
 // RegistryConfig configures the registry client for simple, read-only access
 type RegistryConfig struct {
-	BaseURL   string        // Base URL of the registry API (defaults to https://registry.devex.sh)
-	Timeout   time.Duration // HTTP timeout (defaults to 30 seconds)
-	UserAgent string        // User agent string (defaults to devex-cli/1.0)
+	BaseURL   string        // Base URL of the registry API (defaults to DefaultBaseURL)
+	Timeout   time.Duration // HTTP timeout (defaults to DefaultTimeout)
+	UserAgent string        // User agent string (defaults to DefaultUserAgent)
 }
 
 // NewRegistryClient creates a new registry client for simple, read-only access.
@@ -49,7 +57,7 @@ type RegistryConfig struct {
 func NewRegistryClient(config RegistryConfig) (*RegistryClient, error) {
 	// Validation
 	if config.BaseURL == "" {
-		config.BaseURL = "https://registry.devex.sh"
+		config.BaseURL = DefaultBaseURL
 	}
 	
 	// Validate URL format
@@ -59,10 +67,10 @@ func NewRegistryClient(config RegistryConfig) (*RegistryClient, error) {
 
 	// Set defaults
 	if config.Timeout == 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = DefaultTimeout
 	}
 	if config.UserAgent == "" {
-		config.UserAgent = "devex-cli/1.0"
+		config.UserAgent = DefaultUserAgent
 	}
 
 	return &RegistryClient{
@@ -149,6 +157,11 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 	var results []PluginMetadata
 	query = strings.ToLower(query)
 
+	// Use default limit if not specified
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+
 	// Simple client-side filtering
 	for _, plugin := range registry.Plugins {
 		matches := false
@@ -179,7 +192,7 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 
 		if matches {
 			results = append(results, plugin)
-			if limit > 0 && len(results) >= limit {
+			if len(results) >= limit {
 				break
 			}
 		}
@@ -229,7 +242,7 @@ func (c *RegistryClient) simpleRequest(ctx context.Context, method, path string)
 		
 		return nil, &RegistryError{
 			HTTPStatus: resp.StatusCode,
-			Message:    errorMsg,
+			Message:    fmt.Sprintf("%s (URL: %s)", errorMsg, fullURL),
 		}
 	}
 
@@ -273,7 +286,7 @@ func (rd *RegistryDownloader) GetAvailablePlugins() (map[string]PluginMetadata, 
 // SearchPlugins searches using registry API
 func (rd *RegistryDownloader) SearchPlugins(query string) (map[string]PluginMetadata, error) {
 	ctx := context.Background()
-	plugins, err := rd.registryClient.SearchPlugins(ctx, query, nil, 100)
+	plugins, err := rd.registryClient.SearchPlugins(ctx, query, nil, DefaultSearchLimit)
 	if err != nil {
 		// Fallback to local method
 		return rd.Downloader.SearchPlugins(query)
