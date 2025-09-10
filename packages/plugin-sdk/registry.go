@@ -11,30 +11,58 @@ import (
 	"time"
 )
 
-// RegistryClient provides simple access to the plugin registry API
+// RegistryError represents an error from the registry API
+type RegistryError struct {
+	HTTPStatus int
+	Message    string
+	Err        error
+}
+
+func (e *RegistryError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("registry error (HTTP %d): %s: %v", e.HTTPStatus, e.Message, e.Err)
+	}
+	return fmt.Sprintf("registry error (HTTP %d): %s", e.HTTPStatus, e.Message)
+}
+
+func (e *RegistryError) Unwrap() error {
+	return e.Err
+}
+
+// RegistryClient provides simple, read-only access to the plugin registry API.
+// This client connects to a simplified registry API that does not require authentication.
 type RegistryClient struct {
 	baseURL   string
 	client    *http.Client
 	userAgent string
 }
 
-// RegistryConfig configures the registry client
+// RegistryConfig configures the registry client for simple, read-only access
 type RegistryConfig struct {
-	BaseURL   string
-	Timeout   time.Duration
-	UserAgent string
+	BaseURL   string        // Base URL of the registry API (defaults to https://registry.devex.sh)
+	Timeout   time.Duration // HTTP timeout (defaults to 30 seconds)
+	UserAgent string        // User agent string (defaults to devex-cli/1.0)
 }
 
-// NewRegistryClient creates a new registry client
-func NewRegistryClient(config RegistryConfig) *RegistryClient {
+// NewRegistryClient creates a new registry client for simple, read-only access.
+// This client connects to a simplified registry API without authentication.
+func NewRegistryClient(config RegistryConfig) (*RegistryClient, error) {
+	// Validation
+	if config.BaseURL == "" {
+		config.BaseURL = "https://registry.devex.sh"
+	}
+	
+	// Validate URL format
+	if _, err := url.Parse(config.BaseURL); err != nil {
+		return nil, fmt.Errorf("invalid BaseURL: %w", err)
+	}
+
+	// Set defaults
 	if config.Timeout == 0 {
 		config.Timeout = 30 * time.Second
 	}
 	if config.UserAgent == "" {
 		config.UserAgent = "devex-cli/1.0"
-	}
-	if config.BaseURL == "" {
-		config.BaseURL = "https://registry.devex.sh"
 	}
 
 	return &RegistryClient{
@@ -43,7 +71,7 @@ func NewRegistryClient(config RegistryConfig) *RegistryClient {
 		client: &http.Client{
 			Timeout: config.Timeout,
 		},
-	}
+	}, nil
 }
 
 // APIResponse represents a standard API response (no longer used for simple API)
@@ -76,9 +104,19 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 		return nil, fmt.Errorf("failed to parse registry response: %w", err)
 	}
 
+	// Parse the last updated timestamp
+	lastUpdated, err := time.Parse(time.RFC3339, registryResp.LastUpdated)
+	if err != nil {
+		// Fallback to current time if parsing fails
+		lastUpdated = time.Now()
+	}
+
 	// Convert to PluginRegistry format
 	registry := &PluginRegistry{
-		Plugins: registryResp.Plugins,
+		BaseURL:     registryResp.BaseURL,
+		Version:     registryResp.Version,
+		LastUpdated: lastUpdated,
+		Plugins:     registryResp.Plugins,
 	}
 
 	return registry, nil
@@ -178,7 +216,21 @@ func (c *RegistryClient) simpleRequest(ctx context.Context, method, path string)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		// Try to parse error message from response body
+		var errorMsg string
+		var errorResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errorResp) == nil && errorResp.Error != "" {
+			errorMsg = errorResp.Error
+		} else {
+			errorMsg = string(respBody)
+		}
+		
+		return nil, &RegistryError{
+			HTTPStatus: resp.StatusCode,
+			Message:    errorMsg,
+		}
 	}
 
 	return respBody, nil
@@ -194,14 +246,17 @@ type RegistryDownloader struct {
 }
 
 // NewRegistryDownloader creates a downloader with registry access
-func NewRegistryDownloader(config DownloaderConfig, registryConfig RegistryConfig) *RegistryDownloader {
+func NewRegistryDownloader(config DownloaderConfig, registryConfig RegistryConfig) (*RegistryDownloader, error) {
 	downloader := NewSecureDownloader(config)
-	registryClient := NewRegistryClient(registryConfig)
+	registryClient, err := NewRegistryClient(registryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry client: %w", err)
+	}
 	
 	return &RegistryDownloader{
 		Downloader:     downloader,
 		registryClient: registryClient,
-	}
+	}, nil
 }
 
 // GetAvailablePlugins fetches plugins using registry API
