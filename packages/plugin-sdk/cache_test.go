@@ -119,29 +119,27 @@ var _ = Describe("MemoryCache", func() {
 		It("should track cache hits", func() {
 			cache.Set("key1", "value1")
 			
-			initialMetrics := cache.GetMetrics()
-			initialHits := initialMetrics.Hits
+			initialHits := cache.GetHits()
 			
 			// Perform hits
 			cache.Get("key1")
 			cache.Get("key1")
 			cache.Get("key1")
 			
-			metrics := cache.GetMetrics()
-			Expect(metrics.Hits).To(Equal(initialHits + 3))
+			hits := cache.GetHits()
+			Expect(hits).To(Equal(initialHits + 3))
 		})
 
 		It("should track cache misses", func() {
-			initialMetrics := cache.GetMetrics()
-			initialMisses := initialMetrics.Misses
+			initialMisses := cache.GetMisses()
 			
 			// Perform misses
 			cache.Get("nonexistent1")
 			cache.Get("nonexistent2")
 			cache.Get("nonexistent3")
 			
-			metrics := cache.GetMetrics()
-			Expect(metrics.Misses).To(Equal(initialMisses + 3))
+			misses := cache.GetMisses()
+			Expect(misses).To(Equal(initialMisses + 3))
 		})
 
 		It("should track expired entries as misses", func() {
@@ -150,14 +148,26 @@ var _ = Describe("MemoryCache", func() {
 			// Wait for expiration
 			time.Sleep(150 * time.Millisecond)
 			
-			initialMetrics := cache.GetMetrics()
-			initialMisses := initialMetrics.Misses
+			initialMisses := cache.GetMisses()
 			
 			// Try to get expired entry
 			cache.Get("key1")
 			
-			metrics := cache.GetMetrics()
-			Expect(metrics.Misses).To(Equal(initialMisses + 1))
+			misses := cache.GetMisses()
+			Expect(misses).To(Equal(initialMisses + 1))
+		})
+		
+		It("should track evictions", func() {
+			cache.Set("key1", "value1")
+			
+			// Wait for expiration
+			time.Sleep(150 * time.Millisecond)
+			
+			// Wait for cleanup to run
+			time.Sleep(100 * time.Millisecond)
+			
+			evictions := cache.GetEvictions()
+			Expect(evictions).To(BeNumerically(">=", 1))
 		})
 	})
 
@@ -271,6 +281,32 @@ var _ = Describe("MemoryCache", func() {
 			
 			mapVal, _ := cache.Get("map")
 			Expect(mapVal).To(Equal(map[string]int{"a": 1, "b": 2}))
+		})
+	})
+	
+	Describe("Cache Lifecycle", func() {
+		It("should properly close and stop cleanup goroutine", func() {
+			cache.Set("key1", "value1")
+			
+			// Close the cache
+			cache.Close()
+			
+			// Operations after close should not panic
+			value, found := cache.Get("key1")
+			Expect(found).To(BeFalse())
+			Expect(value).To(BeNil())
+			
+			// Set should be ignored after close
+			cache.Set("key2", "value2")
+			_, found = cache.Get("key2")
+			Expect(found).To(BeFalse())
+		})
+		
+		It("should handle multiple close calls gracefully", func() {
+			// Multiple closes should not panic
+			cache.Close()
+			cache.Close()
+			cache.Close()
 		})
 	})
 })

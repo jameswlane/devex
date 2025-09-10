@@ -53,6 +53,12 @@ type RegistryClient struct {
 	logger    Logger
 }
 
+// SearchIndex provides efficient searching capabilities
+type SearchIndex struct {
+	tagIndex  map[string][]string // tag -> plugin names
+	nameIndex map[string]bool     // normalized names for fast lookup
+}
+
 var _ Registry = (*RegistryClient)(nil) // Compile-time interface check
 
 // RegistryConfig configures the registry client for simple, read-only access
@@ -225,7 +231,35 @@ func (c *RegistryClient) GetPlugin(ctx context.Context, pluginName string) (*Plu
 	return &pluginInfo, nil
 }
 
-// SearchPlugins searches for plugins by name or tags with caching
+// buildSearchIndex creates an optimized search index from the registry
+func (c *RegistryClient) buildSearchIndex(registry *PluginRegistry) *SearchIndex {
+	index := &SearchIndex{
+		tagIndex:  make(map[string][]string),
+		nameIndex: make(map[string]bool),
+	}
+	
+	for name, plugin := range registry.Plugins {
+		// Index normalized plugin names
+		normalizedName := strings.ToLower(plugin.Name)
+		index.nameIndex[normalizedName] = true
+		
+		// Index tags
+		for _, tag := range plugin.Tags {
+			normalizedTag := strings.ToLower(tag)
+			index.tagIndex[normalizedTag] = append(index.tagIndex[normalizedTag], name)
+		}
+	}
+	
+	return index
+}
+
+// matchesQuery checks if a plugin matches the search query
+func (c *RegistryClient) matchesQuery(plugin PluginMetadata, query string) bool {
+	return strings.Contains(strings.ToLower(plugin.Name), query) ||
+		   strings.Contains(strings.ToLower(plugin.Description), query)
+}
+
+// SearchPlugins searches for plugins by name or tags with optimized indexing and caching
 func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags []string, limit int) ([]PluginMetadata, error) {
 	// Create cache key based on search parameters
 	cacheKey := fmt.Sprintf("search:%s:%v:%d", query, tags, limit)
@@ -239,52 +273,56 @@ func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags [
 	}
 	
 	c.logger.Debug("search cache miss", "query", query)
+	
 	// Get all plugins first
 	registry, err := c.GetRegistry(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get registry for search: %w", err)
 	}
 
-	var results []PluginMetadata
-	query = strings.ToLower(query)
-
 	// Use default limit if not specified
 	if limit <= 0 {
 		limit = DefaultSearchLimit
 	}
 
-	// Simple client-side filtering
-	for _, plugin := range registry.Plugins {
-		matches := false
+	var results []PluginMetadata
+	
+	// Build search index for efficiency
+	searchIndex := c.buildSearchIndex(registry)
+	query = strings.ToLower(query)
+	
+	// If we have tag filters, use the index for efficient lookup
+	if len(tags) > 0 {
+		candidateNames := make(map[string]bool)
 		
-		// Match by name or description
-		if query == "" || 
-		   strings.Contains(strings.ToLower(plugin.Name), query) ||
-		   strings.Contains(strings.ToLower(plugin.Description), query) {
-			matches = true
-		}
-
-		// Match by tags
-		if len(tags) > 0 {
-			tagMatch := false
-			for _, searchTag := range tags {
-				for _, pluginTag := range plugin.Tags {
-					if strings.EqualFold(pluginTag, searchTag) {
-						tagMatch = true
-						break
-					}
+		// Find plugins that match any of the tags
+		for _, searchTag := range tags {
+			normalizedTag := strings.ToLower(searchTag)
+			if pluginNames, exists := searchIndex.tagIndex[normalizedTag]; exists {
+				for _, name := range pluginNames {
+					candidateNames[name] = true
 				}
-				if tagMatch {
+			}
+		}
+		
+		// Filter candidates by query
+		for pluginName := range candidateNames {
+			plugin := registry.Plugins[pluginName]
+			if query == "" || c.matchesQuery(plugin, query) {
+				results = append(results, plugin)
+				if len(results) >= limit {
 					break
 				}
 			}
-			matches = matches && tagMatch
 		}
-
-		if matches {
-			results = append(results, plugin)
-			if len(results) >= limit {
-				break
+	} else {
+		// No tag filter, search all plugins
+		for _, plugin := range registry.Plugins {
+			if query == "" || c.matchesQuery(plugin, query) {
+				results = append(results, plugin)
+				if len(results) >= limit {
+					break
+				}
 			}
 		}
 	}

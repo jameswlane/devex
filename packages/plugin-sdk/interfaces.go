@@ -30,6 +30,9 @@ type Cache interface {
 	
 	// Clear removes all values from the cache
 	Clear()
+	
+	// Close stops background processes and cleans up resources
+	Close()
 }
 
 // RegistryDownloaderInterface defines the interface for registry-aware downloaders
