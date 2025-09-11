@@ -1,6 +1,6 @@
 {
   "name": "@devex/system-setup",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "System setup and configuration plugin for DevEx CLI",
   "private": true,
   "main": "main.go",
