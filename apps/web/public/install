@@ -2,91 +2,28 @@
 
 set -e
 
-echo "Starting DevEx installation..."
+echo "🚀 DevEx Installer"
+echo "=================="
+echo ""
 
-# Function to detect and setup download command
-setup_download_tool() {
-    if command -v wget >/dev/null 2>&1; then
-        DOWNLOAD_CMD="wget -qO-"
-        DOWNLOAD_FILE_CMD="wget"
-        echo "Using wget for downloads..."
-    elif command -v curl >/dev/null 2>&1; then
-        DOWNLOAD_CMD="curl -fsSL"
-        DOWNLOAD_FILE_CMD="curl -fsSL -O"
-        echo "Using curl for downloads..."
-    else
-        echo "Neither wget nor curl found. Installing wget..."
-        
-        # Detect package manager and install wget
-        if command -v apt-get >/dev/null 2>&1; then
-            echo "Updating package list and installing wget..."
-            sudo apt-get update -qq && sudo apt-get install -y wget git
-        elif command -v dnf >/dev/null 2>&1; then
-            echo "Installing wget and git via dnf..."
-            sudo dnf install -y wget git
-        elif command -v yum >/dev/null 2>&1; then
-            echo "Installing wget and git via yum..."
-            sudo yum install -y wget git
-        elif command -v pacman >/dev/null 2>&1; then
-            echo "Installing wget and git via pacman..."
-            sudo pacman -S --noconfirm wget git
-        elif command -v zypper >/dev/null 2>&1; then
-            echo "Installing wget and git via zypper..."
-            sudo zypper install -y wget git
-        else
-            echo "Error: Could not find a supported package manager to install wget."
-            echo "Please install wget or curl manually and re-run this script."
-            exit 1
-        fi
-        
-        # Verify wget was installed
-        if command -v wget >/dev/null 2>&1; then
-            DOWNLOAD_CMD="wget -qO-"
-            DOWNLOAD_FILE_CMD="wget"
-            echo "wget installed successfully."
-        else
-            echo "Error: Failed to install wget."
-            exit 1
-        fi
-    fi
-}
-
-# Setup download tools
-setup_download_tool
-
-# Ensure git is installed (required by DevEx)
-ensure_git_installed() {
-    if ! command -v git >/dev/null 2>&1; then
-        echo "Git not found. Installing git..."
-        
-        if command -v apt-get >/dev/null 2>&1; then
-            sudo apt-get update -qq && sudo apt-get install -y git
-        elif command -v dnf >/dev/null 2>&1; then
-            sudo dnf install -y git
-        elif command -v yum >/dev/null 2>&1; then
-            sudo yum install -y git
-        elif command -v pacman >/dev/null 2>&1; then
-            sudo pacman -S --noconfirm git
-        elif command -v zypper >/dev/null 2>&1; then
-            sudo zypper install -y git
-        else
-            echo "Error: Could not install git. Please install git manually."
-            exit 1
-        fi
-        
-        if command -v git >/dev/null 2>&1; then
-            echo "Git installed successfully."
-        else
-            echo "Error: Failed to install git."
-            exit 1
-        fi
-    else
-        echo "Git is already available."
-    fi
-}
-
-# Ensure git is installed
-ensure_git_installed
+# Check for curl or wget
+if command -v curl >/dev/null 2>&1; then
+    DOWNLOAD_CMD="curl -fsSL"
+    DOWNLOAD_FILE_CMD="curl -fsSL -O"
+elif command -v wget >/dev/null 2>&1; then
+    DOWNLOAD_CMD="wget -qO-"
+    DOWNLOAD_FILE_CMD="wget -q"
+else
+    echo "Error: Neither curl nor wget found."
+    echo "Please install curl or wget and try again:"
+    echo ""
+    echo "  Ubuntu/Debian: sudo apt-get install curl"
+    echo "  Fedora/RHEL:   sudo dnf install curl"
+    echo "  Arch:          sudo pacman -S curl"
+    echo "  macOS:         brew install curl"
+    echo ""
+    exit 1
+fi
 
 # Determine OS and architecture
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -99,52 +36,52 @@ case "$ARCH" in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Fetch the latest release version dynamically
-echo "Fetching the latest DevEx release version..."
+# Fetch the latest release version
+echo "Fetching latest version..."
 LATEST_VERSION=$($DOWNLOAD_CMD https://api.github.com/repos/jameswlane/devex/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
 
 if [ -z "$LATEST_VERSION" ]; then
-    echo "Failed to fetch the latest release version. Exiting."
+    echo "Error: Failed to fetch the latest release version."
+    echo "Please check your internet connection and try again."
     exit 1
 fi
 
-echo "Latest version: $LATEST_VERSION"
+echo "✓ Latest version: $LATEST_VERSION"
 
 # Construct file name and URL
 FILENAME="devex_${LATEST_VERSION}_${OS}_${ARCH}.tar.gz"
 BASE_URL="https://github.com/jameswlane/devex/releases/download/${LATEST_VERSION}"
 CHECKSUM_FILE="devex_checksums.txt"
 
-echo "Downloading DevEx release: $FILENAME"
+echo "Downloading $FILENAME..."
 
 # Create a temporary directory for download
 TEMP_DIR=$(mktemp -d)
 cd "$TEMP_DIR"
 
 # Download the tarball and checksum file
+echo "Downloading from $BASE_URL..."
 if [[ "$DOWNLOAD_FILE_CMD" == "curl -fsSL -O" ]]; then
-    curl -fsSL -O "$BASE_URL/$FILENAME"
-    curl -fsSL -O "$BASE_URL/$CHECKSUM_FILE"
+    curl -fsSL -O "$BASE_URL/$FILENAME" || { echo "Error: Download failed"; exit 1; }
+    curl -fsSL -O "$BASE_URL/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
 else
-    $DOWNLOAD_FILE_CMD "$BASE_URL/$FILENAME"
-    $DOWNLOAD_FILE_CMD "$BASE_URL/$CHECKSUM_FILE"
+    $DOWNLOAD_FILE_CMD "$BASE_URL/$FILENAME" || { echo "Error: Download failed"; exit 1; }
+    $DOWNLOAD_FILE_CMD "$BASE_URL/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
 fi
 
 # Verify checksum
 echo "Verifying checksum..."
-grep "$FILENAME" "$CHECKSUM_FILE" | sha256sum --check --status
-if [ $? -ne 0 ]; then
-    echo "Checksum verification failed. Exiting."
+if ! grep "$FILENAME" "$CHECKSUM_FILE" | sha256sum --check --status; then
+    echo "Error: Checksum verification failed."
     exit 1
 fi
-
-echo "Checksum verification passed."
+echo "✓ Checksum verified"
 
 # Install to target directory
 INSTALL_DIR="$HOME/.local/share/devex"
 mkdir -p "$INSTALL_DIR"
 
-echo "Extracting DevEx to $INSTALL_DIR..."
+echo "Installing DevEx..."
 tar -xzf "$FILENAME" -C "$INSTALL_DIR"
 
 # Ensure binary is executable
@@ -154,25 +91,63 @@ chmod +x "$INSTALL_DIR/bin/devex"
 cd ~
 rm -rf "$TEMP_DIR"
 
-# Update PATH if needed
-if ! echo "$PATH" | grep -q "$INSTALL_DIR/bin"; then
-    echo "Updating PATH..."
-    echo "export PATH=\"\$PATH:$INSTALL_DIR/bin\"" >> "$HOME/.bashrc"
-    # Apply the updated PATH to the current session
-    export PATH="$PATH:$INSTALL_DIR/bin"
+# Add to PATH for various shells
+echo ""
+echo "Adding DevEx to PATH..."
+
+# Function to add path to shell config if not already present
+add_to_path() {
+    local shell_config="$1"
+    local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
+    
+    if [ -f "$shell_config" ]; then
+        if ! grep -q "$INSTALL_DIR/bin" "$shell_config"; then
+            echo "  ✓ Adding to $shell_config"
+            echo "" >> "$shell_config"
+            echo "# DevEx CLI" >> "$shell_config"
+            echo "$path_line" >> "$shell_config"
+        fi
+    fi
+}
+
+# Add to common shell configurations
+add_to_path "$HOME/.bashrc"
+add_to_path "$HOME/.zshrc"
+
+# For fish shell
+if [ -f "$HOME/.config/fish/config.fish" ]; then
+    if ! grep -q "$INSTALL_DIR/bin" "$HOME/.config/fish/config.fish"; then
+        echo "  ✓ Adding to ~/.config/fish/config.fish"
+        echo "" >> "$HOME/.config/fish/config.fish"
+        echo "# DevEx CLI" >> "$HOME/.config/fish/config.fish"
+        echo "set -gx PATH \$PATH $INSTALL_DIR/bin" >> "$HOME/.config/fish/config.fish"
+    fi
 fi
 
-# Run the guided setup
-echo "Starting DevEx guided setup..."
+# Export for current session
+export PATH="$PATH:$INSTALL_DIR/bin"
+
 echo ""
-echo "🚀 Welcome to DevEx!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ DevEx installed successfully!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "DevEx will now guide you through setting up your development environment."
-echo "You'll be able to choose programming languages, databases, and applications"
-echo "that fit your development workflow."
+echo "To get started, run:"
+echo ""
+echo "  devex setup"
+echo ""
+echo "This will guide you through setting up your"
+echo "development environment with your preferred tools."
 echo ""
 
-# Run DevEx setup (this will launch the interactive guided installation)
-"$INSTALL_DIR/bin/devex" setup
-
-echo "DevEx installation and setup complete."
+# Try to run setup if devex is in PATH
+if command -v devex >/dev/null 2>&1; then
+    echo "Press Enter to start the setup, or Ctrl+C to exit..."
+    read -r
+    devex setup
+else
+    echo "Note: You may need to restart your shell or run:"
+    echo "  source ~/.bashrc  (or ~/.zshrc for zsh)"
+    echo ""
+    echo "Then run: devex setup"
+fi

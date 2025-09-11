@@ -1,6 +1,11 @@
 pre-commit:
   parallel: false
   commands:
+    generate-web-data:
+      run: |
+        echo "📊 Generating web tools data..."
+        pnpm web:generate
+      stage_fixed: true
     check-large-files:
       run: |
         git diff --cached --name-only | \
