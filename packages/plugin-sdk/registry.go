@@ -1,267 +1,498 @@
 package sdk
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
+	"path"
+	"regexp"
+	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unsafe"
 )
 
-// RegistryClient provides secure access to the plugin registry API
+// Constants for default configuration values
+const (
+	DefaultBaseURL           = "https://registry.devex.sh"
+	DefaultTimeout           = 30 * time.Second
+	DefaultUserAgent         = "devex-cli/1.0"
+	DefaultSearchLimit       = 100
+	DefaultCacheTTL          = 5 * time.Minute
+	MaxPluginNameLength      = 100
+	DefaultMaxIdleConns      = 10
+	DefaultMaxIdleConnsPerHost = 2
+	DefaultIdleConnTimeout   = 30 * time.Second
+)
+
+// RegistryError represents an error from the registry API
+type RegistryError struct {
+	HTTPStatus int
+	Message    string
+	Err        error
+}
+
+func (e *RegistryError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("registry error (HTTP %d): %s: %v", e.HTTPStatus, e.Message, e.Err)
+	}
+	return fmt.Sprintf("registry error (HTTP %d): %s", e.HTTPStatus, e.Message)
+}
+
+func (e *RegistryError) Unwrap() error {
+	return e.Err
+}
+
+// RegistryClient provides simple, read-only access to the plugin registry API.
+// This client connects to a simplified registry API that does not require authentication.
+// It implements the Registry interface for easy testing and mocking.
 type RegistryClient struct {
-	baseURL    string
-	apiKey     string
-	secretKey  string
-	client     *http.Client
-	userAgent  string
+	baseURL     string
+	client      *http.Client
+	userAgent   string
+	cache       *MemoryCache
+	logger      Logger
+	searchIndex unsafe.Pointer // *SearchIndex - atomic pointer for lock-free reads
 }
 
-// RegistryConfig configures the registry client
+// SearchIndex provides efficient searching capabilities with pre-sorted data
+type SearchIndex struct {
+	tagIndex    map[string][]string // tag -> plugin names (pre-sorted)
+	nameIndex   map[string]bool     // normalized names for fast lookup
+	allPlugins  []PluginMetadata    // all plugins pre-sorted alphabetically
+	pluginIndex map[string]int      // plugin name -> index in allPlugins for O(1) lookup
+}
+
+var _ Registry = (*RegistryClient)(nil) // Compile-time interface check
+
+// RegistryConfig configures the registry client for simple, read-only access
 type RegistryConfig struct {
-	BaseURL   string
-	APIKey    string
-	SecretKey string
-	Timeout   time.Duration
-	UserAgent string
+	BaseURL           string        // Base URL of the registry API (defaults to DefaultBaseURL)
+	Timeout           time.Duration // HTTP timeout (defaults to DefaultTimeout)
+	UserAgent         string        // User agent string (defaults to DefaultUserAgent)
+	CacheTTL          time.Duration // Cache TTL (defaults to DefaultCacheTTL)
+	Logger            Logger        // Logger for debugging (optional)
+	MaxIdleConns      int           // Maximum idle connections (defaults to 10)
+	MaxIdleConnsPerHost int         // Maximum idle connections per host (defaults to 2)
+	IdleConnTimeout   time.Duration // Idle connection timeout (defaults to 30s)
 }
 
-// NewRegistryClient creates a new authenticated registry client
-func NewRegistryClient(config RegistryConfig) *RegistryClient {
+// NewRegistryClient creates a new registry client for simple, read-only access.
+// This client connects to a simplified registry API without authentication.
+func NewRegistryClient(config RegistryConfig) (*RegistryClient, error) {
+	// Validation
+	if config.BaseURL == "" {
+		config.BaseURL = DefaultBaseURL
+	}
+	
+	// Validate URL format
+	if _, err := url.Parse(config.BaseURL); err != nil {
+		return nil, fmt.Errorf("invalid BaseURL: %w", err)
+	}
+
+	// Set defaults
 	if config.Timeout == 0 {
-		config.Timeout = 30 * time.Second
+		config.Timeout = DefaultTimeout
 	}
 	if config.UserAgent == "" {
-		config.UserAgent = "devex-cli/1.0"
+		config.UserAgent = DefaultUserAgent
 	}
 
+	// Set cache TTL default
+	if config.CacheTTL == 0 {
+		config.CacheTTL = DefaultCacheTTL
+	}
+	
+	// Set logger default
+	if config.Logger == nil {
+		config.Logger = NewDefaultLogger(false)
+	}
+	
+	// Set connection pooling defaults
+	if config.MaxIdleConns == 0 {
+		config.MaxIdleConns = DefaultMaxIdleConns
+	}
+	if config.MaxIdleConnsPerHost == 0 {
+		config.MaxIdleConnsPerHost = DefaultMaxIdleConnsPerHost
+	}
+	if config.IdleConnTimeout == 0 {
+		config.IdleConnTimeout = DefaultIdleConnTimeout
+	}
+	
+	// Create HTTP client with connection pooling
+	transport := &http.Transport{
+		MaxIdleConns:        config.MaxIdleConns,
+		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
+		IdleConnTimeout:     config.IdleConnTimeout,
+	}
+	
 	return &RegistryClient{
 		baseURL:   strings.TrimSuffix(config.BaseURL, "/"),
-		apiKey:    config.APIKey,
-		secretKey: config.SecretKey,
 		userAgent: config.UserAgent,
 		client: &http.Client{
-			Timeout: config.Timeout,
+			Timeout:   config.Timeout,
+			Transport: transport,
 		},
+		cache:  NewMemoryCache(config.CacheTTL),
+		logger: config.Logger,
+	}, nil
+}
+
+// Simple registry response structure
+type RegistryResponse struct {
+	BaseURL      string                      `json:"base_url"`
+	Version      string                      `json:"version"`
+	LastUpdated  string                      `json:"last_updated"`
+	Plugins      map[string]PluginMetadata   `json:"plugins"`
+}
+
+// Note: Upload functionality and advanced plugin info not available in simple API
+
+// validatePluginName validates a plugin name to prevent security issues
+func validatePluginName(name string) error {
+	if name == "" {
+		return errors.New("plugin name cannot be empty")
 	}
+	
+	if len(name) > MaxPluginNameLength {
+		return fmt.Errorf("plugin name too long (max %d characters)", MaxPluginNameLength)
+	}
+	
+	// Check for path traversal attempts
+	if strings.Contains(name, "..") || strings.Contains(name, "/") || strings.Contains(name, "\\") {
+		return fmt.Errorf("invalid plugin name: contains path separators or traversal sequences")
+	}
+	
+	// Check for absolute paths
+	if path.IsAbs(name) {
+		return fmt.Errorf("invalid plugin name: absolute paths not allowed")
+	}
+	
+	// Validate against a safe pattern (alphanumeric, dash, underscore)
+	validNamePattern := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-_]*$`)
+	if !validNamePattern.MatchString(name) {
+		return fmt.Errorf("invalid plugin name: must contain only alphanumeric characters, dashes, and underscores")
+	}
+	
+	return nil
 }
 
-// APIResponse represents a standard API response
-type APIResponse struct {
-	Success bool            `json:"success"`
-	Data    json.RawMessage `json:"data,omitempty"`
-	Error   string          `json:"error,omitempty"`
-	Code    int             `json:"code,omitempty"`
-}
-
-// PluginUploadRequest represents a plugin upload request
-type PluginUploadRequest struct {
-	Name        string            `json:"name"`
-	Version     string            `json:"version"`
-	Description string            `json:"description"`
-	Author      string            `json:"author,omitempty"`
-	Tags        []string          `json:"tags,omitempty"`
-	Platforms   map[string]string `json:"platforms"` // platform -> download URL
-}
-
-// PluginInfo represents detailed plugin information
-type PluginAPIInfo struct {
-	PluginMetadata
-	Downloads    int64     `json:"downloads"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	Verified     bool      `json:"verified"`
-	PublisherID  string    `json:"publisher_id"`
-}
-
-// GetRegistry fetches the complete plugin registry with authentication
+// GetRegistry fetches the complete plugin registry with caching
 func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, error) {
-	resp, err := c.authenticatedRequest(ctx, "GET", "/v1/registry", nil)
+	cacheKey := "registry:full"
+	
+	// Check cache first
+	if cached, found := c.cache.Get(cacheKey); found {
+		if registry, ok := cached.(*PluginRegistry); ok {
+			c.logger.Debug("registry cache hit")
+			return registry, nil
+		}
+	}
+	
+	c.logger.Debug("registry cache miss, fetching from API")
+	resp, err := c.simpleRequest(ctx, "GET", "/api/v1/registry")
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
 	}
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
+	var registryResp RegistryResponse
+	if err := json.Unmarshal(resp, &registryResp); err != nil {
+		return nil, fmt.Errorf("failed to parse registry response: %w", err)
 	}
 
-	if !apiResp.Success {
-		return nil, fmt.Errorf("API error: %s", apiResp.Error)
+	// Parse the last updated timestamp
+	lastUpdated, err := time.Parse(time.RFC3339, registryResp.LastUpdated)
+	if err != nil {
+		// Use Unix epoch as fallback to avoid downstream time-based logic issues
+		// This is a known reference point (January 1, 1970 UTC) that won't break time comparisons
+		fallbackTime := time.Unix(0, 0)
+		c.logger.Warn("timestamp parsing failed, applying Unix epoch fallback to prevent time logic errors", 
+			"operation", "parse_registry_timestamp",
+			"parse_error", err.Error(), 
+			"invalid_value", registryResp.LastUpdated,
+			"fallback_time", fallbackTime.Format(time.RFC3339),
+			"fallback_unix", fallbackTime.Unix(),
+			"impact", "registry will appear as very old, may trigger unnecessary updates")
+		lastUpdated = fallbackTime
 	}
 
-	var registry PluginRegistry
-	if err := json.Unmarshal(apiResp.Data, &registry); err != nil {
-		return nil, fmt.Errorf("failed to parse registry data: %w", err)
+	// Convert to PluginRegistry format
+	registry := &PluginRegistry{
+		BaseURL:     registryResp.BaseURL,
+		Version:     registryResp.Version,
+		LastUpdated: lastUpdated,
+		Plugins:     registryResp.Plugins,
 	}
 
-	return &registry, nil
+	// Cache the result
+	c.cache.Set(cacheKey, registry)
+	
+	// Update search index
+	c.updateSearchIndex(registry)
+	
+	return registry, nil
 }
 
 // GetPlugin fetches detailed information about a specific plugin
-func (c *RegistryClient) GetPlugin(ctx context.Context, pluginName string) (*PluginAPIInfo, error) {
-	path := fmt.Sprintf("/v1/plugins/%s", url.PathEscape(pluginName))
-	resp, err := c.authenticatedRequest(ctx, "GET", path, nil)
+func (c *RegistryClient) GetPlugin(ctx context.Context, pluginName string) (*PluginMetadata, error) {
+	// Validate plugin name to prevent path traversal
+	if err := validatePluginName(pluginName); err != nil {
+		return nil, fmt.Errorf("invalid plugin name: %w", err)
+	}
+	
+	cacheKey := fmt.Sprintf("plugin:%s", pluginName)
+	
+	// Check cache first
+	if cached, found := c.cache.Get(cacheKey); found {
+		if plugin, ok := cached.(*PluginMetadata); ok {
+			c.logger.Debug("plugin cache hit", "plugin", pluginName)
+			return plugin, nil
+		}
+	}
+	
+	c.logger.Debug("plugin cache miss, fetching from API", "plugin", pluginName)
+	path := fmt.Sprintf("/api/v1/plugins/%s", url.PathEscape(pluginName))
+	resp, err := c.simpleRequest(ctx, "GET", path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch plugin info: %w", err)
 	}
 
-	var apiResp APIResponse
-	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("API error: %s", apiResp.Error)
-	}
-
-	var pluginInfo PluginAPIInfo
-	if err := json.Unmarshal(apiResp.Data, &pluginInfo); err != nil {
+	var pluginInfo PluginMetadata
+	if err := json.Unmarshal(resp, &pluginInfo); err != nil {
 		return nil, fmt.Errorf("failed to parse plugin data: %w", err)
 	}
 
+	// Cache the result
+	c.cache.Set(cacheKey, &pluginInfo)
+	
 	return &pluginInfo, nil
 }
 
-// SearchPlugins searches for plugins with authentication
-func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags []string, limit int) ([]PluginAPIInfo, error) {
-	params := url.Values{}
-	if query != "" {
-		params.Set("q", query)
+// updateSearchIndex updates the cached search index from the registry
+func (c *RegistryClient) updateSearchIndex(registry *PluginRegistry) {
+	index := &SearchIndex{
+		tagIndex:    make(map[string][]string),
+		nameIndex:   make(map[string]bool),
+		allPlugins:  make([]PluginMetadata, 0, len(registry.Plugins)),
+		pluginIndex: make(map[string]int),
 	}
-	if len(tags) > 0 {
-		params.Set("tags", strings.Join(tags, ","))
-	}
-	if limit > 0 {
-		params.Set("limit", strconv.Itoa(limit))
-	}
-
-	path := "/v1/plugins/search"
-	if len(params) > 0 {
-		path += "?" + params.Encode()
-	}
-
-	resp, err := c.authenticatedRequest(ctx, "GET", path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search plugins: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("API error: %s", apiResp.Error)
-	}
-
-	var plugins []PluginAPIInfo
-	if err := json.Unmarshal(apiResp.Data, &plugins); err != nil {
-		return nil, fmt.Errorf("failed to parse search results: %w", err)
-	}
-
-	return plugins, nil
-}
-
-// UploadPlugin uploads a new plugin or version to the registry
-func (c *RegistryClient) UploadPlugin(ctx context.Context, uploadReq PluginUploadRequest) error {
-	reqBody, err := json.Marshal(uploadReq)
-	if err != nil {
-		return fmt.Errorf("failed to marshal upload request: %w", err)
-	}
-
-	resp, err := c.authenticatedRequest(ctx, "POST", "/v1/plugins", reqBody)
-	if err != nil {
-		return fmt.Errorf("failed to upload plugin: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		return fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	if !apiResp.Success {
-		return fmt.Errorf("upload failed: %s", apiResp.Error)
-	}
-
-	return nil
-}
-
-// DeletePlugin removes a plugin from the registry (admin only)
-func (c *RegistryClient) DeletePlugin(ctx context.Context, pluginName string) error {
-	path := fmt.Sprintf("/v1/plugins/%s", url.PathEscape(pluginName))
-	resp, err := c.authenticatedRequest(ctx, "DELETE", path, nil)
-	if err != nil {
-		return fmt.Errorf("failed to delete plugin: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		return fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	if !apiResp.Success {
-		return fmt.Errorf("delete failed: %s", apiResp.Error)
-	}
-
-	return nil
-}
-
-// GetStats returns registry statistics
-func (c *RegistryClient) GetStats(ctx context.Context) (map[string]interface{}, error) {
-	resp, err := c.authenticatedRequest(ctx, "GET", "/v1/stats", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch stats: %w", err)
-	}
-
-	var apiResp APIResponse
-	if err := json.Unmarshal(resp, &apiResp); err != nil {
-		return nil, fmt.Errorf("failed to parse API response: %w", err)
-	}
-
-	if !apiResp.Success {
-		return nil, fmt.Errorf("API error: %s", apiResp.Error)
-	}
-
-	var stats map[string]interface{}
-	if err := json.Unmarshal(apiResp.Data, &stats); err != nil {
-		return nil, fmt.Errorf("failed to parse stats data: %w", err)
-	}
-
-	return stats, nil
-}
-
-// authenticatedRequest makes an authenticated request to the registry API
-func (c *RegistryClient) authenticatedRequest(ctx context.Context, method, path string, body []byte) ([]byte, error) {
-	fullURL := c.baseURL + path
 	
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
+	// Build sorted list of all plugins
+	for _, plugin := range registry.Plugins {
+		index.allPlugins = append(index.allPlugins, plugin)
+	}
+	
+	// Sort all plugins alphabetically for consistent ordering
+	sort.Slice(index.allPlugins, func(i, j int) bool {
+		return index.allPlugins[i].Name < index.allPlugins[j].Name
+	})
+	
+	// Build lookup indexes
+	for i, plugin := range index.allPlugins {
+		// Plugin name -> index mapping for O(1) lookup
+		index.pluginIndex[plugin.Name] = i
+		
+		// Index normalized plugin names
+		normalizedName := strings.ToLower(plugin.Name)
+		index.nameIndex[normalizedName] = true
+		
+		// Index tags with pre-sorted plugin names
+		for _, tag := range plugin.Tags {
+			normalizedTag := strings.ToLower(tag)
+			index.tagIndex[normalizedTag] = append(index.tagIndex[normalizedTag], plugin.Name)
+		}
+	}
+	
+	// Sort plugin names within each tag for consistent ordering
+	for tag := range index.tagIndex {
+		sort.Strings(index.tagIndex[tag])
+	}
+	
+	// Atomically update the search index pointer for lock-free reads
+	atomic.StorePointer(&c.searchIndex, unsafe.Pointer(index))
+}
+
+// getSearchIndex returns the cached search index or builds one if not available
+func (c *RegistryClient) getSearchIndex(registry *PluginRegistry) *SearchIndex {
+	// Atomically load the search index pointer for lock-free reads
+	if ptr := atomic.LoadPointer(&c.searchIndex); ptr != nil {
+		return (*SearchIndex)(ptr)
+	}
+	
+	// Build index if not cached
+	c.updateSearchIndex(registry)
+	
+	// Load again after building
+	return (*SearchIndex)(atomic.LoadPointer(&c.searchIndex))
+}
+
+// min returns the smaller of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// matchesQuery checks if a plugin matches the search query
+func (c *RegistryClient) matchesQuery(plugin PluginMetadata, query string) bool {
+	return strings.Contains(strings.ToLower(plugin.Name), query) ||
+		   strings.Contains(strings.ToLower(plugin.Description), query)
+}
+
+// SearchPlugins searches for plugins by name or tags with optimized indexing and caching
+func (c *RegistryClient) SearchPlugins(ctx context.Context, query string, tags []string, limit int) ([]PluginMetadata, error) {
+	// Create cache key based on search parameters
+	cacheKey := fmt.Sprintf("search:%s:%v:%d", query, tags, limit)
+	
+	// Check cache first
+	if cached, found := c.cache.Get(cacheKey); found {
+		if results, ok := cached.([]PluginMetadata); ok {
+			c.logger.Debug("search cache hit", "query", query)
+			return results, nil
+		}
+	}
+	
+	c.logger.Debug("search cache miss", "query", query)
+	
+	// Get all plugins first
+	registry, err := c.GetRegistry(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get registry for search: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
+	// Use default limit if not specified
+	if limit <= 0 {
+		limit = DefaultSearchLimit
+	}
+
+	// Get cached search index for efficiency
+	searchIndex := c.getSearchIndex(registry)
+	query = strings.ToLower(query)
+	
+	var results []PluginMetadata
+	
+	// If we have tag filters, use the index for efficient lookup
+	if len(tags) > 0 {
+		candidateIndices := make(map[int]bool)
+		
+		// Find plugins that match any of the tags using pre-sorted data
+		for _, searchTag := range tags {
+			normalizedTag := strings.ToLower(searchTag)
+			if pluginNames, exists := searchIndex.tagIndex[normalizedTag]; exists {
+				// Plugin names are already sorted, get their indices efficiently
+				for _, name := range pluginNames {
+					if idx, exists := searchIndex.pluginIndex[name]; exists {
+						candidateIndices[idx] = true
+					}
+				}
+			}
+		}
+		
+		// Collect indices in sorted order for deterministic results
+		sortedIndices := make([]int, 0, len(candidateIndices))
+		for idx := range candidateIndices {
+			sortedIndices = append(sortedIndices, idx)
+		}
+		sort.Ints(sortedIndices)
+		
+		// Apply query filter and relevance scoring using pre-sorted data
+		// Pre-allocate slices with reasonable capacity to reduce allocations
+		exactMatches := make([]PluginMetadata, 0, min(limit/4, 8))     // Assume ~25% exact matches max
+		otherMatches := make([]PluginMetadata, 0, min(limit*3/4, 32))  // Remaining capacity
+		
+		for _, idx := range sortedIndices {
+			plugin := searchIndex.allPlugins[idx]
+			if query == "" || c.matchesQuery(plugin, query) {
+				// Separate exact matches for relevance scoring
+				if strings.EqualFold(plugin.Name, query) {
+					exactMatches = append(exactMatches, plugin)
+				} else {
+					otherMatches = append(otherMatches, plugin)
+				}
+				
+				// Early exit if we have enough results
+				if len(exactMatches)+len(otherMatches) >= limit {
+					break
+				}
+			}
+		}
+		
+		// Combine results with exact matches first (already sorted)
+		results = append(results, exactMatches...)
+		if len(results) < limit && len(otherMatches) > 0 {
+			remaining := limit - len(results)
+			if remaining > len(otherMatches) {
+				remaining = len(otherMatches)
+			}
+			results = append(results, otherMatches[:remaining]...)
+		}
+		
+	} else {
+		// No tag filter, use pre-sorted all plugins list
+		// Pre-allocate slices with reasonable capacity to reduce allocations
+		exactMatches := make([]PluginMetadata, 0, min(limit/4, 8))     // Assume ~25% exact matches max
+		otherMatches := make([]PluginMetadata, 0, min(limit*3/4, 32))  // Remaining capacity
+		
+		// Search through pre-sorted plugins
+		for _, plugin := range searchIndex.allPlugins {
+			if query == "" || c.matchesQuery(plugin, query) {
+				// Separate exact matches for relevance scoring
+				if strings.EqualFold(plugin.Name, query) {
+					exactMatches = append(exactMatches, plugin)
+				} else {
+					otherMatches = append(otherMatches, plugin)
+				}
+				
+				// Early exit if we have enough results
+				if len(exactMatches)+len(otherMatches) >= limit {
+					break
+				}
+			}
+		}
+		
+		// Combine results with exact matches first (already sorted)
+		results = append(results, exactMatches...)
+		if len(results) < limit && len(otherMatches) > 0 {
+			remaining := limit - len(results)
+			if remaining > len(otherMatches) {
+				remaining = len(otherMatches)
+			}
+			results = append(results, otherMatches[:remaining]...)
+		}
+	}
+
+	// Ensure we return an empty slice, not nil
+	if results == nil {
+		results = []PluginMetadata{}
+	}
+	
+	// Cache the results
+	c.cache.Set(cacheKey, results)
+	
+	return results, nil
+}
+
+// Note: Upload, delete, and stats operations are not supported in the simple API
+// These operations may be added in future versions with authentication
+
+// simpleRequest makes a simple request to the registry API
+func (c *RegistryClient) simpleRequest(ctx context.Context, method, path string) ([]byte, error) {
+	fullURL := c.baseURL + path
+
+	req, err := http.NewRequestWithContext(ctx, method, fullURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	// Add headers
 	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-
-	// Add authentication headers if credentials are provided
-	if c.apiKey != "" && c.secretKey != "" {
-		c.addAuthHeaders(req, body)
-	}
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -275,120 +506,102 @@ func (c *RegistryClient) authenticatedRequest(ctx context.Context, method, path 
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		// Try to parse error message from response body
+		var errorMsg string
+		var errorResp struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(respBody, &errorResp) == nil && errorResp.Error != "" {
+			errorMsg = errorResp.Error
+		} else {
+			errorMsg = string(respBody)
+		}
+		
+		return nil, &RegistryError{
+			HTTPStatus: resp.StatusCode,
+			Message:    fmt.Sprintf("%s (URL: %s)", errorMsg, fullURL),
+		}
 	}
 
 	return respBody, nil
 }
 
-// addAuthHeaders adds HMAC-based authentication headers
-func (c *RegistryClient) addAuthHeaders(req *http.Request, body []byte) {
-	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	
-	// Create signature payload: METHOD + PATH + TIMESTAMP + BODY
-	payload := req.Method + req.URL.Path
-	if req.URL.RawQuery != "" {
-		payload += "?" + req.URL.RawQuery
-	}
-	payload += timestamp
-	if body != nil {
-		payload += string(body)
-	}
+// Note: Authentication and rate limiting functions removed 
+// for simplified API compatibility
 
-	// Create HMAC signature
-	mac := hmac.New(sha256.New, []byte(c.secretKey))
-	mac.Write([]byte(payload))
-	signature := hex.EncodeToString(mac.Sum(nil))
-
-	// Add authentication headers
-	req.Header.Set("X-API-Key", c.apiKey)
-	req.Header.Set("X-Timestamp", timestamp)
-	req.Header.Set("X-Signature", signature)
-}
-
-// ValidateSignature validates an HMAC signature (for server-side use)
-func ValidateSignature(apiKey, secretKey, method, path, query, timestamp, bodyStr, receivedSignature string) bool {
-	// Recreate the payload
-	payload := method + path
-	if query != "" {
-		payload += "?" + query
-	}
-	payload += timestamp + bodyStr
-
-	// Create expected signature
-	mac := hmac.New(sha256.New, []byte(secretKey))
-	mac.Write([]byte(payload))
-	expectedSignature := hex.EncodeToString(mac.Sum(nil))
-
-	// Compare signatures using constant-time comparison
-	return hmac.Equal([]byte(receivedSignature), []byte(expectedSignature))
-}
-
-// RateLimitInfo represents rate limit information from API responses
-type RateLimitInfo struct {
-	Limit     int   `json:"limit"`
-	Remaining int   `json:"remaining"`
-	ResetAt   int64 `json:"reset_at"`
-}
-
-// IsRateLimited checks if we're currently rate limited
-func (r *RateLimitInfo) IsRateLimited() bool {
-	return r.Remaining <= 0 && time.Now().Unix() < r.ResetAt
-}
-
-// TimeUntilReset returns the duration until rate limit resets
-func (r *RateLimitInfo) TimeUntilReset() time.Duration {
-	resetTime := time.Unix(r.ResetAt, 0)
-	return time.Until(resetTime)
-}
-
-// Enhanced Downloader with secure registry client
-type SecureDownloader struct {
+// Enhanced Downloader with registry client
+type RegistryDownloader struct {
 	*Downloader
-	registryClient *RegistryClient
+	registryClient Registry // Use interface for better testability
 }
 
-// NewSecureDownloader creates a downloader with authenticated registry access
-func NewSecureDownloaderWithAuth(config DownloaderConfig, registryConfig RegistryConfig) *SecureDownloader {
+var _ RegistryDownloaderInterface = (*RegistryDownloader)(nil) // Compile-time interface check
+
+// NewRegistryDownloader creates a downloader with registry access
+func NewRegistryDownloader(config DownloaderConfig, registryConfig RegistryConfig) (*RegistryDownloader, error) {
 	downloader := NewSecureDownloader(config)
-	registryClient := NewRegistryClient(registryConfig)
+	registryClient, err := NewRegistryClient(registryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create registry client: %w", err)
+	}
 	
-	return &SecureDownloader{
+	return &RegistryDownloader{
 		Downloader:     downloader,
 		registryClient: registryClient,
-	}
+	}, nil
 }
 
-// GetAvailablePlugins fetches plugins using authenticated API
-func (sd *SecureDownloader) GetAvailablePlugins() (map[string]PluginMetadata, error) {
+// GetAvailablePlugins fetches plugins using registry API (backward compatible)
+func (rd *RegistryDownloader) GetAvailablePlugins() (map[string]PluginMetadata, error) {
 	ctx := context.Background()
-	registry, err := sd.registryClient.GetRegistry(ctx)
+	return rd.GetAvailablePluginsWithContext(ctx)
+}
+
+// GetAvailablePluginsWithContext fetches plugins using registry API with context
+func (rd *RegistryDownloader) GetAvailablePluginsWithContext(ctx context.Context) (map[string]PluginMetadata, error) {
+	registry, err := rd.registryClient.GetRegistry(ctx)
 	if err != nil {
-		// Fallback to unauthenticated method
-		return sd.Downloader.GetAvailablePlugins()
+		// Fallback to local method if available
+		if rd.Downloader != nil {
+			return rd.Downloader.GetAvailablePlugins()
+		}
+		return nil, err
 	}
 	return registry.Plugins, nil
 }
 
-// SearchPlugins searches using authenticated API with enhanced features
-func (sd *SecureDownloader) SearchPlugins(query string) (map[string]PluginMetadata, error) {
+// SearchPlugins searches using registry API (backward compatible)
+func (rd *RegistryDownloader) SearchPlugins(query string) (map[string]PluginMetadata, error) {
 	ctx := context.Background()
-	plugins, err := sd.registryClient.SearchPlugins(ctx, query, nil, 100)
+	return rd.SearchPluginsWithContext(ctx, query)
+}
+
+// SearchPluginsWithContext searches using registry API with context
+func (rd *RegistryDownloader) SearchPluginsWithContext(ctx context.Context, query string) (map[string]PluginMetadata, error) {
+	plugins, err := rd.registryClient.SearchPlugins(ctx, query, nil, DefaultSearchLimit)
 	if err != nil {
-		// Fallback to unauthenticated method
-		return sd.Downloader.SearchPlugins(query)
+		// Fallback to local method if we have a Downloader
+		if rd.Downloader != nil {
+			return rd.Downloader.SearchPlugins(query)
+		}
+		return nil, err
 	}
 
 	// Convert to PluginMetadata map
 	results := make(map[string]PluginMetadata)
 	for _, plugin := range plugins {
-		results[plugin.Name] = plugin.PluginMetadata
+		results[plugin.Name] = plugin
 	}
 	return results, nil
 }
 
-// GetPluginDetails returns detailed plugin information from authenticated API
-func (sd *SecureDownloader) GetPluginDetails(pluginName string) (*PluginAPIInfo, error) {
+// GetPluginDetails returns detailed plugin information from registry API (backward compatible)
+func (rd *RegistryDownloader) GetPluginDetails(pluginName string) (*PluginMetadata, error) {
 	ctx := context.Background()
-	return sd.registryClient.GetPlugin(ctx, pluginName)
+	return rd.GetPluginDetailsWithContext(ctx, pluginName)
+}
+
+// GetPluginDetailsWithContext returns detailed plugin information from registry API with context
+func (rd *RegistryDownloader) GetPluginDetailsWithContext(ctx context.Context, pluginName string) (*PluginMetadata, error) {
+	return rd.registryClient.GetPlugin(ctx, pluginName)
 }

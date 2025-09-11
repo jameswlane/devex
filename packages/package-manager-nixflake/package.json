@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-nixflake",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Nix Flake plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

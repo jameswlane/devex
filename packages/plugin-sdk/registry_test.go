@@ -26,39 +26,36 @@ var _ = Describe("Registry Client", func() {
 		server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Default handler - individual tests can override by starting new servers
 			switch r.URL.Path {
-			case "/v1/registry":
+			case "/api/v1/registry":
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, `{"success": true, "data": {"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}}`)
-			case "/v1/plugins/test-plugin":
+				_, _ = fmt.Fprint(w, `{"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}`)
+			case "/api/v1/plugins/test-plugin":
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_, _ = fmt.Fprint(w, `{
-					"success": true,
-					"data": {
-						"name": "test-plugin",
-						"version": "1.0.0",
-						"description": "A test plugin",
-						"author": "Test Author",
-						"download_url": "https://github.com/test/plugin/releases/download/v1.0.0/plugin.tar.gz",
-						"checksum": "sha256:abcdef123456789",
-						"created_at": "2023-01-01T00:00:00Z",
-						"updated_at": "2023-01-01T00:00:00Z"
-					}
+					"name": "test-plugin",
+					"version": "1.0.0",
+					"description": "A test plugin",
+					"author": "Test Author",
+					"download_url": "https://github.com/test/plugin/releases/download/v1.0.0/plugin.tar.gz",
+					"checksum": "sha256:abcdef123456789",
+					"created_at": "2023-01-01T00:00:00Z",
+					"updated_at": "2023-01-01T00:00:00Z"
 				}`)
 			default:
 				w.WriteHeader(http.StatusNotFound)
-				_, _ = fmt.Fprint(w, `{"success": false, "error": "Not found"}`)
+				_, _ = fmt.Fprint(w, `{"error": "Not found"}`)
 			}
 		}))
 
 		config := sdk.RegistryConfig{
 			BaseURL:   server.URL,
-			APIKey:    "test-api-key",
-			SecretKey: "test-secret-key",
 			Timeout:   30 * time.Second,
 		}
-		client = sdk.NewRegistryClient(config)
+		var err error
+		client, err = sdk.NewRegistryClient(config)
+		Expect(err).ToNot(HaveOccurred())
 	})
 
 	AfterEach(func() {
@@ -71,22 +68,29 @@ var _ = Describe("Registry Client", func() {
 		It("should create a new registry client", func() {
 			config := sdk.RegistryConfig{
 				BaseURL:   "https://registry.example.com",
-				APIKey:    "api-key",
-				SecretKey: "secret-key",
 				Timeout:   30 * time.Second,
 			}
-			client := sdk.NewRegistryClient(config)
+			client, err := sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(client).ToNot(BeNil())
 		})
 
 		It("should handle default timeout", func() {
 			config := sdk.RegistryConfig{
 				BaseURL:   "https://registry.example.com",
-				APIKey:    "api-key",
-				SecretKey: "secret-key",
 			}
-			client := sdk.NewRegistryClient(config)
+			client, err := sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(client).ToNot(BeNil())
+		})
+
+		It("should validate BaseURL", func() {
+			config := sdk.RegistryConfig{
+				BaseURL: "ht!tp://invalid-url",
+			}
+			client, err := sdk.NewRegistryClient(config)
+			Expect(err).To(HaveOccurred())
+			Expect(client).To(BeNil())
 		})
 	})
 
@@ -102,16 +106,16 @@ var _ = Describe("Registry Client", func() {
 				server.Close()
 				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(http.StatusInternalServerError)
-					_, _ = fmt.Fprint(w, `{"success": false, "error": "Internal server error"}`)
+					_, _ = fmt.Fprint(w, `{"error": "Internal server error"}`)
 				}))
 				
 				config := sdk.RegistryConfig{
 					BaseURL:   server.URL,
-					APIKey:    "test-api-key",
-					SecretKey: "test-secret-key",
 					Timeout:   30 * time.Second,
 				}
-				client = sdk.NewRegistryClient(config)
+				var err error
+				client, err = sdk.NewRegistryClient(config)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should handle server errors gracefully", func() {
@@ -165,35 +169,26 @@ var _ = Describe("Registry Client", func() {
 		})
 	})
 
-	Describe("Authentication", func() {
-		It("should handle API key authentication", func() {
-			// Test that requests include proper authentication headers
+	Describe("Simple API", func() {
+		It("should handle requests without authentication", func() {
+			// Test that the simplified API works without authentication headers
 			server.Close()
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				apiKey := r.Header.Get("X-API-Key")
-				timestamp := r.Header.Get("X-Timestamp")
-				signature := r.Header.Get("X-Signature")
-				// Check for HMAC authentication headers (don't use Ginkgo assertions in HTTP handlers)
-				if apiKey == "" || timestamp == "" || signature == "" {
-					w.WriteHeader(http.StatusUnauthorized)
-					_, _ = fmt.Fprint(w, `{"success": false, "error": "Unauthorized"}`)
-					return
-				}
-				
+				// Simple API doesn't require authentication
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, `{"success": true, "data": {"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}}`)
+				_, _ = fmt.Fprint(w, `{"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}`)
 			}))
 
 			config := sdk.RegistryConfig{
 				BaseURL:   server.URL,
-				APIKey:    "test-api-key",
-				SecretKey: "test-secret-key",
 				Timeout:   30 * time.Second,
 			}
-			client = sdk.NewRegistryClient(config)
+			var err error
+			client, err = sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
 
-			_, err := client.GetRegistry(ctx)
+			_, err = client.GetRegistry(ctx)
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
@@ -206,18 +201,18 @@ var _ = Describe("Registry Client", func() {
 				w.Header().Set("X-RateLimit-Remaining", "0")
 				w.Header().Set("X-RateLimit-Reset", "1640995200")
 				w.WriteHeader(http.StatusTooManyRequests)
-				_, _ = fmt.Fprint(w, `{"success": false, "error": "Rate limit exceeded"}`)
+				_, _ = fmt.Fprint(w, `{"error": "Rate limit exceeded"}`)
 			}))
 
 			config := sdk.RegistryConfig{
 				BaseURL:   server.URL,
-				APIKey:    "test-api-key",
-				SecretKey: "test-secret-key",
 				Timeout:   30 * time.Second,
 			}
-			client = sdk.NewRegistryClient(config)
+			var err error
+			client, err = sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
 
-			_, err := client.GetRegistry(ctx)
+			_, err = client.GetRegistry(ctx)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("Rate limit exceeded"))
 		})
@@ -228,13 +223,12 @@ var _ = Describe("Registry Client", func() {
 			// Create client with invalid URL to simulate connection failure
 			config := sdk.RegistryConfig{
 				BaseURL:   "http://localhost:99999", // Invalid port
-				APIKey:    "test-api-key",
-				SecretKey: "test-secret-key",
 				Timeout:   1 * time.Second, // Short timeout
 			}
-			failClient := sdk.NewRegistryClient(config)
+			failClient, err := sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
 
-			_, err := failClient.GetRegistry(ctx)
+			_, err = failClient.GetRegistry(ctx)
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -248,17 +242,117 @@ var _ = Describe("Registry Client", func() {
 
 			config := sdk.RegistryConfig{
 				BaseURL:   server.URL,
-				APIKey:    "test-api-key",
-				SecretKey: "test-secret-key",
 				Timeout:   100 * time.Millisecond, // Very short timeout
 			}
-			timeoutClient := sdk.NewRegistryClient(config)
+			timeoutClient, err := sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
 
 			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 			defer cancel()
 
-			_, err := timeoutClient.GetRegistry(ctx)
+			_, err = timeoutClient.GetRegistry(ctx)
 			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("SearchPlugins", func() {
+		BeforeEach(func() {
+			server.Close()
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v1/registry":
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_, _ = fmt.Fprint(w, `{
+						"base_url": "https://registry.example.com",
+						"version": "1.0",
+						"last_updated": "2023-01-01T00:00:00Z",
+						"plugins": {
+							"git-helper": {
+								"name": "git-helper",
+								"description": "Git workflow helper tool",
+								"tags": ["git", "development", "tool"]
+							},
+							"docker-manager": {
+								"name": "docker-manager", 
+								"description": "Docker container management utility",
+								"tags": ["docker", "containers", "tool"]
+							},
+							"code-formatter": {
+								"name": "code-formatter",
+								"description": "Code formatting and linting tool",
+								"tags": ["formatting", "development", "utility"]
+							}
+						}
+					}`)
+				default:
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+
+			config := sdk.RegistryConfig{
+				BaseURL:   server.URL,
+				Timeout:   30 * time.Second,
+			}
+			var err error
+			client, err = sdk.NewRegistryClient(config)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("should search plugins by name", func() {
+			plugins, err := client.SearchPlugins(ctx, "git", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("git-helper"))
+		})
+
+		It("should search plugins by description", func() {
+			plugins, err := client.SearchPlugins(ctx, "docker", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("docker-manager"))
+		})
+
+		It("should search plugins by tags", func() {
+			plugins, err := client.SearchPlugins(ctx, "", []string{"development"}, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(2))
+			
+			names := []string{plugins[0].Name, plugins[1].Name}
+			Expect(names).To(ContainElement("git-helper"))
+			Expect(names).To(ContainElement("code-formatter"))
+		})
+
+		It("should return empty results for no matches", func() {
+			plugins, err := client.SearchPlugins(ctx, "nonexistent", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(BeEmpty())
+		})
+
+		It("should respect search limit", func() {
+			plugins, err := client.SearchPlugins(ctx, "", []string{"tool"}, 1)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+		})
+
+		It("should handle case insensitive search", func() {
+			plugins, err := client.SearchPlugins(ctx, "GIT", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("git-helper"))
+		})
+
+		It("should combine query and tag filters", func() {
+			plugins, err := client.SearchPlugins(ctx, "helper", []string{"development"}, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(1))
+			Expect(plugins[0].Name).To(Equal("git-helper"))
+		})
+
+		It("should handle empty query with no tags", func() {
+			plugins, err := client.SearchPlugins(ctx, "", nil, 0)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(plugins).To(HaveLen(3))
 		})
 	})
 })
@@ -295,13 +389,13 @@ var _ = Describe("Secure Downloader", func() {
 		}
 	})
 
-	It("should create a secure downloader", func() {
+	It("should create a registry downloader", func() {
 		registryConfig := sdk.RegistryConfig{
 			BaseURL: server.URL,
-			APIKey:  "test-key",
 		}
 		downloaderConfig := sdk.DownloaderConfig{}
-		downloader := sdk.NewSecureDownloaderWithAuth(downloaderConfig, registryConfig)
+		downloader, err := sdk.NewRegistryDownloader(downloaderConfig, registryConfig)
+		Expect(err).ToNot(HaveOccurred())
 		Expect(downloader).ToNot(BeNil())
 	})
 })
