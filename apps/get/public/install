@@ -1,0 +1,153 @@
+#!/bin/bash
+
+set -e
+
+echo "🚀 DevEx Installer"
+echo "=================="
+echo ""
+
+# Check for curl or wget
+if command -v curl >/dev/null 2>&1; then
+    DOWNLOAD_CMD="curl -fsSL"
+    DOWNLOAD_FILE_CMD="curl -fsSL -O"
+elif command -v wget >/dev/null 2>&1; then
+    DOWNLOAD_CMD="wget -qO-"
+    DOWNLOAD_FILE_CMD="wget -q"
+else
+    echo "Error: Neither curl nor wget found."
+    echo "Please install curl or wget and try again:"
+    echo ""
+    echo "  Ubuntu/Debian: sudo apt-get install curl"
+    echo "  Fedora/RHEL:   sudo dnf install curl"
+    echo "  Arch:          sudo pacman -S curl"
+    echo "  macOS:         brew install curl"
+    echo ""
+    exit 1
+fi
+
+# Determine OS and architecture
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+
+case "$ARCH" in
+    x86_64) ARCH="amd64" ;;
+    armv8*|aarch64) ARCH="arm64" ;;
+    arm*) ARCH="arm" ;;
+    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+# Fetch the latest release version
+echo "Fetching latest version..."
+LATEST_VERSION=$($DOWNLOAD_CMD https://api.github.com/repos/jameswlane/devex/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
+
+if [ -z "$LATEST_VERSION" ]; then
+    echo "Error: Failed to fetch the latest release version."
+    echo "Please check your internet connection and try again."
+    exit 1
+fi
+
+echo "✓ Latest version: $LATEST_VERSION"
+
+# Construct file name and URL
+FILENAME="devex_${LATEST_VERSION}_${OS}_${ARCH}.tar.gz"
+BASE_URL="https://github.com/jameswlane/devex/releases/download/${LATEST_VERSION}"
+CHECKSUM_FILE="devex_checksums.txt"
+
+echo "Downloading $FILENAME..."
+
+# Create a temporary directory for download
+TEMP_DIR=$(mktemp -d)
+cd "$TEMP_DIR"
+
+# Download the tarball and checksum file
+echo "Downloading from $BASE_URL..."
+if [[ "$DOWNLOAD_FILE_CMD" == "curl -fsSL -O" ]]; then
+    curl -fsSL -O "$BASE_URL/$FILENAME" || { echo "Error: Download failed"; exit 1; }
+    curl -fsSL -O "$BASE_URL/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
+else
+    $DOWNLOAD_FILE_CMD "$BASE_URL/$FILENAME" || { echo "Error: Download failed"; exit 1; }
+    $DOWNLOAD_FILE_CMD "$BASE_URL/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
+fi
+
+# Verify checksum
+echo "Verifying checksum..."
+if ! grep "$FILENAME" "$CHECKSUM_FILE" | sha256sum --check --status; then
+    echo "Error: Checksum verification failed."
+    exit 1
+fi
+echo "✓ Checksum verified"
+
+# Install to target directory
+INSTALL_DIR="$HOME/.local/share/devex"
+mkdir -p "$INSTALL_DIR"
+
+echo "Installing DevEx..."
+tar -xzf "$FILENAME" -C "$INSTALL_DIR"
+
+# Ensure binary is executable
+chmod +x "$INSTALL_DIR/bin/devex"
+
+# Cleanup
+cd ~
+rm -rf "$TEMP_DIR"
+
+# Add to PATH for various shells
+echo ""
+echo "Adding DevEx to PATH..."
+
+# Function to add path to shell config if not already present
+add_to_path() {
+    local shell_config="$1"
+    local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
+    
+    if [ -f "$shell_config" ]; then
+        if ! grep -q "$INSTALL_DIR/bin" "$shell_config"; then
+            echo "  ✓ Adding to $shell_config"
+            echo "" >> "$shell_config"
+            echo "# DevEx CLI" >> "$shell_config"
+            echo "$path_line" >> "$shell_config"
+        fi
+    fi
+}
+
+# Add to common shell configurations
+add_to_path "$HOME/.bashrc"
+add_to_path "$HOME/.zshrc"
+
+# For fish shell
+if [ -f "$HOME/.config/fish/config.fish" ]; then
+    if ! grep -q "$INSTALL_DIR/bin" "$HOME/.config/fish/config.fish"; then
+        echo "  ✓ Adding to ~/.config/fish/config.fish"
+        echo "" >> "$HOME/.config/fish/config.fish"
+        echo "# DevEx CLI" >> "$HOME/.config/fish/config.fish"
+        echo "set -gx PATH \$PATH $INSTALL_DIR/bin" >> "$HOME/.config/fish/config.fish"
+    fi
+fi
+
+# Export for current session
+export PATH="$PATH:$INSTALL_DIR/bin"
+
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ DevEx installed successfully!"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "To get started, run:"
+echo ""
+echo "  devex setup"
+echo ""
+echo "This will guide you through setting up your"
+echo "development environment with your preferred tools."
+echo ""
+
+# Try to run setup if devex is in PATH
+if command -v devex >/dev/null 2>&1; then
+    echo "Press Enter to start the setup, or Ctrl+C to exit..."
+    read -r
+    devex setup
+else
+    echo "Note: You may need to restart your shell or run:"
+    echo "  source ~/.bashrc  (or ~/.zshrc for zsh)"
+    echo ""
+    echo "Then run: devex setup"
+fi
