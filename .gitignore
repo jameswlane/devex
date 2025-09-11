@@ -52,3 +52,6 @@ node_modules
 # Plugin binaries
 packages/*/devex-plugin-*
 !packages/*/devex-plugin-*.go
+
+# Environment files
+.env

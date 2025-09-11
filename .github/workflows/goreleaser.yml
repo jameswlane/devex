@@ -2,11 +2,17 @@ name: DevEx Unified Release
 on:
   push:
     tags:
-      # Main CLI releases
+      # Main CLI releases (new format)
+      - '@devex/cli@*'
+      # Plugin SDK releases (new format)
+      - '@devex/plugin-sdk@*'
+      # Individual plugin releases (new format)
+      - '@devex/tool-*@*'
+      - '@devex/desktop-*@*'
+      - '@devex/package-manager-*@*'
+      # Legacy formats (for backwards compatibility)
       - 'v*'
-      # Plugin SDK releases
       - 'plugin-sdk/v*'
-      # Individual plugin releases
       - 'plugin-*-v*'
 permissions:
   contents: write
@@ -26,7 +32,7 @@ jobs:
           go-version: '1.24'
       - name: Determine release type and config
         id: release-config
-        run: "TAG=\"${GITHUB_REF#refs/tags/}\"\necho \"Current tag: $TAG\"\n\n# Determine which .goreleaser.yml to use based on tag prefix\nif [[ \"$TAG\" == v* ]] && [[ \"$TAG\" != */* ]]; then\n  # Main CLI release (v1.2.3)\n  echo \"Release type: Main CLI\"\n  echo \"config_file=.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=cli\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == plugin-sdk/v* ]]; then\n  # Plugin SDK release (plugin-sdk/v1.2.3)\n  echo \"Release type: Plugin SDK\"\n  echo \"config_file=packages/plugin-sdk/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=sdk\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == plugin-*-v* ]]; then\n  # Individual plugin release (plugin-package-manager-apt-v1.2.3)\n  # Extract plugin name from tag - everything between 'plugin-' and '-v'\n  PLUGIN_NAME=$(echo \"$TAG\" | sed -E 's/^plugin-(.+)-v[0-9]+\\.[0-9]+\\.[0-9]+.*$/\\1/')\n  echo \"Release type: Plugin - $PLUGIN_NAME\"\n  echo \"config_file=packages/$PLUGIN_NAME/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=plugin\" >> $GITHUB_OUTPUT\n  echo \"plugin_name=$PLUGIN_NAME\" >> $GITHUB_OUTPUT\n  \nelse\n  echo \"Unknown tag format: $TAG\"\n  echo \"Expected formats:\"\n  echo \"  CLI: v1.2.3\"\n  echo \"  SDK: plugin-sdk/v1.2.3\"\n  echo \"  Plugin: plugin-<name>-v1.2.3\"\n  exit 1\nfi\n"
+        run: "TAG=\"${GITHUB_REF#refs/tags/}\"\necho \"Current tag: $TAG\"\n\n# Handle new @devex format\nif [[ \"$TAG\" == @devex/cli@* ]]; then\n  # CLI release (@devex/cli@1.2.3)\n  echo \"Release type: Main CLI (new format)\"\n  echo \"config_file=apps/cli/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=cli\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == @devex/plugin-sdk@* ]]; then\n  # Plugin SDK release (@devex/plugin-sdk@1.2.3)\n  echo \"Release type: Plugin SDK (new format)\"\n  echo \"config_file=packages/plugin-sdk/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=sdk\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == @devex/*@* ]]; then\n  # Individual plugin release (@devex/package-manager-apt@1.2.3)\n  # Extract plugin name from @devex/PLUGIN_NAME@VERSION\n  PLUGIN_NAME=$(echo \"$TAG\" | sed -E 's/^@devex\\/(.+)@[0-9]+\\.[0-9]+\\.[0-9]+.*$/\\1/')\n  echo \"Release type: Plugin - $PLUGIN_NAME (new format)\"\n  echo \"config_file=packages/$PLUGIN_NAME/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=plugin\" >> $GITHUB_OUTPUT\n  echo \"plugin_name=$PLUGIN_NAME\" >> $GITHUB_OUTPUT\n  \n# Legacy format support\nelif [[ \"$TAG\" == v* ]] && [[ \"$TAG\" != */* ]]; then\n  # Main CLI release (v1.2.3)\n  echo \"Release type: Main CLI (legacy format)\"\n  echo \"config_file=apps/cli/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=cli\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == plugin-sdk/v* ]]; then\n  # Plugin SDK release (plugin-sdk/v1.2.3)\n  echo \"Release type: Plugin SDK (legacy format)\"\n  echo \"config_file=packages/plugin-sdk/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=sdk\" >> $GITHUB_OUTPUT\n  \nelif [[ \"$TAG\" == plugin-*-v* ]]; then\n  # Individual plugin release (plugin-package-manager-apt-v1.2.3)\n  PLUGIN_NAME=$(echo \"$TAG\" | sed -E 's/^plugin-(.+)-v[0-9]+\\.[0-9]+\\.[0-9]+.*$/\\1/')\n  echo \"Release type: Plugin - $PLUGIN_NAME (legacy format)\"\n  echo \"config_file=packages/$PLUGIN_NAME/.goreleaser.yml\" >> $GITHUB_OUTPUT\n  echo \"working_dir=.\" >> $GITHUB_OUTPUT\n  echo \"release_type=plugin\" >> $GITHUB_OUTPUT\n  echo \"plugin_name=$PLUGIN_NAME\" >> $GITHUB_OUTPUT\n  \nelse\n  echo \"Unknown tag format: $TAG\"\n  echo \"Expected formats:\"\n  echo \"  CLI: @devex/cli@1.2.3 or v1.2.3\"\n  echo \"  SDK: @devex/plugin-sdk@1.2.3 or plugin-sdk/v1.2.3\"\n  echo \"  Plugin: @devex/<plugin-name>@1.2.3 or plugin-<name>-v1.2.3\"\n  exit 1\nfi\n"
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
