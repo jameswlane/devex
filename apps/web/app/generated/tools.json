@@ -1,0 +1,3550 @@
+{
+  "tools": [
+    {
+      "name": "Zen Browser",
+      "description": "A secure and private browser",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "flatpak",
+          "installCommand": "flatpak install flathub io.github.zen_browser.zen",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "Proton VPN",
+      "description": "VPN service by Proton",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "script",
+          "installCommand": "wget https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.4_all.deb &&\nsudo dpkg -i ./protonvpn-stable-release_1.0.4_all.deb && sudo apt update &&\nsudo apt install proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator\n",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "gnome-family"
+      ]
+    },
+    {
+      "name": "Proton Pass",
+      "description": "Password manager by Proton",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "deb",
+          "installCommand": "wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb && sudo apt install ./proton-pass_1.23.1_amd64.deb",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "Proton Mail",
+      "description": "Secure email app by Proton",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "deb",
+          "installCommand": "wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb && sudo apt install ./ProtonMail-desktop-beta.deb",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "KDE Connect",
+      "description": "Integrate Android/iOS devices with your desktop",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "kdeconnect",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "kde",
+        "gnome",
+        "xfce"
+      ]
+    },
+    {
+      "name": "GNOME Tweaks",
+      "description": "Advanced GNOME 3 settings",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "gnome-tweaks",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "gnome"
+      ]
+    },
+    {
+      "name": "GNOME Extensions",
+      "description": "Browser extension for managing GNOME Shell extensions",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "chrome-gnome-shell",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "gnome"
+      ]
+    },
+    {
+      "name": "Dolphin File Manager",
+      "description": "KDE file manager",
+      "category": "Optional Apps",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "dolphin",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Optional Apps",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "kde"
+      ]
+    },
+    {
+      "name": "zsh",
+      "description": "A powerful shell with many features",
+      "category": "System Utilities",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "zsh",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "System Utilities",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "zoxide",
+      "description": "A smarter cd command inspired by z and autojump",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "zoxide",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "app-shells/zoxide",
+              "uninstall_command": "app-shells/zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "zoxide --locked",
+              "uninstall_command": "zoxide",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "zoxide",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "ajeetdsouza.zoxide",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "zoxide",
+              "uninstall_command": "zoxide",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "wget",
+      "description": "A tool for retrieving files from the web",
+      "category": "dependency",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "wget",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "dependency",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "Ulauncher",
+      "description": "A fast application launcher for Linux",
+      "category": "Utility",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "ulauncher",
+          "alternatives": [
+            {
+              "install_method": "deb",
+              "install_command": "ulauncher_5.15.7_all.deb",
+              "uninstall_command": "ulauncher",
+              "download_url": "https://github.com/Ulauncher/Ulauncher/releases/download/5.15.7/ulauncher_5.15.7_all.deb",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "debian"
+                },
+                {
+                  "os": "ubuntu"
+                }
+              ]
+            },
+            {
+              "install_method": "apt",
+              "install_command": "ulauncher",
+              "uninstall_command": "ulauncher",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "debian"
+                }
+              ],
+              "apt_sources": [
+                {
+                  "key_source": "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176",
+                  "key_name": "/usr/share/keyrings/ulauncher-archive-keyring.gpg",
+                  "source_repo": "deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main",
+                  "source_name": "/etc/apt/sources.list.d/ulauncher-jammy.list",
+                  "require_dearmor": true
+                }
+              ]
+            },
+            {
+              "install_method": "yay",
+              "install_command": "ulauncher",
+              "uninstall_command": "ulauncher",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "makepkg",
+              "install_command": "ulauncher",
+              "uninstall_command": "ulauncher",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "git clone https://aur.archlinux.org/ulauncher.git"
+                },
+                {
+                  "shell": "cd ulauncher"
+                }
+              ],
+              "post_install": [
+                {
+                  "shell": "makepkg -is"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "ulauncher",
+              "uninstall_command": "ulauncher",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Utility",
+        "linux"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "Typora",
+      "description": "A minimal and configurable markdown editor",
+      "category": "Text Editors",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "typora",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Text Editors",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "tldr",
+      "description": "Simplified and community-driven man pages",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "tldr",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "app-doc/tldr",
+              "uninstall_command": "app-doc/tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "pip",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true
+            },
+            {
+              "install_method": "npm",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "tealdeer",
+              "uninstall_command": "tealdeer",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "tldr",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "tldr-pages.tlrc",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "tldr",
+              "uninstall_command": "tldr",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "ripgrep",
+      "description": "ripgrep recursively searches directories for a regex pattern while respecting your gitignore",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "ripgrep",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "sys-apps/ripgrep",
+              "uninstall_command": "sys-apps/ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": false
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "ripgrep",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "BurntSushi.ripgrep.MSVC",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "ripgrep",
+              "uninstall_command": "ripgrep",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "plocate",
+      "description": "A much faster locate based on posting lists",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "plocate",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "plocate",
+              "uninstall_command": "plocate",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "plocate",
+              "uninstall_command": "plocate",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "plocate",
+              "uninstall_command": "plocate",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "sys-apps/plocate",
+              "uninstall_command": "sys-apps/plocate",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "plocate",
+              "uninstall_command": "plocate",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "plocate",
+              "uninstall_command": "plocate",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "plocate",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "windows": null
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "Neovim",
+      "description": "Vim-fork focused on extensibility and usability",
+      "category": "Development Tools",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "curlpipe",
+          "alternatives": [
+            {
+              "install_method": "apt",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "debian"
+                },
+                {
+                  "os": "ubuntu"
+                }
+              ],
+              "dependencies": [
+                "python3-neovim"
+              ]
+            },
+            {
+              "install_method": "apt",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "ubuntu"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "sudo apt-get install software-properties-common"
+                },
+                {
+                  "shell": "sudo add-apt-repository ppa:neovim-ppa/stable"
+                },
+                {
+                  "shell": "sudo apt-get update"
+                }
+              ],
+              "dependencies": [
+                "python3-neovim",
+                "python3-dev",
+                "python3-pip"
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "neovim python3-neovim",
+              "uninstall_command": "neovim python3-neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora",
+                  "version": "25+"
+                },
+                {
+                  "os": "centos",
+                  "version": "8+"
+                },
+                {
+                  "os": "rhel",
+                  "version": "8+"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "neovim python3-neovim",
+              "uninstall_command": "neovim python3-neovim",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "dnf copr enable agriffis/neovim-nightly"
+                }
+              ]
+            },
+            {
+              "install_method": "yum",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "centos",
+                  "version": "8+"
+                },
+                {
+                  "os": "rhel",
+                  "version": "8+"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "neovim python-pynvim",
+              "uninstall_command": "neovim python-pynvim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "neovim python-neovim python3-neovim",
+              "uninstall_command": "neovim python-neovim python3-neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                },
+                {
+                  "os": "suse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "app-editors/neovim",
+              "uninstall_command": "app-editors/neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "nvim --classic",
+              "uninstall_command": "nvim",
+              "official_support": true
+            },
+            {
+              "install_method": "snap",
+              "install_command": "--edge nvim --classic",
+              "uninstall_command": "nvim",
+              "official_support": true
+            },
+            {
+              "install_method": "flatpak",
+              "install_command": "io.neovim.nvim",
+              "uninstall_command": "io.neovim.nvim",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo"
+                }
+              ]
+            },
+            {
+              "install_method": "appimage",
+              "download_url": "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage",
+              "destination": "/opt/nvim",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage"
+                },
+                {
+                  "shell": "chmod u+x nvim-linux-x86_64.appimage"
+                },
+                {
+                  "shell": "mkdir -p /opt/nvim"
+                }
+              ],
+              "post_install": [
+                {
+                  "shell": "sudo mv nvim-linux-x86_64.appimage /opt/nvim/nvim"
+                },
+                {
+                  "shell": "echo \"export PATH=\\$PATH:/opt/nvim/\" >> ~/.bashrc"
+                },
+                {
+                  "shell": "echo \"export PATH=\\$PATH:/opt/nvim/\" >> ~/.zshrc"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "neovim",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "sudo port selfupdate"
+                }
+              ]
+            },
+            {
+              "install_method": "curlpipe",
+              "download_url": "https://github.com/neovim/neovim/releases/latest/download/nvim-macos-arm64.tar.gz",
+              "destination": "/usr/local",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "arch": "arm64"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-macos-arm64.tar.gz"
+                },
+                {
+                  "shell": "tar xzf nvim-macos-arm64.tar.gz"
+                }
+              ],
+              "post_install": [
+                {
+                  "shell": "sudo mv nvim-macos-arm64 /usr/local/ && rm -f nvim-macos-arm64.tar.gz"
+                },
+                {
+                  "shell": "echo \"export PATH=\\$PATH:/usr/local/nvim-macos-arm64/bin\" >> ~/.zshrc"
+                }
+              ]
+            },
+            {
+              "install_method": "curlpipe",
+              "download_url": "https://github.com/neovim/neovim/releases/latest/download/nvim-macos-x86_64.tar.gz",
+              "destination": "/usr/local",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "arch": "x86_64"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-macos-x86_64.tar.gz"
+                },
+                {
+                  "shell": "tar xzf nvim-macos-x86_64.tar.gz"
+                }
+              ],
+              "post_install": [
+                {
+                  "shell": "sudo mv nvim-macos-x86_64 /usr/local/ && rm -f nvim-macos-x86_64.tar.gz"
+                },
+                {
+                  "shell": "echo \"export PATH=\\$PATH:/usr/local/nvim-macos-x86_64/bin\" >> ~/.zshrc"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "Neovim.Neovim",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "neovim",
+              "uninstall_command": "neovim",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "scoop bucket add main"
+                }
+              ]
+            },
+            {
+              "install_method": "curlpipe",
+              "download_url": "https://github.com/neovim/neovim/releases/latest/download/nvim-win64.zip",
+              "destination": "C:\\Program Files\\nvim",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-win64.zip"
+                },
+                {
+                  "shell": "powershell -Command \"Expand-Archive nvim-win64.zip -DestinationPath \\\"C:\\Program Files\\\"\""
+                }
+              ],
+              "post_install": [
+                {
+                  "shell": "setx PATH \"%PATH%;C:\\Program Files\\nvim\\bin\""
+                },
+                {
+                  "shell": "del nvim-win64.zip"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Development Tools",
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "LazyGit",
+      "description": "A simple terminal UI for git commands",
+      "category": "Development Tools",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "curlpipe",
+          "alternatives": [
+            {
+              "install_method": "apt",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "debian",
+                  "version": "13+"
+                },
+                {
+                  "os": "ubuntu",
+                  "version": "25.10+"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "amazonlinux",
+                  "version": "2023+"
+                },
+                {
+                  "os": "centos",
+                  "version": "9+"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "sudo dnf copr enable dejan/lazygit"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse-tumbleweed"
+                },
+                {
+                  "os": "opensuse-leap"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "source /etc/os-release && sudo zypper ar https://download.opensuse.org/repositories/devel:/languages:/go/$VERSION_ID/devel:languages:go.repo"
+                },
+                {
+                  "shell": "sudo zypper ref"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "dev-vcs/lazygit",
+              "uninstall_command": "dev-vcs/lazygit",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                },
+                {
+                  "os": "funtoo"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "sudo eselect repository enable guru"
+                },
+                {
+                  "shell": "sudo emaint sync -r guru"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "lazygit",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "sudo port install lazygit"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "JesseDuffield.lazygit",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "lazygit",
+              "uninstall_command": "lazygit",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "scoop bucket add extras"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Development Tools",
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "LazyDocker",
+      "description": "A simple terminal UI for both docker and docker-compose",
+      "category": "Development Tools",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "curlpipe",
+          "installCommand": "curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash",
+          "alternatives": [
+            {
+              "install_method": "pacman",
+              "install_command": "lazydocker",
+              "uninstall_command": "lazydocker",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "go",
+              "install_command": "github.com/jesseduffield/lazydocker@latest",
+              "uninstall_command": "lazydocker",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "go_version": "1.19+"
+                }
+              ],
+              "system_requirements": {
+                "docker_version": "20.10+",
+                "go_version": "1.19+",
+                "min_memory_mb": 512,
+                "min_disk_space_mb": 100,
+                "required_services": [
+                  "docker"
+                ]
+              }
+            },
+            {
+              "install_method": "asdf",
+              "install_command": "lazydocker latest",
+              "uninstall_command": "lazydocker",
+              "official_support": false,
+              "pre_install": [
+                {
+                  "shell": "asdf plugin add lazydocker https://github.com/comdotlinux/asdf-lazydocker.git"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "jesseduffield/lazydocker/lazydocker",
+          "alternatives": [
+            {
+              "install_method": "brew",
+              "install_command": "lazydocker",
+              "uninstall_command": "lazydocker",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "scoop",
+          "installCommand": "lazydocker",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "lazydocker",
+              "uninstall_command": "lazydocker",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Development Tools",
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "gpg",
+      "description": "A tool for secure communication and data storage",
+      "category": "Dependency",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "gpg",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Dependency",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "GitHub CLI",
+      "description": "GitHub official command line tool",
+      "category": "Development Tools",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "gh",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "version": "41+"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "dnf install dnf5-plugins"
+                },
+                {
+                  "shell": "dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "rhel",
+                  "version": "9+"
+                },
+                {
+                  "os": "centos",
+                  "version": "9+"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "dnf install 'dnf-command(config-manager)'"
+                },
+                {
+                  "shell": "dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo"
+                }
+              ]
+            },
+            {
+              "install_method": "yum",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "amazonlinux",
+                  "version": "2"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "type -p yum-config-manager >/dev/null || yum install yum-utils"
+                },
+                {
+                  "shell": "yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                },
+                {
+                  "os": "suse"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "zypper addrepo https://cli.github.com/packages/rpm/gh-cli.repo"
+                },
+                {
+                  "shell": "zypper ref"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "github-cli",
+              "uninstall_command": "github-cli",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "github-cli",
+              "uninstall_command": "github-cli",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "github-cli",
+              "uninstall_command": "github-cli",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "pkg",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "freebsd"
+                }
+              ]
+            },
+            {
+              "install_method": "pkg_add",
+              "install_command": "github-cli",
+              "uninstall_command": "github-cli",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "openbsd"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "github-cli",
+              "uninstall_command": "github-cli",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "gh",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": false
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "GitHub.cli",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": false
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "gh",
+              "uninstall_command": "gh",
+              "official_support": false
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Development Tools",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "git",
+      "description": "A distributed version control system",
+      "category": "Dependency",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "git",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Dependency",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "Ghostty",
+      "description": "GPU-accelerated cross-platform terminal emulator with rich features",
+      "category": "Terminal Emulators",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "ghostty",
+          "alternatives": [
+            {
+              "install_method": "apk",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "yay",
+              "install_command": "ghostty-git",
+              "uninstall_command": "ghostty-git",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "nixflake",
+              "install_command": "github:ghostty-org/ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apt",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "debian",
+                  "version": "12"
+                },
+                {
+                  "os": "ubuntu",
+                  "version": "22.04"
+                }
+              ],
+              "apt_sources": [
+                {
+                  "key_source": "https://download.opensuse.org/repositories/home:clayrisser:bookworm/Debian_12/Release.key",
+                  "key_name": "/etc/apt/trusted.gpg.d/home_clayrisser_bookworm.gpg",
+                  "source_repo": "deb http://download.opensuse.org/repositories/home:/clayrisser:/bookworm/Debian_12/ /",
+                  "source_name": "/etc/apt/sources.list.d/home:clayrisser:bookworm.list",
+                  "require_dearmor": true
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "ghostty",
+              "uninstall_command": "ghostty",
+              "official_support": false,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "dnf copr enable scottames/ghostty"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "ghostty --classic",
+              "uninstall_command": "ghostty",
+              "official_support": false
+            },
+            {
+              "install_method": "appimage",
+              "install_command": "Ghostty.AppImage",
+              "uninstall_command": "Ghostty.AppImage",
+              "download_url": "https://github.com/ghostty-appimage/ghostty-appimage/releases/latest",
+              "destination": "~/Applications/",
+              "official_support": false,
+              "post_install": [
+                {
+                  "shell": "chmod +x ~/Applications/Ghostty.AppImage"
+                }
+              ]
+            }
+          ],
+          "officialSupport": false
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "ghostty",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "windows": null
+      },
+      "tags": [
+        "Terminal Emulators",
+        "linux",
+        "macos"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "fzf",
+      "description": "A command-line fuzzy finder",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "fzf",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "app-shells/fzf",
+              "uninstall_command": "app-shells/fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": false
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "fzf",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "junegunn.fzf",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "fzf",
+              "uninstall_command": "fzf",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "fd-find",
+      "description": "A simple, fast and user-friendly alternative to find",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "fd-find",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "fd-find",
+              "uninstall_command": "fd-find",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "sys-apps/fd",
+              "uninstall_command": "sys-apps/fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "fd-find",
+              "uninstall_command": "fd-find",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "fd",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "sharkdp.fd",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "fd",
+              "uninstall_command": "fd",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "Fastfetch",
+      "description": "A maintained, feature-rich and performance-oriented, neofetch-like system information tool.",
+      "category": "System Utilities",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "deb",
+          "installCommand": "fastfetch",
+          "alternatives": [
+            {
+              "install_method": "apt",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "debian",
+                  "version": "13+"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "brew",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "linux"
+                }
+              ]
+            },
+            {
+              "install_method": "pkg",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "freebsd"
+                }
+              ]
+            },
+            {
+              "install_method": "pkg_add",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "openbsd"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "fastfetch",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "fastfetch",
+          "alternatives": [
+            {
+              "install_method": "scoop",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true
+            },
+            {
+              "install_method": "chocolatey",
+              "install_command": "fastfetch",
+              "uninstall_command": "fastfetch",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "System Utilities",
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "Eza",
+      "description": "A modern alternative to ls",
+      "category": "System Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "eza",
+          "alternatives": [
+            {
+              "install_method": "pacman",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "pkg",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "freebsd"
+                }
+              ]
+            },
+            {
+              "install_method": "pkg_add",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "openbsd"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "eza",
+          "alternatives": [],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "eza-community.eza",
+          "alternatives": [
+            {
+              "install_method": "scoop",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "eza",
+              "uninstall_command": "eza",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "System Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "curl",
+      "description": "A tool to transfer data from or to a server",
+      "category": "dependency",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "curl",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "dependency",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "ca-certificates",
+      "description": "Common CA certificates",
+      "category": "Dependency",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "ca-certificates",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Dependency",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "Build Essential",
+      "description": "Essential development tools and libraries for building software",
+      "category": "Development Tools",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "build-essential pkg-config autoconf bison clang rustc libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev libjemalloc2 libvips-dev imagemagick libmagickwand-dev mupdf mupdf-tools gir1.2-gtop-2.0 gir1.2-clutter-1.0 redis-tools sqlite3 libsqlite3-0 libmysqlclient-dev libpq-dev postgresql-client postgresql-client-common",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "@development-tools pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel",
+              "uninstall_command": "@development-tools pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos",
+                  "version": "8+"
+                },
+                {
+                  "os": "rhel",
+                  "version": "8+"
+                },
+                {
+                  "os": "amazonlinux",
+                  "version": "2+"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "dnf groupinstall -y \"Development Tools\""
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql",
+              "uninstall_command": "base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "patterns-devel-base-devel_basis pkg-config autoconf bison clang rust libopenssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel libvips-devel ImageMagick-devel mupdf redis sqlite3-devel libmysqlclient-devel postgresql-devel",
+              "uninstall_command": "patterns-devel-base-devel_basis pkg-config autoconf bison clang rust libopenssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel libvips-devel ImageMagick-devel mupdf redis sqlite3-devel libmysqlclient-devel postgresql-devel",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                },
+                {
+                  "os": "suse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "sys-devel/autoconf sys-devel/bison sys-devel/clang dev-lang/rust dev-libs/openssl sys-libs/readline sys-libs/zlib dev-libs/libyaml sys-libs/ncurses dev-libs/libffi sys-libs/gdbm dev-libs/jemalloc media-libs/vips media-gfx/imagemagick app-text/mupdf dev-db/redis dev-db/sqlite dev-db/mysql dev-db/postgresql",
+              "uninstall_command": "sys-devel/autoconf sys-devel/bison sys-devel/clang dev-lang/rust dev-libs/openssl sys-libs/readline sys-libs/zlib dev-libs/libyaml sys-libs/ncurses dev-libs/libffi sys-libs/gdbm dev-libs/jemalloc media-libs/vips media-gfx/imagemagick app-text/mupdf dev-db/redis dev-db/sqlite dev-db/mysql dev-db/postgresql",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "system.devel autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel imagemagick-devel mupdf-devel redis sqlite3-devel mysql-devel postgresql-devel",
+              "uninstall_command": "system.devel autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel imagemagick-devel mupdf-devel redis sqlite3-devel mysql-devel postgresql-devel",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "base-devel pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf redis sqlite-devel mysql-devel postgresql-libs",
+              "uninstall_command": "base-devel pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf redis sqlite-devel mysql-devel postgresql-libs",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "build-base pkgconfig autoconf bison clang rust openssl-dev readline-dev zlib-dev yaml-dev ncurses-dev libffi-dev gdbm-dev jemalloc-dev vips-dev imagemagick-dev mupdf-dev redis sqlite-dev mysql-dev postgresql-dev",
+              "uninstall_command": "build-base pkgconfig autoconf bison clang rust openssl-dev readline-dev zlib-dev yaml-dev ncurses-dev libffi-dev gdbm-dev jemalloc-dev vips-dev imagemagick-dev mupdf-dev redis sqlite-dev mysql-dev postgresql-dev",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "gcc gnumake cmake pkg-config autoconf bison clang rustc openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql80 postgresql",
+              "uninstall_command": "gcc gnumake cmake pkg-config autoconf bison clang rustc openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql80 postgresql",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "autoconf bison clang pkg-config openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql-client postgresql",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "autoconf bison clang pkgconfig openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis3 sqlite3 mysql8 postgresql16",
+              "uninstall_command": "autoconf bison clang pkgconfig openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis3 sqlite3 mysql8 postgresql16",
+              "official_support": true,
+              "pre_install": [
+                {
+                  "shell": "sudo port selfupdate"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "chocolatey",
+          "installCommand": "visualstudio2022buildtools visualstudio2022-workload-vctools pkgconfiglite openssl zlib sqlite mysql.utilities postgresql redis-64",
+          "alternatives": [
+            {
+              "install_method": "winget",
+              "install_command": "Microsoft.VisualStudio.2022.BuildTools",
+              "uninstall_command": "Microsoft.VisualStudio.2022.BuildTools",
+              "official_support": true,
+              "post_install": [
+                {
+                  "shell": "winget install Git.Git"
+                },
+                {
+                  "shell": "winget install OpenJS.NodeJS"
+                },
+                {
+                  "shell": "winget install Python.Python.3.11"
+                }
+              ]
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "gcc make cmake pkg-config openssl sqlite postgresql redis",
+              "uninstall_command": "gcc make cmake pkg-config openssl sqlite postgresql redis",
+              "official_support": false,
+              "pre_install": [
+                {
+                  "shell": "scoop bucket add main"
+                },
+                {
+                  "shell": "scoop bucket add extras"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Development Tools",
+        "linux",
+        "macos",
+        "windows"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "btop",
+      "description": "A resource monitor that shows usage and stats for processor, memory, disks, network and processes",
+      "category": "System Monitoring",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "btop",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "btop",
+              "uninstall_command": "btop",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                }
+              ]
+            },
+            {
+              "install_method": "dnf",
+              "install_command": "btop",
+              "uninstall_command": "btop",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "rhel"
+                },
+                {
+                  "os": "rocky"
+                },
+                {
+                  "os": "almalinux"
+                }
+              ],
+              "pre_install": [
+                {
+                  "shell": "dnf install -y epel-release"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "btop",
+              "uninstall_command": "btop",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse-tumbleweed"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "btop",
+              "uninstall_command": "btop",
+              "official_support": true,
+              "post_install": [
+                {
+                  "shell": "snap connect btop:removable-media"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "btop-desktop",
+              "uninstall_command": "btop-desktop",
+              "official_support": true,
+              "post_install": [
+                {
+                  "shell": "snap connect btop-desktop:removable-media"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "btop",
+          "alternatives": [],
+          "officialSupport": true
+        },
+        "windows": null
+      },
+      "tags": [
+        "System Monitoring",
+        "linux",
+        "macos"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "bat",
+      "description": "A cat(1) clone with wings",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "bat",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "sys-apps/bat",
+              "uninstall_command": "sys-apps/bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "eopkg",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "solus"
+                }
+              ]
+            },
+            {
+              "install_method": "xbps",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "void"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            },
+            {
+              "install_method": "nixpkgs",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "nixos"
+                }
+              ]
+            },
+            {
+              "install_method": "snap",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": false
+            },
+            {
+              "install_method": "cargo",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "bat",
+          "alternatives": [
+            {
+              "install_method": "macports",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        },
+        "windows": {
+          "installMethod": "winget",
+          "installCommand": "sharkdp.bat",
+          "alternatives": [
+            {
+              "install_method": "chocolatey",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true
+            },
+            {
+              "install_method": "scoop",
+              "install_command": "bat",
+              "uninstall_command": "bat",
+              "official_support": true
+            }
+          ],
+          "officialSupport": true
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "apache2-utils",
+      "description": "Apache HTTP Server utilities (htpasswd, ab, etc.)",
+      "category": "Utilities",
+      "type": "application",
+      "official": true,
+      "default": true,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "apache2-utils",
+          "alternatives": [
+            {
+              "install_method": "dnf",
+              "install_command": "httpd-tools",
+              "uninstall_command": "httpd-tools",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "fedora"
+                },
+                {
+                  "os": "centos"
+                },
+                {
+                  "os": "rhel"
+                }
+              ]
+            },
+            {
+              "install_method": "pacman",
+              "install_command": "apache-tools",
+              "uninstall_command": "apache-tools",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "arch"
+                },
+                {
+                  "os": "manjaro"
+                }
+              ]
+            },
+            {
+              "install_method": "zypper",
+              "install_command": "apache2-utils",
+              "uninstall_command": "apache2-utils",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "opensuse"
+                }
+              ]
+            },
+            {
+              "install_method": "emerge",
+              "install_command": "app-admin/apache-tools",
+              "uninstall_command": "app-admin/apache-tools",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "gentoo"
+                }
+              ]
+            },
+            {
+              "install_method": "apk",
+              "install_command": "apache2-utils",
+              "uninstall_command": "apache2-utils",
+              "official_support": true,
+              "platform_requirements": [
+                {
+                  "os": "alpine"
+                }
+              ]
+            }
+          ],
+          "officialSupport": true
+        },
+        "macos": {
+          "installMethod": "brew",
+          "installCommand": "httpie",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "windows": {
+          "installMethod": "chocolatey",
+          "installCommand": "apache-httpd",
+          "alternatives": [],
+          "officialSupport": false
+        }
+      },
+      "tags": [
+        "Utilities",
+        "linux",
+        "macos",
+        "windows",
+        "default"
+      ],
+      "desktopEnvironments": [
+        "all"
+      ]
+    },
+    {
+      "name": "SQLite Libraries",
+      "description": "SQLite libraries for database operations",
+      "category": "Databases",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "sqlite3 libsqlite3-0",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Databases",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "Redis",
+      "description": "Redis in-memory data structure store",
+      "category": "Databases",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": null,
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Databases"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "Redis Tools",
+      "description": "Tools for working with Redis",
+      "category": "Databases",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "redis-tools",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Databases",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "PostgreSQL",
+      "description": "PostgreSQL relational database system",
+      "category": "Databases",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": null,
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Databases"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "MySQL",
+      "description": "MySQL relational database management system",
+      "category": "Databases",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": null,
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Databases"
+      ],
+      "desktopEnvironments": []
+    },
+    {
+      "name": "MySQL Development Libraries",
+      "description": "Development libraries for MySQL",
+      "category": "Databases",
+      "type": "application",
+      "official": true,
+      "default": false,
+      "platforms": {
+        "linux": {
+          "installMethod": "apt",
+          "installCommand": "default-libmysqlclient-dev",
+          "alternatives": [],
+          "officialSupport": false
+        },
+        "macos": null,
+        "windows": null
+      },
+      "tags": [
+        "Databases",
+        "linux"
+      ],
+      "desktopEnvironments": []
+    }
+  ],
+  "categories": [
+    "Databases",
+    "Dependency",
+    "Development Tools",
+    "Optional Apps",
+    "System Monitoring",
+    "System Utilities",
+    "Terminal Emulators",
+    "Text Editors",
+    "Utilities",
+    "Utility",
+    "dependency"
+  ],
+  "stats": {
+    "total": 39,
+    "applications": 39,
+    "plugins": 0,
+    "platforms": {
+      "linux": 36,
+      "macos": 17,
+      "windows": 14,
+      "total": 39
+    }
+  },
+  "generated": "2025-09-11T22:35:07.917Z"
+}

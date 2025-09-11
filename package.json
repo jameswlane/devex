@@ -8,6 +8,7 @@
 		"biome:check": "biome check --write",
 		"build": "turbo build",
 		"build:go": "turbo build:go",
+		"generate": "turbo generate",
 		"dev": "turbo dev",
 		"lint": "turbo lint",
 		"lint:go": "turbo lint:go",
@@ -25,6 +26,7 @@
 		"auto:release": "auto shipit",
 		"web:build": "turbo build --filter=web",
 		"web:dev": "turbo dev --filter=web",
+		"web:generate": "node scripts/generate-web-tools-data.js",
 		"docs:build": "turbo build --filter=docs",
 		"docs:dev": "turbo dev --filter=docs",
 		"goreleaser:generate": "node scripts/generate-goreleaser.js",
@@ -42,6 +44,7 @@
 		"@commitlint/format": "^19.8.1",
 		"@octokit/rest": "^22.0.0",
 		"commitlint": "^19.8.0",
+		"glob": "^11.0.3",
 		"js-yaml": "^4.1.0",
 		"turbo": "^2.5.6"
 	}

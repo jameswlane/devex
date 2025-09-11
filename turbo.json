@@ -4,7 +4,7 @@
 	"ui": "tui",
 	"tasks": {
 		"build": {
-			"dependsOn": ["^build"],
+			"dependsOn": ["^build", "generate"],
 			"outputs": [
 				".next/**",
 				"!.next/cache/**",
@@ -25,6 +25,12 @@
 				"Taskfile.yml"
 			],
 			"env": ["GOOS", "GOARCH", "CGO_ENABLED"]
+		},
+		"generate": {
+			"dependsOn": [],
+			"outputs": ["apps/web/app/generated/**"],
+			"inputs": ["apps/cli/config/applications/**/*.yaml"],
+			"cache": true
 		},
 		"build:go": {
 			"dependsOn": ["^build:go"],
