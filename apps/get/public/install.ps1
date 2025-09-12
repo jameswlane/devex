@@ -52,6 +52,23 @@ function Write-DevExInfo {
     $host.UI.RawUI.ForegroundColor = $backup
 }
 
+function Write-DevExError {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Message,
+        
+        [Parameter(Mandatory = $false)]
+        [ConsoleColor]$ForegroundColor = [ConsoleColor]::Red
+    )
+    
+    $backup = $host.UI.RawUI.ForegroundColor
+    if ($ForegroundColor -ne $host.UI.RawUI.ForegroundColor) {
+        $host.UI.RawUI.ForegroundColor = $ForegroundColor
+    }
+    Write-Error $Message
+    $host.UI.RawUI.ForegroundColor = $backup
+}
+
 function Test-Prerequisites {
     # Check PowerShell version
     if ($PSVersionTable.PSVersion.Major -lt 5) {
@@ -309,7 +326,15 @@ function Show-CompletionMessage {
         Read-Host
         
         try {
-            & $devexPath setup
+            # Security: Final validation before command execution
+            $resolvedPath = (Resolve-Path $devexPath).Path
+            if (-not $resolvedPath.EndsWith("devex.exe") -and -not $resolvedPath.EndsWith("devex")) {
+                Write-DevExError "Security violation: Invalid executable path"
+                exit 1
+            }
+            
+            # Execute with limited arguments to prevent injection
+            & $resolvedPath "setup"
         } catch {
             Write-DevExInfo "Note: You may need to restart your PowerShell session" -ForegroundColor Yellow
             Write-DevExInfo "Then run: devex setup"
