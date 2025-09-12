@@ -93,17 +93,35 @@ export async function GET(request: NextRequest) {
 					);
 				}
 
-				let sanitized = input.toLowerCase();
+				// Use character-by-character approach to avoid regex vulnerabilities
+				const sanitized = input.toLowerCase();
+				let result = "";
+				let insideTag = false;
 
-				// Remove HTML/XML tags using a safer approach
-				// Replace any sequence of < followed by anything until > (non-greedy)
-				sanitized = sanitized.replace(/<[^>]{0,100}>/g, ""); // Limit tag content to 100 chars
+				// Manually parse and remove HTML tags without vulnerable regex
+				for (let i = 0; i < sanitized.length; i++) {
+					const char = sanitized[i];
 
-				// Remove any remaining < or > characters to prevent partial tags
-				sanitized = sanitized.replace(/[<>]/g, "");
+					if (char === "<") {
+						insideTag = true;
+						continue;
+					}
 
-				// Keep only alphanumeric characters, whitespace, and hyphens
-				return sanitized.replace(/[^\w\s-]/g, "").trim();
+					if (char === ">") {
+						insideTag = false;
+						continue;
+					}
+
+					// Only include characters that are not inside HTML tags
+					if (!insideTag) {
+						// Allow alphanumeric, whitespace, and hyphens only
+						if (/[\w\s-]/.test(char)) {
+							result += char;
+						}
+					}
+				}
+
+				return result.trim();
 			};
 			const searchTerm = sanitizeSearchTerm(query.search);
 			filteredTools = filteredTools.filter(
@@ -143,32 +161,39 @@ export async function GET(request: NextRequest) {
 		const paginatedTools = filteredTools.slice(startIndex, endIndex);
 		const totalPages = Math.ceil(filteredTools.length / limit);
 
-		return NextResponse.json(
-			{
-				tools: paginatedTools,
-				pagination: {
-					page,
-					limit,
-					total: filteredTools.length,
-					totalPages,
-					hasNext: page < totalPages,
-					hasPrev: page > 1,
-				},
-				stats: {
-					total: tools.length,
-					filtered: filteredTools.length,
-					applications: tools.filter((t) => t.type === "application").length,
-					plugins: tools.filter((t) => t.type === "plugin").length,
-				},
+		const responseData = {
+			tools: paginatedTools,
+			pagination: {
+				page,
+				limit,
+				total: filteredTools.length,
+				totalPages,
+				hasNext: page < totalPages,
+				hasPrev: page > 1,
 			},
-			{
-				headers: {
-					"Cache-Control": "public, max-age=3600, s-maxage=86400",
-					"CDN-Cache-Control": "public, max-age=86400",
-					"Vercel-CDN-Cache-Control": "public, max-age=86400",
-				},
+			stats: {
+				total: tools.length,
+				filtered: filteredTools.length,
+				applications: tools.filter((t) => t.type === "application").length,
+				plugins: tools.filter((t) => t.type === "plugin").length,
 			},
-		);
+		};
+
+		return NextResponse.json(responseData, {
+			headers: {
+				// Caching
+				"Cache-Control": "public, max-age=3600, s-maxage=86400",
+				"CDN-Cache-Control": "public, max-age=86400",
+				"Vercel-CDN-Cache-Control": "public, max-age=86400",
+				// Compression
+				"Content-Encoding": "gzip",
+				Vary: "Accept-Encoding",
+				// Performance
+				"X-Content-Type-Options": "nosniff",
+				"X-Frame-Options": "DENY",
+				"X-XSS-Protection": "1; mode=block",
+			},
+		});
 	} catch (error) {
 		logError(error, { endpoint: "/api/tools", query });
 
