@@ -1,6 +1,10 @@
 package commands
 
-import "github.com/jameswlane/devex/apps/cli/internal/platform"
+import (
+	"strings"
+
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
+)
 
 // PlatformPluginMapping defines the mapping between platform characteristics and required plugins
 type PlatformPluginMapping struct {
@@ -65,7 +69,7 @@ func DetectRequiredPlugins(plat platform.DetectionResult) []string {
 		// Check if we already have a desktop plugin
 		hasDesktopPlugin := false
 		for plugin := range pluginSet {
-			if len(plugin) > 8 && plugin[:8] == "desktop-" {
+			if strings.HasPrefix(plugin, "desktop-") {
 				hasDesktopPlugin = true
 				break
 			}

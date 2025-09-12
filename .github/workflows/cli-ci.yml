@@ -61,4 +61,4 @@ jobs:
       - name: Build web app
         run: pnpm turbo run build --filter=@devex/web
       - name: Build docs
-        run: pnpm turbo run build --filter=docs
+        run: pnpm turbo run build --filter=@devex/docs

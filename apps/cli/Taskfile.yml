@@ -95,7 +95,9 @@ tasks:
   test:integration:
     desc: Run integration tests with timeout and progress reporting
     cmds:
-      - timeout 10m ginkgo run -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v --label-filter="integration"
+      - >
+        timeout 10m ginkgo run -r --timeout=5m -v --label-filter="integration"
+
   # === BENCHMARKING ===
   bench:
     desc: Run benchmarks
@@ -155,12 +157,12 @@ tasks:
   turbo:build:
     desc: Build using TurboRepo
     cmds:
-      - cd ../../ && turbo build:go --filter=cli
+      - cd ../../ && turbo build:go --filter=@devex/cli
   turbo:test:
     desc: Test using TurboRepo (now uses Ginkgo)
     cmds:
-      - cd ../../ && turbo test:go --filter=cli
+      - cd ../../ && turbo test:go --filter=@devex/cli
   turbo:lint:
     desc: Lint using TurboRepo
     cmds:
-      - cd ../../ && turbo lint:go --filter=cli
+      - cd ../../ && turbo lint:go --filter=@devex/cli
