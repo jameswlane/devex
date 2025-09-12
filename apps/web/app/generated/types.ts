@@ -1,5 +1,5 @@
 // Generated file - do not edit manually
-// Last generated: 2025-09-12T01:18:25.752Z
+// Last generated: 2025-09-12T03:16:22.519Z
 
 export interface PlatformInfo {
   installMethod: string;
