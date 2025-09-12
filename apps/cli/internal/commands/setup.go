@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
@@ -182,8 +183,8 @@ type SetupModel struct {
 	settings         config.CrossPlatformSettings
 	// New fields for system overview and plugin management
 	requiredPlugins   []string
-	pluginsInstalling bool
-	pluginsInstalled  bool
+	pluginsInstalling int32 // atomic bool (0 = false, 1 = true)
+	pluginsInstalled  int32 // atomic bool (0 = false, 1 = true)
 	confirmPlugins    bool
 }
 
@@ -209,7 +210,6 @@ const (
 	WaitActivityInterval = 100 // milliseconds
 
 	// Default selections for automated setup
-	DefaultShellIndex      = 0 // zsh (first option)
 	DefaultNodeJSIndex     = 0 // Node.js
 	DefaultPythonIndex     = 1 // Python
 	DefaultPostgreSQLIndex = 0 // PostgreSQL
@@ -219,13 +219,6 @@ const (
 	ExecutablePermissions  = 0755
 	RegularFilePermissions = 0644
 )
-
-// FallbackThemes provides default themes when configuration is unavailable
-// These are the themes available for the 1.0 release
-var FallbackThemes = []string{
-	"Tokyo Night",
-	"Synthwave 84",
-}
 
 // getAvailableThemeNames extracts theme names from application configurations
 func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
@@ -313,82 +306,6 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 	return themeNames
 }
 
-// PlatformPluginMapping defines the mapping between platform characteristics and required plugins
-type PlatformPluginMapping struct {
-	OS              string
-	Distribution    string
-	DesktopEnv      string
-	RequiredPlugins []string
-}
-
-// platformPluginMappings defines the configuration for platform-specific plugin requirements
-var platformPluginMappings = []PlatformPluginMapping{
-	// Linux distributions
-	{OS: "linux", Distribution: "debian", RequiredPlugins: []string{"package-manager-apt", "tool-shell"}},
-	{OS: "linux", Distribution: "ubuntu", RequiredPlugins: []string{"package-manager-apt", "tool-shell"}},
-	{OS: "linux", Distribution: "fedora", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
-	{OS: "linux", Distribution: "rhel", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
-	{OS: "linux", Distribution: "centos", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
-	{OS: "linux", Distribution: "arch", RequiredPlugins: []string{"package-manager-pacman", "tool-shell"}},
-	{OS: "linux", Distribution: "manjaro", RequiredPlugins: []string{"package-manager-pacman", "tool-shell"}},
-	{OS: "linux", Distribution: "opensuse", RequiredPlugins: []string{"package-manager-zypper", "tool-shell"}},
-	{OS: "linux", Distribution: "suse", RequiredPlugins: []string{"package-manager-zypper", "tool-shell"}},
-
-	// macOS
-	{OS: "darwin", RequiredPlugins: []string{"package-manager-homebrew", "tool-shell"}},
-
-	// Windows
-	{OS: "windows", RequiredPlugins: []string{"package-manager-winget", "tool-shell"}},
-
-	// Desktop environments
-	{DesktopEnv: "gnome", RequiredPlugins: []string{"desktop-gnome"}},
-	{DesktopEnv: "kde", RequiredPlugins: []string{"desktop-kde"}},
-	{DesktopEnv: "plasma", RequiredPlugins: []string{"desktop-kde"}},
-	{DesktopEnv: "xfce", RequiredPlugins: []string{"desktop-xfce"}},
-}
-
-// DetectRequiredPlugins detects which DevEx plugins are needed for the current system
-func DetectRequiredPlugins(plat platform.DetectionResult) []string {
-	var plugins []string
-	pluginSet := make(map[string]bool) // Use map to avoid duplicates
-
-	// Check all platform mappings
-	for _, mapping := range platformPluginMappings {
-		// Check if this mapping matches the current platform
-		osMatch := mapping.OS == "" || mapping.OS == plat.OS
-		distMatch := mapping.Distribution == "" || mapping.Distribution == plat.Distribution
-		desktopMatch := mapping.DesktopEnv == "" ||
-			(mapping.DesktopEnv == plat.DesktopEnv && plat.DesktopEnv != "none" && plat.DesktopEnv != "unknown")
-
-		if osMatch && distMatch && desktopMatch {
-			// Add all required plugins from this mapping
-			for _, plugin := range mapping.RequiredPlugins {
-				if !pluginSet[plugin] {
-					pluginSet[plugin] = true
-					plugins = append(plugins, plugin)
-				}
-			}
-		}
-	}
-
-	// Add fallback desktop themes plugin for unknown desktop environments
-	if plat.DesktopEnv != "none" && plat.DesktopEnv != "unknown" && plat.DesktopEnv != "" {
-		hasDesktopPlugin := false
-		for _, plugin := range plugins {
-			if strings.HasPrefix(plugin, "desktop-") {
-				hasDesktopPlugin = true
-				break
-			}
-		}
-		if !hasDesktopPlugin && !pluginSet["desktop-themes"] {
-			plugins = append(plugins, "desktop-themes")
-		}
-	}
-
-	log.Debug("Detected required plugins", "platform", plat, "plugins", plugins)
-	return plugins
-}
-
 // convertThemesToInterface converts []types.Theme to []interface{} for GetAvailableThemes
 func convertThemesToInterface(themes []types.Theme) []interface{} {
 	result := make([]interface{}, len(themes))
@@ -465,8 +382,8 @@ func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.
 		repo:              repo,
 		settings:          settings,
 		requiredPlugins:   DetectRequiredPlugins(plat), // Detect plugins needed
-		pluginsInstalling: false,
-		pluginsInstalled:  false,
+		pluginsInstalling: 0,                           // atomic false
+		pluginsInstalled:  0,                           // atomic false
 		confirmPlugins:    false,
 		shells: []string{
 			"zsh",
@@ -629,13 +546,18 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case PluginInstallCompleteMsg:
-		m.pluginsInstalling = false
-		m.pluginsInstalled = true
+		// Update model state based on installation results using atomic operations
+		atomic.StoreInt32(&m.pluginsInstalling, 0) // Mark installation complete
+
 		if len(msg.Errors) > 0 {
+			m.hasErrors = true
 			for _, err := range msg.Errors {
 				m.installErrors = append(m.installErrors, err.Error())
 			}
-			m.hasErrors = true
+			log.Warn("Plugin installation completed with errors", "errors", len(msg.Errors))
+		} else {
+			atomic.StoreInt32(&m.pluginsInstalled, 1) // Mark installation successful
+			log.Info("All plugins installed successfully")
 		}
 		// Clear progress
 		m.progress = 1.0
@@ -721,13 +643,13 @@ func (m *SetupModel) View() string {
 		s = titleStyle.Render("📦 Installing DevEx Plugins")
 		s += "\n\n"
 		switch {
-		case m.pluginsInstalling:
+		case atomic.LoadInt32(&m.pluginsInstalling) == 1:
 			s += "Downloading and installing plugins...\n\n"
 			s += m.renderProgressBar()
 			s += "\n\n"
 			s += fmt.Sprintf("Status: %s\n", m.installStatus)
 			s += "\nThis may take a moment. Please wait..."
-		case m.pluginsInstalled:
+		case atomic.LoadInt32(&m.pluginsInstalled) == 1:
 			s += selectedStyle.Render("✓ All plugins installed successfully!")
 			s += "\n\n"
 			s += "Installed plugins:\n"
@@ -1059,7 +981,7 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		}
 		return m.nextStep()
 	case StepPluginInstall:
-		if m.pluginsInstalled || m.hasErrors {
+		if atomic.LoadInt32(&m.pluginsInstalled) == 1 || m.hasErrors {
 			return m.nextStep()
 		}
 		return m, nil
@@ -1323,62 +1245,66 @@ type PluginInstallCompleteMsg struct {
 
 func (m *SetupModel) startPluginInstallation() tea.Cmd {
 	return func() tea.Msg {
-		// Mark installation as in progress
-		m.pluginsInstalling = true
+		// Mark installation as in progress using atomic operation
+		atomic.StoreInt32(&m.pluginsInstalling, 1)
+
+		// Collect all errors instead of swallowing them
+		var allErrors []error
 
 		// Initialize plugin bootstrap with download enabled
 		pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
 		if err != nil {
 			log.Error("Failed to initialize plugin system", err)
+			allErrors = append(allErrors, fmt.Errorf("failed to initialize plugin system: %w", err))
 			return PluginInstallCompleteMsg{
-				Errors: []error{fmt.Errorf("failed to initialize plugin system: %w", err)},
+				Errors: allErrors,
 			}
 		}
 
-		// Create context with timeout for plugin installation
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		// Create context with configurable timeout for plugin installation
+		ctx, cancel := context.WithTimeout(context.Background(), PluginInstallTimeout)
 		defer cancel()
 
-		log.Info("Initializing plugin system with required plugins", "plugins", m.requiredPlugins, "timeout", "5m")
+		log.Info("Initializing plugin system with required plugins", "plugins", m.requiredPlugins, "timeout", PluginInstallTimeout.String())
 
+		// Initialize plugins and collect any errors
 		if err := pluginBootstrap.Initialize(ctx); err != nil {
 			log.Error("Failed to bootstrap plugins", err)
+			allErrors = append(allErrors, fmt.Errorf("plugin initialization failed: %w", err))
+
 			// Check for context cancellation/timeout
 			if ctx.Err() != nil {
-				return PluginInstallCompleteMsg{
-					Errors: []error{fmt.Errorf("plugin installation timed out or was cancelled: %w", ctx.Err())},
-				}
+				allErrors = append(allErrors, fmt.Errorf("plugin installation timed out: %w", ctx.Err()))
 			}
-			// Don't fail completely, some plugins might have installed
+			// Continue to verify what plugins were installed despite errors
 		}
 
 		// The Initialize function already downloads required plugins based on platform detection
 		// Check which plugins were successfully installed
-		var errors []error
 		manager := pluginBootstrap.GetManager()
 		installedPlugins := manager.ListPlugins()
 
 		log.Info("Plugins installed", "count", len(installedPlugins))
 
+		// Optimized plugin verification: O(n) instead of O(n×m)
+		installedSet := make(map[string]bool)
+		for pluginName := range installedPlugins {
+			installedSet[pluginName] = true
+		}
+
 		// Check if each required plugin was installed
 		for _, requiredPlugin := range m.requiredPlugins {
-			found := false
-			for pluginName := range installedPlugins {
-				if pluginName == requiredPlugin {
-					found = true
-					log.Info("Plugin verified", "name", requiredPlugin)
-					break
-				}
-			}
-			if !found {
+			if installedSet[requiredPlugin] {
+				log.Info("Plugin verified", "name", requiredPlugin)
+			} else {
 				errMsg := fmt.Sprintf("Plugin %s failed to install or is not available", requiredPlugin)
 				log.Warn(errMsg)
-				errors = append(errors, fmt.Errorf("%s", errMsg))
+				allErrors = append(allErrors, fmt.Errorf("%s", errMsg))
 			}
 		}
 
 		return PluginInstallCompleteMsg{
-			Errors: errors,
+			Errors: allErrors,
 		}
 	}
 }

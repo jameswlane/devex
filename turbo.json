@@ -4,7 +4,7 @@
 	"ui": "tui",
 	"tasks": {
 		"build": {
-			"dependsOn": ["^build", "generate"],
+			"dependsOn": ["^build", "download"],
 			"outputs": [
 				".next/**",
 				"!.next/cache/**",
@@ -25,6 +25,13 @@
 				"Taskfile.yml"
 			],
 			"env": ["GOOS", "GOARCH", "CGO_ENABLED"]
+		},
+		"build:web": {
+			"dependsOn": ["generate"]
+		},
+		"download": {
+			"inputs": ["go.mod", "go.sum"],
+			"cache": false
 		},
 		"generate": {
 			"dependsOn": [],
@@ -49,7 +56,7 @@
 			"inputs": ["**/*.ts", "**/*.tsx", "tsconfig.json"]
 		},
 		"lint": {
-			"dependsOn": ["^lint"],
+			"dependsOn": ["^lint", "download"],
 			"inputs": [
 				"**/*.go",
 				"**/*.ts",
@@ -76,7 +83,7 @@
 			"cache": false
 		},
 		"test": {
-			"dependsOn": ["build"],
+			"dependsOn": ["build", "download"],
 			"inputs": [
 				"**/*.go",
 				"**/*.ts",
