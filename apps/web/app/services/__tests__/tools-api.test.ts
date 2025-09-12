@@ -306,7 +306,7 @@ describe("ToolsService", () => {
 			});
 
 			expect(response.warnings).toBeDefined();
-			expect(response.warnings!.length).toBeGreaterThan(0);
+			expect(response.warnings?.length).toBeGreaterThan(0);
 		});
 
 		it("should handle pagination correctly", () => {

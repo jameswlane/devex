@@ -37,6 +37,9 @@ function detectOS(): Platform {
 export function Hero() {
 	const [platform, setPlatform] = useState<Platform>("linux");
 	const [mounted, setMounted] = useState(false);
+	const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">(
+		"idle",
+	);
 
 	useEffect(() => {
 		setPlatform(detectOS());
@@ -51,9 +54,14 @@ export function Hero() {
 	const copyToClipboard = async () => {
 		try {
 			await navigator.clipboard.writeText(currentCommand.command);
-			// Could add toast notification here
+			setCopyStatus("success");
+			// Clear success state after 2 seconds
+			setTimeout(() => setCopyStatus("idle"), 2000);
 		} catch (err) {
 			console.error("Failed to copy:", err);
+			setCopyStatus("error");
+			// Clear error state after 3 seconds
+			setTimeout(() => setCopyStatus("idle"), 3000);
 		}
 	};
 
@@ -98,10 +106,21 @@ export function Hero() {
 						<button
 							type="button"
 							onClick={copyToClipboard}
-							className="text-gray-300 hover:text-white transition-colors text-sm px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
+							className={`text-sm px-3 py-1 rounded transition-colors ${
+								copyStatus === "success"
+									? "bg-green-600 text-white"
+									: copyStatus === "error"
+										? "bg-red-600 text-white"
+										: "text-gray-300 hover:text-white bg-gray-700 hover:bg-gray-600"
+							}`}
 							title="Copy to clipboard"
+							disabled={copyStatus !== "idle"}
 						>
-							Copy
+							{copyStatus === "success"
+								? "Copied!"
+								: copyStatus === "error"
+									? "Failed!"
+									: "Copy"}
 						</button>
 					</div>
 				</div>

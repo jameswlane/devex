@@ -45,8 +45,26 @@ interface MetadataResponse {
 	};
 }
 
+// Custom debounce hook
+function useDebouncedValue<T>(value: T, delay: number): T {
+	const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+	useEffect(() => {
+		const handler = setTimeout(() => {
+			setDebouncedValue(value);
+		}, delay);
+
+		return () => {
+			clearTimeout(handler);
+		};
+	}, [value, delay]);
+
+	return debouncedValue;
+}
+
 export function ToolSearch() {
 	const [searchTerm, setSearchTerm] = useState("");
+	const debouncedSearchTerm = useDebouncedValue(searchTerm, 300);
 	const [selectedCategory, setSelectedCategory] = useState("all");
 	const [selectedPlatform, setSelectedPlatform] = useState<Platform | "all">(
 		"all",
@@ -108,7 +126,7 @@ export function ToolSearch() {
 						limit: "24",
 					});
 
-					if (searchTerm) params.set("search", searchTerm);
+					if (debouncedSearchTerm) params.set("search", debouncedSearchTerm);
 					if (selectedCategory !== "all")
 						params.set("category", selectedCategory);
 					if (selectedPlatform !== "all")
@@ -131,7 +149,7 @@ export function ToolSearch() {
 				{
 					operation: "fetch_tools",
 					filters: {
-						searchTerm,
+						searchTerm: debouncedSearchTerm,
 						selectedCategory,
 						selectedPlatform,
 						filterType,
@@ -144,7 +162,7 @@ export function ToolSearch() {
 			logError(err, {
 				operation: "fetch_tools",
 				filters: {
-					searchTerm,
+					searchTerm: debouncedSearchTerm,
 					selectedCategory,
 					selectedPlatform,
 					filterType,
@@ -157,7 +175,13 @@ export function ToolSearch() {
 		} finally {
 			setLoading(false);
 		}
-	}, [searchTerm, selectedCategory, selectedPlatform, filterType, currentPage]);
+	}, [
+		debouncedSearchTerm,
+		selectedCategory,
+		selectedPlatform,
+		filterType,
+		currentPage,
+	]);
 
 	useEffect(() => {
 		fetchTools();
@@ -171,7 +195,29 @@ export function ToolSearch() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: We want to reset page when filters change
 	useEffect(() => {
 		resetPage();
-	}, [searchTerm, selectedCategory, selectedPlatform, filterType, resetPage]);
+	}, [
+		debouncedSearchTerm,
+		selectedCategory,
+		selectedPlatform,
+		filterType,
+		resetPage,
+	]);
+
+	// Memoize filtered categories to avoid recalculation
+	const filteredCategories = useMemo(
+		() => metadata?.categories.filter((category) => category !== "all") || [],
+		[metadata?.categories],
+	);
+
+	// Memoize platform statistics for display optimization
+	const platformStats = useMemo(
+		() => ({
+			linux: metadata?.stats.platforms.linux || 0,
+			macos: metadata?.stats.platforms.macos || 0,
+			windows: metadata?.stats.platforms.windows || 0,
+		}),
+		[metadata?.stats.platforms],
+	);
 
 	const getPlatformBadges = useMemo(
 		() => (tool: Tool) => {
@@ -204,6 +250,86 @@ export function ToolSearch() {
 				? "bg-purple-100 text-purple-800"
 				: "bg-green-100 text-green-800",
 		[],
+	);
+
+	// Memoize individual tool cards to prevent unnecessary re-renders
+	const ToolCard = useMemo(
+		() =>
+			({ tool }: { tool: Tool }) => {
+				const platforms = getPlatformBadges(tool);
+				return (
+					<div
+						key={tool.name}
+						className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
+					>
+						{/* Header */}
+						<div className="flex justify-between items-start mb-2">
+							<h3 className="text-xl font-semibold">{tool.name}</h3>
+							<div className="flex space-x-1">
+								{tool.official && (
+									<span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+										Official
+									</span>
+								)}
+								<span
+									className={`text-xs px-2 py-1 rounded-full ${getTypeColor(tool.type)}`}
+								>
+									{tool.type}
+								</span>
+							</div>
+						</div>
+
+						{/* Description */}
+						<p className="text-gray-600 mb-4 text-sm leading-relaxed">
+							{tool.description}
+						</p>
+
+						{/* Category */}
+						<div className="mb-3">
+							<span className="inline-block bg-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-700">
+								{tool.category}
+							</span>
+						</div>
+
+						{/* Platform Support */}
+						<div className="mb-4">
+							<div className="text-xs text-gray-500 mb-1">Platforms:</div>
+							<div className="flex flex-wrap gap-1">
+								{platforms.map((platform) => (
+									<span
+										key={platform}
+										className={`text-xs px-2 py-1 rounded ${getPlatformColor(platform)}`}
+									>
+										{platform === "macos"
+											? "macOS"
+											: platform.charAt(0).toUpperCase() + platform.slice(1)}
+									</span>
+								))}
+							</div>
+						</div>
+
+						{/* Installation Preview */}
+						{platforms.length > 0 && (
+							<div className="mt-4 pt-4 border-t border-gray-100">
+								<div className="text-xs text-gray-500 mb-2">Install via:</div>
+								<div className="text-xs font-mono bg-gray-50 p-2 rounded">
+									{tool.type === "plugin" ? (
+										<span className="text-gray-600">
+											devex plugin install {tool.name}
+										</span>
+									) : (
+										<span className="text-gray-600">
+											{tool.platforms[platforms[0]]?.installMethod ||
+												"auto-detect"}
+										</span>
+									)}
+								</div>
+							</div>
+						)}
+					</div>
+				);
+			},
+		[getPlatformBadges, getPlatformColor, getTypeColor],
 	);
 
 	if (error) {
@@ -297,7 +423,7 @@ export function ToolSearch() {
 							disabled={loading}
 						>
 							<option value="all">All Categories</option>
-							{metadata?.categories.map((category) => (
+							{filteredCategories.map((category) => (
 								<option key={category} value={category}>
 									{category}
 								</option>
@@ -323,15 +449,9 @@ export function ToolSearch() {
 							disabled={loading}
 						>
 							<option value="all">All Platforms</option>
-							<option value="linux">
-								Linux ({metadata?.stats.platforms.linux || 0})
-							</option>
-							<option value="macos">
-								macOS ({metadata?.stats.platforms.macos || 0})
-							</option>
-							<option value="windows">
-								Windows ({metadata?.stats.platforms.windows || 0})
-							</option>
+							<option value="linux">Linux ({platformStats.linux})</option>
+							<option value="macos">macOS ({platformStats.macos})</option>
+							<option value="windows">Windows ({platformStats.windows})</option>
 						</select>
 					</div>
 				</div>
@@ -348,83 +468,9 @@ export function ToolSearch() {
 			{/* Tools Grid */}
 			{!loading && (
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-					{tools.map((tool) => {
-						const platforms = getPlatformBadges(tool);
-						return (
-							<div
-								key={tool.name}
-								className="bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow"
-							>
-								{/* Header */}
-								<div className="flex justify-between items-start mb-2">
-									<h3 className="text-xl font-semibold">{tool.name}</h3>
-									<div className="flex space-x-1">
-										{tool.official && (
-											<span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-												Official
-											</span>
-										)}
-										<span
-											className={`text-xs px-2 py-1 rounded-full ${getTypeColor(tool.type)}`}
-										>
-											{tool.type}
-										</span>
-									</div>
-								</div>
-
-								{/* Description */}
-								<p className="text-gray-600 mb-4 text-sm leading-relaxed">
-									{tool.description}
-								</p>
-
-								{/* Category */}
-								<div className="mb-3">
-									<span className="inline-block bg-gray-200 rounded-full px-3 py-1 text-xs font-medium text-gray-700">
-										{tool.category}
-									</span>
-								</div>
-
-								{/* Platform Support */}
-								<div className="mb-4">
-									<div className="text-xs text-gray-500 mb-1">Platforms:</div>
-									<div className="flex flex-wrap gap-1">
-										{platforms.map((platform) => (
-											<span
-												key={platform}
-												className={`text-xs px-2 py-1 rounded ${getPlatformColor(platform)}`}
-											>
-												{platform === "macos"
-													? "macOS"
-													: platform.charAt(0).toUpperCase() +
-														platform.slice(1)}
-											</span>
-										))}
-									</div>
-								</div>
-
-								{/* Installation Preview */}
-								{platforms.length > 0 && (
-									<div className="mt-4 pt-4 border-t border-gray-100">
-										<div className="text-xs text-gray-500 mb-2">
-											Install via:
-										</div>
-										<div className="text-xs font-mono bg-gray-50 p-2 rounded">
-											{tool.type === "plugin" ? (
-												<span className="text-gray-600">
-													devex plugin install {tool.name}
-												</span>
-											) : (
-												<span className="text-gray-600">
-													{tool.platforms[platforms[0]]?.installMethod ||
-														"auto-detect"}
-												</span>
-											)}
-										</div>
-									</div>
-								)}
-							</div>
-						);
-					})}
+					{tools.map((tool) => (
+						<ToolCard key={tool.name} tool={tool} />
+					))}
 				</div>
 			)}
 

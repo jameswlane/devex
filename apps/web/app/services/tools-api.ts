@@ -1,10 +1,5 @@
 import type { Tool } from "../generated/types";
-import {
-	AppError,
-	formatErrorMessage,
-	logError,
-	ValidationError,
-} from "../utils/error-handling";
+import { ValidationError } from "../utils/error-handling";
 import { validateAndSanitizeSearch } from "./search-sanitization";
 
 // Configuration for API behavior
