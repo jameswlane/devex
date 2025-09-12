@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-eopkg",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Eopkg plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

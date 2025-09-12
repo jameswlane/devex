@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-flatpak",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Flatpak plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
