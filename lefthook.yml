@@ -196,9 +196,9 @@ pre-push:
         }
 commands: &commands
   turborepo-lint-cli:
-    run: pnpm lint --filter=cli
+    run: pnpm lint --filter=@devex/cli
   turborepo-test-cli:
-    run: pnpm test --filter=cli
+    run: pnpm test --filter=@devex/cli
   format-all:
     run: pnpm exec biome check --write .
   lint-web:

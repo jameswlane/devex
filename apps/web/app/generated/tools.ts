@@ -1,8 +1,8 @@
 // Generated file - do not edit manually
-// Last generated: 2025-09-12T03:16:22.519Z
+// Last generated: 2025-09-12T04:40:52.440Z
 
-import toolsData from './tools.json';
-import type { Tool, ToolsData } from './types';
+import toolsData from "./tools.json";
+import type { Tool, ToolsData } from "./types";
 
 export const tools: Tool[] = toolsData.tools as Tool[];
 export const categories: string[] = toolsData.categories;

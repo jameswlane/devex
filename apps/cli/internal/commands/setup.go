@@ -206,7 +206,6 @@ const (
 // Constants for setup configuration
 const (
 	// UI Constants
-	ProgressBarWidth     = 50
 	WaitActivityInterval = 100 // milliseconds
 
 	// Default selections for automated setup
@@ -374,7 +373,7 @@ func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.
 		selectedLangs:     make(map[int]bool),
 		selectedDBs:       make(map[int]bool),
 		selectedApps:      make(map[int]bool),
-		installErrors:     make([]string, 0),
+		installErrors:     make([]string, 0, MaxErrorMessages),
 		hasErrors:         false,
 		shellSwitched:     false,
 		hasDesktop:        plat.DesktopEnv != "none",
@@ -540,7 +539,7 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.installStatus = msg.Status
 		m.progress = msg.Progress
 		if msg.Error != nil {
-			m.installErrors = append(m.installErrors, msg.Error.Error())
+			m.installErrors = addErrorStringSafe(m.installErrors, msg.Error.Error())
 			m.hasErrors = true
 		}
 		return m, nil
@@ -552,7 +551,7 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.Errors) > 0 {
 			m.hasErrors = true
 			for _, err := range msg.Errors {
-				m.installErrors = append(m.installErrors, err.Error())
+				m.installErrors = addErrorStringSafe(m.installErrors, err.Error())
 			}
 			log.Warn("Plugin installation completed with errors", "errors", len(msg.Errors))
 		} else {
@@ -1243,19 +1242,39 @@ type PluginInstallCompleteMsg struct {
 	Errors []error
 }
 
+// addErrorSafe safely adds an error to the slice with bounds checking to prevent unbounded memory growth
+func addErrorSafe(errors []error, newError error) []error {
+	if len(errors) >= MaxErrorMessages {
+		// Replace the last error with a truncation notice
+		errors[MaxErrorMessages-1] = fmt.Errorf("error collection truncated at %d errors (last: %w)", MaxErrorMessages, newError)
+		return errors
+	}
+	return append(errors, newError)
+}
+
+// addErrorStringSafe safely adds an error string to the slice with bounds checking
+func addErrorStringSafe(errors []string, newError string) []string {
+	if len(errors) >= MaxErrorMessages {
+		// Replace the last error with a truncation notice
+		errors[MaxErrorMessages-1] = fmt.Sprintf("error collection truncated at %d errors (last: %s)", MaxErrorMessages, newError)
+		return errors
+	}
+	return append(errors, newError)
+}
+
 func (m *SetupModel) startPluginInstallation() tea.Cmd {
 	return func() tea.Msg {
 		// Mark installation as in progress using atomic operation
 		atomic.StoreInt32(&m.pluginsInstalling, 1)
 
-		// Collect all errors instead of swallowing them
-		var allErrors []error
+		// Pre-allocate error collection with bounds checking for memory safety
+		allErrors := make([]error, 0, MaxErrorMessages)
 
 		// Initialize plugin bootstrap with download enabled
 		pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
 		if err != nil {
 			log.Error("Failed to initialize plugin system", err)
-			allErrors = append(allErrors, fmt.Errorf("failed to initialize plugin system: %w", err))
+			allErrors = addErrorSafe(allErrors, fmt.Errorf("failed to initialize plugin system: %w", err))
 			return PluginInstallCompleteMsg{
 				Errors: allErrors,
 			}
@@ -1270,11 +1289,11 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 		// Initialize plugins and collect any errors
 		if err := pluginBootstrap.Initialize(ctx); err != nil {
 			log.Error("Failed to bootstrap plugins", err)
-			allErrors = append(allErrors, fmt.Errorf("plugin initialization failed: %w", err))
+			allErrors = addErrorSafe(allErrors, fmt.Errorf("plugin initialization failed: %w", err))
 
 			// Check for context cancellation/timeout
 			if ctx.Err() != nil {
-				allErrors = append(allErrors, fmt.Errorf("plugin installation timed out: %w", ctx.Err()))
+				allErrors = addErrorSafe(allErrors, fmt.Errorf("plugin installation timed out: %w", ctx.Err()))
 			}
 			// Continue to verify what plugins were installed despite errors
 		}
@@ -1299,7 +1318,7 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 			} else {
 				errMsg := fmt.Sprintf("Plugin %s failed to install or is not available", requiredPlugin)
 				log.Warn(errMsg)
-				allErrors = append(allErrors, fmt.Errorf("%s", errMsg))
+				allErrors = addErrorSafe(allErrors, fmt.Errorf("%s", errMsg))
 			}
 		}
 
@@ -1354,7 +1373,6 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			}
 			if len(errors) > 0 {
 				err := fmt.Errorf("installation failures: %s", strings.Join(errors, "; "))
-				_ = err
 				log.Error("Direct installer also failed", err)
 				fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
 				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
@@ -1562,7 +1580,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			DefaultPostgreSQLIndex: true, // PostgreSQL
 		},
 		selectedApps:  make(map[int]bool), // No desktop apps for automated setup
-		installErrors: make([]string, 0),
+		installErrors: make([]string, 0, MaxErrorMessages),
 		hasErrors:     false,
 		shellSwitched: false,
 		repo:          repo,
