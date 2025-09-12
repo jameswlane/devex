@@ -118,8 +118,7 @@ func executeGuidedSetup(ctx context.Context, verbose, dryRun, nonInteractive boo
 
 // runInteractiveSetup handles the interactive TUI setup process
 func runInteractiveSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {
-	// TODO: Update runGuidedSetup to accept context parameter
-	runGuidedSetup(repo, settings) //nolint:contextcheck
+	runGuidedSetup(ctx, repo, settings)
 	return nil
 }
 
@@ -314,47 +313,79 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 	return themeNames
 }
 
-// detectRequiredPlugins detects which DevEx plugins are needed for the current system
-func detectRequiredPlugins(plat platform.DetectionResult) []string {
-	var plugins []string
+// PlatformPluginMapping defines the mapping between platform characteristics and required plugins
+type PlatformPluginMapping struct {
+	OS              string
+	Distribution    string
+	DesktopEnv      string
+	RequiredPlugins []string
+}
 
-	// Package manager plugin based on OS/distribution
-	switch plat.OS {
-	case "linux":
-		switch plat.Distribution {
-		case "debian", "ubuntu":
-			plugins = append(plugins, "package-manager-apt")
-		case "fedora", "rhel", "centos":
-			plugins = append(plugins, "package-manager-dnf")
-		case "arch", "manjaro":
-			plugins = append(plugins, "package-manager-pacman")
-		case "opensuse", "suse":
-			plugins = append(plugins, "package-manager-zypper")
+// platformPluginMappings defines the configuration for platform-specific plugin requirements
+var platformPluginMappings = []PlatformPluginMapping{
+	// Linux distributions
+	{OS: "linux", Distribution: "debian", RequiredPlugins: []string{"package-manager-apt", "tool-shell"}},
+	{OS: "linux", Distribution: "ubuntu", RequiredPlugins: []string{"package-manager-apt", "tool-shell"}},
+	{OS: "linux", Distribution: "fedora", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
+	{OS: "linux", Distribution: "rhel", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
+	{OS: "linux", Distribution: "centos", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
+	{OS: "linux", Distribution: "arch", RequiredPlugins: []string{"package-manager-pacman", "tool-shell"}},
+	{OS: "linux", Distribution: "manjaro", RequiredPlugins: []string{"package-manager-pacman", "tool-shell"}},
+	{OS: "linux", Distribution: "opensuse", RequiredPlugins: []string{"package-manager-zypper", "tool-shell"}},
+	{OS: "linux", Distribution: "suse", RequiredPlugins: []string{"package-manager-zypper", "tool-shell"}},
+
+	// macOS
+	{OS: "darwin", RequiredPlugins: []string{"package-manager-homebrew", "tool-shell"}},
+
+	// Windows
+	{OS: "windows", RequiredPlugins: []string{"package-manager-winget", "tool-shell"}},
+
+	// Desktop environments
+	{DesktopEnv: "gnome", RequiredPlugins: []string{"desktop-gnome"}},
+	{DesktopEnv: "kde", RequiredPlugins: []string{"desktop-kde"}},
+	{DesktopEnv: "plasma", RequiredPlugins: []string{"desktop-kde"}},
+	{DesktopEnv: "xfce", RequiredPlugins: []string{"desktop-xfce"}},
+}
+
+// DetectRequiredPlugins detects which DevEx plugins are needed for the current system
+func DetectRequiredPlugins(plat platform.DetectionResult) []string {
+	var plugins []string
+	pluginSet := make(map[string]bool) // Use map to avoid duplicates
+
+	// Check all platform mappings
+	for _, mapping := range platformPluginMappings {
+		// Check if this mapping matches the current platform
+		osMatch := mapping.OS == "" || mapping.OS == plat.OS
+		distMatch := mapping.Distribution == "" || mapping.Distribution == plat.Distribution
+		desktopMatch := mapping.DesktopEnv == "" ||
+			(mapping.DesktopEnv == plat.DesktopEnv && plat.DesktopEnv != "none" && plat.DesktopEnv != "unknown")
+
+		if osMatch && distMatch && desktopMatch {
+			// Add all required plugins from this mapping
+			for _, plugin := range mapping.RequiredPlugins {
+				if !pluginSet[plugin] {
+					pluginSet[plugin] = true
+					plugins = append(plugins, plugin)
+				}
+			}
 		}
-	case "darwin":
-		plugins = append(plugins, "package-manager-homebrew")
-	case "windows":
-		plugins = append(plugins, "package-manager-winget")
 	}
 
-	// Shell plugin (always needed for shell configuration)
-	plugins = append(plugins, "tool-shell")
-
-	// Desktop environment plugin
-	if plat.DesktopEnv != "none" && plat.DesktopEnv != "unknown" {
-		switch plat.DesktopEnv {
-		case "gnome":
-			plugins = append(plugins, "desktop-gnome")
-		case "kde", "plasma":
-			plugins = append(plugins, "desktop-kde")
-		case "xfce":
-			plugins = append(plugins, "desktop-xfce")
-		default:
-			// Generic desktop plugin for other environments
+	// Add fallback desktop themes plugin for unknown desktop environments
+	if plat.DesktopEnv != "none" && plat.DesktopEnv != "unknown" && plat.DesktopEnv != "" {
+		hasDesktopPlugin := false
+		for _, plugin := range plugins {
+			if strings.HasPrefix(plugin, "desktop-") {
+				hasDesktopPlugin = true
+				break
+			}
+		}
+		if !hasDesktopPlugin && !pluginSet["desktop-themes"] {
 			plugins = append(plugins, "desktop-themes")
 		}
 	}
 
+	log.Debug("Detected required plugins", "platform", plat, "plugins", plugins)
 	return plugins
 }
 
@@ -396,7 +427,7 @@ func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string
 	return languageNames
 }
 
-func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings) {
+func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
 
@@ -405,7 +436,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	// Check if we should run in interactive mode (default: yes)
 	if !isInteractiveMode() {
 		log.Info("Non-interactive mode requested, running automated setup")
-		if err := runAutomatedSetup(repo, settings); err != nil {
+		if err := runAutomatedSetupWithContext(ctx, false, repo, settings); err != nil {
 			log.Error("Automated setup failed", err)
 			os.Exit(1) // or handle appropriately
 		}
@@ -433,7 +464,7 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		detectedPlatform:  plat,
 		repo:              repo,
 		settings:          settings,
-		requiredPlugins:   detectRequiredPlugins(plat), // Detect plugins needed
+		requiredPlugins:   DetectRequiredPlugins(plat), // Detect plugins needed
 		pluginsInstalling: false,
 		pluginsInstalled:  false,
 		confirmPlugins:    false,
@@ -457,8 +488,8 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 		model.desktopApps = model.getAvailableDesktopApps()
 	}
 
-	// Start the Bubble Tea program
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	// Start the Bubble Tea program with context
+	program := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx))
 	finalModel, err := program.Run()
 	if err != nil {
 		log.Error("Error running guided setup", err)
@@ -689,13 +720,14 @@ func (m *SetupModel) View() string {
 	case StepPluginInstall:
 		s = titleStyle.Render("📦 Installing DevEx Plugins")
 		s += "\n\n"
-		if m.pluginsInstalling {
+		switch {
+		case m.pluginsInstalling:
 			s += "Downloading and installing plugins...\n\n"
 			s += m.renderProgressBar()
 			s += "\n\n"
 			s += fmt.Sprintf("Status: %s\n", m.installStatus)
 			s += "\nThis may take a moment. Please wait..."
-		} else if m.pluginsInstalled {
+		case m.pluginsInstalled:
 			s += selectedStyle.Render("✓ All plugins installed successfully!")
 			s += "\n\n"
 			s += "Installed plugins:\n"
@@ -704,7 +736,7 @@ func (m *SetupModel) View() string {
 			}
 			s += "\n"
 			s += "Press Enter to continue with setup."
-		} else if m.hasErrors {
+		case m.hasErrors:
 			s += errorStyle.Render("⚠️ Some plugins failed to install")
 			s += "\n\n"
 			for _, err := range m.installErrors {
@@ -1303,12 +1335,20 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 			}
 		}
 
-		// Initialize the plugin system (this will download required plugins)
-		ctx := context.Background()
-		log.Info("Initializing plugin system with required plugins", "plugins", m.requiredPlugins)
+		// Create context with timeout for plugin installation
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		log.Info("Initializing plugin system with required plugins", "plugins", m.requiredPlugins, "timeout", "5m")
 
 		if err := pluginBootstrap.Initialize(ctx); err != nil {
 			log.Error("Failed to bootstrap plugins", err)
+			// Check for context cancellation/timeout
+			if ctx.Err() != nil {
+				return PluginInstallCompleteMsg{
+					Errors: []error{fmt.Errorf("plugin installation timed out or was cancelled: %w", ctx.Err())},
+				}
+			}
 			// Don't fail completely, some plugins might have installed
 		}
 
@@ -1333,7 +1373,7 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 			if !found {
 				errMsg := fmt.Sprintf("Plugin %s failed to install or is not available", requiredPlugin)
 				log.Warn(errMsg)
-				errors = append(errors, fmt.Errorf(errMsg))
+				errors = append(errors, fmt.Errorf("%s", errMsg))
 			}
 		}
 
@@ -1368,6 +1408,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 				fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
 				fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
 				fmt.Printf("Error: %v\n", r)
+				// Cannot return from defer function - the panic recovery is for logging only
 			}
 		}()
 
