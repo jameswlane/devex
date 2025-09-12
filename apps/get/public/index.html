@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>DevEx Installer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0b0b0f" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>" />
+    <style>
+        :root { --bg: #0b0b0f; --fg: #cbd5e1; --muted: #64748b; }
+        html,body { height: 100%; margin: 0; }
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font: 15px/1.6 system-ui, sans-serif;
+        }
+        main { text-align: center; }
+        a { color: var(--fg); text-decoration: underline; }
+        .muted { margin-top: 6px; font-size: 13px; color: var(--muted); }
+    </style>
+    <script>
+        // Suggest script based on platform
+        document.addEventListener("DOMContentLoaded", () => {
+            const isWindows = navigator.userAgent.includes("Windows");
+            const target = isWindows ? "/install.ps1" : "/install";
+            document.getElementById("link").href = target;
+            document.getElementById("link").textContent = target;
+        });
+    </script>
+</head>
+<body>
+<main>
+    <div>DevEx installer host</div>
+    <div class="muted"><a id="link" href="#">Choose installer</a></div>
+</main>
+</body>
+</html>
