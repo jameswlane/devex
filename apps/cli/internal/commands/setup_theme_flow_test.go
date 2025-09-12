@@ -54,7 +54,7 @@ func TestThemeSelectionFlow(t *testing.T) {
 			currentStep  int
 			expectedStep int
 		}{
-			{"Welcome to Desktop Apps", StepWelcome, StepDesktopApps},
+			{"Welcome to Desktop Apps", StepSystemOverview, StepDesktopApps},
 			{"Languages to Databases", StepLanguages, StepDatabases},
 			{"Databases to Shell", StepDatabases, StepShell},
 			{"Shell to Theme", StepShell, StepTheme},
@@ -224,7 +224,7 @@ func TestThemeStepNavigation(t *testing.T) {
 
 	t.Run("nextStep should follow correct sequence", func(t *testing.T) {
 		model := &SetupModel{
-			step:             StepWelcome,
+			step:             StepSystemOverview,
 			hasDesktop:       true,
 			desktopApps:      []string{"Test App"},
 			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
@@ -269,13 +269,13 @@ func TestThemeStepNavigation(t *testing.T) {
 
 		// Test the reverse progression through steps
 		expectedReverseSequence := []int{
-			StepGitConfig,   // From Confirmation
-			StepTheme,       // From GitConfig
-			StepShell,       // From Theme
-			StepDatabases,   // From Shell
-			StepLanguages,   // From Databases
-			StepDesktopApps, // From Languages
-			StepWelcome,     // From DesktopApps
+			StepGitConfig,      // From Confirmation
+			StepTheme,          // From GitConfig
+			StepShell,          // From Theme
+			StepDatabases,      // From Shell
+			StepLanguages,      // From Databases
+			StepDesktopApps,    // From Languages
+			StepSystemOverview, // From DesktopApps
 		}
 
 		for i, expectedStep := range expectedReverseSequence {
