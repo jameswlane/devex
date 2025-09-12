@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -180,12 +181,18 @@ type SetupModel struct {
 	detectedPlatform platform.DetectionResult
 	repo             types.Repository
 	settings         config.CrossPlatformSettings
+	// New fields for system overview and plugin management
+	requiredPlugins   []string
+	pluginsInstalling bool
+	pluginsInstalled  bool
+	confirmPlugins    bool
 }
 
 // setupSteps defines the guided setup process
 const (
-	StepWelcome     = iota
-	StepDesktopApps // Only if desktop detected & non-default apps available
+	StepSystemOverview = iota
+	StepPluginInstall  // Install required plugins first
+	StepDesktopApps    // Only if desktop detected & non-default apps available
 	StepLanguages
 	StepDatabases
 	StepShell     // Only for compatible systems (Linux/macOS)
@@ -307,6 +314,50 @@ func getAvailableThemeNames(settings config.CrossPlatformSettings) []string {
 	return themeNames
 }
 
+// detectRequiredPlugins detects which DevEx plugins are needed for the current system
+func detectRequiredPlugins(plat platform.DetectionResult) []string {
+	var plugins []string
+
+	// Package manager plugin based on OS/distribution
+	switch plat.OS {
+	case "linux":
+		switch plat.Distribution {
+		case "debian", "ubuntu":
+			plugins = append(plugins, "package-manager-apt")
+		case "fedora", "rhel", "centos":
+			plugins = append(plugins, "package-manager-dnf")
+		case "arch", "manjaro":
+			plugins = append(plugins, "package-manager-pacman")
+		case "opensuse", "suse":
+			plugins = append(plugins, "package-manager-zypper")
+		}
+	case "darwin":
+		plugins = append(plugins, "package-manager-homebrew")
+	case "windows":
+		plugins = append(plugins, "package-manager-winget")
+	}
+
+	// Shell plugin (always needed for shell configuration)
+	plugins = append(plugins, "tool-shell")
+
+	// Desktop environment plugin
+	if plat.DesktopEnv != "none" && plat.DesktopEnv != "unknown" {
+		switch plat.DesktopEnv {
+		case "gnome":
+			plugins = append(plugins, "desktop-gnome")
+		case "kde", "plasma":
+			plugins = append(plugins, "desktop-kde")
+		case "xfce":
+			plugins = append(plugins, "desktop-xfce")
+		default:
+			// Generic desktop plugin for other environments
+			plugins = append(plugins, "desktop-themes")
+		}
+	}
+
+	return plugins
+}
+
 // convertThemesToInterface converts []types.Theme to []interface{} for GetAvailableThemes
 func convertThemesToInterface(themes []types.Theme) []interface{} {
 	result := make([]interface{}, len(themes))
@@ -370,18 +421,22 @@ func runGuidedSetup(repo types.Repository, settings config.CrossPlatformSettings
 	// 2. Single-pass filtering with early termination (setup.go:1321-1332)
 	// 3. Cached results to avoid repeated computations during UI navigation
 	model := &SetupModel{
-		step:             StepWelcome,
-		selectedShell:    DefaultShellIndex, // Default to zsh (first option)
-		selectedLangs:    make(map[int]bool),
-		selectedDBs:      make(map[int]bool),
-		selectedApps:     make(map[int]bool),
-		installErrors:    make([]string, 0),
-		hasErrors:        false,
-		shellSwitched:    false,
-		hasDesktop:       plat.DesktopEnv != "none",
-		detectedPlatform: plat,
-		repo:             repo,
-		settings:         settings,
+		step:              StepSystemOverview, // Start with system overview
+		selectedShell:     DefaultShellIndex,  // Default to zsh (first option)
+		selectedLangs:     make(map[int]bool),
+		selectedDBs:       make(map[int]bool),
+		selectedApps:      make(map[int]bool),
+		installErrors:     make([]string, 0),
+		hasErrors:         false,
+		shellSwitched:     false,
+		hasDesktop:        plat.DesktopEnv != "none",
+		detectedPlatform:  plat,
+		repo:              repo,
+		settings:          settings,
+		requiredPlugins:   detectRequiredPlugins(plat), // Detect plugins needed
+		pluginsInstalling: false,
+		pluginsInstalled:  false,
+		confirmPlugins:    false,
 		shells: []string{
 			"zsh",
 			"bash",
@@ -533,6 +588,28 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.prevStep()
 		}
 
+	case PluginInstallMsg:
+		m.installStatus = msg.Status
+		m.progress = msg.Progress
+		if msg.Error != nil {
+			m.installErrors = append(m.installErrors, msg.Error.Error())
+			m.hasErrors = true
+		}
+		return m, nil
+
+	case PluginInstallCompleteMsg:
+		m.pluginsInstalling = false
+		m.pluginsInstalled = true
+		if len(msg.Errors) > 0 {
+			for _, err := range msg.Errors {
+				m.installErrors = append(m.installErrors, err.Error())
+			}
+			m.hasErrors = true
+		}
+		// Clear progress
+		m.progress = 1.0
+		return m, nil
+
 	case InstallProgressMsg:
 		m.installStatus = msg.Status
 		m.progress = msg.Progress
@@ -582,19 +659,61 @@ func (m *SetupModel) View() string {
 		Foreground(lipgloss.Color("#EF4444"))
 
 	switch m.step {
-	case StepWelcome:
+	case StepSystemOverview:
 		s = titleStyle.Render("🚀 Welcome to DevEx Setup!")
 		s += "\n\n"
-		s += subtitleStyle.Render("Let's set up your development environment with the tools you need.")
+		s += subtitleStyle.Render("Let's set up your development environment.")
 		s += "\n\n"
-		s += "This guided setup will help you install:\n"
-		s += "  • Shell configuration and tools\n"
-		s += "  • Programming languages and tools\n"
-		s += "  • Databases (via Docker)\n"
-		s += "  • Essential development applications\n"
-		s += "  • Desktop applications (if applicable)\n"
+		s += "System Information:\n"
+		s += fmt.Sprintf("  • OS: %s\n", m.detectedPlatform.OS)
+		if m.detectedPlatform.Distribution != "" {
+			s += fmt.Sprintf("  • Distribution: %s\n", m.detectedPlatform.Distribution)
+		}
+		if m.hasDesktop {
+			s += fmt.Sprintf("  • Desktop: %s\n", m.detectedPlatform.DesktopEnv)
+		}
+		s += fmt.Sprintf("  • Architecture: %s\n", m.detectedPlatform.Architecture)
+		s += "\n"
+		s += "Required DevEx plugins:\n"
+		for _, plugin := range m.requiredPlugins {
+			s += fmt.Sprintf("  • %s\n", plugin)
+		}
+		s += "\n"
+		if !m.confirmPlugins {
+			s += "Press Enter to download and install plugins, or 'q' to quit."
+		} else {
+			s += selectedStyle.Render("✓ Ready to proceed")
+			s += "\n\nPress Enter to continue."
+		}
+
+	case StepPluginInstall:
+		s = titleStyle.Render("📦 Installing DevEx Plugins")
 		s += "\n\n"
-		s += "Press Enter to continue, or 'q' to quit."
+		if m.pluginsInstalling {
+			s += "Downloading and installing plugins...\n\n"
+			s += m.renderProgressBar()
+			s += "\n\n"
+			s += fmt.Sprintf("Status: %s\n", m.installStatus)
+			s += "\nThis may take a moment. Please wait..."
+		} else if m.pluginsInstalled {
+			s += selectedStyle.Render("✓ All plugins installed successfully!")
+			s += "\n\n"
+			s += "Installed plugins:\n"
+			for _, plugin := range m.requiredPlugins {
+				s += fmt.Sprintf("  ✓ %s\n", plugin)
+			}
+			s += "\n"
+			s += "Press Enter to continue with setup."
+		} else if m.hasErrors {
+			s += errorStyle.Render("⚠️ Some plugins failed to install")
+			s += "\n\n"
+			for _, err := range m.installErrors {
+				s += errorStyle.Render(fmt.Sprintf("  • %s\n", err))
+			}
+			s += "\n"
+			s += "You may continue with limited functionality.\n"
+			s += "Press Enter to continue, or 'q' to quit."
+		}
 
 	case StepDesktopApps:
 		if len(m.desktopApps) == 0 {
@@ -627,7 +746,12 @@ func (m *SetupModel) View() string {
 	case StepLanguages:
 		s = titleStyle.Render("📝 Select Programming Languages")
 		s += "\n\n"
-		s += subtitleStyle.Render("Choose the programming languages you want to install (via mise):")
+		s += subtitleStyle.Render("Choose the programming languages you want to install:")
+		s += "\n"
+		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Italic(true)
+		s += infoStyle.Render("ℹ️  Languages will be managed using mise (https://mise.jdx.dev)")
+		s += "\n"
+		s += infoStyle.Render("   Mise will be installed automatically if not present")
 		s += "\n\n"
 
 		for i, lang := range m.languages {
@@ -650,7 +774,12 @@ func (m *SetupModel) View() string {
 	case StepDatabases:
 		s = titleStyle.Render("🗄️  Select Databases")
 		s += "\n\n"
-		s += subtitleStyle.Render("Choose the databases you want to install (via Docker):")
+		s += subtitleStyle.Render("Choose the databases you want to install:")
+		s += "\n"
+		infoStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280")).Italic(true)
+		s += infoStyle.Render("ℹ️  Databases will run as Docker containers")
+		s += "\n"
+		s += infoStyle.Render("   Docker will be installed automatically if not present")
 		s += "\n\n"
 
 		for i, db := range m.databases {
@@ -891,8 +1020,17 @@ func (m *SetupModel) View() string {
 // Helper methods for handling user input and navigation
 func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	switch m.step {
-	case StepWelcome:
+	case StepSystemOverview:
+		if !m.confirmPlugins {
+			m.confirmPlugins = true
+			return m, nil
+		}
 		return m.nextStep()
+	case StepPluginInstall:
+		if m.pluginsInstalled || m.hasErrors {
+			return m.nextStep()
+		}
+		return m, nil
 	case StepDesktopApps, StepLanguages, StepDatabases, StepShell:
 		return m.nextStep()
 	case StepTheme:
@@ -1001,7 +1139,11 @@ func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
-	case StepWelcome:
+	case StepSystemOverview:
+		m.step = StepPluginInstall
+		// Start plugin installation
+		return m, m.startPluginInstallation()
+	case StepPluginInstall:
 		// Check if we have desktop apps to show first
 		if m.hasDesktop && len(m.desktopApps) > 0 {
 			m.step = StepDesktopApps
@@ -1048,13 +1190,16 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	m.cursor = 0
 	switch m.step {
+	case StepPluginInstall:
+		m.step = StepSystemOverview
+		m.confirmPlugins = false
 	case StepDesktopApps:
-		m.step = StepWelcome
+		m.step = StepPluginInstall
 	case StepLanguages:
 		if m.hasDesktop && len(m.desktopApps) > 0 {
 			m.step = StepDesktopApps
 		} else {
-			m.step = StepWelcome
+			m.step = StepPluginInstall
 		}
 	case StepDatabases:
 		m.step = StepLanguages
@@ -1131,6 +1276,72 @@ type InstallCompleteMsg struct{}
 
 // InstallQuitMsg signals that the setup should exit after installation
 type InstallQuitMsg struct{}
+
+// PluginInstallMsg represents a plugin installation progress update
+type PluginInstallMsg struct {
+	Status   string
+	Progress float64
+	Error    error
+}
+
+// PluginInstallCompleteMsg indicates plugin installation is complete
+type PluginInstallCompleteMsg struct {
+	Errors []error
+}
+
+func (m *SetupModel) startPluginInstallation() tea.Cmd {
+	return func() tea.Msg {
+		// Mark installation as in progress
+		m.pluginsInstalling = true
+
+		// Initialize plugin bootstrap with download enabled
+		pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+		if err != nil {
+			log.Error("Failed to initialize plugin system", err)
+			return PluginInstallCompleteMsg{
+				Errors: []error{fmt.Errorf("failed to initialize plugin system: %w", err)},
+			}
+		}
+
+		// Initialize the plugin system (this will download required plugins)
+		ctx := context.Background()
+		log.Info("Initializing plugin system with required plugins", "plugins", m.requiredPlugins)
+
+		if err := pluginBootstrap.Initialize(ctx); err != nil {
+			log.Error("Failed to bootstrap plugins", err)
+			// Don't fail completely, some plugins might have installed
+		}
+
+		// The Initialize function already downloads required plugins based on platform detection
+		// Check which plugins were successfully installed
+		var errors []error
+		manager := pluginBootstrap.GetManager()
+		installedPlugins := manager.ListPlugins()
+
+		log.Info("Plugins installed", "count", len(installedPlugins))
+
+		// Check if each required plugin was installed
+		for _, requiredPlugin := range m.requiredPlugins {
+			found := false
+			for pluginName := range installedPlugins {
+				if pluginName == requiredPlugin {
+					found = true
+					log.Info("Plugin verified", "name", requiredPlugin)
+					break
+				}
+			}
+			if !found {
+				errMsg := fmt.Sprintf("Plugin %s failed to install or is not available", requiredPlugin)
+				log.Warn(errMsg)
+				errors = append(errors, fmt.Errorf(errMsg))
+			}
+		}
+
+		return PluginInstallCompleteMsg{
+			Errors: errors,
+		}
+	}
+}
 
 func (m *SetupModel) startInstallation() tea.Cmd {
 	return func() tea.Msg {
