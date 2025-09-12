@@ -1,7 +1,7 @@
 {
   "name": "@devex/desktop-lxqt",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "LXQt desktop environment configuration plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
