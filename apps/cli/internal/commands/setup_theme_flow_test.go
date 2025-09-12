@@ -54,7 +54,7 @@ func TestThemeSelectionFlow(t *testing.T) {
 			currentStep  int
 			expectedStep int
 		}{
-			{"Welcome to Desktop Apps", StepSystemOverview, StepDesktopApps},
+			{"SystemOverview to PluginInstall", StepSystemOverview, StepPluginInstall},
 			{"Languages to Databases", StepLanguages, StepDatabases},
 			{"Databases to Shell", StepDatabases, StepShell},
 			{"Shell to Theme", StepShell, StepTheme},
@@ -66,6 +66,11 @@ func TestThemeSelectionFlow(t *testing.T) {
 				model.step = tc.currentStep
 				model.hasDesktop = true                  // Ensure desktop apps step is included
 				model.desktopApps = []string{"Test App"} // Ensure desktop apps are available
+
+				// For SystemOverview, we need confirmPlugins set first
+				if tc.currentStep == StepSystemOverview {
+					model.confirmPlugins = true
+				}
 
 				updatedModel, _ := model.handleEnter()
 
@@ -230,16 +235,18 @@ func TestThemeStepNavigation(t *testing.T) {
 			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
+			pluginsInstalled: 1, // Mark plugins as already installed for test
 		}
 
 		// Test the progression through steps
 		expectedSequence := []int{
-			StepDesktopApps, // From Welcome
-			StepLanguages,   // From DesktopApps
-			StepDatabases,   // From Languages
-			StepShell,       // From Databases
-			StepTheme,       // From Shell
-			StepGitConfig,   // From Theme
+			StepPluginInstall, // From SystemOverview
+			StepDesktopApps,   // From PluginInstall
+			StepLanguages,     // From DesktopApps
+			StepDatabases,     // From Languages
+			StepShell,         // From Databases
+			StepTheme,         // From Shell
+			StepGitConfig,     // From Theme
 		}
 
 		for i, expectedStep := range expectedSequence {
@@ -265,6 +272,7 @@ func TestThemeStepNavigation(t *testing.T) {
 			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
 			repo:             mocks.NewMockRepository(),
 			settings:         config.CrossPlatformSettings{},
+			pluginsInstalled: 1, // Mark plugins as already installed for test
 		}
 
 		// Test the reverse progression through steps
@@ -275,7 +283,8 @@ func TestThemeStepNavigation(t *testing.T) {
 			StepDatabases,      // From Shell
 			StepLanguages,      // From Databases
 			StepDesktopApps,    // From Languages
-			StepSystemOverview, // From DesktopApps
+			StepPluginInstall,  // From DesktopApps
+			StepSystemOverview, // From PluginInstall
 		}
 
 		for i, expectedStep := range expectedReverseSequence {
