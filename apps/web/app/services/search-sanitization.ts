@@ -1,16 +1,29 @@
 /**
  * Robust HTML sanitization and search term processing service
- * Handles edge cases like nested tags, malformed HTML, and injection attempts
+ * Uses DOMPurify for industry-standard XSS protection with server-side support
  */
+
+import DOMPurify from "dompurify";
+import { JSDOM } from "jsdom";
 
 interface SanitizationResult {
 	sanitized: string;
 	warnings: string[];
 }
 
+// Create server-side DOM for DOMPurify
+let serverPurify: typeof DOMPurify;
+if (typeof window === "undefined") {
+	const window = new JSDOM("").window;
+	serverPurify = DOMPurify(window);
+} else {
+	serverPurify = DOMPurify;
+}
+
 /**
- * Sanitizes HTML content with comprehensive edge case handling
- * Handles cases like: <scr<script>ipt>, nested tags, unclosed tags, etc.
+ * Sanitizes HTML content using DOMPurify with comprehensive security configuration
+ * Handles XSS vectors, malicious scripts, and unsafe attributes
+ * Works both client-side and server-side
  */
 export function sanitizeHtmlContent(input: string): SanitizationResult {
 	if (!input || typeof input !== "string") {
@@ -18,100 +31,52 @@ export function sanitizeHtmlContent(input: string): SanitizationResult {
 	}
 
 	const warnings: string[] = [];
-	const sanitized = input.toLowerCase();
-	let result = "";
-	const tagStack: string[] = [];
-	let i = 0;
 
-	// State tracking for robust parsing
-	let insideTag = false;
-	let currentTag = "";
-	let suspiciousPatterns = 0;
+	// Check for obviously malicious patterns before sanitization
+	const maliciousPatterns = [
+		/javascript:/i,
+		/data:text\/(html|javascript)/i,
+		/vbscript:/i,
+		/<script/i,
+		/<iframe/i,
+		/<object/i,
+		/<embed/i,
+		/on\w+=/i, // onclick, onload, etc.
+		/eval\(/i,
+	];
 
-	while (i < sanitized.length) {
-		const char = sanitized[i];
-		const nextChar = sanitized[i + 1];
-
-		// Detect suspicious nested tag patterns like <scr<script>ipt>
-		if (char === "<" && insideTag) {
-			suspiciousPatterns++;
-			warnings.push("Detected nested HTML tag attempt");
-			// Skip this character but don't reset insideTag
-			i++;
-			continue;
+	for (const pattern of maliciousPatterns) {
+		if (pattern.test(input)) {
+			warnings.push(
+				`Detected potentially malicious pattern: ${pattern.source}`,
+			);
 		}
-
-		if (char === "<") {
-			insideTag = true;
-			currentTag = "";
-			i++;
-			continue;
-		}
-
-		if (char === ">") {
-			if (insideTag) {
-				// Check for potentially dangerous tags
-				const dangerousTags = [
-					"script",
-					"iframe",
-					"object",
-					"embed",
-					"form",
-					"input",
-					"style",
-				];
-				if (dangerousTags.some((tag) => currentTag.includes(tag))) {
-					warnings.push(`Blocked potentially dangerous tag: ${currentTag}`);
-				}
-
-				insideTag = false;
-				currentTag = "";
-			}
-			i++;
-			continue;
-		}
-
-		if (insideTag) {
-			currentTag += char;
-			i++;
-			continue;
-		}
-
-		// Only process characters outside of HTML tags
-		if (!insideTag) {
-			// Use character code checks to avoid regex vulnerabilities
-			const code = char.charCodeAt(0);
-			const isAlphanumeric =
-				(code >= 48 && code <= 57) || // 0-9
-				(code >= 65 && code <= 90) || // A-Z
-				(code >= 97 && code <= 122); // a-z
-			const isWhitespace = char === " " || char === "\t" || char === "\n";
-			const isHyphen = char === "-";
-			const isUnderscore = char === "_";
-			const isDot = char === ".";
-
-			if (isAlphanumeric || isWhitespace || isHyphen || isUnderscore || isDot) {
-				result += char;
-			}
-		}
-
-		i++;
 	}
 
-	// Check for unclosed tags
-	if (insideTag) {
-		warnings.push("Detected unclosed HTML tag");
-	}
+	// Configure DOMPurify for maximum security - strip all HTML tags but keep text content
+	const cleanHtml = serverPurify.sanitize(input, {
+		// Strip all HTML tags but keep text content
+		ALLOWED_TAGS: [],
+		ALLOWED_ATTR: [],
+		// Keep content when tags are removed - this is crucial for text extraction
+		KEEP_CONTENT: true,
+		// Prevent DOM clobbering attacks
+		SANITIZE_DOM: true,
+		SANITIZE_NAMED_PROPS: true,
+		// Safe for templates - handles template strings safely
+		SAFE_FOR_TEMPLATES: true,
+		// Return clean text string
+		RETURN_DOM: false,
+		RETURN_DOM_FRAGMENT: false,
+	});
 
-	// Warn about suspicious patterns
-	if (suspiciousPatterns > 0) {
-		warnings.push(
-			`Detected ${suspiciousPatterns} suspicious HTML injection attempts`,
-		);
+	// Check if DOMPurify removed anything significant
+	if (cleanHtml.length < input.length * 0.5 && input.length > 10) {
+		warnings.push("Significant content was removed during sanitization");
 	}
 
 	return {
-		sanitized: result.trim(),
+		sanitized: cleanHtml.trim(),
 		warnings,
 	};
 }
@@ -177,8 +142,30 @@ export function validateAndSanitizeSearch(
 	warnings.push(...htmlWarnings);
 
 	// Additional security: limit consecutive special characters
-	const consecutiveSpecialChars = sanitized.match(/[^\w\s-]{3,}/g);
-	if (consecutiveSpecialChars) {
+	// Use character-based approach to prevent ReDoS vulnerabilities
+	const hasConsecutiveSpecialChars = (str: string): boolean => {
+		let consecutiveCount = 0;
+		for (let i = 0; i < str.length; i++) {
+			const char = str[i];
+			const code = char.charCodeAt(0);
+			const isAlphanumeric =
+				(code >= 48 && code <= 57) || // 0-9
+				(code >= 65 && code <= 90) || // A-Z
+				(code >= 97 && code <= 122); // a-z
+			const isWhitespace = char === " " || char === "\t" || char === "\n";
+			const isHyphen = char === "-";
+
+			if (!isAlphanumeric && !isWhitespace && !isHyphen) {
+				consecutiveCount++;
+				if (consecutiveCount >= 3) return true;
+			} else {
+				consecutiveCount = 0;
+			}
+		}
+		return false;
+	};
+
+	if (hasConsecutiveSpecialChars(sanitized)) {
 		warnings.push("Detected consecutive special characters");
 	}
 
