@@ -8,7 +8,12 @@ import {
 	ValidationError,
 } from "../../utils/error-handling";
 
-const TOOLS_PER_PAGE = 24;
+// Configuration for API behavior
+const API_CONFIG = {
+	DEFAULT_TOOLS_PER_PAGE: 24,
+	MAX_TOOLS_PER_PAGE: 100,
+	MIN_TOOLS_PER_PAGE: 1,
+} as const;
 
 interface ToolsQuery {
 	search?: string;
@@ -28,13 +33,17 @@ export async function GET(request: NextRequest) {
 		platform: searchParams.get("platform") || undefined,
 		type: searchParams.get("type") || undefined,
 		page: searchParams.get("page") || "1",
-		limit: searchParams.get("limit") || TOOLS_PER_PAGE.toString(),
+		limit:
+			searchParams.get("limit") || API_CONFIG.DEFAULT_TOOLS_PER_PAGE.toString(),
 	};
 
 	try {
 		// Validate query parameters
 		const pageNum = parseInt(query.page || "1", 10);
-		const limitNum = parseInt(query.limit || TOOLS_PER_PAGE.toString(), 10);
+		const limitNum = parseInt(
+			query.limit || API_CONFIG.DEFAULT_TOOLS_PER_PAGE.toString(),
+			10,
+		);
 
 		if (Number.isNaN(pageNum) || pageNum < 1) {
 			throw new ValidationError("Page must be a positive integer", {
@@ -42,10 +51,17 @@ export async function GET(request: NextRequest) {
 			});
 		}
 
-		if (Number.isNaN(limitNum) || limitNum < 1 || limitNum > 100) {
-			throw new ValidationError("Limit must be between 1 and 100", {
-				limit: query.limit,
-			});
+		if (
+			Number.isNaN(limitNum) ||
+			limitNum < API_CONFIG.MIN_TOOLS_PER_PAGE ||
+			limitNum > API_CONFIG.MAX_TOOLS_PER_PAGE
+		) {
+			throw new ValidationError(
+				`Limit must be between ${API_CONFIG.MIN_TOOLS_PER_PAGE} and ${API_CONFIG.MAX_TOOLS_PER_PAGE}`,
+				{
+					limit: query.limit,
+				},
+			);
 		}
 
 		if (query.type && !["all", "application", "plugin"].includes(query.type)) {
@@ -66,7 +82,11 @@ export async function GET(request: NextRequest) {
 
 		// Apply filters
 		if (query.search) {
-			const searchTerm = query.search.toLowerCase();
+			const searchTerm = query.search
+				.toLowerCase()
+				.replace(/<[^>]*>/g, "") // Remove HTML/XML tags
+				.replace(/[^\w\s-]/g, "") // Keep only alphanumeric, whitespace, and hyphens
+				.trim();
 			filteredTools = filteredTools.filter(
 				(tool) =>
 					tool.name.toLowerCase().includes(searchTerm) ||
@@ -104,23 +124,32 @@ export async function GET(request: NextRequest) {
 		const paginatedTools = filteredTools.slice(startIndex, endIndex);
 		const totalPages = Math.ceil(filteredTools.length / limit);
 
-		return NextResponse.json({
-			tools: paginatedTools,
-			pagination: {
-				page,
-				limit,
-				total: filteredTools.length,
-				totalPages,
-				hasNext: page < totalPages,
-				hasPrev: page > 1,
+		return NextResponse.json(
+			{
+				tools: paginatedTools,
+				pagination: {
+					page,
+					limit,
+					total: filteredTools.length,
+					totalPages,
+					hasNext: page < totalPages,
+					hasPrev: page > 1,
+				},
+				stats: {
+					total: tools.length,
+					filtered: filteredTools.length,
+					applications: tools.filter((t) => t.type === "application").length,
+					plugins: tools.filter((t) => t.type === "plugin").length,
+				},
 			},
-			stats: {
-				total: tools.length,
-				filtered: filteredTools.length,
-				applications: tools.filter((t) => t.type === "application").length,
-				plugins: tools.filter((t) => t.type === "plugin").length,
+			{
+				headers: {
+					"Cache-Control": "public, max-age=3600, s-maxage=86400",
+					"CDN-Cache-Control": "public, max-age=86400",
+					"Vercel-CDN-Cache-Control": "public, max-age=86400",
+				},
 			},
-		});
+		);
 	} catch (error) {
 		logError(error, { endpoint: "/api/tools", query });
 
