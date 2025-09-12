@@ -83,13 +83,27 @@ export async function GET(request: NextRequest) {
 		// Apply filters
 		if (query.search) {
 			const sanitizeSearchTerm = (input: string): string => {
-				let previous;
-				let current = input.toLowerCase();
-				do {
-					previous = current;
-					current = current.replace(/<[^>]*>/g, "");
-				} while (current !== previous);
-				return current.replace(/[^\w\s-]/g, "").trim();
+				// Prevent ReDoS attacks by limiting input length
+				if (input.length > 1000) {
+					throw new ValidationError(
+						"Search term too long (max 1000 characters)",
+						{
+							searchLength: input.length,
+						},
+					);
+				}
+
+				let sanitized = input.toLowerCase();
+
+				// Remove HTML/XML tags using a safer approach
+				// Replace any sequence of < followed by anything until > (non-greedy)
+				sanitized = sanitized.replace(/<[^>]{0,100}>/g, ""); // Limit tag content to 100 chars
+
+				// Remove any remaining < or > characters to prevent partial tags
+				sanitized = sanitized.replace(/[<>]/g, "");
+
+				// Keep only alphanumeric characters, whitespace, and hyphens
+				return sanitized.replace(/[^\w\s-]/g, "").trim();
 			};
 			const searchTerm = sanitizeSearchTerm(query.search);
 			filteredTools = filteredTools.filter(
