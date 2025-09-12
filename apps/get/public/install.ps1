@@ -286,8 +286,24 @@ function Show-CompletionMessage {
     Write-DevExInfo "development environment with your preferred tools."
     Write-DevExInfo ""
     
-    # Check if devex is accessible
-    $devexPath = Join-Path $BinPath "devex.exe"
+    # Security: Validate BinPath and construct safe devex path
+    if (-not $BinPath -or $BinPath -match '[<>:"|?*]') {
+        Write-DevExError "Invalid BinPath detected: $BinPath"
+        exit 1
+    }
+    
+    # Use System.IO.Path for secure path construction
+    try {
+        $devexPath = [System.IO.Path]::Combine($BinPath, "devex.exe")
+        # Additional validation - ensure the path is within expected bounds
+        if (-not $devexPath.StartsWith($BinPath)) {
+            Write-DevExError "Security violation: Path traversal attempt detected"
+            exit 1
+        }
+    } catch {
+        Write-DevExError "Failed to construct devex path: $($_.Exception.Message)"
+        exit 1
+    }
     if (Test-Path $devexPath) {
         Write-DevExInfo "Press Enter to start the setup, or Ctrl+C to exit..."
         Read-Host
