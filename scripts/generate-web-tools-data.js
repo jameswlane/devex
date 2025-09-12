@@ -5,15 +5,43 @@ const path = require('path');
 const yaml = require('js-yaml');
 const { glob } = require('glob');
 
-// Security: Command sanitization to prevent shell injection
+// Security: Enhanced command sanitization with allowlist approach
+const ALLOWED_PACKAGE_MANAGERS = [
+  'apt', 'apt-get', 'dnf', 'yum', 'pacman', 'zypper', 'brew', 'snap', 'flatpak', 
+  'pip', 'pip3', 'npm', 'yarn', 'pnpm', 'cargo', 'gem', 'go', 'docker',
+  'winget', 'chocolatey', 'scoop', 'mise', 'asdf', 'curl', 'wget'
+];
+
+const ALLOWED_COMMAND_PATTERNS = [
+  /^[a-z-]+\s+(install|add|get)\s+[a-z0-9._-]+(\s+[a-z0-9._-]+)*$/i,
+  /^[a-z-]+\s+-[a-z]\s+[a-z0-9._-]+(\s+[a-z0-9._-]+)*$/i,
+  /^curl\s+-[a-zA-Z0-9]+\s+https?:\/\/[a-z0-9.-]+\/[a-z0-9.\/_-]+$/i,
+  /^wget\s+-[a-zA-Z0-9]+\s+https?:\/\/[a-z0-9.-]+\/[a-z0-9.\/_-]+$/i
+];
+
 function sanitizeCommand(cmd) {
-  if (typeof cmd !== 'string') return '';
-  // Remove dangerous characters and patterns
-  return cmd
-    .replace(/[`$();&|<>]/g, '') // Remove shell metacharacters
-    .replace(/\\./g, '') // Remove escape sequences
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .trim();
+  if (typeof cmd !== 'string' || !cmd.trim()) return '';
+  
+  const sanitized = cmd
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  
+  // Check if command starts with allowed package manager
+  const firstWord = sanitized.split(' ')[0];
+  if (!ALLOWED_PACKAGE_MANAGERS.includes(firstWord)) {
+    console.warn(`🚨 Command validation failed: Unknown package manager "${firstWord}"`);
+    return '';
+  }
+  
+  // Validate against allowed patterns
+  const isValid = ALLOWED_COMMAND_PATTERNS.some(pattern => pattern.test(sanitized));
+  if (!isValid) {
+    console.warn(`🚨 Command validation failed: Pattern not allowed for "${cmd}"`);
+    return '';
+  }
+  
+  return sanitized;
 }
 
 // Enhanced validation schemas
@@ -171,11 +199,27 @@ const CLI_APPLICATIONS_PATH = path.join(process.cwd(), 'apps/cli/config/applicat
 const OUTPUT_PATH = path.join(process.cwd(), 'apps/web/app/generated');
 const REGISTRY_API = 'https://registry.devex.sh/v1/registry';
 
-// Enhanced network error handling with retry logic and caching
+// Enhanced network error handling with granular per-endpoint timeouts
 const CACHE_FILE = path.join(process.cwd(), '.cache', 'plugin-data.json');
-const FETCH_TIMEOUT = 10000; // 10 seconds
 const RETRY_ATTEMPTS = 3;
 const RETRY_DELAY = 2000; // 2 seconds
+
+// Granular timeout configuration per endpoint type
+const ENDPOINT_TIMEOUTS = {
+  registry: 15000,     // Registry API: 15 seconds (may have large responses)
+  metadata: 8000,      // Metadata endpoints: 8 seconds
+  health: 3000,        // Health checks: 3 seconds
+  download: 30000,     // Download endpoints: 30 seconds
+  default: 10000       // Default: 10 seconds
+};
+
+function getTimeoutForUrl(url) {
+  if (url.includes('/registry')) return ENDPOINT_TIMEOUTS.registry;
+  if (url.includes('/metadata') || url.includes('/stats')) return ENDPOINT_TIMEOUTS.metadata;
+  if (url.includes('/health') || url.includes('/ping')) return ENDPOINT_TIMEOUTS.health;
+  if (url.includes('/download') || url.includes('.zip') || url.includes('.tar')) return ENDPOINT_TIMEOUTS.download;
+  return ENDPOINT_TIMEOUTS.default;
+}
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -213,16 +257,21 @@ function saveCachedPlugins(data) {
   }
 }
 
-async function fetchWithTimeout(url, timeout = FETCH_TIMEOUT) {
+async function fetchWithTimeout(url, customTimeout = null) {
+  const timeout = customTimeout || getTimeoutForUrl(url);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
   
   try {
+    console.log(`Fetching ${url} (timeout: ${timeout}ms)`);
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeoutId);
     return response;
   } catch (error) {
     clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms for ${url}`);
+    }
     throw error;
   }
 }

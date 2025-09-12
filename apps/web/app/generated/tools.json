@@ -35,7 +35,7 @@
       "platforms": {
         "linux": {
           "installMethod": "script",
-          "installCommand": "wget https://repo.protonvpn.com/debian/dists/stable/main/binary-all/protonvpn-stable-release_1.0.4_all.deb sudo dpkg -i ./protonvpn-stable-release_1.0.4_all.deb sudo apt update sudo apt install proton-vpn-gnome-desktop libayatana-appindicator3-1 gir1.2-ayatanaappindicator3-0.1 gnome-shell-extension-appindicator",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -60,7 +60,7 @@
       "platforms": {
         "linux": {
           "installMethod": "deb",
-          "installCommand": "wget https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb sudo apt install ./proton-pass_1.23.1_amd64.deb",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -85,7 +85,7 @@
       "platforms": {
         "linux": {
           "installMethod": "deb",
-          "installCommand": "wget https://proton.me/download/mail/linux/1.2.4/ProtonMail-desktop-beta.deb sudo apt install ./ProtonMail-desktop-beta.deb",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -110,7 +110,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "kdeconnect",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -137,7 +137,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "gnome-tweaks",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -162,7 +162,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "chrome-gnome-shell",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -187,7 +187,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "dolphin",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -212,7 +212,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "zsh",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -235,11 +235,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "zoxide",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -256,7 +256,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -270,7 +270,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -281,7 +281,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "app-shells/zoxide",
+              "install_command": "",
               "uninstall_command": "app-shells/zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -292,7 +292,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -303,7 +303,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -314,7 +314,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -325,7 +325,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true,
               "platform_requirements": [
@@ -336,7 +336,7 @@
             },
             {
               "install_method": "cargo",
-              "install_command": "zoxide --locked",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true
             }
@@ -345,11 +345,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "zoxide",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true
             }
@@ -358,17 +358,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "ajeetdsouza.zoxide",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "zoxide",
+              "install_command": "",
               "uninstall_command": "zoxide",
               "official_support": true
             }
@@ -397,7 +397,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "wget",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -420,11 +420,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "ulauncher",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "deb",
-              "install_command": "ulauncher_5.15.7_all.deb",
+              "install_command": "",
               "uninstall_command": "ulauncher",
               "download_url": "https://github.com/Ulauncher/Ulauncher/releases/download/5.15.7/ulauncher_5.15.7_all.deb",
               "official_support": true,
@@ -439,7 +439,7 @@
             },
             {
               "install_method": "apt",
-              "install_command": "ulauncher",
+              "install_command": "",
               "uninstall_command": "ulauncher",
               "official_support": true,
               "platform_requirements": [
@@ -459,7 +459,7 @@
             },
             {
               "install_method": "yay",
-              "install_command": "ulauncher",
+              "install_command": "",
               "uninstall_command": "ulauncher",
               "official_support": true,
               "platform_requirements": [
@@ -470,7 +470,7 @@
             },
             {
               "install_method": "makepkg",
-              "install_command": "ulauncher",
+              "install_command": "",
               "uninstall_command": "ulauncher",
               "official_support": true,
               "platform_requirements": [
@@ -494,7 +494,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "ulauncher",
+              "install_command": "",
               "uninstall_command": "ulauncher",
               "official_support": true,
               "platform_requirements": [
@@ -527,7 +527,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "typora",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -550,11 +550,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "tldr",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -571,7 +571,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -585,7 +585,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -596,7 +596,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "app-doc/tldr",
+              "install_command": "",
               "uninstall_command": "app-doc/tldr",
               "official_support": true,
               "platform_requirements": [
@@ -607,7 +607,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -618,7 +618,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -629,7 +629,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -640,7 +640,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true,
               "platform_requirements": [
@@ -651,19 +651,19 @@
             },
             {
               "install_method": "pip",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true
             },
             {
               "install_method": "npm",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true
             },
             {
               "install_method": "cargo",
-              "install_command": "tealdeer",
+              "install_command": "",
               "uninstall_command": "tealdeer",
               "official_support": true
             }
@@ -672,11 +672,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "tldr",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true
             }
@@ -685,17 +685,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "tldr-pages.tlrc",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "tldr",
+              "install_command": "",
               "uninstall_command": "tldr",
               "official_support": true
             }
@@ -724,11 +724,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "ripgrep",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -745,7 +745,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -759,7 +759,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -770,7 +770,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "sys-apps/ripgrep",
+              "install_command": "",
               "uninstall_command": "sys-apps/ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -781,7 +781,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -792,7 +792,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -803,7 +803,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -814,7 +814,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true,
               "platform_requirements": [
@@ -825,13 +825,13 @@
             },
             {
               "install_method": "snap",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": false
             },
             {
               "install_method": "cargo",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true
             }
@@ -840,11 +840,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "ripgrep",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true
             }
@@ -853,17 +853,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "BurntSushi.ripgrep.MSVC",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "ripgrep",
+              "install_command": "",
               "uninstall_command": "ripgrep",
               "official_support": true
             }
@@ -892,11 +892,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "plocate",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "plocate",
+              "install_command": "",
               "uninstall_command": "plocate",
               "official_support": true,
               "platform_requirements": [
@@ -913,7 +913,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "plocate",
+              "install_command": "",
               "uninstall_command": "plocate",
               "official_support": true,
               "platform_requirements": [
@@ -927,7 +927,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "plocate",
+              "install_command": "",
               "uninstall_command": "plocate",
               "official_support": true,
               "platform_requirements": [
@@ -938,7 +938,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "sys-apps/plocate",
+              "install_command": "",
               "uninstall_command": "sys-apps/plocate",
               "official_support": true,
               "platform_requirements": [
@@ -949,7 +949,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "plocate",
+              "install_command": "",
               "uninstall_command": "plocate",
               "official_support": true,
               "platform_requirements": [
@@ -960,7 +960,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "plocate",
+              "install_command": "",
               "uninstall_command": "plocate",
               "official_support": true,
               "platform_requirements": [
@@ -974,7 +974,7 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "plocate",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -1004,7 +1004,7 @@
           "alternatives": [
             {
               "install_method": "apt",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1021,7 +1021,7 @@
             },
             {
               "install_method": "apt",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": false,
               "platform_requirements": [
@@ -1048,7 +1048,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "neovim python3-neovim",
+              "install_command": "",
               "uninstall_command": "neovim python3-neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1068,7 +1068,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "neovim python3-neovim",
+              "install_command": "",
               "uninstall_command": "neovim python3-neovim",
               "official_support": false,
               "platform_requirements": [
@@ -1084,7 +1084,7 @@
             },
             {
               "install_method": "yum",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1105,7 +1105,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "neovim python-pynvim",
+              "install_command": "",
               "uninstall_command": "neovim python-pynvim",
               "official_support": true,
               "platform_requirements": [
@@ -1119,7 +1119,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "neovim python-neovim python3-neovim",
+              "install_command": "",
               "uninstall_command": "neovim python-neovim python3-neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1133,7 +1133,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "app-editors/neovim",
+              "install_command": "",
               "uninstall_command": "app-editors/neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1144,7 +1144,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1155,7 +1155,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1166,7 +1166,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1177,7 +1177,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "platform_requirements": [
@@ -1188,19 +1188,19 @@
             },
             {
               "install_method": "snap",
-              "install_command": "nvim --classic",
+              "install_command": "",
               "uninstall_command": "nvim",
               "official_support": true
             },
             {
               "install_method": "snap",
-              "install_command": "--edge nvim --classic",
+              "install_command": "",
               "uninstall_command": "nvim",
               "official_support": true
             },
             {
               "install_method": "flatpak",
-              "install_command": "io.neovim.nvim",
+              "install_command": "",
               "uninstall_command": "io.neovim.nvim",
               "official_support": true,
               "pre_install": [
@@ -1243,11 +1243,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "neovim",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "pre_install": [
@@ -1317,17 +1317,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "Neovim.Neovim",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "neovim",
+              "install_command": "",
               "uninstall_command": "neovim",
               "official_support": true,
               "pre_install": [
@@ -1387,7 +1387,7 @@
           "alternatives": [
             {
               "install_method": "apt",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1403,7 +1403,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1427,7 +1427,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1441,7 +1441,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1463,7 +1463,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "dev-vcs/lazygit",
+              "install_command": "",
               "uninstall_command": "dev-vcs/lazygit",
               "official_support": false,
               "platform_requirements": [
@@ -1485,7 +1485,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1496,7 +1496,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1507,7 +1507,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "platform_requirements": [
@@ -1518,7 +1518,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": false,
               "platform_requirements": [
@@ -1532,11 +1532,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "lazygit",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "pre_install": [
@@ -1550,17 +1550,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "JesseDuffield.lazygit",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "lazygit",
+              "install_command": "",
               "uninstall_command": "lazygit",
               "official_support": true,
               "pre_install": [
@@ -1593,11 +1593,11 @@
       "platforms": {
         "linux": {
           "installMethod": "curlpipe",
-          "installCommand": "curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh bash",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "pacman",
-              "install_command": "lazydocker",
+              "install_command": "",
               "uninstall_command": "lazydocker",
               "official_support": false,
               "platform_requirements": [
@@ -1608,7 +1608,7 @@
             },
             {
               "install_method": "go",
-              "install_command": "github.com/jesseduffield/lazydocker@latest",
+              "install_command": "",
               "uninstall_command": "lazydocker",
               "official_support": true,
               "platform_requirements": [
@@ -1628,7 +1628,7 @@
             },
             {
               "install_method": "asdf",
-              "install_command": "lazydocker latest",
+              "install_command": "",
               "uninstall_command": "lazydocker",
               "official_support": false,
               "pre_install": [
@@ -1642,11 +1642,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "jesseduffield/lazydocker/lazydocker",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "brew",
-              "install_command": "lazydocker",
+              "install_command": "",
               "uninstall_command": "lazydocker",
               "official_support": true
             }
@@ -1655,11 +1655,11 @@
         },
         "windows": {
           "installMethod": "scoop",
-          "installCommand": "lazydocker",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "lazydocker",
+              "install_command": "",
               "uninstall_command": "lazydocker",
               "official_support": true
             }
@@ -1687,7 +1687,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "gpg",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -1710,11 +1710,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "gh",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": true,
               "platform_requirements": [
@@ -1736,7 +1736,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": true,
               "platform_requirements": [
@@ -1760,7 +1760,7 @@
             },
             {
               "install_method": "yum",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": true,
               "platform_requirements": [
@@ -1780,7 +1780,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": true,
               "platform_requirements": [
@@ -1802,7 +1802,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "github-cli",
+              "install_command": "",
               "uninstall_command": "github-cli",
               "official_support": false,
               "platform_requirements": [
@@ -1813,7 +1813,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "github-cli",
+              "install_command": "",
               "uninstall_command": "github-cli",
               "official_support": false,
               "platform_requirements": [
@@ -1824,7 +1824,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "github-cli",
+              "install_command": "",
               "uninstall_command": "github-cli",
               "official_support": false,
               "platform_requirements": [
@@ -1835,7 +1835,7 @@
             },
             {
               "install_method": "pkg",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": false,
               "platform_requirements": [
@@ -1846,7 +1846,7 @@
             },
             {
               "install_method": "pkg_add",
-              "install_command": "github-cli",
+              "install_command": "",
               "uninstall_command": "github-cli",
               "official_support": false,
               "platform_requirements": [
@@ -1857,7 +1857,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": false,
               "platform_requirements": [
@@ -1868,7 +1868,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "github-cli",
+              "install_command": "",
               "uninstall_command": "github-cli",
               "official_support": false,
               "platform_requirements": [
@@ -1882,11 +1882,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "gh",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": false
             }
@@ -1895,17 +1895,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "GitHub.cli",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": false
             },
             {
               "install_method": "scoop",
-              "install_command": "gh",
+              "install_command": "",
               "uninstall_command": "gh",
               "official_support": false
             }
@@ -1934,7 +1934,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "git",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -1957,11 +1957,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "ghostty",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "apk",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -1972,7 +1972,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -1983,7 +1983,7 @@
             },
             {
               "install_method": "yay",
-              "install_command": "ghostty-git",
+              "install_command": "",
               "uninstall_command": "ghostty-git",
               "official_support": true,
               "platform_requirements": [
@@ -1994,7 +1994,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -2005,7 +2005,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -2016,7 +2016,7 @@
             },
             {
               "install_method": "nixflake",
-              "install_command": "github:ghostty-org/ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -2027,7 +2027,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -2038,7 +2038,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -2049,7 +2049,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": true,
               "platform_requirements": [
@@ -2060,7 +2060,7 @@
             },
             {
               "install_method": "apt",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": false,
               "platform_requirements": [
@@ -2085,7 +2085,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "ghostty",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": false,
               "platform_requirements": [
@@ -2101,13 +2101,13 @@
             },
             {
               "install_method": "snap",
-              "install_command": "ghostty --classic",
+              "install_command": "",
               "uninstall_command": "ghostty",
               "official_support": false
             },
             {
               "install_method": "appimage",
-              "install_command": "Ghostty.AppImage",
+              "install_command": "",
               "uninstall_command": "Ghostty.AppImage",
               "download_url": "https://github.com/ghostty-appimage/ghostty-appimage/releases/latest",
               "destination": "~/Applications/",
@@ -2123,7 +2123,7 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "ghostty",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -2148,11 +2148,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "fzf",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2169,7 +2169,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2183,7 +2183,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2194,7 +2194,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "app-shells/fzf",
+              "install_command": "",
               "uninstall_command": "app-shells/fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2205,7 +2205,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2216,7 +2216,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2227,7 +2227,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2238,7 +2238,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true,
               "platform_requirements": [
@@ -2249,7 +2249,7 @@
             },
             {
               "install_method": "snap",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": false
             }
@@ -2258,11 +2258,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "fzf",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true
             }
@@ -2271,17 +2271,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "junegunn.fzf",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "fzf",
+              "install_command": "",
               "uninstall_command": "fzf",
               "official_support": true
             }
@@ -2310,11 +2310,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "fd-find",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "fd-find",
+              "install_command": "",
               "uninstall_command": "fd-find",
               "official_support": true,
               "platform_requirements": [
@@ -2331,7 +2331,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true,
               "platform_requirements": [
@@ -2345,7 +2345,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true,
               "platform_requirements": [
@@ -2356,7 +2356,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "sys-apps/fd",
+              "install_command": "",
               "uninstall_command": "sys-apps/fd",
               "official_support": true,
               "platform_requirements": [
@@ -2367,7 +2367,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true,
               "platform_requirements": [
@@ -2378,7 +2378,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true,
               "platform_requirements": [
@@ -2389,7 +2389,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true,
               "platform_requirements": [
@@ -2400,7 +2400,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true,
               "platform_requirements": [
@@ -2411,7 +2411,7 @@
             },
             {
               "install_method": "cargo",
-              "install_command": "fd-find",
+              "install_command": "",
               "uninstall_command": "fd-find",
               "official_support": true
             }
@@ -2420,11 +2420,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "fd",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true
             }
@@ -2433,17 +2433,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "sharkdp.fd",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "fd",
+              "install_command": "",
               "uninstall_command": "fd",
               "official_support": true
             }
@@ -2472,11 +2472,11 @@
       "platforms": {
         "linux": {
           "installMethod": "deb",
-          "installCommand": "fastfetch",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "apt",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2488,7 +2488,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2499,7 +2499,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2510,7 +2510,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2521,7 +2521,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2532,7 +2532,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2543,7 +2543,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2554,7 +2554,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2565,7 +2565,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2576,7 +2576,7 @@
             },
             {
               "install_method": "brew",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2587,7 +2587,7 @@
             },
             {
               "install_method": "pkg",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2598,7 +2598,7 @@
             },
             {
               "install_method": "pkg_add",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true,
               "platform_requirements": [
@@ -2612,11 +2612,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "fastfetch",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true
             }
@@ -2625,17 +2625,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "fastfetch",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "scoop",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true
             },
             {
               "install_method": "chocolatey",
-              "install_command": "fastfetch",
+              "install_command": "",
               "uninstall_command": "fastfetch",
               "official_support": true
             }
@@ -2663,11 +2663,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "eza",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "pacman",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2678,7 +2678,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2689,7 +2689,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2700,7 +2700,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2711,7 +2711,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2722,7 +2722,7 @@
             },
             {
               "install_method": "pkg",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2733,7 +2733,7 @@
             },
             {
               "install_method": "pkg_add",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2744,7 +2744,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true,
               "platform_requirements": [
@@ -2755,7 +2755,7 @@
             },
             {
               "install_method": "cargo",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true
             }
@@ -2764,23 +2764,23 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "eza",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": true
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "eza-community.eza",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "scoop",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true
             },
             {
               "install_method": "cargo",
-              "install_command": "eza",
+              "install_command": "",
               "uninstall_command": "eza",
               "official_support": true
             }
@@ -2809,7 +2809,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "curl",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -2832,7 +2832,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "ca-certificates",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -2855,11 +2855,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "build-essential pkg-config autoconf bison clang rustc libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev libjemalloc2 libvips-dev imagemagick libmagickwand-dev mupdf mupdf-tools gir1.2-gtop-2.0 gir1.2-clutter-1.0 redis-tools sqlite3 libsqlite3-0 libmysqlclient-dev libpq-dev postgresql-client postgresql-client-common",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "@development-tools pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel",
+              "install_command": "",
               "uninstall_command": "@development-tools pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf-devel redis sqlite-devel mysql-devel postgresql-devel",
               "official_support": true,
               "platform_requirements": [
@@ -2887,7 +2887,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql",
+              "install_command": "",
               "uninstall_command": "base-devel pkgconf autoconf bison clang rust openssl readline zlib libyaml ncurses libffi gdbm jemalloc libvips imagemagick mupdf redis sqlite mysql postgresql",
               "official_support": true,
               "platform_requirements": [
@@ -2901,7 +2901,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "patterns-devel-base-devel_basis pkg-config autoconf bison clang rust libopenssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel libvips-devel ImageMagick-devel mupdf redis sqlite3-devel libmysqlclient-devel postgresql-devel",
+              "install_command": "",
               "uninstall_command": "patterns-devel-base-devel_basis pkg-config autoconf bison clang rust libopenssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel libvips-devel ImageMagick-devel mupdf redis sqlite3-devel libmysqlclient-devel postgresql-devel",
               "official_support": true,
               "platform_requirements": [
@@ -2915,7 +2915,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "sys-devel/autoconf sys-devel/bison sys-devel/clang dev-lang/rust dev-libs/openssl sys-libs/readline sys-libs/zlib dev-libs/libyaml sys-libs/ncurses dev-libs/libffi sys-libs/gdbm dev-libs/jemalloc media-libs/vips media-gfx/imagemagick app-text/mupdf dev-db/redis dev-db/sqlite dev-db/mysql dev-db/postgresql",
+              "install_command": "",
               "uninstall_command": "sys-devel/autoconf sys-devel/bison sys-devel/clang dev-lang/rust dev-libs/openssl sys-libs/readline sys-libs/zlib dev-libs/libyaml sys-libs/ncurses dev-libs/libffi sys-libs/gdbm dev-libs/jemalloc media-libs/vips media-gfx/imagemagick app-text/mupdf dev-db/redis dev-db/sqlite dev-db/mysql dev-db/postgresql",
               "official_support": true,
               "platform_requirements": [
@@ -2926,7 +2926,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "system.devel autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel imagemagick-devel mupdf-devel redis sqlite3-devel mysql-devel postgresql-devel",
+              "install_command": "",
               "uninstall_command": "system.devel autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel imagemagick-devel mupdf-devel redis sqlite3-devel mysql-devel postgresql-devel",
               "official_support": true,
               "platform_requirements": [
@@ -2937,7 +2937,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "base-devel pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf redis sqlite-devel mysql-devel postgresql-libs",
+              "install_command": "",
               "uninstall_command": "base-devel pkg-config autoconf bison clang rust openssl-devel readline-devel zlib-devel libyaml-devel ncurses-devel libffi-devel gdbm-devel jemalloc-devel vips-devel ImageMagick-devel mupdf redis sqlite-devel mysql-devel postgresql-libs",
               "official_support": true,
               "platform_requirements": [
@@ -2948,7 +2948,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "build-base pkgconfig autoconf bison clang rust openssl-dev readline-dev zlib-dev yaml-dev ncurses-dev libffi-dev gdbm-dev jemalloc-dev vips-dev imagemagick-dev mupdf-dev redis sqlite-dev mysql-dev postgresql-dev",
+              "install_command": "",
               "uninstall_command": "build-base pkgconfig autoconf bison clang rust openssl-dev readline-dev zlib-dev yaml-dev ncurses-dev libffi-dev gdbm-dev jemalloc-dev vips-dev imagemagick-dev mupdf-dev redis sqlite-dev mysql-dev postgresql-dev",
               "official_support": true,
               "platform_requirements": [
@@ -2959,7 +2959,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "gcc gnumake cmake pkg-config autoconf bison clang rustc openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql80 postgresql",
+              "install_command": "",
               "uninstall_command": "gcc gnumake cmake pkg-config autoconf bison clang rustc openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql80 postgresql",
               "official_support": true,
               "platform_requirements": [
@@ -2973,11 +2973,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "autoconf bison clang pkg-config openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips imagemagick mupdf redis sqlite mysql-client postgresql",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "autoconf bison clang pkgconfig openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis3 sqlite3 mysql8 postgresql16",
+              "install_command": "",
               "uninstall_command": "autoconf bison clang pkgconfig openssl readline zlib libyaml ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis3 sqlite3 mysql8 postgresql16",
               "official_support": true,
               "pre_install": [
@@ -2991,11 +2991,11 @@
         },
         "windows": {
           "installMethod": "chocolatey",
-          "installCommand": "visualstudio2022buildtools visualstudio2022-workload-vctools pkgconfiglite openssl zlib sqlite mysql.utilities postgresql redis-64",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "winget",
-              "install_command": "Microsoft.VisualStudio.2022.BuildTools",
+              "install_command": "",
               "uninstall_command": "Microsoft.VisualStudio.2022.BuildTools",
               "official_support": true,
               "post_install": [
@@ -3012,7 +3012,7 @@
             },
             {
               "install_method": "scoop",
-              "install_command": "gcc make cmake pkg-config openssl sqlite postgresql redis",
+              "install_command": "",
               "uninstall_command": "gcc make cmake pkg-config openssl sqlite postgresql redis",
               "official_support": false,
               "pre_install": [
@@ -3048,11 +3048,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "btop",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "btop",
+              "install_command": "",
               "uninstall_command": "btop",
               "official_support": true,
               "platform_requirements": [
@@ -3063,7 +3063,7 @@
             },
             {
               "install_method": "dnf",
-              "install_command": "btop",
+              "install_command": "",
               "uninstall_command": "btop",
               "official_support": true,
               "platform_requirements": [
@@ -3085,7 +3085,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "btop",
+              "install_command": "",
               "uninstall_command": "btop",
               "official_support": true,
               "platform_requirements": [
@@ -3096,7 +3096,7 @@
             },
             {
               "install_method": "snap",
-              "install_command": "btop",
+              "install_command": "",
               "uninstall_command": "btop",
               "official_support": true,
               "post_install": [
@@ -3107,7 +3107,7 @@
             },
             {
               "install_method": "snap",
-              "install_command": "btop-desktop",
+              "install_command": "",
               "uninstall_command": "btop-desktop",
               "official_support": true,
               "post_install": [
@@ -3121,7 +3121,7 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "btop",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": true
         },
@@ -3146,11 +3146,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "bat",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3167,7 +3167,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3181,7 +3181,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3192,7 +3192,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "sys-apps/bat",
+              "install_command": "",
               "uninstall_command": "sys-apps/bat",
               "official_support": true,
               "platform_requirements": [
@@ -3203,7 +3203,7 @@
             },
             {
               "install_method": "eopkg",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3214,7 +3214,7 @@
             },
             {
               "install_method": "xbps",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3225,7 +3225,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3236,7 +3236,7 @@
             },
             {
               "install_method": "nixpkgs",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true,
               "platform_requirements": [
@@ -3247,13 +3247,13 @@
             },
             {
               "install_method": "snap",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": false
             },
             {
               "install_method": "cargo",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true
             }
@@ -3262,11 +3262,11 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "bat",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "macports",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true
             }
@@ -3275,17 +3275,17 @@
         },
         "windows": {
           "installMethod": "winget",
-          "installCommand": "sharkdp.bat",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "chocolatey",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true
             },
             {
               "install_method": "scoop",
-              "install_command": "bat",
+              "install_command": "",
               "uninstall_command": "bat",
               "official_support": true
             }
@@ -3314,11 +3314,11 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "apache2-utils",
+          "installCommand": "",
           "alternatives": [
             {
               "install_method": "dnf",
-              "install_command": "httpd-tools",
+              "install_command": "",
               "uninstall_command": "httpd-tools",
               "official_support": true,
               "platform_requirements": [
@@ -3335,7 +3335,7 @@
             },
             {
               "install_method": "pacman",
-              "install_command": "apache-tools",
+              "install_command": "",
               "uninstall_command": "apache-tools",
               "official_support": true,
               "platform_requirements": [
@@ -3349,7 +3349,7 @@
             },
             {
               "install_method": "zypper",
-              "install_command": "apache2-utils",
+              "install_command": "",
               "uninstall_command": "apache2-utils",
               "official_support": true,
               "platform_requirements": [
@@ -3360,7 +3360,7 @@
             },
             {
               "install_method": "emerge",
-              "install_command": "app-admin/apache-tools",
+              "install_command": "",
               "uninstall_command": "app-admin/apache-tools",
               "official_support": true,
               "platform_requirements": [
@@ -3371,7 +3371,7 @@
             },
             {
               "install_method": "apk",
-              "install_command": "apache2-utils",
+              "install_command": "",
               "uninstall_command": "apache2-utils",
               "official_support": true,
               "platform_requirements": [
@@ -3385,13 +3385,13 @@
         },
         "macos": {
           "installMethod": "brew",
-          "installCommand": "httpie",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
         "windows": {
           "installMethod": "chocolatey",
-          "installCommand": "apache-httpd",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         }
@@ -3417,7 +3417,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "sqlite3 libsqlite3-0",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -3457,7 +3457,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "redis-tools",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -3514,7 +3514,7 @@
       "platforms": {
         "linux": {
           "installMethod": "apt",
-          "installCommand": "default-libmysqlclient-dev",
+          "installCommand": "",
           "alternatives": [],
           "officialSupport": false
         },
@@ -3552,5 +3552,5 @@
       "total": 39
     }
   },
-  "generated": "2025-09-12T00:30:06.047Z"
+  "generated": "2025-09-12T00:35:43.061Z"
 }
