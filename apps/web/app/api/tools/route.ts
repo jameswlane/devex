@@ -82,11 +82,16 @@ export async function GET(request: NextRequest) {
 
 		// Apply filters
 		if (query.search) {
-			const searchTerm = query.search
-				.toLowerCase()
-				.replace(/<[^>]*>/g, "") // Remove HTML/XML tags
-				.replace(/[^\w\s-]/g, "") // Keep only alphanumeric, whitespace, and hyphens
-				.trim();
+			const sanitizeSearchTerm = (input: string): string => {
+				let previous;
+				let current = input.toLowerCase();
+				do {
+					previous = current;
+					current = current.replace(/<[^>]*>/g, "");
+				} while (current !== previous);
+				return current.replace(/[^\w\s-]/g, "").trim();
+			};
+			const searchTerm = sanitizeSearchTerm(query.search);
 			filteredTools = filteredTools.filter(
 				(tool) =>
 					tool.name.toLowerCase().includes(searchTerm) ||
