@@ -1454,26 +1454,45 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 		}
 
 		// The Initialize function already downloads required plugins based on platform detection
-		// Check which plugins were successfully installed
-		manager := pluginBootstrap.GetManager()
-		installedPlugins := manager.ListPlugins()
-
-		log.Info("Plugins installed", "count", len(installedPlugins))
-
-		// Optimized plugin verification: O(n) instead of O(n×m)
-		installedSet := make(map[string]bool)
-		for pluginName := range installedPlugins {
-			installedSet[pluginName] = true
+		// Perform enhanced plugin validation with security and performance improvements
+		validatorConfig := PluginValidatorConfig{
+			VerifyChecksums:     true,  // Enable checksum verification
+			VerifySignatures:    false, // Enable in Phase 2
+			Concurrency:         4,     // Reasonable parallel verification limit
+			FailOnCritical:      true,  // Early termination on critical failures
+			CriticalPlugins:     []string{"tool-shell", "desktop-gnome", "desktop-kde", "tool-git"},
+			VerificationTimeout: 10 * time.Second, // Per-plugin timeout
 		}
 
-		// Check if each required plugin was installed
-		for _, requiredPlugin := range m.plugins.requiredPlugins {
-			if installedSet[requiredPlugin] {
-				log.Info("Plugin verified", "name", requiredPlugin)
+		validator := NewPluginValidator(pluginBootstrap, validatorConfig)
+		validationSummary := validator.ValidatePlugins(ctx, m.plugins.requiredPlugins)
+
+		log.Info("Plugin validation completed",
+			"totalPlugins", validationSummary.TotalPlugins,
+			"validPlugins", validationSummary.ValidPlugins,
+			"invalidPlugins", validationSummary.InvalidPlugins,
+			"validationTime", validationSummary.ValidationTime,
+		)
+
+		// Add validation errors to the error collection
+		for _, err := range validationSummary.Errors {
+			allErrors = addErrorSafe(allErrors, err)
+		}
+
+		// Log detailed results for debugging
+		for _, result := range validationSummary.Results {
+			if result.IsValid {
+				log.Info("Plugin validated successfully",
+					"name", result.PluginName,
+					"checksumValid", result.ChecksumValid,
+					"validationTime", result.ValidationTime,
+				)
 			} else {
-				errMsg := fmt.Sprintf("Plugin %s failed to install or is not available", requiredPlugin)
-				log.Warn(errMsg)
-				allErrors = addErrorSafe(allErrors, fmt.Errorf("%s", errMsg))
+				log.Warn("Plugin validation failed",
+					"name", result.PluginName,
+					"error", result.Error,
+					"validationTime", result.ValidationTime,
+				)
 			}
 		}
 
