@@ -65,7 +65,9 @@ func TestSetupModel_InstallationCompletionFlow(t *testing.T) {
 			repo:     mockRepo,
 			settings: settings,
 			step:     StepInstalling,
-			progress: 0.5,
+			installation: InstallationState{
+				progress: 0.5,
+			},
 		}
 
 		// Test InstallProgressMsg with partial progress
@@ -78,8 +80,8 @@ func TestSetupModel_InstallationCompletionFlow(t *testing.T) {
 		setupModel := updatedModel.(*SetupModel)
 
 		// Should update progress and status
-		assert.Equal(t, "Installing application...", setupModel.installStatus)
-		assert.Equal(t, 0.75, setupModel.progress)
+		assert.Equal(t, "Installing application...", setupModel.installation.installStatus)
+		assert.Equal(t, 0.75, setupModel.installation.progress)
 		assert.Equal(t, StepInstalling, setupModel.step)
 		assert.NotNil(t, cmd) // Should return wait command
 	})
@@ -92,7 +94,9 @@ func TestSetupModel_InstallationCompletionFlow(t *testing.T) {
 			repo:     mockRepo,
 			settings: settings,
 			step:     StepInstalling,
-			progress: 0.9,
+			installation: InstallationState{
+				progress: 0.9,
+			},
 		}
 
 		// Test InstallProgressMsg with complete progress
@@ -105,8 +109,8 @@ func TestSetupModel_InstallationCompletionFlow(t *testing.T) {
 		setupModel := updatedModel.(*SetupModel)
 
 		// Should transition to complete step when progress is 100%
-		assert.Equal(t, "Installation complete", setupModel.installStatus)
-		assert.Equal(t, 1.0, setupModel.progress)
+		assert.Equal(t, "Installation complete", setupModel.installation.installStatus)
+		assert.Equal(t, 1.0, setupModel.installation.progress)
 		assert.Equal(t, StepComplete, setupModel.step)
 		assert.NotNil(t, cmd)
 	})
@@ -118,12 +122,16 @@ func TestSetupModel_InstallationSynchronization(t *testing.T) {
 		settings := config.CrossPlatformSettings{}
 
 		model := &SetupModel{
-			repo:          mockRepo,
-			settings:      settings,
-			step:          StepDesktopApps,
-			selectedApps:  map[int]bool{0: true},
-			selectedTheme: 0,
-			themes:        []string{"Tokyo Night"},
+			repo:     mockRepo,
+			settings: settings,
+			step:     StepDesktopApps,
+			selections: UISelections{
+				selectedApps:  map[int]bool{0: true},
+				selectedTheme: 0,
+			},
+			system: SystemInfo{
+				themes: []string{"Tokyo Night"},
+			},
 		}
 
 		// Test that startInstallation returns a command (but don't execute it)

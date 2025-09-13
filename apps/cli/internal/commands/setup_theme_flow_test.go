@@ -15,13 +15,17 @@ func TestThemeSelectionFlow(t *testing.T) {
 	// Create a mock setup model for testing
 	createMockSetupModel := func() *SetupModel {
 		return &SetupModel{
-			step:             StepTheme,
-			themes:           []string{"Tokyo Night", "Kanagawa", "Catppuccin"},
-			selectedTheme:    0,
-			cursor:           0,
-			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
+			step:   StepTheme,
+			cursor: 0,
+			system: SystemInfo{
+				themes:           []string{"Tokyo Night", "Kanagawa", "Catppuccin"},
+				detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
+			},
+			selections: UISelections{
+				selectedTheme: 0,
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 	}
 
@@ -64,12 +68,12 @@ func TestThemeSelectionFlow(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				model := createMockSetupModel()
 				model.step = tc.currentStep
-				model.hasDesktop = true                  // Ensure desktop apps step is included
-				model.desktopApps = []string{"Test App"} // Ensure desktop apps are available
+				model.system.hasDesktop = true                  // Ensure desktop apps step is included
+				model.system.desktopApps = []string{"Test App"} // Ensure desktop apps are available
 
 				// For SystemOverview, we need confirmPlugins set first
 				if tc.currentStep == StepSystemOverview {
-					model.confirmPlugins = true
+					model.plugins.confirmPlugins = true
 				}
 
 				updatedModel, _ := model.handleEnter()
@@ -92,7 +96,7 @@ func TestThemeSelectionFlow(t *testing.T) {
 		assert.True(t, ok, "Updated model should be SetupModel")
 
 		// The selected theme should be updated
-		assert.Equal(t, 1, setupModel.selectedTheme, "Space key should select theme at cursor position")
+		assert.Equal(t, 1, setupModel.selections.selectedTheme, "Space key should select theme at cursor position")
 	})
 
 	t.Run("theme step should handle arrow key navigation", func(t *testing.T) {
@@ -124,17 +128,17 @@ func TestThemeSelectionFlow(t *testing.T) {
 		setupModel, ok := updatedModel.(*SetupModel)
 		assert.True(t, ok, "Updated model should be SetupModel")
 		// Cursor should either wrap to last or stay at 0 (both are valid behaviors)
-		assert.True(t, setupModel.cursor >= 0 && setupModel.cursor < len(model.themes),
+		assert.True(t, setupModel.cursor >= 0 && setupModel.cursor < len(model.system.themes),
 			"Cursor should stay within bounds")
 
 		// Test down from last position
-		model.cursor = len(model.themes) - 1
+		model.cursor = len(model.system.themes) - 1
 		downKeyMsg := tea.KeyMsg{Type: tea.KeyDown}
 		updatedModel, _ = model.Update(downKeyMsg)
 		setupModel, ok = updatedModel.(*SetupModel)
 		assert.True(t, ok, "Updated model should be SetupModel")
 		// Cursor should either wrap to first or stay at last (both are valid behaviors)
-		assert.True(t, setupModel.cursor >= 0 && setupModel.cursor < len(model.themes),
+		assert.True(t, setupModel.cursor >= 0 && setupModel.cursor < len(model.system.themes),
 			"Cursor should stay within bounds")
 	})
 
@@ -151,14 +155,14 @@ func TestThemeSelectionFlow(t *testing.T) {
 	t.Run("git config step should handle Enter key correctly", func(t *testing.T) {
 		model := createMockSetupModel()
 		model.step = StepGitConfig
-		model.gitInputActive = false
+		model.git.gitInputActive = false
 		model.cursor = 0
 
 		// Enter should activate git input
 		updatedModel, _ := model.handleEnter()
 
-		assert.True(t, updatedModel.gitInputActive, "Enter key should activate git input on git config step")
-		assert.Equal(t, 0, updatedModel.gitInputField, "Git input field should be set to cursor position")
+		assert.True(t, updatedModel.git.gitInputActive, "Enter key should activate git input on git config step")
+		assert.Equal(t, 0, updatedModel.git.gitInputField, "Git input field should be set to cursor position")
 	})
 
 	t.Run("confirmation step should advance to installation", func(t *testing.T) {
@@ -168,7 +172,7 @@ func TestThemeSelectionFlow(t *testing.T) {
 		updatedModel, cmd := model.handleEnter()
 
 		assert.Equal(t, StepInstalling, updatedModel.step, "Enter on confirmation should advance to installing")
-		assert.True(t, updatedModel.installing, "Installing flag should be set")
+		assert.True(t, updatedModel.installation.installing, "Installing flag should be set")
 		assert.NotNil(t, cmd, "Enter on confirmation should return installation command")
 	})
 
@@ -196,12 +200,14 @@ func TestThemeSelectionFlow(t *testing.T) {
 func TestThemeStepNavigation(t *testing.T) {
 	t.Run("should skip to languages step if no desktop apps", func(t *testing.T) {
 		model := &SetupModel{
-			step:             StepDesktopApps,
-			desktopApps:      []string{}, // No desktop apps
-			hasDesktop:       true,
-			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
+			step: StepDesktopApps,
+			system: SystemInfo{
+				desktopApps:      []string{}, // No desktop apps
+				hasDesktop:       true,
+				detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 
 		// The view should automatically redirect to next step when no desktop apps
@@ -209,33 +215,39 @@ func TestThemeStepNavigation(t *testing.T) {
 
 		// This is tricky to test directly as the View method has side effects
 		// We can at least verify the model handles empty desktop apps gracefully
-		assert.Empty(t, model.desktopApps, "Model should handle empty desktop apps list")
+		assert.Empty(t, model.system.desktopApps, "Model should handle empty desktop apps list")
 	})
 
 	t.Run("should skip shell step on Windows", func(t *testing.T) {
 		model := &SetupModel{
-			step:             StepShell,
-			detectedPlatform: platform.DetectionResult{OS: "windows", DesktopEnv: ""},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
+			step: StepShell,
+			system: SystemInfo{
+				detectedPlatform: platform.DetectionResult{OS: "windows", DesktopEnv: ""},
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 
 		// The view should automatically redirect to next step on Windows
 		_ = model.View() // View method has side effects, but we don't need to check the output
 
 		// Verify Windows platform is handled
-		assert.Equal(t, "windows", model.detectedPlatform.OS, "Should handle Windows platform")
+		assert.Equal(t, "windows", model.system.detectedPlatform.OS, "Should handle Windows platform")
 	})
 
 	t.Run("nextStep should follow correct sequence", func(t *testing.T) {
 		model := &SetupModel{
-			step:             StepSystemOverview,
-			hasDesktop:       true,
-			desktopApps:      []string{"Test App"},
-			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
-			pluginsInstalled: 1, // Mark plugins as already installed for test
+			step: StepSystemOverview,
+			system: SystemInfo{
+				hasDesktop:       true,
+				desktopApps:      []string{"Test App"},
+				detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
+			},
+			plugins: PluginState{
+				pluginsInstalled: 1, // Mark plugins as already installed for test
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 
 		// Test the progression through steps
@@ -257,8 +269,8 @@ func TestThemeStepNavigation(t *testing.T) {
 		}
 
 		// Test git config step advancement (requires filled fields)
-		model.gitFullName = "Test User"
-		model.gitEmail = "test@example.com"
+		model.git.gitFullName = "Test User"
+		model.git.gitEmail = "test@example.com"
 		updatedModel, _ := model.nextStep()
 		assert.Equal(t, StepConfirmation, updatedModel.step,
 			"Git config should advance to confirmation when fields are filled")
@@ -266,13 +278,17 @@ func TestThemeStepNavigation(t *testing.T) {
 
 	t.Run("prevStep should follow correct reverse sequence", func(t *testing.T) {
 		model := &SetupModel{
-			step:             StepConfirmation,
-			hasDesktop:       true,
-			desktopApps:      []string{"Test App"},
-			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
-			pluginsInstalled: 1, // Mark plugins as already installed for test
+			step: StepConfirmation,
+			system: SystemInfo{
+				hasDesktop:       true,
+				desktopApps:      []string{"Test App"},
+				detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
+			},
+			plugins: PluginState{
+				pluginsInstalled: 1, // Mark plugins as already installed for test
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 
 		// Test the reverse progression through steps

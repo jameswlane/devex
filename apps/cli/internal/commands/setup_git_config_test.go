@@ -15,15 +15,19 @@ func TestGitConfigValidation(t *testing.T) {
 	// Create a mock setup model for testing
 	createMockSetupModel := func() *SetupModel {
 		return &SetupModel{
-			step:             StepGitConfig,
-			cursor:           0,
-			gitInputActive:   false,
-			gitInputField:    0,
-			gitFullName:      "",
-			gitEmail:         "",
-			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
+			step:   StepGitConfig,
+			cursor: 0,
+			git: GitConfiguration{
+				gitInputActive: false,
+				gitInputField:  0,
+				gitFullName:    "",
+				gitEmail:       "",
+			},
+			system: SystemInfo{
+				detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 	}
 
@@ -45,8 +49,8 @@ func TestGitConfigValidation(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				model := createMockSetupModel()
-				model.gitFullName = tc.fullName
-				model.gitEmail = tc.email
+				model.git.gitFullName = tc.fullName
+				model.git.gitEmail = tc.email
 
 				updatedModel, _ := model.nextStep()
 
@@ -77,8 +81,8 @@ func TestGitConfigValidation(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				model := createMockSetupModel()
-				model.gitFullName = tc.fullName
-				model.gitEmail = tc.email
+				model.git.gitFullName = tc.fullName
+				model.git.gitEmail = tc.email
 
 				updatedModel, _ := model.nextStep()
 
@@ -92,22 +96,22 @@ func TestGitConfigValidation(t *testing.T) {
 	t.Run("should handle Enter key for field activation", func(t *testing.T) {
 		model := createMockSetupModel()
 		model.cursor = 0
-		model.gitInputActive = false
+		model.git.gitInputActive = false
 
 		// Enter should activate input for name field
 		updatedModel, _ := model.handleEnter()
 
-		assert.True(t, updatedModel.gitInputActive, "Enter should activate git input")
-		assert.Equal(t, 0, updatedModel.gitInputField, "Should set input field to name (0)")
+		assert.True(t, updatedModel.git.gitInputActive, "Enter should activate git input")
+		assert.Equal(t, 0, updatedModel.git.gitInputField, "Should set input field to name (0)")
 
 		// Test email field activation
 		model.cursor = 1
-		model.gitInputActive = false
+		model.git.gitInputActive = false
 
 		updatedModel, _ = model.handleEnter()
 
-		assert.True(t, updatedModel.gitInputActive, "Enter should activate git input")
-		assert.Equal(t, 1, updatedModel.gitInputField, "Should set input field to email (1)")
+		assert.True(t, updatedModel.git.gitInputActive, "Enter should activate git input")
+		assert.Equal(t, 1, updatedModel.git.gitInputField, "Should set input field to email (1)")
 	})
 
 	t.Run("should handle navigation between fields", func(t *testing.T) {
@@ -131,8 +135,8 @@ func TestGitConfigValidation(t *testing.T) {
 
 	t.Run("should handle text input during active editing", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitInputActive = true
-		model.gitInputField = 0 // Name field
+		model.git.gitInputActive = true
+		model.git.gitInputField = 0 // Name field
 
 		// Simulate typing text
 		textKeyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'J', 'o', 'h', 'n'}}
@@ -142,14 +146,14 @@ func TestGitConfigValidation(t *testing.T) {
 			model, _ = updatedModel.(*SetupModel)
 		}
 
-		assert.Contains(t, model.gitFullName, "John", "Should handle text input for name field")
+		assert.Contains(t, model.git.gitFullName, "John", "Should handle text input for name field")
 	})
 
 	t.Run("should handle backspace during active editing", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitInputActive = true
-		model.gitInputField = 0
-		model.gitFullName = "John Doe"
+		model.git.gitInputActive = true
+		model.git.gitInputField = 0
+		model.git.gitFullName = "John Doe"
 
 		// Simulate backspace
 		backspaceKeyMsg := tea.KeyMsg{Type: tea.KeyBackspace}
@@ -157,13 +161,13 @@ func TestGitConfigValidation(t *testing.T) {
 		setupModel, ok := updatedModel.(*SetupModel)
 		assert.True(t, ok, "Updated model should be SetupModel")
 
-		assert.Equal(t, "John Do", setupModel.gitFullName, "Backspace should remove last character")
+		assert.Equal(t, "John Do", setupModel.git.gitFullName, "Backspace should remove last character")
 	})
 
 	t.Run("should handle escape key appropriately", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitInputActive = true
-		model.gitInputField = 0
+		model.git.gitInputActive = true
+		model.git.gitInputField = 0
 
 		// Simulate escape key
 		escapeKeyMsg := tea.KeyMsg{Type: tea.KeyEsc}
@@ -177,8 +181,8 @@ func TestGitConfigValidation(t *testing.T) {
 
 	t.Run("should show correct field indicators in view", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitFullName = "John Doe"
-		model.gitEmail = "john@example.com"
+		model.git.gitFullName = "John Doe"
+		model.git.gitEmail = "john@example.com"
 
 		view := model.View()
 
@@ -191,9 +195,9 @@ func TestGitConfigValidation(t *testing.T) {
 	t.Run("should show cursor indicators for active field", func(t *testing.T) {
 		model := createMockSetupModel()
 		model.cursor = 0
-		model.gitInputActive = true
-		model.gitInputField = 0
-		model.gitFullName = "John"
+		model.git.gitInputActive = true
+		model.git.gitInputField = 0
+		model.git.gitFullName = "John"
 
 		view := model.View()
 
@@ -203,7 +207,7 @@ func TestGitConfigValidation(t *testing.T) {
 
 	t.Run("should show editing instructions when input is active", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitInputActive = true
+		model.git.gitInputActive = true
 
 		view := model.View()
 
@@ -215,7 +219,7 @@ func TestGitConfigValidation(t *testing.T) {
 
 	t.Run("should show navigation instructions when input is not active", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitInputActive = false
+		model.git.gitInputActive = false
 
 		view := model.View()
 
@@ -246,8 +250,8 @@ func TestGitConfigValidation(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				model := createMockSetupModel()
-				model.gitFullName = "John Doe"
-				model.gitEmail = tc.email
+				model.git.gitFullName = "John Doe"
+				model.git.gitEmail = tc.email
 
 				updatedModel, _ := model.nextStep()
 
@@ -264,8 +268,8 @@ func TestGitConfigValidation(t *testing.T) {
 
 	t.Run("should handle long names and emails", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitFullName = "This Is A Very Long Full Name With Many Words And Characters"
-		model.gitEmail = "this.is.a.very.long.email.address@a.very.long.domain.name.example.com"
+		model.git.gitFullName = "This Is A Very Long Full Name With Many Words And Characters"
+		model.git.gitEmail = "this.is.a.very.long.email.address@a.very.long.domain.name.example.com"
 
 		updatedModel, _ := model.nextStep()
 
@@ -289,8 +293,8 @@ func TestGitConfigValidation(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				model := createMockSetupModel()
-				model.gitFullName = tc.fullName
-				model.gitEmail = "user@example.com"
+				model.git.gitFullName = tc.fullName
+				model.git.gitEmail = "user@example.com"
 
 				updatedModel, _ := model.nextStep()
 
@@ -302,15 +306,15 @@ func TestGitConfigValidation(t *testing.T) {
 
 	t.Run("should maintain field values during navigation", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.gitFullName = "John Doe"
-		model.gitEmail = "john@example.com"
+		model.git.gitFullName = "John Doe"
+		model.git.gitEmail = "john@example.com"
 
 		// Navigate to different steps and back
 		nextModel, _ := model.nextStep()     // Go to confirmation
 		prevModel, _ := nextModel.prevStep() // Back to git config
 
-		assert.Equal(t, "John Doe", prevModel.gitFullName, "Should preserve full name")
-		assert.Equal(t, "john@example.com", prevModel.gitEmail, "Should preserve email")
+		assert.Equal(t, "John Doe", prevModel.git.gitFullName, "Should preserve full name")
+		assert.Equal(t, "john@example.com", prevModel.git.gitEmail, "Should preserve email")
 	})
 }
 

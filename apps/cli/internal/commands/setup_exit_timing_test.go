@@ -15,12 +15,16 @@ func TestAutoExitTiming(t *testing.T) {
 	// Create a mock setup model for testing
 	createMockSetupModel := func() *SetupModel {
 		return &SetupModel{
-			step:             StepComplete,
-			detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
-			repo:             mocks.NewMockRepository(),
-			settings:         config.CrossPlatformSettings{},
-			hasErrors:        false,
-			installErrors:    []string{},
+			step: StepComplete,
+			system: SystemInfo{
+				detectedPlatform: platform.DetectionResult{OS: "linux", DesktopEnv: "gnome"},
+			},
+			installation: InstallationState{
+				hasErrors:     false,
+				installErrors: []string{},
+			},
+			repo:     mocks.NewMockRepository(),
+			settings: config.CrossPlatformSettings{},
 		}
 	}
 
@@ -74,8 +78,8 @@ func TestAutoExitTiming(t *testing.T) {
 
 	t.Run("completion view should show success message when no errors", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.hasErrors = false
-		model.installErrors = []string{}
+		model.installation.hasErrors = false
+		model.installation.installErrors = []string{}
 
 		view := model.View()
 
@@ -86,8 +90,8 @@ func TestAutoExitTiming(t *testing.T) {
 
 	t.Run("completion view should show error message when errors exist", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.hasErrors = true
-		model.installErrors = []string{"Failed to install package X", "Service Y not available"}
+		model.installation.hasErrors = true
+		model.installation.installErrors = []string{"Failed to install package X", "Service Y not available"}
 
 		view := model.View()
 
@@ -143,8 +147,8 @@ func TestAutoExitTiming(t *testing.T) {
 
 		// Step should be set to complete when progress reaches 100%
 		assert.Equal(t, StepComplete, setupModel.step, "Step should be complete when progress is 100%")
-		assert.Equal(t, "Installation complete", setupModel.installStatus, "Install status should be updated")
-		assert.Equal(t, 1.0, setupModel.progress, "Progress should be set to 1.0")
+		assert.Equal(t, "Installation complete", setupModel.installation.installStatus, "Install status should be updated")
+		assert.Equal(t, 1.0, setupModel.installation.progress, "Progress should be set to 1.0")
 
 		// Should return a wait command
 		assert.NotNil(t, cmd, "Should return wait command for activity polling")
@@ -166,8 +170,8 @@ func TestAutoExitTiming(t *testing.T) {
 
 		// Step should remain installing when progress is less than 100%
 		assert.Equal(t, StepInstalling, setupModel.step, "Step should remain installing when progress < 100%")
-		assert.Equal(t, "Installing packages...", setupModel.installStatus, "Install status should be updated")
-		assert.Equal(t, 0.7, setupModel.progress, "Progress should be set to 0.7")
+		assert.Equal(t, "Installing packages...", setupModel.installation.installStatus, "Install status should be updated")
+		assert.Equal(t, 0.7, setupModel.installation.progress, "Progress should be set to 0.7")
 
 		// Should return a wait command
 		assert.NotNil(t, cmd, "Should return wait command for activity polling")
@@ -175,18 +179,18 @@ func TestAutoExitTiming(t *testing.T) {
 
 	t.Run("completion step should include installation summary", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.selectedShell = 0
-		model.shells = []string{"zsh", "bash", "fish"}
+		model.selections.selectedShell = 0
+		model.system.shells = []string{"zsh", "bash", "fish"}
 
 		// Simulate some selections
-		model.selectedLangs = map[int]bool{0: true, 2: true}
-		model.languages = []string{"Node.js", "Python", "Go"}
+		model.selections.selectedLangs = map[int]bool{0: true, 2: true}
+		model.system.languages = []string{"Node.js", "Python", "Go"}
 
-		model.selectedDBs = map[int]bool{1: true}
-		model.databases = []string{"PostgreSQL", "MySQL", "Redis"}
+		model.selections.selectedDBs = map[int]bool{1: true}
+		model.system.databases = []string{"PostgreSQL", "MySQL", "Redis"}
 
-		model.selectedApps = map[int]bool{0: true}
-		model.desktopApps = []string{"VS Code", "Chrome"}
+		model.selections.selectedApps = map[int]bool{0: true}
+		model.system.desktopApps = []string{"VS Code", "Chrome"}
 
 		view := model.View()
 
@@ -201,10 +205,10 @@ func TestAutoExitTiming(t *testing.T) {
 
 	t.Run("completion step should provide helpful next steps", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.hasErrors = false
+		model.installation.hasErrors = false
 		model.shellSwitched = true
-		model.selectedShell = 0
-		model.shells = []string{"zsh", "bash", "fish"}
+		model.selections.selectedShell = 0
+		model.system.shells = []string{"zsh", "bash", "fish"}
 
 		view := model.View()
 
@@ -218,10 +222,10 @@ func TestAutoExitTiming(t *testing.T) {
 
 	t.Run("completion step should show troubleshooting when errors exist", func(t *testing.T) {
 		model := createMockSetupModel()
-		model.hasErrors = true
-		model.installErrors = []string{"Docker service not running"}
-		model.selectedShell = 0
-		model.shells = []string{"zsh", "bash", "fish"}
+		model.installation.hasErrors = true
+		model.installation.installErrors = []string{"Docker service not running"}
+		model.selections.selectedShell = 0
+		model.system.shells = []string{"zsh", "bash", "fish"}
 
 		view := model.View()
 

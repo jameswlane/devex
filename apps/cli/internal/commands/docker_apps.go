@@ -15,16 +15,7 @@ const (
 	RedisPort      = "6379:6379"
 )
 
-// getSelectedDatabases returns the names of selected databases
-func (m *SetupModel) getSelectedDatabases() []string {
-	var selected []string
-	for i, isSelected := range m.selectedDBs {
-		if isSelected && i < len(m.databases) {
-			selected = append(selected, m.databases[i])
-		}
-	}
-	return selected
-}
+// getSelectedDatabases is implemented in setup.go to avoid duplication
 
 // getDockerApp returns a CrossPlatformApp for Docker Engine installation using secure Go installer
 func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {

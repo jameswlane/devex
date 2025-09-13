@@ -383,51 +383,324 @@ func outputTable(results []status.AppStatus, verbose bool) {
 
 // Helper functions that remain in this file for now
 func getAppVersion(ctx context.Context, app *types.AppConfig) string {
-	// Version detection based on app type
-	versionCmd := getVersionCommand(app.Name)
-	if versionCmd == "" {
-		return "unknown"
-	}
-
-	cmd := exec.CommandContext(ctx, "sh", "-c", versionCmd)
-	output, err := cmd.Output()
-	if err != nil {
-		return "unknown"
-	}
-
-	version := strings.TrimSpace(string(output))
-	if version == "" {
-		return "unknown"
-	}
-
-	return version
+	// Version detection using direct command execution for security
+	return getVersionDirect(ctx, app.Name)
 }
 
-func getVersionCommand(appName string) string {
-	versionCommands := map[string]string{
-		"git":        "git --version | grep -oP 'git version \\K[0-9.]+'",
-		"docker":     "docker --version | grep -oP 'Docker version \\K[0-9.]+'",
-		"node":       "node --version | grep -oP 'v\\K[0-9.]+'",
-		"nodejs":     "node --version | grep -oP 'v\\K[0-9.]+'",
-		"python":     "python --version 2>&1 | grep -oP 'Python \\K[0-9.]+'",
-		"python3":    "python3 --version | grep -oP 'Python \\K[0-9.]+'",
-		"go":         "go version | grep -oP 'go\\K[0-9.]+'",
-		"rust":       "rustc --version | grep -oP 'rustc \\K[0-9.]+'",
-		"java":       "java -version 2>&1 | head -1 | grep -oP '\"\\K[0-9.]+'",
-		"php":        "php --version | head -1 | grep -oP 'PHP \\K[0-9.]+'",
-		"mysql":      "mysql --version | grep -oP 'mysql  Ver \\K[0-9.]+'",
-		"postgresql": "psql --version | grep -oP 'psql \\(PostgreSQL\\) \\K[0-9.]+'",
-		"redis":      "redis-server --version | grep -oP 'v=\\K[0-9.]+'",
-		"nginx":      "nginx -v 2>&1 | grep -oP 'nginx/\\K[0-9.]+'",
-		"apache2":    "apache2 -v | head -1 | grep -oP 'Apache/\\K[0-9.]+'",
+// getVersionDirect safely executes version commands without shell injection risk
+func getVersionDirect(ctx context.Context, appName string) string {
+	appNameLower := strings.ToLower(appName)
+
+	// Map of app names to their actual command names and version extraction patterns
+	type versionInfo struct {
+		command   string
+		args      []string
+		extractor func(string) string
 	}
 
-	if cmd, ok := versionCommands[strings.ToLower(appName)]; ok {
-		return cmd
+	versionCommands := map[string]versionInfo{
+		"git": {
+			command: "git",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "git version 2.34.1"
+				parts := strings.Fields(output)
+				if len(parts) >= 3 && parts[0] == "git" && parts[1] == "version" {
+					return parts[2]
+				}
+				return "unknown"
+			},
+		},
+		"docker": {
+			command: "docker",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "Docker version 20.10.17, build 100c701"
+				if idx := strings.Index(output, "Docker version "); idx >= 0 {
+					start := idx + len("Docker version ")
+					if commaIdx := strings.Index(output[start:], ","); commaIdx > 0 {
+						return output[start : start+commaIdx]
+					}
+				}
+				return "unknown"
+			},
+		},
+		"node": {
+			command: "node",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "v16.17.0"
+				output = strings.TrimSpace(output)
+				if strings.HasPrefix(output, "v") {
+					return output[1:]
+				}
+				return output
+			},
+		},
+		"nodejs": {
+			command: "node",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				output = strings.TrimSpace(output)
+				if strings.HasPrefix(output, "v") {
+					return output[1:]
+				}
+				return output
+			},
+		},
+		"python": {
+			command: "python",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "Python 3.9.7"
+				parts := strings.Fields(output)
+				if len(parts) >= 2 && parts[0] == "Python" {
+					return parts[1]
+				}
+				return "unknown"
+			},
+		},
+		"python3": {
+			command: "python3",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				parts := strings.Fields(output)
+				if len(parts) >= 2 && parts[0] == "Python" {
+					return parts[1]
+				}
+				return "unknown"
+			},
+		},
+		"go": {
+			command: "go",
+			args:    []string{"version"},
+			extractor: func(output string) string {
+				// Extract from "go version go1.19.1 linux/amd64"
+				if idx := strings.Index(output, "go"); idx >= 0 {
+					parts := strings.Fields(output[idx:])
+					if len(parts) >= 3 && strings.HasPrefix(parts[2], "go") {
+						return parts[2][2:] // Remove "go" prefix
+					}
+				}
+				return "unknown"
+			},
+		},
+		"rust": {
+			command: "rustc",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "rustc 1.64.0 (a55dd71d5 2022-09-19)"
+				parts := strings.Fields(output)
+				if len(parts) >= 2 && parts[0] == "rustc" {
+					return parts[1]
+				}
+				return "unknown"
+			},
+		},
+		"java": {
+			command: "java",
+			args:    []string{"-version"},
+			extractor: func(output string) string {
+				// Java outputs to stderr, extract from 'openjdk version "11.0.16"'
+				lines := strings.Split(output, "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "version") {
+						if start := strings.Index(line, `"`); start >= 0 {
+							if end := strings.Index(line[start+1:], `"`); end > 0 {
+								return line[start+1 : start+1+end]
+							}
+						}
+					}
+				}
+				return "unknown"
+			},
+		},
+		"php": {
+			command: "php",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "PHP 8.1.2 (cli) (built: ..."
+				lines := strings.Split(output, "\n")
+				if len(lines) > 0 {
+					parts := strings.Fields(lines[0])
+					if len(parts) >= 2 && parts[0] == "PHP" {
+						return parts[1]
+					}
+				}
+				return "unknown"
+			},
+		},
+		"mysql": {
+			command: "mysql",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "mysql  Ver 8.0.30 for Linux on x86_64"
+				if idx := strings.Index(output, "Ver "); idx >= 0 {
+					start := idx + 4
+					parts := strings.Fields(output[start:])
+					if len(parts) > 0 {
+						return parts[0]
+					}
+				}
+				return "unknown"
+			},
+		},
+		"postgresql": {
+			command: "psql",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "psql (PostgreSQL) 14.5"
+				if idx := strings.Index(output, "PostgreSQL"); idx >= 0 {
+					parts := strings.Fields(output[idx:])
+					if len(parts) >= 2 {
+						return strings.TrimSuffix(parts[1], ")")
+					}
+				}
+				return "unknown"
+			},
+		},
+		"redis": {
+			command: "redis-server",
+			args:    []string{"--version"},
+			extractor: func(output string) string {
+				// Extract from "Redis server v=7.0.4 sha=00000000:0"
+				if idx := strings.Index(output, "v="); idx >= 0 {
+					start := idx + 2
+					parts := strings.Fields(output[start:])
+					if len(parts) > 0 {
+						return parts[0]
+					}
+				}
+				return "unknown"
+			},
+		},
+		"nginx": {
+			command: "nginx",
+			args:    []string{"-v"},
+			extractor: func(output string) string {
+				// nginx outputs to stderr: "nginx version: nginx/1.22.0"
+				if idx := strings.Index(output, "nginx/"); idx >= 0 {
+					start := idx + 6
+					parts := strings.Fields(output[start:])
+					if len(parts) > 0 {
+						return parts[0]
+					}
+				}
+				return "unknown"
+			},
+		},
+		"apache2": {
+			command: "apache2",
+			args:    []string{"-v"},
+			extractor: func(output string) string {
+				// Extract from "Server version: Apache/2.4.54 (Ubuntu)"
+				lines := strings.Split(output, "\n")
+				for _, line := range lines {
+					if idx := strings.Index(line, "Apache/"); idx >= 0 {
+						start := idx + 7
+						parts := strings.Fields(line[start:])
+						if len(parts) > 0 {
+							return parts[0]
+						}
+					}
+				}
+				return "unknown"
+			},
+		},
 	}
 
-	// Generic version attempts
-	return fmt.Sprintf("%s --version 2>/dev/null || %s -v 2>/dev/null || echo 'unknown'", appName, appName)
+	// Try known command patterns first
+	if info, ok := versionCommands[appNameLower]; ok {
+		cmd := exec.CommandContext(ctx, info.command, info.args...)
+		output, err := cmd.CombinedOutput() // Use CombinedOutput to capture stderr too
+		if err == nil {
+			version := info.extractor(string(output))
+			if version != "unknown" && version != "" {
+				return version
+			}
+		}
+	}
+
+	// Generic fallback: try common version flags directly
+	// First, check if the command exists
+	if _, err := exec.LookPath(appName); err != nil {
+		return "unknown"
+	}
+
+	// Try --version flag
+	cmd := exec.CommandContext(ctx, appName, "--version")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		version := extractGenericVersion(string(output))
+		if version != "" {
+			return version
+		}
+	}
+
+	// Try -v flag
+	cmd = exec.CommandContext(ctx, appName, "-v")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		version := extractGenericVersion(string(output))
+		if version != "" {
+			return version
+		}
+	}
+
+	// Try -version flag
+	cmd = exec.CommandContext(ctx, appName, "-version")
+	if output, err := cmd.CombinedOutput(); err == nil {
+		version := extractGenericVersion(string(output))
+		if version != "" {
+			return version
+		}
+	}
+
+	return "unknown"
+}
+
+// GetAppVersionForTesting is exported for testing purposes only
+func GetAppVersionForTesting(ctx context.Context, app *types.AppConfig) string {
+	return getAppVersion(ctx, app)
+}
+
+// extractGenericVersion attempts to extract a version number from generic output
+func extractGenericVersion(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return ""
+	}
+
+	// Look for common version patterns
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		// Look for patterns like "1.2.3" or "v1.2.3"
+		parts := strings.Fields(line)
+		for _, part := range parts {
+			// Remove 'v' prefix if present
+			part = strings.TrimPrefix(part, "v")
+			part = strings.TrimPrefix(part, "V")
+
+			// Check if it looks like a version number (contains dots and numbers)
+			if strings.Contains(part, ".") {
+				// Basic version pattern check
+				hasDigit := false
+				for _, ch := range part {
+					if ch >= '0' && ch <= '9' {
+						hasDigit = true
+						break
+					}
+				}
+				if hasDigit {
+					// Clean up common suffixes
+					if idx := strings.IndexAny(part, ",;()[]{}'\""); idx > 0 {
+						part = part[:idx]
+					}
+					return part
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 func checkDependencies(ctx context.Context, deps []string, settings config.CrossPlatformSettings) []status.DependencyStatus {
