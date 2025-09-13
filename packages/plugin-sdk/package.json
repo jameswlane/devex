@@ -1,6 +1,6 @@
 {
   "name": "@devex/plugin-sdk",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Shared SDK for DevEx plugins",
   "private": true,
   "scripts": {
