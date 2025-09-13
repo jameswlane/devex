@@ -1535,7 +1535,7 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 //
 // Returns:
 //   - error: nil on successful TUI completion, or error from TUI framework or installation
-func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
+func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
 	// Add recovery mechanism to prevent panics from hanging the application
 	defer func() {
 		if r := recover(); r != nil {
@@ -1545,8 +1545,8 @@ func StartInstallation(apps []types.CrossPlatformApp, repo types.Repository, set
 		}
 	}()
 
-	// Create context for cancellation support
-	ctx, cancel := context.WithCancel(context.Background())
+	// Create cancellable context from the passed context for installation control
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	// Create TUI model

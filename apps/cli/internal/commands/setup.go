@@ -135,8 +135,8 @@ func runAutomatedSetupWithContext(ctx context.Context, dryRun bool, repo types.R
 		return nil
 	}
 
-	// TODO: Update runAutomatedSetup to accept context parameter
-	return runAutomatedSetup(repo, settings) //nolint:contextcheck
+	// Pass context to runAutomatedSetup for proper cancellation support
+	return runAutomatedSetup(ctx, repo, settings)
 }
 
 // previewSetup shows what the setup process would do
@@ -1285,6 +1285,13 @@ func (m *SetupModel) getSelectedShell() string {
 	return "zsh" // Default fallback
 }
 
+func (m *SetupModel) getSelectedTheme() string {
+	if m.selections.selectedTheme >= 0 && m.selections.selectedTheme < len(m.system.themes) {
+		return m.system.themes[m.selections.selectedTheme]
+	}
+	return "" // No theme selected
+}
+
 func (m *SetupModel) renderProgressBar() string {
 	width := ProgressBarWidth
 	filled := int(m.installation.progress * float64(width))
@@ -1505,7 +1512,10 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 			}
 		}()
 
-		if err := tui.StartInstallation(apps, m.repo, m.settings); err != nil {
+		// Get context from Bubble Tea program
+		ctx := context.Background() // Default context if GetContext is not available
+
+		if err := tui.StartInstallation(ctx, apps, m.repo, m.settings); err != nil {
 			log.Error("Streaming installer failed", err)
 			fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
 
@@ -1515,7 +1525,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 
 			var errors []string
 			for _, app := range apps {
-				if err := installers.InstallCrossPlatformApp(app, m.settings, m.repo); err != nil {
+				if err := installers.InstallCrossPlatformApp(ctx, app, m.settings, m.repo); err != nil {
 					errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
 				}
 			}
@@ -1532,7 +1542,6 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 		log.Info("Installation completed successfully, running shell configuration finalization")
 
 		// Run shell finalization (same as automated setup)
-		ctx := context.Background()
 		if err := m.finalizeSetup(ctx); err != nil {
 			log.Warn("Shell setup had issues during TUI installation", "error", err)
 			// Don't fail the entire setup for shell config issues
@@ -1553,24 +1562,156 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	selectedShell := m.getSelectedShell()
 	log.Info("Finalizing setup", "selectedShell", selectedShell)
 
-	// TODO: Use tool-shell plugin for shell setup
-	log.Info("Shell setup would be handled by tool-shell plugin", "shell", selectedShell)
+	// Initialize plugin bootstrap for post-installation configuration
+	pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+	if err != nil {
+		log.Error("Failed to initialize plugin system for finalization", err)
+		return fmt.Errorf("failed to initialize plugin system: %w", err)
+	}
 
-	// TODO: Copy theme files and configurations using desktop-themes plugin
-	log.Info("Theme files would be copied by desktop-themes plugin")
+	// Initialize plugin system
+	if err := pluginBootstrap.Initialize(ctx); err != nil {
+		log.Error("Failed to bootstrap plugins for finalization", err)
+		return fmt.Errorf("plugin initialization failed: %w", err)
+	}
 
-	// TODO: Copy application configuration files using appropriate plugins
-	log.Info("Application configuration would be handled by respective plugins")
+	// 1. Shell configuration using tool-shell plugin (conditional on shell selection or config)
+	if err := m.handleShellConfiguration(ctx, pluginBootstrap, selectedShell); err != nil {
+		log.Warn("Shell configuration failed", "error", err)
+		// Don't fail the entire setup for shell config issues
+	}
 
-	// TODO: Setup git configuration using tool-git plugin
-	log.Info("Git configuration would be handled by tool-git plugin")
+	// 2. Desktop theme configuration using desktop plugin based on detected environment
+	if err := m.handleDesktopConfiguration(ctx, pluginBootstrap); err != nil {
+		log.Warn("Desktop configuration failed", "error", err)
+		// Don't fail the entire setup for desktop config issues
+	}
 
-	// Save selected theme preference
+	// 3. Git configuration using tool-git plugin (conditional on git config presence)
+	if err := m.handleGitConfiguration(ctx, pluginBootstrap); err != nil {
+		log.Warn("Git configuration failed", "error", err)
+		// Don't fail the entire setup for git config issues
+	}
+
+	// Save selected theme preference (using internal implementation)
 	if err := m.saveThemePreference(); err != nil {
 		log.Error("Failed to save theme preference", err)
 		return err
 	}
 
+	return nil
+}
+
+// handleShellConfiguration configures the selected shell using tool-shell plugin
+// Uses plugin only if user changed shell from default or if custom shell config exists
+func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap, selectedShell string) error {
+	// For now, we'll always run shell configuration since we can't easily detect existing config
+	// TODO: Add detection of existing shell configuration files to check if config is needed
+	// Currently assuming shell configuration is always needed for proper setup
+	log.Debug("Shell configuration needed", "shell", selectedShell)
+
+	// Check if tool-shell plugin is available
+	manager := pluginBootstrap.GetManager()
+	installedPlugins := manager.ListPlugins()
+
+	if _, exists := installedPlugins["tool-shell"]; !exists {
+		log.Warn("tool-shell plugin not available, skipping shell configuration")
+		return nil
+	}
+
+	log.Info("Configuring shell using tool-shell plugin", "shell", selectedShell)
+
+	// Execute tool-shell plugin with the selected shell
+	args := []string{"configure", selectedShell}
+	if err := pluginBootstrap.ExecutePlugin("tool-shell", args); err != nil { //nolint:contextcheck
+		return fmt.Errorf("failed to configure shell using tool-shell plugin: %w", err)
+	}
+
+	log.Info("Shell configuration completed successfully", "shell", selectedShell)
+	return nil
+}
+
+// handleDesktopConfiguration applies desktop theme and settings using appropriate desktop plugin
+// Detects desktop environment and uses corresponding plugin (desktop-gnome, desktop-kde, etc.)
+func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap) error {
+	if !m.system.hasDesktop {
+		log.Debug("No desktop environment detected, skipping desktop configuration")
+		return nil
+	}
+
+	// Determine desktop plugin based on detected environment
+	desktopEnv := m.system.detectedPlatform.DesktopEnv
+	if desktopEnv == "none" || desktopEnv == "" {
+		log.Debug("Desktop environment not detected or supported, skipping desktop configuration")
+		return nil
+	}
+
+	pluginName := fmt.Sprintf("desktop-%s", strings.ToLower(desktopEnv))
+	log.Info("Configuring desktop using plugin", "plugin", pluginName, "desktop", desktopEnv)
+
+	// Check if desktop plugin is available
+	manager := pluginBootstrap.GetManager()
+	installedPlugins := manager.ListPlugins()
+
+	if _, exists := installedPlugins[pluginName]; !exists {
+		log.Warn("Desktop plugin not available, skipping desktop configuration", "plugin", pluginName)
+		return nil
+	}
+
+	// Get selected theme if any
+	selectedTheme := m.getSelectedTheme()
+
+	// Execute desktop plugin with theme configuration
+	args := []string{"configure"}
+	if selectedTheme != "" {
+		args = append(args, "--theme", selectedTheme)
+	}
+
+	if err := pluginBootstrap.ExecutePlugin(pluginName, args); err != nil { //nolint:contextcheck
+		return fmt.Errorf("failed to configure desktop using %s plugin: %w", pluginName, err)
+	}
+
+	log.Info("Desktop configuration completed successfully", "plugin", pluginName, "theme", selectedTheme)
+	return nil
+}
+
+// handleGitConfiguration sets up Git using tool-git plugin
+// Uses plugin only if Git configuration (name, email) is provided
+func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap) error {
+	// Check if git configuration is provided
+	gitName := strings.TrimSpace(m.git.gitFullName)
+	gitEmail := strings.TrimSpace(m.git.gitEmail)
+
+	if gitName == "" && gitEmail == "" {
+		log.Debug("No Git configuration provided, skipping git setup")
+		return nil
+	}
+
+	// Check if tool-git plugin is available
+	manager := pluginBootstrap.GetManager()
+	installedPlugins := manager.ListPlugins()
+
+	if _, exists := installedPlugins["tool-git"]; !exists {
+		log.Warn("tool-git plugin not available, skipping git configuration")
+		return nil
+	}
+
+	log.Info("Configuring Git using tool-git plugin", "name", gitName, "email", gitEmail)
+
+	// Execute tool-git plugin with user configuration
+	args := []string{"configure"}
+	if gitName != "" {
+		args = append(args, "--name", gitName)
+	}
+	if gitEmail != "" {
+		args = append(args, "--email", gitEmail)
+	}
+
+	if err := pluginBootstrap.ExecutePlugin("tool-git", args); err != nil { //nolint:contextcheck
+		return fmt.Errorf("failed to configure git using tool-git plugin: %w", err)
+	}
+
+	log.Info("Git configuration completed successfully", "name", gitName, "email", gitEmail)
 	return nil
 }
 
@@ -1848,7 +1989,7 @@ func isInteractiveMode() bool {
 }
 
 // runAutomatedSetup runs a non-interactive setup with sensible defaults
-func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSettings) error {
+func runAutomatedSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {
 	log.Info("Running automated setup with default selections")
 
 	// Create a minimal setup model with default selections for automation
@@ -1865,7 +2006,7 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 	// Use the regular installer system for non-interactive mode
 	var errors []string
 	for _, app := range apps {
-		if err := installers.InstallCrossPlatformApp(app, settings, repo); err != nil {
+		if err := installers.InstallCrossPlatformApp(ctx, app, settings, repo); err != nil {
 			errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
 		}
 	}
@@ -1878,7 +2019,6 @@ func runAutomatedSetup(repo types.Repository, settings config.CrossPlatformSetti
 	}
 
 	// Handle shell configuration and switching
-	ctx := context.Background()
 	if err := model.finalizeSetup(ctx); err != nil {
 		log.Warn("Shell setup had issues", "error", err)
 		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
