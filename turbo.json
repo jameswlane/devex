@@ -56,7 +56,7 @@
 			"inputs": ["**/*.ts", "**/*.tsx", "tsconfig.json"]
 		},
 		"lint": {
-			"dependsOn": ["^lint", "download"],
+			"dependsOn": ["^lint"],
 			"inputs": [
 				"**/*.go",
 				"**/*.ts",
@@ -83,7 +83,7 @@
 			"cache": false
 		},
 		"test": {
-			"dependsOn": ["build", "download"],
+			"dependsOn": ["build"],
 			"inputs": [
 				"**/*.go",
 				"**/*.ts",
