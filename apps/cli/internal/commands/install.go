@@ -151,8 +151,8 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 		attribute.Int("app_count", len(appsToInstall)),
 	))
 
-	// TODO: Update tui.StartInstallation to accept context parameter
-	if err := tui.StartInstallation(appsToInstall, repo, settings); err != nil { //nolint:contextcheck
+	// Pass context to tui.StartInstallation for proper cancellation support
+	if err := tui.StartInstallation(ctx, appsToInstall, repo, settings); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "Installation failed")
 		return fmt.Errorf("installation failed: %w", err)

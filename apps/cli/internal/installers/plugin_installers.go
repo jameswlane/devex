@@ -1,6 +1,7 @@
 package installers
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -177,7 +178,7 @@ func executeInstallCommand(app types.AppConfig, repo types.Repository) error {
 }
 
 // InstallCrossPlatformApp installs a cross-platform application using the appropriate OS-specific configuration
-func InstallCrossPlatformApp(app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) error {
+func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) error {
 	log.Info("Installing cross-platform app", "app", app.Name)
 
 	// Validate that the app is supported on the current platform
