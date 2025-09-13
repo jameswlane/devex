@@ -197,7 +197,7 @@ function validateApplicationData(data, filePath) {
 // Paths
 const CLI_APPLICATIONS_PATH = path.join(process.cwd(), 'apps/cli/config/applications');
 const OUTPUT_PATH = path.join(process.cwd(), 'apps/web/app/generated');
-const REGISTRY_API = 'https://registry.devex.sh/v1/registry';
+const REGISTRY_API = 'https://registry.devex.sh/api/v1/registry';
 
 // Enhanced network error handling with granular per-endpoint timeouts
 const CACHE_FILE = path.join(process.cwd(), '.cache', 'plugin-data.json');
