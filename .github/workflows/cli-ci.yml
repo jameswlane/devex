@@ -44,7 +44,7 @@ jobs:
       - name: Lint all packages
         run: pnpm turbo lint --concurrency=1
       - name: Install Ginkgo
-        run: go install github.com/onsi/ginkgo/v2/ginkgo
+        run: go install github.com/onsi/ginkgo/v2/ginkgo@latest
       - name: Install Gomega
         run: go get github.com/onsi/gomega/...
       - name: Test all packages

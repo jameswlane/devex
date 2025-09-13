@@ -3,15 +3,20 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/spf13/viper"
 )
 
-// PluginValidationResult represents the result of plugin validation
+// PluginValidationResult represents the comprehensive result of validating a single plugin.
+// It contains validation status, security verification results, timing metrics, and any errors encountered.
+// This type is used to provide detailed feedback about plugin integrity and security compliance.
 type PluginValidationResult struct {
 	PluginName     string
 	IsValid        bool
@@ -21,7 +26,9 @@ type PluginValidationResult struct {
 	ValidationTime time.Duration
 }
 
-// ValidationSummary aggregates validation results
+// ValidationSummary provides an aggregated view of plugin validation results across multiple plugins.
+// It includes overall statistics, performance metrics, and collected errors for comprehensive reporting.
+// This summary is essential for understanding the health and security posture of the entire plugin ecosystem.
 type ValidationSummary struct {
 	TotalPlugins     int
 	ValidPlugins     int
@@ -32,7 +39,19 @@ type ValidationSummary struct {
 	Results          []PluginValidationResult
 }
 
-// PluginValidator provides enhanced plugin validation with security and performance improvements
+// PluginValidator provides enterprise-grade plugin validation with advanced security verification
+// and performance optimizations. It supports parallel processing, early termination strategies,
+// checksum verification, GPG signature validation, and configurable critical plugin handling.
+//
+// Key features:
+//   - Parallel processing with configurable worker pools
+//   - Early termination on critical plugin failures
+//   - Comprehensive security validation (checksums, signatures)
+//   - Performance monitoring and timeout handling
+//   - Configurable critical plugin classification
+//
+// Validation timeout rationale: 30-second default provides adequate time for network operations
+// (downloading signatures, key verification) while preventing indefinite hangs in CI/CD environments.
 type PluginValidator struct {
 	pluginBootstrap     *bootstrap.PluginBootstrap
 	checksumVerifier    bool
@@ -43,7 +62,19 @@ type PluginValidator struct {
 	verificationTimeout time.Duration
 }
 
-// PluginValidatorConfig configures the plugin validator
+// PluginValidatorConfig provides comprehensive configuration options for plugin validation behavior.
+// It controls security settings, performance parameters, and operational policies.
+//
+// Configuration hierarchy (highest to lowest precedence):
+//  1. Explicit config values passed to NewPluginValidator
+//  2. Environment variables (DEVEX_CRITICAL_PLUGINS)
+//  3. Viper configuration files (plugin.critical)
+//  4. Sensible defaults
+//
+// Security considerations:
+//   - VerifyChecksums: Essential for integrity validation
+//   - VerifySignatures: Provides authenticity verification (requires GPG infrastructure)
+//   - FailOnCritical: Enables fail-fast behavior for production environments
 type PluginValidatorConfig struct {
 	VerifyChecksums     bool
 	VerifySignatures    bool
@@ -53,7 +84,20 @@ type PluginValidatorConfig struct {
 	VerificationTimeout time.Duration
 }
 
-// NewPluginValidator creates a new enhanced plugin validator
+// NewPluginValidator creates a new enhanced plugin validator with the specified configuration.
+// It implements intelligent defaults for production use while allowing full customization.
+//
+// Default behaviors:
+//   - Concurrency: Limited to min(NumCPU(), 4) for optimal resource utilization
+//   - Timeout: 30 seconds per plugin (adequate for network operations)
+//   - Critical plugins: Loaded from config hierarchy or defaults to essential system plugins
+//
+// The validator automatically optimizes for the target environment, scaling concurrency
+// based on available CPU cores while maintaining reasonable resource limits.
+//
+// Critical plugin classification:
+// Critical plugins are validated first with potential early termination to provide
+// immediate feedback on essential system components.
 func NewPluginValidator(pluginBootstrap *bootstrap.PluginBootstrap, config PluginValidatorConfig) *PluginValidator {
 	// Set reasonable defaults
 	if config.Concurrency <= 0 {
@@ -73,14 +117,9 @@ func NewPluginValidator(pluginBootstrap *bootstrap.PluginBootstrap, config Plugi
 		criticalSet[plugin] = true
 	}
 
-	// Default critical plugins if none specified
+	// Load critical plugins from configuration if not specified
 	if len(criticalSet) == 0 {
-		criticalSet = map[string]bool{
-			"tool-shell":    true,
-			"desktop-gnome": true,
-			"desktop-kde":   true,
-			"tool-git":      true,
-		}
+		criticalSet = loadCriticalPluginsFromConfig()
 	}
 
 	return &PluginValidator{
@@ -94,7 +133,90 @@ func NewPluginValidator(pluginBootstrap *bootstrap.PluginBootstrap, config Plugi
 	}
 }
 
-// ValidatePlugins performs enhanced plugin validation with parallel processing and early termination
+// loadCriticalPluginsFromConfig loads critical plugins from the configuration hierarchy.
+// It implements a three-tier priority system for maximum flexibility:
+//
+//  1. Environment variable: DEVEX_CRITICAL_PLUGINS (comma-separated list)
+//     Example: DEVEX_CRITICAL_PLUGINS="tool-shell,desktop-gnome,tool-git"
+//
+//  2. Viper configuration: plugin.critical (string slice)
+//     Example: plugin.critical = ["tool-shell", "desktop-gnome", "tool-git"]
+//
+//  3. Default critical plugins: Essential system components
+//     Includes: tool-shell, desktop-gnome, desktop-kde, tool-git
+//
+// This hierarchy allows environment-specific overrides while maintaining sensible defaults
+// for common development environments.
+func loadCriticalPluginsFromConfig() map[string]bool {
+	criticalSet := make(map[string]bool)
+
+	// 1. Try environment variable first (highest priority)
+	envCritical := os.Getenv("DEVEX_CRITICAL_PLUGINS")
+	if envCritical != "" {
+		plugins := strings.Split(envCritical, ",")
+		for _, plugin := range plugins {
+			plugin = strings.TrimSpace(plugin)
+			if plugin != "" {
+				criticalSet[plugin] = true
+			}
+		}
+		log.Debug("Loaded critical plugins from environment", "plugins", envCritical)
+		return criticalSet
+	}
+
+	// 2. Try Viper configuration (medium priority)
+	if viper.IsSet("plugin.critical") {
+		configPlugins := viper.GetStringSlice("plugin.critical")
+		for _, plugin := range configPlugins {
+			plugin = strings.TrimSpace(plugin)
+			if plugin != "" {
+				criticalSet[plugin] = true
+			}
+		}
+		log.Debug("Loaded critical plugins from config", "plugins", configPlugins)
+		return criticalSet
+	}
+
+	// 3. Default critical plugins (lowest priority)
+	criticalSet = map[string]bool{
+		"tool-shell":    true,
+		"desktop-gnome": true,
+		"desktop-kde":   true,
+		"tool-git":      true,
+	}
+	log.Debug("Using default critical plugins", "plugins", []string{"tool-shell", "desktop-gnome", "desktop-kde", "tool-git"})
+	return criticalSet
+}
+
+// ValidatePlugins performs comprehensive plugin validation using a two-phase approach optimized
+// for both security and performance in enterprise environments.
+//
+// Validation algorithm:
+//
+//	Phase 1: Critical Plugin Validation (Sequential)
+//	  - Validates essential system plugins first for immediate feedback
+//	  - Supports early termination on critical failures (if FailOnCritical=true)
+//	  - Reduces time-to-feedback for core system dependencies
+//
+//	Phase 2: Parallel Validation (Concurrent)
+//	  - Validates remaining plugins using configurable worker pools
+//	  - Optimizes resource utilization while maintaining system stability
+//	  - Provides comprehensive coverage with timeout protection
+//
+// Security features:
+//   - Checksum verification for plugin integrity
+//   - GPG signature validation for authenticity (when configured)
+//   - Registry trust validation
+//   - Timeout-based protection against hanging operations
+//
+// Performance optimizations:
+//   - O(1) plugin lookup using hash sets
+//   - Parallel processing with bounded concurrency
+//   - Early termination strategies
+//   - Pre-allocated result collections
+//
+// Context cancellation is respected throughout the validation process, enabling
+// graceful shutdown in CI/CD environments or user-initiated cancellations.
 func (v *PluginValidator) ValidatePlugins(ctx context.Context, requiredPlugins []string) *ValidationSummary {
 	startTime := time.Now()
 	summary := &ValidationSummary{

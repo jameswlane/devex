@@ -120,8 +120,7 @@ func executeGuidedSetup(ctx context.Context, verbose, dryRun, nonInteractive boo
 
 // runInteractiveSetup handles the interactive TUI setup process
 func runInteractiveSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {
-	runGuidedSetup(ctx, repo, settings)
-	return nil
+	return runGuidedSetup(ctx, repo, settings)
 }
 
 // runAutomatedSetupWithContext handles non-interactive setup with context and dry-run support
@@ -375,7 +374,7 @@ func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string
 	return languageNames
 }
 
-func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) {
+func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
 
@@ -386,9 +385,9 @@ func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.
 		log.Info("Non-interactive mode requested, running automated setup")
 		if err := runAutomatedSetupWithContext(ctx, false, repo, settings); err != nil {
 			log.Error("Automated setup failed", err)
-			os.Exit(1) // or handle appropriately
+			return fmt.Errorf("automated setup failed: %w", err)
 		}
-		return
+		return nil
 	}
 
 	// Detect platform and desktop environment first
@@ -474,7 +473,7 @@ func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.
 	finalModel, err := program.Run()
 	if err != nil {
 		log.Error("Error running guided setup", err)
-		os.Exit(1)
+		return fmt.Errorf("error running guided setup: %w", err)
 	}
 
 	// Clean up terminal after exiting alt screen
@@ -485,6 +484,8 @@ func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.
 		fmt.Print("\033[H\033[2J") // Clear screen at minimum
 		fmt.Println("✅ DevEx Setup Completed!")
 	}
+
+	return nil
 }
 
 // displayFinalMessage shows a clean final message after exiting the TUI
