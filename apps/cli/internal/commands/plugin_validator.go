@@ -53,13 +53,14 @@ type ValidationSummary struct {
 // Validation timeout rationale: 30-second default provides adequate time for network operations
 // (downloading signatures, key verification) while preventing indefinite hangs in CI/CD environments.
 type PluginValidator struct {
-	pluginBootstrap     *bootstrap.PluginBootstrap
-	checksumVerifier    bool
-	signatureVerifier   bool
-	concurrency         int
-	failOnCritical      bool
-	criticalPlugins     map[string]bool
-	verificationTimeout time.Duration
+	pluginBootstrap      *bootstrap.PluginBootstrap
+	checksumVerifier     bool
+	signatureVerifier    bool
+	concurrency          int
+	failOnCritical       bool
+	criticalPlugins      map[string]bool
+	verificationTimeout  time.Duration
+	allowInsecurePlugins bool
 }
 
 // PluginValidatorConfig provides comprehensive configuration options for plugin validation behavior.
@@ -76,12 +77,13 @@ type PluginValidator struct {
 //   - VerifySignatures: Provides authenticity verification (requires GPG infrastructure)
 //   - FailOnCritical: Enables fail-fast behavior for production environments
 type PluginValidatorConfig struct {
-	VerifyChecksums     bool
-	VerifySignatures    bool
-	Concurrency         int
-	FailOnCritical      bool
-	CriticalPlugins     []string
-	VerificationTimeout time.Duration
+	VerifyChecksums      bool
+	VerifySignatures     bool
+	Concurrency          int
+	FailOnCritical       bool
+	CriticalPlugins      []string
+	VerificationTimeout  time.Duration
+	AllowInsecurePlugins bool
 }
 
 // NewPluginValidator creates a new enhanced plugin validator with the specified configuration.
@@ -108,7 +110,7 @@ func NewPluginValidator(pluginBootstrap *bootstrap.PluginBootstrap, config Plugi
 	}
 
 	if config.VerificationTimeout <= 0 {
-		config.VerificationTimeout = 30 * time.Second
+		config.VerificationTimeout = PluginVerifyTimeout
 	}
 
 	// Build critical plugins set for fast lookup
@@ -123,13 +125,14 @@ func NewPluginValidator(pluginBootstrap *bootstrap.PluginBootstrap, config Plugi
 	}
 
 	return &PluginValidator{
-		pluginBootstrap:     pluginBootstrap,
-		checksumVerifier:    config.VerifyChecksums,
-		signatureVerifier:   config.VerifySignatures,
-		concurrency:         config.Concurrency,
-		failOnCritical:      config.FailOnCritical,
-		criticalPlugins:     criticalSet,
-		verificationTimeout: config.VerificationTimeout,
+		pluginBootstrap:      pluginBootstrap,
+		checksumVerifier:     config.VerifyChecksums,
+		signatureVerifier:    config.VerifySignatures,
+		concurrency:          config.Concurrency,
+		failOnCritical:       config.FailOnCritical,
+		criticalPlugins:      criticalSet,
+		verificationTimeout:  config.VerificationTimeout,
+		allowInsecurePlugins: config.AllowInsecurePlugins,
 	}
 }
 
@@ -245,6 +248,68 @@ func isValidPluginName(pluginName string) bool {
 	}
 
 	return true
+}
+
+// isNetworkError checks if the error is related to network connectivity
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errorStr := strings.ToLower(err.Error())
+	return strings.Contains(errorStr, "network") ||
+		strings.Contains(errorStr, "connection") ||
+		strings.Contains(errorStr, "timeout") ||
+		strings.Contains(errorStr, "unreachable") ||
+		strings.Contains(errorStr, "dns") ||
+		strings.Contains(errorStr, "no route") ||
+		strings.Contains(errorStr, "connection refused")
+}
+
+// isPermissionError checks if the error is related to file permissions
+func isPermissionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errorStr := strings.ToLower(err.Error())
+	return strings.Contains(errorStr, "permission") ||
+		strings.Contains(errorStr, "access denied") ||
+		strings.Contains(errorStr, "operation not permitted") ||
+		strings.Contains(errorStr, "insufficient privileges")
+}
+
+// isDiskSpaceError checks if the error is related to disk space
+func isDiskSpaceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errorStr := strings.ToLower(err.Error())
+	return strings.Contains(errorStr, "no space") ||
+		strings.Contains(errorStr, "disk full") ||
+		strings.Contains(errorStr, "insufficient space")
+}
+
+// enhanceErrorMessage provides actionable guidance for common error scenarios
+func enhanceErrorMessage(operation, pluginName string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	baseMsg := fmt.Sprintf("%s failed for plugin %s", operation, pluginName)
+
+	if isNetworkError(err) {
+		return fmt.Errorf("%s due to network connectivity issues. Please check your internet connection, verify proxy settings, and try again: %w", baseMsg, err)
+	}
+
+	if isPermissionError(err) {
+		return fmt.Errorf("%s due to insufficient permissions. Try running with sudo, check directory permissions, or ensure your user has access to the plugin directory: %w", baseMsg, err)
+	}
+
+	if isDiskSpaceError(err) {
+		return fmt.Errorf("%s due to insufficient disk space. Please free up disk space and try again: %w", baseMsg, err)
+	}
+
+	// Default enhanced message for unknown errors
+	return fmt.Errorf("%s. Please check the plugin name is correct, verify your system meets requirements, and consult the documentation at https://docs.devex.sh/troubleshooting: %w", baseMsg, err)
 }
 
 // ValidatePlugins performs comprehensive plugin validation using a two-phase approach optimized
@@ -480,7 +545,8 @@ func (v *PluginValidator) validateSinglePlugin(ctx context.Context, pluginName s
 
 	// Basic installation check
 	if !installedSet[pluginName] {
-		result.Error = fmt.Errorf("plugin %s is not installed or not available", pluginName)
+		result.Error = enhanceErrorMessage("Plugin installation check", pluginName,
+			fmt.Errorf("plugin is not installed or not available"))
 		result.ValidationTime = time.Since(startTime)
 		return result
 	}
@@ -489,7 +555,7 @@ func (v *PluginValidator) validateSinglePlugin(ctx context.Context, pluginName s
 	// This leverages the existing SDK validation infrastructure
 	if v.checksumVerifier || v.signatureVerifier {
 		if err := v.performEnhancedValidation(pluginCtx, pluginName); err != nil {
-			result.Error = fmt.Errorf("plugin %s failed enhanced validation: %w", pluginName, err)
+			result.Error = enhanceErrorMessage("Plugin security validation", pluginName, err)
 			result.ValidationTime = time.Since(startTime)
 			return result
 		}
@@ -518,20 +584,24 @@ func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginN
 	manager := v.pluginBootstrap.GetManager()
 	pluginInfo, exists := manager.ListPlugins()[pluginName]
 	if !exists {
-		return fmt.Errorf("plugin %s not found in manager", pluginName)
+		return enhanceErrorMessage("Plugin manager lookup", pluginName,
+			fmt.Errorf("plugin not found in manager"))
 	}
 
 	// Basic plugin integrity checks
 	if err := v.validatePluginIntegrity(ctx, pluginName, pluginInfo); err != nil {
-		return fmt.Errorf("plugin integrity validation failed: %w", err)
+		return enhanceErrorMessage("Plugin integrity validation", pluginName, err)
 	}
 
 	// Checksum verification if enabled
 	if v.checksumVerifier {
 		if err := v.validatePluginChecksum(ctx, pluginName, pluginInfo); err != nil {
 			log.Warn("Checksum verification failed", "plugin", pluginName, "error", err)
-			// Continue validation for now - don't fail hard on checksum issues
-			// This will be enhanced when SDK integration is complete
+			// Fail validation unless insecure plugins are explicitly allowed
+			if !v.allowInsecurePlugins {
+				return fmt.Errorf("checksum verification failed for plugin %s (use --allow-insecure-plugins to bypass): %w", pluginName, err)
+			}
+			log.Warn("Continuing with unverified plugin due to --allow-insecure-plugins flag", "plugin", pluginName)
 		}
 	}
 
@@ -539,8 +609,11 @@ func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginN
 	if v.signatureVerifier {
 		if err := v.validatePluginSignature(ctx, pluginName, pluginInfo); err != nil {
 			log.Warn("Signature verification failed", "plugin", pluginName, "error", err)
-			// Continue validation for now - don't fail hard on signature issues
-			// This will be enhanced when SDK integration is complete
+			// Fail validation unless insecure plugins are explicitly allowed
+			if !v.allowInsecurePlugins {
+				return fmt.Errorf("signature verification failed for plugin %s (use --allow-insecure-plugins to bypass): %w", pluginName, err)
+			}
+			log.Warn("Continuing with unsigned plugin due to --allow-insecure-plugins flag", "plugin", pluginName)
 		}
 	}
 

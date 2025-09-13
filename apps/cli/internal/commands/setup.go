@@ -1449,7 +1449,8 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 
 			// Check for context cancellation/timeout
 			if ctx.Err() != nil {
-				allErrors = addErrorSafe(allErrors, fmt.Errorf("plugin installation timed out: %w", ctx.Err()))
+				timeoutErr := fmt.Errorf("plugin installation timed out after %v. This may indicate network issues or system resource constraints. Try increasing DEVEX_PLUGIN_TIMEOUT or check your network connection: %w", m.plugins.timeout, ctx.Err())
+				allErrors = addErrorSafe(allErrors, timeoutErr)
 			}
 			// Continue to verify what plugins were installed despite errors
 		}
@@ -1462,7 +1463,7 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 			Concurrency:         4,     // Reasonable parallel verification limit
 			FailOnCritical:      true,  // Early termination on critical failures
 			CriticalPlugins:     []string{"tool-shell", "desktop-gnome", "desktop-kde", "tool-git"},
-			VerificationTimeout: 10 * time.Second, // Per-plugin timeout
+			VerificationTimeout: PluginVerifyTimeout, // Per-plugin timeout
 		}
 
 		validator := NewPluginValidator(pluginBootstrap, validatorConfig)
@@ -1586,7 +1587,7 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
 	if err != nil {
 		log.Error("Failed to initialize plugin system for finalization", err)
-		return fmt.Errorf("failed to initialize plugin system: %w", err)
+		return fmt.Errorf("failed to initialize plugin system. This may be due to network connectivity issues, insufficient permissions, or missing dependencies. Please check your internet connection, ensure you have write access to the plugin directory, and try again: %w", err)
 	}
 
 	// Initialize plugin system
@@ -1644,7 +1645,7 @@ func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstr
 	// Execute tool-shell plugin with the selected shell
 	args := []string{"configure", selectedShell}
 	if err := pluginBootstrap.ExecutePlugin("tool-shell", args); err != nil { //nolint:contextcheck
-		return fmt.Errorf("failed to configure shell using tool-shell plugin: %w", err)
+		return fmt.Errorf("failed to configure shell using tool-shell plugin. This may be due to shell configuration file permissions or an unsupported shell type. Please check that your shell configuration files are writable and that your shell is supported: %w", err)
 	}
 
 	log.Info("Shell configuration completed successfully", "shell", selectedShell)
@@ -1688,7 +1689,7 @@ func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBoots
 	}
 
 	if err := pluginBootstrap.ExecutePlugin(pluginName, args); err != nil { //nolint:contextcheck
-		return fmt.Errorf("failed to configure desktop using %s plugin: %w", pluginName, err)
+		return fmt.Errorf("failed to configure desktop using %s plugin. This may be due to missing desktop environment packages, insufficient permissions, or unsupported desktop configuration. Please ensure your desktop environment is fully installed and you have appropriate permissions: %w", pluginName, err)
 	}
 
 	log.Info("Desktop configuration completed successfully", "plugin", pluginName, "theme", selectedTheme)
