@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -153,39 +154,70 @@ func previewSetup(settings config.CrossPlatformSettings) error {
 	return nil
 }
 
-// SetupModel represents the state of our guided setup UI
-type SetupModel struct {
-	step             int
+// UISelections groups all user selection states for the setup interface
+type UISelections struct {
+	selectedShell int
+	selectedLangs map[int]bool
+	selectedDBs   map[int]bool
+	selectedApps  map[int]bool
+	selectedTheme int
+}
+
+// GitConfiguration holds Git-specific configuration state
+type GitConfiguration struct {
+	gitFullName    string
+	gitEmail       string
+	gitInputField  int  // 0 = full name, 1 = email
+	gitInputActive bool // true when editing a field
+}
+
+// InstallationState tracks the current installation progress and errors
+type InstallationState struct {
+	installing    bool
+	installStatus string
+	progress      float64
+	installErrors []string
+	hasErrors     bool
+}
+
+// PluginState manages plugin installation state
+type PluginState struct {
+	requiredPlugins   []string
+	pluginsInstalling int32 // atomic bool (0 = false, 1 = true)
+	pluginsInstalled  int32 // atomic bool (0 = false, 1 = true)
+	confirmPlugins    bool
+	timeout           time.Duration // Configurable timeout
+}
+
+// SystemInfo contains detected system information and available options
+type SystemInfo struct {
 	shells           []string
 	languages        []string
 	databases        []string
 	desktopApps      []string
 	themes           []string
-	selectedShell    int
-	selectedLangs    map[int]bool
-	selectedDBs      map[int]bool
-	selectedApps     map[int]bool
-	selectedTheme    int
-	gitFullName      string
-	gitEmail         string
-	gitInputField    int  // 0 = full name, 1 = email
-	gitInputActive   bool // true when editing a field
-	cursor           int
-	installing       bool
-	installStatus    string
-	progress         float64
-	installErrors    []string
-	hasErrors        bool
-	shellSwitched    bool
 	hasDesktop       bool
 	detectedPlatform platform.DetectionResult
-	repo             types.Repository
-	settings         config.CrossPlatformSettings
-	// New fields for system overview and plugin management
-	requiredPlugins   []string
-	pluginsInstalling int32 // atomic bool (0 = false, 1 = true)
-	pluginsInstalled  int32 // atomic bool (0 = false, 1 = true)
-	confirmPlugins    bool
+}
+
+// SetupModel represents the state of our guided setup UI
+// This model is organized into focused sub-structures for better maintainability
+type SetupModel struct {
+	// Navigation state
+	step          int
+	cursor        int
+	shellSwitched bool
+
+	// Grouped states for better organization
+	system       SystemInfo
+	selections   UISelections
+	git          GitConfiguration
+	installation InstallationState
+	plugins      PluginState
+
+	// External dependencies
+	repo     types.Repository
+	settings config.CrossPlatformSettings
 }
 
 // setupSteps defines the guided setup process
@@ -367,41 +399,74 @@ func runGuidedSetup(ctx context.Context, repo types.Repository, settings config.
 	// 1. Pre-allocated slices with known capacity (setup.go:226)
 	// 2. Single-pass filtering with early termination (setup.go:1321-1332)
 	// 3. Cached results to avoid repeated computations during UI navigation
+	// Get plugin timeout from environment or use default
+	pluginTimeout := getPluginTimeout()
+
 	model := &SetupModel{
-		step:              StepSystemOverview, // Start with system overview
-		selectedShell:     DefaultShellIndex,  // Default to zsh (first option)
-		selectedLangs:     make(map[int]bool),
-		selectedDBs:       make(map[int]bool),
-		selectedApps:      make(map[int]bool),
-		installErrors:     make([]string, 0, MaxErrorMessages),
-		hasErrors:         false,
-		shellSwitched:     false,
-		hasDesktop:        plat.DesktopEnv != "none",
-		detectedPlatform:  plat,
-		repo:              repo,
-		settings:          settings,
-		requiredPlugins:   DetectRequiredPlugins(plat), // Detect plugins needed
-		pluginsInstalling: 0,                           // atomic false
-		pluginsInstalled:  0,                           // atomic false
-		confirmPlugins:    false,
-		shells: []string{
-			"zsh",
-			"bash",
-			"fish",
+		step:          StepSystemOverview, // Start with system overview
+		cursor:        0,
+		shellSwitched: false,
+
+		// System information
+		system: SystemInfo{
+			shells: []string{
+				"zsh",
+				"bash",
+				"fish",
+			},
+			languages: getProgrammingLanguageNames(settings),
+			databases: []string{
+				"PostgreSQL",
+				"MySQL",
+				"Redis",
+			},
+			desktopApps:      []string{},                       // Will be populated based on platform
+			themes:           getAvailableThemeNames(settings), // Performance: Themes cached in model for UI navigation
+			hasDesktop:       plat.DesktopEnv != "none",
+			detectedPlatform: plat,
 		},
-		languages: getProgrammingLanguageNames(settings),
-		databases: []string{
-			"PostgreSQL",
-			"MySQL",
-			"Redis",
+
+		// User selections
+		selections: UISelections{
+			selectedShell: DefaultShellIndex, // Default to zsh (first option)
+			selectedLangs: make(map[int]bool),
+			selectedDBs:   make(map[int]bool),
+			selectedApps:  make(map[int]bool),
+			selectedTheme: 0,
 		},
-		themes: getAvailableThemeNames(settings), // Performance: Themes cached in model for UI navigation
+
+		// Git configuration
+		git: GitConfiguration{
+			// Will be populated during setup
+		},
+
+		// Installation state
+		installation: InstallationState{
+			installing:    false,
+			installStatus: "",
+			progress:      0,
+			installErrors: make([]string, 0, MaxErrorMessages),
+			hasErrors:     false,
+		},
+
+		// Plugin state
+		plugins: PluginState{
+			requiredPlugins:   DetectRequiredPlugins(plat), // Detect plugins needed
+			pluginsInstalling: 0,                           // atomic false
+			pluginsInstalled:  0,                           // atomic false
+			confirmPlugins:    false,
+			timeout:           pluginTimeout,
+		},
+
+		// External dependencies
+		repo:     repo,
+		settings: settings,
 	}
 
 	// Set desktop apps based on platform and config (non-default apps only)
 	// Performance optimization: Cache filtered results to avoid repeated filtering during UI navigation
-	if model.hasDesktop {
-		model.desktopApps = model.getAvailableDesktopApps()
+	if model.system.hasDesktop {
+		model.system.desktopApps = model.getAvailableDesktopApps()
 	}
 
 	// Start the Bubble Tea program with context
@@ -433,13 +498,13 @@ func displayFinalMessage(model *SetupModel) {
 	// Header with some spacing
 	message.WriteString("\n")
 
-	if model.hasErrors {
+	if model.installation.hasErrors {
 		// Error header
 		message.WriteString("⚠️  DevEx Setup Completed with Issues\n")
 		message.WriteString("═══════════════════════════════════════\n\n")
 
-		message.WriteString(fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(model.installErrors)))
-		for _, err := range model.installErrors {
+		message.WriteString(fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(model.installation.installErrors)))
+		for _, err := range model.installation.installErrors {
 			message.WriteString(fmt.Sprintf("  ❌ %s\n", err))
 		}
 		message.WriteString("\n")
@@ -481,7 +546,7 @@ func displayFinalMessage(model *SetupModel) {
 		message.WriteString("  3. Check Docker: docker ps\n")
 	}
 
-	if model.hasErrors {
+	if model.installation.hasErrors {
 		message.WriteString("\n⚠️  Some components may need manual attention.\n")
 	}
 
@@ -506,7 +571,7 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Special handling for git configuration text input
-		if m.step == StepGitConfig && m.gitInputActive {
+		if m.step == StepGitConfig && m.git.gitInputActive {
 			return m.handleGitInput(msg)
 		}
 
@@ -536,35 +601,35 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case PluginInstallMsg:
-		m.installStatus = msg.Status
-		m.progress = msg.Progress
+		m.installation.installStatus = msg.Status
+		m.installation.progress = msg.Progress
 		if msg.Error != nil {
-			m.installErrors = addErrorStringSafe(m.installErrors, msg.Error.Error())
-			m.hasErrors = true
+			m.installation.installErrors = addErrorStringSafe(m.installation.installErrors, msg.Error.Error())
+			m.installation.hasErrors = true
 		}
 		return m, nil
 
 	case PluginInstallCompleteMsg:
 		// Update model state based on installation results using atomic operations
-		atomic.StoreInt32(&m.pluginsInstalling, 0) // Mark installation complete
+		atomic.StoreInt32(&m.plugins.pluginsInstalling, 0) // Mark installation complete
 
 		if len(msg.Errors) > 0 {
-			m.hasErrors = true
+			m.installation.hasErrors = true
 			for _, err := range msg.Errors {
-				m.installErrors = addErrorStringSafe(m.installErrors, err.Error())
+				m.installation.installErrors = addErrorStringSafe(m.installation.installErrors, err.Error())
 			}
 			log.Warn("Plugin installation completed with errors", "errors", len(msg.Errors))
 		} else {
-			atomic.StoreInt32(&m.pluginsInstalled, 1) // Mark installation successful
+			atomic.StoreInt32(&m.plugins.pluginsInstalled, 1) // Mark installation successful
 			log.Info("All plugins installed successfully")
 		}
 		// Clear progress
-		m.progress = 1.0
+		m.installation.progress = 1.0
 		return m, nil
 
 	case InstallProgressMsg:
-		m.installStatus = msg.Status
-		m.progress = msg.Progress
+		m.installation.installStatus = msg.Status
+		m.installation.progress = msg.Progress
 		if msg.Progress >= 1.0 {
 			m.step = StepComplete
 		}
@@ -617,21 +682,21 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Let's set up your development environment.")
 		s += "\n\n"
 		s += "System Information:\n"
-		s += fmt.Sprintf("  • OS: %s\n", m.detectedPlatform.OS)
-		if m.detectedPlatform.Distribution != "" {
-			s += fmt.Sprintf("  • Distribution: %s\n", m.detectedPlatform.Distribution)
+		s += fmt.Sprintf("  • OS: %s\n", m.system.detectedPlatform.OS)
+		if m.system.detectedPlatform.Distribution != "" {
+			s += fmt.Sprintf("  • Distribution: %s\n", m.system.detectedPlatform.Distribution)
 		}
-		if m.hasDesktop {
-			s += fmt.Sprintf("  • Desktop: %s\n", m.detectedPlatform.DesktopEnv)
+		if m.system.hasDesktop {
+			s += fmt.Sprintf("  • Desktop: %s\n", m.system.detectedPlatform.DesktopEnv)
 		}
-		s += fmt.Sprintf("  • Architecture: %s\n", m.detectedPlatform.Architecture)
+		s += fmt.Sprintf("  • Architecture: %s\n", m.system.detectedPlatform.Architecture)
 		s += "\n"
 		s += "Required DevEx plugins:\n"
-		for _, plugin := range m.requiredPlugins {
+		for _, plugin := range m.plugins.requiredPlugins {
 			s += fmt.Sprintf("  • %s\n", plugin)
 		}
 		s += "\n"
-		if !m.confirmPlugins {
+		if !m.plugins.confirmPlugins {
 			s += "Press Enter to download and install plugins, or 'q' to quit."
 		} else {
 			s += selectedStyle.Render("✓ Ready to proceed")
@@ -642,25 +707,25 @@ func (m *SetupModel) View() string {
 		s = titleStyle.Render("📦 Installing DevEx Plugins")
 		s += "\n\n"
 		switch {
-		case atomic.LoadInt32(&m.pluginsInstalling) == 1:
+		case atomic.LoadInt32(&m.plugins.pluginsInstalling) == 1:
 			s += "Downloading and installing plugins...\n\n"
 			s += m.renderProgressBar()
 			s += "\n\n"
-			s += fmt.Sprintf("Status: %s\n", m.installStatus)
+			s += fmt.Sprintf("Status: %s\n", m.installation.installStatus)
 			s += "\nThis may take a moment. Please wait..."
-		case atomic.LoadInt32(&m.pluginsInstalled) == 1:
+		case atomic.LoadInt32(&m.plugins.pluginsInstalled) == 1:
 			s += selectedStyle.Render("✓ All plugins installed successfully!")
 			s += "\n\n"
 			s += "Installed plugins:\n"
-			for _, plugin := range m.requiredPlugins {
+			for _, plugin := range m.plugins.requiredPlugins {
 				s += fmt.Sprintf("  ✓ %s\n", plugin)
 			}
 			s += "\n"
 			s += "Press Enter to continue with setup."
-		case m.hasErrors:
+		case m.installation.hasErrors:
 			s += errorStyle.Render("⚠️ Some plugins failed to install")
 			s += "\n\n"
-			for _, err := range m.installErrors {
+			for _, err := range m.installation.installErrors {
 				s += errorStyle.Render(fmt.Sprintf("  • %s\n", err))
 			}
 			s += "\n"
@@ -669,7 +734,7 @@ func (m *SetupModel) View() string {
 		}
 
 	case StepDesktopApps:
-		if len(m.desktopApps) == 0 {
+		if len(m.system.desktopApps) == 0 {
 			// Skip desktop apps if none available, go to next step
 			newModel, _ := m.nextStep()
 			return newModel.View()
@@ -679,14 +744,14 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Choose additional desktop applications (optional):")
 		s += "\n\n"
 
-		for i, app := range m.desktopApps {
+		for i, app := range m.system.desktopApps {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			selected := " "
-			if m.selectedApps[i] {
+			if m.selections.selectedApps[i] {
 				selected = selectedStyle.Render("✓")
 			}
 
@@ -707,14 +772,14 @@ func (m *SetupModel) View() string {
 		s += infoStyle.Render("   Mise will be installed automatically if not present")
 		s += "\n\n"
 
-		for i, lang := range m.languages {
+		for i, lang := range m.system.languages {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			checked := " "
-			if m.selectedLangs[i] {
+			if m.selections.selectedLangs[i] {
 				checked = selectedStyle.Render("✓")
 			}
 
@@ -735,14 +800,14 @@ func (m *SetupModel) View() string {
 		s += infoStyle.Render("   Docker will be installed automatically if not present")
 		s += "\n\n"
 
-		for i, db := range m.databases {
+		for i, db := range m.system.databases {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			checked := " "
-			if m.selectedDBs[i] {
+			if m.selections.selectedDBs[i] {
 				checked = selectedStyle.Render("✓")
 			}
 
@@ -754,7 +819,7 @@ func (m *SetupModel) View() string {
 
 	case StepShell:
 		// Only show shell selection on compatible systems (Linux/macOS)
-		if m.detectedPlatform.OS == "windows" {
+		if m.system.detectedPlatform.OS == "windows" {
 			newModel, _ := m.nextStep()
 			return newModel.View()
 		}
@@ -764,14 +829,14 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
 		s += "\n\n"
 
-		for i, shell := range m.shells {
+		for i, shell := range m.system.shells {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			selected := " "
-			if m.selectedShell == i {
+			if m.selections.selectedShell == i {
 				selected = selectedStyle.Render("●")
 			}
 
@@ -797,14 +862,14 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Choose a theme for your applications:")
 		s += "\n\n"
 
-		for i, theme := range m.themes {
+		for i, theme := range m.system.themes {
 			cursor := " "
 			if m.cursor == i {
 				cursor = cursorStyle.Render(">")
 			}
 
 			selected := " "
-			if m.selectedTheme == i {
+			if m.selections.selectedTheme == i {
 				selected = selectedStyle.Render("●")
 			}
 
@@ -830,8 +895,8 @@ func (m *SetupModel) View() string {
 		if m.cursor == 0 {
 			cursor = cursorStyle.Render(">")
 		}
-		nameValue := m.gitFullName
-		if m.gitInputActive && m.gitInputField == 0 {
+		nameValue := m.git.gitFullName
+		if m.git.gitInputActive && m.git.gitInputField == 0 {
 			nameValue += "_" // Show cursor
 		}
 		s += fmt.Sprintf("%s Full Name: %s\n", cursor, nameValue)
@@ -841,23 +906,23 @@ func (m *SetupModel) View() string {
 		if m.cursor == 1 {
 			cursor = cursorStyle.Render(">")
 		}
-		emailValue := m.gitEmail
-		if m.gitInputActive && m.gitInputField == 1 {
+		emailValue := m.git.gitEmail
+		if m.git.gitInputActive && m.git.gitInputField == 1 {
 			emailValue += "_" // Show cursor
 		}
 		s += fmt.Sprintf("%s Email: %s\n", cursor, emailValue)
 
 		// Show email validation feedback
-		if m.gitEmail != "" && !isValidEmail(m.gitEmail) {
+		if m.git.gitEmail != "" && !isValidEmail(m.git.gitEmail) {
 			s += errorStyle.Render("   ⚠️  Email must contain @ and . characters") + "\n"
 		}
 
 		s += "\n"
-		if m.gitInputActive {
+		if m.git.gitInputActive {
 			s += "Type your information and press Enter to confirm, Escape to cancel editing"
 		} else {
-			fullName := strings.TrimSpace(m.gitFullName)
-			email := strings.TrimSpace(m.gitEmail)
+			fullName := strings.TrimSpace(m.git.gitFullName)
+			email := strings.TrimSpace(m.git.gitEmail)
 			if fullName != "" && email != "" && isValidEmail(email) {
 				s += "Use ↑/↓ to navigate, Enter to edit field, 'n' to continue"
 			} else {
@@ -904,7 +969,7 @@ func (m *SetupModel) View() string {
 	case StepInstalling:
 		s = titleStyle.Render("⚙️  Installing...")
 		s += "\n\n"
-		s += fmt.Sprintf("Status: %s\n", m.installStatus)
+		s += fmt.Sprintf("Status: %s\n", m.installation.installStatus)
 		s += "\n"
 		s += m.renderProgressBar()
 		s += "\n\n"
@@ -913,13 +978,13 @@ func (m *SetupModel) View() string {
 	case StepComplete:
 		selectedShell := m.getSelectedShell()
 
-		if m.hasErrors {
+		if m.installation.hasErrors {
 			s = titleStyle.Render("⚠️  Setup Completed with Issues")
 			s += "\n\n"
-			s += fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(m.installErrors))
+			s += fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(m.installation.installErrors))
 
 			errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
-			for _, err := range m.installErrors {
+			for _, err := range m.installation.installErrors {
 				s += errorStyle.Render("  ❌ "+err) + "\n"
 			}
 			s += "\n"
@@ -943,7 +1008,7 @@ func (m *SetupModel) View() string {
 		}
 		s += "\n\n"
 
-		if !m.hasErrors {
+		if !m.installation.hasErrors {
 			if m.shellSwitched {
 				s += fmt.Sprintf("Your shell has been switched to %s. Please restart your terminal\n", selectedShell)
 				s += fmt.Sprintf("or run 'exec %s' to start using your new environment.\n\n", selectedShell)
@@ -974,13 +1039,13 @@ func (m *SetupModel) View() string {
 func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepSystemOverview:
-		if !m.confirmPlugins {
-			m.confirmPlugins = true
+		if !m.plugins.confirmPlugins {
+			m.plugins.confirmPlugins = true
 			return m, nil
 		}
 		return m.nextStep()
 	case StepPluginInstall:
-		if atomic.LoadInt32(&m.pluginsInstalled) == 1 || m.hasErrors {
+		if atomic.LoadInt32(&m.plugins.pluginsInstalled) == 1 || m.installation.hasErrors {
 			return m.nextStep()
 		}
 		return m, nil
@@ -990,15 +1055,15 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		// Theme step: Enter should not continue, only 'n' continues
 		return m, nil
 	case StepGitConfig:
-		if !m.gitInputActive {
+		if !m.git.gitInputActive {
 			// Start editing the selected field
-			m.gitInputActive = true
-			m.gitInputField = m.cursor
+			m.git.gitInputActive = true
+			m.git.gitInputField = m.cursor
 		}
 		return m, nil
 	case StepConfirmation:
 		m.step = StepInstalling
-		m.installing = true
+		m.installation.installing = true
 		return m, m.startInstallation()
 	case StepInstalling:
 		// During installation, Enter key should not do anything
@@ -1017,29 +1082,29 @@ func (m *SetupModel) handleGitInput(msg tea.KeyMsg) (*SetupModel, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		// Finish editing current field
-		m.gitInputActive = false
+		m.git.gitInputActive = false
 		return m, nil
 	case "escape":
 		// Cancel editing
-		m.gitInputActive = false
+		m.git.gitInputActive = false
 		return m, nil
 	case "backspace":
 		// Remove last character
-		if m.gitInputField == 0 && len(m.gitFullName) > 0 {
-			m.gitFullName = m.gitFullName[:len(m.gitFullName)-1]
-		} else if m.gitInputField == 1 && len(m.gitEmail) > 0 {
-			m.gitEmail = m.gitEmail[:len(m.gitEmail)-1]
+		if m.git.gitInputField == 0 && len(m.git.gitFullName) > 0 {
+			m.git.gitFullName = m.git.gitFullName[:len(m.git.gitFullName)-1]
+		} else if m.git.gitInputField == 1 && len(m.git.gitEmail) > 0 {
+			m.git.gitEmail = m.git.gitEmail[:len(m.git.gitEmail)-1]
 		}
 		return m, nil
 	default:
 		// Add character to current field
 		if len(msg.Runes) > 0 {
 			char := msg.Runes[0]
-			switch m.gitInputField {
+			switch m.git.gitInputField {
 			case 0:
-				m.gitFullName += string(char)
+				m.git.gitFullName += string(char)
 			case 1:
-				m.gitEmail += string(char)
+				m.git.gitEmail += string(char)
 			}
 		}
 		return m, nil
@@ -1050,15 +1115,15 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 	var maxItems int
 	switch m.step {
 	case StepDesktopApps:
-		maxItems = len(m.desktopApps)
+		maxItems = len(m.system.desktopApps)
 	case StepLanguages:
-		maxItems = len(m.languages)
+		maxItems = len(m.system.languages)
 	case StepDatabases:
-		maxItems = len(m.databases)
+		maxItems = len(m.system.databases)
 	case StepShell:
-		maxItems = len(m.shells)
+		maxItems = len(m.system.shells)
 	case StepTheme:
-		maxItems = len(m.themes)
+		maxItems = len(m.system.themes)
 	case StepGitConfig:
 		maxItems = 2 // Full name and email
 	default:
@@ -1074,15 +1139,15 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepDesktopApps:
-		m.selectedApps[m.cursor] = !m.selectedApps[m.cursor]
+		m.selections.selectedApps[m.cursor] = !m.selections.selectedApps[m.cursor]
 	case StepLanguages:
-		m.selectedLangs[m.cursor] = !m.selectedLangs[m.cursor]
+		m.selections.selectedLangs[m.cursor] = !m.selections.selectedLangs[m.cursor]
 	case StepDatabases:
-		m.selectedDBs[m.cursor] = !m.selectedDBs[m.cursor]
+		m.selections.selectedDBs[m.cursor] = !m.selections.selectedDBs[m.cursor]
 	case StepShell:
-		m.selectedShell = m.cursor
+		m.selections.selectedShell = m.cursor
 	case StepTheme:
-		m.selectedTheme = m.cursor
+		m.selections.selectedTheme = m.cursor
 	default:
 		return m, nil // No selection needed for other steps
 	}
@@ -1098,7 +1163,7 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		return m, m.startPluginInstallation()
 	case StepPluginInstall:
 		// Check if we have desktop apps to show first
-		if m.hasDesktop && len(m.desktopApps) > 0 {
+		if m.system.hasDesktop && len(m.system.desktopApps) > 0 {
 			m.step = StepDesktopApps
 		} else {
 			m.step = StepLanguages
@@ -1109,7 +1174,7 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		m.step = StepDatabases
 	case StepDatabases:
 		// Only show shell selection on compatible systems
-		if m.detectedPlatform.OS != "windows" {
+		if m.system.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 		} else {
 			m.step = StepTheme // Windows gets theme selection without shell
@@ -1120,8 +1185,8 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		m.step = StepGitConfig
 	case StepGitConfig:
 		// Only proceed if both fields are filled and email is valid
-		fullName := strings.TrimSpace(m.gitFullName)
-		email := strings.TrimSpace(m.gitEmail)
+		fullName := strings.TrimSpace(m.git.gitFullName)
+		email := strings.TrimSpace(m.git.gitEmail)
 		if fullName != "" && email != "" && isValidEmail(email) {
 			m.step = StepConfirmation
 		}
@@ -1145,11 +1210,11 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepPluginInstall:
 		m.step = StepSystemOverview
-		m.confirmPlugins = false
+		m.plugins.confirmPlugins = false
 	case StepDesktopApps:
 		m.step = StepPluginInstall
 	case StepLanguages:
-		if m.hasDesktop && len(m.desktopApps) > 0 {
+		if m.system.hasDesktop && len(m.system.desktopApps) > 0 {
 			m.step = StepDesktopApps
 		} else {
 			m.step = StepPluginInstall
@@ -1159,7 +1224,7 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	case StepShell:
 		m.step = StepDatabases
 	case StepTheme:
-		if m.detectedPlatform.OS != "windows" {
+		if m.system.detectedPlatform.OS != "windows" {
 			m.step = StepShell
 		} else {
 			m.step = StepDatabases
@@ -1185,8 +1250,8 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 
 func (m *SetupModel) getSelectedLanguages() []string {
 	var selected []string
-	for i, lang := range m.languages {
-		if m.selectedLangs[i] {
+	for i, lang := range m.system.languages {
+		if m.selections.selectedLangs[i] {
 			selected = append(selected, lang)
 		}
 	}
@@ -1195,17 +1260,34 @@ func (m *SetupModel) getSelectedLanguages() []string {
 
 func (m *SetupModel) getSelectedDesktopApps() []string {
 	var selected []string
-	for i, app := range m.desktopApps {
-		if m.selectedApps[i] {
+	for i, app := range m.system.desktopApps {
+		if m.selections.selectedApps[i] {
 			selected = append(selected, app)
 		}
 	}
 	return selected
 }
 
+func (m *SetupModel) getSelectedDatabases() []string {
+	var selected []string
+	for i, db := range m.system.databases {
+		if m.selections.selectedDBs[i] {
+			selected = append(selected, db)
+		}
+	}
+	return selected
+}
+
+func (m *SetupModel) getSelectedShell() string {
+	if m.selections.selectedShell >= 0 && m.selections.selectedShell < len(m.system.shells) {
+		return m.system.shells[m.selections.selectedShell]
+	}
+	return "zsh" // Default fallback
+}
+
 func (m *SetupModel) renderProgressBar() string {
 	width := ProgressBarWidth
-	filled := int(m.progress * float64(width))
+	filled := int(m.installation.progress * float64(width))
 	bar := ""
 
 	for i := 0; i < width; i++ {
@@ -1216,7 +1298,7 @@ func (m *SetupModel) renderProgressBar() string {
 		}
 	}
 
-	return fmt.Sprintf("[%s] %.0f%%", bar, m.progress*100)
+	return fmt.Sprintf("[%s] %.0f%%", bar, m.installation.progress*100)
 }
 
 // InstallProgressMsg Installation process and progress tracking
@@ -1242,7 +1324,59 @@ type PluginInstallCompleteMsg struct {
 	Errors []error
 }
 
+// BoundedErrorCollector manages error collection with memory bounds
+// This prevents unbounded memory growth during error collection while preserving
+// important error information
+type BoundedErrorCollector struct {
+	errors    []error
+	maxErrors int
+	truncated bool
+	mu        sync.Mutex
+}
+
+// NewBoundedErrorCollector creates a new error collector with specified bounds
+func NewBoundedErrorCollector(maxErrors int) *BoundedErrorCollector {
+	return &BoundedErrorCollector{
+		errors:    make([]error, 0, maxErrors),
+		maxErrors: maxErrors,
+	}
+}
+
+// AddError safely adds an error to the collector
+func (c *BoundedErrorCollector) AddError(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if len(c.errors) >= c.maxErrors {
+		if !c.truncated {
+			c.truncated = true
+			// Replace the last error with a truncation notice
+			c.errors[c.maxErrors-1] = fmt.Errorf("error collection truncated at %d errors (last: %w)", c.maxErrors, err)
+		}
+		return
+	}
+	c.errors = append(c.errors, err)
+}
+
+// GetErrors returns a copy of collected errors
+func (c *BoundedErrorCollector) GetErrors() []error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	result := make([]error, len(c.errors))
+	copy(result, c.errors)
+	return result
+}
+
+// IsTruncated returns whether error collection was truncated
+func (c *BoundedErrorCollector) IsTruncated() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.truncated
+}
+
 // addErrorSafe safely adds an error to the slice with bounds checking to prevent unbounded memory growth
+// Deprecated: Use BoundedErrorCollector instead for thread-safe error collection
 func addErrorSafe(errors []error, newError error) []error {
 	if len(errors) >= MaxErrorMessages {
 		// Replace the last error with a truncation notice
@@ -1253,6 +1387,7 @@ func addErrorSafe(errors []error, newError error) []error {
 }
 
 // addErrorStringSafe safely adds an error string to the slice with bounds checking
+// Deprecated: Use BoundedErrorCollector instead for thread-safe error collection
 func addErrorStringSafe(errors []string, newError string) []string {
 	if len(errors) >= MaxErrorMessages {
 		// Replace the last error with a truncation notice
@@ -1262,10 +1397,23 @@ func addErrorStringSafe(errors []string, newError string) []string {
 	return append(errors, newError)
 }
 
+// getPluginTimeout returns the plugin installation timeout from environment or default
+func getPluginTimeout() time.Duration {
+	// Check environment variable for custom timeout
+	if timeoutStr := os.Getenv("DEVEX_PLUGIN_TIMEOUT"); timeoutStr != "" {
+		if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+			log.Info("Using custom plugin timeout", "timeout", timeout.String())
+			return timeout
+		}
+		log.Warn("Invalid DEVEX_PLUGIN_TIMEOUT value, using default", "value", timeoutStr, "default", PluginInstallTimeout.String())
+	}
+	return PluginInstallTimeout
+}
+
 func (m *SetupModel) startPluginInstallation() tea.Cmd {
 	return func() tea.Msg {
 		// Mark installation as in progress using atomic operation
-		atomic.StoreInt32(&m.pluginsInstalling, 1)
+		atomic.StoreInt32(&m.plugins.pluginsInstalling, 1)
 
 		// Pre-allocate error collection with bounds checking for memory safety
 		allErrors := make([]error, 0, MaxErrorMessages)
@@ -1281,10 +1429,10 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 		}
 
 		// Create context with configurable timeout for plugin installation
-		ctx, cancel := context.WithTimeout(context.Background(), PluginInstallTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), m.plugins.timeout)
 		defer cancel()
 
-		log.Info("Initializing plugin system with required plugins", "plugins", m.requiredPlugins, "timeout", PluginInstallTimeout.String())
+		log.Info("Initializing plugin system with required plugins", "plugins", m.plugins.requiredPlugins, "timeout", m.plugins.timeout.String())
 
 		// Initialize plugins and collect any errors
 		if err := pluginBootstrap.Initialize(ctx); err != nil {
@@ -1312,7 +1460,7 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 		}
 
 		// Check if each required plugin was installed
-		for _, requiredPlugin := range m.requiredPlugins {
+		for _, requiredPlugin := range m.plugins.requiredPlugins {
 			if installedSet[requiredPlugin] {
 				log.Info("Plugin verified", "name", requiredPlugin)
 			} else {
@@ -1397,7 +1545,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 func (m *SetupModel) waitForActivity() tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(time.Millisecond * WaitActivityInterval)
-		return InstallProgressMsg{Status: m.installStatus, Progress: m.progress}
+		return InstallProgressMsg{Status: m.installation.installStatus, Progress: m.installation.progress}
 	}
 }
 
@@ -1462,7 +1610,7 @@ func (m *SetupModel) buildAppList() []types.CrossPlatformApp {
 	}
 
 	// Step 5: Desktop apps (if desktop detected and selected)
-	if m.hasDesktop {
+	if m.system.hasDesktop {
 		desktopApps := m.getSelectedDesktopApps()
 		for _, appName := range desktopApps {
 			if app := m.getDesktopAppByName(appName); app != nil {
@@ -1570,32 +1718,72 @@ func (m *SetupModel) getDesktopAppByName(name string) *types.CrossPlatformApp {
 
 // createAutomatedSetupModel creates a SetupModel with default selections for automated setup
 func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) *SetupModel {
+	// Get plugin timeout from environment or use default
+	pluginTimeout := getPluginTimeout()
+
 	return &SetupModel{
-		selectedShell: DefaultShellIndex, // Default to zsh (first option)
-		selectedLangs: map[int]bool{
-			DefaultNodeJSIndex: true, // Node.js
-			DefaultPythonIndex: true, // Python
-		},
-		selectedDBs: map[int]bool{
-			DefaultPostgreSQLIndex: true, // PostgreSQL
-		},
-		selectedApps:  make(map[int]bool), // No desktop apps for automated setup
-		installErrors: make([]string, 0, MaxErrorMessages),
-		hasErrors:     false,
+		step:          0,
+		cursor:        0,
 		shellSwitched: false,
-		repo:          repo,
-		settings:      settings,
-		shells: []string{
-			"zsh",
-			"bash",
-			"fish",
+
+		// System information
+		system: SystemInfo{
+			shells: []string{
+				"zsh",
+				"bash",
+				"fish",
+			},
+			languages: getProgrammingLanguageNames(settings),
+			databases: []string{
+				"PostgreSQL",
+				"MySQL",
+				"Redis",
+			},
+			desktopApps: []string{},
+			themes:      []string{},
+			hasDesktop:  false,
 		},
-		languages: getProgrammingLanguageNames(settings),
-		databases: []string{
-			"PostgreSQL",
-			"MySQL",
-			"Redis",
+
+		// User selections
+		selections: UISelections{
+			selectedShell: DefaultShellIndex, // Default to zsh (first option)
+			selectedLangs: map[int]bool{
+				DefaultNodeJSIndex: true, // Node.js
+				DefaultPythonIndex: true, // Python
+			},
+			selectedDBs: map[int]bool{
+				DefaultPostgreSQLIndex: true, // PostgreSQL
+			},
+			selectedApps:  make(map[int]bool), // No desktop apps for automated setup
+			selectedTheme: 0,
 		},
+
+		// Git configuration
+		git: GitConfiguration{
+			// Will be populated during setup
+		},
+
+		// Installation state
+		installation: InstallationState{
+			installing:    false,
+			installStatus: "",
+			progress:      0,
+			installErrors: make([]string, 0, MaxErrorMessages),
+			hasErrors:     false,
+		},
+
+		// Plugin state
+		plugins: PluginState{
+			requiredPlugins:   []string{},
+			pluginsInstalling: 0,
+			pluginsInstalled:  0,
+			confirmPlugins:    false,
+			timeout:           pluginTimeout,
+		},
+
+		// External dependencies
+		repo:     repo,
+		settings: settings,
 	}
 }
 
@@ -1757,7 +1945,7 @@ func (m *SetupModel) isDesktopApp(app types.CrossPlatformApp) bool {
 
 // isCompatibleWithPlatform checks if an app is available for the current platform
 func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
-	switch m.detectedPlatform.OS {
+	switch m.system.detectedPlatform.OS {
 	case "linux":
 		return app.Linux.InstallCommand != ""
 	case "darwin":
@@ -1772,22 +1960,22 @@ func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
 // isCompatibleWithDesktopEnvironment checks if an app is compatible with the detected desktop environment
 func (m *SetupModel) isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp) bool {
 	// If no desktop environment detected, allow all apps
-	if m.detectedPlatform.DesktopEnv == "unknown" || m.detectedPlatform.DesktopEnv == "" {
+	if m.system.detectedPlatform.DesktopEnv == "unknown" || m.system.detectedPlatform.DesktopEnv == "" {
 		return true
 	}
 
 	// For non-Linux systems, all desktop apps are compatible with the OS-level desktop
-	if m.detectedPlatform.OS != "linux" {
+	if m.system.detectedPlatform.OS != "linux" {
 		return true
 	}
 
 	// Use the app's built-in desktop environment compatibility check
-	return app.IsCompatibleWithDesktopEnvironment(m.detectedPlatform.DesktopEnv)
+	return app.IsCompatibleWithDesktopEnvironment(m.system.detectedPlatform.DesktopEnv)
 }
 
 // saveThemePreference saves the user's selected theme as the global preference
 func (m *SetupModel) saveThemePreference() error {
-	log.Info("Saving theme preference", "theme", m.themes[m.selectedTheme])
+	log.Info("Saving theme preference", "theme", m.system.themes[m.selections.selectedTheme])
 
 	// Create theme repository using the system repository
 	systemRepo, ok := m.repo.(types.SystemRepository)
@@ -1797,7 +1985,7 @@ func (m *SetupModel) saveThemePreference() error {
 	themeRepo := repository.NewThemeRepository(systemRepo)
 
 	// Save the selected theme as global preference
-	selectedTheme := m.themes[m.selectedTheme]
+	selectedTheme := m.system.themes[m.selections.selectedTheme]
 	if err := themeRepo.SetGlobalTheme(selectedTheme); err != nil {
 		return fmt.Errorf("failed to save global theme preference: %w", err)
 	}

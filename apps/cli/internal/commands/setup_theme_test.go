@@ -51,9 +51,13 @@ var _ = Describe("SetupModel", func() {
 			mockRepo := mocks.NewMockRepository()
 
 			model := &SetupModel{
-				repo:          mockRepo,
-				themes:        []string{"Tokyo Night", "Kanagawa", "Light Theme"},
-				selectedTheme: 1, // Select "Kanagawa"
+				repo: mockRepo,
+				system: SystemInfo{
+					themes: []string{"Tokyo Night", "Kanagawa", "Light Theme"},
+				},
+				selections: UISelections{
+					selectedTheme: 1, // Select "Kanagawa"
+				},
 			}
 
 			err := model.saveThemePreference()
@@ -70,9 +74,13 @@ var _ = Describe("SetupModel", func() {
 			mockRepo := mocks.NewMockRepository()
 
 			model := &SetupModel{
-				repo:          mockRepo,
-				themes:        []string{"Tokyo Night", "Kanagawa"},
-				selectedTheme: 999, // Invalid index
+				repo: mockRepo,
+				system: SystemInfo{
+					themes: []string{"Tokyo Night", "Kanagawa"},
+				},
+				selections: UISelections{
+					selectedTheme: 999, // Invalid index
+				},
 			}
 
 			// Should panic or handle gracefully
@@ -85,9 +93,13 @@ var _ = Describe("SetupModel", func() {
 			mockRepo := mocks.NewMockRepository()
 
 			model := &SetupModel{
-				repo:          mockRepo,
-				themes:        []string{},
-				selectedTheme: 0,
+				repo: mockRepo,
+				system: SystemInfo{
+					themes: []string{},
+				},
+				selections: UISelections{
+					selectedTheme: 0,
+				},
 			}
 
 			// Should panic or handle gracefully

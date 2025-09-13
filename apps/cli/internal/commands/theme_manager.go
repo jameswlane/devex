@@ -193,23 +193,23 @@ func (m *SetupModel) copyAppConfigFiles() error {
 
 // setupGitConfiguration applies git configuration using user's name and email
 func (m *SetupModel) setupGitConfiguration(ctx context.Context) error {
-	log.Info("Setting up git configuration", "name", m.gitFullName, "email", m.gitEmail)
+	log.Info("Setting up git configuration", "name", m.git.gitFullName, "email", m.git.gitEmail)
 
 	// Set git user name
-	if m.gitFullName != "" {
-		if _, err := exec.CommandContext(ctx, "git", "config", "--global", "user.name", m.gitFullName).CombinedOutput(); err != nil {
+	if m.git.gitFullName != "" {
+		if _, err := exec.CommandContext(ctx, "git", "config", "--global", "user.name", m.git.gitFullName).CombinedOutput(); err != nil {
 			log.Warn("Failed to set git user name", "error", err)
 		} else {
-			log.Info("Git user name set successfully", "name", m.gitFullName)
+			log.Info("Git user name set successfully", "name", m.git.gitFullName)
 		}
 	}
 
 	// Set git user email
-	if m.gitEmail != "" {
-		if _, err := exec.CommandContext(ctx, "git", "config", "--global", "user.email", m.gitEmail).CombinedOutput(); err != nil {
+	if m.git.gitEmail != "" {
+		if _, err := exec.CommandContext(ctx, "git", "config", "--global", "user.email", m.git.gitEmail).CombinedOutput(); err != nil {
 			log.Warn("Failed to set git user email", "error", err)
 		} else {
-			log.Info("Git user email set successfully", "email", m.gitEmail)
+			log.Info("Git user email set successfully", "email", m.git.gitEmail)
 		}
 	}
 
