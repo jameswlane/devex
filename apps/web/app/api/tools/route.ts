@@ -43,8 +43,7 @@ export async function GET(request: NextRequest) {
 				"Cache-Control": "public, max-age=3600, s-maxage=86400",
 				"CDN-Cache-Control": "public, max-age=86400",
 				"Vercel-CDN-Cache-Control": "public, max-age=86400",
-				// Compression
-				"Content-Encoding": "gzip",
+				// Note: Vercel automatically handles compression, don't set Content-Encoding manually
 				Vary: "Accept-Encoding",
 				// Security
 				"X-Content-Type-Options": "nosniff",
