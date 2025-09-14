@@ -4,7 +4,7 @@
 	"ui": "tui",
 	"tasks": {
 		"build": {
-			"dependsOn": ["^build", "download"],
+			"dependsOn": ["^build", "download", "db:generate"],
 			"outputs": [
 				".next/**",
 				"!.next/cache/**",
@@ -22,9 +22,27 @@
 				"*.go",
 				"go.mod",
 				"go.sum",
-				"Taskfile.yml"
+				"Taskfile.yml",
+				"app/**",
+				"prisma/**",
+				"package.json",
+				"tsconfig.json"
 			],
-			"env": ["GOOS", "GOARCH", "CGO_ENABLED"]
+			"env": [
+				"GOOS",
+				"GOARCH",
+				"CGO_ENABLED",
+				"DATABASE_URL",
+				"POSTGRES_URL",
+				"PRISMA_DATABASE_URL"
+			]
+		},
+		"db:generate": {
+			"dependsOn": [],
+			"inputs": ["prisma/**"],
+			"outputs": ["../../node_modules/.pnpm/**/@prisma/client/**"],
+			"cache": true,
+			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
 		},
 		"build:web": {
 			"dependsOn": ["generate"]
@@ -140,5 +158,11 @@
 			"env": ["GITHUB_TOKEN", "GORELEASER_KEY"]
 		}
 	},
-	"globalEnv": ["CI", "VERCEL_URL"]
+	"globalEnv": [
+		"CI",
+		"VERCEL_URL",
+		"DATABASE_URL",
+		"POSTGRES_URL",
+		"PRISMA_DATABASE_URL"
+	]
 }
