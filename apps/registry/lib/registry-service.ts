@@ -39,22 +39,18 @@ export class RegistryService {
             resource === "all" || resource === "plugins" 
               ? tx.plugin.count({
                   where: { status: "active" },
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : 0,
             resource === "all" || resource === "applications"
               ? tx.application.count({
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : 0,
             resource === "all" || resource === "configs"
               ? tx.config.count({
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : 0,
             resource === "all" || resource === "stacks"
               ? tx.stack.count({
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : 0,
           ]),
@@ -83,7 +79,6 @@ export class RegistryService {
                     downloadCount: true,
                     lastDownload: true,
                   },
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : [],
             resource === "all" || resource === "applications"
@@ -129,7 +124,6 @@ export class RegistryService {
                       },
                     },
                   },
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : [],
             resource === "all" || resource === "configs"
@@ -152,7 +146,6 @@ export class RegistryService {
                     downloadCount: true,
                     lastDownload: true,
                   },
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : [],
             resource === "all" || resource === "stacks"
@@ -177,7 +170,6 @@ export class RegistryService {
                     downloadCount: true,
                     lastDownload: true,
                   },
-                  cacheStrategy: RegistryService.CACHE_STRATEGIES.registry,
                 })
               : [],
           ]),
@@ -193,7 +185,6 @@ export class RegistryService {
               dailyDownloads: true,
               date: true,
             },
-            cacheStrategy: RegistryService.CACHE_STRATEGIES.stats,
           }),
         ]);
 
@@ -260,10 +251,6 @@ export class RegistryService {
                 platforms: true,
                 downloadCount: true,
               },
-              cacheStrategy: {
-                ...RegistryService.CACHE_STRATEGIES.search,
-                tags: ["search", `search:${query}`],
-              },
             })
           : [],
         resource === "all" || resource === "applications"
@@ -292,10 +279,6 @@ export class RegistryService {
                 category: true,
                 official: true,
                 tags: true,
-              },
-              cacheStrategy: {
-                ...RegistryService.CACHE_STRATEGIES.search,
-                tags: ["search", `search:${query}`],
               },
             })
           : [],
@@ -328,11 +311,6 @@ export class RegistryService {
             downloadCount: true,
             lastDownload: true,
           },
-          cacheStrategy: {
-            swr: 300, // 5 minutes
-            ttl: 300,
-            tags: ["popular", "plugins"],
-          },
         }),
         tx.application.findMany({
           take: limit,
@@ -345,11 +323,6 @@ export class RegistryService {
             description: true,
             category: true,
             official: true,
-          },
-          cacheStrategy: {
-            swr: 300,
-            ttl: 300,
-            tags: ["popular", "applications"],
           },
         }),
         tx.config.findMany({
@@ -364,11 +337,6 @@ export class RegistryService {
             category: true,
             downloadCount: true,
           },
-          cacheStrategy: {
-            swr: 300,
-            ttl: 300,
-            tags: ["popular", "configs"],
-          },
         }),
         tx.stack.findMany({
           take: limit,
@@ -382,11 +350,6 @@ export class RegistryService {
             category: true,
             downloadCount: true,
           },
-          cacheStrategy: {
-            swr: 300,
-            ttl: 300,
-            tags: ["popular", "stacks"],
-          },
         }),
       ]);
 
@@ -395,14 +358,11 @@ export class RegistryService {
     );
   }
 
-  // Invalidate cache when data changes
+  // Invalidate cache when data changes (no-op without Accelerate)
   async invalidateCache(tags: string[]) {
-    try {
-      await prisma.$accelerate.invalidate({ tags });
-    } catch (error) {
-      console.error("Cache invalidation error:", error);
-      // Don't throw - cache invalidation failure shouldn't break the app
-    }
+    // Cache invalidation is disabled when not using Prisma Accelerate
+    // This is a no-op to maintain API compatibility
+    console.log("Cache invalidation skipped (Accelerate not enabled):", tags);
   }
 
   // Update download counters (with cache invalidation)

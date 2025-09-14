@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import type { ApplicationWhereInput } from "@/lib/types";
+import type { Application, PlatformInfo, Prisma } from "@prisma/client";
 import {
 	validateCategory,
 	validatePaginationParams,
 	validatePlatform,
 	validateSearchQuery,
 } from "@/lib/validation";
+
+type ApplicationWithSupports = Application & {
+	linuxSupport: PlatformInfo | null;
+	macosSupport: PlatformInfo | null;
+	windowsSupport: PlatformInfo | null;
+};
 
 export async function GET(request: Request) {
 	try {
@@ -18,7 +24,7 @@ export async function GET(request: Request) {
 		const { limit, offset } = validatePaginationParams(searchParams);
 
 		// Build where clause with proper validation
-		const where: ApplicationWhereInput = {};
+		const where: Prisma.ApplicationWhereInput = {};
 
 		if (category) {
 			// Now using validated category - safe from injection
@@ -48,7 +54,7 @@ export async function GET(request: Request) {
 			];
 		}
 
-		// Fetch applications with pagination
+		// Fetch applications with pagination using proper Prisma types
 		const [applications, total] = await Promise.all([
 			prisma.application.findMany({
 				where,
@@ -64,8 +70,8 @@ export async function GET(request: Request) {
 			prisma.application.count({ where }),
 		]);
 
-		// Transform to expected format
-		const applicationsFormatted = applications.map((app) => ({
+		// Transform to expected format using proper typing
+		const applicationsFormatted = applications.map((app: ApplicationWithSupports) => ({
 			name: app.name,
 			description: app.description,
 			category: app.category,

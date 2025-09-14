@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import type { PluginWhereInput } from "@/lib/types";
+import type { Plugin, Prisma } from "@prisma/client";
 import {
 	validatePaginationParams,
 	validatePluginType,
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 		const { limit, offset } = validatePaginationParams(searchParams);
 
 		// Build where clause with proper validation
-		const where: PluginWhereInput = {};
+		const where: Prisma.PluginWhereInput = {};
 
 		if (type) {
 			// Now using validated plugin type - safe from injection
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 			];
 		}
 
-		// Fetch plugins with pagination
+		// Fetch plugins with pagination using proper Prisma types
 		const [plugins, total] = await Promise.all([
 			prisma.plugin.findMany({
 				where,
@@ -42,8 +42,8 @@ export async function GET(request: Request) {
 			prisma.plugin.count({ where }),
 		]);
 
-		// Transform to expected format
-		const pluginsFormatted = plugins.map((plugin) => ({
+		// Transform to expected format using proper typing
+		const pluginsFormatted = plugins.map((plugin: Plugin) => ({
 			name: plugin.name,
 			description: plugin.description,
 			type: plugin.type,

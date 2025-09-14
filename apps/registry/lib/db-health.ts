@@ -264,11 +264,7 @@ export async function handleHealthCheck(includeSensitive = false) {
       },
     });
   } catch (error) {
-    return createApiError(
-      "Health check failed",
-      500,
-      { error: error instanceof Error ? error.message : "Unknown error" }
-    );
+    return createApiError("Health check failed", 500);
   }
 }
 

@@ -1,4 +1,5 @@
 import type { NextRequest, NextResponse } from "next/server";
+import { NextResponse as NextRes } from "next/server";
 import { createApiError } from "./logger";
 import { redis, type RedisStore } from "./redis";
 
@@ -179,7 +180,7 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
       if (current && current.count >= finalConfig.maxRequests) {
         const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
         
-        return Response.json(
+        return NextRes.json(
           {
             error: finalConfig.message,
             retryAfter,
@@ -225,7 +226,7 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
         console.warn("Skip counting not fully implemented with Redis rate limiting");
       }
       
-      return new Response(response.body, {
+      return new NextRes(response.body, {
         status: response.status,
         statusText: response.statusText,
         headers,
@@ -240,7 +241,7 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
       const headers = new Headers(response.headers);
       headers.set("X-RateLimit-Status", "degraded");
       
-      return new Response(response.body, {
+      return new NextRes(response.body, {
         status: response.status,
         statusText: response.statusText,
         headers,

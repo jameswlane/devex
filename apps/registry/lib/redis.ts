@@ -29,7 +29,6 @@ const redisConfig: RedisConfig = {
 // Create IORedis client for traditional Redis instances
 export const ioRedisClient = new IORedis(redisConfig.url, {
   maxRetriesPerRequest: redisConfig.maxRetries,
-  retryDelayOnFailover: redisConfig.retryDelayOnFailover,
   connectTimeout: redisConfig.connectTimeout,
   lazyConnect: true,
   // Handle connection errors gracefully
@@ -92,8 +91,10 @@ class UpstashRedisStore implements RedisStore {
   }
 
   async mset(keyValues: Record<string, string>, ttlSeconds?: number): Promise<void> {
-    const pairs = Object.entries(keyValues).flat();
-    await this.client.mset(...pairs);
+    const entries = Object.entries(keyValues);
+    for (const [key, value] of entries) {
+      await this.client.set(key, value);
+    }
     
     if (ttlSeconds) {
       const promises = Object.keys(keyValues).map(key => 

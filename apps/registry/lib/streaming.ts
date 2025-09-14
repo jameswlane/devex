@@ -1,4 +1,4 @@
-import type { ReadableStream } from "stream/web";
+// ReadableStream is a global web API, no import needed
 
 // Streaming utilities for large JSON responses
 export class StreamingJsonResponse {
@@ -16,6 +16,7 @@ export class StreamingJsonResponse {
     const { chunkSize = 100, metadata = {}, onProgress } = options;
     const total = data.length;
     let processed = 0;
+    const encoder = this.encoder; // Capture encoder reference
 
     const stream = new ReadableStream({
       start(controller) {
@@ -27,7 +28,7 @@ export class StreamingJsonResponse {
           data: "["
         }).slice(0, -2) + '"[';
         
-        controller.enqueue(this.encoder.encode(opening));
+        controller.enqueue(encoder.encode(opening));
       },
 
       async pull(controller) {
@@ -35,7 +36,7 @@ export class StreamingJsonResponse {
           if (processed >= total) {
             // Close the array and add final metadata
             const closing = '],"completed":true,"processedAt":"' + new Date().toISOString() + '"}';
-            controller.enqueue(this.encoder.encode(closing));
+            controller.enqueue(encoder.encode(closing));
             controller.close();
             return;
           }
@@ -57,7 +58,7 @@ export class StreamingJsonResponse {
             chunkJson += JSON.stringify(item);
           });
 
-          controller.enqueue(this.encoder.encode(chunkJson));
+          controller.enqueue(encoder.encode(chunkJson));
 
           processed += chunk.length;
           onProgress?.(processed, total);
@@ -94,6 +95,7 @@ export class StreamingJsonResponse {
     const { chunkSize = 100, metadata = {}, onProgress } = options;
     const total = data.length;
     let processed = 0;
+    const encoder = this.encoder; // Capture encoder reference
 
     const stream = new ReadableStream({
       start(controller) {
@@ -105,7 +107,7 @@ export class StreamingJsonResponse {
           format: "ndjson",
         }) + "\n";
         
-        controller.enqueue(this.encoder.encode(metadataLine));
+        controller.enqueue(encoder.encode(metadataLine));
       },
 
       async pull(controller) {
@@ -118,7 +120,7 @@ export class StreamingJsonResponse {
               processedAt: new Date().toISOString(),
             }) + "\n";
             
-            controller.enqueue(this.encoder.encode(completion));
+            controller.enqueue(encoder.encode(completion));
             controller.close();
             return;
           }
@@ -131,7 +133,7 @@ export class StreamingJsonResponse {
             ndjsonChunk += JSON.stringify(item) + "\n";
           });
 
-          controller.enqueue(this.encoder.encode(ndjsonChunk));
+          controller.enqueue(encoder.encode(ndjsonChunk));
 
           processed += chunk.length;
           onProgress?.(processed, total);
@@ -166,6 +168,7 @@ export class StreamingJsonResponse {
   ): Response {
     const { keepAlive = true, heartbeatInterval = 30000 } = options;
     let heartbeatTimer: NodeJS.Timeout | null = null;
+    const encoder = this.encoder; // Capture encoder reference
 
     const stream = new ReadableStream({
       start(controller) {
@@ -175,7 +178,7 @@ export class StreamingJsonResponse {
           timestamp: new Date().toISOString() 
         })}\n\n`;
         
-        controller.enqueue(this.encoder.encode(connectEvent));
+        controller.enqueue(encoder.encode(connectEvent));
 
         // Set up heartbeat if keep alive is enabled
         if (keepAlive) {
@@ -185,7 +188,7 @@ export class StreamingJsonResponse {
             })}\n\n`;
             
             try {
-              controller.enqueue(this.encoder.encode(heartbeat));
+              controller.enqueue(encoder.encode(heartbeat));
             } catch {
               // Client disconnected, clean up
               if (heartbeatTimer) {
@@ -208,7 +211,7 @@ export class StreamingJsonResponse {
               timestamp: new Date().toISOString() 
             })}\n\n`;
             
-            controller.enqueue(this.encoder.encode(completeEvent));
+            controller.enqueue(encoder.encode(completeEvent));
             
             // Clean up heartbeat
             if (heartbeatTimer) {
@@ -222,7 +225,7 @@ export class StreamingJsonResponse {
 
           // Send data event
           const dataEvent = `event: data\ndata: ${JSON.stringify(value)}\n\n`;
-          controller.enqueue(this.encoder.encode(dataEvent));
+          controller.enqueue(encoder.encode(dataEvent));
           
         } catch (error) {
           // Send error event
@@ -231,7 +234,7 @@ export class StreamingJsonResponse {
             timestamp: new Date().toISOString() 
           })}\n\n`;
           
-          controller.enqueue(this.encoder.encode(errorEvent));
+          controller.enqueue(encoder.encode(errorEvent));
           controller.error(error);
         }
       },

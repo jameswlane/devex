@@ -1,19 +1,24 @@
 import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
+// Create a base client type
+type BasePrismaClient = PrismaClient;
+
 const globalForPrisma = globalThis as unknown as {
-	prisma: PrismaClient | undefined;
+	prisma: BasePrismaClient | undefined;
 };
 
-// Configure Prisma with Accelerate for caching and connection pooling
-export const prisma =
-	globalForPrisma.prisma ??
-	new PrismaClient({
-		log:
-			process.env.NODE_ENV === "development"
-				? ["query", "info", "warn", "error"]
-				: ["error"],
-	}).$extends(withAccelerate());
+// Configure Prisma - for now, let's disable Accelerate to fix typing issues
+const basePrismaClient = new PrismaClient({
+	log:
+		process.env.NODE_ENV === "development"
+			? ["query", "info", "warn", "error"]
+			: ["error"],
+});
+
+// Export the base client for now to fix typing issues
+// TODO: Re-enable Accelerate after fixing TypeScript conflicts
+export const prisma = globalForPrisma.prisma ?? basePrismaClient;
 
 // Ensure the prisma instance is re-used during hot-reload
 // to prevent creating multiple database connections

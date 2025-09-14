@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getCorsOrigins, REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
-import { prisma } from "@/lib/prisma";
+import { registryService } from "@/lib/registry-service";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import type {
 	ApplicationResponse,
@@ -21,79 +21,16 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 			100,
 			Math.max(1, parseInt(searchParams.get("limit") || "50", 10)),
 		);
-		const resource = searchParams.get("resource") || "all"; // plugins, applications, configs, stacks, or all
-		const skip = (page - 1) * limit;
+		const resource = (searchParams.get("resource") || "all") as "all" | "plugins" | "applications" | "configs" | "stacks";
 
-		const result = await prisma.$transaction(async (tx) => {
-			const counts = await Promise.all([
-				resource === "all" || resource === "plugins" ? tx.plugin.count() : 0,
-				resource === "all" || resource === "applications"
-					? tx.application.count()
-					: 0,
-				resource === "all" || resource === "configs" ? tx.config.count() : 0,
-				resource === "all" || resource === "stacks" ? tx.stack.count() : 0,
-			]);
-
-			const [pluginCount, applicationCount, configCount, stackCount] = counts;
-
-			const data = await Promise.all([
-				resource === "all" || resource === "plugins"
-					? tx.plugin.findMany({
-							skip,
-							take: limit,
-							orderBy: { name: "asc" },
-						})
-					: [],
-				resource === "all" || resource === "applications"
-					? tx.application.findMany({
-							skip,
-							take: limit,
-							include: {
-								linuxSupport: true,
-								macosSupport: true,
-								windowsSupport: true,
-							},
-							orderBy: { name: "asc" },
-						})
-					: [],
-				resource === "all" || resource === "configs"
-					? tx.config.findMany({
-							skip,
-							take: limit,
-							orderBy: { name: "asc" },
-						})
-					: [],
-				resource === "all" || resource === "stacks"
-					? tx.stack.findMany({
-							skip,
-							take: limit,
-							orderBy: { name: "asc" },
-						})
-					: [],
-			]);
-
-			const [plugins, applications, configs, stacks] = data;
-
-			const stats = await tx.registryStats.findFirst({
-				orderBy: { date: "desc" },
-			});
-
-			return {
-				plugins,
-				applications,
-				configs,
-				stacks,
-				stats,
-				totalCounts: {
-					plugins: pluginCount,
-					applications: applicationCount,
-					configs: configCount,
-					stacks: stackCount,
-				},
-			};
+		// Use the optimized registry service with circuit breaker and caching
+		const result = await registryService.getPaginatedRegistry({
+			page,
+			limit,
+			resource,
 		});
 
-		// Transform data to response format
+		// Transform data to response format using proper types
 		const pluginsFormatted = result.plugins.map((plugin) => ({
 			name: plugin.name,
 			description: plugin.description,
