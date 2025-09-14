@@ -40,7 +40,7 @@
 		"db:generate": {
 			"dependsOn": [],
 			"inputs": ["prisma/**"],
-			"outputs": ["../../node_modules/.pnpm/**/@prisma/client/**"],
+			"outputs": ["node_modules/.prisma/**", ".prisma/**"],
 			"cache": true,
 			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
 		},
