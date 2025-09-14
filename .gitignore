@@ -56,3 +56,6 @@ packages/*/devex-plugin-*
 # Environment files
 .env
 .vercel
+
+# Cache files
+.cache/
