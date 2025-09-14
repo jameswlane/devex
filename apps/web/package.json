@@ -4,7 +4,6 @@
 	"private": true,
 	"scripts": {
 		"dev": "next dev",
-		"prebuild": "cd ../.. && node scripts/generate-web-tools-data.js",
 		"build": "next build",
 		"start": "next start",
 		"generate": "cd ../.. && node scripts/generate-web-tools-data.js",

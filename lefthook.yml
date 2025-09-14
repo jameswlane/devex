@@ -1,13 +1,6 @@
 pre-commit:
   parallel: false
   commands:
-    generate-web-data:
-      root: "apps/cli/config/applications/"
-      glob: "*.{yml,yaml}"
-      run: |
-        echo "📊 Generating web tools data..."
-        pnpm web:generate
-      stage_fixed: true
     check-large-files:
       run: |
         git diff --cached --name-only | \
@@ -21,15 +14,6 @@ pre-commit:
     yamllint:
       glob: "*.{yml,yaml}"
       run: yamllint {staged_files}
-    end-of-file-fixer:
-      glob: '*.{js,ts,jsx,tsx,go,md,yml,yaml,json}'
-      run: |
-        for file in {staged_files}; do
-          if [ -s "$file" ] && [ "$(tail -c1 "$file")" != "" ]; then
-            echo "" >> "$file"
-          fi
-        done
-      stage_fixed: true
     biome:
       glob: '*.{json}'
       run: pnpm exec biome check --write {staged_files}

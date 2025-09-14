@@ -3,25 +3,25 @@
 @tailwind utilities;
 
 @layer base {
-  html {
-    font-family: system-ui, sans-serif;
-  }
+	html {
+		font-family: system-ui, sans-serif;
+	}
 }
 
 @layer components {
-  .stat-card {
-    @apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow;
-  }
-  
-  .stat-title {
-    @apply text-lg font-semibold text-gray-800 mb-2;
-  }
-  
-  .stat-value {
-    @apply text-3xl font-bold text-blue-600 mb-1;
-  }
-  
-  .stat-description {
-    @apply text-sm text-gray-600;
-  }
+	.stat-card {
+		@apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow;
+	}
+
+	.stat-title {
+		@apply text-lg font-semibold text-gray-800 mb-2;
+	}
+
+	.stat-value {
+		@apply text-3xl font-bold text-blue-600 mb-1;
+	}
+
+	.stat-description {
+		@apply text-sm text-gray-600;
+	}
 }

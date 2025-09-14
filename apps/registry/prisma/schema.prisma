@@ -41,6 +41,10 @@ model Application {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  @@index([category])
+  @@index([official])
+  @@index([default])
+  @@index([name])
   @@map("applications")
 }
 
@@ -71,6 +75,10 @@ model Plugin {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  @@index([type])
+  @@index([priority])
+  @@index([status])
+  @@index([name])
   @@map("plugins")
 }
 
@@ -101,6 +109,9 @@ model Config {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  @@index([category])
+  @@index([type])
+  @@index([name])
   @@map("configs")
 }
 
@@ -135,6 +146,8 @@ model Stack {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
+  @@index([category])
+  @@index([name])
   @@map("stacks")
 }
 
@@ -191,5 +204,8 @@ model SyncLog {
   
   createdAt DateTime @default(now())
   
+  @@index([type])
+  @@index([createdAt])
+  @@index([success])
   @@map("sync_logs")
 }

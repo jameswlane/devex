@@ -27,7 +27,6 @@
 		"auto:release": "auto shipit",
 		"web:build": "turbo build --filter=@devex/web",
 		"web:dev": "turbo dev --filter=@devex/web",
-		"web:generate": "node scripts/generate-web-tools-data.js",
 		"docs:build": "turbo build --filter=@devex/docs",
 		"docs:dev": "turbo dev --filter=@devex/docs",
 		"goreleaser:generate": "node scripts/generate-goreleaser.js",
