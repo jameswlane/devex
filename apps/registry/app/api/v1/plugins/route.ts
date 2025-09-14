@@ -5,19 +5,22 @@ import type { PluginWhereInput } from "@/lib/types";
 import {
 	validatePaginationParams,
 	validateSearchQuery,
+	validatePluginType,
 } from "@/lib/validation";
+import { REGISTRY_CONFIG } from "@/lib/config";
 
 export async function GET(request: Request) {
 	try {
 		const { searchParams } = new URL(request.url);
-		const type = validateSearchQuery(searchParams.get("type"));
+		const type = validatePluginType(searchParams.get("type"));
 		const search = validateSearchQuery(searchParams.get("search"));
 		const { limit, offset } = validatePaginationParams(searchParams);
 
-		// Build where clause
+		// Build where clause with proper validation
 		const where: PluginWhereInput = {};
 
 		if (type) {
+			// Now using validated plugin type - safe from injection
 			where.type = { contains: type, mode: "insensitive" };
 		}
 
@@ -48,9 +51,9 @@ export async function GET(request: Request) {
 			status: plugin.status,
 			supports: plugin.supports as Record<string, boolean>,
 			platforms: plugin.platforms,
-			version: "1.1.0",
-			author: "DevEx Team",
-			repository: plugin.githubUrl || "https://github.com/jameswlane/devex",
+			version: REGISTRY_CONFIG.PLUGIN_VERSION,
+			author: REGISTRY_CONFIG.PLUGIN_AUTHOR,
+			repository: plugin.githubUrl || REGISTRY_CONFIG.PLUGIN_REPOSITORY,
 			githubPath: plugin.githubPath,
 			downloadCount: plugin.downloadCount,
 			lastDownload: plugin.lastDownload?.toISOString(),

@@ -5,25 +5,29 @@ import type { ApplicationWhereInput } from "@/lib/types";
 import {
 	validatePaginationParams,
 	validateSearchQuery,
+	validateCategory,
+	validatePlatform,
 } from "@/lib/validation";
 
 export async function GET(request: Request) {
 	try {
 		const { searchParams } = new URL(request.url);
-		const category = searchParams.get("category");
+		const category = validateCategory(searchParams.get("category"));
 		const search = validateSearchQuery(searchParams.get("search"));
-		const platform = validateSearchQuery(searchParams.get("platform"));
+		const platform = validatePlatform(searchParams.get("platform"));
 		const { limit, offset } = validatePaginationParams(searchParams);
 
-		// Build where clause
+		// Build where clause with proper validation
 		const where: ApplicationWhereInput = {};
 
 		if (category) {
+			// Now using validated category - safe from injection
 			where.category = { contains: category, mode: "insensitive" };
 		}
 
 		if (platform) {
-			switch (platform.toLowerCase()) {
+			// Using validated platform - safe from injection
+			switch (platform) {
 				case "linux":
 					where.linuxSupportId = { not: null };
 					break;

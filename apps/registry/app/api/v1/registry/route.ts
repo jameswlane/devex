@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { REGISTRY_CONFIG, getCorsOrigins } from "@/lib/config";
 
 export async function GET() {
 	try {
@@ -40,11 +41,11 @@ export async function GET() {
 					supports: plugin.supports as Record<string, boolean>,
 					platforms: plugin.platforms,
 					tags: [], // Will be inferred from type and platforms
-					version: "1.1.0", // Default version for now
-					author: "DevEx Team",
-					repository: plugin.githubUrl || "https://github.com/jameswlane/devex",
+					version: REGISTRY_CONFIG.PLUGIN_VERSION,
+					author: REGISTRY_CONFIG.PLUGIN_AUTHOR,
+					repository: plugin.githubUrl || REGISTRY_CONFIG.PLUGIN_REPOSITORY,
 					dependencies: [], // Will be enhanced in future
-					release_tag: `@devex/${plugin.name}@1.1.0`,
+					release_tag: `@devex/${plugin.name}@${REGISTRY_CONFIG.PLUGIN_VERSION}`,
 					githubPath: plugin.githubPath,
 					downloadCount: plugin.downloadCount,
 					lastDownload: plugin.lastDownload?.toISOString(),
@@ -142,11 +143,11 @@ export async function GET() {
 		);
 
 		const registry = {
-			base_url: "https://github.com/jameswlane/devex/releases/download",
-			version: "2.0.0", // Updated version for database-backed registry
+			base_url: REGISTRY_CONFIG.BASE_URL,
+			version: REGISTRY_CONFIG.REGISTRY_VERSION,
 			last_updated: new Date().toISOString(),
-			source: "database", // Indicate this is database-backed
-			github_url: "https://github.com/jameswlane/devex",
+			source: REGISTRY_CONFIG.REGISTRY_SOURCE,
+			github_url: REGISTRY_CONFIG.GITHUB_URL,
 
 			// Core registry data
 			plugins: pluginsFormatted,
@@ -182,11 +183,11 @@ export async function GET() {
 
 		return NextResponse.json(registry, {
 			headers: {
-				"Cache-Control": "public, max-age=300, s-maxage=600", // 5min cache, 10min CDN
+				"Cache-Control": `public, max-age=${REGISTRY_CONFIG.DEFAULT_CACHE_DURATION}, s-maxage=${REGISTRY_CONFIG.CDN_CACHE_DURATION}`,
 				"CDN-Cache-Control": "public, max-age=3600", // 1 hour CDN cache
 				Vary: "Accept-Encoding",
-				"X-Registry-Source": "database",
-				"X-Registry-Version": "2.0.0",
+				"X-Registry-Source": REGISTRY_CONFIG.REGISTRY_SOURCE,
+				"X-Registry-Version": REGISTRY_CONFIG.REGISTRY_VERSION,
 				"X-Total-Items": registry.stats.total.all.toString(),
 			},
 		});
@@ -198,11 +199,11 @@ export async function GET() {
 
 // Handle CORS preflight
 export async function OPTIONS() {
+	const corsOrigins = getCorsOrigins();
 	return new Response(null, {
 		status: 200,
 		headers: {
-			"Access-Control-Allow-Origin":
-				process.env.NODE_ENV === "production" ? "https://devex.sh" : "*",
+			"Access-Control-Allow-Origin": Array.isArray(corsOrigins) ? corsOrigins.join(", ") : corsOrigins,
 			"Access-Control-Allow-Methods": "GET, OPTIONS",
 			"Access-Control-Allow-Headers": "Content-Type",
 		},

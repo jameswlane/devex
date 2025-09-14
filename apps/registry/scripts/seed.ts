@@ -126,9 +126,32 @@ async function seedApplications() {
 			process.cwd(),
 			"../web/app/generated/tools.json",
 		);
-		const webToolsData: WebToolsData = JSON.parse(
-			fs.readFileSync(webToolsPath, "utf-8"),
-		);
+		
+		// Safe JSON parsing with error handling
+		let webToolsData: WebToolsData;
+		try {
+			if (!fs.existsSync(webToolsPath)) {
+				throw new Error(`Web tools data file not found: ${webToolsPath}`);
+			}
+			
+			const rawData = fs.readFileSync(webToolsPath, "utf-8");
+			if (!rawData.trim()) {
+				throw new Error("Web tools data file is empty");
+			}
+			
+			webToolsData = JSON.parse(rawData);
+			
+			// Validate the parsed data structure
+			if (!webToolsData || !Array.isArray(webToolsData.tools)) {
+				throw new Error("Invalid web tools data structure: missing tools array");
+			}
+		} catch (error) {
+			if (error instanceof SyntaxError) {
+				console.error("JSON parsing failed:", error.message);
+				throw new Error(`Malformed JSON in web tools data: ${error.message}`);
+			}
+			throw error; // Re-throw other errors
+		}
 
 		const applications = webToolsData.tools.filter(
 			(tool) => tool.type === "application",
