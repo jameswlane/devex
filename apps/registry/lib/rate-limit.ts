@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { createApiError } from "./logger";
 
 // Rate limiting configuration
@@ -29,7 +29,10 @@ class RateLimitStore {
 		}, 60000);
 	}
 
-	increment(key: string, windowMs: number): { count: number; resetTime: number } {
+	increment(
+		key: string,
+		windowMs: number,
+	): { count: number; resetTime: number } {
 		const now = Date.now();
 		const existing = this.store.get(key);
 
@@ -47,11 +50,11 @@ class RateLimitStore {
 	get(key: string): { count: number; resetTime: number } | undefined {
 		const now = Date.now();
 		const existing = this.store.get(key);
-		
+
 		if (existing && existing.resetTime > now) {
 			return existing;
 		}
-		
+
 		return undefined;
 	}
 
@@ -102,13 +105,13 @@ function defaultKeyGenerator(req: NextRequest): string {
 	const forwarded = req.headers.get("x-forwarded-for");
 	const real = req.headers.get("x-real-ip");
 	const cloudflare = req.headers.get("cf-connecting-ip");
-	
+
 	// Use the first available IP
 	const ip = forwarded?.split(",")[0].trim() || real || cloudflare || "unknown";
-	
+
 	// Include pathname to allow different limits per endpoint
 	const pathname = new URL(req.url).pathname;
-	
+
 	return `${ip}:${pathname}`;
 }
 
@@ -125,19 +128,21 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 
 	return async function rateLimitMiddleware(
 		req: NextRequest,
-		handler: () => Promise<NextResponse>
+		handler: () => Promise<NextResponse>,
 	): Promise<NextResponse> {
 		const key = finalConfig.keyGenerator!(req);
-		
+
 		// Check current rate limit status
 		const current = rateLimitStore.get(key);
-		const remaining = current ? Math.max(0, finalConfig.maxRequests - current.count) : finalConfig.maxRequests;
+		const remaining = current
+			? Math.max(0, finalConfig.maxRequests - current.count)
+			: finalConfig.maxRequests;
 		const resetTime = current?.resetTime || Date.now() + finalConfig.windowMs;
-		
+
 		// Check if rate limit exceeded
 		if (current && current.count >= finalConfig.maxRequests) {
 			const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
-			
+
 			return NextResponse.json(
 				{
 					error: finalConfig.message,
@@ -151,36 +156,38 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 						"X-RateLimit-Reset": new Date(resetTime).toISOString(),
 						"Retry-After": retryAfter.toString(),
 					},
-				}
+				},
 			);
 		}
-		
+
 		// Increment counter
 		rateLimitStore.increment(key, finalConfig.windowMs);
-		
+
 		// Execute the handler
 		const response = await handler();
-		
+
 		// Add rate limit headers to response
 		const headers = new Headers(response.headers);
 		headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
 		headers.set("X-RateLimit-Remaining", Math.max(0, remaining - 1).toString());
 		headers.set("X-RateLimit-Reset", new Date(resetTime).toISOString());
-		
+
 		// Check if we should skip counting this request
 		const status = response.status;
 		const isSuccess = status >= 200 && status < 300;
 		const isFailed = status >= 400;
-		
-		if ((finalConfig.skipSuccessfulRequests && isSuccess) || 
-			(finalConfig.skipFailedRequests && isFailed)) {
+
+		if (
+			(finalConfig.skipSuccessfulRequests && isSuccess) ||
+			(finalConfig.skipFailedRequests && isFailed)
+		) {
 			// Reset the count for this request
 			const current = rateLimitStore.get(key);
 			if (current && current.count > 0) {
 				current.count--;
 			}
 		}
-		
+
 		return new NextResponse(response.body, {
 			status: response.status,
 			statusText: response.statusText,
@@ -192,11 +199,13 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 // Helper function to apply rate limiting to an API route
 export function withRateLimit(
 	handler: (req: NextRequest) => Promise<NextResponse>,
-	config?: Partial<RateLimitConfig>
+	config?: Partial<RateLimitConfig>,
 ) {
 	const rateLimiter = rateLimit(config);
-	
-	return async function rateLimitedHandler(req: NextRequest): Promise<NextResponse> {
+
+	return async function rateLimitedHandler(
+		req: NextRequest,
+	): Promise<NextResponse> {
 		return rateLimiter(req, () => handler(req));
 	};
 }

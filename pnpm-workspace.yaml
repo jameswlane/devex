@@ -1,6 +1,9 @@
 packages:
   - apps/*
   - packages/*
+catalogs:
+  prisma:
+    prisma: latest
 onlyBuiltDependencies:
   - '@tailwindcss/oxide'
   - core-js

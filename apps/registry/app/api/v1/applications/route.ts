@@ -3,10 +3,10 @@ import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { ApplicationWhereInput } from "@/lib/types";
 import {
-	validatePaginationParams,
-	validateSearchQuery,
 	validateCategory,
+	validatePaginationParams,
 	validatePlatform,
+	validateSearchQuery,
 } from "@/lib/validation";
 
 export async function GET(request: Request) {

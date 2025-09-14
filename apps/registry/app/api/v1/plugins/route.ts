@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
+import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import type { PluginWhereInput } from "@/lib/types";
 import {
 	validatePaginationParams,
-	validateSearchQuery,
 	validatePluginType,
+	validateSearchQuery,
 } from "@/lib/validation";
-import { REGISTRY_CONFIG } from "@/lib/config";
 
 export async function GET(request: Request) {
 	try {

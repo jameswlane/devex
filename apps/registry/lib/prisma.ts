@@ -8,16 +8,10 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
 	globalForPrisma.prisma ??
 	new PrismaClient({
-		log: process.env.NODE_ENV === "development" ? ["query", "info", "warn", "error"] : ["error"],
-		datasources: {
-			db: {
-				url: process.env.DATABASE_URL,
-			},
-		},
-		// Connection pool configuration
-		// These settings optimize for serverless environments like Vercel
-		// where connections should be managed carefully
-		datasourceUrl: process.env.DATABASE_URL,
+		log:
+			process.env.NODE_ENV === "development"
+				? ["query", "info", "warn", "error"]
+				: ["error"],
 	});
 
 // Ensure the prisma instance is re-used during hot-reload
@@ -35,7 +29,10 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // Export connection pool metrics helper
-export async function getConnectionPoolMetrics() {
-	const metrics = await prisma.$metrics.json();
-	return metrics;
-}
+// Note: Metrics need to be enabled in the Prisma schema first
+// by adding: previewFeatures = ["metrics"]
+// export async function getConnectionPoolMetrics() {
+// 	const metrics = await prisma.$metrics.json();
+// 	return metrics;
+// }
+

@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 export function logDatabaseError(error: any, context: string) {
 	const errorInfo = {
 		context,
@@ -11,14 +13,13 @@ export function logDatabaseError(error: any, context: string) {
 }
 
 export function createApiError(message: string, status: number = 500) {
-	return new Response(
-		JSON.stringify({
+	return NextResponse.json(
+		{
 			error: message,
 			timestamp: new Date().toISOString(),
-		}),
+		},
 		{
 			status,
-			headers: { "Content-Type": "application/json" },
 		},
 	);
 }
