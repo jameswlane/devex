@@ -21,7 +21,14 @@ export async function GET(request: Request) {
 		const category = validateCategory(searchParams.get("category"));
 		const search = validateSearchQuery(searchParams.get("search"));
 		const platform = validatePlatform(searchParams.get("platform"));
-		const { limit, offset } = validatePaginationParams(searchParams);
+		
+		// Handle the new validation format
+		const paginationResult = validatePaginationParams(searchParams);
+		if (!paginationResult.success) {
+			return createApiError("Invalid pagination parameters", 400);
+		}
+		const { page, limit } = paginationResult.data!;
+		const offset = (page - 1) * limit;
 
 		// Build where clause with proper validation
 		const where: Prisma.ApplicationWhereInput = {};

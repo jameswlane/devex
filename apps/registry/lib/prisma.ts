@@ -1,30 +1,37 @@
 import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
-// Create a base client type
-type BasePrismaClient = PrismaClient;
+// Create Prisma client with Accelerate extension
+const createPrismaClient = () => {
+	const client = new PrismaClient({
+		log:
+			process.env.NODE_ENV === "development"
+				? ["query", "info", "warn", "error"]
+				: ["error"],
+	});
 
-const globalForPrisma = globalThis as unknown as {
-	prisma: BasePrismaClient | undefined;
+	// Extend with Accelerate since it's enabled on Prisma Cloud
+	return client.$extends(withAccelerate());
 };
 
-// Configure Prisma - for now, let's disable Accelerate to fix typing issues
-const basePrismaClient = new PrismaClient({
-	log:
-		process.env.NODE_ENV === "development"
-			? ["query", "info", "warn", "error"]
-			: ["error"],
-});
+// Type the client properly to avoid union type issues
+type AcceleratedPrismaClient = ReturnType<typeof createPrismaClient>;
 
-// Export the base client for now to fix typing issues
-// TODO: Re-enable Accelerate after fixing TypeScript conflicts
-export const prisma = globalForPrisma.prisma ?? basePrismaClient;
+const globalForPrisma = globalThis as unknown as {
+	prisma: AcceleratedPrismaClient | undefined;
+};
+
+// Create the client instance
+const prismaInstance = globalForPrisma.prisma ?? createPrismaClient();
 
 // Ensure the prisma instance is re-used during hot-reload
 // to prevent creating multiple database connections
 if (process.env.NODE_ENV !== "production") {
-	globalForPrisma.prisma = prisma;
+	globalForPrisma.prisma = prismaInstance;
 }
+
+// Export the accelerated client with proper typing
+export const prisma = prismaInstance;
 
 // Graceful shutdown for serverless environments
 if (process.env.NODE_ENV === "production") {
