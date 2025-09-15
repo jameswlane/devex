@@ -33,6 +33,36 @@ export class StructuredLogger {
   private readonly version: string;
   private readonly environment: string;
 
+  // Fields considered sensitive and redacted from logs
+  private static readonly SENSITIVE_KEYS = [
+    "password", "secret", "token", "key", "apiKey", "apikey", "auth", "access_token", "refresh_token"
+  ];
+
+  /**
+   * Recursively redacts sensitive fields in an object.
+   * @param value - The object to redact.
+   * @returns A new object with sensitive values redacted.
+   */
+  private static redactSensitiveData<T>(value: T): T {
+    if (Array.isArray(value)) {
+      return value.map(item => StructuredLogger.redactSensitiveData(item)) as any;
+    } else if (value && typeof value === "object") {
+      const output: any = {};
+      for (const [k, v] of Object.entries(value)) {
+        if (
+          typeof k === "string" &&
+          StructuredLogger.SENSITIVE_KEYS.some(s => k.toLowerCase().includes(s))
+        ) {
+          output[k] = "[REDACTED]";
+        } else {
+          output[k] = StructuredLogger.redactSensitiveData(v);
+        }
+      }
+      return output;
+    }
+    return value;
+  }
+
   constructor() {
     this.service = "devex-registry";
     this.version = process.env.APP_VERSION || "1.0.0";
@@ -55,13 +85,16 @@ export class StructuredLogger {
     };
 
     if (context) {
-      entry.context = context;
-      entry.requestId = context.requestId;
-      entry.userId = context.userId;
+      // Redact sensitive values from context before logging
+      const safeContext = StructuredLogger.redactSensitiveData(context);
+      entry.context = safeContext;
+      entry.requestId = safeContext.requestId;
+      entry.userId = safeContext.userId;
     }
 
     if (error) {
-      entry.error = {
+      // Redact sensitive values from error object if present
+      const cleanError: any = {
         name: error.name,
         message: error.message,
         code: (error as any).code,
@@ -69,7 +102,8 @@ export class StructuredLogger {
 
       // Only include stack traces in development
       if (this.environment === "development") {
-        entry.error.stack = error.stack;
+        cleanError.stack = error.stack;
+      entry.error = StructuredLogger.redactSensitiveData(cleanError);
       }
     }
 
