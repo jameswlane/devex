@@ -1,24 +1,15 @@
-import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { logger, logPerformance } from "../../../../lib/logger";
+import { logger, logPerformance, createDatabaseError } from "../../../../lib/logger";
 import { withQueryCache, CacheCategory } from "../../../../lib/query-cache";
-
-// Lazy initialization of Prisma client to avoid build-time errors
-let prisma: PrismaClient | null = null;
-
-function getPrismaClient(): PrismaClient {
-	if (!prisma) {
-		prisma = new PrismaClient();
-	}
-	return prisma;
-}
+import { ensurePrisma } from "../../../../lib/prisma-client";
 
 export async function GET(request: Request) {
-	const prismaClient = getPrismaClient();
-	
 	try {
 		const url = new URL(request.url);
 		const forceRefresh = url.searchParams.get("refresh") === "true";
+		
+		// Get Prisma client with proper error handling
+		const prismaClient = ensurePrisma();
 		
 		// Wrap expensive aggregation in cache
 		const stats = await withQueryCache(
@@ -157,17 +148,10 @@ export async function GET(request: Request) {
 			},
 		});
 	} catch (error) {
-		logger.error("Failed to fetch registry statistics", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+		logger.error("Failed to fetch registry statistics", { 
+			error: error instanceof Error ? error.message : String(error) 
+		}, error instanceof Error ? error : undefined);
 
-		return NextResponse.json(
-			{
-				error: "Failed to fetch registry statistics",
-				code: "DATABASE_ERROR",
-				timestamp: new Date().toISOString(),
-			},
-			{ status: 500 },
-		);
-	} finally {
-		await prismaClient.$disconnect();
+		return createDatabaseError("fetch registry statistics");
 	}
 }
