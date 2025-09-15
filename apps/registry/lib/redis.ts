@@ -18,19 +18,30 @@ interface RedisConfig {
 // Upstash Redis client (for Vercel/Serverless)
 export const upstashRedis = Redis.fromEnv();
 
-// Alternative Redis client (for self-hosted Redis)
-const redisConfig: RedisConfig = {
-  url: process.env.REDIS_URL || process.env.KV_URL || "redis://localhost:6379",
-  token: process.env.KV_REST_API_TOKEN,
-  apiUrl: process.env.KV_REST_API_URL,
-  apiToken: process.env.KV_REST_API_TOKEN,
-  password: process.env.REDIS_PASSWORD,
-  username: process.env.REDIS_USERNAME || "default",
-  maxRetries: 3,
-  retryDelayOnFailover: 100,
-  connectTimeout: 10000,
-  enableTLS: process.env.REDIS_TLS === "true" || process.env.NODE_ENV === "production",
-};
+// Safe Redis configuration with sensitive data isolation
+function createRedisConfig(): RedisConfig {
+  // Isolate sensitive environment variables to prevent exposure in error traces
+  const sensitiveVars = {
+    token: process.env.KV_REST_API_TOKEN,
+    apiToken: process.env.KV_REST_API_TOKEN,
+    password: process.env.REDIS_PASSWORD,
+  };
+
+  return {
+    url: process.env.REDIS_URL || process.env.KV_URL || "redis://localhost:6379",
+    token: sensitiveVars.token,
+    apiUrl: process.env.KV_REST_API_URL,
+    apiToken: sensitiveVars.apiToken,
+    password: sensitiveVars.password,
+    username: process.env.REDIS_USERNAME || "default",
+    maxRetries: 3,
+    retryDelayOnFailover: 100,
+    connectTimeout: 10000,
+    enableTLS: process.env.REDIS_TLS === "true" || process.env.NODE_ENV === "production",
+  };
+}
+
+const redisConfig = createRedisConfig();
 
 // Create IORedis client for traditional Redis instances
 export const ioRedisClient = new IORedis(redisConfig.url, {

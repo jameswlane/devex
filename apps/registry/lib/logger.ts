@@ -110,8 +110,51 @@ export class StructuredLogger {
     return entry;
   }
 
+  // Redact sensitive data from log entries before writing
+  private static redactSensitiveData(obj: any): any {
+    if (!obj || typeof obj !== 'object') {
+      return obj;
+    }
+
+    const sensitiveKeys = [
+      'token', 'password', 'secret', 'key', 'auth', 'authorization',
+      'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_TOKEN', 'DATABASE_URL',
+      'REDIS_PASSWORD', 'REDIS_URL', 'api_key', 'apiKey', 'bearer'
+    ];
+
+    const redacted = Array.isArray(obj) ? [] : {};
+    
+    for (const [key, value] of Object.entries(obj)) {
+      const keyLower = key.toLowerCase();
+      const isSensitive = sensitiveKeys.some(sensitiveKey => 
+        keyLower.includes(sensitiveKey.toLowerCase())
+      );
+      
+      if (isSensitive) {
+        redacted[key] = '[REDACTED]';
+      } else if (typeof value === 'object' && value !== null) {
+        redacted[key] = StructuredLogger.redactSensitiveData(value);
+      } else if (typeof value === 'string' && value.length > 50) {
+        // Redact long strings that might contain tokens
+        const urlPattern = /^https?:\/\//;
+        const tokenPattern = /^[A-Za-z0-9+/=]{20,}$/;
+        if (tokenPattern.test(value) && !urlPattern.test(value)) {
+          redacted[key] = '[REDACTED_TOKEN]';
+        } else {
+          redacted[key] = value;
+        }
+      } else {
+        redacted[key] = value;
+      }
+    }
+    
+    return redacted;
+  }
+
   private write(entry: LogEntry): void {
-    const logString = JSON.stringify(entry);
+    // Redact sensitive data before serialization
+    const safeEntry = StructuredLogger.redactSensitiveData(entry);
+    const logString = JSON.stringify(safeEntry);
     
     switch (entry.level) {
       case LogLevel.ERROR:
