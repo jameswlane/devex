@@ -26,7 +26,8 @@ export async function GET(request: Request) {
 		// Handle the new validation format
 		const paginationResult = validatePaginationParams(searchParams);
 		if (!paginationResult.success) {
-			return createApiError("Invalid pagination parameters", 400);
+			const url = new URL(request.url);
+			return createApiError("Invalid pagination parameters", 400, undefined, paginationResult.error, url.pathname);
 		}
 		const { page, limit } = paginationResult.data!;
 		const offset = (page - 1) * limit;
@@ -110,6 +111,7 @@ export async function GET(request: Request) {
 		});
 	} catch (error) {
 		logDatabaseError(error, "applications_fetch");
-		return createApiError("Failed to fetch applications", 500);
+		const url = new URL(request.url);
+		return createApiError("Failed to fetch applications", 500, undefined, undefined, url.pathname);
 	}
 }

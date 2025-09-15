@@ -1,9 +1,12 @@
 import { NextRequest } from "next/server";
 import { handleHealthCheck, dbHealthMonitor, DatabaseRecovery } from "@/lib/db-health";
-import { createApiError } from "@/lib/logger";
+import { createApiError, logger } from "@/lib/logger";
+import { getStartupHealth } from "@/lib/startup";
 
 // GET /api/health - Basic health check
 export async function GET(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     // Check if this is a detailed health check (for internal monitoring)
     const url = new URL(request.url);
@@ -21,10 +24,78 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Return health check response
-    return await handleHealthCheck(detailed);
+    // Get startup health information
+    let startupHealth;
+    try {
+      startupHealth = await getStartupHealth();
+    } catch (error) {
+      logger.warn("Failed to get startup health information", {
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      startupHealth = {
+        status: "failed" as const,
+        uptime: process.uptime() * 1000,
+      };
+    }
+
+    // Get database and Redis health
+    const dbHealth = await dbHealthMonitor.checkHealth();
+    
+    // Return enhanced health check response with startup information
+    const responseTime = Date.now() - startTime;
+    
+    const response = {
+      status: dbHealth.status,
+      timestamp: dbHealth.timestamp,
+      uptime: process.uptime() * 1000,
+      responseTime,
+      version: process.env.APP_VERSION || "1.0.0",
+      environment: process.env.NODE_ENV || "development",
+      startup: startupHealth,
+      database: {
+        status: dbHealth.status,
+        latency: dbHealth.latency,
+        connections: detailed ? dbHealth.connections : undefined,
+      },
+      redis: dbHealth.redis,
+      ...(detailed && {
+        errors: dbHealth.errors,
+        connectionPool: await dbHealthMonitor.getPoolStatus(),
+      }),
+    };
+
+    // Log health check for monitoring
+    logger.info("Health check completed", {
+      status: dbHealth.status,
+      responseTime,
+      startupStatus: startupHealth.status,
+      detailed,
+    });
+
+    const httpStatus = dbHealth.status === "healthy" ? 200 : 
+                      dbHealth.status === "degraded" ? 200 : 503;
+
+    return Response.json(response, {
+      status: httpStatus,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "X-Health-Status": dbHealth.status,
+        "X-Startup-Status": startupHealth.status,
+        "X-Response-Time": responseTime.toString(),
+      },
+    });
   } catch (error) {
-    return createApiError("Health check failed", 500);
+    const responseTime = Date.now() - startTime;
+    
+    logger.error("Health check failed", {
+      responseTime,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }, error instanceof Error ? error : undefined);
+    
+    return createApiError("Health check failed", 500, undefined, {
+      responseTime,
+    }, "/api/health");
   }
 }
 

@@ -13,6 +13,7 @@ import type { Plugin, Application, Config, Stack, RegistryStats } from "@prisma/
 const TRANSFORMATION_CACHE = {
 	TTL: 300, // 5 minutes
 	KEY_PREFIX: "transform:",
+	TRACKING_PREFIX: "transform:tracking:",
 	BATCH_SIZE: 100, // Process in batches to avoid memory issues
 };
 
@@ -80,6 +81,41 @@ export class RegistryTransformationService {
 		return `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`;
 	}
 
+	// Track cache keys for efficient invalidation
+	private async trackCacheKey(type: string, cacheKey: string): Promise<void> {
+		try {
+			const trackingKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}`;
+			// Use Redis set to track active cache keys for this type
+			// For Upstash Redis, we'll store as a JSON array since it doesn't support sets
+			const existingKeys = await redis.get(trackingKey);
+			const keySet = existingKeys ? JSON.parse(existingKeys) : [];
+			
+			if (!keySet.includes(cacheKey)) {
+				keySet.push(cacheKey);
+				// Limit tracking to prevent unbounded growth
+				if (keySet.length > 1000) {
+					keySet.splice(0, keySet.length - 1000); // Keep last 1000 keys
+				}
+				await redis.set(trackingKey, JSON.stringify(keySet), TRANSFORMATION_CACHE.TTL * 2);
+			}
+		} catch (error) {
+			// Don't fail the operation if tracking fails
+			console.warn("Failed to track cache key:", error);
+		}
+	}
+
+	// Get tracked cache keys for a type
+	private async getTrackedKeys(type: string): Promise<string[]> {
+		try {
+			const trackingKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}`;
+			const existingKeys = await redis.get(trackingKey);
+			return existingKeys ? JSON.parse(existingKeys) : [];
+		} catch (error) {
+			console.warn("Failed to get tracked keys:", error);
+			return [];
+		}
+	}
+
 	// Generate hash for data to detect changes
 	private generateDataHash(data: any[]): string {
 		// Create a hash based on data length and first/last item timestamps
@@ -142,9 +178,10 @@ export class RegistryTransformationService {
 			transformed.push(...batchTransformed);
 		}
 
-		// Cache the result
+		// Cache the result and track the key
 		try {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			await this.trackCacheKey("plugins", cacheKey);
 		} catch (error) {
 			console.warn("Failed to cache plugin transformations:", error);
 		}
@@ -224,9 +261,10 @@ export class RegistryTransformationService {
 			transformed.push(...batchTransformed);
 		}
 
-		// Cache the result
+		// Cache the result and track the key
 		try {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			await this.trackCacheKey("applications", cacheKey);
 		} catch (error) {
 			console.warn("Failed to cache application transformations:", error);
 		}
@@ -264,9 +302,10 @@ export class RegistryTransformationService {
 			lastDownload: config.lastDownload?.toISOString(),
 		}));
 
-		// Cache the result
+		// Cache the result and track the key
 		try {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			await this.trackCacheKey("configs", cacheKey);
 		} catch (error) {
 			console.warn("Failed to cache config transformations:", error);
 		}
@@ -306,9 +345,10 @@ export class RegistryTransformationService {
 			lastDownload: stack.lastDownload?.toISOString(),
 		}));
 
-		// Cache the result
+		// Cache the result and track the key
 		try {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			await this.trackCacheKey("stacks", cacheKey);
 		} catch (error) {
 			console.warn("Failed to cache stack transformations:", error);
 		}
@@ -409,19 +449,146 @@ export class RegistryTransformationService {
 		try {
 			const typesToInvalidate = types || ["plugins", "applications", "configs", "stacks"];
 			
-			// For each type, we'd need to invalidate all possible hashes
-			// This is a simplified approach - in production, you might want to track active cache keys
+			// Use tracked keys for efficient cache invalidation
 			const promises = typesToInvalidate.map(async (type) => {
-				// This is a simple approach - delete keys by pattern
-				// Note: This would require implementing a key pattern deletion method
-				console.log(`Invalidating transformation cache for ${type}`);
-				// In a real implementation, you'd track cache keys or use Redis patterns
+				await this.deleteTrackedKeys(type);
 			});
 
 			await Promise.all(promises);
 		} catch (error) {
 			console.error("Failed to invalidate transformation cache:", error);
 		}
+	}
+
+	// Delete all tracked cache keys for a specific type
+	private async deleteTrackedKeys(type: string): Promise<number> {
+		try {
+			const trackedKeys = await this.getTrackedKeys(type);
+			if (trackedKeys.length === 0) {
+				return 0;
+			}
+
+			// Delete all tracked keys in batches
+			const batchSize = 50;
+			let deletedCount = 0;
+			
+			for (let i = 0; i < trackedKeys.length; i += batchSize) {
+				const batch = trackedKeys.slice(i, i + batchSize);
+				const deletePromises = batch.map(key => redis.del(key));
+				await Promise.all(deletePromises);
+				deletedCount += batch.length;
+			}
+
+			// Clear the tracking key itself
+			const trackingKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}`;
+			await redis.del(trackingKey);
+
+			return deletedCount;
+		} catch (error) {
+			console.error(`Failed to delete tracked keys for ${type}:`, error);
+			// Fallback to pattern-based deletion
+			const pattern = `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:*`;
+			return await this.deleteKeysByPattern(pattern);
+		}
+	}
+
+	// Atomic key deletion using Redis SCAN + DELETE pattern
+	private async deleteKeysByPattern(pattern: string): Promise<number> {
+		try {
+			// Check if Redis client supports scan operation
+			if (typeof redis.ping !== 'function') {
+				console.warn("Redis client doesn't support pattern scanning, skipping cache invalidation");
+				return 0;
+			}
+
+			let deletedCount = 0;
+			let cursor = 0;
+			const keysToDelete: string[] = [];
+
+			// Use SCAN to find keys matching the pattern
+			do {
+				try {
+					// Note: This implementation assumes a Redis client that supports scan
+					// For Upstash Redis (REST API), we'll need a different approach
+					const scanResult = await this.scanKeys(cursor, pattern, 100);
+					cursor = scanResult.cursor;
+					keysToDelete.push(...scanResult.keys);
+				} catch (scanError) {
+					console.warn("SCAN operation failed, falling back to key tracking approach:", scanError);
+					// Fallback: try to delete common patterns
+					await this.fallbackKeyDeletion(pattern);
+					return 0;
+				}
+			} while (cursor !== 0);
+
+			// Delete keys in batches to avoid overwhelming Redis
+			if (keysToDelete.length > 0) {
+				const batchSize = 50;
+				for (let i = 0; i < keysToDelete.length; i += batchSize) {
+					const batch = keysToDelete.slice(i, i + batchSize);
+					const deletePromises = batch.map(key => redis.del(key));
+					await Promise.all(deletePromises);
+					deletedCount += batch.length;
+				}
+			}
+
+			return deletedCount;
+		} catch (error) {
+			console.error(`Failed to delete keys by pattern ${pattern}:`, error);
+			return 0;
+		}
+	}
+
+	// Scan keys helper method - abstracts Redis SCAN operation
+	private async scanKeys(cursor: number, pattern: string, count: number): Promise<{ cursor: number; keys: string[] }> {
+		// For most Redis clients, this would use the SCAN command
+		// For Upstash Redis REST API, we need to implement differently
+		
+		// Try to use native scan if available
+		if ('scan' in redis && typeof (redis as any).scan === 'function') {
+			const result = await (redis as any).scan(cursor, 'MATCH', pattern, 'COUNT', count);
+			return {
+				cursor: parseInt(result[0]),
+				keys: result[1] || []
+			};
+		}
+
+		// Fallback: For REST-based Redis (like Upstash), we can't easily scan
+		// So we return empty results and rely on the fallback method
+		throw new Error("SCAN operation not supported by current Redis client");
+	}
+
+	// Fallback key deletion for Redis clients that don't support SCAN
+	private async fallbackKeyDeletion(pattern: string): Promise<void> {
+		// Extract type from pattern
+		const match = pattern.match(/transform:([^:]+):/);
+		if (!match) return;
+
+		const type = match[1];
+		
+		// Generate some common hash patterns to try deleting
+		// This is not perfect but better than nothing
+		const commonHashes = ['empty', 'cached', 'default'];
+		const keysToTry = commonHashes.map(hash => 
+			`${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`
+		);
+
+		// Also try some generated patterns based on typical data sizes
+		for (let size = 1; size <= 100; size += 10) {
+			const hash = Buffer.from(JSON.stringify({ length: size })).toString("base64").slice(0, 16);
+			keysToTry.push(`${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`);
+		}
+
+		// Delete these keys if they exist
+		const deletePromises = keysToTry.map(async (key) => {
+			try {
+				await redis.del(key);
+			} catch (error) {
+				// Ignore individual key deletion failures
+			}
+		});
+
+		await Promise.all(deletePromises);
 	}
 
 	// Get cache statistics

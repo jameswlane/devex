@@ -44,10 +44,9 @@ export const ioRedisClient = new IORedis(redisConfig.url, {
   tls: redisConfig.enableTLS ? {} : undefined,
   // Security settings
   enableReadyCheck: true,
-  maxRetriesPerRequest: 3,
   // Handle connection errors gracefully
   retryStrategy: (times) => {
-    if (times > 3) return null; // Stop retrying after 3 attempts
+    if (times > redisConfig.maxRetries) return null; // Stop retrying after max attempts
     return Math.min(times * 200, 3000); // Exponential backoff
   },
   // Connection events for monitoring

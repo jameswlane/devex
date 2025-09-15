@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { initializeApplication } from "@/lib/startup";
 
 interface RegistryStats {
 	totals: {
@@ -105,8 +106,35 @@ async function getRegistryStats(): Promise<RegistryStats> {
 			},
 			lastUpdated: recentStats?.date?.toISOString() || new Date().toISOString(),
 		};
+	} catch (error) {
+		console.error("Failed to fetch registry stats:", error);
+		// Return fallback stats to prevent page from breaking
+		return {
+			totals: {
+				applications: 0,
+				plugins: 0,
+				configs: 0,
+				stacks: 0,
+				all: 0,
+			},
+			platforms: {
+				linux: 0,
+				macos: 0,
+				windows: 0,
+			},
+			categories: {
+				applications: {},
+				plugins: {},
+				configs: {},
+			},
+			lastUpdated: new Date().toISOString(),
+		};
 	} finally {
-		await prisma.$disconnect();
+		try {
+			await prisma.$disconnect();
+		} catch (error) {
+			console.error("Failed to disconnect from database:", error);
+		}
 	}
 }
 
@@ -172,6 +200,25 @@ function CategoryBreakdown({
 export const dynamic = "force-dynamic";
 
 export default async function RegistryHomepage() {
+	// Initialize application startup with proper error handling
+	try {
+		const startupResult = await initializeApplication({
+			enableWarmup: process.env.NODE_ENV === "production",
+			timeoutMs: 5000, // Shorter timeout for page loads
+			retries: 1, // Single retry for page loads
+		});
+		
+		if (!startupResult.success) {
+			console.warn("Application startup completed with warnings:", {
+				database: startupResult.database,
+				redis: startupResult.redis,
+			});
+		}
+	} catch (error) {
+		console.error("Application startup failed:", error);
+		// Continue anyway - page should still render with cached/fallback data
+	}
+
 	const stats = await getRegistryStats();
 
 	return (

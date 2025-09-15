@@ -53,8 +53,8 @@ export async function initializeApplication(config: Partial<StartupConfig> = {})
     // Pre-warm connections if enabled
     if (finalConfig.enableWarmup) {
       await Promise.allSettled([
-        warmupDatabaseWithRetry(finalConfig.retries, results),
-        warmupRedisWithRetry(finalConfig.retries, results),
+        warmupDatabaseWithRetry(finalConfig.retries, results.database),
+        warmupRedisWithRetry(finalConfig.retries, results.redis),
       ]);
     } else {
       logger.info("Connection warmup disabled, skipping pre-warming");

@@ -123,21 +123,135 @@ export function logDatabaseError(error: any, context: string) {
   logger.error("Database error occurred", { context, operation: context }, error);
 }
 
-export function createApiError(message: string, status: number = 500) {
-  logger.error("API error response", { statusCode: status, responseMessage: message });
+// Standardized error response interface
+export interface StandardErrorResponse {
+  success: false;
+  error: {
+    code: string;
+    message: string;
+    details?: Record<string, any>;
+    timestamp: string;
+    requestId: string;
+    path?: string;
+  };
+  meta?: {
+    version: string;
+    environment: string;
+  };
+}
+
+// Error code mappings for consistent error handling
+export const ERROR_CODES = {
+  // 4xx Client Errors
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  INVALID_REQUEST: "INVALID_REQUEST", 
+  UNAUTHORIZED: "UNAUTHORIZED",
+  FORBIDDEN: "FORBIDDEN",
+  NOT_FOUND: "NOT_FOUND",
+  RATE_LIMITED: "RATE_LIMITED",
   
-  return NextResponse.json(
-    {
-      error: message,
+  // 5xx Server Errors
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+  DATABASE_ERROR: "DATABASE_ERROR",
+  CACHE_ERROR: "CACHE_ERROR",
+  EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
+  CONFIGURATION_ERROR: "CONFIGURATION_ERROR",
+} as const;
+
+export function createApiError(
+  message: string, 
+  status: number = 500, 
+  code?: string,
+  details?: Record<string, any>,
+  path?: string
+): NextResponse {
+  const requestId = crypto.randomUUID();
+  
+  // Determine error code if not provided
+  const errorCode = code || getErrorCodeFromStatus(status);
+  
+  logger.error("API error response", { 
+    statusCode: status, 
+    errorCode,
+    responseMessage: message,
+    requestId,
+    path,
+    details,
+  });
+  
+  const errorResponse: StandardErrorResponse = {
+    success: false,
+    error: {
+      code: errorCode,
+      message,
+      details,
       timestamp: new Date().toISOString(),
-      requestId: crypto.randomUUID(),
+      requestId,
+      path,
     },
-    {
-      status,
-      headers: {
-        "X-Error-Type": status >= 500 ? "server_error" : "client_error",
-      },
+    meta: {
+      version: process.env.APP_VERSION || "1.0.0",
+      environment: process.env.NODE_ENV || "development",
     },
+  };
+  
+  return NextResponse.json(errorResponse, {
+    status,
+    headers: {
+      "X-Error-Type": status >= 500 ? "server_error" : "client_error",
+      "X-Error-Code": errorCode,
+      "X-Request-ID": requestId,
+    },
+  });
+}
+
+// Helper function to map status codes to error codes
+function getErrorCodeFromStatus(status: number): string {
+  switch (status) {
+    case 400:
+      return ERROR_CODES.INVALID_REQUEST;
+    case 401:
+      return ERROR_CODES.UNAUTHORIZED;
+    case 403:
+      return ERROR_CODES.FORBIDDEN;
+    case 404:
+      return ERROR_CODES.NOT_FOUND;
+    case 422:
+      return ERROR_CODES.VALIDATION_ERROR;
+    case 429:
+      return ERROR_CODES.RATE_LIMITED;
+    case 500:
+    default:
+      return ERROR_CODES.INTERNAL_ERROR;
+  }
+}
+
+// Specialized error creation functions
+export function createValidationError(message: string, details?: Record<string, any>, path?: string) {
+  return createApiError(message, 422, ERROR_CODES.VALIDATION_ERROR, details, path);
+}
+
+export function createNotFoundError(resource: string, path?: string) {
+  return createApiError(`${resource} not found`, 404, ERROR_CODES.NOT_FOUND, { resource }, path);
+}
+
+export function createRateLimitError(retryAfter: number, path?: string) {
+  return createApiError(
+    "Rate limit exceeded", 
+    429, 
+    ERROR_CODES.RATE_LIMITED, 
+    { retryAfter },
+    path
+  );
+}
+
+export function createDatabaseError(operation: string, path?: string) {
+  return createApiError(
+    "Database operation failed", 
+    500, 
+    ERROR_CODES.DATABASE_ERROR, 
+    { operation },
+    path
   );
 }
 
