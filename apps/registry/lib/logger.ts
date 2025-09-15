@@ -35,7 +35,8 @@ export class StructuredLogger {
 
   // Fields considered sensitive and redacted from logs
   private static readonly SENSITIVE_KEYS = [
-    "password", "secret", "token", "key", "apiKey", "apikey", "auth", "access_token", "refresh_token"
+    "password", "secret", "token", "key", "apiKey", "apikey", "auth", "access_token", "refresh_token",
+    "KV_REST_API_TOKEN", "UPSTASH_REDIS_REST_TOKEN", "DATABASE_URL", "REDIS_PASSWORD", "REDIS_URL", "bearer", "authorization"
   ];
 
   /**
@@ -54,6 +55,15 @@ export class StructuredLogger {
           StructuredLogger.SENSITIVE_KEYS.some(s => k.toLowerCase().includes(s))
         ) {
           output[k] = "[REDACTED]";
+        } else if (typeof v === 'string' && v.length > 50) {
+          // Redact long strings that might contain tokens
+          const urlPattern = /^https?:\/\//;
+          const tokenPattern = /^[A-Za-z0-9+/=]{20,}$/;
+          if (tokenPattern.test(v) && !urlPattern.test(v)) {
+            output[k] = '[REDACTED_TOKEN]';
+          } else {
+            output[k] = StructuredLogger.redactSensitiveData(v);
+          }
         } else {
           output[k] = StructuredLogger.redactSensitiveData(v);
         }
@@ -103,53 +113,13 @@ export class StructuredLogger {
       // Only include stack traces in development
       if (this.environment === "development") {
         cleanError.stack = error.stack;
-      entry.error = StructuredLogger.redactSensitiveData(cleanError);
       }
+      entry.error = StructuredLogger.redactSensitiveData(cleanError);
     }
 
     return entry;
   }
 
-  // Redact sensitive data from log entries before writing
-  private static redactSensitiveData(obj: any): any {
-    if (!obj || typeof obj !== 'object') {
-      return obj;
-    }
-
-    const sensitiveKeys = [
-      'token', 'password', 'secret', 'key', 'auth', 'authorization',
-      'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_TOKEN', 'DATABASE_URL',
-      'REDIS_PASSWORD', 'REDIS_URL', 'api_key', 'apiKey', 'bearer'
-    ];
-
-    const redacted = Array.isArray(obj) ? [] : {};
-    
-    for (const [key, value] of Object.entries(obj)) {
-      const keyLower = key.toLowerCase();
-      const isSensitive = sensitiveKeys.some(sensitiveKey => 
-        keyLower.includes(sensitiveKey.toLowerCase())
-      );
-      
-      if (isSensitive) {
-        redacted[key] = '[REDACTED]';
-      } else if (typeof value === 'object' && value !== null) {
-        redacted[key] = StructuredLogger.redactSensitiveData(value);
-      } else if (typeof value === 'string' && value.length > 50) {
-        // Redact long strings that might contain tokens
-        const urlPattern = /^https?:\/\//;
-        const tokenPattern = /^[A-Za-z0-9+/=]{20,}$/;
-        if (tokenPattern.test(value) && !urlPattern.test(value)) {
-          redacted[key] = '[REDACTED_TOKEN]';
-        } else {
-          redacted[key] = value;
-        }
-      } else {
-        redacted[key] = value;
-      }
-    }
-    
-    return redacted;
-  }
 
   private write(entry: LogEntry): void {
     // Redact sensitive data before serialization
