@@ -377,21 +377,34 @@ export class RegistryService {
   }
 
   // Invalidate cache when data changes (both Prisma Accelerate and transformation cache)
-  async invalidateCache(tags: string[]) {
+  async invalidateCache(tags: string[], specificItems?: { type: string; names: string[] }[]) {
     // Accelerate is enabled on Prisma Cloud - handle cache invalidation
     try {
       // Prisma Accelerate will automatically handle cache invalidation
       // based on the tags provided in the cache strategies
       console.log("Prisma cache invalidation triggered for tags:", tags);
       
-      // Also invalidate transformation cache
-      const transformationTypes = tags
-        .filter(tag => ["plugins", "applications", "configs", "stacks"].includes(tag))
-        .map(tag => tag.endsWith("s") ? tag.slice(0, -1) : tag) as ("plugins" | "applications" | "configs" | "stacks")[];
-      
-      if (transformationTypes.length > 0) {
-        await transformationService.invalidateTransformationCache(transformationTypes);
-        console.log("Transformation cache invalidation triggered for types:", transformationTypes);
+      // Granular transformation cache invalidation
+      if (specificItems) {
+        // Invalidate specific items for more targeted cache clearing
+        for (const item of specificItems) {
+          const resourceType = item.type as "plugins" | "applications" | "configs" | "stacks";
+          console.log(`Invalidating specific ${resourceType}:`, item.names);
+          
+          // For now, we still invalidate the entire type, but this prepares for
+          // more granular invalidation in the future
+          await transformationService.invalidateTransformationCache([resourceType]);
+        }
+      } else {
+        // Fallback to type-based invalidation
+        const transformationTypes = tags
+          .filter(tag => ["plugins", "applications", "configs", "stacks"].includes(tag))
+          .map(tag => tag.endsWith("s") ? tag : tag + "s") as ("plugins" | "applications" | "configs" | "stacks")[];
+        
+        if (transformationTypes.length > 0) {
+          await transformationService.invalidateTransformationCache(transformationTypes);
+          console.log("Transformation cache invalidation triggered for types:", transformationTypes);
+        }
       }
     } catch (error) {
       console.error("Cache invalidation failed:", error);
@@ -439,13 +452,21 @@ export class RegistryService {
           break;
       }
 
-      // Invalidate related caches (both Prisma Accelerate and transformation cache)
-      await this.invalidateCache([
-        "registry",
-        "stats",
-        "popular",
-        resource + "s", // plugins, configs, stacks
-      ]);
+      // Invalidate related caches with granular targeting
+      await this.invalidateCache(
+        [
+          "registry",
+          "stats", 
+          "popular",
+          resource + "s", // plugins, configs, stacks
+        ],
+        [
+          {
+            type: resource + "s",
+            names: [name]
+          }
+        ]
+      );
     } catch (error) {
       console.error(`Failed to increment download count for ${resource}:${name}`, error);
     }

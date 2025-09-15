@@ -153,6 +153,19 @@ export async function connectPrisma(): Promise<void> {
 	}
 }
 
+// Pre-warm database connection for cold starts
+export async function warmupPrisma(): Promise<void> {
+	try {
+		console.log("Pre-warming database connection...");
+		// Execute a lightweight query to establish connection
+		await prismaInstance.$queryRaw`SELECT 1 as health_check`;
+		console.log("Database connection pre-warmed successfully");
+	} catch (error) {
+		console.warn("Database pre-warming failed:", error);
+		// Don't throw - this is optional optimization
+	}
+}
+
 // Disconnect gracefully
 export async function disconnectPrisma(): Promise<void> {
 	if (!isConnected) return;

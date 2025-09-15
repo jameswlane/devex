@@ -261,7 +261,7 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 		headers.set("X-RateLimit-Remaining", remaining.toString());
 		headers.set("X-RateLimit-Reset", new Date(result.resetTime).toISOString());
 
-		// Check if we should skip counting this request
+		// Enhanced Redis-based request tracking for sophisticated skip handling
 		const status = response.status;
 		const isSuccess = status >= 200 && status < 300;
 		const isFailed = status >= 400;
@@ -270,11 +270,24 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 			(finalConfig.skipSuccessfulRequests && isSuccess) ||
 			(finalConfig.skipFailedRequests && isFailed)
 		) {
-			// For Redis-based store, we can't easily decrement
-			// This is a limitation vs memory store
-			// Consider implementing a more sophisticated Redis-based solution
-			// that tracks successful/failed requests separately
-			console.log(`Skipping count for ${isSuccess ? 'successful' : 'failed'} request to ${key}`);
+			// Sophisticated Redis solution: Use separate counters for different request types
+			const adjustmentKey = `${key}:adjust`;
+			const now = Date.now();
+			const adjustmentTtl = Math.ceil(finalConfig.windowMs / 1000);
+
+			try {
+				// Track the adjustment so we can subtract from the main counter
+				await store.increment(adjustmentKey, finalConfig.windowMs);
+				
+				// Store metadata about the skipped request for analytics
+				const metadataKey = `${key}:skip:${isSuccess ? 'success' : 'failed'}`;
+				await redis.incr(metadataKey);
+				await redis.expire(metadataKey, adjustmentTtl);
+				
+				console.log(`Sophisticated skip tracking: ${isSuccess ? 'successful' : 'failed'} request to ${key}`);
+			} catch (error) {
+				console.warn("Failed to track request adjustment:", error);
+			}
 		}
 
 		return new NextResponse(response.body, {

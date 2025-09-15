@@ -22,17 +22,31 @@ export interface DatabaseHealth {
   errors: string[];
 }
 
+export interface HealthCheckConfig {
+  cacheTimeMs: number;
+  timeout: number;
+  retries: number;
+}
+
 export class DatabaseHealthMonitor {
   private healthCache: DatabaseHealth | null = null;
   private lastCheck = 0;
-  private readonly CACHE_TTL = 30000; // 30 seconds
+  private config: HealthCheckConfig;
+
+  constructor(config?: Partial<HealthCheckConfig>) {
+    this.config = {
+      cacheTimeMs: config?.cacheTimeMs ?? 30000, // 30 seconds default
+      timeout: config?.timeout ?? 5000, // 5 seconds default
+      retries: config?.retries ?? 2, // 2 retries default
+    };
+  }
 
   // Comprehensive health check
   async checkHealth(forceFresh = false): Promise<DatabaseHealth> {
     const now = Date.now();
     
     // Return cached result if still valid
-    if (!forceFresh && this.healthCache && (now - this.lastCheck) < this.CACHE_TTL) {
+    if (!forceFresh && this.healthCache && (now - this.lastCheck) < this.config.cacheTimeMs) {
       return this.healthCache;
     }
 
@@ -222,8 +236,12 @@ export class DatabaseHealthMonitor {
   }
 }
 
-// Global health monitor instance
-export const dbHealthMonitor = new DatabaseHealthMonitor();
+// Global health monitor instance with environment-based configuration
+export const dbHealthMonitor = new DatabaseHealthMonitor({
+  cacheTimeMs: parseInt(process.env.HEALTH_CHECK_CACHE_MS || "30000", 10),
+  timeout: parseInt(process.env.HEALTH_CHECK_TIMEOUT_MS || "5000", 10),
+  retries: parseInt(process.env.HEALTH_CHECK_RETRIES || "2", 10),
+});
 
 // Health check endpoint handler
 export async function handleHealthCheck(includeSensitive = false) {

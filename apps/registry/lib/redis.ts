@@ -7,9 +7,12 @@ interface RedisConfig {
   token?: string;
   apiUrl?: string;
   apiToken?: string;
+  password?: string;
+  username?: string;
   maxRetries: number;
   retryDelayOnFailover: number;
   connectTimeout: number;
+  enableTLS: boolean;
 }
 
 // Upstash Redis client (for Vercel/Serverless)
@@ -21,9 +24,12 @@ const redisConfig: RedisConfig = {
   token: process.env.KV_REST_API_TOKEN,
   apiUrl: process.env.KV_REST_API_URL,
   apiToken: process.env.KV_REST_API_TOKEN,
+  password: process.env.REDIS_PASSWORD,
+  username: process.env.REDIS_USERNAME || "default",
   maxRetries: 3,
   retryDelayOnFailover: 100,
   connectTimeout: 10000,
+  enableTLS: process.env.REDIS_TLS === "true" || process.env.NODE_ENV === "production",
 };
 
 // Create IORedis client for traditional Redis instances
@@ -31,10 +37,23 @@ export const ioRedisClient = new IORedis(redisConfig.url, {
   maxRetriesPerRequest: redisConfig.maxRetries,
   connectTimeout: redisConfig.connectTimeout,
   lazyConnect: true,
+  // Authentication
+  username: redisConfig.username,
+  password: redisConfig.password,
+  // TLS configuration for production
+  tls: redisConfig.enableTLS ? {} : undefined,
+  // Security settings
+  enableReadyCheck: true,
+  maxRetriesPerRequest: 3,
   // Handle connection errors gracefully
   retryStrategy: (times) => {
     if (times > 3) return null; // Stop retrying after 3 attempts
     return Math.min(times * 200, 3000); // Exponential backoff
+  },
+  // Connection events for monitoring
+  reconnectOnError: (err) => {
+    const targetError = "READONLY";
+    return err.message.includes(targetError);
   },
 });
 
@@ -184,6 +203,20 @@ export const createRedisStore = (): RedisStore => {
 
 // Global Redis store instance
 export const redis = createRedisStore();
+
+// Pre-warm Redis connection for cold starts
+export async function warmupRedis(): Promise<void> {
+  try {
+    console.log("Pre-warming Redis connection...");
+    const start = Date.now();
+    await redis.ping();
+    const latency = Date.now() - start;
+    console.log(`Redis connection pre-warmed successfully (${latency}ms)`);
+  } catch (error) {
+    console.warn("Redis pre-warming failed:", error);
+    // Don't throw - this is optional optimization
+  }
+}
 
 // Health check utility
 export async function checkRedisHealth(): Promise<{
