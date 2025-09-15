@@ -9,7 +9,7 @@
 	},
 	"dependencies": {
 		"@octokit/rest": "^22.0.0",
-		"next": "^15.5.2"
+		"next": "^15.5.3"
 	},
 	"devDependencies": {
 		"vercel": "^47.0.1"
