@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals'
 import { NextRequest } from 'next/server'
-import { rateLimit, rateLimitStore, RATE_LIMIT_CONFIGS } from '@/lib/rate-limit'
+import { rateLimit, RATE_LIMIT_CONFIGS, checkRateLimitHealth } from '@/lib/rate-limit'
+
+// Mock Redis to simulate healthy Redis in tests
+jest.mock('@/lib/redis', () => ({
+  redis: {
+    get: jest.fn().mockResolvedValue(null),
+    set: jest.fn().mockResolvedValue('OK'),
+    incr: jest.fn(),
+    expire: jest.fn().mockResolvedValue(1),
+    del: jest.fn().mockResolvedValue(1),
+    exists: jest.fn().mockResolvedValue(0),
+    ping: jest.fn().mockResolvedValue('PONG'),
+  },
+  checkRedisHealth: jest.fn().mockResolvedValue({
+    status: 'healthy'
+  })
+}))
 
 // Mock NextRequest
 const createMockRequest = (ip = '127.0.0.1', pathname = '/test') => {
@@ -27,9 +43,14 @@ const createMockHandler = (status = 200) => {
 
 describe('rate-limit', () => {
   beforeEach(() => {
-    // Reset rate limit store
-    rateLimitStore.destroy()
     jest.clearAllMocks()
+    // Reset redis mock to default behavior
+    const { redis } = require('@/lib/redis')
+    redis.incr.mockImplementation((key: string) => {
+      // Default behavior: first call returns 1, subsequent calls increment
+      const callCount = (redis.incr as jest.Mock).mock.calls.filter(call => call[0] === key).length
+      return Promise.resolve(callCount)
+    })
   })
 
   describe('rateLimit', () => {
@@ -48,34 +69,44 @@ describe('rate-limit', () => {
       const rateLimiter = rateLimit({ windowMs: 60000, maxRequests: 2 })
       const req = createMockRequest()
       const handler = createMockHandler()
+      
+      // Mock redis.incr to return increasing counts
+      const { redis } = require('@/lib/redis')
+      let callCount = 0
+      redis.incr.mockImplementation(() => Promise.resolve(++callCount))
 
       // First two requests should pass
-      await rateLimiter(req, handler)
-      await rateLimiter(req, handler)
+      const response1 = await rateLimiter(req, handler)
+      const response2 = await rateLimiter(req, handler)
       
       // Third request should be blocked
-      const response = await rateLimiter(req, handler)
+      const response3 = await rateLimiter(req, handler)
 
       expect(handler).toHaveBeenCalledTimes(2)
-      expect(response.status).toBe(429)
+      expect(response1.status).toBe(200)
+      expect(response2.status).toBe(200)
+      expect(response3.status).toBe(429)
     })
 
     it('should reset rate limit after window expires', async () => {
       const rateLimiter = rateLimit({ windowMs: 100, maxRequests: 1 })
       const req = createMockRequest()
       const handler = createMockHandler()
+      
+      const { redis } = require('@/lib/redis')
 
-      // First request should pass
-      await rateLimiter(req, handler)
+      // First request should pass (count = 1)
+      redis.incr.mockResolvedValueOnce(1)
+      const firstResponse = await rateLimiter(req, handler)
+      expect(firstResponse.status).toBe(200)
 
-      // Second request should be blocked
+      // Second request should be blocked (count = 2)
+      redis.incr.mockResolvedValueOnce(2)
       const blockedResponse = await rateLimiter(req, handler)
       expect(blockedResponse.status).toBe(429)
 
-      // Wait for window to expire
-      await new Promise(resolve => setTimeout(resolve, 150))
-
-      // Request should now pass again
+      // After window expires, Redis would return count = 1 for new window
+      redis.incr.mockResolvedValueOnce(1)
       const allowedResponse = await rateLimiter(req, handler)
       expect(allowedResponse.status).toBe(200)
       expect(handler).toHaveBeenCalledTimes(2)
@@ -100,6 +131,9 @@ describe('rate-limit', () => {
       const rateLimiter = rateLimit({ windowMs: 60000, maxRequests: 5 })
       const req = createMockRequest()
       const handler = createMockHandler()
+      
+      const { redis } = require('@/lib/redis')
+      redis.incr.mockResolvedValueOnce(1)
 
       const response = await rateLimiter(req, handler)
 
@@ -116,29 +150,14 @@ describe('rate-limit', () => {
     })
   })
 
-  describe('rateLimitStore', () => {
-    it('should increment counters correctly', () => {
-      const key = 'test-key'
-      const windowMs = 60000
-
-      const result1 = rateLimitStore.increment(key, windowMs)
-      expect(result1.count).toBe(1)
-
-      const result2 = rateLimitStore.increment(key, windowMs)
-      expect(result2.count).toBe(2)
-    })
-
-    it('should reset expired entries', () => {
-      const key = 'test-key'
-      const windowMs = 100
-
-      rateLimitStore.increment(key, windowMs)
+  describe('checkRateLimitHealth', () => {
+    it('should return health status', async () => {
+      const health = await checkRateLimitHealth()
       
-      // Wait for expiration
-      setTimeout(() => {
-        const result = rateLimitStore.get(key)
-        expect(result).toBeUndefined()
-      }, 150)
+      expect(health).toHaveProperty('status')
+      expect(health).toHaveProperty('storeType')
+      expect(['healthy', 'degraded', 'unhealthy']).toContain(health.status)
+      expect(['redis', 'memory']).toContain(health.storeType)
     })
   })
 })

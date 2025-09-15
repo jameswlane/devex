@@ -227,16 +227,13 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 
 		const store = await getRateLimitStore();
 
-		// Check current rate limit status
-		const current = await store.get(key);
-		const remaining = current
-			? Math.max(0, finalConfig.maxRequests - current.count)
-			: finalConfig.maxRequests;
-		const resetTime = current?.resetTime || Date.now() + finalConfig.windowMs;
+		// Increment counter first to get new count
+		const result = await store.increment(key, finalConfig.windowMs);
+		const remaining = Math.max(0, finalConfig.maxRequests - result.count);
 
-		// Check if rate limit exceeded
-		if (current && current.count >= finalConfig.maxRequests) {
-			const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
+		// Check if rate limit exceeded after increment
+		if (result.count > finalConfig.maxRequests) {
+			const retryAfter = Math.ceil((result.resetTime - Date.now()) / 1000);
 
 			return NextResponse.json(
 				{
@@ -248,15 +245,12 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 					headers: {
 						"X-RateLimit-Limit": finalConfig.maxRequests.toString(),
 						"X-RateLimit-Remaining": "0",
-						"X-RateLimit-Reset": new Date(resetTime).toISOString(),
+						"X-RateLimit-Reset": new Date(result.resetTime).toISOString(),
 						"Retry-After": retryAfter.toString(),
 					},
 				},
 			);
 		}
-
-		// Increment counter
-		await store.increment(key, finalConfig.windowMs);
 
 		// Execute the handler
 		const response = await handler();
@@ -264,8 +258,8 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 		// Add rate limit headers to response
 		const headers = new Headers(response.headers);
 		headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
-		headers.set("X-RateLimit-Remaining", Math.max(0, remaining - 1).toString());
-		headers.set("X-RateLimit-Reset", new Date(resetTime).toISOString());
+		headers.set("X-RateLimit-Remaining", remaining.toString());
+		headers.set("X-RateLimit-Reset", new Date(result.resetTime).toISOString());
 
 		// Check if we should skip counting this request
 		const status = response.status;
