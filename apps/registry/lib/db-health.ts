@@ -1,6 +1,6 @@
 import { prisma, checkDatabaseHealth, executeWithRetry, connectPrisma, disconnectPrisma } from "./prisma";
 import { redis, checkRedisHealth } from "./redis";
-import { createApiError } from "./logger";
+import { createApiError, logger } from "./logger";
 
 // Database health monitoring and connection management
 export interface DatabaseHealth {
@@ -297,7 +297,7 @@ export class DatabaseRecovery {
       
       return true;
     } catch (error) {
-      console.error("Database recovery failed:", error);
+      logger.error("Database recovery failed", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
       return false;
     }
   }
@@ -312,9 +312,9 @@ export class DatabaseRecovery {
   static async gracefulShutdown(): Promise<void> {
     try {
       await disconnectPrisma();
-      console.log("Database connections closed gracefully");
+      logger.info("Database connections closed gracefully");
     } catch (error) {
-      console.error("Error during graceful shutdown:", error);
+      logger.error("Error during graceful shutdown", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }
   }
 }
@@ -338,7 +338,7 @@ export class DatabaseCircuitBreaker {
       if (now - this.lastFailureTime > this.RETRY_TIMEOUT) {
         this.isOpen = false;
         this.failures = 0;
-        console.log("Database circuit breaker: Attempting to close circuit");
+        logger.info("Database circuit breaker: Attempting to close circuit");
       } else {
         throw new Error("Database circuit breaker is open - service temporarily unavailable");
       }
@@ -350,7 +350,7 @@ export class DatabaseCircuitBreaker {
       
       // Reset failure count on success
       if (this.failures > 0) {
-        console.log(`Database circuit breaker: Resetting failure count (was ${this.failures})`);
+        logger.info("Database circuit breaker: Resetting failure count", { previousFailures: this.failures });
         this.failures = 0;
       }
       
@@ -362,7 +362,7 @@ export class DatabaseCircuitBreaker {
       // Open circuit breaker if threshold exceeded
       if (this.failures >= this.FAILURE_THRESHOLD) {
         this.isOpen = true;
-        console.error(`Database circuit breaker: Opening circuit after ${this.failures} failures`);
+        logger.error("Database circuit breaker: Opening circuit", { failures: this.failures });
       }
       
       throw error;

@@ -126,7 +126,7 @@ export class StructuredLogger {
     const safeEntry = StructuredLogger.redactSensitiveData(entry);
     const logString = JSON.stringify(safeEntry);
     
-    switch (entry.level) {
+    switch (safeEntry.level) {
       case LogLevel.ERROR:
         console.error(logString);
         break;

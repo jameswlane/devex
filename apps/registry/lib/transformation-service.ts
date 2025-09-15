@@ -1,5 +1,6 @@
 import { redis } from "./redis";
 import { REGISTRY_CONFIG } from "./config";
+import { logger } from "./logger";
 import type {
 	ApplicationResponse,
 	ConfigResponse,
@@ -100,7 +101,7 @@ export class RegistryTransformationService {
 			}
 		} catch (error) {
 			// Don't fail the operation if tracking fails
-			console.warn("Failed to track cache key:", error);
+			logger.warn("Failed to track cache key", { error: error instanceof Error ? error.message : String(error) });
 		}
 	}
 
@@ -111,7 +112,7 @@ export class RegistryTransformationService {
 			const existingKeys = await redis.get(trackingKey);
 			return existingKeys ? JSON.parse(existingKeys) : [];
 		} catch (error) {
-			console.warn("Failed to get tracked keys:", error);
+			logger.warn("Failed to get tracked keys", { error: error instanceof Error ? error.message : String(error) });
 			return [];
 		}
 	}
@@ -147,7 +148,7 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			console.warn("Failed to get cached plugin transformations:", error);
+			logger.warn("Failed to get cached plugin transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		// Transform plugins in batches
@@ -183,7 +184,7 @@ export class RegistryTransformationService {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
 			await this.trackCacheKey("plugins", cacheKey);
 		} catch (error) {
-			console.warn("Failed to cache plugin transformations:", error);
+			logger.warn("Failed to cache plugin transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		return transformed;
@@ -202,7 +203,7 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			console.warn("Failed to get cached application transformations:", error);
+			logger.warn("Failed to get cached application transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		// Transform applications in batches
@@ -266,7 +267,7 @@ export class RegistryTransformationService {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
 			await this.trackCacheKey("applications", cacheKey);
 		} catch (error) {
-			console.warn("Failed to cache application transformations:", error);
+			logger.warn("Failed to cache application transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		return transformed;
@@ -285,7 +286,7 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			console.warn("Failed to get cached config transformations:", error);
+			logger.warn("Failed to get cached config transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		// Transform configs (simpler, so no batching needed unless very large)
@@ -307,7 +308,7 @@ export class RegistryTransformationService {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
 			await this.trackCacheKey("configs", cacheKey);
 		} catch (error) {
-			console.warn("Failed to cache config transformations:", error);
+			logger.warn("Failed to cache config transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		return transformed;
@@ -326,7 +327,7 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			console.warn("Failed to get cached stack transformations:", error);
+			logger.warn("Failed to get cached stack transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		// Transform stacks
@@ -350,7 +351,7 @@ export class RegistryTransformationService {
 			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
 			await this.trackCacheKey("stacks", cacheKey);
 		} catch (error) {
-			console.warn("Failed to cache stack transformations:", error);
+			logger.warn("Failed to cache stack transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
 
 		return transformed;
@@ -456,7 +457,7 @@ export class RegistryTransformationService {
 
 			await Promise.all(promises);
 		} catch (error) {
-			console.error("Failed to invalidate transformation cache:", error);
+			logger.error("Failed to invalidate transformation cache", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		}
 	}
 
@@ -485,7 +486,7 @@ export class RegistryTransformationService {
 
 			return deletedCount;
 		} catch (error) {
-			console.error(`Failed to delete tracked keys for ${type}:`, error);
+			logger.error("Failed to delete tracked keys", { type, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 			// Fallback to pattern-based deletion
 			const pattern = `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:*`;
 			return await this.deleteKeysByPattern(pattern);
@@ -497,7 +498,7 @@ export class RegistryTransformationService {
 		try {
 			// Check if Redis client supports scan operation
 			if (typeof redis.ping !== 'function') {
-				console.warn("Redis client doesn't support pattern scanning, skipping cache invalidation");
+				logger.warn("Redis client doesn't support pattern scanning, skipping cache invalidation");
 				return 0;
 			}
 
@@ -514,7 +515,7 @@ export class RegistryTransformationService {
 					cursor = scanResult.cursor;
 					keysToDelete.push(...scanResult.keys);
 				} catch (scanError) {
-					console.warn("SCAN operation failed, falling back to key tracking approach:", scanError);
+					logger.warn("SCAN operation failed, falling back to key tracking approach", { error: scanError instanceof Error ? scanError.message : String(scanError) });
 					// Fallback: try to delete common patterns
 					await this.fallbackKeyDeletion(pattern);
 					return 0;
@@ -534,7 +535,7 @@ export class RegistryTransformationService {
 
 			return deletedCount;
 		} catch (error) {
-			console.error(`Failed to delete keys by pattern ${pattern}:`, error);
+			logger.error("Failed to delete keys by pattern", { pattern, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 			return 0;
 		}
 	}

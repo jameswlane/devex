@@ -81,7 +81,7 @@ export function validateRequest(request: NextRequest): ValidationResult {
       const contentType = request.headers.get('content-type');
       if (contentType) {
         const baseContentType = contentType.split(';')[0].trim();
-        if (!SECURITY_CONFIG.ALLOWED_CONTENT_TYPES.includes(baseContentType)) {
+        if (!(SECURITY_CONFIG.ALLOWED_CONTENT_TYPES as readonly string[]).includes(baseContentType)) {
           logger.warn("Request blocked: Invalid content type", {
             contentType: baseContentType,
             allowedTypes: SECURITY_CONFIG.ALLOWED_CONTENT_TYPES,
@@ -205,8 +205,8 @@ export function getClientIP(request: NextRequest): string {
     }
   }
 
-  // Fallback to request IP
-  return request.ip || 'unknown';
+  // Fallback - NextRequest doesn't have ip property, return unknown
+  return 'unknown';
 }
 
 // Validate IP address format

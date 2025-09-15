@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
+import { logger } from "./logger";
 
 // Connection pool metrics and health monitoring
 interface ConnectionPoolMetrics {
@@ -50,7 +51,12 @@ async function withRetry<T>(
 					config.maxDelay,
 				);
 				
-				console.warn(`Database operation failed (attempt ${attempt}/${config.maxAttempts}), retrying in ${delay}ms:`, error instanceof Error ? error.message : String(error));
+				logger.warn("Database operation failed, retrying", { 
+					attempt, 
+					maxAttempts: config.maxAttempts, 
+					delay, 
+					error: error instanceof Error ? error.message : String(error) 
+				});
 				await new Promise(resolve => setTimeout(resolve, delay));
 			}
 		}
@@ -141,14 +147,14 @@ export async function connectPrisma(): Promise<void> {
 	try {
 		await withRetry(async () => {
 			connectionAttempts++;
-			console.log(`Attempting to connect to database (attempt ${connectionAttempts})...`);
+			logger.info("Attempting to connect to database", { attempt: connectionAttempts });
 			await prismaInstance.$connect();
-			console.log("Database connected successfully");
+			logger.info("Database connected successfully");
 			isConnected = true;
 			connectionAttempts = 0; // Reset on success
 		});
 	} catch (error) {
-		console.error("Failed to connect to database after retries:", error);
+		logger.error("Failed to connect to database after retries", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		throw error;
 	}
 }
@@ -156,12 +162,12 @@ export async function connectPrisma(): Promise<void> {
 // Pre-warm database connection for cold starts
 export async function warmupPrisma(): Promise<void> {
 	try {
-		console.log("Pre-warming database connection...");
+		logger.info("Pre-warming database connection");
 		// Execute a lightweight query to establish connection
 		await prismaInstance.$queryRaw`SELECT 1 as health_check`;
-		console.log("Database connection pre-warmed successfully");
+		logger.info("Database connection pre-warmed successfully");
 	} catch (error) {
-		console.warn("Database pre-warming failed:", error);
+		logger.warn("Database pre-warming failed", { error: error instanceof Error ? error.message : String(error) });
 		// Don't throw - this is optional optimization
 	}
 }
@@ -173,9 +179,9 @@ export async function disconnectPrisma(): Promise<void> {
 	try {
 		await prismaInstance.$disconnect();
 		isConnected = false;
-		console.log("Database disconnected successfully");
+		logger.info("Database disconnected successfully");
 	} catch (error) {
-		console.error("Error disconnecting from database:", error);
+		logger.error("Error disconnecting from database", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 	}
 }
 
@@ -221,13 +227,13 @@ if (process.env.NODE_ENV === "production") {
 	
 	// Handle SIGTERM and SIGINT for graceful shutdown
 	process.on("SIGTERM", async () => {
-		console.log("Received SIGTERM, shutting down gracefully...");
+		logger.info("Received SIGTERM, shutting down gracefully");
 		await disconnectPrisma();
 		process.exit(0);
 	});
 	
 	process.on("SIGINT", async () => {
-		console.log("Received SIGINT, shutting down gracefully...");
+		logger.info("Received SIGINT, shutting down gracefully");
 		await disconnectPrisma();
 		process.exit(0);
 	});

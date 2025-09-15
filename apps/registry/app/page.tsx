@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { initializeApplication } from "@/lib/startup";
+import { logger } from "@/lib/logger";
 
 interface RegistryStats {
 	totals: {
@@ -107,7 +108,7 @@ async function getRegistryStats(): Promise<RegistryStats> {
 			lastUpdated: recentStats?.date?.toISOString() || new Date().toISOString(),
 		};
 	} catch (error) {
-		console.error("Failed to fetch registry stats:", error);
+		logger.error("Failed to fetch registry stats", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		// Return fallback stats to prevent page from breaking
 		return {
 			totals: {
@@ -133,7 +134,7 @@ async function getRegistryStats(): Promise<RegistryStats> {
 		try {
 			await prisma.$disconnect();
 		} catch (error) {
-			console.error("Failed to disconnect from database:", error);
+			logger.error("Failed to disconnect from database", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		}
 	}
 }
@@ -209,13 +210,13 @@ export default async function RegistryHomepage() {
 		});
 		
 		if (!startupResult.success) {
-			console.warn("Application startup completed with warnings:", {
+			logger.warn("Application startup completed with warnings", {
 				database: startupResult.database,
 				redis: startupResult.redis,
 			});
 		}
 	} catch (error) {
-		console.error("Application startup failed:", error);
+		logger.error("Application startup failed", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		// Continue anyway - page should still render with cached/fallback data
 	}
 

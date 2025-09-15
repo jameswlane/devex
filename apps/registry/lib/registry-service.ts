@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import { dbCircuitBreaker } from "./db-health";
 import { transformationService } from "./transformation-service";
+import { logger } from "./logger";
 import type {
   PluginResponse,
   ApplicationResponse,
@@ -382,14 +383,14 @@ export class RegistryService {
     try {
       // Prisma Accelerate will automatically handle cache invalidation
       // based on the tags provided in the cache strategies
-      console.log("Prisma cache invalidation triggered for tags:", tags);
+      logger.debug("Prisma cache invalidation triggered", { tags });
       
       // Granular transformation cache invalidation
       if (specificItems) {
         // Invalidate specific items for more targeted cache clearing
         for (const item of specificItems) {
           const resourceType = item.type as "plugins" | "applications" | "configs" | "stacks";
-          console.log(`Invalidating specific ${resourceType}:`, item.names);
+          logger.debug("Invalidating specific resource type", { resourceType, names: item.names });
           
           // For now, we still invalidate the entire type, but this prepares for
           // more granular invalidation in the future
@@ -403,11 +404,11 @@ export class RegistryService {
         
         if (transformationTypes.length > 0) {
           await transformationService.invalidateTransformationCache(transformationTypes);
-          console.log("Transformation cache invalidation triggered for types:", transformationTypes);
+          logger.debug("Transformation cache invalidation triggered", { types: transformationTypes });
         }
       }
     } catch (error) {
-      console.error("Cache invalidation failed:", error);
+      logger.error("Cache invalidation failed", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }
   }
 
@@ -468,7 +469,7 @@ export class RegistryService {
         ]
       );
     } catch (error) {
-      console.error(`Failed to increment download count for ${resource}:${name}`, error);
+      logger.error("Failed to increment download count", { resource, name, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }
   }
 }

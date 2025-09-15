@@ -1,7 +1,7 @@
 import { warmupPrisma } from "./prisma";
 import { warmupRedis } from "./redis";
 import { logger } from "./logger";
-import { TransformationService } from "./transformation-service";
+import { RegistryTransformationService } from "./transformation-service";
 
 // Application startup configuration
 interface StartupConfig {
@@ -204,7 +204,7 @@ async function warmupApplicationCache(): Promise<void> {
   
   try {
     // Initialize transformation service for cache warmup
-    const transformationService = TransformationService.getInstance();
+    const transformationService = new RegistryTransformationService();
     
     // Pre-warm popular search patterns in background
     const warmupPromises = [
@@ -291,7 +291,7 @@ async function warmupStaticData(): Promise<void> {
 }
 
 // Pre-warm transformation cache with common patterns
-async function warmupTransformationCache(service: TransformationService): Promise<void> {
+async function warmupTransformationCache(service: RegistryTransformationService): Promise<void> {
   try {
     // This will initialize the transformation service cache tracking
     // The actual transformation caching happens on-demand

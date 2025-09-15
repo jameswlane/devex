@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { logger } from "../../../../lib/logger";
 
 const prisma = new PrismaClient();
 
@@ -119,7 +120,7 @@ export async function GET() {
 			},
 		});
 	} catch (error) {
-		console.error("Failed to fetch registry statistics:", error);
+		logger.error("Failed to fetch registry statistics", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 
 		return NextResponse.json(
 			{

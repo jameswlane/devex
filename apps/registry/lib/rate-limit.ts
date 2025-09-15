@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { createApiError } from "./logger";
+import { createApiError, logger } from "./logger";
 import { redis, checkRedisHealth } from "./redis";
 
 // Rate limiting configuration
@@ -42,7 +42,7 @@ class RedisRateLimitStore implements RateLimitStore {
 			return { count, resetTime };
 		} catch (error) {
 			// Fallback to allowing request if Redis is down
-			console.error("Redis rate limit error:", error);
+			logger.error("Redis rate limit error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 			return { count: 1, resetTime };
 		}
 	}
@@ -64,7 +64,7 @@ class RedisRateLimitStore implements RateLimitStore {
 			
 			return { count, resetTime };
 		} catch (error) {
-			console.error("Redis rate limit get error:", error);
+			logger.error("Redis rate limit get error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 			return undefined;
 		}
 	}
@@ -74,7 +74,7 @@ class RedisRateLimitStore implements RateLimitStore {
 		try {
 			await redis.del(redisKey);
 		} catch (error) {
-			console.error("Redis rate limit reset error:", error);
+			logger.error("Redis rate limit reset error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		}
 	}
 
@@ -101,7 +101,7 @@ class MemoryRateLimitStore implements RateLimitStore {
 			
 			// Memory usage monitoring
 			if (this.store.size > 10000) {
-				console.warn(`Rate limit store size: ${this.store.size} entries`);
+				logger.warn("Rate limit store size warning", { storeSize: this.store.size });
 			}
 		}, 30000);
 	}
@@ -146,10 +146,10 @@ class MemoryRateLimitStore implements RateLimitStore {
 async function createRateLimitStore(): Promise<RateLimitStore> {
 	const redisHealth = await checkRedisHealth();
 	if (redisHealth.status === "healthy") {
-		console.log("Using Redis for rate limiting");
+		logger.info("Using Redis for rate limiting");
 		return new RedisRateLimitStore();
 	} else {
-		console.warn("Redis unavailable, using memory store for rate limiting:", redisHealth.error);
+		logger.warn("Redis unavailable, using memory store for rate limiting", { error: redisHealth.error });
 		return new MemoryRateLimitStore();
 	}
 }
@@ -284,9 +284,9 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 				await redis.incr(metadataKey);
 				await redis.expire(metadataKey, adjustmentTtl);
 				
-				console.log(`Sophisticated skip tracking: ${isSuccess ? 'successful' : 'failed'} request to ${key}`);
+				logger.debug("Sophisticated skip tracking", { success: isSuccess, key });
 			} catch (error) {
-				console.warn("Failed to track request adjustment:", error);
+				logger.warn("Failed to track request adjustment", { error: error instanceof Error ? error.message : String(error) });
 			}
 		}
 

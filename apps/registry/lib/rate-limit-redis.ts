@@ -1,6 +1,6 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { NextResponse as NextRes } from "next/server";
-import { createApiError } from "./logger";
+import { createApiError, logger } from "./logger";
 import { redis, type RedisStore } from "./redis";
 
 // Rate limiting configuration
@@ -40,7 +40,7 @@ export class RedisRateLimitStore {
         remaining: Math.max(0, count),
       };
     } catch (error) {
-      console.error("Redis rate limit error:", error);
+      logger.error("Redis rate limit error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
       // Fallback: allow request if Redis is unavailable
       return {
         count: 1,
@@ -66,7 +66,7 @@ export class RedisRateLimitStore {
 
       return { count, resetTime };
     } catch (error) {
-      console.error("Redis rate limit get error:", error);
+      logger.error("Redis rate limit get error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
       return null;
     }
   }
@@ -78,7 +78,7 @@ export class RedisRateLimitStore {
     try {
       await this.redis.del(windowKey);
     } catch (error) {
-      console.error("Redis rate limit reset error:", error);
+      logger.error("Redis rate limit reset error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }
   }
 
@@ -223,7 +223,7 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
           (finalConfig.skipFailedRequests && isFailed)) {
         // We would need to decrement, but it's complex with Redis
         // Instead, we could use a separate counter or accept this limitation
-        console.warn("Skip counting not fully implemented with Redis rate limiting");
+        logger.warn("Skip counting not fully implemented with Redis rate limiting");
       }
       
       return new NextRes(response.body, {
@@ -233,7 +233,7 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
       });
       
     } catch (error) {
-      console.error("Rate limiting error:", error);
+      logger.error("Rate limiting error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
       // On Redis failure, allow the request but log the error
       const response = await handler();
       

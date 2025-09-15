@@ -1,5 +1,6 @@
 import { Redis } from "@upstash/redis";
 import IORedis from "ioredis";
+import { logger } from "./logger";
 
 // Redis configuration interface
 interface RedisConfig {
@@ -217,13 +218,13 @@ export const redis = createRedisStore();
 // Pre-warm Redis connection for cold starts
 export async function warmupRedis(): Promise<void> {
   try {
-    console.log("Pre-warming Redis connection...");
+    logger.info("Pre-warming Redis connection");
     const start = Date.now();
     await redis.ping();
     const latency = Date.now() - start;
-    console.log(`Redis connection pre-warmed successfully (${latency}ms)`);
+    logger.info("Redis connection pre-warmed successfully", { latency });
   } catch (error) {
-    console.warn("Redis pre-warming failed:", error);
+    logger.warn("Redis pre-warming failed", { error: error instanceof Error ? error.message : String(error) });
     // Don't throw - this is optional optimization
   }
 }
@@ -256,6 +257,6 @@ export async function closeRedisConnection(): Promise<void> {
   try {
     await redis.disconnect();
   } catch (error) {
-    console.error("Error closing Redis connection:", error);
+    logger.error("Error closing Redis connection", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
   }
 }

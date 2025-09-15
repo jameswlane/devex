@@ -1,4 +1,5 @@
 import { redis } from "./redis";
+import { logger } from "./logger";
 
 // Metrics interface
 export interface ApplicationMetrics {
@@ -54,7 +55,7 @@ export class MetricsCollector {
       await redis.set(`${responseTimeKey}:count`, newCount.toString(), METRICS_TTL);
       
     } catch (error) {
-      console.warn("Failed to record request metrics:", error);
+      logger.warn("Failed to record request metrics", { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -72,7 +73,7 @@ export class MetricsCollector {
         await redis.expire(missKey, METRICS_TTL);
       }
     } catch (error) {
-      console.warn("Failed to record cache metrics:", error);
+      logger.warn("Failed to record cache metrics", { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -84,7 +85,7 @@ export class MetricsCollector {
       await redis.incr(key);
       await redis.expire(key, METRICS_TTL);
     } catch (error) {
-      console.warn("Failed to record rate limit metrics:", error);
+      logger.warn("Failed to record rate limit metrics", { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -130,7 +131,7 @@ export class MetricsCollector {
         lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error("Failed to fetch metrics:", error);
+      logger.error("Failed to fetch metrics", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
       return {
         requestCount: 0,
         errorCount: 0,
@@ -162,7 +163,7 @@ export class MetricsCollector {
       }
       this.requestTimes = [];
     } catch (error) {
-      console.error("Failed to reset metrics:", error);
+      logger.error("Failed to reset metrics", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }
   }
 
