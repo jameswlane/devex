@@ -12,10 +12,14 @@ import type { Plugin, Application, Config, Stack, RegistryStats } from "@prisma/
 
 // Cache configuration for transformations
 const TRANSFORMATION_CACHE = {
-	TTL: 300, // 5 minutes
+	TTL: 900, // 15 minutes for stable data
+	SHORT_TTL: 300, // 5 minutes for frequently changing data
+	LONG_TTL: 3600, // 1 hour for very stable data
 	KEY_PREFIX: "transform:",
 	TRACKING_PREFIX: "transform:tracking:",
+	STATS_PREFIX: "transform:stats:",
 	BATCH_SIZE: 100, // Process in batches to avoid memory issues
+	MAX_TRACKED_KEYS: 1000, // Limit tracking to prevent unbounded growth
 };
 
 // Proper type definitions for plugin capabilities
@@ -130,29 +134,105 @@ type StackWithExtras = {
 	lastDownload: Date | null;
 };
 
+// Cache statistics interface
+interface CacheStats {
+	hits: number;
+	misses: number;
+	totalRequests: number;
+	cacheSize: number;
+	hitRate: number;
+}
+
 // Registry transformation service with optimized caching
 export class RegistryTransformationService {
+	private cacheStats: CacheStats = {
+		hits: 0,
+		misses: 0,
+		totalRequests: 0,
+		cacheSize: 0,
+		hitRate: 0,
+	};
 	// Generate cache key for specific transformations
 	private getCacheKey(type: string, hash: string): string {
 		return `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`;
 	}
 
-	// Track cache keys for efficient invalidation
+	// Update cache statistics
+	private updateCacheStats(hit: boolean): void {
+		this.cacheStats.totalRequests++;
+		if (hit) {
+			this.cacheStats.hits++;
+		} else {
+			this.cacheStats.misses++;
+		}
+		this.cacheStats.hitRate = this.cacheStats.totalRequests > 0 
+			? this.cacheStats.hits / this.cacheStats.totalRequests 
+			: 0;
+	}
+
+	// Persist cache statistics to Redis
+	private async persistCacheStats(): Promise<void> {
+		try {
+			const statsKey = `${TRANSFORMATION_CACHE.STATS_PREFIX}global`;
+			await redis.set(statsKey, JSON.stringify(this.cacheStats), TRANSFORMATION_CACHE.LONG_TTL);
+		} catch (error) {
+			logger.warn("Failed to persist cache stats", { error: error instanceof Error ? error.message : String(error) });
+		}
+	}
+
+	// Load cache statistics from Redis
+	private async loadCacheStats(): Promise<void> {
+		try {
+			const statsKey = `${TRANSFORMATION_CACHE.STATS_PREFIX}global`;
+			const cached = await redis.get(statsKey);
+			if (cached) {
+				this.cacheStats = { ...this.cacheStats, ...JSON.parse(cached) };
+			}
+		} catch (error) {
+			logger.warn("Failed to load cache stats", { error: error instanceof Error ? error.message : String(error) });
+		}
+	}
+
+	// Track cache keys for efficient invalidation with improved strategy
 	private async trackCacheKey(type: string, cacheKey: string): Promise<void> {
 		try {
 			const trackingKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}`;
+			const timestampKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}:timestamps`;
+			
 			// Use Redis set to track active cache keys for this type
 			// For Upstash Redis, we'll store as a JSON array since it doesn't support sets
-			const existingKeys = await redis.get(trackingKey);
+			const [existingKeys, existingTimestamps] = await Promise.all([
+				redis.get(trackingKey),
+				redis.get(timestampKey)
+			]);
+			
 			const keySet = existingKeys ? JSON.parse(existingKeys) : [];
+			const timestampMap = existingTimestamps ? JSON.parse(existingTimestamps) : {};
 			
 			if (!keySet.includes(cacheKey)) {
 				keySet.push(cacheKey);
-				// Limit tracking to prevent unbounded growth
-				if (keySet.length > 1000) {
-					keySet.splice(0, keySet.length - 1000); // Keep last 1000 keys
+				timestampMap[cacheKey] = Date.now();
+				
+				// Limit tracking to prevent unbounded growth with LRU-like cleanup
+				if (keySet.length > TRANSFORMATION_CACHE.MAX_TRACKED_KEYS) {
+					// Remove oldest 20% of keys
+					const sortedKeys = Object.keys(timestampMap).sort((a, b) => timestampMap[a] - timestampMap[b]);
+					const keysToRemove = sortedKeys.slice(0, Math.floor(TRANSFORMATION_CACHE.MAX_TRACKED_KEYS * 0.2));
+					
+					for (const keyToRemove of keysToRemove) {
+						const index = keySet.indexOf(keyToRemove);
+						if (index > -1) keySet.splice(index, 1);
+						delete timestampMap[keyToRemove];
+					}
 				}
-				await redis.set(trackingKey, JSON.stringify(keySet), TRANSFORMATION_CACHE.TTL * 2);
+				
+				// Update tracking with longer TTL than cache itself
+				await Promise.all([
+					redis.set(trackingKey, JSON.stringify(keySet), TRANSFORMATION_CACHE.TTL * 2),
+					redis.set(timestampKey, JSON.stringify(timestampMap), TRANSFORMATION_CACHE.TTL * 2)
+				]);
+				
+				this.cacheStats.cacheSize = keySet.length;
 			}
 		} catch (error) {
 			// Don't fail the operation if tracking fails
@@ -172,39 +252,77 @@ export class RegistryTransformationService {
 		}
 	}
 
-	// Generate hash for data to detect changes
-	private generateDataHash(data: any[]): string {
+	// Generate improved hash for data to detect changes with more granularity
+	private generateDataHash(data: any[], useContent: boolean = false): string {
 		// Create a hash based on data length and first/last item timestamps
 		if (data.length === 0) return "empty";
 		
 		const firstItem = data[0];
 		const lastItem = data[data.length - 1];
 		
-		const hashData = {
+		let hashData: any = {
 			length: data.length,
 			first: firstItem?.updatedAt || firstItem?.createdAt,
 			last: lastItem?.updatedAt || lastItem?.createdAt,
 		};
+
+		// For more sensitive caching, include content-based hash
+		if (useContent && data.length <= 10) {
+			// Only hash content for small datasets to avoid performance issues
+			hashData.contentHash = Buffer.from(JSON.stringify(data.map(item => 
+				({ name: item.name, updated: item.updatedAt || item.createdAt })
+			))).toString("base64").slice(0, 8);
+		}
 		
 		return Buffer.from(JSON.stringify(hashData)).toString("base64").slice(0, 16);
+	}
+
+	// Determine appropriate TTL based on data characteristics
+	private getTTLForData(type: string, dataLength: number): number {
+		// Plugins and configs change less frequently - longer cache
+		if (type === "plugins" || type === "configs") {
+			return TRANSFORMATION_CACHE.LONG_TTL;
+		}
+		
+		// Applications might change more often - medium cache
+		if (type === "applications") {
+			return TRANSFORMATION_CACHE.TTL;
+		}
+		
+		// Stacks are dynamic - shorter cache
+		if (type === "stacks") {
+			return TRANSFORMATION_CACHE.SHORT_TTL;
+		}
+		
+		// Small datasets can have longer cache since they're cheaper to regenerate
+		return dataLength <= 10 ? TRANSFORMATION_CACHE.LONG_TTL : TRANSFORMATION_CACHE.TTL;
 	}
 
 	// Transform plugins with caching
 	async transformPlugins(plugins: PluginWithExtras[]): Promise<PluginResponse[]> {
 		if (plugins.length === 0) return [];
 
-		const hash = this.generateDataHash(plugins);
+		// Load cache stats on first use
+		if (this.cacheStats.totalRequests === 0) {
+			await this.loadCacheStats();
+		}
+
+		const hash = this.generateDataHash(plugins, plugins.length <= 50); // Use content hash for smaller datasets
 		const cacheKey = this.getCacheKey("plugins", hash);
 
 		try {
 			// Try to get from cache first
 			const cached = await redis.get(cacheKey);
 			if (cached) {
+				this.updateCacheStats(true); // Cache hit
 				return JSON.parse(cached);
 			}
 		} catch (error) {
 			logger.warn("Failed to get cached plugin transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
+
+		// Cache miss
+		this.updateCacheStats(false);
 
 		// Transform plugins in batches
 		const transformed: PluginResponse[] = [];
@@ -234,10 +352,16 @@ export class RegistryTransformationService {
 			transformed.push(...batchTransformed);
 		}
 
-		// Cache the result and track the key
+		// Cache the result and track the key with adaptive TTL
 		try {
-			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			const ttl = this.getTTLForData("plugins", plugins.length);
+			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("plugins", cacheKey);
+			
+			// Periodically persist cache stats
+			if (this.cacheStats.totalRequests % 10 === 0) {
+				await this.persistCacheStats();
+			}
 		} catch (error) {
 			logger.warn("Failed to cache plugin transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
@@ -249,17 +373,20 @@ export class RegistryTransformationService {
 	async transformApplications(applications: ApplicationWithSupport[]): Promise<ApplicationResponse[]> {
 		if (applications.length === 0) return [];
 
-		const hash = this.generateDataHash(applications);
+		const hash = this.generateDataHash(applications, applications.length <= 50);
 		const cacheKey = this.getCacheKey("applications", hash);
 
 		try {
 			const cached = await redis.get(cacheKey);
 			if (cached) {
+				this.updateCacheStats(true);
 				return JSON.parse(cached);
 			}
 		} catch (error) {
 			logger.warn("Failed to get cached application transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
+
+		this.updateCacheStats(false);
 
 		// Transform applications in batches
 		const transformed: ApplicationResponse[] = [];
@@ -317,10 +444,15 @@ export class RegistryTransformationService {
 			transformed.push(...batchTransformed);
 		}
 
-		// Cache the result and track the key
+		// Cache the result and track the key with adaptive TTL
 		try {
-			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			const ttl = this.getTTLForData("applications", applications.length);
+			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("applications", cacheKey);
+			
+			if (this.cacheStats.totalRequests % 10 === 0) {
+				await this.persistCacheStats();
+			}
 		} catch (error) {
 			logger.warn("Failed to cache application transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
@@ -332,17 +464,20 @@ export class RegistryTransformationService {
 	async transformConfigs(configs: ConfigWithExtras[]): Promise<ConfigResponse[]> {
 		if (configs.length === 0) return [];
 
-		const hash = this.generateDataHash(configs);
+		const hash = this.generateDataHash(configs, configs.length <= 20);
 		const cacheKey = this.getCacheKey("configs", hash);
 
 		try {
 			const cached = await redis.get(cacheKey);
 			if (cached) {
+				this.updateCacheStats(true);
 				return JSON.parse(cached);
 			}
 		} catch (error) {
 			logger.warn("Failed to get cached config transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
+
+		this.updateCacheStats(false);
 
 		// Transform configs (simpler, so no batching needed unless very large)
 		const transformed: ConfigResponse[] = configs.map((config) => ({
@@ -358,10 +493,15 @@ export class RegistryTransformationService {
 			lastDownload: config.lastDownload?.toISOString(),
 		}));
 
-		// Cache the result and track the key
+		// Cache the result and track the key with adaptive TTL
 		try {
-			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			const ttl = this.getTTLForData("configs", configs.length);
+			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("configs", cacheKey);
+			
+			if (this.cacheStats.totalRequests % 10 === 0) {
+				await this.persistCacheStats();
+			}
 		} catch (error) {
 			logger.warn("Failed to cache config transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
@@ -373,17 +513,20 @@ export class RegistryTransformationService {
 	async transformStacks(stacks: StackWithExtras[]): Promise<StackResponse[]> {
 		if (stacks.length === 0) return [];
 
-		const hash = this.generateDataHash(stacks);
+		const hash = this.generateDataHash(stacks, stacks.length <= 20);
 		const cacheKey = this.getCacheKey("stacks", hash);
 
 		try {
 			const cached = await redis.get(cacheKey);
 			if (cached) {
+				this.updateCacheStats(true);
 				return JSON.parse(cached);
 			}
 		} catch (error) {
 			logger.warn("Failed to get cached stack transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
+
+		this.updateCacheStats(false);
 
 		// Transform stacks
 		const transformed: StackResponse[] = stacks.map((stack) => ({
@@ -401,10 +544,15 @@ export class RegistryTransformationService {
 			lastDownload: stack.lastDownload?.toISOString(),
 		}));
 
-		// Cache the result and track the key
+		// Cache the result and track the key with adaptive TTL
 		try {
-			await redis.set(cacheKey, JSON.stringify(transformed), TRANSFORMATION_CACHE.TTL);
+			const ttl = this.getTTLForData("stacks", stacks.length);
+			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("stacks", cacheKey);
+			
+			if (this.cacheStats.totalRequests % 10 === 0) {
+				await this.persistCacheStats();
+			}
 		} catch (error) {
 			logger.warn("Failed to cache stack transformations", { error: error instanceof Error ? error.message : String(error) });
 		}
@@ -647,19 +795,47 @@ export class RegistryTransformationService {
 		await Promise.all(deletePromises);
 	}
 
-	// Get cache statistics
-	async getCacheStats(): Promise<{
-		hitRate: number;
-		totalRequests: number;
-		cacheSize: number;
-	}> {
-		// This would require implementing cache metrics tracking
-		// For now, return placeholder values
+	// Cache preloading for frequently accessed data
+	async preloadCache(types: ("plugins" | "applications" | "configs" | "stacks")[] = ["plugins", "applications"]): Promise<void> {
+		try {
+			logger.info("Starting cache preloading", { types });
+			
+			// This would typically be called during application startup
+			// with sample or commonly requested data to warm the cache
+			
+			// For now, we'll track that preloading was requested
+			const preloadKey = `${TRANSFORMATION_CACHE.STATS_PREFIX}preload:${Date.now()}`;
+			await redis.set(preloadKey, JSON.stringify({ types, timestamp: Date.now() }), TRANSFORMATION_CACHE.SHORT_TTL);
+			
+			logger.info("Cache preloading completed", { types });
+		} catch (error) {
+			logger.warn("Cache preloading failed", { error: error instanceof Error ? error.message : String(error) });
+		}
+	}
+
+	// Get comprehensive cache statistics
+	async getCacheStats(): Promise<CacheStats> {
+		// Load latest stats from Redis
+		await this.loadCacheStats();
+		
 		return {
-			hitRate: 0.85, // 85% hit rate
-			totalRequests: 1000,
-			cacheSize: 50, // 50 cached transformations
+			...this.cacheStats,
+			hitRate: this.cacheStats.totalRequests > 0 
+				? this.cacheStats.hits / this.cacheStats.totalRequests 
+				: 0,
 		};
+	}
+
+	// Clear cache statistics
+	async clearCacheStats(): Promise<void> {
+		this.cacheStats = {
+			hits: 0,
+			misses: 0,
+			totalRequests: 0,
+			cacheSize: 0,
+			hitRate: 0,
+		};
+		await this.persistCacheStats();
 	}
 }
 

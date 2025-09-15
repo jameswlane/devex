@@ -1,19 +1,20 @@
-import { NextResponse } from "next/server";
-import { logger, logPerformance, createDatabaseError } from "../../../../lib/logger";
+import { NextRequest, NextResponse } from "next/server";
+import { logger, logPerformance } from "../../../../lib/logger";
 import { withQueryCache, CacheCategory } from "../../../../lib/query-cache";
 import { ensurePrisma } from "../../../../lib/prisma-client";
+import { withErrorHandling, safeDatabase } from "../../../../lib/error-handler";
 
-export async function GET(request: Request) {
-	try {
+async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 		const url = new URL(request.url);
 		const forceRefresh = url.searchParams.get("refresh") === "true";
 
-		// Get Prisma client with proper error handling
-		const prismaClient = ensurePrisma();
+	// Get Prisma client with proper error handling
+	const prismaClient = ensurePrisma();
 
-		// Wrap expensive aggregation in a cache
-		const stats = await withQueryCache(
-			async () => {
+	// Wrap expensive aggregation in a cache with database retry logic
+	const stats = await withQueryCache(
+		async () => {
+			return await safeDatabase(async () => {
 				const startTime = Date.now();
 
 				// Get current counts and statistics
@@ -131,27 +132,27 @@ export async function GET(request: Request) {
 						timestamp: new Date().toISOString(),
 					},
 				};
-			},
-			"registry:stats",
-			{
-				category: CacheCategory.AGGREGATION,
-				ttl: 600, // 10 minutes
-				forceRefresh,
-			}
-		);
+			}, {
+				operation: "fetch-registry-stats",
+				resource: "statistics"
+			});
+		},
+		"registry:stats",
+		{
+			category: CacheCategory.AGGREGATION,
+			ttl: 600, // 10 minutes
+			forceRefresh,
+		}
+	);
 
-		return NextResponse.json(stats, {
-			headers: {
-				"Cache-Control": "public, max-age=300, s-maxage=600",
-				"X-Registry-Source": "database",
-				"X-Total-Items": stats.totals.all.toString(),
-			},
-		});
-	} catch (error) {
-		logger.error("Failed to fetch registry statistics", {
-			error: error instanceof Error ? error.message : String(error)
-		}, error instanceof Error ? error : undefined);
-
-		return createDatabaseError("fetch registry statistics");
-	}
+	return NextResponse.json(stats, {
+		headers: {
+			"Cache-Control": "public, max-age=300, s-maxage=600",
+			"X-Registry-Source": "database",
+			"X-Total-Items": stats.totals.all.toString(),
+		},
+	});
 }
+
+// Export wrapped handler with standardized error handling
+export const GET = withErrorHandling(handleGetStats, "fetch-registry-stats");

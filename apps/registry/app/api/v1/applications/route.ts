@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
-import { createApiError, logDatabaseError } from "@/lib/logger";
+import { NextRequest, NextResponse } from "next/server";
+import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
+import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
 import type { Application, PlatformInfo, Prisma } from "@prisma/client";
 import {
 	validateCategory,
@@ -16,8 +17,7 @@ type ApplicationWithSupports = Application & {
 	windowsSupport: PlatformInfo | null;
 };
 
-export async function GET(request: Request) {
-	try {
+async function handleGetApplications(request: NextRequest): Promise<NextResponse> {
 		const { searchParams } = new URL(request.url);
 		const category = validateCategory(searchParams.get("category"));
 		const search = validateSearchQuery(searchParams.get("search"));
@@ -63,8 +63,9 @@ export async function GET(request: Request) {
 			];
 		}
 
-		// Fetch applications with pagination using proper Prisma types
-		const [applications, total] = await Promise.all([
+	// Fetch applications with pagination using proper Prisma types and database retry logic
+	const [applications, total] = await safeDatabase(
+		() => Promise.all([
 			prisma.application.findMany({
 				where,
 				include: {
@@ -77,7 +78,13 @@ export async function GET(request: Request) {
 				skip: offset,
 			}),
 			prisma.application.count({ where }),
-		]);
+		]),
+		{
+			operation: "fetch-applications",
+			resource: "applications",
+			metadata: { page, limit, category, search, platform }
+		}
+	);
 
 		// Use optimized transformation service with caching
 		const applicationsFormatted = await transformationService.transformApplications(
@@ -101,17 +108,15 @@ export async function GET(request: Request) {
 			},
 		};
 
-		return NextResponse.json(response, {
-			headers: {
-				"Cache-Control": "public, max-age=300, s-maxage=600",
-				"X-Total-Count": total.toString(),
-				"X-Registry-Source": "database",
-				"X-Transformation-Cache": "enabled",
-			},
-		});
-	} catch (error) {
-		logDatabaseError(error, "applications_fetch");
-		const url = new URL(request.url);
-		return createApiError("Failed to fetch applications", 500, undefined, undefined, url.pathname);
-	}
+	return NextResponse.json(response, {
+		headers: {
+			"Cache-Control": "public, max-age=300, s-maxage=600",
+			"X-Total-Count": total.toString(),
+			"X-Registry-Source": "database",
+			"X-Transformation-Cache": "enabled",
+		},
+	});
 }
+
+// Export wrapped handler with standardized error handling
+export const GET = withErrorHandling(handleGetApplications, "fetch-applications");
