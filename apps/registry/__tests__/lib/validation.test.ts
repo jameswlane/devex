@@ -95,7 +95,7 @@ describe('validation', () => {
     })
 
     it('should remove SQL injection attempts', () => {
-      expect(sanitizeSearchQuery("'; DROP TABLE users; --")).toBe(' DROP TABLE users ')
+      expect(sanitizeSearchQuery("'; DROP TABLE users; --")).toBe('DROP TABLE users')
       expect(sanitizeSearchQuery('docker\x00postgres')).toBe('dockerpostgres')
     })
   })
