@@ -20,9 +20,9 @@ jest.mock('../../lib/redis', () => ({
 }));
 
 jest.mock('../../lib/transformation-service', () => ({
-  TransformationService: {
-    getInstance: jest.fn().mockReturnValue({}),
-  },
+  RegistryTransformationService: jest.fn().mockImplementation(() => ({
+    getCacheStats: jest.fn().mockResolvedValue({ hitRate: 0.85, totalRequests: 100, cacheSize: 10 }),
+  })),
 }));
 
 jest.mock('../../lib/logger', () => ({

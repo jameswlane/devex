@@ -47,6 +47,8 @@ const mockConsole = {
   log: jest.fn(),
   warn: jest.fn(),
   error: jest.fn(),
+  info: jest.fn(),
+  debug: jest.fn(),
 };
 Object.assign(console, mockConsole);
 
@@ -175,10 +177,13 @@ describe('Redis Module', () => {
     it('should log warmup process', async () => {
       await warmupRedis();
       
-      expect(mockConsole.log).toHaveBeenCalledWith('Pre-warming Redis connection...');
+      // Check for structured logger output (JSON format)
+      expect(mockConsole.info).toHaveBeenCalledWith(
+        expect.stringContaining('"message":"Pre-warming Redis connection"')
+      );
       // Either success or failure should be logged
       expect(
-        mockConsole.log.mock.calls.some(call => 
+        mockConsole.info.mock.calls.some(call => 
           call[0].includes('Redis connection pre-warmed successfully')
         ) ||
         mockConsole.warn.mock.calls.some(call => 

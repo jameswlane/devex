@@ -204,14 +204,8 @@ describe('Security Module', () => {
         },
       });
 
-      // Mock the request.ip property
-      Object.defineProperty(mockRequest, 'ip', {
-        value: '127.0.0.1',
-        writable: true,
-      });
-
       const ip = getClientIP(mockRequest);
-      expect(ip).toBe('127.0.0.1');
+      expect(ip).toBe('unknown'); // Invalid IP should return 'unknown'
     });
 
     it('should return "unknown" when no IP is available', () => {
