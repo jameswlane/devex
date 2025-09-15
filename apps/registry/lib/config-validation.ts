@@ -50,7 +50,9 @@ export function validateConfiguration(): ValidatedConfig {
     const config = EnvironmentSchema.parse(process.env);
     
     // Additional validation logic
-    const hasRedis = config.REDIS_URL || (config.KV_REST_API_URL && config.KV_REST_API_TOKEN) || (config.UPSTASH_REDIS_REST_URL && config.UPSTASH_REDIS_REST_TOKEN);
+    const hasRedis = !!config.REDIS_URL ||
+      (!!config.KV_REST_API_URL && !!config.KV_REST_API_TOKEN) ||
+      (!!config.UPSTASH_REDIS_REST_URL && !!config.UPSTASH_REDIS_REST_TOKEN);
     
     if (!hasRedis && config.NODE_ENV === "production") {
       logger.warn("No Redis configuration found for production environment", {
