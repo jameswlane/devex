@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import bcrypt from "bcrypt";
 import { logger } from "./logger";
 import { redis } from "./redis";
 
@@ -249,18 +250,16 @@ export async function requireSignedRequest(
 /**
  * Generate API key for client authentication
  */
-export function generateApiKey(clientId: string): {
+export async function generateApiKey(clientId: string): Promise<{
   apiKey: string;
   hashedKey: string;
-} {
+}> {
   // Generate random API key
   const apiKey = `devex_${crypto.randomBytes(32).toString("hex")}`;
   
-  // Hash the key for storage
-  const hashedKey = crypto
-    .createHash("sha256")
-    .update(apiKey)
-    .digest("hex");
+  // Hash the key for storage using bcrypt with proper salt rounds
+  const saltRounds = 12;
+  const hashedKey = await bcrypt.hash(apiKey, saltRounds);
   
   logger.info("API key generated", {
     clientId,
@@ -277,17 +276,25 @@ export function generateApiKey(clientId: string): {
  * Verify API key
  */
 export async function verifyApiKey(
-  apiKey: string
+  apiKey: string,
+  storedHashedKey: string
 ): Promise<{ valid: boolean; clientId?: string }> {
   try {
-    // Hash the provided key
-    const hashedKey = crypto
+    // Use bcrypt to compare the API key with the stored hash
+    const isValid = await bcrypt.compare(apiKey, storedHashedKey);
+    
+    if (!isValid) {
+      return { valid: false };
+    }
+    
+    // Create a hash for cache lookup (using SHA256 for cache keys is fine)
+    const cacheKey = crypto
       .createHash("sha256")
       .update(apiKey)
       .digest("hex");
     
     // Check if key exists in Redis cache
-    const cachedClient = await redis.get(`apikey:${hashedKey}`);
+    const cachedClient = await redis.get(`apikey:${cacheKey}`);
     
     if (cachedClient) {
       return {

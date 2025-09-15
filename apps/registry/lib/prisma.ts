@@ -32,43 +32,43 @@ async function withRetry<T>(
 	config: RetryConfig = RETRY_CONFIG,
 ): Promise<T> {
 	let lastError: Error;
-	
+
 	for (let attempt = 1; attempt <= config.maxAttempts; attempt++) {
 		try {
 			return await operation();
 		} catch (error) {
 			lastError = error as Error;
-			
+
 			// Don't retry on certain types of errors
 			if (isNonRetryableError(error)) {
 				throw error;
 			}
-			
+
 			// Don't wait on the last attempt
 			if (attempt < config.maxAttempts) {
 				const delay = Math.min(
 					config.initialDelay * Math.pow(config.backoffFactor, attempt - 1),
 					config.maxDelay,
 				);
-				
-				logger.warn("Database operation failed, retrying", { 
-					attempt, 
-					maxAttempts: config.maxAttempts, 
-					delay, 
-					error: error instanceof Error ? error.message : String(error) 
+
+				logger.warn("Database operation failed, retrying", {
+					attempt,
+					maxAttempts: config.maxAttempts,
+					delay,
+					error: error instanceof Error ? error.message : String(error)
 				});
 				await new Promise(resolve => setTimeout(resolve, delay));
 			}
 		}
 	}
-	
+
 	throw lastError!;
 }
 
 // Check if error should not be retried
 function isNonRetryableError(error: unknown): boolean {
 	if (!(error instanceof Error)) return false;
-	
+
 	// Don't retry authentication, authorization, or validation errors
 	const nonRetryablePatterns = [
 		/authentication/i,
@@ -78,7 +78,7 @@ function isNonRetryableError(error: unknown): boolean {
 		/unique constraint/i,
 		/foreign key/i,
 	];
-	
+
 	return nonRetryablePatterns.some(pattern => pattern.test(error.message));
 }
 
@@ -93,11 +93,11 @@ const createPrismaClient = () => {
 		errorFormat: "pretty",
 	};
 
-	// Only add datasources if DATABASE_URL is available (avoid build-time errors)
-	if (process.env.DATABASE_URL) {
+	// Only add datasources if PRISMA_DATABASE_URL is available (avoid build-time errors)
+	if (process.env.PRISMA_DATABASE_URL) {
 		config.datasources = {
 			db: {
-				url: process.env.DATABASE_URL,
+				url: process.env.PRISMA_DATABASE_URL,
 			},
 		};
 	}
@@ -143,7 +143,7 @@ const MAX_CONNECTION_ATTEMPTS = 5;
 // Connect with retry logic
 export async function connectPrisma(): Promise<void> {
 	if (isConnected) return;
-	
+
 	try {
 		await withRetry(async () => {
 			connectionAttempts++;
@@ -175,7 +175,7 @@ export async function warmupPrisma(): Promise<void> {
 // Disconnect gracefully
 export async function disconnectPrisma(): Promise<void> {
 	if (!isConnected) return;
-	
+
 	try {
 		await prismaInstance.$disconnect();
 		isConnected = false;
@@ -193,12 +193,12 @@ export async function checkDatabaseHealth(): Promise<{
 }> {
 	try {
 		const start = Date.now();
-		
+
 		// Simple health check query
 		await prismaInstance.$queryRaw`SELECT 1`;
-		
+
 		const latency = Date.now() - start;
-		
+
 		// Note: Actual connection pool metrics would require Prisma metrics preview feature
 		// For now, we return basic health information
 		return {
@@ -224,14 +224,14 @@ if (process.env.NODE_ENV === "production") {
 	process.on("beforeExit", async () => {
 		await disconnectPrisma();
 	});
-	
+
 	// Handle SIGTERM and SIGINT for graceful shutdown
 	process.on("SIGTERM", async () => {
 		logger.info("Received SIGTERM, shutting down gracefully");
 		await disconnectPrisma();
 		process.exit(0);
 	});
-	
+
 	process.on("SIGINT", async () => {
 		logger.info("Received SIGINT, shutting down gracefully");
 		await disconnectPrisma();
@@ -249,7 +249,7 @@ export async function executeWithRetry<T>(
 		if (!isConnected) {
 			await connectPrisma();
 		}
-		
+
 		return await operation();
 	});
 }
@@ -263,7 +263,7 @@ export async function executeTransactionWithRetry<T>(
 		if (!isConnected) {
 			await connectPrisma();
 		}
-		
+
 		return await prismaInstance.$transaction(async (tx) => {
 			return await transaction(tx as typeof prismaInstance);
 		}, {

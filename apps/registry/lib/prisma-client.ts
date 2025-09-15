@@ -27,11 +27,11 @@ const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: ExtendedPrismaClient;
 };
 
-// Check if DATABASE_URL is available before creating client
+// Check if PRISMA_DATABASE_URL is available before creating client
 function createPrismaClient(): ExtendedPrismaClient | null {
-  if (!process.env.DATABASE_URL) {
+  if (!process.env.PRISMA_DATABASE_URL) {
     if (process.env.NODE_ENV !== "production") {
-      logger.warn("DATABASE_URL not found, Prisma client not initialized");
+      logger.warn("PRISMA_DATABASE_URL not found, Prisma client not initialized");
     }
     return null;
   }
@@ -103,7 +103,7 @@ if (process.env.NODE_ENV !== "production" && prisma) {
 // Helper function to ensure Prisma is available
 export function ensurePrisma(): ExtendedPrismaClient {
   if (!prisma) {
-    throw new Error("Prisma client not available. Check DATABASE_URL configuration.");
+    throw new Error("Prisma client not available. Check PRISMA_DATABASE_URL configuration.");
   }
   return prisma;
 }

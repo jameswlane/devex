@@ -7,40 +7,40 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("PRISMA_DATABASE_URL")
 }
 
 model Application {
   id          String   @id @default(cuid())
-  name        String   @unique
-  description String
-  category    String
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  category    String   @db.VarChar(50)
   official    Boolean  @default(false)
   default     Boolean  @default(false)
   tags        String[]
-  
+
   // Platform support
   linuxSupport   PlatformInfo? @relation("LinuxSupport", fields: [linuxSupportId], references: [id])
   linuxSupportId String?
-  
+
   macosSupport   PlatformInfo? @relation("MacOSSupport", fields: [macosSupportId], references: [id])
   macosSupportId String?
-  
+
   windowsSupport   PlatformInfo? @relation("WindowsSupport", fields: [windowsSupportId], references: [id])
   windowsSupportId String?
-  
+
   // Desktop Environment support
   desktopEnvironments String[]
-  
-  // GitHub source transparency
-  githubUrl     String?
-  githubPath    String?
+
+  // GitHub source transparency  
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
-  
+
   // Metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([category])
   @@index([official])
   @@index([default])
@@ -50,31 +50,31 @@ model Application {
 
 model Plugin {
   id          String   @id @default(cuid())
-  name        String   @unique
-  description String
-  type        String   // package-manager, installer, utility, etc.
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  type        String   @db.VarChar(50) // package-manager, installer, utility, etc.
   priority    Int      @default(50)
-  status      String   @default("active") // active, deprecated, experimental
-  
+  status      String   @default("active") @db.VarChar(20) // active, deprecated, experimental
+
   // Capabilities
   supports Json @default("{}")
-  
+
   // Platform support - plugins are typically cross-platform
   platforms String[] @default(["linux", "macos", "windows"])
-  
-  // GitHub source transparency
-  githubUrl     String?
-  githubPath    String?
+
+  // GitHub source transparency  
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
-  
+
   // Registry metadata
   downloadCount Int      @default(0)
   lastDownload  DateTime?
-  
+
   // Metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([type])
   @@index([priority])
   @@index([status])
@@ -84,31 +84,31 @@ model Plugin {
 
 model Config {
   id          String   @id @default(cuid())
-  name        String   @unique
-  description String
-  category    String   // system, development, desktop, etc.
-  type        String   // yaml, json, toml, etc.
-  
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  category    String   @db.VarChar(50) // system, development, desktop, etc.
+  type        String   @db.VarChar(20) // yaml, json, toml, etc.
+
   // Target platforms
   platforms String[]
-  
+
   // Configuration content
   content   Json
   schema    Json? // JSON schema for validation
-  
-  // GitHub source transparency
-  githubUrl     String?
-  githubPath    String?
+
+  // GitHub source transparency  
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
-  
+
   // Usage tracking
   downloadCount Int      @default(0)
   lastDownload  DateTime?
-  
+
   // Metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([category])
   @@index([type])
   @@index([name])
@@ -117,35 +117,35 @@ model Config {
 
 model Stack {
   id          String   @id @default(cuid())
-  name        String   @unique
-  description String
-  category    String   // web, mobile, data, devops, etc.
-  
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  category    String   @db.VarChar(50) // web, mobile, data, devops, etc.
+
   // Stack composition
   applications String[] // References to application names
   configs      String[] // References to config names
   plugins      String[] // References to plugin names
-  
+
   // Platform support
   platforms            String[]
   desktopEnvironments  String[]
-  
+
   // Prerequisites
   prerequisites Json @default("[]") // System requirements, other stacks, etc.
-  
-  // GitHub source transparency
-  githubUrl     String?
-  githubPath    String?
+
+  // GitHub source transparency  
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
-  
+
   // Usage tracking
   downloadCount Int      @default(0)
   lastDownload  DateTime?
-  
+
   // Metadata
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([category])
   @@index([name])
   @@map("stacks")
@@ -153,57 +153,57 @@ model Stack {
 
 model PlatformInfo {
   id              String @id @default(cuid())
-  installMethod   String
-  installCommand  String
+  installMethod   String @db.VarChar(50)
+  installCommand  String @db.Text
   officialSupport Boolean @default(false)
-  
+
   // Alternative installation methods
   alternatives Json @default("[]")
-  
+
   // Relationships
   linuxApplications   Application[] @relation("LinuxSupport")
-  macosApplications   Application[] @relation("MacOSSupport") 
+  macosApplications   Application[] @relation("MacOSSupport")
   windowsApplications Application[] @relation("WindowsSupport")
-  
+
   @@map("platform_info")
 }
 
 model RegistryStats {
   id        String   @id @default(cuid())
   date      DateTime @unique @default(now())
-  
+
   // Counts
   totalApplications Int @default(0)
   totalPlugins      Int @default(0)
   totalConfigs      Int @default(0)
   totalStacks       Int @default(0)
-  
+
   // Platform distribution
   linuxSupported   Int @default(0)
   macosSupported   Int @default(0)
   windowsSupported Int @default(0)
-  
+
   // Activity metrics
   totalDownloads Int @default(0)
   dailyDownloads Int @default(0)
-  
+
   @@map("registry_stats")
 }
 
 model SyncLog {
   id        String   @id @default(cuid())
-  type      String   // application, plugin, config, stack
-  name      String
-  action    String   // create, update, delete
-  githubUrl String?
-  
+  type      String   @db.VarChar(20) // application, plugin, config, stack
+  name      String   @db.VarChar(100)
+  action    String   @db.VarChar(20) // create, update, delete
+  githubUrl String?  @db.VarChar(500)
+
   // Sync details
   success   Boolean
-  error     String?
+  error     String?  @db.Text
   changes   Json?    // What changed during sync
-  
+
   createdAt DateTime @default(now())
-  
+
   @@index([type])
   @@index([createdAt])
   @@index([success])

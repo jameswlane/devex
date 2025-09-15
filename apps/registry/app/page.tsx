@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { ensurePrisma } from "@/lib/prisma-client";
 import { initializeApplication } from "@/lib/startup";
 import { logger } from "@/lib/logger";
 
@@ -26,32 +26,23 @@ interface RegistryStats {
 
 async function getRegistryStats(): Promise<RegistryStats> {
 	try {
-		const [
-			applicationsCount,
-			pluginsCount,
-			configsCount,
-			stacksCount,
-			linuxApps,
-			macosApps,
-			windowsApps,
-			appCategories,
-			pluginTypes,
-			configCategories,
-			recentStats,
-		] = await Promise.all([
-			prisma.application.count(),
-			prisma.plugin.count(),
-			prisma.config.count(),
-			prisma.stack.count(),
-			prisma.application.count({
-				where: { linuxSupportId: { not: null } },
-			}),
-			prisma.application.count({
-				where: { macosSupportId: { not: null } },
-			}),
-			prisma.application.count({
-				where: { windowsSupportId: { not: null } },
-			}),
+		const prisma = ensurePrisma();
+		
+		// Use optimized single query instead of multiple separate queries
+		const statsQuery = await prisma.$queryRaw<any[]>`
+			SELECT 
+				'totals' as category,
+				(SELECT COUNT(*) FROM applications) as applications_count,
+				(SELECT COUNT(*) FROM plugins) as plugins_count,
+				(SELECT COUNT(*) FROM configs) as configs_count,
+				(SELECT COUNT(*) FROM stacks) as stacks_count,
+				(SELECT COUNT(*) FROM applications WHERE linux_support_id IS NOT NULL) as linux_apps,
+				(SELECT COUNT(*) FROM applications WHERE macos_support_id IS NOT NULL) as macos_apps,
+				(SELECT COUNT(*) FROM applications WHERE windows_support_id IS NOT NULL) as windows_apps
+		`;
+
+		// Get category breakdowns in separate optimized queries
+		const [appCategories, pluginTypes, configCategories, recentStats] = await Promise.all([
 			prisma.application.groupBy({
 				by: ["category"],
 				_count: { category: true },
@@ -68,6 +59,15 @@ async function getRegistryStats(): Promise<RegistryStats> {
 				orderBy: { date: "desc" },
 			}),
 		]);
+
+		const stats = statsQuery[0];
+		const applicationsCount = Number(stats.applications_count);
+		const pluginsCount = Number(stats.plugins_count);
+		const configsCount = Number(stats.configs_count);
+		const stacksCount = Number(stats.stacks_count);
+		const linuxApps = Number(stats.linux_apps);
+		const macosApps = Number(stats.macos_apps);
+		const windowsApps = Number(stats.windows_apps);
 
 		return {
 			totals: {
@@ -130,12 +130,6 @@ async function getRegistryStats(): Promise<RegistryStats> {
 			},
 			lastUpdated: new Date().toISOString(),
 		};
-	} finally {
-		try {
-			await prisma.$disconnect();
-		} catch (error) {
-			logger.error("Failed to disconnect from database", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
-		}
 	}
 }
 

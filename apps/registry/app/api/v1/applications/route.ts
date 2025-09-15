@@ -81,7 +81,7 @@ export async function GET(request: Request) {
 
 		// Use optimized transformation service with caching
 		const applicationsFormatted = await transformationService.transformApplications(
-			applications as ApplicationWithSupports[]
+			applications as any[]
 		);
 
 		const response = {

@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 				...plugin,
 				downloadCount: plugin.downloadCount || 0,
 				lastDownload: plugin.lastDownload,
-			}))
+			})) as any[]
 		);
 
 		const response = {

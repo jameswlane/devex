@@ -18,6 +18,15 @@ const TRANSFORMATION_CACHE = {
 	BATCH_SIZE: 100, // Process in batches to avoid memory issues
 };
 
+// Proper type definitions for plugin capabilities
+interface PluginCapabilities {
+	packageManagers?: string[];
+	architectures?: string[];
+	features?: string[];
+	dependencies?: string[];
+	configurations?: Record<string, any>;
+}
+
 // Type definitions for raw database data from registry service
 type PluginWithExtras = {
 	name: string;
@@ -25,13 +34,25 @@ type PluginWithExtras = {
 	type: string;
 	priority: number;
 	status: string;
-	supports: any;
+	supports: PluginCapabilities;
 	platforms: string[];
 	githubUrl: string | null;
 	githubPath: string | null;
 	downloadCount: number;
 	lastDownload: Date | null;
 };
+
+// Platform support interface
+interface PlatformSupportInfo {
+	installMethod: string;
+	installCommand: string;
+	officialSupport: boolean;
+	alternatives?: Array<{
+		method: string;
+		command: string;
+		priority: number;
+	}>;
+}
 
 type ApplicationWithSupport = {
 	name: string;
@@ -42,10 +63,24 @@ type ApplicationWithSupport = {
 	tags: string[];
 	desktopEnvironments: string[];
 	githubPath: string | null;
-	linuxSupport: any | null;
-	macosSupport: any | null;
-	windowsSupport: any | null;
+	linuxSupport: PlatformSupportInfo | null;
+	macosSupport: PlatformSupportInfo | null;
+	windowsSupport: PlatformSupportInfo | null;
 };
+
+// Configuration content interface based on type
+interface ConfigContent {
+	[key: string]: any; // Configuration values are flexible by nature
+}
+
+// JSON Schema interface for configuration validation
+interface ConfigJsonSchema {
+	$schema?: string;
+	type: string;
+	properties: Record<string, any>;
+	required?: string[];
+	additionalProperties?: boolean;
+}
 
 type ConfigWithExtras = {
 	name: string;
@@ -53,12 +88,32 @@ type ConfigWithExtras = {
 	category: string;
 	type: string;
 	platforms: string[];
-	content: any;
-	schema: any | null;
+	content: ConfigContent;
+	schema: ConfigJsonSchema | null;
 	githubPath: string | null;
 	downloadCount: number;
 	lastDownload: Date | null;
 };
+
+// Stack prerequisites interface
+interface StackPrerequisites {
+	systemRequirements?: {
+		minimumMemory?: string;
+		minimumStorage?: string;
+		requiredPorts?: number[];
+		operatingSystem?: string[];
+	};
+	dependencies?: {
+		requiredStacks?: string[];
+		requiredApplications?: string[];
+		conflictingApplications?: string[];
+	};
+	setup?: {
+		postInstallSteps?: string[];
+		configurationFiles?: string[];
+		environmentVariables?: Record<string, string>;
+	};
+}
 
 type StackWithExtras = {
 	name: string;
@@ -69,7 +124,7 @@ type StackWithExtras = {
 	plugins: string[];
 	platforms: string[];
 	desktopEnvironments: string[];
-	prerequisites: any;
+	prerequisites: StackPrerequisites;
 	githubPath: string | null;
 	downloadCount: number;
 	lastDownload: Date | null;

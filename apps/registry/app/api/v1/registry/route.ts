@@ -32,7 +32,7 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 			...result,
 			page,
 			limit,
-		});
+		} as any);
 
 		return NextResponse.json(response, {
 			headers: {

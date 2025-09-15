@@ -7,15 +7,15 @@ export async function GET(request: Request) {
 	try {
 		const url = new URL(request.url);
 		const forceRefresh = url.searchParams.get("refresh") === "true";
-		
+
 		// Get Prisma client with proper error handling
 		const prismaClient = ensurePrisma();
-		
-		// Wrap expensive aggregation in cache
+
+		// Wrap expensive aggregation in a cache
 		const stats = await withQueryCache(
 			async () => {
 				const startTime = Date.now();
-				
+
 				// Get current counts and statistics
 				const [
 					applicationsCount,
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 						_count: { category: true },
 					}),
 				]);
-				
+
 				const queryTime = Date.now() - startTime;
 				logPerformance("stats:aggregation", queryTime, {
 					counts: {
@@ -148,8 +148,8 @@ export async function GET(request: Request) {
 			},
 		});
 	} catch (error) {
-		logger.error("Failed to fetch registry statistics", { 
-			error: error instanceof Error ? error.message : String(error) 
+		logger.error("Failed to fetch registry statistics", {
+			error: error instanceof Error ? error.message : String(error)
 		}, error instanceof Error ? error : undefined);
 
 		return createDatabaseError("fetch registry statistics");

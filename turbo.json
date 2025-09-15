@@ -16,6 +16,7 @@
 				"devex-plugin-*"
 			],
 			"inputs": [
+				"$TURBO_DEFAULT$",
 				"src/**",
 				"cmd/**",
 				"pkg/**",
@@ -26,7 +27,11 @@
 				"app/**",
 				"prisma/**",
 				"package.json",
-				"tsconfig.json"
+				"tsconfig.json",
+				".env.production.local",
+				".env.local",
+				".env.production",
+				".env"
 			],
 			"env": [
 				"GOOS",
@@ -146,7 +151,14 @@
 		"dev": {
 			"persistent": true,
 			"cache": false,
-			"dependsOn": ["^build"]
+			"dependsOn": ["^build"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env.development.local",
+				".env.local",
+				".env.development",
+				".env"
+			]
 		},
 		"start": {
 			"dependsOn": ["build"],
