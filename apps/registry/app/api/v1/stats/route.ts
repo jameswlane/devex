@@ -3,9 +3,19 @@ import { NextResponse } from "next/server";
 import { logger, logPerformance } from "../../../../lib/logger";
 import { withQueryCache, CacheCategory } from "../../../../lib/query-cache";
 
-const prisma = new PrismaClient();
+// Lazy initialization of Prisma client to avoid build-time errors
+let prisma: PrismaClient | null = null;
+
+function getPrismaClient(): PrismaClient {
+	if (!prisma) {
+		prisma = new PrismaClient();
+	}
+	return prisma;
+}
 
 export async function GET(request: Request) {
+	const prismaClient = getPrismaClient();
+	
 	try {
 		const url = new URL(request.url);
 		const forceRefresh = url.searchParams.get("refresh") === "true";
@@ -27,46 +37,46 @@ export async function GET(request: Request) {
 					totalDownloads,
 					recentStats,
 				] = await Promise.all([
-					prisma.application.count(),
-					prisma.plugin.count(),
-					prisma.config.count(),
-					prisma.stack.count(),
-					prisma.application.count({
+					prismaClient.application.count(),
+					prismaClient.plugin.count(),
+					prismaClient.config.count(),
+					prismaClient.stack.count(),
+					prismaClient.application.count({
 						where: { linuxSupportId: { not: null } },
 					}),
-					prisma.application.count({
+					prismaClient.application.count({
 						where: { macosSupportId: { not: null } },
 					}),
-					prisma.application.count({
+					prismaClient.application.count({
 						where: { windowsSupportId: { not: null } },
 					}),
 					// Sum up download counts
 					Promise.all([
-						prisma.plugin.aggregate({ _sum: { downloadCount: true } }),
-						prisma.config.aggregate({ _sum: { downloadCount: true } }),
-						prisma.stack.aggregate({ _sum: { downloadCount: true } }),
+						prismaClient.plugin.aggregate({ _sum: { downloadCount: true } }),
+						prismaClient.config.aggregate({ _sum: { downloadCount: true } }),
+						prismaClient.stack.aggregate({ _sum: { downloadCount: true } }),
 					]).then((results) =>
 						results.reduce(
 							(sum, result) => sum + (result._sum.downloadCount || 0),
 							0,
 						),
 					),
-					prisma.registryStats.findFirst({
+					prismaClient.registryStats.findFirst({
 						orderBy: { date: "desc" },
 					}),
 				]);
 
 				// Get category breakdown
 				const [appCategories, pluginTypes, configCategories] = await Promise.all([
-					prisma.application.groupBy({
+					prismaClient.application.groupBy({
 						by: ["category"],
 						_count: { category: true },
 					}),
-					prisma.plugin.groupBy({
+					prismaClient.plugin.groupBy({
 						by: ["type"],
 						_count: { type: true },
 					}),
-					prisma.config.groupBy({
+					prismaClient.config.groupBy({
 						by: ["category"],
 						_count: { category: true },
 					}),
@@ -158,6 +168,6 @@ export async function GET(request: Request) {
 			{ status: 500 },
 		);
 	} finally {
-		await prisma.$disconnect();
+		await prismaClient.$disconnect();
 	}
 }

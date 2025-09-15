@@ -16,8 +16,31 @@ interface RedisConfig {
   enableTLS: boolean;
 }
 
-// Upstash Redis client (for Vercel/Serverless)
-export const upstashRedis = Redis.fromEnv();
+// Lazy initialization of Upstash Redis client
+let upstashRedisInstance: Redis | null = null;
+
+// Upstash Redis client (for Vercel/Serverless) - lazy initialization
+export const upstashRedis = (() => {
+  if (!upstashRedisInstance) {
+    try {
+      // Only initialize if environment variables are present
+      if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+        upstashRedisInstance = Redis.fromEnv();
+      } else if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+        upstashRedisInstance = new Redis({
+          url: process.env.KV_REST_API_URL,
+          token: process.env.KV_REST_API_TOKEN,
+        });
+      }
+    } catch (error) {
+      // Silently fail during build time
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("Upstash Redis initialization skipped:", error);
+      }
+    }
+  }
+  return upstashRedisInstance as Redis;
+})();
 
 // Safe Redis configuration with sensitive data isolation
 function createRedisConfig(): RedisConfig {
@@ -42,31 +65,45 @@ function createRedisConfig(): RedisConfig {
   };
 }
 
-const redisConfig = createRedisConfig();
+// Lazy initialization of IORedis client
+let ioRedisClientInstance: IORedis | null = null;
 
-// Create IORedis client for traditional Redis instances
-export const ioRedisClient = new IORedis(redisConfig.url, {
-  maxRetriesPerRequest: redisConfig.maxRetries,
-  connectTimeout: redisConfig.connectTimeout,
-  lazyConnect: true,
-  // Authentication
-  username: redisConfig.username,
-  password: redisConfig.password,
-  // TLS configuration for production
-  tls: redisConfig.enableTLS ? {} : undefined,
-  // Security settings
-  enableReadyCheck: true,
-  // Handle connection errors gracefully
-  retryStrategy: (times) => {
-    if (times > redisConfig.maxRetries) return null; // Stop retrying after max attempts
-    return Math.min(times * 200, 3000); // Exponential backoff
-  },
-  // Connection events for monitoring
-  reconnectOnError: (err) => {
-    const targetError = "READONLY";
-    return err.message.includes(targetError);
-  },
-});
+// Create IORedis client for traditional Redis instances - lazy initialization
+export const ioRedisClient = (() => {
+  if (!ioRedisClientInstance && process.env.REDIS_URL) {
+    try {
+      const redisConfig = createRedisConfig();
+      ioRedisClientInstance = new IORedis(redisConfig.url, {
+        maxRetriesPerRequest: redisConfig.maxRetries,
+        connectTimeout: redisConfig.connectTimeout,
+        lazyConnect: true,
+        // Authentication
+        username: redisConfig.username,
+        password: redisConfig.password,
+        // TLS configuration for production
+        tls: redisConfig.enableTLS ? {} : undefined,
+        // Security settings
+        enableReadyCheck: true,
+        // Handle connection errors gracefully
+        retryStrategy: (times) => {
+          if (times > redisConfig.maxRetries) return null; // Stop retrying after max attempts
+          return Math.min(times * 200, 3000); // Exponential backoff
+        },
+        // Connection events for monitoring
+        reconnectOnError: (err) => {
+          const targetError = "READONLY";
+          return err.message.includes(targetError);
+        },
+      });
+    } catch (error) {
+      // Silently fail during build time
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("IORedis initialization skipped:", error);
+      }
+    }
+  }
+  return ioRedisClientInstance as IORedis;
+})();
 
 // Redis abstraction layer
 export interface RedisStore {
@@ -201,15 +238,89 @@ class IORedisStore implements RedisStore {
   }
 }
 
+// In-memory fallback store for when Redis is not available
+class InMemoryStore implements RedisStore {
+  private store = new Map<string, { value: string; expiry?: number }>();
+
+  async get(key: string): Promise<string | null> {
+    const item = this.store.get(key);
+    if (!item) return null;
+    if (item.expiry && item.expiry < Date.now()) {
+      this.store.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+
+  async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
+    const expiry = ttlSeconds ? Date.now() + ttlSeconds * 1000 : undefined;
+    this.store.set(key, { value, expiry });
+  }
+
+  async incr(key: string): Promise<number> {
+    const current = await this.get(key);
+    const value = current ? parseInt(current, 10) + 1 : 1;
+    await this.set(key, value.toString());
+    return value;
+  }
+
+  async expire(key: string, seconds: number): Promise<void> {
+    const item = this.store.get(key);
+    if (item) {
+      item.expiry = Date.now() + seconds * 1000;
+    }
+  }
+
+  async del(key: string): Promise<void> {
+    this.store.delete(key);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    const value = await this.get(key);
+    return value !== null;
+  }
+
+  async mget(...keys: string[]): Promise<(string | null)[]> {
+    return Promise.all(keys.map(key => this.get(key)));
+  }
+
+  async mset(keyValues: Record<string, string>, ttlSeconds?: number): Promise<void> {
+    for (const [key, value] of Object.entries(keyValues)) {
+      await this.set(key, value, ttlSeconds);
+    }
+  }
+
+  async ping(): Promise<string> {
+    return "PONG";
+  }
+
+  async disconnect(): Promise<void> {
+    this.store.clear();
+  }
+}
+
 // Create the Redis store instance based on environment
 export const createRedisStore = (): RedisStore => {
+  // Check if we have Redis configuration
+  const hasUpstash = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) ||
+                     !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  const hasRedis = !!process.env.REDIS_URL;
+  
   // Prefer Upstash Redis for serverless environments
-  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+  if (hasUpstash && upstashRedis) {
     return new UpstashRedisStore(upstashRedis);
   }
   
   // Fallback to IORedis for traditional Redis
-  return new IORedisStore(ioRedisClient);
+  if (hasRedis) {
+    return new IORedisStore(ioRedisClient);
+  }
+  
+  // Fallback to in-memory store when Redis is not available
+  if (process.env.NODE_ENV !== "production") {
+    console.debug("Redis not configured, using in-memory store");
+  }
+  return new InMemoryStore();
 };
 
 // Global Redis store instance
