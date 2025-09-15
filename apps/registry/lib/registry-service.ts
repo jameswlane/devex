@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { dbCircuitBreaker } from "./db-health";
+import { transformationService } from "./transformation-service";
 import type {
   PluginResponse,
   ApplicationResponse,
@@ -375,13 +376,23 @@ export class RegistryService {
     );
   }
 
-  // Invalidate cache when data changes
+  // Invalidate cache when data changes (both Prisma Accelerate and transformation cache)
   async invalidateCache(tags: string[]) {
     // Accelerate is enabled on Prisma Cloud - handle cache invalidation
     try {
       // Prisma Accelerate will automatically handle cache invalidation
       // based on the tags provided in the cache strategies
-      console.log("Cache invalidation triggered for tags:", tags);
+      console.log("Prisma cache invalidation triggered for tags:", tags);
+      
+      // Also invalidate transformation cache
+      const transformationTypes = tags
+        .filter(tag => ["plugins", "applications", "configs", "stacks"].includes(tag))
+        .map(tag => tag.endsWith("s") ? tag.slice(0, -1) : tag) as ("plugins" | "applications" | "configs" | "stacks")[];
+      
+      if (transformationTypes.length > 0) {
+        await transformationService.invalidateTransformationCache(transformationTypes);
+        console.log("Transformation cache invalidation triggered for types:", transformationTypes);
+      }
     } catch (error) {
       console.error("Cache invalidation failed:", error);
     }
@@ -428,7 +439,7 @@ export class RegistryService {
           break;
       }
 
-      // Invalidate related caches
+      // Invalidate related caches (both Prisma Accelerate and transformation cache)
       await this.invalidateCache([
         "registry",
         "stats",

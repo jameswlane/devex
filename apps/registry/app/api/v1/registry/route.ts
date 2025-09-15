@@ -3,13 +3,10 @@ import { NextResponse } from "next/server";
 import { getCorsOrigins, REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { registryService } from "@/lib/registry-service";
+import { transformationService } from "@/lib/transformation-service";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import type {
-	ApplicationResponse,
-	ConfigResponse,
 	PaginatedResponse,
-	PluginResponse,
-	StackResponse,
 } from "@/lib/types/registry";
 
 // Apply rate limiting to the GET handler
@@ -30,165 +27,12 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 			resource,
 		});
 
-		// Transform data to response format using proper types
-		const pluginsFormatted = result.plugins.map((plugin) => ({
-			name: plugin.name,
-			description: plugin.description,
-			type: plugin.type,
-			priority: plugin.priority,
-			status: plugin.status,
-			supports: plugin.supports as Record<string, boolean>,
-			platforms: plugin.platforms,
-			tags: [],
-			version: REGISTRY_CONFIG.PLUGIN_VERSION,
-			author: REGISTRY_CONFIG.PLUGIN_AUTHOR,
-			repository: plugin.githubUrl || REGISTRY_CONFIG.PLUGIN_REPOSITORY,
-			dependencies: [],
-			release_tag: `@devex/${plugin.name}@${REGISTRY_CONFIG.PLUGIN_VERSION}`,
-			githubPath: plugin.githubPath,
-			downloadCount: plugin.downloadCount,
-			lastDownload: plugin.lastDownload?.toISOString(),
-		})) as PluginResponse[];
-
-		const applicationsFormatted = result.applications.map((app) => ({
-			name: app.name,
-			description: app.description,
-			category: app.category,
-			type: "application" as const,
-			official: app.official,
-			default: app.default,
-			platforms: {
-				linux: app.linuxSupport
-					? {
-							installMethod: app.linuxSupport.installMethod,
-							installCommand: app.linuxSupport.installCommand,
-							officialSupport: app.linuxSupport.officialSupport,
-							alternatives:
-								(app.linuxSupport.alternatives as Array<{
-									method: string;
-									command: string;
-								}>) || [],
-						}
-					: null,
-				macos: app.macosSupport
-					? {
-							installMethod: app.macosSupport.installMethod,
-							installCommand: app.macosSupport.installCommand,
-							officialSupport: app.macosSupport.officialSupport,
-							alternatives:
-								(app.macosSupport.alternatives as Array<{
-									method: string;
-									command: string;
-								}>) || [],
-						}
-					: null,
-				windows: app.windowsSupport
-					? {
-							installMethod: app.windowsSupport.installMethod,
-							installCommand: app.windowsSupport.installCommand,
-							officialSupport: app.windowsSupport.officialSupport,
-							alternatives:
-								(app.windowsSupport.alternatives as Array<{
-									method: string;
-									command: string;
-								}>) || [],
-						}
-					: null,
-			},
-			tags: app.tags,
-			desktopEnvironments: app.desktopEnvironments,
-			githubPath: app.githubPath,
-		})) as ApplicationResponse[];
-
-		const configsFormatted = result.configs.map((config) => ({
-			name: config.name,
-			description: config.description,
-			category: config.category,
-			type: config.type,
-			platforms: config.platforms,
-			content: config.content,
-			schema: config.schema,
-			githubPath: config.githubPath,
-			downloadCount: config.downloadCount,
-			lastDownload: config.lastDownload?.toISOString(),
-		})) as ConfigResponse[];
-
-		const stacksFormatted = result.stacks.map((stack) => ({
-			name: stack.name,
-			description: stack.description,
-			category: stack.category,
-			applications: stack.applications,
-			configs: stack.configs,
-			plugins: stack.plugins,
-			platforms: stack.platforms,
-			desktopEnvironments: stack.desktopEnvironments,
-			prerequisites: stack.prerequisites,
-			githubPath: stack.githubPath,
-			downloadCount: stack.downloadCount,
-			lastDownload: stack.lastDownload?.toISOString(),
-		})) as StackResponse[];
-
-		const response: PaginatedResponse = {
-			base_url: REGISTRY_CONFIG.BASE_URL,
-			version: REGISTRY_CONFIG.REGISTRY_VERSION,
-			last_updated: new Date().toISOString(),
-			source: REGISTRY_CONFIG.REGISTRY_SOURCE,
-			github_url: REGISTRY_CONFIG.GITHUB_URL,
-
-			// Paginated data
-			data: {
-				plugins: pluginsFormatted,
-				applications: applicationsFormatted,
-				configs: configsFormatted,
-				stacks: stacksFormatted,
-			},
-
-			// Pagination metadata
-			pagination: {
-				page,
-				limit,
-				totalPages: Math.ceil(
-					Math.max(
-						result.totalCounts.plugins,
-						result.totalCounts.applications,
-						result.totalCounts.configs,
-						result.totalCounts.stacks,
-					) / limit,
-				),
-				totalItems: {
-					plugins: result.totalCounts.plugins,
-					applications: result.totalCounts.applications,
-					configs: result.totalCounts.configs,
-					stacks: result.totalCounts.stacks,
-				},
-			},
-
-			// Statistics
-			stats: {
-				total: {
-					applications: result.totalCounts.applications,
-					plugins: result.totalCounts.plugins,
-					configs: result.totalCounts.configs,
-					stacks: result.totalCounts.stacks,
-					all:
-						result.totalCounts.applications +
-						result.totalCounts.plugins +
-						result.totalCounts.configs +
-						result.totalCounts.stacks,
-				},
-				platforms: {
-					linux: result.stats?.linuxSupported || 0,
-					macos: result.stats?.macosSupported || 0,
-					windows: result.stats?.windowsSupported || 0,
-				},
-				activity: {
-					totalDownloads: result.stats?.totalDownloads || 0,
-					dailyDownloads: result.stats?.dailyDownloads || 0,
-				},
-				lastUpdated:
-					result.stats?.date?.toISOString() || new Date().toISOString(),
-			},
-		};
+		// Use optimized transformation service with caching
+		const response = await transformationService.transformRegistryResponse({
+			...result,
+			page,
+			limit,
+		});
 
 		return NextResponse.json(response, {
 			headers: {
@@ -200,6 +44,7 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 				"X-Pagination-Page": page.toString(),
 				"X-Pagination-Limit": limit.toString(),
 				"X-Pagination-Total-Pages": response.pagination.totalPages.toString(),
+				"X-Transformation-Cache": "enabled",
 			},
 		});
 	} catch (error) {

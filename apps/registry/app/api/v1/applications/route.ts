@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { transformationService } from "@/lib/transformation-service";
 import type { Application, PlatformInfo, Prisma } from "@prisma/client";
 import {
 	validateCategory,
@@ -77,46 +78,10 @@ export async function GET(request: Request) {
 			prisma.application.count({ where }),
 		]);
 
-		// Transform to expected format using proper typing
-		const applicationsFormatted = applications.map((app: ApplicationWithSupports) => ({
-			name: app.name,
-			description: app.description,
-			category: app.category,
-			type: "application",
-			official: app.official,
-			default: app.default,
-			platforms: {
-				linux: app.linuxSupport
-					? {
-							installMethod: app.linuxSupport.installMethod,
-							installCommand: app.linuxSupport.installCommand,
-							officialSupport: app.linuxSupport.officialSupport,
-							alternatives: app.linuxSupport.alternatives as any[],
-						}
-					: null,
-				macos: app.macosSupport
-					? {
-							installMethod: app.macosSupport.installMethod,
-							installCommand: app.macosSupport.installCommand,
-							officialSupport: app.macosSupport.officialSupport,
-							alternatives: app.macosSupport.alternatives as any[],
-						}
-					: null,
-				windows: app.windowsSupport
-					? {
-							installMethod: app.windowsSupport.installMethod,
-							installCommand: app.windowsSupport.installCommand,
-							officialSupport: app.windowsSupport.officialSupport,
-							alternatives: app.windowsSupport.alternatives as any[],
-						}
-					: null,
-			},
-			tags: app.tags,
-			desktopEnvironments: app.desktopEnvironments,
-			githubPath: app.githubPath,
-			createdAt: app.createdAt.toISOString(),
-			updatedAt: app.updatedAt.toISOString(),
-		}));
+		// Use optimized transformation service with caching
+		const applicationsFormatted = await transformationService.transformApplications(
+			applications as ApplicationWithSupports[]
+		);
 
 		const response = {
 			applications: applicationsFormatted,
@@ -140,6 +105,7 @@ export async function GET(request: Request) {
 				"Cache-Control": "public, max-age=300, s-maxage=600",
 				"X-Total-Count": total.toString(),
 				"X-Registry-Source": "database",
+				"X-Transformation-Cache": "enabled",
 			},
 		});
 	} catch (error) {
