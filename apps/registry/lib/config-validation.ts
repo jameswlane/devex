@@ -88,7 +88,10 @@ export function validateConfiguration(): ValidatedConfig {
         .map(issue => issue.path.join("."));
       
       if (missingRequired.length > 0) {
-        console.error(`Missing required environment variables: ${missingRequired.join(", ")}`);
+        // Use logger instead of console.error to ensure sensitive data redaction
+        logger.error("Missing required environment variables", {
+          missingVariables: missingRequired,
+        });
       }
       
       throw new Error(`Configuration validation failed: ${error.message}`);
