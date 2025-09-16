@@ -3,6 +3,7 @@ import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
+import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
 import { Prisma } from "@prisma/client";
 
 // GET /api/v1/plugins/[id] - Get a specific plugin
@@ -27,7 +28,16 @@ async function handleGetPlugin(
 		return createApiError("Plugin not found", 404);
 	}
 
-	return NextResponse.json(plugin);
+	return createOptimizedResponse(plugin, {
+		type: ResponseType.STATIC,
+		headers: {
+			"X-Resource-Type": "plugin",
+			"X-Resource-ID": id,
+		},
+		performance: {
+			source: "database",
+		},
+	});
 }
 
 // PUT /api/v1/plugins/[id] - Update a plugin
@@ -73,7 +83,17 @@ async function handleUpdatePlugin(
 		return createApiError("Plugin not found", 404);
 	}
 
-	return NextResponse.json(plugin);
+	return createOptimizedResponse(plugin, {
+		type: ResponseType.REALTIME,
+		headers: {
+			"X-Resource-Type": "plugin",
+			"X-Resource-ID": id,
+			"X-Operation": "update",
+		},
+		performance: {
+			source: "database",
+		},
+	});
 }
 
 // DELETE /api/v1/plugins/[id] - Delete a plugin
@@ -100,7 +120,17 @@ async function handleDeletePlugin(
 		}
 	);
 
-	return NextResponse.json({ success: true, message: "Plugin deleted successfully" });
+	return createOptimizedResponse(
+		{ success: true, message: "Plugin deleted successfully" },
+		{
+			type: ResponseType.REALTIME,
+			headers: {
+				"X-Resource-Type": "plugin",
+				"X-Resource-ID": id,
+				"X-Operation": "delete",
+			},
+		}
+	);
 }
 
 // Export wrapped handlers with error handling

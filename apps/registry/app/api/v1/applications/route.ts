@@ -3,6 +3,7 @@ import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
+import { createPaginatedResponse, ResponseType, createOptimizedResponse } from "@/lib/response-optimization";
 import type { Application } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import {
@@ -110,35 +111,35 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 		});
 
 		// Use optimized transformation service with caching
+		const transformStart = performance.now();
 		const applicationsFormatted = await transformationService.transformApplications(
 			applicationsWithSupport
 		);
+		const transformTime = performance.now() - transformStart;
 
-		const response = {
-			applications: applicationsFormatted,
-			pagination: {
+		// Use optimized paginated response for applications
+		return createPaginatedResponse(
+			applicationsFormatted,
+			{
 				total,
-				count: applications.length,
+				page,
 				limit,
-				offset,
-				hasNext: offset + limit < total,
-				hasPrevious: offset > 0,
 			},
-			meta: {
-				source: "database",
-				version: "2.0.0",
-				timestamp: new Date().toISOString(),
-			},
-		};
-
-	return NextResponse.json(response, {
-		headers: {
-			"Cache-Control": "public, max-age=300, s-maxage=600",
-			"X-Total-Count": total.toString(),
-			"X-Registry-Source": "database",
-			"X-Transformation-Cache": "enabled",
-		},
-	});
+			{
+				// Additional metadata for applications endpoint
+				filters: {
+					...(category && { category }),
+					...(platform && { platform }),
+					...(search && { search }),
+				},
+				meta: {
+					source: "database",
+					transformationCache: "enabled",
+					queryOptimization: "composite-indexes",
+					platformFiltering: platform ? "json-path-optimized" : "none",
+				},
+			}
+		);
 }
 
 // POST /api/v1/applications - Create a new application
@@ -181,7 +182,16 @@ async function handleCreateApplication(request: NextRequest): Promise<NextRespon
 		}
 	);
 
-	return NextResponse.json(application, { status: 201 });
+	return createOptimizedResponse(
+		{ application, success: true },
+		{
+			type: ResponseType.REALTIME,
+			headers: {
+				"Location": `/api/v1/applications/${application.id}`,
+				"X-Created-Resource": "application",
+			},
+		}
+	);
 }
 
 // Export wrapped handlers with standardized error handling

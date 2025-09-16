@@ -3,6 +3,7 @@ import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
 import { invalidateOnDataChange, withCacheInvalidation } from "@/lib/cache-invalidation";
+import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
 import { Prisma } from "@prisma/client";
 
 // GET /api/v1/applications/[id] - Get a specific application

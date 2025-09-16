@@ -3,6 +3,7 @@ import { logger, logPerformance } from "../../../../lib/logger";
 import { withQueryCache, CacheCategory } from "../../../../lib/query-cache";
 import { ensurePrisma } from "../../../../lib/prisma-client";
 import { withErrorHandling, safeDatabase } from "../../../../lib/error-handler";
+import { createOptimizedResponse, ResponseType } from "../../../../lib/response-optimization";
 import { Prisma } from "@prisma/client";
 
 async function handleGetStats(request: NextRequest): Promise<NextResponse> {
@@ -173,11 +174,16 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 		}
 	);
 
-	return NextResponse.json(stats, {
+	return createOptimizedResponse(stats, {
+		type: ResponseType.DYNAMIC,
 		headers: {
-			"Cache-Control": "public, max-age=300, s-maxage=600",
 			"X-Registry-Source": "database",
 			"X-Total-Items": stats.totals.all.toString(),
+			"X-Stats-Cached": forceRefresh ? "false" : "true",
+		},
+		performance: {
+			source: "cached-aggregation",
+			cacheHit: !forceRefresh,
 		},
 	});
 }

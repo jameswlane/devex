@@ -3,6 +3,7 @@ import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
+import { createPaginatedResponse, ResponseType, createOptimizedResponse } from "@/lib/response-optimization";
 import type { Plugin, Prisma } from "@prisma/client";
 import {
 	validatePaginationParams,
@@ -52,6 +53,7 @@ async function handleGetPlugins(request: Request) {
 		]);
 
 		// Use optimized transformation service with caching
+		const transformStart = performance.now();
 		const pluginsFormatted = await transformationService.transformPlugins(
 			plugins.map(plugin => ({
 				...plugin,
@@ -60,32 +62,29 @@ async function handleGetPlugins(request: Request) {
 				supports: plugin.supports as Record<string, boolean>,
 			}))
 		);
+		const transformTime = performance.now() - transformStart;
 
-		const response = {
-			plugins: pluginsFormatted,
-			pagination: {
+		// Use optimized paginated response
+		return createPaginatedResponse(
+			pluginsFormatted,
+			{
 				total,
-				count: plugins.length,
+				page,
 				limit,
-				offset,
-				hasNext: offset + limit < total,
-				hasPrevious: offset > 0,
 			},
-			meta: {
-				source: "database",
-				version: "2.0.0",
-				timestamp: new Date().toISOString(),
-			},
-		};
-
-		return NextResponse.json(response, {
-			headers: {
-				"Cache-Control": "public, max-age=300, s-maxage=600",
-				"X-Total-Count": total.toString(),
-				"X-Registry-Source": "database",
-				"X-Transformation-Cache": "enabled",
-			},
-		});
+			{
+				// Additional metadata for plugins endpoint
+				filters: {
+					...(type && { type }),
+					...(search && { search }),
+				},
+				meta: {
+					source: "database",
+					transformationCache: "enabled",
+					queryOptimization: "composite-indexes",
+				},
+			}
+		);
 	} catch (error) {
 		logDatabaseError(error, "plugins_fetch");
 		return createApiError("Failed to fetch plugins", 500);
@@ -120,7 +119,16 @@ async function handleCreatePlugin(request: Request) {
 	// Invalidate caches after successful creation
 	await invalidateOnDataChange("create", "plugin", plugin.id);
 
-	return NextResponse.json(plugin, { status: 201 });
+	return createOptimizedResponse(
+		{ plugin, success: true },
+		{
+			type: ResponseType.REALTIME,
+			headers: {
+				"Location": `/api/v1/plugins/${plugin.id}`,
+				"X-Created-Resource": "plugin",
+			},
+		}
+	);
 }
 
 // Export handlers
