@@ -19,15 +19,8 @@ model Application {
   default     Boolean  @default(false)
   tags        String[]
 
-  // Platform support
-  linuxSupport   PlatformInfo? @relation("LinuxSupport", fields: [linuxSupportId], references: [id])
-  linuxSupportId String?
-
-  macosSupport   PlatformInfo? @relation("MacOSSupport", fields: [macosSupportId], references: [id])
-  macosSupportId String?
-
-  windowsSupport   PlatformInfo? @relation("WindowsSupport", fields: [windowsSupportId], references: [id])
-  windowsSupportId String?
+  // Optimized platform support - embedded JSON for better performance
+  platforms Json @default("{}")
 
   // Desktop Environment support
   desktopEnvironments String[]
@@ -45,6 +38,8 @@ model Application {
   @@index([official])
   @@index([default])
   @@index([name])
+  // Optimized GIN indexes for JSON platform queries
+  @@index([platforms], type: Gin)
   @@map("applications")
 }
 
@@ -151,22 +146,6 @@ model Stack {
   @@map("stacks")
 }
 
-model PlatformInfo {
-  id              String @id @default(cuid())
-  installMethod   String @db.VarChar(50)
-  installCommand  String @db.Text
-  officialSupport Boolean @default(false)
-
-  // Alternative installation methods
-  alternatives Json @default("[]")
-
-  // Relationships
-  linuxApplications   Application[] @relation("LinuxSupport")
-  macosApplications   Application[] @relation("MacOSSupport")
-  windowsApplications Application[] @relation("WindowsSupport")
-
-  @@map("platform_info")
-}
 
 model RegistryStats {
   id        String   @id @default(cuid())

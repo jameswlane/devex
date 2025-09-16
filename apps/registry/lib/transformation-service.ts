@@ -67,6 +67,22 @@ type ApplicationWithSupport = {
 	tags: string[];
 	desktopEnvironments: string[];
 	githubPath: string | null;
+	// Optimized JSON platform support structure
+	platforms: {
+		linux?: PlatformSupportInfo | null;
+		macos?: PlatformSupportInfo | null;
+		windows?: PlatformSupportInfo | null;
+	};
+} | {
+	// Legacy support format for backward compatibility
+	name: string;
+	description: string;
+	category: string;
+	official: boolean;
+	default: boolean;
+	tags: string[];
+	desktopEnvironments: string[];
+	githubPath: string | null;
 	linuxSupport: PlatformSupportInfo | null;
 	macosSupport: PlatformSupportInfo | null;
 	windowsSupport: PlatformSupportInfo | null;
@@ -394,52 +410,54 @@ export class RegistryTransformationService {
 		for (let i = 0; i < applications.length; i += TRANSFORMATION_CACHE.BATCH_SIZE) {
 			const batch = applications.slice(i, i + TRANSFORMATION_CACHE.BATCH_SIZE);
 
-			const batchTransformed = batch.map((app) => ({
-				name: app.name,
-				description: app.description,
-				category: app.category,
-				type: "application" as const,
-				official: app.official,
-				default: app.default,
-				platforms: {
-					linux: app.linuxSupport
-						? {
-								installMethod: app.linuxSupport.installMethod,
-								installCommand: app.linuxSupport.installCommand,
-								officialSupport: app.linuxSupport.officialSupport,
-								alternatives: (app.linuxSupport.alternatives as Array<{
-									method: string;
-									command: string;
-								}>) || [],
-							}
-						: null,
-					macos: app.macosSupport
-						? {
-								installMethod: app.macosSupport.installMethod,
-								installCommand: app.macosSupport.installCommand,
-								officialSupport: app.macosSupport.officialSupport,
-								alternatives: (app.macosSupport.alternatives as Array<{
-									method: string;
-									command: string;
-								}>) || [],
-							}
-						: null,
-					windows: app.windowsSupport
-						? {
-								installMethod: app.windowsSupport.installMethod,
-								installCommand: app.windowsSupport.installCommand,
-								officialSupport: app.windowsSupport.officialSupport,
-								alternatives: (app.windowsSupport.alternatives as Array<{
-									method: string;
-									command: string;
-								}>) || [],
-							}
-						: null,
-				},
-				tags: app.tags,
-				desktopEnvironments: app.desktopEnvironments,
-				githubPath: app.githubPath,
-			}));
+			const batchTransformed = batch.map((app) => {
+				// Handle both new JSON format and legacy format
+				const getPlatformSupport = (platformName: 'linux' | 'macos' | 'windows') => {
+					// New JSON format
+					if ('platforms' in app && app.platforms) {
+						const platform = app.platforms[platformName];
+						return platform ? {
+							installMethod: platform.installMethod,
+							installCommand: platform.installCommand,
+							officialSupport: platform.officialSupport,
+							alternatives: (platform.alternatives as Array<{
+								method: string;
+								command: string;
+							}>) || [],
+						} : null;
+					}
+					
+					// Legacy format
+					const legacyApp = app as any;
+					const legacyPlatform = legacyApp[`${platformName}Support`];
+					return legacyPlatform ? {
+						installMethod: legacyPlatform.installMethod,
+						installCommand: legacyPlatform.installCommand,
+						officialSupport: legacyPlatform.officialSupport,
+						alternatives: (legacyPlatform.alternatives as Array<{
+							method: string;
+							command: string;
+						}>) || [],
+					} : null;
+				};
+
+				return {
+					name: app.name,
+					description: app.description,
+					category: app.category,
+					type: "application" as const,
+					official: app.official,
+					default: app.default,
+					platforms: {
+						linux: getPlatformSupport('linux'),
+						macos: getPlatformSupport('macos'),
+						windows: getPlatformSupport('windows'),
+					},
+					tags: app.tags,
+					desktopEnvironments: app.desktopEnvironments,
+					githubPath: app.githubPath,
+				};
+			});
 
 			transformed.push(...batchTransformed);
 		}

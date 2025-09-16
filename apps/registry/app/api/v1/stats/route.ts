@@ -3,6 +3,7 @@ import { logger, logPerformance } from "../../../../lib/logger";
 import { withQueryCache, CacheCategory } from "../../../../lib/query-cache";
 import { ensurePrisma } from "../../../../lib/prisma-client";
 import { withErrorHandling, safeDatabase } from "../../../../lib/error-handler";
+import { Prisma } from "@prisma/client";
 
 async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 		const url = new URL(request.url);
@@ -34,13 +35,28 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 					prismaClient.config.count(),
 					prismaClient.stack.count(),
 					prismaClient.application.count({
-						where: { linuxSupportId: { not: null } },
+						where: { 
+							platforms: {
+								path: ['linux'],
+								not: Prisma.JsonNull
+							}
+						},
 					}),
 					prismaClient.application.count({
-						where: { macosSupportId: { not: null } },
+						where: { 
+							platforms: {
+								path: ['macos'],
+								not: Prisma.JsonNull
+							}
+						},
 					}),
 					prismaClient.application.count({
-						where: { windowsSupportId: { not: null } },
+						where: { 
+							platforms: {
+								path: ['windows'],
+								not: Prisma.JsonNull
+							}
+						},
 					}),
 					// Sum up download counts
 					Promise.all([

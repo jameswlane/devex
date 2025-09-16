@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, Prisma } from "@prisma/client";
 import fs from "fs";
 import path from "path";
 
@@ -104,17 +104,15 @@ async function getGitHubPath(
 	}
 }
 
-async function createPlatformInfo(platformData: any) {
+function createPlatformInfo(platformData: any) {
 	if (!platformData) return null;
 
-	return await prisma.platformInfo.create({
-		data: {
-			installMethod: platformData.installMethod,
-			installCommand: platformData.installCommand,
-			officialSupport: platformData.officialSupport || false,
-			alternatives: platformData.alternatives || [],
-		},
-	});
+	return {
+		installMethod: platformData.installMethod,
+		installCommand: platformData.installCommand,
+		officialSupport: platformData.officialSupport || false,
+		alternatives: platformData.alternatives || [],
+	};
 }
 
 async function seedApplications() {
@@ -163,16 +161,18 @@ async function seedApplications() {
 		for (const app of applications) {
 			console.log(`  Seeding application: ${app.name}`);
 
-			// Create platform info for each platform
-			const linuxSupport = app.platforms.linux
-				? await createPlatformInfo(app.platforms.linux)
-				: null;
-			const macosSupport = app.platforms.macos
-				? await createPlatformInfo(app.platforms.macos)
-				: null;
-			const windowsSupport = app.platforms.windows
-				? await createPlatformInfo(app.platforms.windows)
-				: null;
+			// Create optimized JSON platform structure
+			const platforms = {
+				linux: app.platforms.linux
+					? createPlatformInfo(app.platforms.linux)
+					: null,
+				macos: app.platforms.macos
+					? createPlatformInfo(app.platforms.macos)
+					: null,
+				windows: app.platforms.windows
+					? createPlatformInfo(app.platforms.windows)
+					: null,
+			};
 
 			const githubPath = await getGitHubPath("application", app.name);
 
@@ -185,6 +185,7 @@ async function seedApplications() {
 					default: app.default,
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments || [],
+					platforms: platforms,
 					githubUrl: GITHUB_BASE_URL,
 					githubPath: githubPath,
 					lastSynced: new Date(),
@@ -197,9 +198,7 @@ async function seedApplications() {
 					default: app.default,
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments || [],
-					linuxSupportId: linuxSupport?.id,
-					macosSupportId: macosSupport?.id,
-					windowsSupportId: windowsSupport?.id,
+					platforms: platforms,
 					githubUrl: GITHUB_BASE_URL,
 					githubPath: githubPath,
 					lastSynced: new Date(),
@@ -458,22 +457,43 @@ async function updateRegistryStats() {
 				prisma.stack.count(),
 			]);
 
-		// Count platform support
+		// Count platform support using optimized JSON queries
 		const [linuxApps, macosApps, windowsApps] = await Promise.all([
 			prisma.application.count({
 				where: {
-					OR: [{ linuxSupportId: { not: null } }, { tags: { has: "linux" } }],
-				},
-			}),
-			prisma.application.count({
-				where: {
-					OR: [{ macosSupportId: { not: null } }, { tags: { has: "macos" } }],
+					OR: [
+						{
+							platforms: {
+								path: ['linux'],
+								not: Prisma.JsonNull
+							}
+						}, 
+						{ tags: { has: "linux" } }
+					],
 				},
 			}),
 			prisma.application.count({
 				where: {
 					OR: [
-						{ windowsSupportId: { not: null } },
+						{
+							platforms: {
+								path: ['macos'],
+								not: Prisma.JsonNull
+							}
+						}, 
+						{ tags: { has: "macos" } }
+					],
+				},
+			}),
+			prisma.application.count({
+				where: {
+					OR: [
+						{
+							platforms: {
+								path: ['windows'],
+								not: Prisma.JsonNull
+							}
+						},
 						{ tags: { has: "windows" } },
 					],
 				},

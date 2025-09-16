@@ -108,30 +108,8 @@ export class RegistryService {
                     tags: true,
                     desktopEnvironments: true,
                     githubPath: true,
-                    linuxSupport: {
-                      select: {
-                        installMethod: true,
-                        installCommand: true,
-                        officialSupport: true,
-                        alternatives: true,
-                      },
-                    },
-                    macosSupport: {
-                      select: {
-                        installMethod: true,
-                        installCommand: true,
-                        officialSupport: true,
-                        alternatives: true,
-                      },
-                    },
-                    windowsSupport: {
-                      select: {
-                        installMethod: true,
-                        installCommand: true,
-                        officialSupport: true,
-                        alternatives: true,
-                      },
-                    },
+                    // Use optimized JSON platform support
+                    platforms: true,
                   },
                   ...this.getCacheStrategy("registry"),
                 })

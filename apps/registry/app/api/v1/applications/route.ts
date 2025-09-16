@@ -3,7 +3,8 @@ import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
-import type { Application, PlatformInfo, Prisma } from "@prisma/client";
+import type { Application } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import {
 	validateCategory,
 	validatePaginationParams,
@@ -11,13 +12,7 @@ import {
 	validateSearchQuery,
 } from "@/lib/validation";
 
-type ApplicationWithPlatformInfo = Prisma.ApplicationGetPayload<{
-	include: {
-		linuxSupport: true;
-		macosSupport: true;
-		windowsSupport: true;
-	};
-}>;
+type ApplicationWithPlatforms = Application;
 
 async function handleGetApplications(request: NextRequest): Promise<NextResponse> {
 		const { searchParams } = new URL(request.url);
@@ -44,17 +39,11 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 
 		if (platform) {
 			// Using validated platform - safe from injection
-			switch (platform) {
-				case "linux":
-					where.linuxSupportId = { not: null };
-					break;
-				case "macos":
-					where.macosSupportId = { not: null };
-					break;
-				case "windows":
-					where.windowsSupportId = { not: null };
-					break;
-			}
+			// Query the JSON platforms field using Prisma's JSON operators
+			where.platforms = {
+				path: [platform],
+				not: Prisma.JsonNull
+			};
 		}
 
 		if (search) {
@@ -65,16 +54,11 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 			];
 		}
 
-	// Fetch applications with pagination using proper Prisma types and database retry logic
+	// Fetch applications with pagination using optimized JSON-based platform support
 	const [applications, total] = await safeDatabase(
 		() => Promise.all([
 			prisma.application.findMany({
 				where,
-				include: {
-					linuxSupport: true,
-					macosSupport: true,
-					windowsSupport: true,
-				},
 				orderBy: [{ default: "desc" }, { official: "desc" }, { name: "asc" }],
 				take: limit,
 				skip: offset,
@@ -86,37 +70,44 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 			resource: "applications",
 			metadata: { page, limit, category, search, platform }
 		}
-	) as [ApplicationWithPlatformInfo[], number];
+	) as [ApplicationWithPlatforms[], number];
 
-		// Transform applications to the format expected by the transformation service
-		const applicationsWithSupport = applications.map(app => ({
-			name: app.name,
-			description: app.description,
-			category: app.category,
-			official: app.official,
-			default: app.default,
-			tags: app.tags,
-			desktopEnvironments: app.desktopEnvironments,
-			githubPath: app.githubPath,
-			linuxSupport: app.linuxSupport ? {
-				installMethod: app.linuxSupport.installMethod,
-				installCommand: app.linuxSupport.installCommand,
-				officialSupport: app.linuxSupport.officialSupport,
-				alternatives: Array.isArray(app.linuxSupport.alternatives) ? app.linuxSupport.alternatives as Array<{method: string; command: string; priority: number}> : []
-			} : null,
-			macosSupport: app.macosSupport ? {
-				installMethod: app.macosSupport.installMethod,
-				installCommand: app.macosSupport.installCommand,
-				officialSupport: app.macosSupport.officialSupport,
-				alternatives: Array.isArray(app.macosSupport.alternatives) ? app.macosSupport.alternatives as Array<{method: string; command: string; priority: number}> : []
-			} : null,
-			windowsSupport: app.windowsSupport ? {
-				installMethod: app.windowsSupport.installMethod,
-				installCommand: app.windowsSupport.installCommand,
-				officialSupport: app.windowsSupport.officialSupport,
-				alternatives: Array.isArray(app.windowsSupport.alternatives) ? app.windowsSupport.alternatives as Array<{method: string; command: string; priority: number}> : []
-			} : null,
-		}));
+		// Transform applications with optimized JSON platform support
+		const applicationsWithSupport = applications.map(app => {
+			const platforms = app.platforms as any; // JSON field from database
+			
+			return {
+				name: app.name,
+				description: app.description,
+				category: app.category,
+				official: app.official,
+				default: app.default,
+				tags: app.tags,
+				desktopEnvironments: app.desktopEnvironments,
+				githubPath: app.githubPath,
+				// Use new JSON platform structure
+				platforms: {
+					linux: platforms?.linux ? {
+						installMethod: platforms.linux.installMethod,
+						installCommand: platforms.linux.installCommand,
+						officialSupport: platforms.linux.officialSupport,
+						alternatives: Array.isArray(platforms.linux.alternatives) ? platforms.linux.alternatives : []
+					} : null,
+					macos: platforms?.macos ? {
+						installMethod: platforms.macos.installMethod,
+						installCommand: platforms.macos.installCommand,
+						officialSupport: platforms.macos.officialSupport,
+						alternatives: Array.isArray(platforms.macos.alternatives) ? platforms.macos.alternatives : []
+					} : null,
+					windows: platforms?.windows ? {
+						installMethod: platforms.windows.installMethod,
+						installCommand: platforms.windows.installCommand,
+						officialSupport: platforms.windows.officialSupport,
+						alternatives: Array.isArray(platforms.windows.alternatives) ? platforms.windows.alternatives : []
+					} : null,
+				}
+			};
+		});
 
 		// Use optimized transformation service with caching
 		const applicationsFormatted = await transformationService.transformApplications(
