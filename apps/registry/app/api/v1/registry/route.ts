@@ -9,6 +9,25 @@ import type {
 	PaginatedResponse,
 } from "@/lib/types/registry";
 
+type RegistryServiceResult = {
+	plugins: any[];
+	applications: any[];
+	configs: any[];
+	stacks: any[];
+	stats: any;
+	totalCounts: {
+		plugins: number;
+		applications: number;
+		configs: number;
+		stacks: number;
+	};
+};
+
+type TransformationInput = RegistryServiceResult & {
+	page: number;
+	limit: number;
+};
+
 // Apply rate limiting to the GET handler
 export const GET = withRateLimit(async function handler(request: NextRequest) {
 	try {
@@ -32,7 +51,7 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 			...result,
 			page,
 			limit,
-		} as any);
+		} as TransformationInput);
 
 		return NextResponse.json(response, {
 			headers: {

@@ -11,11 +11,13 @@ import {
 	validateSearchQuery,
 } from "@/lib/validation";
 
-type ApplicationWithSupports = Application & {
-	linuxSupport: PlatformInfo | null;
-	macosSupport: PlatformInfo | null;
-	windowsSupport: PlatformInfo | null;
-};
+type ApplicationWithPlatformInfo = Prisma.ApplicationGetPayload<{
+	include: {
+		linuxSupport: true;
+		macosSupport: true;
+		windowsSupport: true;
+	};
+}>;
 
 async function handleGetApplications(request: NextRequest): Promise<NextResponse> {
 		const { searchParams } = new URL(request.url);
@@ -84,11 +86,41 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 			resource: "applications",
 			metadata: { page, limit, category, search, platform }
 		}
-	);
+	) as [ApplicationWithPlatformInfo[], number];
+
+		// Transform applications to the format expected by the transformation service
+		const applicationsWithSupport = applications.map(app => ({
+			name: app.name,
+			description: app.description,
+			category: app.category,
+			official: app.official,
+			default: app.default,
+			tags: app.tags,
+			desktopEnvironments: app.desktopEnvironments,
+			githubPath: app.githubPath,
+			linuxSupport: app.linuxSupport ? {
+				installMethod: app.linuxSupport.installMethod,
+				installCommand: app.linuxSupport.installCommand,
+				officialSupport: app.linuxSupport.officialSupport,
+				alternatives: Array.isArray(app.linuxSupport.alternatives) ? app.linuxSupport.alternatives as Array<{method: string; command: string; priority: number}> : []
+			} : null,
+			macosSupport: app.macosSupport ? {
+				installMethod: app.macosSupport.installMethod,
+				installCommand: app.macosSupport.installCommand,
+				officialSupport: app.macosSupport.officialSupport,
+				alternatives: Array.isArray(app.macosSupport.alternatives) ? app.macosSupport.alternatives as Array<{method: string; command: string; priority: number}> : []
+			} : null,
+			windowsSupport: app.windowsSupport ? {
+				installMethod: app.windowsSupport.installMethod,
+				installCommand: app.windowsSupport.installCommand,
+				officialSupport: app.windowsSupport.officialSupport,
+				alternatives: Array.isArray(app.windowsSupport.alternatives) ? app.windowsSupport.alternatives as Array<{method: string; command: string; priority: number}> : []
+			} : null,
+		}));
 
 		// Use optimized transformation service with caching
 		const applicationsFormatted = await transformationService.transformApplications(
-			applications as any[]
+			applicationsWithSupport
 		);
 
 		const response = {

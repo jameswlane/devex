@@ -10,6 +10,7 @@ import {
 	validateSearchQuery,
 } from "@/lib/validation";
 
+
 export async function GET(request: Request) {
 	try {
 		const { searchParams } = new URL(request.url);
@@ -56,7 +57,8 @@ export async function GET(request: Request) {
 				...plugin,
 				downloadCount: plugin.downloadCount || 0,
 				lastDownload: plugin.lastDownload,
-			})) as any[]
+				supports: plugin.supports as Record<string, boolean>,
+			}))
 		);
 
 		const response = {
