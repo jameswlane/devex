@@ -84,25 +84,37 @@ async function getRegistryStats(): Promise<RegistryStats> {
 			},
 			categories: {
 				applications: appCategories.reduce(
-					(acc, cat) => {
-						acc[cat.category] = cat._count.category;
+					(acc: Record<string, number>, cat: any) => {
+						const category = cat.category;
+						const count = cat._count.category;
+						if (category && typeof category === 'string') {
+							acc[category] = count;
+						}
 						return acc;
 					},
-					{} as Record<string, number>,
+					{},
 				),
 				plugins: pluginTypes.reduce(
-					(acc, type) => {
-						acc[type.type] = type._count.type;
+					(acc: Record<string, number>, type: any) => {
+						const pluginType = type.type;
+						const count = type._count.type;
+						if (pluginType && typeof pluginType === 'string') {
+							acc[pluginType] = count;
+						}
 						return acc;
 					},
-					{} as Record<string, number>,
+					{},
 				),
 				configs: configCategories.reduce(
-					(acc, cat) => {
-						acc[cat.category] = cat._count.category;
+					(acc: Record<string, number>, cat: any) => {
+						const category = cat.category;
+						const count = cat._count.category;
+						if (category && typeof category === 'string') {
+							acc[category] = count;
+						}
 						return acc;
 					},
-					{} as Record<string, number>,
+					{},
 				),
 			},
 			lastUpdated: recentStats?.date?.toISOString() || new Date().toISOString(),
