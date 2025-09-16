@@ -21,6 +21,11 @@ model Application {
 
   // Optimized platform support - embedded JSON for better performance
   platforms Json @default("{}")
+  
+  // Computed platform support columns for efficient querying
+  supportsLinux   Boolean @default(false)
+  supportsMacOS   Boolean @default(false) 
+  supportsWindows Boolean @default(false)
 
   // Desktop Environment support
   desktopEnvironments String[]
@@ -40,12 +45,20 @@ model Application {
   @@index([default])
   @@index([name])
   
-  // Optimized GIN indexes for JSON platform queries
+  // Optimized platform support indexes for efficient filtering
+  @@index([supportsLinux])
+  @@index([supportsMacOS])  
+  @@index([supportsWindows])
+  
+  // Optimized GIN indexes for JSON platform queries (fallback)
   @@index([platforms], type: Gin)
   
   // Composite indexes for query optimization
   @@index([official(sort: Desc), default(sort: Desc), name(sort: Asc)], name: "idx_applications_official_default_name")
   @@index([category, official(sort: Desc)], name: "idx_applications_category_official")
+  @@index([category, supportsLinux], name: "idx_applications_category_linux")
+  @@index([category, supportsMacOS], name: "idx_applications_category_macos")
+  @@index([category, supportsWindows], name: "idx_applications_category_windows")
   
   @@map("applications")
 }

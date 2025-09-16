@@ -35,29 +35,15 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 					prismaClient.plugin.count(),
 					prismaClient.config.count(),
 					prismaClient.stack.count(),
+					// Optimized platform counts using boolean columns for high performance
 					prismaClient.application.count({
-						where: { 
-							platforms: {
-								path: ['linux'],
-								not: Prisma.JsonNull
-							}
-						},
+						where: { supportsLinux: true },
 					}),
 					prismaClient.application.count({
-						where: { 
-							platforms: {
-								path: ['macos'],
-								not: Prisma.JsonNull
-							}
-						},
+						where: { supportsMacOS: true },
 					}),
 					prismaClient.application.count({
-						where: { 
-							platforms: {
-								path: ['windows'],
-								not: Prisma.JsonNull
-							}
-						},
+						where: { supportsWindows: true },
 					}),
 					// Sum up download counts
 					Promise.all([

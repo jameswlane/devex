@@ -40,11 +40,24 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 
 		if (platform) {
 			// Using validated platform - safe from injection
-			// Query the JSON platforms field using Prisma's JSON operators
-			where.platforms = {
-				path: [platform],
-				not: Prisma.JsonNull
-			};
+			// Use optimized boolean columns for high-performance platform filtering
+			switch (platform) {
+				case "linux":
+					where.supportsLinux = true;
+					break;
+				case "macos":
+					where.supportsMacOS = true;
+					break;
+				case "windows":
+					where.supportsWindows = true;
+					break;
+				default:
+					// Fallback to JSON path query for non-standard platforms
+					where.platforms = {
+						path: [platform],
+						not: Prisma.JsonNull
+					};
+			}
 		}
 
 		if (search) {
