@@ -11,7 +11,7 @@ import {
 } from "@/lib/validation";
 
 
-export async function GET(request: Request) {
+async function handleGetPlugins(request: Request) {
 	try {
 		const { searchParams } = new URL(request.url);
 		const type = validatePluginType(searchParams.get("type"));
@@ -91,3 +91,38 @@ export async function GET(request: Request) {
 		return createApiError("Failed to fetch plugins", 500);
 	}
 }
+
+// POST /api/v1/plugins - Create a new plugin
+async function handleCreatePlugin(request: Request) {
+	const { invalidateOnDataChange } = await import("@/lib/cache-invalidation");
+	const body = await request.json();
+
+	// Validate required fields
+	if (!body.name || !body.description || !body.type) {
+		return createApiError("Missing required fields: name, description, type", 400);
+	}
+
+	// Create the plugin
+	const plugin = await prisma.plugin.create({
+		data: {
+			name: body.name,
+			description: body.description,
+			type: body.type,
+			priority: body.priority || 50,
+			status: body.status || "active",
+			supports: body.supports || {},
+			platforms: body.platforms || ["linux", "macos", "windows"],
+			githubUrl: body.githubUrl,
+			githubPath: body.githubPath,
+		},
+	});
+
+	// Invalidate caches after successful creation
+	await invalidateOnDataChange("create", "plugin", plugin.id);
+
+	return NextResponse.json(plugin, { status: 201 });
+}
+
+// Export handlers
+export const GET = handleGetPlugins;
+export const POST = handleCreatePlugin;

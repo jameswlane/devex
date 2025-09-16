@@ -355,36 +355,37 @@ export class RegistryService {
     );
   }
 
-  // Invalidate cache when data changes (both Prisma Accelerate and transformation cache)
+  // Invalidate cache when data changes using the new unified strategy
   async invalidateCache(tags: string[], specificItems?: { type: string; names: string[] }[]) {
-    // Accelerate is enabled on Prisma Cloud - handle cache invalidation
     try {
-      // Prisma Accelerate will automatically handle cache invalidation
-      // based on the tags provided in the cache strategies
-      logger.debug("Prisma cache invalidation triggered", { tags });
-
-      // Granular transformation cache invalidation
-      if (specificItems) {
-        // Invalidate specific items for more targeted cache clearing
+      const { invalidateRegistryCache, invalidateOnDataChange } = await import("./cache-invalidation");
+      
+      // Use the new unified cache invalidation strategy
+      if (specificItems && specificItems.length > 0) {
+        // Invalidate specific items
         for (const item of specificItems) {
-          const resourceType = item.type as "plugins" | "applications" | "configs" | "stacks";
-          logger.debug("Invalidating specific resource type", { resourceType, names: item.names });
-
-          // For now, we still invalidate the entire type, but this prepares for
-          // more granular invalidation in the future
-          await transformationService.invalidateTransformationCache([resourceType]);
+          const resourceType = item.type.replace(/s$/, "") as "plugin" | "application" | "config" | "stack";
+          
+          for (const name of item.names) {
+            await invalidateRegistryCache(resourceType, name, {
+              invalidateCDN: false, // Don't invalidate CDN for bulk operations
+              waitForCompletion: false,
+            });
+          }
         }
       } else {
-        // Fallback to type-based invalidation
-        const transformationTypes = tags
-          .filter(tag => ["plugins", "applications", "configs", "stacks"].includes(tag))
-          .map(tag => tag.endsWith("s") ? tag : `${tag}s`) as ("plugins" | "applications" | "configs" | "stacks")[];
-
-        if (transformationTypes.length > 0) {
-          await transformationService.invalidateTransformationCache(transformationTypes);
-          logger.debug("Transformation cache invalidation triggered", { types: transformationTypes });
+        // Invalidate by tags
+        for (const tag of tags) {
+          const resourceType = tag.replace(/s$/, "") as "plugin" | "application" | "config" | "stack" | "stats" | "all";
+          await invalidateRegistryCache(resourceType, undefined, {
+            tags,
+            invalidateCDN: tags.includes("registry") || tags.includes("all"),
+            waitForCompletion: false,
+          });
         }
       }
+      
+      logger.debug("Cache invalidation completed", { tags, specificItems });
     } catch (error) {
       logger.error("Cache invalidation failed", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }
@@ -431,21 +432,13 @@ export class RegistryService {
           break;
       }
 
-      // Invalidate related caches with granular targeting
-      await this.invalidateCache(
-        [
-          "registry",
-          "stats",
-          "popular",
-          resource + "s", // plugins, configs, stacks
-        ],
-        [
-          {
-            type: resource + "s",
-            names: [name]
-          }
-        ]
-      );
+      // Use the new cache invalidation strategy
+      const { invalidateRegistryCache } = await import("./cache-invalidation");
+      await invalidateRegistryCache(resource, name, {
+        tags: ["popular", "stats"],
+        invalidateCDN: false, // Don't invalidate CDN for download count updates
+        waitForCompletion: false,
+      });
     } catch (error) {
       logger.error("Failed to increment download count", { resource, name, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
     }

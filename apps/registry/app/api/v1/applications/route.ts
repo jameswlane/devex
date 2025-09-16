@@ -141,5 +141,49 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 	});
 }
 
-// Export wrapped handler with standardized error handling
+// POST /api/v1/applications - Create a new application
+async function handleCreateApplication(request: NextRequest): Promise<NextResponse> {
+	const { invalidateOnDataChange } = await import("@/lib/cache-invalidation");
+	const body = await request.json();
+
+	// Validate required fields
+	if (!body.name || !body.description || !body.category) {
+		return createApiError("Missing required fields: name, description, category", 400);
+	}
+
+	// Create the application
+	const application = await safeDatabase(
+		async () => {
+			const created = await prisma.application.create({
+				data: {
+					name: body.name,
+					description: body.description,
+					category: body.category,
+					official: body.official || false,
+					default: body.default || false,
+					tags: body.tags || [],
+					desktopEnvironments: body.desktopEnvironments || [],
+					platforms: body.platforms || {},
+					githubUrl: body.githubUrl,
+					githubPath: body.githubPath,
+				},
+			});
+
+			// Invalidate caches after successful creation
+			await invalidateOnDataChange("create", "application", created.id);
+
+			return created;
+		},
+		{
+			operation: "create-application",
+			resource: "application",
+			metadata: { name: body.name }
+		}
+	);
+
+	return NextResponse.json(application, { status: 201 });
+}
+
+// Export wrapped handlers with standardized error handling
 export const GET = withErrorHandling(handleGetApplications, "fetch-applications");
+export const POST = withErrorHandling(handleCreateApplication, "create-application");
