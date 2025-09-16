@@ -47,7 +47,7 @@ async function withRetry<T>(
 			// Don't wait on the last attempt
 			if (attempt < config.maxAttempts) {
 				const delay = Math.min(
-					config.initialDelay * Math.pow(config.backoffFactor, attempt - 1),
+					config.initialDelay * config.backoffFactor ** (attempt - 1),
 					config.maxDelay,
 				);
 

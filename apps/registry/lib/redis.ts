@@ -162,9 +162,9 @@ class UpstashRedisStore implements RedisStore {
     for (const [key, value] of entries) {
       await this.client.set(key, value);
     }
-    
+
     if (ttlSeconds) {
-      const promises = Object.keys(keyValues).map(key => 
+      const promises = Object.keys(keyValues).map(key =>
         this.client.expire(key, ttlSeconds)
       );
       await Promise.all(promises);
@@ -197,7 +197,7 @@ class IORedisStore implements RedisStore {
   }
 
   async incr(key: string): Promise<number> {
-    return await this.client.incr(key);
+    return this.client.incr(key);
   }
 
   async expire(key: string, seconds: number): Promise<void> {
@@ -213,24 +213,24 @@ class IORedisStore implements RedisStore {
   }
 
   async mget(...keys: string[]): Promise<(string | null)[]> {
-    return await this.client.mget(...keys);
+    return this.client.mget(...keys);
   }
 
   async mset(keyValues: Record<string, string>, ttlSeconds?: number): Promise<void> {
     const pipeline = this.client.pipeline();
-    
+
     Object.entries(keyValues).forEach(([key, value]) => {
       pipeline.set(key, value);
       if (ttlSeconds) {
         pipeline.expire(key, ttlSeconds);
       }
     });
-    
+
     await pipeline.exec();
   }
 
   async ping(): Promise<string> {
-    return await this.client.ping();
+    return this.client.ping();
   }
 
   async disconnect(): Promise<void> {
@@ -305,17 +305,17 @@ export const createRedisStore = (): RedisStore => {
   const hasUpstash = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) ||
                      !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
   const hasRedis = !!process.env.REDIS_URL;
-  
+
   // Prefer Upstash Redis for serverless environments
   if (hasUpstash && upstashRedis) {
     return new UpstashRedisStore(upstashRedis);
   }
-  
+
   // Fallback to IORedis for traditional Redis
   if (hasRedis) {
     return new IORedisStore(ioRedisClient);
   }
-  
+
   // Fallback to in-memory store when Redis is not available
   if (process.env.NODE_ENV !== "production") {
     console.debug("Redis not configured, using in-memory store");
@@ -350,7 +350,7 @@ export async function checkRedisHealth(): Promise<{
     const start = Date.now();
     await redis.ping();
     const latency = Date.now() - start;
-    
+
     return {
       status: "healthy",
       latency,

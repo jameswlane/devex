@@ -23,10 +23,10 @@ interface DatabaseHealth {
 
 // Query performance thresholds (in milliseconds)
 const PERFORMANCE_THRESHOLDS = {
-  FAST: 100,       // Under 100ms is good
-  NORMAL: 500,     // Under 500ms is acceptable
-  SLOW: 1000,      // Under 1s needs attention
-  CRITICAL: 5000,  // Over 5s is critical
+  FAST: 100,       // Under 100 ms it is good
+  NORMAL: 500,     // Under 500 ms it is acceptable
+  SLOW: 1000,      // Under 1 s needs attention
+  CRITICAL: 5000,  // Over 5 s it is critical
 };
 
 // Extended Prisma client with monitoring
@@ -104,7 +104,7 @@ export class MonitoredPrismaClient extends PrismaClient {
   }
 
   /**
-   * Create extended client with Accelerate
+   * Create an extended client with Accelerate
    */
   private createExtendedClient() {
     return this.$extends(withAccelerate());
@@ -125,7 +125,7 @@ export class MonitoredPrismaClient extends PrismaClient {
    */
   private recordQueryMetrics(metrics: QueryMetrics): void {
     this.metrics.push(metrics);
-    
+
     // Keep metrics size under control
     if (this.metrics.length > this.maxMetricsSize) {
       this.metrics = this.metrics.slice(-this.maxMetricsSize);
@@ -143,22 +143,22 @@ export class MonitoredPrismaClient extends PrismaClient {
   private async storeAggregatedMetrics(metrics: QueryMetrics): Promise<void> {
     const queryType = this.extractQueryType(metrics.query);
     const hourKey = `db:metrics:${queryType}:${new Date().toISOString().slice(0, 13)}`;
-    
+
     try {
       // Increment query count
       await redis.incr(`${hourKey}:count`);
-      
+
       // Update average duration (simplified - in production use proper averaging)
       const currentAvg = await redis.get(`${hourKey}:avg_duration`);
       const count = await redis.get(`${hourKey}:count`);
-      
+
       if (currentAvg && count) {
-        const newAvg = (parseFloat(currentAvg) * (parseInt(count) - 1) + metrics.duration) / parseInt(count);
+        const newAvg = (parseFloat(currentAvg) * (parseInt(count, 10) - 1) + metrics.duration) / parseInt(count, 10);
         await redis.set(`${hourKey}:avg_duration`, newAvg.toString(), 3600);
       } else {
         await redis.set(`${hourKey}:avg_duration`, metrics.duration.toString(), 3600);
       }
-      
+
       // Track slow queries
       if (metrics.duration > PERFORMANCE_THRESHOLDS.SLOW) {
         await redis.incr(`${hourKey}:slow_queries`);
@@ -197,21 +197,21 @@ export class MonitoredPrismaClient extends PrismaClient {
     const averageDuration = totalQueries > 0
       ? this.metrics.reduce((sum, m) => sum + m.duration, 0) / totalQueries
       : 0;
-    
+
     const slowQueries = this.metrics.filter(
       m => m.duration > PERFORMANCE_THRESHOLDS.SLOW
     ).length;
-    
+
     const criticalQueries = this.metrics.filter(
       m => m.duration > PERFORMANCE_THRESHOLDS.CRITICAL
     ).length;
-    
+
     const queryDistribution: Record<string, number> = {};
     this.metrics.forEach(m => {
       const type = this.extractQueryType(m.query);
       queryDistribution[type] = (queryDistribution[type] || 0) + 1;
     });
-    
+
     return {
       totalQueries,
       averageDuration: Math.round(averageDuration),
@@ -236,13 +236,13 @@ export async function checkDatabaseHealth(
   prisma: PrismaClient
 ): Promise<DatabaseHealth> {
   const startTime = Date.now();
-  
+
   try {
     // Simple health check query
     await prisma.$queryRaw`SELECT 1`;
-    
+
     const latency = Date.now() - startTime;
-    
+
     // Determine health status based on latency
     let status: DatabaseHealth["status"] = "healthy";
     if (latency > PERFORMANCE_THRESHOLDS.NORMAL) {
@@ -251,7 +251,7 @@ export async function checkDatabaseHealth(
     if (latency > PERFORMANCE_THRESHOLDS.CRITICAL) {
       status = "unhealthy";
     }
-    
+
     return {
       status,
       latency,
@@ -259,12 +259,12 @@ export async function checkDatabaseHealth(
     };
   } catch (error) {
     const latency = Date.now() - startTime;
-    
+
     logger.error("Database health check failed", {
       error: error instanceof Error ? error.message : String(error),
       latency,
     }, error instanceof Error ? error : undefined);
-    
+
     return {
       status: "unhealthy",
       latency,
@@ -275,7 +275,7 @@ export async function checkDatabaseHealth(
 }
 
 /**
- * Monitor database connection pool
+ * Monitor the database connection pool
  */
 export async function monitorConnectionPool(
   prisma: PrismaClient
@@ -288,22 +288,22 @@ export async function monitorConnectionPool(
     // Get pool metrics (this is a simplified version)
     // In production, you'd want to use Prisma metrics API
     const result = await prisma.$queryRaw<any[]>`
-      SELECT 
+      SELECT
         count(*) as total_connections,
         sum(case when state = 'active' then 1 else 0 end) as active_connections,
         sum(case when state = 'idle' then 1 else 0 end) as idle_connections
-      FROM pg_stat_activity 
+      FROM pg_stat_activity
       WHERE datname = current_database()
     `;
-    
+
     if (result && result[0]) {
       return {
-        activeConnections: parseInt(result[0].active_connections) || 0,
-        totalConnections: parseInt(result[0].total_connections) || 0,
+        activeConnections: parseInt(result[0].active_connections, 10) || 0,
+        totalConnections: parseInt(result[0].total_connections, 10) || 0,
         waitingRequests: 0, // Would need application-level tracking
       };
     }
-    
+
     return {
       activeConnections: 0,
       totalConnections: 0,
@@ -313,7 +313,7 @@ export async function monitorConnectionPool(
     logger.debug("Failed to get connection pool metrics", {
       error: error instanceof Error ? error.message : String(error),
     });
-    
+
     return {
       activeConnections: 0,
       totalConnections: 0,
@@ -330,7 +330,7 @@ export function withDatabaseMonitoring<T>(
   operationName: string
 ): Promise<T> {
   const startTime = Date.now();
-  
+
   return operation()
     .then(result => {
       const duration = Date.now() - startTime;
@@ -357,7 +357,7 @@ export function createMonitoredPrismaClient(
 }
 
 /**
- * Scheduled health check for database
+ * Scheduled health check for a database
  */
 export async function scheduledHealthCheck(
   prisma: PrismaClient,
@@ -366,7 +366,7 @@ export async function scheduledHealthCheck(
   const runCheck = async () => {
     const health = await checkDatabaseHealth(prisma);
     const poolMetrics = await monitorConnectionPool(prisma);
-    
+
     // Store health metrics in Redis
     const healthKey = `db:health:${new Date().toISOString().slice(0, 16)}`;
     await redis.set(
@@ -377,7 +377,7 @@ export async function scheduledHealthCheck(
       }),
       300 // Keep for 5 minutes
     );
-    
+
     // Alert on unhealthy status
     if (health.status === "unhealthy") {
       logger.error("Database is unhealthy", {
@@ -391,14 +391,14 @@ export async function scheduledHealthCheck(
       });
     }
   };
-  
-  // Run initial check
+
+  // Run the initial check
   runCheck().catch(err => {
     logger.error("Failed to run database health check", {
       error: err instanceof Error ? err.message : String(err),
     }, err instanceof Error ? err : undefined);
   });
-  
+
   // Schedule recurring checks
   return setInterval(() => {
     runCheck().catch(err => {

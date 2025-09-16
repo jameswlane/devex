@@ -36,11 +36,11 @@ export enum SensitiveOperation {
 // Get signature configuration from environment
 function getSignatureConfig(): SignatureConfig {
   const secretKey = process.env.REQUEST_SIGNING_SECRET || process.env.API_SECRET_KEY;
-  
+
   if (!secretKey) {
     logger.warn("Request signing secret not configured, using default (NOT FOR PRODUCTION)");
   }
-  
+
   return {
     algorithm: "sha256",
     secretKey: secretKey || "default-dev-secret-change-in-production",
@@ -61,21 +61,21 @@ export function generateRequestSignature(
   const config = getSignatureConfig();
   const ts = timestamp || Date.now();
   const requestNonce = nonce || crypto.randomBytes(16).toString("hex");
-  
-  // Create canonical string for signing
+
+  // Create a canonical string for signing
   const canonicalString = [
     operation,
     ts.toString(),
     requestNonce,
     JSON.stringify(payload || {}),
   ].join(":");
-  
+
   // Generate HMAC signature
   const signature = crypto
     .createHmac(config.algorithm, config.secretKey)
     .update(canonicalString)
     .digest("hex");
-  
+
   return {
     signature,
     timestamp: ts,
@@ -95,45 +95,45 @@ export async function verifyRequestSignature(
   payload: any
 ): Promise<{ valid: boolean; error?: string }> {
   const config = getSignatureConfig();
-  
+
   try {
     // Check timestamp expiration
     const now = Date.now();
     const age = (now - timestamp) / 1000; // Age in seconds
-    
+
     if (age > config.expirationSeconds) {
-      return { 
-        valid: false, 
-        error: `Signature expired. Age: ${age}s, Max: ${config.expirationSeconds}s` 
+      return {
+        valid: false,
+        error: `Signature expired. Age: ${age}s, Max: ${config.expirationSeconds}s`
       };
     }
-    
+
     if (timestamp > now + 60000) { // Allow 1 minute clock skew
-      return { 
-        valid: false, 
-        error: "Signature timestamp is in the future" 
+      return {
+        valid: false,
+        error: "Signature timestamp is in the future"
       };
     }
-    
+
     // Check nonce to prevent replay attacks
     const nonceKey = `nonce:${nonce}`;
     const nonceExists = await redis.exists(nonceKey);
-    
+
     if (nonceExists) {
       logger.warn("Duplicate nonce detected - possible replay attack", {
         operation,
         nonce,
         timestamp,
       });
-      return { 
-        valid: false, 
-        error: "Duplicate nonce - possible replay attack" 
+      return {
+        valid: false,
+        error: "Duplicate nonce - possible replay attack"
       };
     }
-    
+
     // Store nonce with expiration
     await redis.set(nonceKey, "1", config.nonceWindow);
-    
+
     // Recreate canonical string
     const canonicalString = [
       operation,
@@ -141,41 +141,41 @@ export async function verifyRequestSignature(
       nonce,
       JSON.stringify(payload || {}),
     ].join(":");
-    
+
     // Generate expected signature
     const expectedSignature = crypto
       .createHmac(config.algorithm, config.secretKey)
       .update(canonicalString)
       .digest("hex");
-    
+
     // Constant-time comparison to prevent timing attacks
     const valid = crypto.timingSafeEqual(
       Buffer.from(signature, "hex"),
       Buffer.from(expectedSignature, "hex")
     );
-    
+
     if (!valid) {
       logger.warn("Invalid signature detected", {
         operation,
         timestamp,
-        nonce: nonce.substring(0, 8) + "...", // Log partial nonce
+        nonce: `${nonce.substring(0, 8)}...`, // Log partial nonce
       });
-      return { 
-        valid: false, 
-        error: "Invalid signature" 
+      return {
+        valid: false,
+        error: "Invalid signature"
       };
     }
-    
+
     return { valid: true };
   } catch (error) {
     logger.error("Error verifying signature", {
       operation,
       error: error instanceof Error ? error.message : String(error),
     }, error instanceof Error ? error : undefined);
-    
-    return { 
-      valid: false, 
-      error: "Signature verification failed" 
+
+    return {
+      valid: false,
+      error: "Signature verification failed"
     };
   }
 }
@@ -192,14 +192,14 @@ export async function requireSignedRequest(
     const signature = request.headers.get("X-Signature");
     const timestamp = request.headers.get("X-Timestamp");
     const nonce = request.headers.get("X-Nonce");
-    
+
     if (!signature || !timestamp || !nonce) {
       return {
         success: false,
         error: "Missing signature headers",
       };
     }
-    
+
     // Parse request body
     let payload = null;
     if (request.method !== "GET" && request.method !== "DELETE") {
@@ -213,7 +213,7 @@ export async function requireSignedRequest(
         };
       }
     }
-    
+
     // Verify signature
     const verification = await verifyRequestSignature(
       operation,
@@ -222,14 +222,14 @@ export async function requireSignedRequest(
       nonce,
       payload
     );
-    
+
     if (!verification.valid) {
       return {
         success: false,
         error: verification.error,
       };
     }
-    
+
     return {
       success: true,
       payload,
@@ -239,7 +239,7 @@ export async function requireSignedRequest(
       operation,
       error: error instanceof Error ? error.message : String(error),
     }, error instanceof Error ? error : undefined);
-    
+
     return {
       success: false,
       error: "Request verification failed",
@@ -256,16 +256,16 @@ export async function generateApiKey(clientId: string): Promise<{
 }> {
   // Generate random API key
   const apiKey = `devex_${crypto.randomBytes(32).toString("hex")}`;
-  
+
   // Hash the key for storage using bcrypt with proper salt rounds
   const saltRounds = 12;
   const hashedKey = await bcrypt.hash(apiKey, saltRounds);
-  
+
   logger.info("API key generated", {
     clientId,
-    keyPrefix: apiKey.substring(0, 10) + "...",
+    keyPrefix: `${apiKey.substring(0, 10)}...`,
   });
-  
+
   return {
     apiKey,
     hashedKey,
@@ -282,27 +282,27 @@ export async function verifyApiKey(
   try {
     // Use bcrypt to compare the API key with the stored hash
     const isValid = await bcrypt.compare(apiKey, storedHashedKey);
-    
+
     if (!isValid) {
       return { valid: false };
     }
-    
+
     // Create a hash for cache lookup (using SHA256 for cache keys is fine)
     const cacheKey = crypto
       .createHash("sha256")
       .update(apiKey)
       .digest("hex");
-    
+
     // Check if key exists in Redis cache
     const cachedClient = await redis.get(`apikey:${cacheKey}`);
-    
+
     if (cachedClient) {
       return {
         valid: true,
         clientId: cachedClient,
       };
     }
-    
+
     // In production, check database for API key
     // For now, return invalid
     return {
@@ -312,7 +312,7 @@ export async function verifyApiKey(
     logger.error("Error verifying API key", {
       error: error instanceof Error ? error.message : String(error),
     }, error instanceof Error ? error : undefined);
-    
+
     return {
       valid: false,
     };
@@ -330,7 +330,7 @@ export function signWebhookPayload(
     .createHmac("sha256", secret)
     .update(JSON.stringify(payload))
     .digest("hex");
-  
+
   return `sha256=${signature}`;
 }
 
@@ -343,7 +343,7 @@ export function verifyWebhookSignature(
   secret: string
 ): boolean {
   const expectedSignature = signWebhookPayload(payload, secret);
-  
+
   try {
     return crypto.timingSafeEqual(
       Buffer.from(signature),
@@ -364,17 +364,17 @@ export async function rateLimitSignedRequest(
   windowSeconds: number = 60
 ): Promise<{ allowed: boolean; remaining: number }> {
   const key = `ratelimit:${clientId}:${operation}:${Math.floor(Date.now() / 1000 / windowSeconds)}`;
-  
+
   try {
     const count = await redis.incr(key);
-    
+
     if (count === 1) {
       await redis.expire(key, windowSeconds);
     }
-    
+
     const allowed = count <= limit;
     const remaining = Math.max(0, limit - count);
-    
+
     if (!allowed) {
       logger.warn("Rate limit exceeded for signed request", {
         clientId,
@@ -383,7 +383,7 @@ export async function rateLimitSignedRequest(
         limit,
       });
     }
-    
+
     return {
       allowed,
       remaining,
@@ -395,7 +395,7 @@ export async function rateLimitSignedRequest(
       operation,
       error: error instanceof Error ? error.message : String(error),
     }, error instanceof Error ? error : undefined);
-    
+
     return {
       allowed: true,
       remaining: limit,

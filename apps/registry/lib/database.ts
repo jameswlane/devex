@@ -20,19 +20,19 @@ interface DatabaseConfig {
 
 export const DB_CONFIG: DatabaseConfig = {
 	// Maximum number of connections in the pool
-	connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || "10"),
+	connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT || "10", 10),
 
 	// How long to wait for a connection from the pool (seconds)
-	poolTimeout: parseInt(process.env.DB_POOL_TIMEOUT || "30"),
+	poolTimeout: parseInt(process.env.DB_POOL_TIMEOUT || "30", 10),
 
 	// Connection timeout (seconds)
-	connectTimeout: parseInt(process.env.DB_CONNECT_TIMEOUT || "10"),
+	connectTimeout: parseInt(process.env.DB_CONNECT_TIMEOUT || "10", 10),
 
 	// Maximum idle time before connection is closed (seconds)
-	maxIdleTime: parseInt(process.env.DB_MAX_IDLE_TIME || "300"),
+	maxIdleTime: parseInt(process.env.DB_MAX_IDLE_TIME || "300", 10),
 
 	// How long to wait to acquire a connection (milliseconds)
-	acquireTimeout: parseInt(process.env.DB_ACQUIRE_TIMEOUT || "30000"),
+	acquireTimeout: parseInt(process.env.DB_ACQUIRE_TIMEOUT || "30000", 10),
 };
 
 // Helper to append pooling parameters to database URL

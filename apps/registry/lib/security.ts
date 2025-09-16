@@ -7,17 +7,17 @@ export const SECURITY_CONFIG = {
   MAX_REQUEST_SIZE: 1024 * 1024, // 1MB
   MAX_JSON_SIZE: 512 * 1024, // 512KB
   MAX_URL_LENGTH: 2048,
-  
+
   // Rate limiting thresholds
   SUSPICIOUS_REQUEST_THRESHOLD: 100, // requests per minute
-  
+
   // Content type restrictions
   ALLOWED_CONTENT_TYPES: [
     'application/json',
     'application/x-www-form-urlencoded',
     'text/plain'
   ],
-  
+
   // Security headers
   SECURITY_HEADERS: {
     'X-Content-Type-Options': 'nosniff',
@@ -48,7 +48,7 @@ export function validateRequest(request: NextRequest): ValidationResult {
         userAgent: request.headers.get('user-agent'),
         ip: getClientIP(request),
       });
-      
+
       return {
         isValid: false,
         reason: "URL length exceeds maximum allowed",
@@ -67,7 +67,7 @@ export function validateRequest(request: NextRequest): ValidationResult {
           userAgent: request.headers.get('user-agent'),
           ip: getClientIP(request),
         });
-        
+
         return {
           isValid: false,
           reason: "Request body too large",
@@ -88,7 +88,7 @@ export function validateRequest(request: NextRequest): ValidationResult {
             method: request.method,
             ip: getClientIP(request),
           });
-          
+
           return {
             isValid: false,
             reason: "Unsupported content type",
@@ -105,7 +105,7 @@ export function validateRequest(request: NextRequest): ValidationResult {
       url: request.url,
       method: request.method,
     }, error instanceof Error ? error : undefined);
-    
+
     return {
       isValid: false,
       reason: "Validation error",
@@ -116,7 +116,7 @@ export function validateRequest(request: NextRequest): ValidationResult {
 
 // Enhanced search query sanitization
 export function sanitizeSearchQuery(query: string): string {
-  if (!query || typeof query !== 'string') {
+  if (!query) {
     return '';
   }
 
@@ -147,7 +147,7 @@ export function applySecurityHeaders(response: NextResponse): NextResponse {
   Object.entries(SECURITY_CONFIG.SECURITY_HEADERS).forEach(([key, value]) => {
     response.headers.set(key, value);
   });
-  
+
   return response;
 }
 
@@ -213,7 +213,7 @@ export function getClientIP(request: NextRequest): string {
 function isValidIP(ip: string): boolean {
   const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
   const ipv6Regex = /^(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
-  
+
   return ipv4Regex.test(ip) || ipv6Regex.test(ip);
 }
 
@@ -235,7 +235,7 @@ export async function securityMiddleware(
   try {
     // Execute the handler
     const response = await handler(request);
-    
+
     // Apply security headers to successful responses
     return applySecurityHeaders(response);
   } catch (error) {
@@ -244,7 +244,7 @@ export async function securityMiddleware(
       method: request.method,
       url: request.url,
     }, error instanceof Error ? error : undefined);
-    
+
     return createSecureErrorResponse(
       "Internal server error",
       500,
@@ -265,7 +265,7 @@ export async function validateJsonBody(request: NextRequest): Promise<{ isValid:
     }
 
     const data = await request.json();
-    
+
     // Additional JSON validation can be added here
     if (typeof data !== 'object' || data === null) {
       return {

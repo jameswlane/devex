@@ -44,7 +44,7 @@ export class RegistryService {
         const [counts, data, stats] = await Promise.all([
           // Count queries with covering indexes
           Promise.all([
-            resource === "all" || resource === "plugins" 
+            resource === "all" || resource === "plugins"
               ? tx.plugin.count({
                   where: { status: "active" },
                 })
@@ -232,7 +232,7 @@ export class RegistryService {
     limit?: number;
   }) {
     const { query, resource = "all", limit = 50 } = params;
-    
+
     // Use PostgreSQL full-text search with caching
     const searchVector = query.split(" ").join(" | ");
 
@@ -384,14 +384,14 @@ export class RegistryService {
       // Prisma Accelerate will automatically handle cache invalidation
       // based on the tags provided in the cache strategies
       logger.debug("Prisma cache invalidation triggered", { tags });
-      
+
       // Granular transformation cache invalidation
       if (specificItems) {
         // Invalidate specific items for more targeted cache clearing
         for (const item of specificItems) {
           const resourceType = item.type as "plugins" | "applications" | "configs" | "stacks";
           logger.debug("Invalidating specific resource type", { resourceType, names: item.names });
-          
+
           // For now, we still invalidate the entire type, but this prepares for
           // more granular invalidation in the future
           await transformationService.invalidateTransformationCache([resourceType]);
@@ -400,8 +400,8 @@ export class RegistryService {
         // Fallback to type-based invalidation
         const transformationTypes = tags
           .filter(tag => ["plugins", "applications", "configs", "stacks"].includes(tag))
-          .map(tag => tag.endsWith("s") ? tag : tag + "s") as ("plugins" | "applications" | "configs" | "stacks")[];
-        
+          .map(tag => tag.endsWith("s") ? tag : `${tag}s`) as ("plugins" | "applications" | "configs" | "stacks")[];
+
         if (transformationTypes.length > 0) {
           await transformationService.invalidateTransformationCache(transformationTypes);
           logger.debug("Transformation cache invalidation triggered", { types: transformationTypes });
@@ -457,7 +457,7 @@ export class RegistryService {
       await this.invalidateCache(
         [
           "registry",
-          "stats", 
+          "stats",
           "popular",
           resource + "s", // plugins, configs, stacks
         ],

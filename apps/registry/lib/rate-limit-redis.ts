@@ -28,7 +28,7 @@ export class RedisRateLimitStore {
     try {
       // Use Redis pipeline for atomic operations
       const count = await this.redis.incr(windowKey);
-      
+
       // Set expiration only on first increment
       if (count === 1) {
         await this.redis.expire(windowKey, Math.ceil(windowMs / 1000));
@@ -74,7 +74,7 @@ export class RedisRateLimitStore {
   async reset(key: string, windowMs: number): Promise<void> {
     const now = Date.now();
     const windowKey = `ratelimit:${key}:${Math.floor(now / windowMs)}`;
-    
+
     try {
       await this.redis.del(windowKey);
     } catch (error) {
@@ -138,16 +138,16 @@ function defaultKeyGenerator(req: NextRequest): string {
   const vercel = req.headers.get("x-vercel-forwarded-for");
 
   // Use the first available IP, fallback to unknown
-  const ip = 
-    forwarded?.split(",")[0].trim() || 
-    real || 
-    cloudflare || 
-    vercel || 
+  const ip =
+    forwarded?.split(",")[0].trim() ||
+    real ||
+    cloudflare ||
+    vercel ||
     "unknown";
 
   // Include pathname for endpoint-specific limits
   const pathname = new URL(req.url).pathname;
-  
+
   return `${ip}:${pathname}`;
 }
 
@@ -166,20 +166,20 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
     req: NextRequest,
     handler: () => Promise<NextResponse>
   ): Promise<NextResponse> {
-    const key = finalConfig.keyGenerator!(req);
-    
+    const key = finalConfig.keyGenerator?.(req);
+
     try {
       // Check current rate limit status
       const current = await redisRateLimitStore.get(key, finalConfig.windowMs);
-      const remaining = current 
-        ? Math.max(0, finalConfig.maxRequests - current.count) 
+      const remaining = current
+        ? Math.max(0, finalConfig.maxRequests - current.count)
         : finalConfig.maxRequests;
       const resetTime = current?.resetTime || Date.now() + finalConfig.windowMs;
-      
+
       // Check if rate limit exceeded
       if (current && current.count >= finalConfig.maxRequests) {
         const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
-        
+
         return NextRes.json(
           {
             error: finalConfig.message,
@@ -200,47 +200,47 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
           }
         );
       }
-      
+
       // Increment counter
       const result = await redisRateLimitStore.increment(key, finalConfig.windowMs);
-      
+
       // Execute the handler
       const response = await handler();
-      
+
       // Add rate limit headers to response
       const headers = new Headers(response.headers);
       headers.set("X-RateLimit-Limit", finalConfig.maxRequests.toString());
       headers.set("X-RateLimit-Remaining", Math.max(0, finalConfig.maxRequests - result.count).toString());
       headers.set("X-RateLimit-Reset", new Date(result.resetTime).toISOString());
       headers.set("X-RateLimit-Policy", `${finalConfig.maxRequests};w=${finalConfig.windowMs / 1000}`);
-      
+
       // Check if we should skip counting this request
       const status = response.status;
       const isSuccess = status >= 200 && status < 300;
       const isFailed = status >= 400;
-      
-      if ((finalConfig.skipSuccessfulRequests && isSuccess) || 
+
+      if ((finalConfig.skipSuccessfulRequests && isSuccess) ||
           (finalConfig.skipFailedRequests && isFailed)) {
         // We would need to decrement, but it's complex with Redis
         // Instead, we could use a separate counter or accept this limitation
         logger.warn("Skip counting not fully implemented with Redis rate limiting");
       }
-      
+
       return new NextRes(response.body, {
         status: response.status,
         statusText: response.statusText,
         headers,
       });
-      
+
     } catch (error) {
       logger.error("Rate limiting error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
       // On Redis failure, allow the request but log the error
       const response = await handler();
-      
+
       // Add headers indicating rate limiting is degraded
       const headers = new Headers(response.headers);
       headers.set("X-RateLimit-Status", "degraded");
-      
+
       return new NextRes(response.body, {
         status: response.status,
         statusText: response.statusText,
@@ -256,7 +256,7 @@ export function withRedisRateLimit(
   config?: Partial<RateLimitConfig>
 ) {
   const rateLimiter = redisRateLimit(config);
-  
+
   return async function rateLimitedHandler(req: NextRequest): Promise<NextResponse> {
     return rateLimiter(req, () => handler(req));
   };
@@ -298,7 +298,7 @@ export async function checkMultipleRateLimits(
       const remaining = Math.max(0, config.maxRequests - count);
       const resetTime = current?.resetTime || Date.now() + config.windowMs;
       const isLimited = count >= config.maxRequests;
-      
+
       return {
         key,
         count,
@@ -308,7 +308,7 @@ export async function checkMultipleRateLimits(
       };
     })
   );
-  
+
   return results
     .filter((result): result is PromiseFulfilledResult<any> => result.status === "fulfilled")
     .map(result => result.value);

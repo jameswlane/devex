@@ -40,7 +40,7 @@ interface StartupResults {
 export async function initializeApplication(config: Partial<StartupConfig> = {}): Promise<StartupResults> {
   const finalConfig = { ...defaultConfig, ...config };
   const startTime = Date.now();
-  
+
   logger.info("Starting application initialization", {
     config: finalConfig,
     nodeEnv: process.env.NODE_ENV,
@@ -95,12 +95,12 @@ export async function initializeApplication(config: Partial<StartupConfig> = {})
   } catch (error) {
     results.duration = Date.now() - startTime;
     results.success = false;
-    
+
     logger.error("Application initialization failed", {
       duration: results.duration,
       error: error instanceof Error ? error.message : "Unknown error",
     }, error instanceof Error ? error : undefined);
-    
+
     return results;
   }
 }
@@ -116,7 +116,7 @@ async function warmupDatabaseWithRetry(retries: number, results: StartupResults[
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       results.error = errorMessage;
-      
+
       if (attempt === retries) {
         logger.error("Database warmup failed after all retries", {
           attempts: retries,
@@ -127,9 +127,9 @@ async function warmupDatabaseWithRetry(retries: number, results: StartupResults[
           error: errorMessage,
           remainingAttempts: retries - attempt,
         });
-        
+
         // Exponential backoff delay
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 5000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -147,7 +147,7 @@ async function warmupRedisWithRetry(retries: number, results: StartupResults['re
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       results.error = errorMessage;
-      
+
       if (attempt === retries) {
         logger.error("Redis warmup failed after all retries", {
           attempts: retries,
@@ -158,9 +158,9 @@ async function warmupRedisWithRetry(retries: number, results: StartupResults['re
           error: errorMessage,
           remainingAttempts: retries - attempt,
         });
-        
+
         // Exponential backoff delay
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        const delay = Math.min(1000 * 2 ** (attempt - 1), 5000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -178,7 +178,7 @@ async function warmupCacheWithRetry(retries: number, results: StartupResults['ca
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       results.error = errorMessage;
-      
+
       if (attempt === retries) {
         logger.warn("Cache warmup failed after all retries (this is optional)", {
           attempts: retries,
@@ -189,9 +189,9 @@ async function warmupCacheWithRetry(retries: number, results: StartupResults['ca
           error: errorMessage,
           remainingAttempts: retries - attempt,
         });
-        
+
         // Shorter delay for cache warmup since it's optional
-        const delay = Math.min(500 * Math.pow(2, attempt - 1), 2000);
+        const delay = Math.min(500 * 2 ** (attempt - 1), 2000);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -201,21 +201,21 @@ async function warmupCacheWithRetry(retries: number, results: StartupResults['ca
 // Application-level cache warming strategy
 async function warmupApplicationCache(): Promise<void> {
   const startTime = Date.now();
-  
+
   try {
     // Initialize transformation service for cache warmup
     const transformationService = new RegistryTransformationService();
-    
-    // Pre-warm popular search patterns in background
+
+    // Pre-warm popular search patterns in the background
     const warmupPromises = [
-      warmupPopularSearches(),
-      warmupStaticData(),
-      warmupTransformationCache(transformationService),
+      await warmupPopularSearches(),
+      await warmupStaticData(),
+      await warmupTransformationCache(transformationService),
     ];
-    
+
     // Execute warmup tasks with timeout
     await Promise.allSettled(warmupPromises);
-    
+
     const duration = Date.now() - startTime;
     logger.info("Application cache warmup completed", { duration });
   } catch (error) {
@@ -230,18 +230,18 @@ async function warmupApplicationCache(): Promise<void> {
 async function warmupPopularSearches(): Promise<void> {
   try {
     const { redis } = await import("./redis");
-    
+
     // Popular search terms based on typical DevEx tool searches
     const popularQueries = [
       'git', 'docker', 'node', 'python', 'vscode', 'terminal', 'editor',
       'database', 'development', 'productivity', 'system'
     ];
-    
+
     // Cache empty search results to avoid cold start delays
     const cachePromises = popularQueries.map(async (query) => {
       const cacheKey = `search:${query}`;
       const exists = await redis.exists(cacheKey);
-      
+
       if (!exists) {
         const emptyResult = {
           query,
@@ -252,12 +252,12 @@ async function warmupPopularSearches(): Promise<void> {
           total: 0,
           lastUpdated: new Date().toISOString(),
         };
-        
+
         // Short TTL for warm-up cache entries
         await redis.set(cacheKey, JSON.stringify(emptyResult), 300); // 5 minutes
       }
     });
-    
+
     await Promise.all(cachePromises);
     logger.debug("Popular searches cache warmed", { queries: popularQueries.length });
   } catch (error) {
@@ -271,7 +271,7 @@ async function warmupPopularSearches(): Promise<void> {
 async function warmupStaticData(): Promise<void> {
   try {
     const { redis } = await import("./redis");
-    
+
     // Cache registry metadata
     const registryMeta = {
       version: '1.0.0',
@@ -279,9 +279,9 @@ async function warmupStaticData(): Promise<void> {
       supportedPlatforms: ['linux', 'darwin', 'windows'],
       categories: ['development', 'productivity', 'system', 'utilities'],
     };
-    
+
     await redis.set('registry:meta', JSON.stringify(registryMeta), 1800); // 30 minutes
-    
+
     logger.debug("Static registry data cache warmed");
   } catch (error) {
     logger.warn("Failed to warm static data cache", {
@@ -315,11 +315,11 @@ export async function getStartupHealth(): Promise<{
   lastInitialization?: StartupResults;
 }> {
   let cacheStats;
-  
+
   try {
     const { redis } = await import("./redis");
     const connectionStatus = await redis.ping();
-    
+
     cacheStats = {
       status: connectionStatus === 'PONG' ? 'connected' : 'disconnected',
       hitRate: 0.85, // Placeholder - would track in production
@@ -332,7 +332,7 @@ export async function getStartupHealth(): Promise<{
       totalKeys: 0,
     };
   }
-  
+
   return {
     status: "ready", // Simplified for now - could track actual state
     uptime: process.uptime() * 1000, // Convert to milliseconds
@@ -343,16 +343,16 @@ export async function getStartupHealth(): Promise<{
 // Graceful shutdown handler
 export async function gracefulShutdown(signal: string): Promise<void> {
   logger.info("Graceful shutdown initiated", { signal });
-  
+
   try {
     // Close database connections
     const { disconnectPrisma } = await import("./prisma");
     await disconnectPrisma();
-    
-    // Close Redis connections  
+
+    // Close Redis connections
     const { closeRedisConnection } = await import("./redis");
     await closeRedisConnection();
-    
+
     logger.info("Graceful shutdown completed successfully");
   } catch (error) {
     logger.error("Error during graceful shutdown", {
@@ -364,33 +364,33 @@ export async function gracefulShutdown(signal: string): Promise<void> {
 // Register process signal handlers for graceful shutdown
 export function registerShutdownHandlers(): void {
   const signals = ["SIGTERM", "SIGINT", "SIGQUIT"];
-  
+
   signals.forEach(signal => {
     process.on(signal, async () => {
       await gracefulShutdown(signal);
       process.exit(0);
     });
   });
-  
+
   // Handle uncaught exceptions
   process.on("uncaughtException", (error) => {
     logger.error("Uncaught exception, shutting down", {
       error: error.message,
       stack: error.stack,
     });
-    
+
     gracefulShutdown("uncaughtException").finally(() => {
       process.exit(1);
     });
   });
-  
+
   // Handle unhandled promise rejections
   process.on("unhandledRejection", (reason, promise) => {
     logger.error("Unhandled promise rejection, shutting down", {
       reason: reason instanceof Error ? reason.message : String(reason),
       stack: reason instanceof Error ? reason.stack : undefined,
     });
-    
+
     gracefulShutdown("unhandledRejection").finally(() => {
       process.exit(1);
     });

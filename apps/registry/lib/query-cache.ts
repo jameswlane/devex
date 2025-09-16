@@ -53,11 +53,11 @@ export function generateCacheKey(
   prefix?: string
 ): string {
   const baseKey = prefix ? `${prefix}:${category}:${identifier}` : `${category}:${identifier}`;
-  
+
   if (!params || Object.keys(params).length === 0) {
     return baseKey;
   }
-  
+
   // Sort params for consistent keys
   const sortedParams = Object.keys(params)
     .sort()
@@ -65,14 +65,14 @@ export function generateCacheKey(
       acc[key] = params[key];
       return acc;
     }, {} as Record<string, any>);
-  
+
   // Hash params to avoid overly long keys
   const paramsHash = crypto
     .createHash("sha256")
     .update(JSON.stringify(sortedParams))
     .digest("hex")
     .substring(0, 16);
-  
+
   return `${baseKey}:${paramsHash}`;
 }
 
@@ -85,35 +85,35 @@ export async function withQueryCache<T>(
   options: CacheOptions
 ): Promise<T> {
   const { category, ttl, keyPrefix, skipCache, forceRefresh } = options;
-  
+
   // Skip cache if requested
   if (skipCache || process.env.DISABLE_CACHE === "true") {
     return await operation();
   }
-  
+
   const cacheKey = generateCacheKey(category, identifier, {}, keyPrefix);
   const cacheTTL = ttl || CACHE_DURATIONS[category];
-  
+
   try {
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
       const startCache = Date.now();
       const cached = await redis.get(cacheKey);
       const cacheLatency = Date.now() - startCache;
-      
+
       if (cached) {
         metrics.hits++;
         updateAverageLatency(cacheLatency);
-        
+
         logger.debug("Cache hit", {
           key: cacheKey,
           category,
           latency: cacheLatency,
         });
-        
+
         return JSON.parse(cached) as T;
       }
-      
+
       metrics.misses++;
       logger.debug("Cache miss", {
         key: cacheKey,
@@ -121,23 +121,23 @@ export async function withQueryCache<T>(
         latency: cacheLatency,
       });
     }
-    
+
     // Execute the operation
     const startOperation = Date.now();
     const result = await operation();
     const operationLatency = Date.now() - startOperation;
-    
+
     // Log slow operations
     logPerformance(`query:${identifier}`, operationLatency, {
       category,
       cacheKey,
     });
-    
+
     // Store in cache
     const startStore = Date.now();
     await redis.set(cacheKey, JSON.stringify(result), cacheTTL);
     const storeLatency = Date.now() - startStore;
-    
+
     logger.debug("Cache stored", {
       key: cacheKey,
       category,
@@ -145,7 +145,7 @@ export async function withQueryCache<T>(
       operationLatency,
       storeLatency,
     });
-    
+
     return result;
   } catch (error) {
     metrics.errors++;
@@ -154,7 +154,7 @@ export async function withQueryCache<T>(
       category,
       error: error instanceof Error ? error.message : String(error),
     }, error instanceof Error ? error : undefined);
-    
+
     // Fall back to direct operation on cache error
     return await operation();
   }
@@ -172,17 +172,17 @@ export async function withBatchQueryCache<T>(
   if (!ids || ids.length === 0) {
     return new Map();
   }
-  
+
   const results = new Map<string, T>();
   const missingIds: string[] = [];
-  const cacheKeys = ids.map(id => 
+  const cacheKeys = ids.map(id =>
     generateCacheKey(category, id, {}, options?.keyPrefix)
   );
-  
+
   try {
     // Try to get all from cache
     const cached = await redis.mget(...cacheKeys);
-    
+
     ids.forEach((id, index) => {
       const cachedValue = cached[index];
       if (cachedValue) {
@@ -193,12 +193,12 @@ export async function withBatchQueryCache<T>(
         metrics.misses++;
       }
     });
-    
+
     // Fetch missing items
     if (missingIds.length > 0) {
       const fetched = await operation(missingIds);
       const ttl = options?.ttl || CACHE_DURATIONS[category];
-      
+
       // Store fetched items in cache
       const cacheUpdates: Record<string, string> = {};
       fetched.forEach((value, id) => {
@@ -206,12 +206,12 @@ export async function withBatchQueryCache<T>(
         const key = generateCacheKey(category, id, {}, options?.keyPrefix);
         cacheUpdates[key] = JSON.stringify(value);
       });
-      
+
       if (Object.keys(cacheUpdates).length > 0) {
         await redis.mset(cacheUpdates, ttl);
       }
     }
-    
+
     return results;
   } catch (error) {
     metrics.errors++;
@@ -220,7 +220,7 @@ export async function withBatchQueryCache<T>(
       idsCount: ids.length,
       error: error instanceof Error ? error.message : String(error),
     }, error instanceof Error ? error : undefined);
-    
+
     // Fall back to direct operation
     return await operation(ids);
   }
@@ -295,13 +295,13 @@ export const EXPENSIVE_AGGREGATIONS = [
  * Decorator for caching expensive aggregation queries
  */
 export function cacheAggregation(identifier: string, ttl?: number) {
-  return function (
+  return (
     target: any,
     propertyKey: string,
     descriptor: PropertyDescriptor
-  ) {
+  ) => {
     const originalMethod = descriptor.value;
-    
+
     descriptor.value = async function (...args: any[]) {
       return withQueryCache(
         () => originalMethod.apply(this, args),
@@ -312,7 +312,7 @@ export function cacheAggregation(identifier: string, ttl?: number) {
         }
       );
     };
-    
+
     return descriptor;
   };
 }

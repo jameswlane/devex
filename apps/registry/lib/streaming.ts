@@ -21,13 +21,13 @@ export class StreamingJsonResponse {
     const stream = new ReadableStream({
       start(controller) {
         // Send opening metadata and array start
-        const opening = JSON.stringify({
+        const opening = `${JSON.stringify({
           ...metadata,
           total,
           streaming: true,
           data: "["
-        }).slice(0, -2) + '"[';
-        
+        }).slice(0, -2)}"[`;
+
         controller.enqueue(encoder.encode(opening));
       },
 
@@ -35,7 +35,7 @@ export class StreamingJsonResponse {
         try {
           if (processed >= total) {
             // Close the array and add final metadata
-            const closing = '],"completed":true,"processedAt":"' + new Date().toISOString() + '"}';
+            const closing = `],"completed":true,"processedAt":"${new Date().toISOString()}"}`;
             controller.enqueue(encoder.encode(closing));
             controller.close();
             return;
@@ -46,12 +46,12 @@ export class StreamingJsonResponse {
           const isLastChunk = processed + chunkSize >= total;
 
           let chunkJson = "";
-          
+
           // Add comma separator for subsequent chunks
           if (!isFirstChunk) {
             chunkJson += ",";
           }
-          
+
           // Serialize chunk items
           chunk.forEach((item, index) => {
             if (index > 0) chunkJson += ",";
@@ -100,13 +100,13 @@ export class StreamingJsonResponse {
     const stream = new ReadableStream({
       start(controller) {
         // Send metadata as first line
-        const metadataLine = JSON.stringify({
+        const metadataLine = `${JSON.stringify({
           ...metadata,
           total,
           streaming: true,
           format: "ndjson",
-        }) + "\n";
-        
+        })}\n`;
+
         controller.enqueue(encoder.encode(metadataLine));
       },
 
@@ -114,23 +114,23 @@ export class StreamingJsonResponse {
         try {
           if (processed >= total) {
             // Send completion marker
-            const completion = JSON.stringify({
+            const completion = `${JSON.stringify({
               completed: true,
               processed,
               processedAt: new Date().toISOString(),
-            }) + "\n";
-            
+            })}\n`;
+
             controller.enqueue(encoder.encode(completion));
             controller.close();
             return;
           }
 
           const chunk = data.slice(processed, processed + chunkSize);
-          
+
           // Convert each item to a JSON line
           let ndjsonChunk = "";
           chunk.forEach(item => {
-            ndjsonChunk += JSON.stringify(item) + "\n";
+            ndjsonChunk += `${JSON.stringify(item)}\n`;
           });
 
           controller.enqueue(encoder.encode(ndjsonChunk));
@@ -173,20 +173,20 @@ export class StreamingJsonResponse {
     const stream = new ReadableStream({
       start(controller) {
         // Send initial connection event
-        const connectEvent = `event: connect\ndata: ${JSON.stringify({ 
-          connected: true, 
-          timestamp: new Date().toISOString() 
+        const connectEvent = `event: connect\ndata: ${JSON.stringify({
+          connected: true,
+          timestamp: new Date().toISOString()
         })}\n\n`;
-        
+
         controller.enqueue(encoder.encode(connectEvent));
 
         // Set up heartbeat if keep alive is enabled
         if (keepAlive) {
           heartbeatTimer = setInterval(() => {
-            const heartbeat = `event: heartbeat\ndata: ${JSON.stringify({ 
-              timestamp: new Date().toISOString() 
+            const heartbeat = `event: heartbeat\ndata: ${JSON.stringify({
+              timestamp: new Date().toISOString()
             })}\n\n`;
-            
+
             try {
               controller.enqueue(encoder.encode(heartbeat));
             } catch {
@@ -203,22 +203,22 @@ export class StreamingJsonResponse {
       async pull(controller) {
         try {
           const { value, done } = await dataGenerator.next();
-          
+
           if (done) {
             // Send completion event
-            const completeEvent = `event: complete\ndata: ${JSON.stringify({ 
-              completed: true, 
-              timestamp: new Date().toISOString() 
+            const completeEvent = `event: complete\ndata: ${JSON.stringify({
+              completed: true,
+              timestamp: new Date().toISOString()
             })}\n\n`;
-            
+
             controller.enqueue(encoder.encode(completeEvent));
-            
+
             // Clean up heartbeat
             if (heartbeatTimer) {
               clearInterval(heartbeatTimer);
               heartbeatTimer = null;
             }
-            
+
             controller.close();
             return;
           }
@@ -226,14 +226,14 @@ export class StreamingJsonResponse {
           // Send data event
           const dataEvent = `event: data\ndata: ${JSON.stringify(value)}\n\n`;
           controller.enqueue(encoder.encode(dataEvent));
-          
+
         } catch (error) {
           // Send error event
-          const errorEvent = `event: error\ndata: ${JSON.stringify({ 
+          const errorEvent = `event: error\ndata: ${JSON.stringify({
             error: error instanceof Error ? error.message : "Unknown error",
-            timestamp: new Date().toISOString() 
+            timestamp: new Date().toISOString()
           })}\n\n`;
-          
+
           controller.enqueue(encoder.encode(errorEvent));
           controller.error(error);
         }
@@ -277,15 +277,15 @@ export function streamLargeArray<T>(
   } = options;
 
   const maxMemoryBytes = maxMemoryMB * 1024 * 1024;
-  
-  // Calculate optimal chunk size based on memory constraints
+
+  // Calculate the optimal chunk size based on memory constraints
   let chunkSize = 100;
   if (data.length > 0) {
     const sampleSize = Math.min(10, data.length);
     const avgItemSize = data.slice(0, sampleSize)
       .map(estimateItemSize)
       .reduce((a, b) => a + b, 0) / sampleSize;
-    
+
     chunkSize = Math.floor(maxMemoryBytes / avgItemSize);
     chunkSize = Math.max(1, Math.min(chunkSize, 1000)); // Keep reasonable bounds
   }
@@ -299,7 +299,7 @@ export function streamLargeArray<T>(
   if (format === "ndjson") {
     return streaming.createNDJsonResponse(data, { chunkSize, metadata });
   }
-  
+
   return streaming.createStreamingResponse(data, { chunkSize, metadata });
 }
 
@@ -339,22 +339,22 @@ export async function* generateLiveUpdates<T>(
 export function supportsStreaming(request: Request): boolean {
   const acceptEncoding = request.headers.get("accept-encoding") || "";
   const userAgent = request.headers.get("user-agent") || "";
-  
+
   // Check for chunked transfer encoding support
-  const supportsChunked = acceptEncoding.includes("chunked") || 
+  const supportsChunked = acceptEncoding.includes("chunked") ||
     !userAgent.includes("MSIE"); // Old IE doesn't support chunked properly
-  
+
   return supportsChunked;
 }
 
 // Middleware to add streaming headers
 export function addStreamingHeaders(response: Response): Response {
   const headers = new Headers(response.headers);
-  
+
   headers.set("X-Accel-Buffering", "no"); // Disable nginx buffering
   headers.set("Cache-Control", "no-cache");
   headers.set("Connection", "keep-alive");
-  
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

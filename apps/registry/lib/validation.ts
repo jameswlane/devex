@@ -41,8 +41,8 @@ export function validatePaginationParams(params: Record<string, string> | URLSea
 	const pageParam = getParam("page");
 	const limitParam = getParam("limit");
 
-	const page = pageParam ? parseInt(pageParam) : 1;
-	const limit = limitParam ? parseInt(limitParam) : 50;
+	const page = pageParam ? parseInt(pageParam, 10) : 1;
+	const limit = limitParam ? parseInt(limitParam, 10) : 50;
 
 	// Validate page (must be >= 1)
 	if (page < 1) {
@@ -71,7 +71,7 @@ export function validatePaginationParams(params: Record<string, string> | URLSea
 			}
 		};
 	}
-	
+
 	if (limit > 100) {
 		return {
 			success: false,
@@ -85,7 +85,7 @@ export function validatePaginationParams(params: Record<string, string> | URLSea
 		};
 	}
 
-	return { 
+	return {
 		success: true,
 		data: { page, limit }
 	};
@@ -135,7 +135,7 @@ export function validatePluginType(type?: string | null): string | undefined {
 // Sanitize search query to prevent injection attacks
 export function sanitizeSearchQuery(query: string): string {
 	if (!query) return '';
-	
+
 	// Remove SQL injection patterns and dangerous characters
 	return query
 		.replace(/['";]/g, '') // Remove quotes and semicolons
@@ -153,7 +153,7 @@ export function validateQueryParams(
 ): { success: boolean; data?: any; error?: any } {
 	if (resource === 'plugins') {
 		const validated: any = {};
-		
+
 		if (params.type) {
 			const type = validatePluginType(params.type);
 			if (!type) {
@@ -161,17 +161,17 @@ export function validateQueryParams(
 			}
 			validated.type = type;
 		}
-		
+
 		if (params.status) {
 			validated.status = params.status;
 		}
-		
+
 		return { success: true, data: validated };
 	}
-	
+
 	if (resource === 'applications') {
 		const validated: any = {};
-		
+
 		if (params.category) {
 			// Accept lowercase 'development' and convert to 'Development'
 			const categoryInput = params.category.charAt(0).toUpperCase() + params.category.slice(1);
@@ -179,9 +179,9 @@ export function validateQueryParams(
 			if (!category) {
 				return { success: false, error: 'Invalid category' };
 			}
-			validated.category = params.category; // Use original case for test compatibility
+			validated.category = params.category; // Use the original case for test compatibility
 		}
-		
+
 		if (params.platform) {
 			const platform = validatePlatform(params.platform);
 			if (!platform) {
@@ -189,13 +189,13 @@ export function validateQueryParams(
 			}
 			validated.platform = platform;
 		}
-		
+
 		if (params.official === 'true') {
 			validated.official = true;
 		}
-		
+
 		return { success: true, data: validated };
 	}
-	
+
 	return { success: false, error: 'Invalid resource type' };
 }

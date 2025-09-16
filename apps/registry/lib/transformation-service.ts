@@ -31,7 +31,7 @@ interface PluginCapabilities {
 	configurations?: Record<string, any>;
 }
 
-// Type definitions for raw database data from registry service
+// Type definitions for raw database data from the registry service
 type PluginWithExtras = {
 	name: string;
 	description: string;
@@ -152,7 +152,7 @@ export class RegistryTransformationService {
 		cacheSize: 0,
 		hitRate: 0,
 	};
-	// Generate cache key for specific transformations
+	// Generate a cache key for specific transformations
 	private getCacheKey(type: string, hash: string): string {
 		return `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`;
 	}
@@ -165,8 +165,8 @@ export class RegistryTransformationService {
 		} else {
 			this.cacheStats.misses++;
 		}
-		this.cacheStats.hitRate = this.cacheStats.totalRequests > 0 
-			? this.cacheStats.hits / this.cacheStats.totalRequests 
+		this.cacheStats.hitRate = this.cacheStats.totalRequests > 0
+			? this.cacheStats.hits / this.cacheStats.totalRequests
 			: 0;
 	}
 
@@ -193,45 +193,45 @@ export class RegistryTransformationService {
 		}
 	}
 
-	// Track cache keys for efficient invalidation with improved strategy
+	// Track cache keys for efficient invalidation with an improved strategy
 	private async trackCacheKey(type: string, cacheKey: string): Promise<void> {
 		try {
 			const trackingKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}`;
 			const timestampKey = `${TRANSFORMATION_CACHE.TRACKING_PREFIX}${type}:timestamps`;
-			
+
 			// Use Redis set to track active cache keys for this type
 			// For Upstash Redis, we'll store as a JSON array since it doesn't support sets
 			const [existingKeys, existingTimestamps] = await Promise.all([
 				redis.get(trackingKey),
 				redis.get(timestampKey)
 			]);
-			
+
 			const keySet = existingKeys ? JSON.parse(existingKeys) : [];
 			const timestampMap = existingTimestamps ? JSON.parse(existingTimestamps) : {};
-			
+
 			if (!keySet.includes(cacheKey)) {
 				keySet.push(cacheKey);
 				timestampMap[cacheKey] = Date.now();
-				
+
 				// Limit tracking to prevent unbounded growth with LRU-like cleanup
 				if (keySet.length > TRANSFORMATION_CACHE.MAX_TRACKED_KEYS) {
-					// Remove oldest 20% of keys
+					// Remove the oldest 20% of keys
 					const sortedKeys = Object.keys(timestampMap).sort((a, b) => timestampMap[a] - timestampMap[b]);
 					const keysToRemove = sortedKeys.slice(0, Math.floor(TRANSFORMATION_CACHE.MAX_TRACKED_KEYS * 0.2));
-					
+
 					for (const keyToRemove of keysToRemove) {
 						const index = keySet.indexOf(keyToRemove);
 						if (index > -1) keySet.splice(index, 1);
 						delete timestampMap[keyToRemove];
 					}
 				}
-				
-				// Update tracking with longer TTL than cache itself
+
+				// Update tracking with longer TTL than the cache itself
 				await Promise.all([
 					redis.set(trackingKey, JSON.stringify(keySet), TRANSFORMATION_CACHE.TTL * 2),
 					redis.set(timestampKey, JSON.stringify(timestampMap), TRANSFORMATION_CACHE.TTL * 2)
 				]);
-				
+
 				this.cacheStats.cacheSize = keySet.length;
 			}
 		} catch (error) {
@@ -256,10 +256,10 @@ export class RegistryTransformationService {
 	private generateDataHash(data: any[], useContent: boolean = false): string {
 		// Create a hash based on data length and first/last item timestamps
 		if (data.length === 0) return "empty";
-		
+
 		const firstItem = data[0];
 		const lastItem = data[data.length - 1];
-		
+
 		let hashData: any = {
 			length: data.length,
 			first: firstItem?.updatedAt || firstItem?.createdAt,
@@ -269,11 +269,11 @@ export class RegistryTransformationService {
 		// For more sensitive caching, include content-based hash
 		if (useContent && data.length <= 10) {
 			// Only hash content for small datasets to avoid performance issues
-			hashData.contentHash = Buffer.from(JSON.stringify(data.map(item => 
+			hashData.contentHash = Buffer.from(JSON.stringify(data.map(item =>
 				({ name: item.name, updated: item.updatedAt || item.createdAt })
 			))).toString("base64").slice(0, 8);
 		}
-		
+
 		return Buffer.from(JSON.stringify(hashData)).toString("base64").slice(0, 16);
 	}
 
@@ -283,17 +283,17 @@ export class RegistryTransformationService {
 		if (type === "plugins" || type === "configs") {
 			return TRANSFORMATION_CACHE.LONG_TTL;
 		}
-		
+
 		// Applications might change more often - medium cache
 		if (type === "applications") {
 			return TRANSFORMATION_CACHE.TTL;
 		}
-		
+
 		// Stacks are dynamic - shorter cache
 		if (type === "stacks") {
 			return TRANSFORMATION_CACHE.SHORT_TTL;
 		}
-		
+
 		// Small datasets can have longer cache since they're cheaper to regenerate
 		return dataLength <= 10 ? TRANSFORMATION_CACHE.LONG_TTL : TRANSFORMATION_CACHE.TTL;
 	}
@@ -326,10 +326,10 @@ export class RegistryTransformationService {
 
 		// Transform plugins in batches
 		const transformed: PluginResponse[] = [];
-		
+
 		for (let i = 0; i < plugins.length; i += TRANSFORMATION_CACHE.BATCH_SIZE) {
 			const batch = plugins.slice(i, i + TRANSFORMATION_CACHE.BATCH_SIZE);
-			
+
 			const batchTransformed = batch.map((plugin) => ({
 				name: plugin.name,
 				description: plugin.description,
@@ -357,7 +357,7 @@ export class RegistryTransformationService {
 			const ttl = this.getTTLForData("plugins", plugins.length);
 			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("plugins", cacheKey);
-			
+
 			// Periodically persist cache stats
 			if (this.cacheStats.totalRequests % 10 === 0) {
 				await this.persistCacheStats();
@@ -393,7 +393,7 @@ export class RegistryTransformationService {
 
 		for (let i = 0; i < applications.length; i += TRANSFORMATION_CACHE.BATCH_SIZE) {
 			const batch = applications.slice(i, i + TRANSFORMATION_CACHE.BATCH_SIZE);
-			
+
 			const batchTransformed = batch.map((app) => ({
 				name: app.name,
 				description: app.description,
@@ -449,7 +449,7 @@ export class RegistryTransformationService {
 			const ttl = this.getTTLForData("applications", applications.length);
 			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("applications", cacheKey);
-			
+
 			if (this.cacheStats.totalRequests % 10 === 0) {
 				await this.persistCacheStats();
 			}
@@ -498,7 +498,7 @@ export class RegistryTransformationService {
 			const ttl = this.getTTLForData("configs", configs.length);
 			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("configs", cacheKey);
-			
+
 			if (this.cacheStats.totalRequests % 10 === 0) {
 				await this.persistCacheStats();
 			}
@@ -549,7 +549,7 @@ export class RegistryTransformationService {
 			const ttl = this.getTTLForData("stacks", stacks.length);
 			await redis.set(cacheKey, JSON.stringify(transformed), ttl);
 			await this.trackCacheKey("stacks", cacheKey);
-			
+
 			if (this.cacheStats.totalRequests % 10 === 0) {
 				await this.persistCacheStats();
 			}
@@ -577,7 +577,7 @@ export class RegistryTransformationService {
 		limit: number;
 	}): Promise<PaginatedResponse> {
 		// Use Promise.all to transform all data types in parallel
-		const [pluginsFormatted, applicationsFormatted, configsFormatted, stacksFormatted] = 
+		const [pluginsFormatted, applicationsFormatted, configsFormatted, stacksFormatted] =
 			await Promise.all([
 				this.transformPlugins(data.plugins),
 				this.transformApplications(data.applications),
@@ -627,9 +627,9 @@ export class RegistryTransformationService {
 					plugins: data.totalCounts.plugins,
 					configs: data.totalCounts.configs,
 					stacks: data.totalCounts.stacks,
-					all: data.totalCounts.applications + 
-						 data.totalCounts.plugins + 
-						 data.totalCounts.configs + 
+					all: data.totalCounts.applications +
+						 data.totalCounts.plugins +
+						 data.totalCounts.configs +
 						 data.totalCounts.stacks,
 				},
 				platforms: {
@@ -652,7 +652,7 @@ export class RegistryTransformationService {
 	async invalidateTransformationCache(types?: ("plugins" | "applications" | "configs" | "stacks")[]): Promise<void> {
 		try {
 			const typesToInvalidate = types || ["plugins", "applications", "configs", "stacks"];
-			
+
 			// Use tracked keys for efficient cache invalidation
 			const promises = typesToInvalidate.map(async (type) => {
 				await this.deleteTrackedKeys(type);
@@ -675,7 +675,7 @@ export class RegistryTransformationService {
 			// Delete all tracked keys in batches
 			const batchSize = 50;
 			let deletedCount = 0;
-			
+
 			for (let i = 0; i < trackedKeys.length; i += batchSize) {
 				const batch = trackedKeys.slice(i, i + batchSize);
 				const deletePromises = batch.map(key => redis.del(key));
@@ -747,7 +747,7 @@ export class RegistryTransformationService {
 	private async scanKeys(cursor: number, pattern: string, count: number): Promise<{ cursor: number; keys: string[] }> {
 		// For most Redis clients, this would use the SCAN command
 		// For Upstash Redis REST API, we need to implement differently
-		
+
 		// Try to use native scan if available
 		if ('scan' in redis && typeof (redis as any).scan === 'function') {
 			const result = await (redis as any).scan(cursor, 'MATCH', pattern, 'COUNT', count);
@@ -769,11 +769,11 @@ export class RegistryTransformationService {
 		if (!match) return;
 
 		const type = match[1];
-		
+
 		// Generate some common hash patterns to try deleting
 		// This is not perfect but better than nothing
 		const commonHashes = ['empty', 'cached', 'default'];
-		const keysToTry = commonHashes.map(hash => 
+		const keysToTry = commonHashes.map(hash =>
 			`${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`
 		);
 
@@ -799,14 +799,14 @@ export class RegistryTransformationService {
 	async preloadCache(types: ("plugins" | "applications" | "configs" | "stacks")[] = ["plugins", "applications"]): Promise<void> {
 		try {
 			logger.info("Starting cache preloading", { types });
-			
+
 			// This would typically be called during application startup
 			// with sample or commonly requested data to warm the cache
-			
+
 			// For now, we'll track that preloading was requested
 			const preloadKey = `${TRANSFORMATION_CACHE.STATS_PREFIX}preload:${Date.now()}`;
 			await redis.set(preloadKey, JSON.stringify({ types, timestamp: Date.now() }), TRANSFORMATION_CACHE.SHORT_TTL);
-			
+
 			logger.info("Cache preloading completed", { types });
 		} catch (error) {
 			logger.warn("Cache preloading failed", { error: error instanceof Error ? error.message : String(error) });
@@ -817,11 +817,11 @@ export class RegistryTransformationService {
 	async getCacheStats(): Promise<CacheStats> {
 		// Load latest stats from Redis
 		await this.loadCacheStats();
-		
+
 		return {
 			...this.cacheStats,
-			hitRate: this.cacheStats.totalRequests > 0 
-				? this.cacheStats.hits / this.cacheStats.totalRequests 
+			hitRate: this.cacheStats.totalRequests > 0
+				? this.cacheStats.hits / this.cacheStats.totalRequests
 				: 0,
 		};
 	}
@@ -850,7 +850,7 @@ export async function checkTransformationHealth(): Promise<{
 }> {
 	try {
 		const stats = await transformationService.getCacheStats();
-		
+
 		return {
 			status: stats.hitRate > 0.5 ? "healthy" : "degraded",
 			cacheStats: stats,

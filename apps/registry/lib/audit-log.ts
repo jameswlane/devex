@@ -11,24 +11,24 @@ export enum AuditEventType {
   LOGOUT = "logout",
   TOKEN_CREATED = "token_created",
   TOKEN_REVOKED = "token_revoked",
-  
+
   // Resource management
   RESOURCE_CREATED = "resource_created",
   RESOURCE_UPDATED = "resource_updated",
   RESOURCE_DELETED = "resource_deleted",
   RESOURCE_ACCESSED = "resource_accessed",
-  
+
   // Administrative actions
   ADMIN_ACTION = "admin_action",
   PERMISSION_GRANTED = "permission_granted",
   PERMISSION_REVOKED = "permission_revoked",
   CONFIGURATION_CHANGED = "configuration_changed",
-  
+
   // Data operations
   DATA_EXPORT = "data_export",
   DATA_IMPORT = "data_import",
   BULK_OPERATION = "bulk_operation",
-  
+
   // Security events
   SECURITY_ALERT = "security_alert",
   RATE_LIMIT_EXCEEDED = "rate_limit_exceeded",
@@ -75,14 +75,14 @@ export class AuditLogger {
   private buffer: AuditLogEntry[] = [];
   private readonly bufferSize = 100;
   private flushInterval: NodeJS.Timeout | null = null;
-  
+
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
-    
+
     // Start periodic flush
     this.startPeriodicFlush();
   }
-  
+
   /**
    * Log an audit event
    */
@@ -118,22 +118,22 @@ export class AuditLogger {
       result: details?.result || "success",
       errorMessage: details?.errorMessage,
     };
-    
+
     // Add to buffer
     this.buffer.push(entry);
-    
+
     // Log to application logger as well
     this.logToApplicationLogger(entry);
-    
+
     // Store in Redis for real-time monitoring
     await this.storeInRedis(entry);
-    
-    // Flush if buffer is full
+
+    // Flush if the buffer is full
     if (this.buffer.length >= this.bufferSize) {
       await this.flush();
     }
   }
-  
+
   /**
    * Log administrative action
    */
@@ -147,7 +147,7 @@ export class AuditLogger {
       result: "success",
     });
   }
-  
+
   /**
    * Log resource access
    */
@@ -169,7 +169,7 @@ export class AuditLogger {
       }
     );
   }
-  
+
   /**
    * Log security event
    */
@@ -183,7 +183,7 @@ export class AuditLogger {
       details,
       result: "failure",
     });
-    
+
     // Alert on critical security events
     if (
       eventType === AuditEventType.SECURITY_ALERT ||
@@ -198,7 +198,7 @@ export class AuditLogger {
       });
     }
   }
-  
+
   /**
    * Store audit entry in Redis for real-time monitoring
    */
@@ -206,13 +206,13 @@ export class AuditLogger {
     try {
       const key = `audit:${entry.eventType}:${new Date().toISOString().slice(0, 10)}`;
       const value = JSON.stringify(entry);
-      
+
       // Store in a list for the day
       await redis.set(`${key}:${entry.id}`, value, 86400 * 7); // Keep for 7 days
-      
+
       // Increment counters
       await redis.incr(`audit:count:${entry.eventType}:daily`);
-      
+
       if (entry.result === "failure") {
         await redis.incr(`audit:failures:${entry.eventType}:daily`);
       }
@@ -222,13 +222,13 @@ export class AuditLogger {
       });
     }
   }
-  
+
   /**
    * Log to application logger
    */
   private logToApplicationLogger(entry: AuditLogEntry): void {
     const logLevel = entry.result === "failure" ? "warn" : "info";
-    
+
     logger[logLevel]("Audit event", {
       eventType: entry.eventType,
       action: entry.action,
@@ -239,23 +239,23 @@ export class AuditLogger {
       requestId: entry.metadata?.requestId,
     });
   }
-  
+
   /**
    * Flush buffer to database
    */
   private async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
-    
+
     const entriesToFlush = [...this.buffer];
     this.buffer = [];
-    
+
     try {
       // In production, you would batch insert to an audit log table
       // For now, we'll just log that we would persist these
       logger.debug("Flushing audit log buffer", {
         count: entriesToFlush.length,
       });
-      
+
       // Example of how you might persist to database:
       // await this.prisma.auditLog.createMany({
       //   data: entriesToFlush.map(entry => ({
@@ -269,12 +269,12 @@ export class AuditLogger {
         error: error instanceof Error ? error.message : String(error),
         count: entriesToFlush.length,
       }, error instanceof Error ? error : undefined);
-      
+
       // Re-add to buffer if flush failed
       this.buffer = [...entriesToFlush, ...this.buffer];
     }
   }
-  
+
   /**
    * Start periodic flush
    */
@@ -287,7 +287,7 @@ export class AuditLogger {
       });
     }, 30000); // Flush every 30 seconds
   }
-  
+
   /**
    * Stop periodic flush and flush remaining entries
    */
@@ -296,7 +296,7 @@ export class AuditLogger {
       clearInterval(this.flushInterval);
       this.flushInterval = null;
     }
-    
+
     await this.flush();
   }
 }
@@ -329,12 +329,12 @@ export function getAuditLogger(): AuditLogger {
  */
 export function extractAuditContext(request: Request): AuditContext {
   const headers = request.headers;
-  
+
   return {
     userId: headers.get("X-User-Id") || undefined,
     clientId: headers.get("X-Client-Id") || undefined,
-    ipAddress: headers.get("X-Forwarded-For") || 
-               headers.get("X-Real-IP") || 
+    ipAddress: headers.get("X-Forwarded-For") ||
+               headers.get("X-Real-IP") ||
                undefined,
     userAgent: headers.get("User-Agent") || undefined,
     requestId: headers.get("X-Request-Id") || crypto.randomUUID(),
@@ -353,10 +353,10 @@ export function withAuditLogging(
   return async (req: Request): Promise<Response> => {
     const context = extractAuditContext(req);
     const startTime = Date.now();
-    
+
     try {
       const response = await handler(req, context);
-      
+
       // Log successful action
       if (auditLogger && response.ok) {
         await auditLogger.log(eventType, action, context, {
@@ -367,7 +367,7 @@ export function withAuditLogging(
           },
         });
       }
-      
+
       return response;
     } catch (error) {
       // Log failed action
@@ -380,7 +380,7 @@ export function withAuditLogging(
           },
         });
       }
-      
+
       throw error;
     }
   };
@@ -418,7 +418,7 @@ export async function getAuditStatistics(
 }> {
   // In production, this would aggregate from database
   logger.debug("Getting audit statistics", { timeRange });
-  
+
   return {
     totalEvents: 0,
     eventsByType: {},

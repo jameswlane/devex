@@ -1,209 +1,10 @@
 import Link from "next/link";
-import { ensurePrisma } from "@/lib/prisma-client";
 import { initializeApplication } from "@/lib/startup";
 import { logger } from "@/lib/logger";
+import StatsDashboard from "@/components/stats-dashboard";
+import { StatsErrorBoundary } from "@/components/error-boundary";
 
-interface RegistryStats {
-	totals: {
-		applications: number;
-		plugins: number;
-		configs: number;
-		stacks: number;
-		all: number;
-	};
-	platforms: {
-		linux: number;
-		macos: number;
-		windows: number;
-	};
-	categories: {
-		applications: Record<string, number>;
-		plugins: Record<string, number>;
-		configs: Record<string, number>;
-	};
-	lastUpdated: string;
-}
-
-async function getRegistryStats(): Promise<RegistryStats> {
-	try {
-		const prisma = ensurePrisma();
-		
-		// Use optimized single query instead of multiple separate queries
-		const statsQuery = await prisma.$queryRaw<any[]>`
-			SELECT 
-				'totals' as category,
-				(SELECT COUNT(*) FROM applications) as applications_count,
-				(SELECT COUNT(*) FROM plugins) as plugins_count,
-				(SELECT COUNT(*) FROM configs) as configs_count,
-				(SELECT COUNT(*) FROM stacks) as stacks_count,
-				(SELECT COUNT(*) FROM applications WHERE linux_support_id IS NOT NULL) as linux_apps,
-				(SELECT COUNT(*) FROM applications WHERE macos_support_id IS NOT NULL) as macos_apps,
-				(SELECT COUNT(*) FROM applications WHERE windows_support_id IS NOT NULL) as windows_apps
-		`;
-
-		// Get category breakdowns in separate optimized queries
-		const [appCategories, pluginTypes, configCategories, recentStats] = await Promise.all([
-			prisma.application.groupBy({
-				by: ["category"],
-				_count: { category: true },
-			}),
-			prisma.plugin.groupBy({
-				by: ["type"],
-				_count: { type: true },
-			}),
-			prisma.config.groupBy({
-				by: ["category"],
-				_count: { category: true },
-			}),
-			prisma.registryStats.findFirst({
-				orderBy: { date: "desc" },
-			}),
-		]);
-
-		const stats = statsQuery[0];
-		const applicationsCount = Number(stats.applications_count);
-		const pluginsCount = Number(stats.plugins_count);
-		const configsCount = Number(stats.configs_count);
-		const stacksCount = Number(stats.stacks_count);
-		const linuxApps = Number(stats.linux_apps);
-		const macosApps = Number(stats.macos_apps);
-		const windowsApps = Number(stats.windows_apps);
-
-		return {
-			totals: {
-				applications: applicationsCount,
-				plugins: pluginsCount,
-				configs: configsCount,
-				stacks: stacksCount,
-				all: applicationsCount + pluginsCount + configsCount + stacksCount,
-			},
-			platforms: {
-				linux: linuxApps,
-				macos: macosApps,
-				windows: windowsApps,
-			},
-			categories: {
-				applications: appCategories.reduce(
-					(acc: Record<string, number>, cat: any) => {
-						const category = cat.category;
-						const count = cat._count.category;
-						if (category && typeof category === 'string') {
-							acc[category] = count;
-						}
-						return acc;
-					},
-					{},
-				),
-				plugins: pluginTypes.reduce(
-					(acc: Record<string, number>, type: any) => {
-						const pluginType = type.type;
-						const count = type._count.type;
-						if (pluginType && typeof pluginType === 'string') {
-							acc[pluginType] = count;
-						}
-						return acc;
-					},
-					{},
-				),
-				configs: configCategories.reduce(
-					(acc: Record<string, number>, cat: any) => {
-						const category = cat.category;
-						const count = cat._count.category;
-						if (category && typeof category === 'string') {
-							acc[category] = count;
-						}
-						return acc;
-					},
-					{},
-				),
-			},
-			lastUpdated: recentStats?.date?.toISOString() || new Date().toISOString(),
-		};
-	} catch (error) {
-		logger.error("Failed to fetch registry stats", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
-		// Return fallback stats to prevent page from breaking
-		return {
-			totals: {
-				applications: 0,
-				plugins: 0,
-				configs: 0,
-				stacks: 0,
-				all: 0,
-			},
-			platforms: {
-				linux: 0,
-				macos: 0,
-				windows: 0,
-			},
-			categories: {
-				applications: {},
-				plugins: {},
-				configs: {},
-			},
-			lastUpdated: new Date().toISOString(),
-		};
-	}
-}
-
-function StatCard({
-	title,
-	count,
-	description,
-	href,
-}: {
-	title: string;
-	count: number;
-	description: string;
-	href?: string;
-}) {
-	const content = (
-		<div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-			<h3 className="text-lg font-semibold text-gray-800 mb-2">{title}</h3>
-			<div className="text-3xl font-bold text-blue-600 mb-1">
-				{count.toLocaleString()}
-			</div>
-			<p className="text-sm text-gray-600">{description}</p>
-		</div>
-	);
-
-	return href ? (
-		<Link href={href} className="block">
-			{content}
-		</Link>
-	) : (
-		content
-	);
-}
-
-function CategoryBreakdown({
-	title,
-	categories,
-}: {
-	title: string;
-	categories: Record<string, number>;
-}) {
-	const sortedCategories = Object.entries(categories)
-		.sort(([, a], [, b]) => b - a)
-		.slice(0, 5); // Top 5 categories
-
-	return (
-		<div className="bg-white rounded-lg shadow-md p-6">
-			<h3 className="text-lg font-semibold text-gray-800 mb-4">{title}</h3>
-			<div className="space-y-2">
-				{sortedCategories.map(([category, count]) => (
-					<div key={category} className="flex justify-between items-center">
-						<span className="text-gray-700 capitalize">
-							{category.replace("-", " ")}
-						</span>
-						<span className="text-blue-600 font-medium">{count}</span>
-					</div>
-				))}
-			</div>
-		</div>
-	);
-}
-
-// Force dynamic rendering since we need database access
+// Force dynamic rendering since we have client-side data fetching
 export const dynamic = "force-dynamic";
 
 export default async function RegistryHomepage() {
@@ -225,8 +26,6 @@ export default async function RegistryHomepage() {
 		logger.error("Application startup failed", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
 		// Continue anyway - page should still render with cached/fallback data
 	}
-
-	const stats = await getRegistryStats();
 
 	return (
 		<div className="min-h-screen bg-gray-50">
@@ -274,92 +73,55 @@ export default async function RegistryHomepage() {
 
 			{/* Main Content */}
 			<main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-				{/* Overview Stats */}
-				<div className="mb-8">
-					<h2 className="text-2xl font-bold text-gray-900 mb-6">
-						Registry Overview
-					</h2>
-					<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-						<StatCard
-							title="Applications"
-							count={stats.totals.applications}
-							description="Cross-platform applications"
-							href="/api/v1/applications"
-						/>
-						<StatCard
-							title="Plugins"
-							count={stats.totals.plugins}
-							description="DevEx CLI plugins"
-							href="/api/v1/plugins"
-						/>
-						<StatCard
-							title="Configs"
-							count={stats.totals.configs}
-							description="Configuration templates"
-						/>
-						<StatCard
-							title="Stacks"
-							count={stats.totals.stacks}
-							description="Curated app collections"
-						/>
-					</div>
+				{/* Statistics Dashboard with Loading States */}
+				<StatsErrorBoundary>
+					<StatsDashboard />
+				</StatsErrorBoundary>
 
-					<StatCard
-						title="Total Registry Items"
-						count={stats.totals.all}
-						description="Everything available in the DevEx ecosystem"
-					/>
-				</div>
-
-				{/* Platform Support */}
-				<div className="mb-8">
+				{/* Browse Categories */}
+				<div className="mb-8 mt-12">
 					<h2 className="text-2xl font-bold text-gray-900 mb-6">
-						Platform Support
+						Browse Registry
 					</h2>
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-						<StatCard
-							title="Linux"
-							count={stats.platforms.linux}
-							description="Applications with Linux support"
-						/>
-						<StatCard
-							title="macOS"
-							count={stats.platforms.macos}
-							description="Applications with macOS support"
-						/>
-						<StatCard
-							title="Windows"
-							count={stats.platforms.windows}
-							description="Applications with Windows support"
-						/>
-					</div>
-				</div>
-
-				{/* Category Breakdowns */}
-				<div className="mb-8">
-					<h2 className="text-2xl font-bold text-gray-900 mb-6">
-						Popular Categories
-					</h2>
-					<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-						<CategoryBreakdown
-							title="Application Categories"
-							categories={stats.categories.applications}
-						/>
-						<CategoryBreakdown
-							title="Plugin Types"
-							categories={stats.categories.plugins}
-						/>
-						{Object.keys(stats.categories.configs).length > 0 && (
-							<CategoryBreakdown
-								title="Config Categories"
-								categories={stats.categories.configs}
-							/>
-						)}
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+						<Link
+							href="/applications"
+							className="block bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+						>
+							<div className="flex items-center">
+								<div className="flex-shrink-0">
+									<svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+									</svg>
+								</div>
+								<div className="ml-4">
+									<h3 className="text-lg font-semibold text-gray-900">Applications</h3>
+									<p className="text-gray-600">Browse cross-platform development applications with advanced filtering and search</p>
+								</div>
+							</div>
+						</Link>
+						
+						<Link
+							href="/plugins"
+							className="block bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
+						>
+							<div className="flex items-center">
+								<div className="flex-shrink-0">
+									<svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+									</svg>
+								</div>
+								<div className="ml-4">
+									<h3 className="text-lg font-semibold text-gray-900">Plugins</h3>
+									<p className="text-gray-600">Explore DevEx CLI plugins and extensions with type-based filtering</p>
+								</div>
+							</div>
+						</Link>
 					</div>
 				</div>
 
 				{/* API Documentation */}
-				<div className="mb-8">
+				<div className="mb-8 mt-12">
 					<h2 className="text-2xl font-bold text-gray-900 mb-6">
 						API Endpoints
 					</h2>
@@ -418,17 +180,6 @@ export default async function RegistryHomepage() {
 			<footer className="bg-white border-t border-gray-200">
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 					<div className="text-center">
-						<p className="text-gray-600">
-							Last updated:{" "}
-							{new Date(stats.lastUpdated).toLocaleDateString("en-US", {
-								year: "numeric",
-								month: "long",
-								day: "numeric",
-								hour: "2-digit",
-								minute: "2-digit",
-								timeZoneName: "short",
-							})}
-						</p>
 						<p className="text-gray-500 mt-2">
 							Powered by{" "}
 							<Link
