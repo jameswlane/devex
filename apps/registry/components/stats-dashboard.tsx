@@ -2,12 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { 
-  PlatformDistributionChart, 
-  CategoryComparisonChart, 
-  RegistryOverviewChart,
-  GrowthTrendChart 
-} from './charts'
 
 interface RegistryStats {
   totals: {
@@ -175,17 +169,35 @@ export default function StatsDashboard() {
       setError(null)
 
       const url = forceRefresh ? '/api/v1/stats?refresh=true' : '/api/v1/stats'
-      const response = await fetch(url)
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        // Add timeout to prevent hanging requests
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      })
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch statistics: ${response.status} ${response.statusText}`)
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`Failed to fetch statistics: ${response.status} ${response.statusText} - ${errorText}`)
       }
 
       const data = await response.json()
+      
+      // Validate data structure
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format from statistics API')
+      }
+      
       setStats(data)
       setLastRefresh(new Date())
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      if (err instanceof Error && err.name === 'AbortError') {
+        setError('Request timeout - statistics service is taking too long to respond')
+      } else {
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      }
       console.error('Failed to fetch stats:', err)
     } finally {
       setIsLoading(false)
@@ -305,38 +317,39 @@ export default function StatsDashboard() {
         isLoading={isLoading}
       />
 
-      {/* Visual Charts Section */}
+      {/* Quick Stats Summary */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-6">Visual Analytics</h2>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Registry Overview Chart */}
-          <RegistryOverviewChart 
-            totals={stats?.totals || { applications: 0, plugins: 0, configs: 0, stacks: 0 }}
-            isLoading={isLoading}
-          />
-          
-          {/* Platform Distribution Chart */}
-          <PlatformDistributionChart 
-            data={[
-              { platform: 'linux', count: stats?.platforms.linux || 0 },
-              { platform: 'macos', count: stats?.platforms.macos || 0 },
-              { platform: 'windows', count: stats?.platforms.windows || 0 }
-            ]}
-            isLoading={isLoading}
-          />
-        </div>
-
-        {/* Category Comparison Chart - Full Width */}
-        <CategoryComparisonChart 
-          applicationsData={stats?.categories.applications || {}}
-          pluginsData={stats?.categories.plugins || {}}
-          configsData={stats?.categories.configs || {}}
-          isLoading={isLoading}
-        />
-
-        {/* Growth Trends Chart - Placeholder for future */}
-        <div className="mt-6">
-          <GrowthTrendChart isLoading={isLoading} />
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Overview</h2>
+        <div className="bg-white rounded-lg shadow-md p-6">
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="text-center animate-pulse">
+                  <div className="h-8 bg-gray-200 rounded w-16 mx-auto mb-2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-20 mx-auto"></div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{stats?.totals.applications || 0}</div>
+                <div className="text-sm text-gray-600">Applications</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-purple-600">{stats?.totals.plugins || 0}</div>
+                <div className="text-sm text-gray-600">Plugins</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{stats?.totals.configs || 0}</div>
+                <div className="text-sm text-gray-600">Configs</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-orange-600">{stats?.totals.stacks || 0}</div>
+                <div className="text-sm text-gray-600">Stacks</div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
