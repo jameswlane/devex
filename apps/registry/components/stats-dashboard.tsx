@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { 
+  PlatformDistributionChart, 
+  CategoryComparisonChart, 
+  RegistryOverviewChart 
+} from './charts'
 
 interface RegistryStats {
   totals: {
@@ -373,6 +378,38 @@ export default function StatsDashboard() {
             title="Windows"
             count={stats?.platforms.windows}
             description="Applications with Windows support"
+            isLoading={isLoading}
+          />
+        </div>
+      </div>
+
+      {/* Visual Charts Section */}
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Visual Analytics</h2>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
+          {/* Registry Overview Pie Chart */}
+          <RegistryOverviewChart
+            totals={stats?.totals || { applications: 0, plugins: 0, configs: 0, stacks: 0 }}
+            isLoading={isLoading}
+          />
+          
+          {/* Platform Distribution Chart */}
+          <PlatformDistributionChart
+            data={[
+              { platform: 'linux', count: stats?.platforms.linux || 0 },
+              { platform: 'macos', count: stats?.platforms.macos || 0 },
+              { platform: 'windows', count: stats?.platforms.windows || 0 }
+            ]}
+            isLoading={isLoading}
+          />
+        </div>
+        
+        {/* Category Comparison Chart - Full Width */}
+        <div className="mb-8">
+          <CategoryComparisonChart
+            applicationsData={stats?.categories.applications || {}}
+            pluginsData={stats?.categories.plugins || {}}
+            configsData={stats?.categories.configs || {}}
             isLoading={isLoading}
           />
         </div>
