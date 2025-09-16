@@ -324,7 +324,7 @@ export class CacheInvalidationService {
       for (const prefix of prefixes) {
         if (pattern.startsWith(prefix) || pattern === "*") {
           // Generate possible keys based on pattern
-          const baseKey = pattern.replace("*", "");
+          const baseKey = pattern.replace(/\*/g, "");
           
           // Try to delete common variations
           const variations = [
