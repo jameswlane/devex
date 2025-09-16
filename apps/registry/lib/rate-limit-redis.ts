@@ -168,6 +168,11 @@ export function redisRateLimit(config: Partial<RateLimitConfig> = {}) {
   ): Promise<NextResponse> {
     const key = finalConfig.keyGenerator?.(req);
 
+    if (!key) {
+      logger.warn("Rate limit key generator returned undefined, skipping rate limit");
+      return await handler();
+    }
+
     try {
       // Check current rate limit status
       const current = await redisRateLimitStore.get(key, finalConfig.windowMs);
