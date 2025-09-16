@@ -40,13 +40,13 @@ packages/shared/plugin-sdk/
 type Plugin interface {
     // GetInfo returns plugin metadata
     GetInfo() PluginInfo
-    
+
     // IsCompatible checks if plugin can run on current system
     IsCompatible() bool
-    
+
     // Execute runs the plugin with given command and arguments
     Execute(ctx context.Context, command string, args []string) error
-    
+
     // GetCommands returns list of supported commands
     GetCommands() []Command
 }
@@ -87,10 +87,10 @@ type MyPlugin struct {
 func (p *MyPlugin) GetInfo() interfaces.PluginInfo {
     return interfaces.PluginInfo{
         Name:        "my-plugin",
-        Version:     "1.0.0", 
+        Version:     "1.0.0",
         Description: "Example plugin implementation",
         Author:      "Your Name",
-        License:     "GPL-3.0",
+        License:     "Apache-2.0",
         Platforms:   []interfaces.Platform{interfaces.Linux, interfaces.MacOS},
         Commands: []interfaces.Command{
             {
@@ -123,7 +123,7 @@ func main() {
         config: config.Load("my-plugin"),
         logger: logging.New("my-plugin"),
     }
-    
+
     interfaces.RunPlugin(plugin)
 }
 ```
@@ -150,7 +150,7 @@ if err := cfg.Validate(schema); err != nil {
 logger := logging.New("plugin-name")
 
 // Log with context
-logger.Info("Starting plugin", 
+logger.Info("Starting plugin",
     logging.String("version", "1.0.0"),
     logging.Int("port", 8080),
 )
@@ -183,11 +183,11 @@ func (p *Plugin) installPackage(name string) error {
     if !p.packageExists(name) {
         return errors.Wrapf(ErrPackageNotFound, "package %s", name)
     }
-    
+
     if err := p.download(name); err != nil {
         return errors.Wrapf(err, "failed to download %s", name)
     }
-    
+
     return nil
 }
 ```
@@ -204,16 +204,16 @@ import (
 func TestPluginInstall(t *testing.T) {
     // Create test plugin instance
     plugin := testing.NewMockPlugin()
-    
+
     // Set up test expectations
     plugin.ExpectCommand("install").
         WithArgs("example-package").
         Returns(nil)
-    
+
     // Execute test
     err := plugin.Execute(context.Background(), "install", []string{"example-package"})
     assert.NoError(t, err)
-    
+
     // Verify expectations
     plugin.AssertExpectations(t)
 }
@@ -225,7 +225,7 @@ func TestConfigurationLoading(t *testing.T) {
         "timeout": 30,
     })
     defer os.Remove(configPath)
-    
+
     // Load and test configuration
     cfg := config.LoadFromPath(configPath)
     assert.True(t, cfg.GetBool("debug"))
@@ -254,13 +254,13 @@ cfg := testing.NewMockConfig(map[string]interface{}{
 ```go
 type PackageManager interface {
     Plugin
-    
+
     // Package operations
     Install(ctx context.Context, packages []string) error
-    Remove(ctx context.Context, packages []string) error  
+    Remove(ctx context.Context, packages []string) error
     Update(ctx context.Context) error
     Search(ctx context.Context, query string) ([]Package, error)
-    
+
     // Repository management
     AddRepository(ctx context.Context, repo Repository) error
     RemoveRepository(ctx context.Context, name string) error
@@ -271,11 +271,11 @@ type PackageManager interface {
 ```go
 type DesktopEnvironment interface {
     Plugin
-    
+
     // Theme and appearance
     ApplyTheme(ctx context.Context, theme Theme) error
     SetWallpaper(ctx context.Context, path string) error
-    
+
     // Configuration
     SetSetting(ctx context.Context, key, value string) error
     GetSetting(ctx context.Context, key string) (string, error)
@@ -286,11 +286,11 @@ type DesktopEnvironment interface {
 ```go
 type SystemTool interface {
     Plugin
-    
+
     // Tool-specific operations
     Configure(ctx context.Context, config ToolConfig) error
     GetStatus(ctx context.Context) (ToolStatus, error)
-    
+
     // Service management
     Start(ctx context.Context) error
     Stop(ctx context.Context) error
@@ -324,7 +324,7 @@ task build
 # Run tests
 task test
 
-# Run integration tests  
+# Run integration tests
 task test:integration
 
 # Install locally for testing
@@ -343,7 +343,7 @@ name: "my-plugin"
 version: "1.0.0"
 description: "Example plugin"
 author: "Your Name"
-license: "GPL-3.0"
+license: "Apache-2.0"
 website: "https://example.com"
 
 platforms:
@@ -366,7 +366,7 @@ config_schema:
       type: "boolean"
       default: false
     timeout:
-      type: "integer" 
+      type: "integer"
       default: 30
 ```
 
@@ -374,7 +374,7 @@ config_schema:
 
 ### SDK Versioning
 - **Major**: Breaking API changes
-- **Minor**: New features, backward compatible  
+- **Minor**: New features, backward compatible
 - **Patch**: Bug fixes and improvements
 
 ### Plugin Compatibility Matrix
@@ -383,7 +383,7 @@ sdk_version: "0.1.0"
 compatible_devex_versions:
   - ">=2.0.0"
   - "<3.0.0"
-  
+
 minimum_requirements:
   go_version: "1.24"
   os_support: ["linux", "macos", "windows"]
@@ -401,7 +401,7 @@ minimum_requirements:
 ### Plugin Submission
 1. Implement required interfaces
 2. Add comprehensive tests
-3. Include documentation and examples  
+3. Include documentation and examples
 4. Submit plugin for review
 5. Maintain plugin after acceptance
 

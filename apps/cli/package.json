@@ -1,6 +1,6 @@
 {
-  "name": "@devex/cli",
-  "version": "0.6.0",
-  "private": true,
-  "description": "DevEx CLI - Development Environment Setup Tool"
+	"name": "@devex/cli",
+	"version": "0.6.0",
+	"private": true,
+	"description": "DevEx CLI - Development Environment Setup Tool"
 }

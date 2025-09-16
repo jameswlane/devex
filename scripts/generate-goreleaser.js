@@ -223,7 +223,7 @@ class GoReleaserGenerator {
 					homepage: "https://devex.sh",
 					description:
 						"CLI tool for efficiently setting up and managing development environments",
-					license: "GPL-3.0",
+					license: "Apache-2.0",
 				},
 			],
 			snapcrafts: [
@@ -236,7 +236,7 @@ class GoReleaserGenerator {
 						"DevEx is a powerful CLI tool designed to streamline the setup and management of development environments. It simplifies the installation of applications, configuration of programming languages, and customization of themes.",
 					grade: "stable",
 					confinement: "classic",
-					license: "GPL-3.0",
+					license: "Apache-2.0",
 				},
 			],
 			scoops: [
@@ -251,7 +251,7 @@ class GoReleaserGenerator {
 					homepage: "https://devex.sh",
 					description:
 						"CLI tool for efficiently setting up and managing development environments",
-					license: "GPL-3.0",
+					license: "Apache-2.0",
 				},
 			],
 		};
