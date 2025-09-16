@@ -287,10 +287,11 @@ export async function verifyApiKey(
       return { valid: false };
     }
 
-    // Create a hash for cache lookup (using SHA256 for cache keys is fine)
+    // Create a deterministic cache key from the stored hash (not the plaintext API key)
+    // This avoids storing plaintext API keys in cache while ensuring consistent lookups
     const cacheKey = crypto
       .createHash("sha256")
-      .update(apiKey)
+      .update(storedHashedKey)
       .digest("hex");
 
     // Check if key exists in Redis cache
