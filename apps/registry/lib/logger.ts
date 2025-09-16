@@ -126,6 +126,18 @@ export class StructuredLogger {
     const safeEntry = StructuredLogger.redactSensitiveData(entry);
     const logString = JSON.stringify(safeEntry);
     
+    // Additional safety check for sensitive patterns
+    // Look for actual sensitive values, not just field names or redacted placeholders
+    const sensitivePatterns = /KV_REST_API_TOKEN=|DATABASE_URL=|"secret":"[^"]*[a-zA-Z0-9]{20,}"|"password":"[^"]*[a-zA-Z0-9]{8,}"|"token":"[^"]*[a-zA-Z0-9]{20,}"/i;
+    if (sensitivePatterns.test(logString)) {
+      console.error(JSON.stringify({
+        level: safeEntry.level,
+        message: "Log entry contains sensitive data - redacted",
+        timestamp: safeEntry.timestamp
+      }));
+      return;
+    }
+    
     switch (safeEntry.level) {
       case LogLevel.ERROR:
         console.error(logString);
