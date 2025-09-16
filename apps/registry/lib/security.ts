@@ -115,8 +115,8 @@ export function validateRequest(request: NextRequest): ValidationResult {
 }
 
 // Enhanced search query sanitization
-export function sanitizeSearchQuery(query: string): string {
-  if (!query) {
+export function sanitizeSearchQuery(query: any): string {
+  if (!query || typeof query !== 'string') {
     return '';
   }
 
