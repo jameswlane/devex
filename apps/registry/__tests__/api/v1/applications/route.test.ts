@@ -193,7 +193,7 @@ describe('/api/v1/applications', () => {
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            platforms: { path: ['linux'], not: {} },
+            supportsLinux: true,
           }),
         })
       )
@@ -206,7 +206,7 @@ describe('/api/v1/applications', () => {
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            platforms: { path: ['macos'], not: {} },
+            supportsMacOS: true,
           }),
         })
       )
@@ -219,7 +219,7 @@ describe('/api/v1/applications', () => {
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            platforms: { path: ['windows'], not: {} },
+            supportsWindows: true,
           }),
         })
       )
@@ -254,7 +254,7 @@ describe('/api/v1/applications', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             category: { contains: 'development', mode: 'insensitive' },
-            platforms: { path: ['linux'], not: {} },
+            supportsLinux: true,
             OR: [
               { name: { contains: 'editor', mode: 'insensitive' } },
               { description: { contains: 'editor', mode: 'insensitive' } },

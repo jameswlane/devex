@@ -1,13 +1,6 @@
 import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals'
 import crypto from 'crypto'
 
-// Mock bcrypt
-const mockBcrypt = {
-  hash: jest.fn(),
-  compare: jest.fn(),
-}
-jest.mock('bcrypt', () => mockBcrypt)
-
 // Mock logger
 const mockLogger = {
   warn: jest.fn(),
@@ -490,9 +483,6 @@ describe('Request Signing Module', () => {
   })
 
   describe('generateApiKey', () => {
-    beforeEach(() => {
-      mockBcrypt.hash.mockResolvedValue('$2b$12$hashedkey...')
-    })
 
     it('should generate a valid API key and hash', async () => {
       const clientId = 'test-client-123'
@@ -500,8 +490,8 @@ describe('Request Signing Module', () => {
       const result = await generateApiKey(clientId)
 
       expect(result.apiKey).toMatch(/^devex_[a-f0-9]{64}$/)
-      expect(result.hashedKey).toBe('$2b$12$hashedkey...')
-      expect(mockBcrypt.hash).toHaveBeenCalledWith(result.apiKey, 12)
+      // HMAC-SHA256 produces a 64-character hex string
+      expect(result.hashedKey).toMatch(/^[a-f0-9]{64}$/)
       expect(mockLogger.info).toHaveBeenCalledWith(
         'API key generated',
         expect.objectContaining({
@@ -521,28 +511,26 @@ describe('Request Signing Module', () => {
 
   describe('verifyApiKey', () => {
     beforeEach(() => {
-      mockBcrypt.compare.mockResolvedValue(true)
       mockRedis.get.mockResolvedValue('test-client-123')
     })
 
     it('should verify a valid API key', async () => {
       const apiKey = 'devex_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
-      const hashedKey = '$2b$12$hashedkey...'
+      // Generate the correct HMAC-SHA256 hash for this API key
+      const secretKey = process.env.API_KEY_SECRET || "devex-registry-default-secret-change-in-production"
+      const expectedHash = crypto.createHmac('sha256', secretKey).update(apiKey).digest('hex')
 
-      const result = await verifyApiKey(apiKey, hashedKey)
+      const result = await verifyApiKey(apiKey, expectedHash)
 
       expect(result.valid).toBe(true)
       expect(result.clientId).toBe('test-client-123')
-      expect(mockBcrypt.compare).toHaveBeenCalledWith(apiKey, hashedKey)
     })
 
     it('should reject invalid API keys', async () => {
-      mockBcrypt.compare.mockResolvedValue(false)
-      
-      const apiKey = 'invalid-key'
-      const hashedKey = '$2b$12$hashedkey...'
+      const apiKey = 'devex_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+      const invalidHash = 'invalid_hash_that_does_not_match'
 
-      const result = await verifyApiKey(apiKey, hashedKey)
+      const result = await verifyApiKey(apiKey, invalidHash)
 
       expect(result.valid).toBe(false)
       expect(result.clientId).toBeUndefined()
@@ -560,15 +548,13 @@ describe('Request Signing Module', () => {
     })
 
     it('should handle verification errors gracefully', async () => {
-      mockBcrypt.compare.mockRejectedValue(new Error('Bcrypt failed'))
-      
+      // Test with malformed hash that would cause Buffer.from to fail
       const apiKey = 'devex_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
-      const hashedKey = '$2b$12$hashedkey...'
+      const malformedHash = 'not-a-hex-string'
 
-      const result = await verifyApiKey(apiKey, hashedKey)
+      const result = await verifyApiKey(apiKey, malformedHash)
 
       expect(result.valid).toBe(false)
-      expect(mockLogger.error).toHaveBeenCalled()
     })
   })
 

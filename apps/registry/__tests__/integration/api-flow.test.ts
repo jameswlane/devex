@@ -510,11 +510,22 @@ describe('API Integration Flow', () => {
         expect(response.status).toBe(200)
         
         // Verify the correct platform filter was applied
+        const expectedWhere: any = {}
+        switch (platform) {
+          case 'linux':
+            expectedWhere.supportsLinux = true
+            break
+          case 'macos':
+            expectedWhere.supportsMacOS = true
+            break
+          case 'windows':
+            expectedWhere.supportsWindows = true
+            break
+        }
+        
         expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
-            where: expect.objectContaining({
-              platforms: { path: [platform], not: {} }
-            })
+            where: expect.objectContaining(expectedWhere)
           })
         )
       }

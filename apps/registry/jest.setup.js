@@ -6,6 +6,17 @@ process.env.DATABASE_URL = 'file:./test.db'
 process.env.NEXTAUTH_SECRET = 'test-secret'
 process.env.NEXTAUTH_URL = 'http://localhost:3000'
 
+// Suppress console output during tests unless it's an error
+const originalConsole = console
+global.console = {
+  ...originalConsole,
+  log: jest.fn(),
+  debug: jest.fn(),
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: originalConsole.error, // Keep errors visible
+}
+
 // Mock Prisma client for tests
 jest.mock('./lib/prisma', () => ({
   prisma: {
