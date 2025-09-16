@@ -1,325 +1,366 @@
-const fs = require('fs').promises;
-const path = require('path');
-const crypto = require('crypto');
-const https = require('https');
-const { Octokit } = require('@octokit/rest');
+const fs = require("fs").promises;
+const path = require("path");
+const crypto = require("crypto");
+const https = require("https");
+const { Octokit } = require("@octokit/rest");
 
-const OWNER = 'jameswlane';
-const REPO = 'devex';
-const REGISTRY_BASE_URL = 'https://registry.devex.sh';
+const OWNER = "jameswlane";
+const REPO = "devex";
+const REGISTRY_BASE_URL = "https://registry.devex.sh";
 
 class RegistryGenerator {
-    constructor() {
-        this.octokit = new Octokit({
-            auth: process.env.GITHUB_TOKEN
-        });
-    }
+	constructor() {
+		this.octokit = new Octokit({
+			auth: process.env.GITHUB_TOKEN,
+		});
+	}
 
-    async generateRegistry(tagOrMode = 'all') {
-        console.log(`Generating registry for: ${tagOrMode}`);
+	async generateRegistry(tagOrMode = "all") {
+		console.log(`Generating registry for: ${tagOrMode}`);
 
-        const registry = {
-            base_url: `https://github.com/${OWNER}/${REPO}/releases/download`,
-            version: "1.0.0",
-            last_updated: new Date().toISOString(),
-            plugins: {}
-        };
+		const registry = {
+			base_url: `https://github.com/${OWNER}/${REPO}/releases/download`,
+			version: "1.0.0",
+			last_updated: new Date().toISOString(),
+			plugins: {},
+		};
 
-        if (tagOrMode === 'all') {
-            // Generate registry from all plugin tags
-            const pluginTags = await this.getAllPluginTags();
-            console.log(`Found ${pluginTags.length} plugin tags`);
-            
-            for (const tag of pluginTags) {
-                try {
-                    await this.processPluginTag(tag, registry);
-                } catch (error) {
-                    console.warn(`Failed to process tag ${tag}: ${error.message}`);
-                }
-            }
-        } else {
-            // Generate registry from specific tag
-            await this.processPluginTag(tagOrMode, registry);
-        }
+		if (tagOrMode === "all") {
+			// Generate registry from all plugin tags
+			const pluginTags = await this.getAllPluginTags();
+			console.log(`Found ${pluginTags.length} plugin tags`);
 
-        await this.saveRegistry(registry);
-        await this.generatePluginIndex(registry);
+			for (const tag of pluginTags) {
+				try {
+					await this.processPluginTag(tag, registry);
+				} catch (error) {
+					console.warn(`Failed to process tag ${tag}: ${error.message}`);
+				}
+			}
+		} else {
+			// Generate registry from specific tag
+			await this.processPluginTag(tagOrMode, registry);
+		}
 
-        console.log(`Registry generated with ${Object.keys(registry.plugins).length} plugins`);
-        return registry;
-    }
+		await this.saveRegistry(registry);
+		await this.generatePluginIndex(registry);
 
-    async getAllPluginTags() {
-        try {
-            const { data: tags } = await this.octokit.rest.repos.listTags({
-                owner: OWNER,
-                repo: REPO,
-                per_page: 100
-            });
-            
-            // Filter for plugin tags in new format: @devex/package-name@version
-            return tags
-                .map(tag => tag.name)
-                .filter(name => name.match(/^@devex\/(tool-|desktop-|package-manager-).+@\d+\.\d+\.\d+$/));
-        } catch (error) {
-            console.error('Failed to get tags:', error.message);
-            return [];
-        }
-    }
+		console.log(
+			`Registry generated with ${Object.keys(registry.plugins).length} plugins`,
+		);
+		return registry;
+	}
 
-    async processPluginTag(tag, registry) {
-        console.log(`Processing tag: ${tag}`);
-        
-        const { pluginName, version } = this.parsePluginTag(tag);
-        if (!pluginName) {
-            console.warn(`Could not parse plugin name from tag: ${tag}`);
-            return;
-        }
+	async getAllPluginTags() {
+		try {
+			const { data: tags } = await this.octokit.rest.repos.listTags({
+				owner: OWNER,
+				repo: REPO,
+				per_page: 100,
+			});
 
-        try {
-            const release = await this.getRelease(tag);
-            const pluginAssets = this.filterPluginAssets(release.assets);
-            
-            if (pluginAssets.length === 0) {
-                console.warn(`No plugin assets found for ${tag}`);
-                return;
-            }
+			// Filter for plugin tags in new format: @devex/package-name@version
+			return tags
+				.map((tag) => tag.name)
+				.filter((name) =>
+					name.match(
+						/^@devex\/(tool-|desktop-|package-manager-).+@\d+\.\d+\.\d+$/,
+					),
+				);
+		} catch (error) {
+			console.error("Failed to get tags:", error.message);
+			return [];
+		}
+	}
 
-            // Group assets by plugin name
-            const pluginGroups = this.groupAssetsByPlugin(pluginAssets);
-            
-            for (const [assetPluginName, assets] of Object.entries(pluginGroups)) {
-                // Use the plugin name from the tag, not from assets
-                const finalPluginName = pluginName;
-                const pluginMetadata = await this.getPluginMetadata(finalPluginName);
+	async processPluginTag(tag, registry) {
+		console.log(`Processing tag: ${tag}`);
 
-                registry.plugins[finalPluginName] = {
-                    name: finalPluginName,
-                    version: version,
-                    description: pluginMetadata.description,
-                    author: pluginMetadata.author || "DevEx Team",
-                    repository: `https://github.com/${OWNER}/${REPO}`,
-                    platforms: {},
-                    dependencies: pluginMetadata.dependencies || [],
-                    tags: pluginMetadata.tags || [],
-                    type: pluginMetadata.type || "unknown",
-                    priority: pluginMetadata.priority || 0,
-                    supports: pluginMetadata.supports || {},
-                    release_tag: tag
-                };
+		const { pluginName, version } = this.parsePluginTag(tag);
+		if (!pluginName) {
+			console.warn(`Could not parse plugin name from tag: ${tag}`);
+			return;
+		}
 
-                // Process each platform binary
-                for (const asset of assets) {
-                    const platformInfo = this.parsePlatformFromAsset(asset);
-                    if (platformInfo) {
-                        // Skip checksum calculation for now to speed up registry generation
-                        // const checksum = await this.calculateChecksumFromURL(asset.browser_download_url);
+		try {
+			const release = await this.getRelease(tag);
+			const pluginAssets = this.filterPluginAssets(release.assets);
 
-                        registry.plugins[finalPluginName].platforms[platformInfo.key] = {
-                            url: asset.browser_download_url,
-                            checksum: "sha256:pending", // Placeholder for now
-                            size: asset.size,
-                            os: platformInfo.os,
-                            arch: platformInfo.arch
-                        };
-                    }
-                }
-            }
-        } catch (error) {
-            // If no GitHub release exists, create a basic registry entry from metadata
-            console.warn(`No release found for ${tag}, creating basic entry from metadata`);
-            
-            const pluginMetadata = await this.getPluginMetadata(pluginName);
-            
-            registry.plugins[pluginName] = {
-                name: pluginName,
-                version: version,
-                description: pluginMetadata.description,
-                author: pluginMetadata.author || "DevEx Team",
-                repository: `https://github.com/${OWNER}/${REPO}`,
-                platforms: {}, // No binaries available yet
-                dependencies: pluginMetadata.dependencies || [],
-                tags: pluginMetadata.tags || [],
-                type: pluginMetadata.type || "unknown",
-                priority: pluginMetadata.priority || 0,
-                supports: pluginMetadata.supports || {},
-                release_tag: tag,
-                status: "pending_release" // Indicates no binaries are available yet
-            };
-        }
-    }
+			if (pluginAssets.length === 0) {
+				console.warn(`No plugin assets found for ${tag}`);
+				return;
+			}
 
-    parsePluginTag(tag) {
-        // Parse @devex/package-manager-apt@1.0.0 format
-        const match = tag.match(/^@devex\/(.+)@(\d+\.\d+\.\d+.*)$/);
-        if (match) {
-            return {
-                pluginName: match[1],
-                version: match[2]
-            };
-        }
-        return { pluginName: null, version: null };
-    }
+			// Group assets by plugin name
+			const pluginGroups = this.groupAssetsByPlugin(pluginAssets);
 
-    async getRelease(version) {
-        try {
-            const { data: release } = await this.octokit.rest.repos.getReleaseByTag({
-                owner: OWNER,
-                repo: REPO,
-                tag: version
-            });
-            return release;
-        } catch (error) {
-            throw new Error(`Failed to get release ${version}: ${error.message}`);
-        }
-    }
+			for (const [assetPluginName, assets] of Object.entries(pluginGroups)) {
+				// Use the plugin name from the tag, not from assets
+				const finalPluginName = pluginName;
+				const pluginMetadata = await this.getPluginMetadata(finalPluginName);
 
-    filterPluginAssets(assets) {
-        return assets.filter(asset =>
-            asset.name.startsWith('devex-plugin-') &&
-            !asset.name.endsWith('.sig') // Exclude signature files
-        );
-    }
+				registry.plugins[finalPluginName] = {
+					name: finalPluginName,
+					version: version,
+					description: pluginMetadata.description,
+					author: pluginMetadata.author || "DevEx Team",
+					repository: `https://github.com/${OWNER}/${REPO}`,
+					platforms: {},
+					dependencies: pluginMetadata.dependencies || [],
+					tags: pluginMetadata.tags || [],
+					type: pluginMetadata.type || "unknown",
+					priority: pluginMetadata.priority || 0,
+					supports: pluginMetadata.supports || {},
+					release_tag: tag,
+				};
 
-    groupAssetsByPlugin(assets) {
-        const groups = {};
+				// Process each platform binary
+				for (const asset of assets) {
+					const platformInfo = this.parsePlatformFromAsset(asset);
+					if (platformInfo) {
+						// Skip checksum calculation for now to speed up registry generation
+						// const checksum = await this.calculateChecksumFromURL(asset.browser_download_url);
 
-        for (const asset of assets) {
-            const pluginName = this.extractPluginName(asset.name);
-            if (pluginName) {
-                if (!groups[pluginName]) {
-                    groups[pluginName] = [];
-                }
-                groups[pluginName].push(asset);
-            }
-        }
+						registry.plugins[finalPluginName].platforms[platformInfo.key] = {
+							url: asset.browser_download_url,
+							checksum: "sha256:pending", // Placeholder for now
+							size: asset.size,
+							os: platformInfo.os,
+							arch: platformInfo.arch,
+						};
+					}
+				}
+			}
+		} catch (error) {
+			// If no GitHub release exists, create a basic registry entry from metadata
+			console.warn(
+				`No release found for ${tag}, creating basic entry from metadata`,
+			);
 
-        return groups;
-    }
+			const pluginMetadata = await this.getPluginMetadata(pluginName);
 
-    extractPluginName(assetName) {
-        // Extract from: devex-plugin-package-manager-apt_v1.0.0_linux_amd64.tar.gz
-        // or from: package-manager-apt_v1.0.0_linux_amd64.tar.gz (new format)
-        let match = assetName.match(/^devex-plugin-(.+?)_v[\d.]+_/);
-        if (match) {
-            return match[1];
-        }
-        
-        // Try new format without devex-plugin prefix
-        match = assetName.match(/^(.+?)_v[\d.]+_/);
-        if (match && (match[1].includes('tool-') || match[1].includes('desktop-') || match[1].includes('package-manager-'))) {
-            return match[1];
-        }
-        
-        return null;
-    }
+			registry.plugins[pluginName] = {
+				name: pluginName,
+				version: version,
+				description: pluginMetadata.description,
+				author: pluginMetadata.author || "DevEx Team",
+				repository: `https://github.com/${OWNER}/${REPO}`,
+				platforms: {}, // No binaries available yet
+				dependencies: pluginMetadata.dependencies || [],
+				tags: pluginMetadata.tags || [],
+				type: pluginMetadata.type || "unknown",
+				priority: pluginMetadata.priority || 0,
+				supports: pluginMetadata.supports || {},
+				release_tag: tag,
+				status: "pending_release", // Indicates no binaries are available yet
+			};
+		}
+	}
 
-    parsePlatformFromAsset(asset) {
-        // Parse: devex-plugin-package-manager-apt_v1.0.0_linux_amd64.tar.gz
-        // or: package-manager-apt_v1.0.0_linux_amd64.tar.gz
-        let match = asset.name.match(/_v[\d.]+_([^_]+)_([^.]+)/);
-        if (!match) {
-            // Try alternative format
-            match = asset.name.match(/_([^_]+)_([^.]+)\.(tar\.gz|zip)$/);
-        }
-        if (!match) return null;
+	parsePluginTag(tag) {
+		// Parse @devex/package-manager-apt@1.0.0 format
+		const match = tag.match(/^@devex\/(.+)@(\d+\.\d+\.\d+.*)$/);
+		if (match) {
+			return {
+				pluginName: match[1],
+				version: match[2],
+			};
+		}
+		return { pluginName: null, version: null };
+	}
 
-        const os = match[1];
-        let arch = match[2];
-        
-        // Handle cases where arch includes file extension
-        arch = arch.replace(/\.(tar\.gz|zip)$/, '');
+	async getRelease(version) {
+		try {
+			const { data: release } = await this.octokit.rest.repos.getReleaseByTag({
+				owner: OWNER,
+				repo: REPO,
+				tag: version,
+			});
+			return release;
+		} catch (error) {
+			throw new Error(`Failed to get release ${version}: ${error.message}`);
+		}
+	}
 
-        return {
-            key: `${os}-${arch}`,
-            os: os,
-            arch: arch
-        };
-    }
+	filterPluginAssets(assets) {
+		return assets.filter(
+			(asset) =>
+				asset.name.startsWith("devex-plugin-") && !asset.name.endsWith(".sig"), // Exclude signature files
+		);
+	}
 
-    async getPluginMetadata(pluginName) {
-        try {
-            const packageJsonPath = path.join(
-                __dirname,
-                '..',
-                'packages',
-                pluginName,
-                'package.json'
-            );
+	groupAssetsByPlugin(assets) {
+		const groups = {};
 
-            const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+		for (const asset of assets) {
+			const pluginName = this.extractPluginName(asset.name);
+			if (pluginName) {
+				if (!groups[pluginName]) {
+					groups[pluginName] = [];
+				}
+				groups[pluginName].push(asset);
+			}
+		}
 
-            return {
-                description: packageJson.description,
-                author: packageJson.author,
-                dependencies: packageJson.devex?.plugin?.dependencies || [],
-                tags: packageJson.keywords || [],
-                type: packageJson.devex?.plugin?.type || "unknown",
-                priority: packageJson.devex?.plugin?.priority || 0,
-                supports: packageJson.devex?.plugin?.supports || {}
-            };
-        } catch (error) {
-            console.warn(`Could not read metadata for plugin ${pluginName}: ${error.message}`);
-            return {
-                description: `DevEx plugin: ${pluginName}`,
-                tags: [pluginName]
-            };
-        }
-    }
+		return groups;
+	}
 
-    async calculateChecksumFromURL(url) {
-        return new Promise((resolve, reject) => {
-            const hash = crypto.createHash('sha256');
+	extractPluginName(assetName) {
+		// Extract from: devex-plugin-package-manager-apt_v1.0.0_linux_amd64.tar.gz
+		// or from: package-manager-apt_v1.0.0_linux_amd64.tar.gz (new format)
+		let match = assetName.match(/^devex-plugin-(.+?)_v[\d.]+_/);
+		if (match) {
+			return match[1];
+		}
 
-            https.get(url, (response) => {
-                if (response.statusCode !== 200) {
-                    reject(new Error(`HTTP ${response.statusCode}`));
-                    return;
-                }
+		// Try new format without devex-plugin prefix
+		match = assetName.match(/^(.+?)_v[\d.]+_/);
+		if (
+			match &&
+			(match[1].includes("tool-") ||
+				match[1].includes("desktop-") ||
+				match[1].includes("package-manager-"))
+		) {
+			return match[1];
+		}
 
-                response.on('data', chunk => hash.update(chunk));
-                response.on('end', () => resolve(hash.digest('hex')));
-                response.on('error', reject);
-            }).on('error', reject);
-        });
-    }
+		return null;
+	}
 
-    async saveRegistry(registry) {
-        const registryDir = path.join(__dirname, '..', 'apps', 'registry', 'public', 'v1');
-        await fs.mkdir(registryDir, { recursive: true });
+	parsePlatformFromAsset(asset) {
+		// Parse: devex-plugin-package-manager-apt_v1.0.0_linux_amd64.tar.gz
+		// or: package-manager-apt_v1.0.0_linux_amd64.tar.gz
+		let match = asset.name.match(/_v[\d.]+_([^_]+)_([^.]+)/);
+		if (!match) {
+			// Try alternative format
+			match = asset.name.match(/_([^_]+)_([^.]+)\.(tar\.gz|zip)$/);
+		}
+		if (!match) return null;
 
-        const registryPath = path.join(registryDir, 'registry.json');
-        await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
+		const os = match[1];
+		let arch = match[2];
 
-        console.log(`Registry saved to: ${registryPath}`);
-    }
+		// Handle cases where arch includes file extension
+		arch = arch.replace(/\.(tar\.gz|zip)$/, "");
 
-    async generatePluginIndex(registry) {
-        // Generate an index page for the registry
-        const pluginList = Object.values(registry.plugins).map(plugin => ({
-            name: plugin.name,
-            description: plugin.description,
-            version: plugin.version,
-            platforms: Object.keys(plugin.platforms),
-            tags: plugin.tags
-        }));
+		return {
+			key: `${os}-${arch}`,
+			os: os,
+			arch: arch,
+		};
+	}
 
-        const indexPath = path.join(__dirname, '..', 'apps', 'registry', 'public', 'v1', 'index.json');
-        await fs.writeFile(indexPath, JSON.stringify({
-            registry_version: registry.version,
-            plugin_count: pluginList.length,
-            last_updated: registry.last_updated,
-            plugins: pluginList
-        }, null, 2));
-    }
+	async getPluginMetadata(pluginName) {
+		try {
+			const packageJsonPath = path.join(
+				__dirname,
+				"..",
+				"packages",
+				pluginName,
+				"package.json",
+			);
+
+			const packageJson = JSON.parse(
+				await fs.readFile(packageJsonPath, "utf8"),
+			);
+
+			return {
+				description: packageJson.description,
+				author: packageJson.author,
+				dependencies: packageJson.devex?.plugin?.dependencies || [],
+				tags: packageJson.keywords || [],
+				type: packageJson.devex?.plugin?.type || "unknown",
+				priority: packageJson.devex?.plugin?.priority || 0,
+				supports: packageJson.devex?.plugin?.supports || {},
+			};
+		} catch (error) {
+			console.warn(
+				`Could not read metadata for plugin ${pluginName}: ${error.message}`,
+			);
+			return {
+				description: `DevEx plugin: ${pluginName}`,
+				tags: [pluginName],
+			};
+		}
+	}
+
+	async calculateChecksumFromURL(url) {
+		return new Promise((resolve, reject) => {
+			const hash = crypto.createHash("sha256");
+
+			https
+				.get(url, (response) => {
+					if (response.statusCode !== 200) {
+						reject(new Error(`HTTP ${response.statusCode}`));
+						return;
+					}
+
+					response.on("data", (chunk) => hash.update(chunk));
+					response.on("end", () => resolve(hash.digest("hex")));
+					response.on("error", reject);
+				})
+				.on("error", reject);
+		});
+	}
+
+	async saveRegistry(registry) {
+		const registryDir = path.join(
+			__dirname,
+			"..",
+			"apps",
+			"registry",
+			"public",
+			"v1",
+		);
+		await fs.mkdir(registryDir, { recursive: true });
+
+		const registryPath = path.join(registryDir, "registry.json");
+		await fs.writeFile(registryPath, JSON.stringify(registry, null, 2));
+
+		console.log(`Registry saved to: ${registryPath}`);
+	}
+
+	async generatePluginIndex(registry) {
+		// Generate an index page for the registry
+		const pluginList = Object.values(registry.plugins).map((plugin) => ({
+			name: plugin.name,
+			description: plugin.description,
+			version: plugin.version,
+			platforms: Object.keys(plugin.platforms),
+			tags: plugin.tags,
+		}));
+
+		const indexPath = path.join(
+			__dirname,
+			"..",
+			"apps",
+			"registry",
+			"public",
+			"v1",
+			"index.json",
+		);
+		await fs.writeFile(
+			indexPath,
+			JSON.stringify(
+				{
+					registry_version: registry.version,
+					plugin_count: pluginList.length,
+					last_updated: registry.last_updated,
+					plugins: pluginList,
+				},
+				null,
+				2,
+			),
+		);
+	}
 }
 
 // Main execution
 async function main() {
-    const tagOrMode = process.argv[2] || 'all';
-    
-    if (tagOrMode === '--help' || tagOrMode === '-h') {
-        console.log(`
+	const tagOrMode = process.argv[2] || "all";
+
+	if (tagOrMode === "--help" || tagOrMode === "-h") {
+		console.log(`
 DevEx Plugin Registry Generator
 
 Usage:
@@ -335,28 +376,30 @@ Examples:
   node generate-registry.js all                          # Same as above
   node generate-registry.js @devex/package-manager-apt@1.0.0  # Generate from specific tag
 `);
-        process.exit(0);
-    }
+		process.exit(0);
+	}
 
-    // Skip plugin-sdk releases as they are Go modules, not executable plugins
-    if (tagOrMode.includes('plugin-sdk')) {
-        console.log(`Skipping plugin-sdk release ${tagOrMode} - this is a Go module, not an executable plugin`);
-        process.exit(0);
-    }
+	// Skip plugin-sdk releases as they are Go modules, not executable plugins
+	if (tagOrMode.includes("plugin-sdk")) {
+		console.log(
+			`Skipping plugin-sdk release ${tagOrMode} - this is a Go module, not an executable plugin`,
+		);
+		process.exit(0);
+	}
 
-    try {
-        const generator = new RegistryGenerator();
-        await generator.generateRegistry(tagOrMode);
-        console.log('Registry generation completed successfully!');
-    } catch (error) {
-        console.error('Registry generation failed:', error.message);
-        console.error(error.stack);
-        process.exit(1);
-    }
+	try {
+		const generator = new RegistryGenerator();
+		await generator.generateRegistry(tagOrMode);
+		console.log("Registry generation completed successfully!");
+	} catch (error) {
+		console.error("Registry generation failed:", error.message);
+		console.error(error.stack);
+		process.exit(1);
+	}
 }
 
 if (require.main === module) {
-    main();
+	main();
 }
 
 module.exports = { RegistryGenerator };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import type { Tool } from "../generated/types";
+import type { Tool } from "../services/tools-api";
 import {
 	formatErrorMessage,
 	logError,

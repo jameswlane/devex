@@ -1,5 +1,4 @@
-import type { Tool } from "../../generated/types";
-import { API_CONFIG, ToolsService } from "../tools-api";
+import { API_CONFIG, type Tool, ToolsService } from "../tools-api";
 
 // Mock tools data
 const mockTools: Tool[] = [

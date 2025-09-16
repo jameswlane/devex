@@ -1,6 +1,38 @@
-import type { Tool } from "../generated/types";
 import { ValidationError } from "../utils/error-handling";
 import { validateAndSanitizeSearch } from "./search-sanitization";
+
+// Tool type definition
+interface PlatformInfo {
+	installMethod: string;
+	installCommand: string;
+	alternatives?: Array<{
+		install_method: string;
+		install_command: string;
+		official_support?: boolean;
+	}>;
+	officialSupport: boolean;
+}
+
+export interface Tool {
+	name: string;
+	description: string;
+	category: string;
+	type: "application" | "plugin";
+	official: boolean;
+	default: boolean;
+	platforms: {
+		linux?: PlatformInfo | null;
+		macos?: PlatformInfo | null;
+		windows?: PlatformInfo | null;
+	};
+	tags: string[];
+	desktopEnvironments?: string[];
+	// Plugin-specific fields
+	pluginType?: string;
+	priority?: number;
+	supports?: Record<string, boolean>;
+	status?: string;
+}
 
 // Configuration for API behavior
 export const API_CONFIG = {

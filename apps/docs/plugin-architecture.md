@@ -189,7 +189,7 @@ func main() {
     "description": "My custom DevEx plugin",
     "keywords": ["devex", "plugin"],
     "author": "Your Name",
-    "license": "GPL-3.0",
+    "license": "Apache-2.0",
     "devex": {
         "plugin": {
             "type": "utility",
