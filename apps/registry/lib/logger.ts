@@ -124,20 +124,11 @@ export class StructuredLogger {
   private write(entry: LogEntry): void {
     // Redact sensitive data before serialization
     const safeEntry = StructuredLogger.redactSensitiveData(entry);
-    const logString = JSON.stringify(safeEntry);
     
-    // Additional safety check for sensitive patterns
-    // Look for actual sensitive values, not just field names or redacted placeholders
-    const sensitivePatterns = /KV_REST_API_TOKEN=|DATABASE_URL=|"secret":"[^"]*[a-zA-Z0-9]{20,}"|"password":"[^"]*[a-zA-Z0-9]{8,}"|"token":"[^"]*[a-zA-Z0-9]{20,}"/i;
-    if (sensitivePatterns.test(logString)) {
-      console.error(JSON.stringify({
-        level: safeEntry.level,
-        message: "Log entry contains sensitive data - redacted",
-        timestamp: safeEntry.timestamp
-      }));
-      return;
-    }
+    // Create a safe log string with additional pattern checks
+    const logString = this.createSafeLogString(safeEntry);
     
+    // Output the safe log string to console
     switch (safeEntry.level) {
       case LogLevel.ERROR:
         console.error(logString);
@@ -152,6 +143,47 @@ export class StructuredLogger {
         console.debug(logString);
         break;
     }
+  }
+
+  /**
+   * Creates a safe log string ensuring no sensitive data escapes to console output
+   */
+  private createSafeLogString(safeEntry: LogEntry): string {
+    const logString = JSON.stringify(safeEntry);
+    
+    // Enhanced sensitive pattern detection
+    const sensitivePatterns = [
+      /KV_REST_API_TOKEN=["']?[a-zA-Z0-9+/=]{20,}["']?/gi,
+      /DATABASE_URL=["']?[^"'\s]{20,}["']?/gi,
+      /"secret"\s*:\s*["'][^"']*[a-zA-Z0-9]{20,}["']/gi,
+      /"password"\s*:\s*["'][^"']*[a-zA-Z0-9]{8,}["']/gi,
+      /"token"\s*:\s*["'][^"']*[a-zA-Z0-9]{20,}["']/gi,
+      /"authorization"\s*:\s*["'][^"']*[a-zA-Z0-9]{20,}["']/gi,
+      /"bearer"\s*:\s*["'][^"']*[a-zA-Z0-9]{20,}["']/gi,
+      // Base64 encoded tokens that might have escaped redaction
+      /["'][A-Za-z0-9+/]{40,}={0,2}["']/g,
+      // JWT tokens that might have escaped redaction
+      /["']eyJ[A-Za-z0-9+/=]+\.eyJ[A-Za-z0-9+/=]+\.[A-Za-z0-9+/=_-]+["']/g
+    ];
+    
+    // Check for any sensitive patterns that may have escaped redaction
+    for (const pattern of sensitivePatterns) {
+      if (pattern.test(logString)) {
+        // Return a completely safe log entry if sensitive data detected
+        return JSON.stringify({
+          level: safeEntry.level,
+          message: "Log entry contains sensitive data - completely redacted for security",
+          timestamp: safeEntry.timestamp,
+          service: safeEntry.service,
+          version: safeEntry.version,
+          environment: safeEntry.environment,
+          requestId: safeEntry.requestId,
+          security_notice: "Original log entry contained sensitive information and was redacted"
+        });
+      }
+    }
+    
+    return logString;
   }
 
   error(message: string, context?: Record<string, any>, error?: Error): void {
