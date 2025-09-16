@@ -319,11 +319,11 @@ function logResponseMetrics({
   };
   
   // Log performance metrics for monitoring
-  logger.debug("Response optimization metrics", metrics);
+  logger?.debug("Response optimization metrics", metrics);
   
   // Log slow responses for investigation
   if (responseTime > 1000) { // > 1 second
-    logger.warn("Slow API response detected", {
+    logger?.warn("Slow API response detected", {
       ...metrics,
       threshold: "1000ms",
       recommendation: "Consider query optimization or caching improvements",
@@ -332,7 +332,7 @@ function logResponseMetrics({
   
   // Log large responses for optimization opportunities
   if (size > 1024 * 1024) { // > 1MB
-    logger.warn("Large API response detected", {
+    logger?.warn("Large API response detected", {
       ...metrics,
       threshold: "1MB",
       recommendation: "Consider pagination or response field selection",
@@ -418,7 +418,7 @@ export function withResponseOptimization<T extends any[]>(
       return response;
     } catch (error) {
       const processingTime = performance.now() - startTime;
-      logger.error("API handler error", {
+      logger?.error("API handler error", {
         error: error instanceof Error ? error.message : String(error),
         processingTime: `${processingTime}ms`,
       });

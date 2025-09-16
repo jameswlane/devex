@@ -92,6 +92,7 @@ jest.mock('@/lib/logger', () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
   logPerformance: jest.fn(),
   createApiError: jest.fn(() => new Response('Error', { status: 500 })),
@@ -390,8 +391,8 @@ describe('API Integration Flow', () => {
       const appsData = await appsResponse.json()
 
       expect(appsResponse.status).toBe(200)
-      expect(appsData.applications).toHaveLength(1)
-      expect(appsData.applications[0].name).toBe('vscode')
+      expect(appsData.items).toHaveLength(1)
+      expect(appsData.items[0].name).toBe('vscode')
 
       // Test plugins endpoint
       const pluginsReq = createMockRequest('/api/v1/plugins')
@@ -399,8 +400,8 @@ describe('API Integration Flow', () => {
       const pluginsData = await pluginsResponse.json()
 
       expect(pluginsResponse.status).toBe(200)
-      expect(pluginsData.plugins).toHaveLength(1)
-      expect(pluginsData.plugins[0].name).toBe('apt-plugin')
+      expect(pluginsData.items).toHaveLength(1)
+      expect(pluginsData.items[0].name).toBe('apt-plugin')
     })
 
     it('should handle filtering and pagination consistently', async () => {
@@ -492,8 +493,8 @@ describe('API Integration Flow', () => {
         const data = await response.json()
         
         expect(data.meta).toBeDefined()
-        expect(data.meta.source).toBe('database')
-        expect(data.meta.version).toBe('2.0.0')
+        expect(data.meta.source).toMatch(/^(database|cached-aggregation)$/)
+        expect(data.meta.version).toBe('2.1.0')
         expect(data.meta.timestamp).toBeDefined()
       }
     })
@@ -509,11 +510,10 @@ describe('API Integration Flow', () => {
         expect(response.status).toBe(200)
         
         // Verify the correct platform filter was applied
-        const expectedFilter = `${platform}SupportId`
         expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
           expect.objectContaining({
             where: expect.objectContaining({
-              [expectedFilter]: { not: null }
+              platforms: { path: [platform], not: {} }
             })
           })
         )
@@ -563,8 +563,8 @@ describe('API Integration Flow', () => {
       )
 
       expect(statsData.totals).toBeDefined()
-      expect(appsData.applications).toBeDefined()
-      expect(pluginsData.plugins).toBeDefined()
+      expect(appsData.items).toBeDefined()
+      expect(pluginsData.items).toBeDefined()
       expect(registryData.data).toBeDefined()
     })
   })

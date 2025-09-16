@@ -64,15 +64,21 @@ const mockApplication = {
   desktopEnvironments: ['gnome'],
   githubUrl: 'https://github.com/test/app',
   githubPath: '/path/to/app',
-  linuxSupport: {
-    id: 'linux-1',
-    installMethod: 'apt',
-    installCommand: 'apt install test-app',
-    officialSupport: true,
-    alternatives: [],
+  platforms: {
+    linux: {
+      installMethod: 'apt',
+      installCommand: 'apt install test-app',
+      officialSupport: true,
+      supported: true,
+      alternatives: [],
+    },
+    macos: {
+      supported: false,
+    },
+    windows: {
+      supported: false,
+    },
   },
-  macosSupport: null,
-  windowsSupport: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   lastSynced: new Date(),
@@ -117,24 +123,26 @@ describe('/api/v1/applications', () => {
       const data = await response.json()
 
       expect(response.status).toBe(200)
-      expect(data).toHaveProperty('applications')
+      expect(data).toHaveProperty('items')
       expect(data).toHaveProperty('pagination')
       expect(data).toHaveProperty('meta')
 
-      expect(data.applications).toHaveLength(1)
-      expect(data.applications[0]).toEqual(mockFormattedApplication)
+      expect(data.items).toHaveLength(1)
+      expect(data.items[0]).toEqual(mockFormattedApplication)
 
       expect(data.pagination).toEqual({
         total: 1,
         count: 1,
         limit: 50,
         offset: 0,
+        page: 1,
+        totalPages: 1,
         hasNext: false,
         hasPrevious: false,
       })
 
       expect(data.meta.source).toBe('database')
-      expect(data.meta.version).toBe('2.0.0')
+      expect(data.meta.version).toBe('2.1.0')
     })
 
     it('should handle pagination parameters correctly', async () => {
@@ -150,6 +158,8 @@ describe('/api/v1/applications', () => {
         count: 1,
         limit: 25,
         offset: 25,
+        page: 2,
+        totalPages: 4,
         hasNext: true,
         hasPrevious: true,
       })
@@ -183,7 +193,7 @@ describe('/api/v1/applications', () => {
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            linuxSupportId: { not: null },
+            platforms: { path: ['linux'], not: {} },
           }),
         })
       )
@@ -196,7 +206,7 @@ describe('/api/v1/applications', () => {
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            macosSupportId: { not: null },
+            platforms: { path: ['macos'], not: {} },
           }),
         })
       )
@@ -209,7 +219,7 @@ describe('/api/v1/applications', () => {
       expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            windowsSupportId: { not: null },
+            platforms: { path: ['windows'], not: {} },
           }),
         })
       )
@@ -244,7 +254,7 @@ describe('/api/v1/applications', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             category: { contains: 'development', mode: 'insensitive' },
-            linuxSupportId: { not: null },
+            platforms: { path: ['linux'], not: {} },
             OR: [
               { name: { contains: 'editor', mode: 'insensitive' } },
               { description: { contains: 'editor', mode: 'insensitive' } },
@@ -257,17 +267,14 @@ describe('/api/v1/applications', () => {
 
     it('should include platform support information in response', async () => {
       const req = createMockRequest()
-      await GET(req)
+      const response = await GET(req)
+      const data = await response.json()
 
-      expect(mockPrisma.application.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          include: {
-            linuxSupport: true,
-            macosSupport: true,
-            windowsSupport: true,
-          },
-        })
-      )
+      // Platform information is now embedded in the JSON platforms field
+      expect(data.items[0]).toHaveProperty('platforms')
+      expect(data.items[0].platforms).toHaveProperty('linux')
+      expect(data.items[0].platforms).toHaveProperty('macos')
+      expect(data.items[0].platforms).toHaveProperty('windows')
     })
 
     it('should order results correctly', async () => {
@@ -289,10 +296,10 @@ describe('/api/v1/applications', () => {
       const req = createMockRequest()
       const response = await GET(req)
 
-      expect(response.headers.get('Cache-Control')).toBe('public, max-age=300, s-maxage=600')
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=600, s-maxage=1200, stale-while-revalidate=1800')
       expect(response.headers.get('X-Total-Count')).toBe('1')
-      expect(response.headers.get('X-Registry-Source')).toBe('database')
-      expect(response.headers.get('X-Transformation-Cache')).toBe('enabled')
+      expect(response.headers.get('X-Registry-Optimized')).toBe('true')
+      expect(response.headers.get('X-API-Version')).toBe('2.1.0')
     })
 
     it('should handle validation errors for pagination', async () => {
@@ -322,7 +329,38 @@ describe('/api/v1/applications', () => {
       const req = createMockRequest()
       await GET(req)
 
-      expect(mockTransformationService.transformApplications).toHaveBeenCalledWith([mockApplication])
+      expect(mockTransformationService.transformApplications).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: 'test-app',
+          description: 'Test application',
+          category: 'development',
+          official: true,
+          default: false,
+          tags: ['test', 'development'],
+          desktopEnvironments: ['gnome'],
+          githubPath: '/path/to/app',
+          platforms: expect.objectContaining({
+            linux: expect.objectContaining({
+              installMethod: 'apt',
+              installCommand: 'apt install test-app',
+              officialSupport: true,
+              alternatives: expect.any(Array),
+            }),
+            macos: expect.objectContaining({
+              installMethod: undefined,
+              installCommand: undefined,
+              officialSupport: undefined,
+              alternatives: expect.any(Array),
+            }),
+            windows: expect.objectContaining({
+              installMethod: undefined,
+              installCommand: undefined,
+              officialSupport: undefined,
+              alternatives: expect.any(Array),
+            }),
+          }),
+        })
+      ])
     })
 
     it('should handle empty results correctly', async () => {
@@ -334,7 +372,7 @@ describe('/api/v1/applications', () => {
       const response = await GET(req)
       const data = await response.json()
 
-      expect(data.applications).toHaveLength(0)
+      expect(data.items).toHaveLength(0)
       expect(data.pagination.total).toBe(0)
       expect(data.pagination.hasNext).toBe(false)
       expect(data.pagination.hasPrevious).toBe(false)
@@ -353,6 +391,8 @@ describe('/api/v1/applications', () => {
         count: 1,
         limit: 20,
         offset: 80, // (5-1) * 20
+        page: 5,
+        totalPages: 50,
         hasNext: true,
         hasPrevious: true,
       })

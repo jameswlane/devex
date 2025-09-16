@@ -43,6 +43,7 @@ jest.mock('@/lib/logger', () => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
   logPerformance: jest.fn(),
   createApiError: jest.fn(() => new Response('Error', { status: 500 })),
@@ -147,8 +148,8 @@ describe('/api/v1/stats', () => {
       })
 
       // Check meta information
-      expect(data.meta.source).toBe('database')
-      expect(data.meta.version).toBe('2.0.0')
+      expect(data.meta.source).toBe('cached-aggregation')
+      expect(data.meta.version).toBe('2.1.0')
       expect(data.meta.timestamp).toBeDefined()
     })
 
@@ -210,9 +211,9 @@ describe('/api/v1/stats', () => {
       const req = createMockRequest()
       const response = await GET(req)
 
-      expect(response.headers.get('Cache-Control')).toBe('public, max-age=300, s-maxage=600')
-      expect(response.headers.get('X-Registry-Source')).toBe('database')
-      expect(response.headers.get('X-Total-Items')).toBe('100')
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=300, s-maxage=600, stale-while-revalidate=900')
+      expect(response.headers.get('X-Registry-Optimized')).toBe('true')
+      expect(response.headers.get('X-API-Version')).toBe('2.1.0')
     })
 
     it('should handle missing registry stats gracefully', async () => {
@@ -224,7 +225,7 @@ describe('/api/v1/stats', () => {
 
       expect(response.status).toBe(200)
       expect(data.activity.dailyDownloads).toBe(0)
-      expect(data.meta.lastUpdated).toBeDefined()
+      expect(data.meta.timestamp).toBeDefined()
     })
 
     it('should aggregate download counts correctly', async () => {

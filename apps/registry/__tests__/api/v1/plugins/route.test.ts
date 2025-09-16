@@ -114,24 +114,26 @@ describe('/api/v1/plugins', () => {
       const data = await response.json()
 
       expect(response.status).toBe(200)
-      expect(data).toHaveProperty('plugins')
+      expect(data).toHaveProperty('items')
       expect(data).toHaveProperty('pagination')
       expect(data).toHaveProperty('meta')
 
-      expect(data.plugins).toHaveLength(1)
-      expect(data.plugins[0]).toEqual(mockFormattedPlugin)
+      expect(data.items).toHaveLength(1)
+      expect(data.items[0]).toEqual(mockFormattedPlugin)
 
       expect(data.pagination).toEqual({
         total: 1,
         count: 1,
         limit: 50,
         offset: 0,
+        page: 1,
+        totalPages: 1,
         hasNext: false,
         hasPrevious: false,
       })
 
       expect(data.meta.source).toBe('database')
-      expect(data.meta.version).toBe('2.0.0')
+      expect(data.meta.version).toBe('2.1.0')
     })
 
     it('should handle pagination parameters correctly', async () => {
@@ -147,6 +149,8 @@ describe('/api/v1/plugins', () => {
         count: 1,
         limit: 20,
         offset: 40, // (3-1) * 20
+        page: 3,
+        totalPages: 8,
         hasNext: true,
         hasPrevious: true,
       })
@@ -240,10 +244,10 @@ describe('/api/v1/plugins', () => {
       const req = createMockRequest()
       const response = await GET(req)
 
-      expect(response.headers.get('Cache-Control')).toBe('public, max-age=300, s-maxage=600')
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=600, s-maxage=1200, stale-while-revalidate=1800')
       expect(response.headers.get('X-Total-Count')).toBe('1')
-      expect(response.headers.get('X-Registry-Source')).toBe('database')
-      expect(response.headers.get('X-Transformation-Cache')).toBe('enabled')
+      expect(response.headers.get('X-Registry-Optimized')).toBe('true')
+      expect(response.headers.get('X-API-Version')).toBe('2.1.0')
     })
 
     it('should handle validation errors for pagination', async () => {
@@ -305,7 +309,7 @@ describe('/api/v1/plugins', () => {
       const response = await GET(req)
       const data = await response.json()
 
-      expect(data.plugins).toHaveLength(0)
+      expect(data.items).toHaveLength(0)
       expect(data.pagination.total).toBe(0)
       expect(data.pagination.hasNext).toBe(false)
       expect(data.pagination.hasPrevious).toBe(false)
@@ -343,9 +347,11 @@ describe('/api/v1/plugins', () => {
 
       expect(data.pagination).toEqual({
         total: 500,
-        count: 25,
+        count: 1, // The test mocks only 1 item returned  
         limit: 25,
         offset: 25, // (2-1) * 25
+        page: 2,
+        totalPages: 20,
         hasNext: true,
         hasPrevious: true,
       })
