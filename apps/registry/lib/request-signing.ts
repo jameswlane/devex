@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import bcrypt from "bcrypt";
 import { logger } from "./logger";
 import { redis } from "./redis";
 
@@ -271,16 +272,13 @@ export async function generateApiKey(clientId: string): Promise<{
 }
 
 /**
- * Hash API key using HMAC-SHA256 for secure storage
+ * Hash API key securely using bcrypt
  */
 function hashApiKey(apiKey: string): string {
-  // Use a secret key from environment for HMAC (in production this should be from secure key management)
-  const secretKey = process.env.API_KEY_SECRET || "devex-registry-default-secret-change-in-production";
-  
-  return crypto
-    .createHmac("sha256", secretKey)
-    .update(apiKey)
-    .digest("hex");
+  // Use bcrypt with a configurable salt rounds (default 12)
+  const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 12;
+  // Bcrypt generates its own random salt if not provided
+  return bcrypt.hashSync(apiKey, saltRounds);
 }
 
 /**
@@ -291,14 +289,8 @@ export async function verifyApiKey(
   storedHashedKey: string
 ): Promise<{ valid: boolean; clientId?: string }> {
   try {
-    // Hash the provided API key using HMAC-SHA256
-    const providedHash = hashApiKey(apiKey);
-
-    // Use constant-time comparison to prevent timing attacks
-    const isValid = crypto.timingSafeEqual(
-      Buffer.from(providedHash, "hex"),
-      Buffer.from(storedHashedKey, "hex")
-    );
+    // Verify the provided API key using bcrypt
+    const isValid = bcrypt.compareSync(apiKey, storedHashedKey);
 
     if (!isValid) {
       return { valid: false };

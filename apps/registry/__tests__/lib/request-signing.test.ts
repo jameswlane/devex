@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals'
 import crypto from 'crypto'
+import bcrypt from 'bcrypt'
 
 // Mock logger
 const mockLogger = {
@@ -490,8 +491,8 @@ describe('Request Signing Module', () => {
       const result = await generateApiKey(clientId)
 
       expect(result.apiKey).toMatch(/^devex_[a-f0-9]{64}$/)
-      // HMAC-SHA256 produces a 64-character hex string
-      expect(result.hashedKey).toMatch(/^[a-f0-9]{64}$/)
+      // bcrypt hash format
+      expect(result.hashedKey).toMatch(/^\$2[aby]\$\d{2}\$.{53}$/)
       expect(mockLogger.info).toHaveBeenCalledWith(
         'API key generated',
         expect.objectContaining({
@@ -517,8 +518,8 @@ describe('Request Signing Module', () => {
     it('should verify a valid API key', async () => {
       const apiKey = 'devex_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
       // Generate the correct HMAC-SHA256 hash for this API key
-      const secretKey = process.env.API_KEY_SECRET || "devex-registry-default-secret-change-in-production"
-      const expectedHash = crypto.createHmac('sha256', secretKey).update(apiKey).digest('hex')
+      const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 12
+      const expectedHash = require("bcrypt").hashSync(apiKey, saltRounds)
 
       const result = await verifyApiKey(apiKey, expectedHash)
 
@@ -540,7 +541,7 @@ describe('Request Signing Module', () => {
       mockRedis.get.mockResolvedValue(null)
       
       const apiKey = 'devex_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
-      const hashedKey = '$2b$12$hashedkey...'
+      const hashedKey = bcrypt.hashSync(apiKey, 12)
 
       const result = await verifyApiKey(apiKey, hashedKey)
 
