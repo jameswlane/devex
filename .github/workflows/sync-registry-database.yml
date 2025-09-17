@@ -30,6 +30,8 @@ on:
         type: boolean
 permissions:
   contents: read
+  issues: write
+  actions: read
 env:
   NODE_VERSION: '20'
 jobs:
@@ -37,9 +39,6 @@ jobs:
     name: Sync Registry Database
     runs-on: ubuntu-latest
     environment: production
-    permissions:
-      contents: read
-      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
