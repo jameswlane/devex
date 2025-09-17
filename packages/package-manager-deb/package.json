@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-deb",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "DEB plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

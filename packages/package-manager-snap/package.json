@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-snap",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Snap plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

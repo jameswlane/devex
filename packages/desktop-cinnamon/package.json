@@ -1,7 +1,7 @@
 {
   "name": "@devex/desktop-cinnamon",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Cinnamon desktop environment configuration plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
