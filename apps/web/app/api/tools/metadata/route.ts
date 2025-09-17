@@ -66,9 +66,41 @@ async function getRegistryMetadata() {
 			}
 		}
 
+		// Transform stats to expected format
+		const transformedStats = {
+			total: {
+				applications:
+					registryData.stats?.total?.applications ||
+					Object.keys(registryData.applications || {}).length,
+				plugins:
+					registryData.stats?.total?.plugins ||
+					Object.keys(registryData.plugins || {}).length,
+				configs:
+					registryData.stats?.total?.configs ||
+					Object.keys(registryData.configs || {}).length,
+				stacks:
+					registryData.stats?.total?.stacks ||
+					Object.keys(registryData.stacks || {}).length,
+				all:
+					(registryData.stats?.total?.applications ||
+						Object.keys(registryData.applications || {}).length) +
+					(registryData.stats?.total?.plugins ||
+						Object.keys(registryData.plugins || {}).length) +
+					(registryData.stats?.total?.configs ||
+						Object.keys(registryData.configs || {}).length) +
+					(registryData.stats?.total?.stacks ||
+						Object.keys(registryData.stacks || {}).length),
+			},
+			platforms: registryData.stats?.platforms || {
+				linux: 0,
+				macos: 0,
+				windows: 0,
+			},
+		};
+
 		const metadata = {
 			categories: Array.from(categories).sort(),
-			stats: registryData.stats || {},
+			stats: transformedStats,
 			timestamp: Date.now(),
 		};
 

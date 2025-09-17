@@ -33,14 +33,17 @@ interface ApiResponse {
 interface MetadataResponse {
 	categories: string[];
 	stats: {
-		total: number;
-		applications: number;
-		plugins: number;
+		total: {
+			applications: number;
+			plugins: number;
+			configs: number;
+			stacks: number;
+			all: number;
+		};
 		platforms: {
 			linux: number;
 			macos: number;
 			windows: number;
-			total: number;
 		};
 	};
 }
@@ -361,9 +364,9 @@ export function ToolSearch() {
 						"Loading..."
 					) : (
 						<>
-							{pagination?.total || 0} of {metadata?.stats.total || 0} tools •{" "}
-							{metadata?.stats.applications || 0} apps •{" "}
-							{metadata?.stats.plugins || 0} plugins
+							{pagination?.total || 0} of {metadata?.stats.total?.all || 0}{" "}
+							tools • {metadata?.stats.total?.applications || 0} apps •{" "}
+							{metadata?.stats.total?.plugins || 0} plugins
 						</>
 					)}
 				</div>
@@ -397,12 +400,14 @@ export function ToolSearch() {
 							className="border border-gray-300 rounded-md px-3 py-1 text-sm"
 							disabled={loading}
 						>
-							<option value="all">All ({metadata?.stats.total || 0})</option>
+							<option value="all">
+								All ({metadata?.stats.total?.all || 0})
+							</option>
 							<option value="application">
-								Applications ({metadata?.stats.applications || 0})
+								Applications ({metadata?.stats.total?.applications || 0})
 							</option>
 							<option value="plugin">
-								Plugins ({metadata?.stats.plugins || 0})
+								Plugins ({metadata?.stats.total?.plugins || 0})
 							</option>
 						</select>
 					</div>
