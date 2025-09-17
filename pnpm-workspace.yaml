@@ -5,9 +5,12 @@ catalogs:
   prisma:
     prisma: latest
 onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
   - '@tailwindcss/oxide'
   - core-js
   - esbuild
   - msw
+  - prisma
   - sharp
   - unrs-resolver
