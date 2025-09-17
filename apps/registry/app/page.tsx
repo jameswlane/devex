@@ -30,7 +30,7 @@ export default async function RegistryHomepage() {
 	return (
 		<div className="min-h-screen bg-gray-50">
 			{/* Header */}
-			<header className="bg-white shadow-sm">
+			<header className="bg-white shadow-xs">
 				<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
 					<div className="flex items-center justify-between">
 						<div>
@@ -45,7 +45,7 @@ export default async function RegistryHomepage() {
 						<div className="flex space-x-4">
 							<Link
 								href="https://github.com/jameswlane/devex"
-								className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+								className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-xs text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
 							>
 								<svg
 									className="w-5 h-5 mr-2"
@@ -62,7 +62,7 @@ export default async function RegistryHomepage() {
 							</Link>
 							<Link
 								href="/api/v1/registry"
-								className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+								className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-xs text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
 							>
 								API Access
 							</Link>
@@ -135,7 +135,7 @@ export default async function RegistryHomepage() {
 									Get complete registry data including all applications,
 									plugins, configs, and stacks
 								</p>
-								<code className="bg-gray-100 px-3 py-1 rounded text-sm">
+								<code className="bg-gray-100 px-3 py-1 rounded-sm text-sm">
 									GET /api/v1/registry
 								</code>
 							</div>
@@ -147,7 +147,7 @@ export default async function RegistryHomepage() {
 									Browse applications with filtering by category, platform, and
 									search
 								</p>
-								<code className="bg-gray-100 px-3 py-1 rounded text-sm">
+								<code className="bg-gray-100 px-3 py-1 rounded-sm text-sm">
 									GET /api/v1/applications?category=development&platform=linux
 								</code>
 							</div>
@@ -156,7 +156,7 @@ export default async function RegistryHomepage() {
 								<p className="text-gray-600 mb-2">
 									Browse DevEx CLI plugins with filtering by type and search
 								</p>
-								<code className="bg-gray-100 px-3 py-1 rounded text-sm">
+								<code className="bg-gray-100 px-3 py-1 rounded-sm text-sm">
 									GET /api/v1/plugins?type=package-manager
 								</code>
 							</div>
@@ -167,7 +167,7 @@ export default async function RegistryHomepage() {
 								<p className="text-gray-600 mb-2">
 									Get comprehensive registry statistics and metrics
 								</p>
-								<code className="bg-gray-100 px-3 py-1 rounded text-sm">
+								<code className="bg-gray-100 px-3 py-1 rounded-sm text-sm">
 									GET /api/v1/stats
 								</code>
 							</div>

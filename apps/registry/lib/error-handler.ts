@@ -252,18 +252,72 @@ export class RegistryErrorHandler {
 }
 
 /**
- * Higher-order function to wrap API route handlers with standardized error handling
+ * Higher-order function to wrap API route handlers with standardized error handling and rate limiting
  */
 export function withErrorHandling<T extends NextRequest>(
   handler: (request: T, ...args: any[]) => Promise<NextResponse>,
-  operation: string
+  operation: string,
+  enableRateLimit: boolean = true
 ) {
   return async function wrappedHandler(request: T, ...args: any[]): Promise<NextResponse> {
     const startTime = Date.now();
-    
+
+    // Apply rate limiting if enabled
+    if (enableRateLimit) {
+      const { withRedisRateLimit, REDIS_RATE_LIMIT_CONFIGS } = await import("./rate-limit-redis");
+
+      // Determine rate limit config based on operation
+      let rateLimitConfig = REDIS_RATE_LIMIT_CONFIGS.default as any;
+      if (operation.includes("sync")) {
+        rateLimitConfig = REDIS_RATE_LIMIT_CONFIGS.sync;
+      } else if (operation.includes("search")) {
+        rateLimitConfig = REDIS_RATE_LIMIT_CONFIGS.search;
+      } else if (operation.includes("registry")) {
+        rateLimitConfig = REDIS_RATE_LIMIT_CONFIGS.registry;
+      }
+
+      // Apply rate limiting
+      const rateLimitedHandler = withRedisRateLimit(
+        async (req: NextRequest) => {
+          try {
+            const response = await handler(req as T, ...args);
+
+            // Log successful requests
+            const responseTime = Date.now() - startTime;
+            logger.info("Request completed successfully", {
+              operation,
+              method: req.method,
+              path: new URL(req.url).pathname,
+              statusCode: response.status,
+              responseTime,
+            });
+
+            return response;
+          } catch (error) {
+            const responseTime = Date.now() - startTime;
+            const url = new URL(req.url);
+
+            return RegistryErrorHandler.handleError(error, {
+              operation,
+              requestId: req.headers.get("x-request-id") || undefined,
+              metadata: {
+                method: req.method,
+                path: url.pathname,
+                responseTime,
+              },
+            });
+          }
+        },
+        rateLimitConfig
+      );
+
+      return rateLimitedHandler(request);
+    }
+
+    // No rate limiting - proceed with regular error handling
     try {
       const response = await handler(request, ...args);
-      
+
       // Log successful requests
       const responseTime = Date.now() - startTime;
       logger.info("Request completed successfully", {
@@ -273,12 +327,12 @@ export function withErrorHandling<T extends NextRequest>(
         statusCode: response.status,
         responseTime,
       });
-      
+
       return response;
     } catch (error) {
       const responseTime = Date.now() - startTime;
       const url = new URL(request.url);
-      
+
       return RegistryErrorHandler.handleError(error, {
         operation,
         requestId: request.headers.get("x-request-id") || undefined,
