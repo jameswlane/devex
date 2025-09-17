@@ -1,31 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Pagination } from '@/components/pagination'
 import { APIErrorBoundary } from '@/components/error-boundary'
 import { FilterPanel } from '@/components/filter-panel'
 import { ApplicationCard } from '@/components/application-card'
+import { useDebounce } from '@/hooks/use-debounce'
+import {
+  APPLICATION_CATEGORIES,
+  PLATFORMS,
+  PAGE_SIZE_OPTIONS,
+  MIN_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  SEARCH_DEBOUNCE_MS
+} from '@/lib/constants'
 import type { ApplicationsResponse } from './page'
-
-const CATEGORIES = [
-  'development',
-  'productivity',
-  'design',
-  'communication',
-  'media',
-  'games',
-  'utilities',
-  'education',
-  'security',
-  'databases'
-]
-
-const PLATFORMS = [
-  { value: 'linux', label: 'Linux' },
-  { value: 'macos', label: 'macOS' },
-  { value: 'windows', label: 'Windows' }
-]
 
 interface ApplicationsClientProps {
   initialData: ApplicationsResponse | null
@@ -46,7 +36,17 @@ export function ApplicationsClient({ initialData, initialParams }: ApplicationsC
   const [searchQuery, setSearchQuery] = useState(initialParams.search)
   const [selectedCategory, setSelectedCategory] = useState(initialParams.category)
   const [selectedPlatform, setSelectedPlatform] = useState(initialParams.platform)
-  const [pageSize, setPageSize] = useState(parseInt(initialParams.limit))
+  const [pageSize, setPageSize] = useState(parseInt(initialParams.limit, 10))
+
+  // Debounced search query for URL updates
+  const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS)
+
+  // Update URL when debounced search query changes
+  useEffect(() => {
+    if (debouncedSearchQuery !== initialParams.search) {
+      updateURL({ search: debouncedSearchQuery })
+    }
+  }, [debouncedSearchQuery])
 
   const updateURL = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -69,7 +69,7 @@ export function ApplicationsClient({ initialData, initialParams }: ApplicationsC
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    updateURL({ search: searchQuery })
+    // Search is handled by debounced effect
   }
 
   const handleCategoryChange = (category: string) => {
@@ -83,8 +83,10 @@ export function ApplicationsClient({ initialData, initialParams }: ApplicationsC
   }
 
   const handlePageSizeChange = (newPageSize: number) => {
-    setPageSize(newPageSize)
-    updateURL({ limit: newPageSize.toString(), page: '1' })
+    // Validate page size
+    const validatedPageSize = Math.max(MIN_PAGE_SIZE, Math.min(MAX_PAGE_SIZE, newPageSize))
+    setPageSize(validatedPageSize)
+    updateURL({ limit: validatedPageSize.toString(), page: '1' })
   }
 
   const handlePageChange = (page: number) => {
@@ -121,7 +123,7 @@ export function ApplicationsClient({ initialData, initialParams }: ApplicationsC
       id: 'category',
       label: 'Category',
       value: selectedCategory,
-      options: CATEGORIES.map((category) => ({
+      options: APPLICATION_CATEGORIES.map((category) => ({
         value: category,
         label: category.charAt(0).toUpperCase() + category.slice(1)
       })),
@@ -159,7 +161,7 @@ export function ApplicationsClient({ initialData, initialParams }: ApplicationsC
         filters={filters}
         pageSize={pageSize}
         onPageSizeChange={handlePageSizeChange}
-        pageSizeOptions={[10, 20, 50, 100]}
+        pageSizeOptions={PAGE_SIZE_OPTIONS as number[]}
         activeFilters={activeFilters}
         onClearFilters={clearFilters}
       />

@@ -6,8 +6,17 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as yaml from "yaml";
 
-// Initialize Prisma client with Accelerate
-const prisma = new PrismaClient().$extends(withAccelerate());
+// Get GitHub URL from environment variable
+const GITHUB_BASE_URL = process.env.GITHUB_BASE_URL || 'https://github.com/jameswlane/devex';
+
+// Initialize Prisma client with Accelerate and connection pooling
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: process.env.PRISMA_DATABASE_URL,
+    },
+  },
+}).$extends(withAccelerate());
 
 interface ApplicationConfig {
   name: string;
@@ -56,8 +65,33 @@ interface StackConfig {
 }
 
 async function loadYamlFile<T>(filePath: string): Promise<T> {
-  const content = await fs.readFile(filePath, "utf-8");
-  return yaml.parse(content) as T;
+  // Validate path to prevent directory traversal
+  const normalizedPath = path.normalize(filePath);
+  const resolvedPath = path.resolve(normalizedPath);
+  const projectRoot = path.resolve(process.cwd());
+
+  if (!resolvedPath.startsWith(projectRoot)) {
+    throw new Error('Invalid file path: attempted directory traversal');
+  }
+
+  // Check if file exists and is actually a file
+  const stats = await fs.stat(resolvedPath);
+  if (!stats.isFile()) {
+    throw new Error('Invalid file path: not a file');
+  }
+
+  const content = await fs.readFile(resolvedPath, "utf-8");
+
+  // Sanitize YAML content before parsing
+  try {
+    const parsed = yaml.parse(content, {
+      strict: true,
+      maxAliasCount: 100,
+    }) as T;
+    return parsed;
+  } catch (error) {
+    throw new Error(`Failed to parse YAML file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 async function syncApplications() {
@@ -107,7 +141,7 @@ async function syncApplications() {
           supportsMacOS,
           supportsWindows,
           desktopEnvironments: app.desktopEnvironments ?? [],
-          githubUrl: "https://github.com/jameswlane/devex",
+          githubUrl: GITHUB_BASE_URL,
           githubPath: "apps/cli/config/applications.yaml",
           lastSynced: new Date(),
         },
@@ -123,7 +157,7 @@ async function syncApplications() {
           supportsMacOS,
           supportsWindows,
           desktopEnvironments: app.desktopEnvironments ?? [],
-          githubUrl: "https://github.com/jameswlane/devex",
+          githubUrl: GITHUB_BASE_URL,
           githubPath: "apps/cli/config/applications.yaml",
           lastSynced: new Date(),
         },
@@ -162,7 +196,7 @@ async function syncPlugins() {
             status: "active",
             supports: {},
             platforms: ["linux", "macos", "windows"],
-            githubUrl: "https://github.com/jameswlane/devex",
+            githubUrl: GITHUB_BASE_URL,
             githubPath: `packages/${entry.name}`,
             lastSynced: new Date(),
           },
@@ -174,7 +208,7 @@ async function syncPlugins() {
             status: "active",
             supports: {},
             platforms: ["linux", "macos", "windows"],
-            githubUrl: "https://github.com/jameswlane/devex",
+            githubUrl: GITHUB_BASE_URL,
             githubPath: `packages/${entry.name}`,
             lastSynced: new Date(),
           },
@@ -214,7 +248,7 @@ async function syncConfigs() {
           platforms: ["linux", "macos", "windows"],
           content: parsed,
           schema: undefined,
-          githubUrl: "https://github.com/jameswlane/devex",
+          githubUrl: GITHUB_BASE_URL,
           githubPath: `apps/cli/config/${configFile.file}`,
           lastSynced: new Date(),
         },
@@ -226,7 +260,7 @@ async function syncConfigs() {
           platforms: ["linux", "macos", "windows"],
           content: parsed,
           schema: undefined,
-          githubUrl: "https://github.com/jameswlane/devex",
+          githubUrl: GITHUB_BASE_URL,
           githubPath: `apps/cli/config/${configFile.file}`,
           lastSynced: new Date(),
         },
@@ -277,7 +311,7 @@ async function syncStacks() {
           platforms: stack.platforms,
           desktopEnvironments: [],
           prerequisites: [],
-          githubUrl: "https://github.com/jameswlane/devex",
+          githubUrl: GITHUB_BASE_URL,
           githubPath: "apps/registry/scripts/sync-database.ts",
           lastSynced: new Date(),
         },
@@ -291,7 +325,7 @@ async function syncStacks() {
           platforms: stack.platforms,
           desktopEnvironments: [],
           prerequisites: [],
-          githubUrl: "https://github.com/jameswlane/devex",
+          githubUrl: GITHUB_BASE_URL,
           githubPath: "apps/registry/scripts/sync-database.ts",
           lastSynced: new Date(),
         },
@@ -342,23 +376,42 @@ async function updateRegistryStats() {
 async function main() {
   console.log("🚀 Starting database sync...\n");
 
+  // Check for required authentication/authorization
+  if (!process.env.PRISMA_DATABASE_URL) {
+    console.error("❌ Missing required PRISMA_DATABASE_URL environment variable");
+    process.exit(1);
+  }
+
   try {
-    await syncApplications();
-    console.log("");
+    // Run sync operations in parallel for better performance
+    const results = await Promise.allSettled([
+      syncApplications(),
+      syncPlugins(),
+      syncConfigs(),
+      syncStacks(),
+    ]);
 
-    await syncPlugins();
-    console.log("");
+    // Check for any failures
+    const failures = results.filter(result => result.status === 'rejected');
+    if (failures.length > 0) {
+      console.error("\n⚠️  Some sync operations failed:");
+      failures.forEach((failure, index) => {
+        if (failure.status === 'rejected') {
+          console.error(`  - Operation ${index + 1}: ${failure.reason}`);
+        }
+      });
+    }
 
-    await syncConfigs();
     console.log("");
-
-    await syncStacks();
-    console.log("");
-
     await updateRegistryStats();
     console.log("");
 
-    console.log("✨ Database sync completed successfully!");
+    if (failures.length === 0) {
+      console.log("✨ Database sync completed successfully!");
+    } else {
+      console.log("⚠️  Database sync completed with some failures");
+      process.exit(1);
+    }
   } catch (error) {
     console.error("❌ Database sync failed:", error);
     process.exit(1);

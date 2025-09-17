@@ -1,29 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Pagination } from '@/components/pagination'
 import { APIErrorBoundary } from '@/components/error-boundary'
 import { FilterPanel } from '@/components/filter-panel'
 import { PluginCard } from '@/components/plugin-card'
+import { useDebounce } from '@/hooks/use-debounce'
+import {
+  PLUGIN_TYPES,
+  PLUGIN_STATUS,
+  PAGE_SIZE_OPTIONS,
+  MIN_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  SEARCH_DEBOUNCE_MS
+} from '@/lib/constants'
 import type { PluginsResponse } from './page'
-
-const PLUGIN_TYPES = [
-  'package-manager',
-  'installer',
-  'utility',
-  'development',
-  'configuration',
-  'security',
-  'monitoring',
-  'automation'
-]
-
-const PLUGIN_STATUS = [
-  'active',
-  'deprecated',
-  'experimental'
-]
 
 interface PluginsClientProps {
   initialData: PluginsResponse | null
@@ -44,7 +36,17 @@ export function PluginsClient({ initialData, initialParams }: PluginsClientProps
   const [searchQuery, setSearchQuery] = useState(initialParams.search)
   const [selectedType, setSelectedType] = useState(initialParams.type)
   const [selectedStatus, setSelectedStatus] = useState(initialParams.status)
-  const [pageSize, setPageSize] = useState(parseInt(initialParams.limit))
+  const [pageSize, setPageSize] = useState(parseInt(initialParams.limit, 10))
+
+  // Debounced search query for URL updates
+  const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS)
+
+  // Update URL when debounced search query changes
+  useEffect(() => {
+    if (debouncedSearchQuery !== initialParams.search) {
+      updateURL({ search: debouncedSearchQuery })
+    }
+  }, [debouncedSearchQuery])
 
   const updateURL = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -67,7 +69,7 @@ export function PluginsClient({ initialData, initialParams }: PluginsClientProps
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    updateURL({ search: searchQuery })
+    // Search is handled by debounced effect
   }
 
   const handleTypeChange = (type: string) => {
@@ -81,8 +83,10 @@ export function PluginsClient({ initialData, initialParams }: PluginsClientProps
   }
 
   const handlePageSizeChange = (newPageSize: number) => {
-    setPageSize(newPageSize)
-    updateURL({ limit: newPageSize.toString(), page: '1' })
+    // Validate page size
+    const validatedPageSize = Math.max(MIN_PAGE_SIZE, Math.min(MAX_PAGE_SIZE, newPageSize))
+    setPageSize(validatedPageSize)
+    updateURL({ limit: validatedPageSize.toString(), page: '1' })
   }
 
   const handlePageChange = (page: number) => {
@@ -160,7 +164,7 @@ export function PluginsClient({ initialData, initialParams }: PluginsClientProps
         filters={filters}
         pageSize={pageSize}
         onPageSizeChange={handlePageSizeChange}
-        pageSizeOptions={[10, 20, 50, 100]}
+        pageSizeOptions={PAGE_SIZE_OPTIONS as number[]}
         activeFilters={activeFilters}
         onClearFilters={clearFilters}
       />

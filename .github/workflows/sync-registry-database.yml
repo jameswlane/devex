@@ -30,8 +30,6 @@ on:
         type: boolean
 permissions:
   contents: read
-  issues: write
-  actions: read
 env:
   NODE_VERSION: '20'
 jobs:
@@ -135,30 +133,17 @@ jobs:
           name: sync-report-${{ github.run_id }}
           path: sync-report.txt
           retention-days: 30
-      - name: Notify on failure
+      - name: Log failure details
         if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const issue = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Registry Database Sync Failed - Run #${context.runNumber}`,
-              body: `## Registry Database Sync Failure
-
-              The automated registry database sync has failed.
-
-              **Details:**
-              - Workflow Run: [#${context.runNumber}](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
-              - Triggered by: ${context.eventName}
-              - Actor: @${context.actor}
-              - Time: ${new Date().toISOString()}
-
-              Please check the workflow logs for more details.`,
-              labels: ['bug', 'registry', 'automation']
-            });
-
-            console.log(`Created issue #${issue.data.number}`);
+        run: |
+          echo "❌ Registry Database Sync Failed"
+          echo "Workflow Run: #${{ github.run_number }}"
+          echo "Workflow URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          echo "Please check the workflow logs for more details."
   verify-sync:
     name: Verify Database Sync
     runs-on: ubuntu-latest
