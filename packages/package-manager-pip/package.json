@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-pip",
   "private": true,
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Pip plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-nixpkgs",
   "private": true,
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Nixpkgs plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

@@ -1,7 +1,7 @@
 {
   "name": "@devex/desktop-xfce",
   "private": true,
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "XFCE desktop environment configuration plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
