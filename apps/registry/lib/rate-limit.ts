@@ -242,6 +242,12 @@ export const RATE_LIMIT_CONFIGS = {
 		maxRequests: 10, // 10 requests per minute
 		message: "Too many sync requests. Please try again later.",
 	},
+	// Download endpoints - high volume but tracked
+	download: {
+		windowMs: 60 * 1000, // 1 minute
+		maxRequests: 200, // 200 downloads per minute per IP
+		message: "Too many download requests. Please try again later.",
+	},
 	// Default configuration
 	default: {
 		windowMs: 60 * 1000, // 1 minute

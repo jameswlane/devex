@@ -372,7 +372,7 @@ describe('Error Handler Module', () => {
   describe('withErrorHandling', () => {
     it('should wrap handlers and catch errors', async () => {
       const mockHandler = jest.fn().mockRejectedValue(new Error('Handler failed'))
-      const wrappedHandler = withErrorHandling(mockHandler, 'test-operation')
+      const wrappedHandler = withErrorHandling(mockHandler, 'test-operation', false)
 
       const mockRequest = {
         method: 'GET',
@@ -392,7 +392,7 @@ describe('Error Handler Module', () => {
     it('should log successful requests', async () => {
       const mockResponse = NextResponse.json({ success: true }, { status: 200 })
       const mockHandler = jest.fn().mockResolvedValue(mockResponse)
-      const wrappedHandler = withErrorHandling(mockHandler, 'test-operation')
+      const wrappedHandler = withErrorHandling(mockHandler, 'test-operation', false)
 
       const mockRequest = {
         method: 'GET',
@@ -419,7 +419,7 @@ describe('Error Handler Module', () => {
 
     it('should include request ID in error context when available', async () => {
       const mockHandler = jest.fn().mockRejectedValue(new Error('Test error'))
-      const wrappedHandler = withErrorHandling(mockHandler, 'test-operation')
+      const wrappedHandler = withErrorHandling(mockHandler, 'test-operation', false)
 
       const mockRequest = {
         method: 'POST',

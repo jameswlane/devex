@@ -19,25 +19,44 @@ model Application {
   default     Boolean  @default(false)
   tags        String[]
 
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
   // Optimized platform support - embedded JSON for better performance
   platforms Json @default("{}")
-  
+
   // Computed platform support columns for efficient querying
   supportsLinux   Boolean @default(false)
-  supportsMacOS   Boolean @default(false) 
+  supportsMacOS   Boolean @default(false)
   supportsWindows Boolean @default(false)
 
   // Desktop Environment support
   desktopEnvironments String[]
 
-  // GitHub source transparency  
+  // GitHub source transparency
   githubUrl     String?   @db.VarChar(500)
   githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
 
+  // Download tracking
+  downloadCount Int      @default(0)
+  lastDownload  DateTime?
+
+  // Binary metadata for different platforms
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Installation metadata
+  installMethods Json    @default("{}") // Available installation methods per platform
+  dependencies   String[] @default([])  // System dependencies
+
   // Metadata
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Single column indexes
   @@index([category])
@@ -71,13 +90,17 @@ model Plugin {
   priority    Int      @default(50)
   status      String   @default("active") @db.VarChar(20) // active, deprecated, experimental
 
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
   // Capabilities
   supports Json @default("{}")
 
   // Platform support - plugins are typically cross-platform
   platforms String[] @default(["linux", "macos", "windows"])
 
-  // GitHub source transparency  
+  // GitHub source transparency
   githubUrl     String?   @db.VarChar(500)
   githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
@@ -86,9 +109,22 @@ model Plugin {
   downloadCount Int      @default(0)
   lastDownload  DateTime?
 
+  // Binary metadata for different platforms
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Plugin SDK metadata
+  sdkVersion    String?  @db.VarChar(50) // Compatible SDK version
+  apiVersion    String?  @db.VarChar(50) // Plugin API version
+  dependencies  String[] @default([])    // Plugin dependencies
+  conflicts     String[] @default([])    // Conflicting plugins
+
   // Metadata
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Single column indexes
   @@index([type])
@@ -112,6 +148,10 @@ model Config {
   category    String   @db.VarChar(50) // system, development, desktop, etc.
   type        String   @db.VarChar(20) // yaml, json, toml, etc.
 
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
   // Target platforms
   platforms String[]
 
@@ -119,7 +159,7 @@ model Config {
   content   Json
   schema    Json? // JSON schema for validation
 
-  // GitHub source transparency  
+  // GitHub source transparency
   githubUrl     String?   @db.VarChar(500)
   githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
@@ -128,9 +168,21 @@ model Config {
   downloadCount Int      @default(0)
   lastDownload  DateTime?
 
+  // Binary/file metadata for different platforms
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Configuration metadata
+  dependencies  String[] @default([])    // Required applications/plugins
+  conflicts     String[] @default([])    // Conflicting configurations
+  variables     Json     @default("{}") // Template variables
+
   // Metadata
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Single column indexes
   @@index([category])
@@ -151,6 +203,10 @@ model Stack {
   description String   @db.Text
   category    String   @db.VarChar(50) // web, mobile, data, devops, etc.
 
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
   // Stack composition
   applications String[] // References to application names
   configs      String[] // References to config names
@@ -163,7 +219,7 @@ model Stack {
   // Prerequisites
   prerequisites Json @default("[]") // System requirements, other stacks, etc.
 
-  // GitHub source transparency  
+  // GitHub source transparency
   githubUrl     String?   @db.VarChar(500)
   githubPath    String?   @db.VarChar(500)
   lastSynced    DateTime @default(now())
@@ -172,9 +228,21 @@ model Stack {
   downloadCount Int      @default(0)
   lastDownload  DateTime?
 
+  // Binary/file metadata for different platforms (stack definition files)
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Stack metadata
+  dependencies  String[] @default([])    // Required system dependencies
+  conflicts     String[] @default([])    // Conflicting stacks
+  variables     Json     @default("{}") // Stack configuration variables
+
   // Metadata
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   // Single column indexes
   @@index([category])

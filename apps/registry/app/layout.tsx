@@ -31,11 +31,11 @@ export const metadata: Metadata = {
 			"The official registry for DevEx CLI applications, plugins, configs, and stacks.",
 	},
 	robots: {
-		index: true,
-		follow: true,
+		index: false,
+		follow: false,
 		googleBot: {
-			index: true,
-			follow: true,
+			index: false,
+			follow: false,
 			"max-video-preview": -1,
 			"max-image-preview": "large",
 			"max-snippet": -1,
@@ -53,6 +53,8 @@ export default function RootLayout({
 			<head>
 				<link rel="icon" href="/favicon.ico" />
 				<link rel="canonical" href="https://registry.devex.sh" />
+				<meta name="robots" content="noindex, nofollow" />
+				<meta name="googlebot" content="noindex, nofollow" />
 			</head>
 			<body className="antialiased">{children}</body>
 		</html>

@@ -692,6 +692,84 @@ cobra-cli config set author "James Lane <email@example.com>"
 - Update help text and examples for user clarity
 - Use descriptive command and flag names
 
+## Registry Database Migration Best Practices
+
+### 🚨 CRITICAL: Production-Safe Database Migrations
+
+When the registry goes to production, all database changes MUST be migration-safe and preserve existing data. Follow these rules:
+
+#### Migration Safety Rules
+
+**❌ NEVER DO IN PRODUCTION:**
+- `prisma migrate reset` (wipes all data)
+- `prisma db push --accept-data-loss` (can lose data)
+- Dropping columns without migration strategy
+- Changing column types without data conversion
+
+**✅ ALWAYS DO FOR PRODUCTION:**
+```bash
+# 1. Create migration (never reset)
+pnpm prisma migrate dev --name descriptive_name
+
+# 2. Review migration SQL before applying
+cat prisma/migrations/[timestamp]_descriptive_name/migration.sql
+
+# 3. Test migration on staging database first
+pnpm prisma migrate deploy --preview-feature
+
+# 4. Apply to production only after staging validation
+pnpm prisma migrate deploy
+```
+
+#### Safe Schema Change Patterns
+
+**Adding New Columns:**
+```sql
+-- ✅ Safe: Add nullable column with default
+ALTER TABLE plugins ADD COLUMN sdk_version VARCHAR(50);
+
+-- ✅ Safe: Add non-null column with default value
+ALTER TABLE plugins ADD COLUMN api_version VARCHAR(50) DEFAULT 'v1';
+```
+
+**Removing Columns (3-Step Process):**
+```sql
+-- Step 1: Deploy code that doesn't use the column (one release)
+-- Step 2: Mark column as deprecated in schema comments (one release)
+-- Step 3: Drop column after confirming no usage (next release)
+ALTER TABLE plugins DROP COLUMN deprecated_field;
+```
+
+**JSON Schema Evolution:**
+```sql
+-- ✅ Safe: JSON field changes are backwards compatible
+-- Adding new JSON fields doesn't break existing code
+UPDATE plugins SET binaries = binaries || '{"checksums_v2": {}}'
+WHERE binaries IS NOT NULL;
+```
+
+#### Registry Migration Checklist
+
+Before deploying registry changes:
+
+1. **Schema Changes**
+   - [ ] Migration creates only additive changes
+   - [ ] Default values provided for new non-null columns
+   - [ ] Indexes added for new query patterns
+   - [ ] No data loss operations
+
+2. **Data Migration**
+   - [ ] Existing data preserved and converted correctly
+   - [ ] Migration tested on staging database copy
+   - [ ] Rollback strategy documented
+
+3. **API Compatibility**
+   - [ ] Registry API endpoints remain backwards compatible
+   - [ ] CLI registry.json format unchanged or versioned
+   - [ ] Download URLs continue to work during migration
+
+**Remember:** In production, database migrations are permanent and irreversible. Always err on the side of caution and test thoroughly.
+
 # Important Reminders
 
 - **Use cobra-cli for new commands** - ensures consistency and best practices
