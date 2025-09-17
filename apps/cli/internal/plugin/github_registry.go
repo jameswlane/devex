@@ -88,7 +88,7 @@ func (r *GitHubRegistry) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 
 // fetchHostedRegistry fetches registry from Vercel-hosted API
 func (r *GitHubRegistry) fetchHostedRegistry(ctx context.Context) (*PluginRegistry, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", r.registryURL+"/v1/registry.json", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", r.registryURL+"/api/v1/registry.json", nil)
 	if err != nil {
 		return nil, err
 	}

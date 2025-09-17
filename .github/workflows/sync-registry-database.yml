@@ -1,13 +1,16 @@
 name: Sync Registry Database
 on:
-  # Run on push to main branch
+  # Run on new plugin tags
   push:
+    tags:
+      - '@devex/**@*' # Match plugin tags like @devex/package-manager-apt@1.6.0
     branches:
       - main
     paths:
       - 'apps/cli/config/**/*.yaml'
       - 'packages/package-manager-*/**'
       - 'apps/registry/scripts/sync-database.ts'
+      - 'apps/registry/scripts/sync-github-plugins.ts'
       - '.github/workflows/sync-registry-database.yml'
   # Run on a schedule (daily at 2 AM UTC)
   schedule:
@@ -20,6 +23,13 @@ on:
         required: false
         type: boolean
         default: false
+      force_reseed:
+        description: 'Force complete database reseed'
+        required: false
+        default: 'false'
+        type: boolean
+permissions:
+  contents: read
 env:
   NODE_VERSION: '20'
 jobs:
@@ -27,6 +37,9 @@ jobs:
     name: Sync Registry Database
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -60,19 +73,39 @@ jobs:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
         run: |
           pnpm prisma generate
+      - name: Run database migrations
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+        run: |
+          pnpm prisma migrate deploy
+      - name: Reseed database (if forced)
+        if: ${{ github.event.inputs.force_reseed == 'true' }}
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm tsx scripts/seed-test-data.ts
+      - name: Sync GitHub plugins
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Install tsx for TypeScript execution
+          pnpm add -D tsx
+
+          # Run GitHub plugin sync
+          pnpm tsx scripts/sync-github-plugins.ts
       - name: Run database sync
         working-directory: apps/registry
         env:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          # Install tsx for TypeScript execution
-          pnpm add -D tsx
-
-          # Make script executable
+          # Run existing sync script for applications/configs
           chmod +x scripts/sync-database.ts
-
-          # Run sync script
           pnpm tsx scripts/sync-database.ts
       - name: Log sync completion
         if: success()
@@ -160,6 +193,17 @@ jobs:
           echo "Checking /api/v1/plugins..."
           curl -f -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
             "${REGISTRY_URL}/api/v1/plugins" || exit 1
+
+          # Check new registry.json endpoint for CLI compatibility
+          echo "Checking /api/v1/registry.json..."
+          curl -f -s -o /tmp/registry.json -w "HTTP Status: %{http_code}\n" \
+            "${REGISTRY_URL}/api/v1/registry.json" || exit 1
+
+          # Validate registry.json structure
+          echo "Validating registry.json structure..."
+          jq -e '.plugins | type == "object"' /tmp/registry.json > /dev/null || exit 1
+          PLUGIN_COUNT=$(jq '.plugins | length' /tmp/registry.json)
+          echo "✅ Registry contains $PLUGIN_COUNT plugins"
 
           echo "✅ All API endpoints are responding correctly"
       - name: Check data freshness
