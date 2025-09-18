@@ -1,0 +1,181 @@
+# Plugin Configuration for DevEx
+# This file defines plugin mappings and priorities for different platforms
+# Plugin priority rankings (higher number = higher priority)
+priorities:
+  package_managers:
+    # Native package managers have highest priority
+    apt: 100 # Debian/Ubuntu native
+    dnf: 100 # Fedora/RHEL native
+    yum: 95 # Older RHEL/CentOS
+    pacman: 100 # Arch Linux native
+    zypper: 100 # openSUSE native
+    emerge: 100 # Gentoo native
+    apk: 100 # Alpine native
+    brew: 100 # macOS de-facto standard
+    winget: 100 # Windows native (Microsoft)
+    # Universal/secondary package managers
+    flatpak: 50 # Cross-distribution Linux
+    snap: 45 # Canonical's universal packages
+    appimage: 48 # Portable Linux applications
+    nix: 40 # Cross-platform functional
+    # Third-party package managers
+    choco: 60 # Windows Chocolatey
+    scoop: 55 # Windows Scoop
+    port: 50 # MacPorts
+    fink: 45 # Fink for macOS
+  desktop_environments:
+    gnome: 100 # Most popular Linux DE
+    kde: 95 # Second most popular
+    xfce: 80 # Lightweight popular
+    mate: 70 # GNOME 2 fork
+    cinnamon: 75 # Linux Mint default
+    budgie: 65 # Solus default
+    lxde: 60 # Lightweight
+    unity: 55 # Ubuntu's old DE
+    deepin: 50 # Deepin Linux
+# Platform-specific plugin requirements
+platforms:
+  linux:
+    ubuntu:
+      required:
+        - package-manager-apt
+        - system-linux
+        - distro-ubuntu
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+        - package-manager-snap
+      desktop_aware: true
+    fedora:
+      required:
+        - package-manager-dnf
+        - system-linux
+        - distro-fedora
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+      desktop_aware: true
+    arch:
+      required:
+        - package-manager-pacman
+        - system-linux
+        - distro-arch
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+        - package-manager-snap
+      desktop_aware: true
+    debian:
+      required:
+        - package-manager-apt
+        - system-linux
+        - distro-debian
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+      desktop_aware: true
+    opensuse:
+      required:
+        - package-manager-zypper
+        - system-linux
+        - distro-opensuse
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+      desktop_aware: true
+    rhel:
+      required:
+        - package-manager-dnf
+        - system-linux
+        - distro-rhel
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+      desktop_aware: true
+    centos:
+      required:
+        - package-manager-yum
+        - system-linux
+        - distro-centos
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-flatpak
+      desktop_aware: true
+  darwin:
+    macos:
+      required:
+        - package-manager-brew
+        - system-macos
+        - desktop-macos
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-port
+        - package-manager-nix
+      desktop_aware: false # macOS always has desktop
+  windows:
+    windows:
+      required:
+        - package-manager-winget
+        - system-windows
+        - desktop-windows
+        - tool-shell
+        - tool-git
+      optional:
+        - package-manager-choco
+        - package-manager-scoop
+      desktop_aware: false # Windows always has desktop
+# Plugin dependencies
+dependencies:
+  desktop-gnome:
+    requires:
+      - system-linux
+    conflicts: []
+  desktop-kde:
+    requires:
+      - system-linux
+    conflicts: []
+  desktop-xfce:
+    requires:
+      - system-linux
+    conflicts: []
+  package-manager-flatpak:
+    requires:
+      - system-linux
+    conflicts: []
+  package-manager-snap:
+    requires:
+      - system-linux
+    conflicts: []
+# User override configuration
+# Users can specify their preferences in ~/.devex/config.yaml
+user_overrides:
+# Example user configuration:
+# preferred_package_manager: flatpak
+# excluded_plugins:
+#   - package-manager-snap
+# included_plugins:
+#   - tool-stackdetector
+
+# Plugin selection rules
+selection_rules:
+  # Maximum number of package managers to auto-select
+  max_package_managers: 2
+  # Always include these plugins if available
+  always_include:
+    - tool-shell
+    - tool-git
+  # Never auto-select these plugins (user must explicitly request)
+  never_auto_select:
+    - package-manager-nix # Requires special setup
+  # Prefer native package manager over universal ones
+  prefer_native: true
+  # Include desktop environment plugins on GUI systems
+  include_desktop: true
