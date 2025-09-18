@@ -1,7 +1,7 @@
 {
   "name": "@devex/desktop-kde",
   "private": true,
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "KDE Plasma desktop environment configuration plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {

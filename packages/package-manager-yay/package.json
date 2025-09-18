@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-yay",
   "private": true,
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "Yay plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
