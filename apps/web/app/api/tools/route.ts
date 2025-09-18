@@ -42,9 +42,9 @@ async function fetchRegistryData(): Promise<Tool[]> {
 		const tools: Tool[] = [];
 
 		// Transform applications from registry
-		const applications = Object.values(
-			registryData.applications || {},
-		) as any[];
+		const applications = (registryData.data?.applications ||
+			registryData.applications ||
+			[]) as any[];
 		for (const app of applications) {
 			tools.push({
 				name: app.name,
@@ -60,7 +60,9 @@ async function fetchRegistryData(): Promise<Tool[]> {
 		}
 
 		// Transform plugins from registry
-		const plugins = Object.values(registryData.plugins || {}) as any[];
+		const plugins = (registryData.data?.plugins ||
+			registryData.plugins ||
+			[]) as any[];
 		for (const plugin of plugins) {
 			tools.push({
 				name: plugin.name,

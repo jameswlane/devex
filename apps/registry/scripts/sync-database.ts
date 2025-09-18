@@ -65,10 +65,12 @@ interface StackConfig {
 }
 
 async function loadYamlFile<T>(filePath: string): Promise<T> {
-  // Validate path to prevent directory traversal
+  // Validate path to prevent directory traversal outside the project
   const normalizedPath = path.normalize(filePath);
   const resolvedPath = path.resolve(normalizedPath);
-  const projectRoot = path.resolve(process.cwd());
+
+  // Allow paths within the project structure (going up from apps/registry to project root)
+  const projectRoot = path.resolve(process.cwd(), "../..");
 
   if (!resolvedPath.startsWith(projectRoot)) {
     throw new Error('Invalid file path: attempted directory traversal');
@@ -97,75 +99,93 @@ async function loadYamlFile<T>(filePath: string): Promise<T> {
 async function syncApplications() {
   console.log("📦 Syncing applications...");
 
-  const applicationsPath = path.join(process.cwd(), "../../apps/cli/config/applications.yaml");
-  const data = await loadYamlFile<{ applications: ApplicationConfig[] }>(applicationsPath);
+  // Scan all application directories for individual YAML files
+  const applicationsBasePath = path.join(process.cwd(), "../../apps/cli/config/applications");
+  const applicationCategories = await fs.readdir(applicationsBasePath, { withFileTypes: true });
 
-  for (const app of data.applications) {
-    try {
-      // Prepare platform support data
-      const platforms: any = {};
-      let supportsLinux = false;
-      let supportsMacOS = false;
-      let supportsWindows = false;
+  for (const categoryEntry of applicationCategories) {
+    if (!categoryEntry.isDirectory()) continue;
 
-      if (app.allPlatforms) {
-        platforms.all = app.allPlatforms;
-        supportsLinux = true;
-        supportsMacOS = true;
-        supportsWindows = true;
-      } else {
-        if (app.linux) {
-          platforms.linux = app.linux;
+    const categoryPath = path.join(applicationsBasePath, categoryEntry.name);
+    const yamlFiles = await fs.readdir(categoryPath);
+
+    for (const yamlFile of yamlFiles) {
+      if (!yamlFile.endsWith('.yaml')) continue;
+
+      try {
+        const filePath = path.join(categoryPath, yamlFile);
+        const app = await loadYamlFile<ApplicationConfig>(filePath);
+
+        // Set category based on directory if not specified in file
+        if (!app.category) {
+          app.category = categoryEntry.name;
+        }
+
+        // Prepare platform support data
+        const platforms: any = {};
+        let supportsLinux = false;
+        let supportsMacOS = false;
+        let supportsWindows = false;
+
+        if (app.allPlatforms) {
+          platforms.all = app.allPlatforms;
           supportsLinux = true;
-        }
-        if (app.macos) {
-          platforms.macos = app.macos;
           supportsMacOS = true;
-        }
-        if (app.windows) {
-          platforms.windows = app.windows;
           supportsWindows = true;
+        } else {
+          if (app.linux) {
+            platforms.linux = app.linux;
+            supportsLinux = true;
+          }
+          if (app.macos) {
+            platforms.macos = app.macos;
+            supportsMacOS = true;
+          }
+          if (app.windows) {
+            platforms.windows = app.windows;
+            supportsWindows = true;
+          }
         }
+
+        await prisma.application.upsert({
+          where: { name: app.name },
+          update: {
+            description: app.description,
+            category: app.category,
+            official: app.official ?? false,
+            default: app.default ?? false,
+            tags: app.tags ?? [],
+            platforms,
+            supportsLinux,
+            supportsMacOS,
+            supportsWindows,
+            desktopEnvironments: app.desktopEnvironments ?? [],
+            githubUrl: GITHUB_BASE_URL,
+            githubPath: `apps/cli/config/applications/${categoryEntry.name}/${yamlFile}`,
+            lastSynced: new Date(),
+          },
+          create: {
+            name: app.name,
+            description: app.description,
+            category: app.category,
+            official: app.official ?? false,
+            default: app.default ?? false,
+            tags: app.tags ?? [],
+            platforms,
+            supportsLinux,
+            supportsMacOS,
+            supportsWindows,
+            desktopEnvironments: app.desktopEnvironments ?? [],
+            githubUrl: GITHUB_BASE_URL,
+            githubPath: `apps/cli/config/applications/${categoryEntry.name}/${yamlFile}`,
+            lastSynced: new Date(),
+          },
+        });
+
+        console.log(`  ✅ Synced application: ${app.name}`);
+      } catch (error) {
+        console.error(`  ❌ Failed to sync application from ${yamlFile}:`, error);
       }
-
-      await prisma.application.upsert({
-        where: { name: app.name },
-        update: {
-          description: app.description,
-          category: app.category,
-          official: app.official ?? false,
-          default: app.default ?? false,
-          tags: app.tags ?? [],
-          platforms,
-          supportsLinux,
-          supportsMacOS,
-          supportsWindows,
-          desktopEnvironments: app.desktopEnvironments ?? [],
-          githubUrl: GITHUB_BASE_URL,
-          githubPath: "apps/cli/config/applications.yaml",
-          lastSynced: new Date(),
-        },
-        create: {
-          name: app.name,
-          description: app.description,
-          category: app.category,
-          official: app.official ?? false,
-          default: app.default ?? false,
-          tags: app.tags ?? [],
-          platforms,
-          supportsLinux,
-          supportsMacOS,
-          supportsWindows,
-          desktopEnvironments: app.desktopEnvironments ?? [],
-          githubUrl: GITHUB_BASE_URL,
-          githubPath: "apps/cli/config/applications.yaml",
-          lastSynced: new Date(),
-        },
-      });
-
-      console.log(`  ✅ Synced application: ${app.name}`);
-    } catch (error) {
-      console.error(`  ❌ Failed to sync application ${app.name}:`, error);
     }
   }
 }
