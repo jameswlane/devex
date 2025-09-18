@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -240,9 +241,22 @@ func (d *Detector) detectDesktopEnvironment(platform *Platform) {
 
 // processExists checks if a process is currently running
 func (d *Detector) processExists(name string) bool {
+	// Validate process name to prevent command injection
+	if !isValidProcessName(name) {
+		return false
+	}
+
 	cmd := exec.Command("pgrep", name)
 	err := cmd.Run()
 	return err == nil
+}
+
+// isValidProcessName validates process names to prevent command injection
+func isValidProcessName(name string) bool {
+	// Allow only alphanumeric characters, hyphens, underscores, and dots
+	// This covers legitimate process names while preventing injection
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_.-]+$`, name)
+	return matched && len(name) > 0 && len(name) < 64
 }
 
 // detectPackageManagers detects available package managers on the system
@@ -301,8 +315,21 @@ func (d *Detector) detectPackageManagers(platform *Platform) {
 
 // commandExists checks if a command exists in PATH
 func (d *Detector) commandExists(cmd string) bool {
+	// Validate command name to prevent path traversal
+	if !isValidCommandName(cmd) {
+		return false
+	}
+
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+// isValidCommandName validates command names to prevent path traversal and injection
+func isValidCommandName(cmd string) bool {
+	// Allow only alphanumeric characters, hyphens, underscores, and dots
+	// No path separators or special characters
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_.-]+$`, cmd)
+	return matched && len(cmd) > 0 && len(cmd) < 64 && !strings.Contains(cmd, "/") && !strings.Contains(cmd, "\\")
 }
 
 // GetRequiredPlugins returns the list of plugins needed for this platform

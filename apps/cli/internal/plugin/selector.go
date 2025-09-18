@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -111,6 +112,8 @@ func (s *Selector) SelectPlugins(ctx context.Context) ([]string, error) {
 	// 3. Query registry for available plugins
 	availablePlugins, err := s.registryClient.GetAvailablePlugins(ctx, s.platform.OS, s.platform.Distribution)
 	if err != nil {
+		// Log the registry failure reason for debugging
+		log.Printf("Registry unavailable, falling back to local selection: %v", err)
 		// If registry is unavailable, use local selection
 		return s.getLocalSelection(selectedPlugins), nil
 	}
@@ -132,19 +135,62 @@ func (s *Selector) SelectPlugins(ctx context.Context) ([]string, error) {
 	return s.getPluginList(finalPlugins), nil
 }
 
-// loadPluginConfig loads the plugin configuration from file
+// loadPluginConfig loads the plugin configuration from file with better error handling
 func loadPluginConfig() (*PluginConfig, error) {
 	config := &PluginConfig{}
 
-	// Load default configuration
-	configPath := filepath.Join("config", "plugins.yaml")
-	defaultConfig, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read default config: %w", err)
+	// Try multiple possible locations for the config file
+	configPaths := []string{
+		filepath.Join("config", "plugins.yaml"),             // Relative from working directory
+		filepath.Join("..", "..", "config", "plugins.yaml"), // Relative from internal/plugin
+		"/etc/devex/plugins.yaml",                           // System-wide config
+		"plugins.yaml",                                      // Current directory fallback
 	}
 
-	if err := yaml.Unmarshal(defaultConfig, config); err != nil {
-		return nil, fmt.Errorf("failed to parse default config: %w", err)
+	var configData []byte
+	var configErr error
+
+	for _, configPath := range configPaths {
+		if data, err := os.ReadFile(configPath); err == nil {
+			configData = data
+			log.Printf("Loaded plugin config from: %s", configPath)
+			break
+		} else {
+			configErr = err // Keep the last error for reporting
+		}
+	}
+
+	// If no config file found, use minimal default configuration
+	if configData == nil {
+		log.Printf("No plugin config file found, using minimal defaults")
+		configData = []byte(`
+priorities:
+  package_managers:
+    apt: 100
+    dnf: 100
+    pacman: 100
+    brew: 100
+    winget: 100
+    flatpak: 50
+    snap: 45
+platforms:
+  linux:
+    ubuntu:
+      required: ["package-manager-apt", "system-linux", "tool-shell", "tool-git"]
+      desktop_aware: true
+dependencies: {}
+user_overrides: {}
+selection_rules:
+  max_package_managers: 2
+  always_include: ["tool-shell", "tool-git"]
+  prefer_native: true
+  include_desktop: true
+`)
+	}
+
+	// Parse the configuration
+	if err := yaml.Unmarshal(configData, config); err != nil {
+		return nil, fmt.Errorf("failed to parse plugin config: %w (last file error: %w)", err, configErr)
 	}
 
 	// Load user overrides if they exist
@@ -291,21 +337,72 @@ func (s *Selector) filterAndPrioritize(selectedPlugins map[string]bool, availabl
 
 // resolveDependencies resolves plugin dependencies
 func (s *Selector) resolveDependencies(ctx context.Context, selectedPlugins map[string]bool) error {
-	changed := true
-	for changed {
-		changed = false
+	maxIterations := 10 // Prevent infinite loops in circular dependencies
+	iteration := 0
+
+	for {
+		iteration++
+		if iteration > maxIterations {
+			return fmt.Errorf("dependency resolution exceeded maximum iterations, possible circular dependency")
+		}
+
+		changed := false
+		unresolvedDeps := []string{}
+
 		for plugin := range selectedPlugins {
 			if dep, ok := s.config.Dependencies[plugin]; ok {
 				for _, required := range dep.Requires {
 					if !selectedPlugins[required] {
-						selectedPlugins[required] = true
-						changed = true
+						// Check if the required plugin is available
+						if s.isPluginAvailable(required) {
+							selectedPlugins[required] = true
+							changed = true
+							log.Printf("Added dependency %s for plugin %s", required, plugin)
+						} else {
+							unresolvedDeps = append(unresolvedDeps, fmt.Sprintf("%s requires %s", plugin, required))
+						}
 					}
 				}
 			}
 		}
+
+		// If no changes were made, we're done
+		if !changed {
+			break
+		}
+
+		// Check for unresolved dependencies
+		if len(unresolvedDeps) > 0 {
+			log.Printf("Warning: some dependencies could not be resolved: %v", unresolvedDeps)
+			// Don't fail here, just log the warning
+		}
 	}
+
 	return nil
+}
+
+// isPluginAvailable checks if a plugin is available (simplified check)
+func (s *Selector) isPluginAvailable(pluginName string) bool {
+	// For now, assume all plugins in our dependency config are available
+	// In a full implementation, this would check the registry or local plugin store
+	_, exists := s.config.Dependencies[pluginName]
+
+	// Also check if it's a known system plugin type
+	knownPrefixes := []string{
+		"package-manager-",
+		"system-",
+		"distro-",
+		"desktop-",
+		"tool-",
+	}
+
+	for _, prefix := range knownPrefixes {
+		if strings.HasPrefix(pluginName, prefix) {
+			return true
+		}
+	}
+
+	return exists
 }
 
 // checkConflicts checks for plugin conflicts
