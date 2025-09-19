@@ -37,7 +37,7 @@ func (a *APTInstaller) validatePackageName(packageName string) error {
 	// Check for null bytes and control characters
 	for i, r := range packageName {
 		if r == 0 || (r < 32 && r != 9 && r != 10 && r != 13) { // Allow tab, LF, CR
-			return fmt.Errorf("package name contains invalid characters")
+			return fmt.Errorf("package name contains invalid characters at position %d", i)
 		}
 		if i == 0 && (r == '-' || r == '.') {
 			return fmt.Errorf("package name contains invalid characters")
