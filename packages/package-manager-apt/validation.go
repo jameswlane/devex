@@ -40,7 +40,7 @@ func (a *APTInstaller) validatePackageName(packageName string) error {
 			return fmt.Errorf("package name contains invalid characters at position %d", i)
 		}
 		if i == 0 && (r == '-' || r == '.') {
-			return fmt.Errorf("package name contains invalid characters")
+			return fmt.Errorf("package name cannot start with '%c' character", r)
 		}
 	}
 
