@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -240,9 +241,22 @@ func (d *Detector) detectDesktopEnvironment(platform *Platform) {
 
 // processExists checks if a process is currently running
 func (d *Detector) processExists(name string) bool {
+	// Validate process name to prevent command injection
+	if !isValidProcessName(name) {
+		return false
+	}
+
 	cmd := exec.Command("pgrep", name)
 	err := cmd.Run()
 	return err == nil
+}
+
+// isValidProcessName validates process names to prevent command injection
+func isValidProcessName(name string) bool {
+	// Allow only alphanumeric characters, hyphens, underscores, and dots
+	// This covers legitimate process names while preventing injection
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_.-]+$`, name)
+	return matched && len(name) > 0 && len(name) < 64
 }
 
 // detectPackageManagers detects available package managers on the system
@@ -252,15 +266,16 @@ func (d *Detector) detectPackageManagers(platform *Platform) {
 	switch platform.OS {
 	case "linux":
 		linuxPMs := map[string]string{
-			"apt":     "apt",
-			"yum":     "yum",
-			"dnf":     "dnf",
-			"pacman":  "pacman",
-			"zypper":  "zypper",
-			"emerge":  "emerge",
-			"apk":     "apk",
-			"snap":    "snap",
-			"flatpak": "flatpak",
+			"apt":      "apt",
+			"yum":      "yum",
+			"dnf":      "dnf",
+			"pacman":   "pacman",
+			"zypper":   "zypper",
+			"emerge":   "emerge",
+			"apk":      "apk",
+			"snap":     "snap",
+			"flatpak":  "flatpak",
+			"appimage": "appimagetool",
 		}
 		for pm, cmd := range linuxPMs {
 			if d.commandExists(cmd) {
@@ -300,16 +315,31 @@ func (d *Detector) detectPackageManagers(platform *Platform) {
 
 // commandExists checks if a command exists in PATH
 func (d *Detector) commandExists(cmd string) bool {
+	// Validate command name to prevent path traversal
+	if !isValidCommandName(cmd) {
+		return false
+	}
+
 	_, err := exec.LookPath(cmd)
 	return err == nil
+}
+
+// isValidCommandName validates command names to prevent path traversal and injection
+func isValidCommandName(cmd string) bool {
+	// Allow only alphanumeric characters, hyphens, underscores, and dots
+	// No path separators or special characters
+	matched, _ := regexp.MatchString(`^[a-zA-Z0-9_.-]+$`, cmd)
+	return matched && len(cmd) > 0 && len(cmd) < 64 && !strings.Contains(cmd, "/") && !strings.Contains(cmd, "\\")
 }
 
 // GetRequiredPlugins returns the list of plugins needed for this platform
 func (p *Platform) GetRequiredPlugins() []string {
 	plugins := []string{}
 
-	// Add package manager plugins
-	for _, pm := range p.PackageManagers {
+	// Add package manager plugins with priority-based selection
+	// Primary package managers are preferred over secondary ones
+	primaryPMs := p.getPrimaryPackageManagers()
+	for _, pm := range primaryPMs {
 		plugins = append(plugins, fmt.Sprintf("package-manager-%s", pm))
 	}
 
@@ -317,16 +347,86 @@ func (p *Platform) GetRequiredPlugins() []string {
 	switch p.OS {
 	case "linux":
 		plugins = append(plugins, "system-linux")
-		if p.Distribution != "unknown" {
+		if p.Distribution != "unknown" && p.Distribution != "" {
 			plugins = append(plugins, fmt.Sprintf("distro-%s", p.Distribution))
+		}
+		// Add desktop environment plugin if detected
+		if p.DesktopEnv != "unknown" && p.DesktopEnv != "" {
+			plugins = append(plugins, fmt.Sprintf("desktop-%s", p.DesktopEnv))
 		}
 	case "darwin":
 		plugins = append(plugins, "system-macos")
+		// macOS always has a desktop environment
+		plugins = append(plugins, "desktop-macos")
 	case "windows":
 		plugins = append(plugins, "system-windows")
+		// Windows always has a desktop environment
+		plugins = append(plugins, "desktop-windows")
 	}
 
+	// Add essential tool plugins
+	plugins = append(plugins, "tool-shell")
+	plugins = append(plugins, "tool-git")
+
 	return plugins
+}
+
+// getPrimaryPackageManagers returns the primary package managers for the platform
+// This prioritizes native package managers over third-party ones
+func (p *Platform) getPrimaryPackageManagers() []string {
+	// Define priority order for each OS
+	priorities := map[string][]string{
+		"linux": {
+			// Native package managers first
+			"apt", "dnf", "yum", "pacman", "zypper", "emerge", "apk",
+			// Universal package managers second
+			"flatpak", "snap", "appimage",
+		},
+		"darwin": {
+			"brew", // Homebrew is the de-facto standard on macOS
+			"port", "fink", "nix",
+		},
+		"windows": {
+			"winget", // Microsoft's official package manager
+			"choco", "scoop", "nix",
+		},
+	}
+
+	result := []string{}
+	seen := make(map[string]bool)
+
+	// Get priority order for current OS
+	order, ok := priorities[p.OS]
+	if !ok {
+		// If OS not in priorities, return all detected package managers
+		return p.PackageManagers
+	}
+
+	// Add package managers in priority order
+	for _, pm := range order {
+		for _, detected := range p.PackageManagers {
+			if pm == detected && !seen[pm] {
+				result = append(result, pm)
+				seen[pm] = true
+				// For native package managers, typically only include the primary one
+				// unless it's a universal package manager
+				if p.OS == "linux" && (pm != "flatpak" && pm != "snap") && len(result) > 0 {
+					// If we've found the primary native package manager, skip others
+					// but continue to add universal ones
+					break
+				}
+			}
+		}
+	}
+
+	// Add any remaining detected package managers not in priority list
+	for _, pm := range p.PackageManagers {
+		if !seen[pm] {
+			result = append(result, pm)
+		}
+	}
+
+	return result
 }
 
 // String returns a human-readable representation of the platform
