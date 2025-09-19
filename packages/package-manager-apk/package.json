@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-apk",
   "private": true,
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "APK package manager plugin for Alpine Linux",
   "main": "main.go",
   "scripts": {
