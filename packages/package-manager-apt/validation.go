@@ -29,6 +29,11 @@ func (a *APTInstaller) validatePackageName(packageName string) error {
 		return fmt.Errorf("package name cannot be empty")
 	}
 
+	// Check length to prevent excessively long names
+	if len(packageName) > MaxPackageNameLength {
+		return fmt.Errorf("package name too long: %d characters (max %d)", len(packageName), MaxPackageNameLength)
+	}
+
 	// Check for null bytes and control characters
 	for i, r := range packageName {
 		if r == 0 || (r < 32 && r != 9 && r != 10 && r != 13) { // Allow tab, LF, CR
