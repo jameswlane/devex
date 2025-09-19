@@ -74,7 +74,7 @@ jobs:
           PACKAGES_TO_RELEASE=""
 
           # Filter out changes that shouldn't trigger releases
-          RELEVANT_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "^\.github/" | grep -v "^apps/registry/" | grep -v "^apps/web/" | grep -v "^apps/docs/" | grep -v "^scripts/" | grep -v "^\..*" | grep -v "README\.md$" | grep -v "\.md$" | grep -v "package\.json$" || echo "")
+          RELEVANT_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "^\.github/" | grep -v "^apps/registry/" | grep -v "^apps/web/" | grep -v "^apps/docs/" | grep -v "^scripts/" | grep -v "^\..*" | grep -v "README\.md$" | grep -v "\.md$" | grep -v "package\.json$" | grep -v "/dist/" || echo "")
 
           echo "Relevant changed files (excluding workflows, registry, docs):"
           echo "$RELEVANT_CHANGED_FILES"
