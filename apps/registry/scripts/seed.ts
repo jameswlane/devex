@@ -218,100 +218,205 @@ async function seedPlugins() {
 	console.log("🌱 Seeding plugins...");
 
 	try {
-		// Read plugins from packages directory
+		// Read plugins from packages directory with retry logic
 		const packagesDir = path.join(process.cwd(), "../../packages");
-		const packageDirs = await fs.readdir(packagesDir);
+
+		// Add timeout and retry logic for directory reading
+		let packageDirs: string[] = [];
+		const maxRetries = 3;
+		const retryDelay = 1000; // 1 second
+
+		for (let attempt = 1; attempt <= maxRetries; attempt++) {
+			try {
+				packageDirs = await fs.readdir(packagesDir);
+				break;
+			} catch (error) {
+				console.warn(`Attempt ${attempt}/${maxRetries} to read packages directory failed:`, error instanceof Error ? error.message : String(error));
+				if (attempt === maxRetries) {
+					throw new Error(`Failed to read packages directory after ${maxRetries} attempts: ${error instanceof Error ? error.message : String(error)}`);
+				}
+				// Wait before retrying
+				await new Promise(resolve => setTimeout(resolve, retryDelay));
+			}
+		}
 
 		const plugins = [];
+		const concurrencyLimit = 3; // Process 3 packages at a time to avoid overwhelming filesystem
 
-		for (const dir of packageDirs) {
-			const packageJsonPath = path.join(packagesDir, dir, "package.json");
-			try {
-				const packageData = JSON.parse(await fs.readFile(packageJsonPath, "utf-8"));
+		// Process packages in batches to prevent race conditions
+		for (let i = 0; i < packageDirs.length; i += concurrencyLimit) {
+			const batch = packageDirs.slice(i, i + concurrencyLimit);
+			const batchPromises = batch.map(async (dir) => {
+				const packageJsonPath = path.join(packagesDir, dir, "package.json");
 
-				// Only process DevEx plugins
-				if (packageData.name?.startsWith("@devex/") && packageData.devex?.plugin) {
-					const pluginConfig = packageData.devex.plugin;
-					const pluginName = packageData.name.replace("@devex/", "");
+				try {
+					// Check if file exists before reading with timeout
+					const fileExists = existsSync(packageJsonPath);
+					if (!fileExists) {
+						console.debug(`Skipping ${dir}: package.json not found`);
+						return null;
+					}
 
-					plugins.push({
-						name: pluginName,
-						version: packageData.version,
-						description: packageData.description,
-						author: packageData.author || "DevEx Team",
-						repository: packageData.repository?.url || "https://github.com/jameswlane/devex",
-						platforms: pluginConfig.platforms || [],
-						dependencies: pluginConfig.dependencies || [],
-						tags: packageData.keywords || [],
-						type: pluginConfig.type,
-						priority: pluginConfig.priority || 10,
-						supports: pluginConfig.supports || {},
-						release_tag: `${packageData.name}@${packageData.version}`,
-						status: "active"
-					});
+					// Add timeout to file reading to prevent hanging
+					const readPromise = fs.readFile(packageJsonPath, "utf-8");
+					const timeoutPromise = new Promise<never>((_, reject) =>
+						setTimeout(() => reject(new Error(`Timeout reading ${packageJsonPath}`)), 5000)
+					);
+
+					const packageContent = await Promise.race([readPromise, timeoutPromise]);
+
+					if (!packageContent.trim()) {
+						console.warn(`Skipping ${dir}: package.json is empty`);
+						return null;
+					}
+
+					const packageData = JSON.parse(packageContent);
+
+					// Only process DevEx plugins
+					if (packageData.name?.startsWith("@devex/") && packageData.devex?.plugin) {
+						const pluginConfig = packageData.devex.plugin;
+						const pluginName = packageData.name.replace("@devex/", "");
+
+						return {
+							name: pluginName,
+							version: packageData.version,
+							description: packageData.description,
+							author: packageData.author || "DevEx Team",
+							repository: packageData.repository?.url || "https://github.com/jameswlane/devex",
+							platforms: pluginConfig.platforms || [],
+							dependencies: pluginConfig.dependencies || [],
+							tags: packageData.keywords || [],
+							type: pluginConfig.type,
+							priority: pluginConfig.priority || 10,
+							supports: pluginConfig.supports || {},
+							release_tag: `${packageData.name}@${packageData.version}`,
+							status: "active"
+						};
+					}
+
+					console.debug(`Skipping ${dir}: not a DevEx plugin`);
+					return null;
+				} catch (error) {
+					// More specific error handling
+					if (error instanceof SyntaxError) {
+						console.warn(`Skipping ${dir}: invalid JSON in package.json - ${error.message}`);
+					} else if (error instanceof Error && error.message.includes('Timeout')) {
+						console.warn(`Skipping ${dir}: timeout reading package.json`);
+					} else {
+						console.warn(`Skipping ${dir}: ${error instanceof Error ? error.message : String(error)}`);
+					}
+					return null;
 				}
-			} catch (error) {
-				// Skip if package.json doesn't exist or can't be read
-				console.warn(`Could not read package.json for ${dir}: ${error instanceof Error ? error.message : String(error)}`);
+			});
+
+			// Wait for current batch to complete before processing next batch
+			const batchResults = await Promise.allSettled(batchPromises);
+
+			// Collect successful results
+			for (const result of batchResults) {
+				if (result.status === 'fulfilled' && result.value !== null) {
+					plugins.push(result.value);
+				}
+			}
+
+			// Small delay between batches to prevent filesystem overload
+			if (i + concurrencyLimit < packageDirs.length) {
+				await new Promise(resolve => setTimeout(resolve, 100));
 			}
 		}
 
 		console.log(`Found ${plugins.length} plugins to seed`);
 
-		for (const plugin of plugins) {
-			console.log(`  Seeding plugin: ${plugin.name}`);
+		// Process database operations in batches to prevent connection exhaustion
+		const dbBatchSize = 5;
+		const batchTimeout = 30000; // 30 seconds per batch
 
-			const githubPath = await getGitHubPath("plugin", plugin.name);
+		for (let i = 0; i < plugins.length; i += dbBatchSize) {
+			const batch = plugins.slice(i, i + dbBatchSize);
+			console.log(`Processing plugin batch ${Math.floor(i/dbBatchSize) + 1}/${Math.ceil(plugins.length/dbBatchSize)}`);
 
-			// Determine supported platforms based on plugin type and dependencies
-			let platforms = ["linux", "macos", "windows"];
-			if (plugin.tags.includes("linux")) {
-				platforms = ["linux"];
-			} else if (plugin.type === "package-manager") {
-				// Package managers are typically platform-specific
-				if (
-					plugin.tags.includes("debian") ||
-					plugin.tags.includes("ubuntu") ||
-					plugin.tags.includes("apt")
-				) {
+			const batchPromises = batch.map(async (plugin) => {
+				console.log(`  Seeding plugin: ${plugin.name}`);
+
+				const githubPath = await getGitHubPath("plugin", plugin.name);
+
+				// Determine supported platforms based on plugin type and dependencies
+				let platforms = ["linux", "macos", "windows"];
+				if (plugin.tags.includes("linux")) {
 					platforms = ["linux"];
-				} else if (
-					plugin.tags.includes("macos") ||
-					plugin.tags.includes("brew")
-				) {
-					platforms = ["macos"];
-				} else if (plugin.tags.includes("windows")) {
-					platforms = ["windows"];
+				} else if (plugin.type === "package-manager") {
+					// Package managers are typically platform-specific
+					if (
+						plugin.tags.includes("debian") ||
+						plugin.tags.includes("ubuntu") ||
+						plugin.tags.includes("apt")
+					) {
+						platforms = ["linux"];
+					} else if (
+						plugin.tags.includes("macos") ||
+						plugin.tags.includes("brew")
+					) {
+						platforms = ["macos"];
+					} else if (plugin.tags.includes("windows")) {
+						platforms = ["windows"];
+					}
+				}
+
+				// Add timeout to database operations
+				const upsertPromise = prisma.plugin.upsert({
+					where: { name: plugin.name },
+					update: {
+						description: plugin.description,
+						type: plugin.type,
+						priority: plugin.priority,
+						status: plugin.status,
+						supports: plugin.supports,
+						platforms: platforms,
+						githubUrl: plugin.repository,
+						githubPath: githubPath,
+						lastSynced: new Date(),
+					},
+					create: {
+						name: plugin.name,
+						description: plugin.description,
+						type: plugin.type,
+						priority: plugin.priority,
+						status: plugin.status,
+						supports: plugin.supports,
+						platforms: platforms,
+						githubUrl: plugin.repository,
+						githubPath: githubPath,
+						downloadCount: 0,
+						lastSynced: new Date(),
+					},
+				});
+
+				const timeoutPromise = new Promise<never>((_, reject) =>
+					setTimeout(() => reject(new Error(`Database operation timeout for plugin ${plugin.name}`)), batchTimeout)
+				);
+
+				return Promise.race([upsertPromise, timeoutPromise]);
+			});
+
+			// Wait for current batch with proper error handling
+			const batchResults = await Promise.allSettled(batchPromises);
+
+			// Log results and handle failures
+			for (let j = 0; j < batchResults.length; j++) {
+				const result = batchResults[j];
+				const plugin = batch[j];
+
+				if (result.status === 'rejected') {
+					console.error(`  ❌ Failed to seed plugin ${plugin.name}:`, result.reason);
+				} else {
+					console.log(`  ✅ Successfully seeded plugin ${plugin.name}`);
 				}
 			}
 
-			await prisma.plugin.upsert({
-				where: { name: plugin.name },
-				update: {
-					description: plugin.description,
-					type: plugin.type,
-					priority: plugin.priority,
-					status: plugin.status,
-					supports: plugin.supports,
-					platforms: platforms,
-					githubUrl: plugin.repository,
-					githubPath: githubPath,
-					lastSynced: new Date(),
-				},
-				create: {
-					name: plugin.name,
-					description: plugin.description,
-					type: plugin.type,
-					priority: plugin.priority,
-					status: plugin.status,
-					supports: plugin.supports,
-					platforms: platforms,
-					githubUrl: plugin.repository,
-					githubPath: githubPath,
-					downloadCount: 0,
-					lastSynced: new Date(),
-				},
-			});
+			// Small delay between database batches to prevent overwhelming the connection pool
+			if (i + dbBatchSize < plugins.length) {
+				await new Promise(resolve => setTimeout(resolve, 200));
+			}
 		}
 
 		console.log(`✅ Successfully seeded ${plugins.length} plugins`);
@@ -577,29 +682,72 @@ async function updateRegistryStats() {
 async function main() {
 	console.log("🚀 Starting DevEx Registry Database Seeding...\n");
 
+	// Add connection timeout and retry logic
+	const maxConnectionRetries = 3;
+	const connectionRetryDelay = 2000;
+
+	for (let attempt = 1; attempt <= maxConnectionRetries; attempt++) {
+		try {
+			// Test database connection
+			await prisma.$connect();
+			console.log("✅ Database connection established");
+			break;
+		} catch (error) {
+			console.warn(`Database connection attempt ${attempt}/${maxConnectionRetries} failed:`, error instanceof Error ? error.message : String(error));
+
+			if (attempt === maxConnectionRetries) {
+				throw new Error(`Failed to connect to database after ${maxConnectionRetries} attempts`);
+			}
+
+			// Wait before retrying
+			await new Promise(resolve => setTimeout(resolve, connectionRetryDelay));
+		}
+	}
+
 	try {
 		// Skip applications for now - focus on plugins
 		// await seedApplications();
 		// console.log("");
 
+		console.log("Starting plugin seeding with improved timing controls...");
 		await seedPlugins();
 		console.log("");
 
+		console.log("Starting config seeding...");
 		await seedConfigs();
 		console.log("");
 
+		console.log("Starting stack seeding...");
 		await seedStacks();
 		console.log("");
 
+		console.log("Updating registry statistics...");
 		await updateRegistryStats();
 		console.log("");
 
 		console.log("🎉 Database seeding completed successfully!");
 	} catch (error) {
 		console.error("💥 Database seeding failed:", error);
+
+		// Provide more specific error guidance
+		if (error instanceof Error) {
+			if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+				console.error("💡 This appears to be a timing issue. Try running the seed script again or check system resources.");
+			} else if (error.message.includes('connection') || error.message.includes('ECONNREFUSED')) {
+				console.error("💡 Database connection issue. Ensure the database is running and accessible.");
+			} else if (error.message.includes('permission') || error.message.includes('EACCES')) {
+				console.error("💡 File permission issue. Check that the script has permission to read package files.");
+			}
+		}
+
 		process.exit(1);
 	} finally {
-		await prisma.$disconnect();
+		try {
+			await prisma.$disconnect();
+			console.log("✅ Database connection closed cleanly");
+		} catch (disconnectError) {
+			console.warn("⚠️ Error while disconnecting from database:", disconnectError instanceof Error ? disconnectError.message : String(disconnectError));
+		}
 	}
 }
 
