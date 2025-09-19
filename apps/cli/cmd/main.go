@@ -46,7 +46,7 @@ func main() {
 	// Validate dependencies quietly
 	ctx := context.Background()
 	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
-		log.Fatal("Dependency validation failed", err)
+		log.Fatal("Dependency validation failed", fmt.Errorf("failed to validate required dependencies: %w", err))
 	}
 
 	homeDir, err := utils.GetHomeDir()
