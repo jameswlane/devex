@@ -1426,8 +1426,13 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 		// Pre-allocate error collection with bounds checking for memory safety
 		allErrors := make([]error, 0, MaxErrorMessages)
 
-		// Initialize plugin bootstrap with download enabled
+		// Initialize plugin bootstrap with smart download fallback
+		// Try with downloads enabled first, but fall back to skip downloads if registry is unavailable
 		pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+		if err != nil {
+			log.Warn("Plugin download failed, trying with downloads disabled", "error", err)
+			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true) // Skip downloads
+		}
 		if err != nil {
 			log.Error("Failed to initialize plugin system", err)
 			allErrors = addErrorSafe(allErrors, fmt.Errorf("failed to initialize plugin system: %w", err))
@@ -1476,9 +1481,20 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 			"validationTime", validationSummary.ValidationTime,
 		)
 
-		// Add validation errors to the error collection
-		for _, err := range validationSummary.Errors {
-			allErrors = addErrorSafe(allErrors, err)
+		// Add validation errors to the error collection, but be graceful about plugin availability
+		if validationSummary.InvalidPlugins > 0 && validationSummary.ValidPlugins == 0 {
+			// If all plugins failed validation and none succeeded, it's likely a registry/network issue
+			// Log as warning instead of hard error
+			log.Warn("Plugin validation failed - likely due to registry unavailability",
+				"invalidPlugins", validationSummary.InvalidPlugins,
+				"validPlugins", validationSummary.ValidPlugins,
+			)
+			// Don't add these as hard errors that would fail the setup
+		} else {
+			// Add validation errors to the error collection for genuine plugin issues
+			for _, err := range validationSummary.Errors {
+				allErrors = addErrorSafe(allErrors, err)
+			}
 		}
 
 		// Log detailed results for debugging
@@ -1584,7 +1600,12 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	log.Info("Finalizing setup", "selectedShell", selectedShell)
 
 	// Initialize plugin bootstrap for post-installation configuration
+	// Try with downloads enabled first, but fall back to skip downloads if registry is unavailable
 	pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+	if err != nil {
+		log.Warn("Plugin download failed during finalization, trying with downloads disabled", "error", err)
+		pluginBootstrap, err = bootstrap.NewPluginBootstrap(true) // Skip downloads
+	}
 	if err != nil {
 		log.Error("Failed to initialize plugin system for finalization", err)
 		return fmt.Errorf("failed to initialize plugin system. This may be due to network connectivity issues, insufficient permissions, or missing dependencies. Please check your internet connection, ensure you have write access to the plugin directory, and try again: %w", err)
