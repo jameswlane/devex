@@ -73,8 +73,14 @@ jobs:
           # Determine affected packages based on changed files (more precise detection)
           PACKAGES_TO_RELEASE=""
 
+          # Filter out changes that shouldn't trigger releases
+          RELEVANT_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep -v "^\.github/" | grep -v "^apps/registry/" | grep -v "^apps/web/" | grep -v "^apps/docs/" | grep -v "^scripts/" | grep -v "^\..*" | grep -v "README\.md$" | grep -v "\.md$" | grep -v "package\.json$" || echo "")
+
+          echo "Relevant changed files (excluding workflows, registry, docs):"
+          echo "$RELEVANT_CHANGED_FILES"
+
           # Check CLI changes (exclude docs and README files)
-          CLI_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep "^apps/cli/" | grep -v "^apps/cli/docs/" | grep -v "^apps/cli/README.md" | grep -v "^apps/cli/\.md$" || echo "")
+          CLI_CHANGED_FILES=$(echo "$RELEVANT_CHANGED_FILES" | grep "^apps/cli/" | grep -v "^apps/cli/docs/" | grep -v "^apps/cli/README.md" | grep -v "^apps/cli/\.md$" || echo "")
           if [ -n "$CLI_CHANGED_FILES" ]; then
             echo "CLI source code changes detected:"
             echo "$CLI_CHANGED_FILES"
@@ -82,7 +88,7 @@ jobs:
           fi
 
           # Check Plugin SDK changes (exclude docs and README files)
-          SDK_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep "^packages/plugin-sdk/" | grep -v "^packages/plugin-sdk/docs/" | grep -v "^packages/plugin-sdk/README.md" | grep -v "^packages/plugin-sdk/\.md$" || echo "")
+          SDK_CHANGED_FILES=$(echo "$RELEVANT_CHANGED_FILES" | grep "^packages/plugin-sdk/" | grep -v "^packages/plugin-sdk/docs/" | grep -v "^packages/plugin-sdk/README.md" | grep -v "^packages/plugin-sdk/\.md$" || echo "")
           if [ -n "$SDK_CHANGED_FILES" ]; then
             echo "Plugin SDK source code changes detected:"
             echo "$SDK_CHANGED_FILES"
@@ -94,7 +100,7 @@ jobs:
             if [ "$dir" != "packages/plugin-sdk/" ]; then
               PACKAGE_NAME=$(basename "$dir")
               # Only include source code changes, exclude docs/README/markdown files
-              PLUGIN_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep "^$dir" | grep -v "^$dir/docs/" | grep -v "^$dir/README.md" | grep -v "^$dir.*\.md$" || echo "")
+              PLUGIN_CHANGED_FILES=$(echo "$RELEVANT_CHANGED_FILES" | grep "^$dir" | grep -v "^$dir/docs/" | grep -v "^$dir/README.md" | grep -v "^$dir.*\.md$" || echo "")
               if [ -n "$PLUGIN_CHANGED_FILES" ]; then
                 echo "Plugin $PACKAGE_NAME source code changes detected:"
                 echo "$PLUGIN_CHANGED_FILES"
