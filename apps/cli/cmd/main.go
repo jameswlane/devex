@@ -94,7 +94,7 @@ func isDebugMode() bool {
 	}
 
 	// Check environment variables
-	if os.Getenv("DEVEX_DEBUG") == "true" || os.Getenv("DEBUG") == "true" {
+	if os.Getenv("DEVEX_DEBUG") == "true" || os.Getenv("DEBUG") == "true" || os.Getenv("DEVEX_VERBOSE") == "true" {
 		return true
 	}
 
