@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-brew",
   "private": true,
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Homebrew plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
