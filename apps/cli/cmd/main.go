@@ -35,6 +35,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
 	}
 
+	// Set the CLI version for logging
+	log.SetCLIVersion(version)
+
 	// Detect platform information
 	plat := platform.DetectPlatform()
 

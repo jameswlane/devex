@@ -18,7 +18,7 @@ import (
 
 const (
 	// Default plugin registry URL - you would host this
-	DefaultRegistryURL = "https://registry.devex.sh/v1"
+	DefaultRegistryURL = "https://registry.devex.sh"
 )
 
 // PluginBootstrap handles the automatic plugin discovery and loading
@@ -257,7 +257,7 @@ func (b *PluginBootstrap) createPluginManagementCmd() *cobra.Command {
 		Use:   "registry",
 		Short: "Show plugin registry configuration",
 		Long: `Show the current plugin registry URL configuration.
-		
+
 The registry URL can be configured via:
 1. Environment variable: DEVEX_PLUGIN_REGISTRY_URL
 2. Config file: ~/.devex/config.yaml (plugin_registry_url key)

@@ -68,15 +68,18 @@ export const GET = withRateLimit(async function handler() {
 				if (plugin.platforms.includes(platform.split('-')[0])) {
 					platforms[platform] = {
 						// Registry download URL that will track and redirect
-						url: `${REGISTRY_CONFIG.BASE_URL}/api/v1/plugins/${plugin.id}/download/${platform}`,
+						url: `https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platform}`,
 						checksum: "", // TODO: Store checksums in database
 						size: 0 // TODO: Store file sizes in database
 					};
 				}
 			}
 
-			registryPlugins[plugin.name] = {
-				name: plugin.name,
+			// Normalize plugin name to match CLI expectations
+			const normalizedName = normalizePluginName(plugin.name, plugin.type);
+
+			registryPlugins[normalizedName] = {
+				name: normalizedName,
 				version: version,
 				description: plugin.description,
 				author: "DevEx Team",
@@ -116,6 +119,26 @@ function extractVersionFromGithubPath(githubPath: string | null): string | null 
 	// Match @devex/plugin-name@1.6.0 pattern
 	const versionMatch = githubPath.match(/@devex\/[^@]+@(.+)$/);
 	return versionMatch ? versionMatch[1] : null;
+}
+
+// Helper function to normalize plugin names to match CLI expectations
+function normalizePluginName(pluginName: string, pluginType: string): string {
+	// If plugin name already has the type prefix, return as-is
+	if (pluginName.startsWith(`${pluginType}-`)) {
+		return pluginName;
+	}
+
+	// For certain types, add the type prefix to match CLI expectations
+	if (pluginType === "package-manager" && !pluginName.startsWith("package-manager-")) {
+		return `package-manager-${pluginName}`;
+	}
+
+	if (pluginType === "desktop-environment" && !pluginName.startsWith("desktop-")) {
+		return `desktop-${pluginName}`;
+	}
+
+	// For other types (tool, system, etc.), return the name as-is
+	return pluginName;
 }
 
 // Helper function to extract tags from plugin type

@@ -343,25 +343,32 @@ func (p *Platform) GetRequiredPlugins() []string {
 		plugins = append(plugins, fmt.Sprintf("package-manager-%s", pm))
 	}
 
-	// Add OS-specific plugins
+	// Add OS-specific plugins (only if they exist)
 	switch p.OS {
 	case "linux":
-		plugins = append(plugins, "system-linux")
-		if p.Distribution != "unknown" && p.Distribution != "" {
-			plugins = append(plugins, fmt.Sprintf("distro-%s", p.Distribution))
-		}
-		// Add desktop environment plugin if detected
+		// Use system-setup instead of system-linux (which doesn't exist yet)
+		plugins = append(plugins, "system-setup")
+
+		// Skip distro-specific plugins for now - they don't exist yet
+		// TODO: Add distro plugins when they're implemented
+		// if p.Distribution != "unknown" && p.Distribution != "" {
+		//     plugins = append(plugins, fmt.Sprintf("distro-%s", p.Distribution))
+		// }
+
+		// Add desktop environment plugin if detected (these do exist)
 		if p.DesktopEnv != "unknown" && p.DesktopEnv != "" {
 			plugins = append(plugins, fmt.Sprintf("desktop-%s", p.DesktopEnv))
 		}
 	case "darwin":
-		plugins = append(plugins, "system-macos")
-		// macOS always has a desktop environment
-		plugins = append(plugins, "desktop-macos")
+		// Use system-setup for now - macOS-specific plugins don't exist yet
+		plugins = append(plugins, "system-setup")
+		// TODO: Add macOS desktop plugins when implemented
+		// plugins = append(plugins, "desktop-macos")
 	case "windows":
-		plugins = append(plugins, "system-windows")
-		// Windows always has a desktop environment
-		plugins = append(plugins, "desktop-windows")
+		// Use system-setup for now - Windows-specific plugins don't exist yet
+		plugins = append(plugins, "system-setup")
+		// TODO: Add Windows desktop plugins when implemented
+		// plugins = append(plugins, "desktop-windows")
 	}
 
 	// Add essential tool plugins

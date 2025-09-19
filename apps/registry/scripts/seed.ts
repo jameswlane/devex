@@ -1,7 +1,8 @@
 #!/usr/bin/env tsx
 
 import { PrismaClient, Prisma } from "@prisma/client";
-import fs from "fs";
+import fs from "fs/promises";
+import { existsSync, readFileSync } from "fs";
 import path from "path";
 
 const prisma = new PrismaClient();
@@ -128,11 +129,11 @@ async function seedApplications() {
 		// Safe JSON parsing with error handling
 		let webToolsData: WebToolsData;
 		try {
-			if (!fs.existsSync(webToolsPath)) {
+			if (!existsSync(webToolsPath)) {
 				throw new Error(`Web tools data file not found: ${webToolsPath}`);
 			}
 
-			const rawData = fs.readFileSync(webToolsPath, "utf-8");
+			const rawData = readFileSync(webToolsPath, "utf-8");
 			if (!rawData.trim()) {
 				throw new Error("Web tools data file is empty");
 			}
@@ -217,13 +218,44 @@ async function seedPlugins() {
 	console.log("🌱 Seeding plugins...");
 
 	try {
-		// Read plugins from the registry.json
-		const registryPath = path.join(process.cwd(), "public/v1/registry.json");
-		const registryData: RegistryData = JSON.parse(
-			fs.readFileSync(registryPath, "utf-8"),
-		);
+		// Read plugins from packages directory
+		const packagesDir = path.join(process.cwd(), "../../packages");
+		const packageDirs = await fs.readdir(packagesDir);
 
-		const plugins = Object.values(registryData.plugins);
+		const plugins = [];
+
+		for (const dir of packageDirs) {
+			const packageJsonPath = path.join(packagesDir, dir, "package.json");
+			try {
+				const packageData = JSON.parse(await fs.readFile(packageJsonPath, "utf-8"));
+
+				// Only process DevEx plugins
+				if (packageData.name?.startsWith("@devex/") && packageData.devex?.plugin) {
+					const pluginConfig = packageData.devex.plugin;
+					const pluginName = packageData.name.replace("@devex/", "");
+
+					plugins.push({
+						name: pluginName,
+						version: packageData.version,
+						description: packageData.description,
+						author: packageData.author || "DevEx Team",
+						repository: packageData.repository?.url || "https://github.com/jameswlane/devex",
+						platforms: pluginConfig.platforms || [],
+						dependencies: pluginConfig.dependencies || [],
+						tags: packageData.keywords || [],
+						type: pluginConfig.type,
+						priority: pluginConfig.priority || 10,
+						supports: pluginConfig.supports || {},
+						release_tag: `${packageData.name}@${packageData.version}`,
+						status: "active"
+					});
+				}
+			} catch (error) {
+				// Skip if package.json doesn't exist or can't be read
+				console.warn(`Could not read package.json for ${dir}: ${error instanceof Error ? error.message : String(error)}`);
+			}
+		}
+
 		console.log(`Found ${plugins.length} plugins to seed`);
 
 		for (const plugin of plugins) {
@@ -467,7 +499,7 @@ async function updateRegistryStats() {
 								path: ['linux'],
 								not: Prisma.JsonNull
 							}
-						}, 
+						},
 						{ tags: { has: "linux" } }
 					],
 				},
@@ -480,7 +512,7 @@ async function updateRegistryStats() {
 								path: ['macos'],
 								not: Prisma.JsonNull
 							}
-						}, 
+						},
 						{ tags: { has: "macos" } }
 					],
 				},
@@ -546,8 +578,9 @@ async function main() {
 	console.log("🚀 Starting DevEx Registry Database Seeding...\n");
 
 	try {
-		await seedApplications();
-		console.log("");
+		// Skip applications for now - focus on plugins
+		// await seedApplications();
+		// console.log("");
 
 		await seedPlugins();
 		console.log("");
