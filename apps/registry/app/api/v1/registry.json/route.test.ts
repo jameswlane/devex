@@ -6,13 +6,11 @@ import { NextRequest } from 'next/server';
 import { GET } from './route';
 
 // Mock Prisma
-const mockPrismaPlugin = {
-  findMany: jest.fn(),
-};
-
 jest.mock('@/lib/prisma', () => ({
   prisma: {
-    plugin: mockPrismaPlugin,
+    plugin: {
+      findMany: jest.fn(),
+    },
   },
 }));
 
@@ -34,6 +32,9 @@ jest.mock('@/lib/config', () => ({
   },
 }));
 
+// Get the mocked prisma instance
+const { prisma } = require('@/lib/prisma');
+
 describe('/api/v1/registry.json', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -54,7 +55,7 @@ describe('/api/v1/registry.json', () => {
       },
     ];
 
-    mockPrismaPlugin.findMany.mockResolvedValue(mockPlugins);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
     const response = await GET();
@@ -68,7 +69,7 @@ describe('/api/v1/registry.json', () => {
   });
 
   it('should handle database errors gracefully', async () => {
-    mockPrismaPlugin.findMany.mockRejectedValue(new Error('Database error'));
+    (prisma.plugin.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
     const response = await GET();
@@ -102,7 +103,7 @@ describe('/api/v1/registry.json', () => {
       },
     ];
 
-    mockPrismaPlugin.findMany.mockResolvedValue(mockPlugins);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
 
     const response = await GET();
     const data = await response.json();
@@ -114,7 +115,7 @@ describe('/api/v1/registry.json', () => {
   });
 
   it('should include proper cache headers', async () => {
-    mockPrismaPlugin.findMany.mockResolvedValue([]);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue([]);
 
     const response = await GET();
 
@@ -145,7 +146,7 @@ describe('normalizePluginName', () => {
       },
     ];
 
-    mockPrismaPlugin.findMany.mockResolvedValue(mockPlugins);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
 
     const response = await GET();
 
@@ -168,7 +169,7 @@ describe('normalizePluginName', () => {
       },
     ];
 
-    mockPrismaPlugin.findMany.mockResolvedValue(mockPlugins);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
 
     const response = await GET();
 
@@ -193,7 +194,7 @@ describe('extractVersionFromGithubPath', () => {
       },
     ];
 
-    mockPrismaPlugin.findMany.mockResolvedValue(mockPlugins);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
 
     const response = await GET();
     const data = await response.json();
@@ -216,7 +217,7 @@ describe('extractVersionFromGithubPath', () => {
       },
     ];
 
-    mockPrismaPlugin.findMany.mockResolvedValue(mockPlugins);
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
 
     const response = await GET();
     const data = await response.json();
