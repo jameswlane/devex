@@ -1,0 +1,12 @@
+{
+  "project_name": "devex",
+  "tag": "0.29.1",
+  "previous_tag": "@devex/package-manager-apt@1.10.0",
+  "version": "0.29.1",
+  "commit": "f7f836f1beaa9de776fbfb8ff1f87b55b829abc1",
+  "date": "2025-09-19T03:14:41.083615455Z",
+  "runtime": {
+    "goos": "linux",
+    "goarch": "amd64"
+  }
+}
