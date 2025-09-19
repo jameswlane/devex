@@ -69,8 +69,8 @@ export const GET = withRateLimit(async function handler() {
 					platforms[platform] = {
 						// Registry download URL that will track and redirect
 						url: `https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platform}`,
-						checksum: "", // TODO: Store checksums in database
-						size: 0 // TODO: Store file sizes in database
+						checksum: "", // TODO: Store checksums in database (Issue #219)
+						size: 0 // TODO: Store file sizes in database (Issue #220)
 					};
 				}
 			}
@@ -123,6 +123,14 @@ function extractVersionFromGithubPath(githubPath: string | null): string | null 
 
 // Helper function to normalize plugin names to match CLI expectations
 function normalizePluginName(pluginName: string, pluginType: string): string {
+	// Validate inputs to prevent null/undefined issues
+	if (!pluginName || typeof pluginName !== 'string') {
+		throw new Error('Plugin name must be a non-empty string');
+	}
+	if (!pluginType || typeof pluginType !== 'string') {
+		throw new Error('Plugin type must be a non-empty string');
+	}
+
 	// If plugin name already has the type prefix, return as-is
 	if (pluginName.startsWith(`${pluginType}-`)) {
 		return pluginName;

@@ -410,17 +410,24 @@ func (p *Platform) getPrimaryPackageManagers() []string {
 	}
 
 	// Add package managers in priority order
+	foundNativePackageManager := false
 	for _, pm := range order {
 		for _, detected := range p.PackageManagers {
 			if pm == detected && !seen[pm] {
+				// Check if this is a universal package manager
+				isUniversal := pm == "flatpak" || pm == "snap" || pm == "appimage"
+
+				// For Linux, only include one native package manager, but allow all universal ones
+				if p.OS == "linux" && !isUniversal && foundNativePackageManager {
+					continue // Skip additional native package managers
+				}
+
 				result = append(result, pm)
 				seen[pm] = true
-				// For native package managers, typically only include the primary one
-				// unless it's a universal package manager
-				if p.OS == "linux" && (pm != "flatpak" && pm != "snap") && len(result) > 0 {
-					// If we've found the primary native package manager, skip others
-					// but continue to add universal ones
-					break
+
+				// Mark that we found a native package manager
+				if p.OS == "linux" && !isUniversal {
+					foundNativePackageManager = true
 				}
 			}
 		}
