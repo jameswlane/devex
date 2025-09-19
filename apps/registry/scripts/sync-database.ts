@@ -373,8 +373,25 @@ async function updateRegistryStats() {
         prisma.application.count({ where: { supportsWindows: true } }),
       ]);
 
-    await prisma.registryStats.create({
-      data: {
+    // Use today's date as the key for upsert (consistent with sync-github-plugins.ts)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    await prisma.registryStats.upsert({
+      where: { date: today },
+      update: {
+        totalApplications: applications,
+        totalPlugins: plugins,
+        totalConfigs: configs,
+        totalStacks: stacks,
+        linuxSupported: linuxApps,
+        macosSupported: macosApps,
+        windowsSupported: windowsApps,
+        totalDownloads: 0,
+        dailyDownloads: 0,
+      },
+      create: {
+        date: today,
         totalApplications: applications,
         totalPlugins: plugins,
         totalConfigs: configs,
@@ -387,7 +404,7 @@ async function updateRegistryStats() {
       },
     });
 
-    console.log(`  ✅ Updated registry statistics`);
+    console.log(`  ✅ Updated registry statistics for ${today.toISOString().split('T')[0]}`);
   } catch (error) {
     console.error(`  ❌ Failed to update registry statistics:`, error);
   }

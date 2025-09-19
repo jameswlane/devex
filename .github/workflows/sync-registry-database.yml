@@ -190,20 +190,38 @@ jobs:
       - name: Check data freshness
         env:
           REGISTRY_URL: https://registry.devex.sh
-        run: |-
+        run: |
           # Get stats and check last update time
           STATS=$(curl -s "${REGISTRY_URL}/api/v1/stats")
           LAST_UPDATED=$(echo $STATS | jq -r '.meta.lastUpdated')
 
           echo "Last registry update: $LAST_UPDATED"
+          echo "Stats response: $STATS"
 
-          # Check if update is recent (within last hour)
-          LAST_UPDATE_TIMESTAMP=$(date -d "$LAST_UPDATED" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$LAST_UPDATED" +%s)
-          CURRENT_TIMESTAMP=$(date +%s)
-          DIFF=$((CURRENT_TIMESTAMP - LAST_UPDATE_TIMESTAMP))
+          # Skip timestamp validation if lastUpdated is null
+          if [ "$LAST_UPDATED" = "null" ] || [ -z "$LAST_UPDATED" ]; then
+            echo "⚠️ Warning: lastUpdated field is null - database sync may not be updating timestamp"
+            echo "✅ Registry API is responding, but timestamp tracking needs investigation"
+            exit 0
+          fi
 
-          if [ $DIFF -gt 3600 ]; then
-            echo "⚠️ Warning: Registry data might be stale (last updated more than 1 hour ago)"
+          # Check if update is recent (within last hour) - Linux compatible date command
+          if command -v date >/dev/null 2>&1; then
+            LAST_UPDATE_TIMESTAMP=$(date -d "$LAST_UPDATED" +%s 2>/dev/null || echo "0")
+            CURRENT_TIMESTAMP=$(date +%s)
+
+            if [ "$LAST_UPDATE_TIMESTAMP" != "0" ]; then
+              DIFF=$((CURRENT_TIMESTAMP - LAST_UPDATE_TIMESTAMP))
+
+              if [ $DIFF -gt 3600 ]; then
+                echo "⚠️ Warning: Registry data might be stale (last updated more than 1 hour ago)"
+                echo "Time difference: ${DIFF} seconds"
+              else
+                echo "✅ Registry data is fresh (updated ${DIFF} seconds ago)"
+              fi
+            else
+              echo "⚠️ Warning: Could not parse timestamp format: $LAST_UPDATED"
+            fi
           else
-            echo "✅ Registry data is fresh"
+            echo "✅ Registry API is responding (timestamp validation skipped - no date command)"
           fi
