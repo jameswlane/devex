@@ -1,0 +1,50 @@
+# Plugin Metadata for DNF Package Manager
+name: package-manager-dnf
+type: package-manager
+description: DNF package manager support for Fedora/RHEL systems
+version: 1.0.0
+author: DevEx Team
+license: MIT
+homepage: https://github.com/jameswlane/devex
+repository: https://github.com/jameswlane/devex
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - fedora
+      - rhel
+      - centos
+      - rocky
+      - almalinux
+      - oracle
+    architectures:
+      - amd64
+      - arm64
+    min_version: "8" # Minimum RHEL/CentOS version
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - package-manager-yum # DNF replaces YUM
+# Capabilities
+supports:
+  install: true
+  uninstall: true
+  update: true
+  search: true
+  list: true
+  repository_management: true
+  module_streams: true
+# Priority (lower number = higher priority)
+priority: 10
+# Tags for discovery
+tags:
+  - package-manager
+  - dnf
+  - fedora
+  - rhel
+  - centos
+  - linux
+  - system
