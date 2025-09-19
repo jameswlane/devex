@@ -19,7 +19,7 @@ const (
 	VersionFile       = ".version"
 	HistoryFile       = ".version-history.json"
 	MigrationsDir     = "migrations"
-	CurrentVersion    = "0.9.2"
+	CurrentVersion    = "dev"
 	VersionTimeFormat = "2006-01-02T15:04:05Z07:00"
 )
 

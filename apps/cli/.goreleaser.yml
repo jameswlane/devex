@@ -3,6 +3,8 @@ builds:
   - id: devex
     main: ./cmd/main.go
     binary: bin/devex
+    ldflags:
+      - -X main.version={{.Version}}
     goos:
       - linux
       - darwin
