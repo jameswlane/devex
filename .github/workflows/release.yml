@@ -31,7 +31,90 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Determine changed packages and create releases
         id: auto-release
-        run: "# Install dependencies first\npnpm install --frozen-lockfile\n\n# Set up git user\ngit config user.name \"github-actions[bot]\"\ngit config user.email \"github-actions[bot]@users.noreply.github.com\"\n\n# Get the last tag or use initial commit\nLAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)\necho \"Last tag: $LAST_TAG\"\n\n# Check what files changed since last tag\nCHANGED_FILES=$(git diff --name-only $LAST_TAG..HEAD || git diff --name-only --cached)\necho \"Changed files: $CHANGED_FILES\"\n\n# Check for conventional commits since last tag\nCOMMITS=$(git log $LAST_TAG..HEAD --pretty=format:\"%s\" --no-merges | grep -E \"^(feat|fix|perf|refactor)(\\([^)]+\\))?: \" || echo \"\")\n\nif [ -z \"$COMMITS\" ]; then\n  echo \"No conventional commits found since last release\"\n  echo \"has_release=false\" >> $GITHUB_OUTPUT\n  exit 0\nfi\n\necho \"Found conventional commits:\"\necho \"$COMMITS\"\n\n# Determine version bump (major, minor, patch)\nBUMP_TYPE=\"patch\"\nif echo \"$COMMITS\" | grep -q \"BREAKING CHANGE\\|!:\"; then\n  BUMP_TYPE=\"major\"\nelif echo \"$COMMITS\" | grep -q \"^feat\"; then\n  BUMP_TYPE=\"minor\"\nfi\n\necho \"Determined bump type: $BUMP_TYPE\"\n\n# Determine affected packages based on changed files\nPACKAGES_TO_RELEASE=\"\"\n\n# Check CLI changes\nif echo \"$CHANGED_FILES\" | grep -q \"^apps/cli/\"; then\n  PACKAGES_TO_RELEASE=\"$PACKAGES_TO_RELEASE @devex/cli\"\nfi\n\n# Check Plugin SDK changes  \nif echo \"$CHANGED_FILES\" | grep -q \"^packages/plugin-sdk/\"; then\n  PACKAGES_TO_RELEASE=\"$PACKAGES_TO_RELEASE @devex/plugin-sdk\"\nfi\n\n# Check other plugin package changes\nfor dir in packages/*/; do\n  if [ \"$dir\" != \"packages/plugin-sdk/\" ]; then\n    PACKAGE_NAME=$(basename \"$dir\")\n    if echo \"$CHANGED_FILES\" | grep -q \"^$dir\"; then\n      PACKAGES_TO_RELEASE=\"$PACKAGES_TO_RELEASE @devex/$PACKAGE_NAME\"\n    fi\n  fi\ndone\n\nPACKAGES_TO_RELEASE=$(echo \"$PACKAGES_TO_RELEASE\" | xargs)\necho \"Packages to release: $PACKAGES_TO_RELEASE\"\n\nif [ -z \"$PACKAGES_TO_RELEASE\" ]; then\n  echo \"No packages affected by changes\"\n  echo \"has_release=false\" >> $GITHUB_OUTPUT\n  exit 0\nfi\n\necho \"has_release=true\" >> $GITHUB_OUTPUT\necho \"packages=$PACKAGES_TO_RELEASE\" >> $GITHUB_OUTPUT\necho \"bump_type=$BUMP_TYPE\" >> $GITHUB_OUTPUT\n"
+        run: |
+          # Install dependencies first
+          pnpm install --frozen-lockfile
+
+          # Set up git user
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Get the last tag or use initial commit
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          echo "Last tag: $LAST_TAG"
+
+          # Check what files changed since last tag
+          CHANGED_FILES=$(git diff --name-only $LAST_TAG..HEAD || git diff --name-only --cached)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Check for conventional commits since last tag
+          COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"%s" --no-merges | grep -E "^(feat|fix|perf|refactor)(\([^)]+\))?: " || echo "")
+
+          if [ -z "$COMMITS" ]; then
+            echo "No conventional commits found since last release"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Found conventional commits:"
+          echo "$COMMITS"
+
+          # Determine version bump (major, minor, patch)
+          BUMP_TYPE="patch"
+          if echo "$COMMITS" | grep -q "BREAKING CHANGE\|!:"; then
+            BUMP_TYPE="major"
+          elif echo "$COMMITS" | grep -q "^feat"; then
+            BUMP_TYPE="minor"
+          fi
+
+          echo "Determined bump type: $BUMP_TYPE"
+
+          # Determine affected packages based on changed files (more precise detection)
+          PACKAGES_TO_RELEASE=""
+
+          # Check CLI changes (exclude docs and README files)
+          CLI_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep "^apps/cli/" | grep -v "^apps/cli/docs/" | grep -v "^apps/cli/README.md" | grep -v "^apps/cli/\.md$" || echo "")
+          if [ -n "$CLI_CHANGED_FILES" ]; then
+            echo "CLI source code changes detected:"
+            echo "$CLI_CHANGED_FILES"
+            PACKAGES_TO_RELEASE="$PACKAGES_TO_RELEASE @devex/cli"
+          fi
+
+          # Check Plugin SDK changes (exclude docs and README files)
+          SDK_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep "^packages/plugin-sdk/" | grep -v "^packages/plugin-sdk/docs/" | grep -v "^packages/plugin-sdk/README.md" | grep -v "^packages/plugin-sdk/\.md$" || echo "")
+          if [ -n "$SDK_CHANGED_FILES" ]; then
+            echo "Plugin SDK source code changes detected:"
+            echo "$SDK_CHANGED_FILES"
+            PACKAGES_TO_RELEASE="$PACKAGES_TO_RELEASE @devex/plugin-sdk"
+          fi
+
+          # Check individual plugin package changes (only source code changes)
+          for dir in packages/*/; do
+            if [ "$dir" != "packages/plugin-sdk/" ]; then
+              PACKAGE_NAME=$(basename "$dir")
+              # Only include source code changes, exclude docs/README/markdown files
+              PLUGIN_CHANGED_FILES=$(echo "$CHANGED_FILES" | grep "^$dir" | grep -v "^$dir/docs/" | grep -v "^$dir/README.md" | grep -v "^$dir.*\.md$" || echo "")
+              if [ -n "$PLUGIN_CHANGED_FILES" ]; then
+                echo "Plugin $PACKAGE_NAME source code changes detected:"
+                echo "$PLUGIN_CHANGED_FILES"
+                PACKAGES_TO_RELEASE="$PACKAGES_TO_RELEASE @devex/$PACKAGE_NAME"
+              fi
+            fi
+          done
+
+          PACKAGES_TO_RELEASE=$(echo "$PACKAGES_TO_RELEASE" | xargs)
+          echo "Packages to release: $PACKAGES_TO_RELEASE"
+
+          if [ -z "$PACKAGES_TO_RELEASE" ]; then
+            echo "No packages affected by source code changes (excluding docs/README changes)"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "has_release=true" >> $GITHUB_OUTPUT
+          echo "packages=$PACKAGES_TO_RELEASE" >> $GITHUB_OUTPUT
+          echo "bump_type=$BUMP_TYPE" >> $GITHUB_OUTPUT
       - name: Calculate versions and prepare release data
         if: steps.auto-release.outputs.has_release == 'true'
         id: prepare-releases
