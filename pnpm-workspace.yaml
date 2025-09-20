@@ -1,13 +1,17 @@
 packages:
   - apps/*
   - packages/*
+
 catalogs:
   prisma:
     prisma: latest
+
 onlyBuiltDependencies:
   - '@prisma/client'
   - '@prisma/engines'
+  - '@swc/core'
   - '@tailwindcss/oxide'
+  - bcrypt
   - core-js
   - esbuild
   - msw

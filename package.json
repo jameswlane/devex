@@ -1,6 +1,6 @@
 {
 	"name": "devex",
-	"version": "1.0.0",
+	"version": "0.0.0",
 	"description": "Used for release automation",
 	"scripts": {
 		"biome:format": "biome format --write",
@@ -45,7 +45,7 @@
 	"keywords": [],
 	"author": "James W Lane",
 	"license": "Apache-2.0",
-	"packageManager": "pnpm@10.15.1",
+	"packageManager": "pnpm@10.17.0",
 	"devDependencies": {
 		"@auto-it/conventional-commits": "^11.2.1",
 		"@auto-it/core": "^11.2.1",
