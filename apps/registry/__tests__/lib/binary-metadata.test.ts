@@ -372,6 +372,36 @@ describe('BinaryMetadataService', () => {
       const result = service.formatForRegistry({});
       expect(result).toEqual({});
     });
+
+    it('should skip entries with empty checksums', () => {
+      const binaries = {
+        'linux-amd64': {
+          url: 'https://registry.devex.sh/api/v1/plugins/test/download/linux-amd64',
+          checksum: 'abcd1234',
+          size: 2048,
+          algorithm: 'sha256' as const,
+          lastUpdated: '2023-01-01T00:00:00Z'
+        },
+        'darwin-amd64': {
+          url: 'https://registry.devex.sh/api/v1/plugins/test/download/darwin-amd64',
+          checksum: '', // Empty checksum should be skipped
+          size: 0,
+          algorithm: 'sha256' as const,
+          lastUpdated: '2023-01-01T00:00:00Z'
+        }
+      };
+
+      const result = service.formatForRegistry(binaries);
+
+      expect(result).toEqual({
+        'linux-amd64': {
+          url: 'https://registry.devex.sh/api/v1/plugins/test/download/linux-amd64',
+          checksum: 'abcd1234',
+          size: 2048
+        }
+        // darwin-amd64 should be excluded due to empty checksum
+      });
+    });
   });
 
   describe('singleton pattern', () => {

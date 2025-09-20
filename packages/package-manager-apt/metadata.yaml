@@ -19,7 +19,7 @@ platforms:
     architectures:
       - amd64
       - arm64
-    min_version: "18.04" # Minimum Ubuntu/Debian version supported
+    min_version: "18.04" # Minimum Ubuntu version (18.04 LTS) / Debian 10+ supported
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"

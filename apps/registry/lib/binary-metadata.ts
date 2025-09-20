@@ -79,7 +79,7 @@ export class BinaryMetadataService {
       };
 
       if (this.githubApiToken) {
-        headers['Authorization'] = `token ${this.githubApiToken}`;
+        headers['Authorization'] = `Bearer ${this.githubApiToken}`;
       }
 
       const releaseUrl = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`;
@@ -180,7 +180,8 @@ export class BinaryMetadataService {
       // Use actual version or 'latest' tag
       const tag = version === 'latest' ? 'latest' : `v${version}`;
 
-      for (const platform of platforms) {
+      // Use Promise.all for parallel GitHub API calls to improve performance
+      const platformPromises = platforms.map(async (platform) => {
         // Standard naming convention for DevEx plugin binaries
         const assetName = `${pluginName}-${platform}${platform.includes('windows') ? '.exe' : ''}`;
 
@@ -191,13 +192,26 @@ export class BinaryMetadataService {
           // For now, we'll create placeholder checksums that can be updated later
           const registryDownloadUrl = `https://registry.devex.sh/api/v1/plugins/${pluginName}/download/${platform}`;
 
-          binaries[platform] = {
-            url: registryDownloadUrl,
-            checksum: '', // Will be populated when binary is actually available
-            size: assetMetadata.size,
-            algorithm: 'sha256',
-            lastUpdated: new Date().toISOString()
+          return {
+            platform,
+            metadata: {
+              url: registryDownloadUrl,
+              checksum: '', // Will be populated when binary is actually available
+              size: assetMetadata.size,
+              algorithm: 'sha256' as const,
+              lastUpdated: new Date().toISOString()
+            }
           };
+        }
+        return null;
+      });
+
+      const results = await Promise.all(platformPromises);
+
+      // Collect successful results into binaries object
+      for (const result of results) {
+        if (result) {
+          binaries[result.platform] = result.metadata;
         }
       }
 
@@ -285,11 +299,15 @@ export class BinaryMetadataService {
     const formatted: Record<string, any> = {};
 
     for (const [platform, metadata] of Object.entries(binaries)) {
-      formatted[platform] = {
-        url: metadata.url,
-        checksum: metadata.checksum,
-        size: metadata.size
-      };
+      // Only include platforms with valid metadata
+      // Skip entries with empty checksums and zero size (placeholder data)
+      if (metadata.checksum && metadata.size > 0) {
+        formatted[platform] = {
+          url: metadata.url,
+          checksum: metadata.checksum,
+          size: metadata.size
+        };
+      }
     }
 
     return formatted;
