@@ -1,3 +1,16 @@
+# 1.0.0 (2025-09-20)
+
+
+### Bug Fixes
+
+* add workspace root flag to pnpm add command in semantic-release workflow ([a905b89](https://github.com/jameswlane/devex/commit/a905b8931398376b53d5994c3cbe4e0481c18fb9))
+* install task CLI tool in semantic-release workflow ([b4ef8a3](https://github.com/jameswlane/devex/commit/b4ef8a372e88570bc7fdb7f20e79048712a6b912))
+
+
+### Features
+
+* add semantic-release configuration for automated versioning ([7a0b978](https://github.com/jameswlane/devex/commit/7a0b978c1ce87d3e3a9839dfb8c728924f309ebd))
+
 ## [0.26.3](https://github.com/jameswlane/devex/compare/0.26.2...0.26.3) (2025-09-08)
 
 
