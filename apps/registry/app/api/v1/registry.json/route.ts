@@ -4,6 +4,7 @@ import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
+import { binaryMetadataService, type PlatformBinaries } from "@/lib/binary-metadata";
 import type { Plugin } from "@prisma/client";
 
 interface PluginMetadata {
@@ -14,7 +15,14 @@ interface PluginMetadata {
 	repository?: string;
 	platforms: Record<string, PlatformBinary>;
 	dependencies?: string[];
+	conflicts?: string[];
 	tags?: string[];
+	requirements?: {
+		os_version?: string;
+		arch?: string[];
+		memory_mb?: number;
+		disk_mb?: number;
+	};
 }
 
 interface PlatformBinary {
@@ -30,9 +38,19 @@ interface RegistryResponse {
 }
 
 // Apply rate limiting to the GET handler
-export const GET = withRateLimit(async function handler() {
+export const GET = withRateLimit(async function handler(request: Request) {
 	try {
-		// Fetch all active plugins from database
+		// Parse query parameters for pagination
+		const { searchParams } = new URL(request.url);
+		const limit = Math.min(parseInt(searchParams.get('limit') || '500'), 1000); // Max 1000 plugins
+		const offset = parseInt(searchParams.get('offset') || '0');
+
+		// Get total count for metadata
+		const totalCount = await prisma.plugin.count({
+			where: { status: "active" }
+		});
+
+		// Fetch active plugins with pagination
 		const plugins = await prisma.plugin.findMany({
 			where: {
 				status: "active",
@@ -41,6 +59,8 @@ export const GET = withRateLimit(async function handler() {
 				{ priority: "asc" },
 				{ name: "asc" }
 			],
+			take: limit,
+			skip: offset,
 		});
 
 		// Transform plugins into registry.json format expected by CLI
@@ -50,33 +70,47 @@ export const GET = withRateLimit(async function handler() {
 			// Extract version from githubPath or default to latest
 			const version = extractVersionFromGithubPath(plugin.githubPath) || "latest";
 
-			// Build platform binaries with registry download URLs
-			const platforms: Record<string, PlatformBinary> = {};
+			// Build platform binaries with proper metadata
+			let platforms: Record<string, PlatformBinary> = {};
 
-			// Standard DevEx plugin platforms
-			const supportedPlatforms = [
-				"linux-amd64",
-				"linux-arm64",
-				"darwin-amd64",
-				"darwin-arm64",
-				"windows-amd64",
-				"windows-arm64"
-			];
+			// Try to get existing binary metadata from database
+			const existingBinaries = plugin.binaries as any;
+			if (existingBinaries && typeof existingBinaries === 'object' && Object.keys(existingBinaries).length > 0) {
+				// Use existing metadata from database
+				platforms = binaryMetadataService.formatForRegistry(existingBinaries as PlatformBinaries);
+			} else {
+				// Generate new metadata for supported platforms based on database data
+				const supportedArchitectures = ["amd64", "arm64"];
+				const platformMap: Record<string, string> = {
+					"linux": "linux",
+					"macos": "darwin",
+					"windows": "windows"
+				};
 
-			for (const platform of supportedPlatforms) {
-				// Check if plugin supports this platform
-				if (plugin.platforms.includes(platform.split('-')[0])) {
-					platforms[platform] = {
-						// Registry download URL that will track and redirect
-						url: `https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platform}`,
-						checksum: "", // TODO: Store checksums in database (Issue #219)
-						size: 0 // TODO: Store file sizes in database (Issue #220)
-					};
+				// Use actual platform data from database instead of hard-coded strings
+				for (const dbPlatform of plugin.platforms) {
+					const platformName = platformMap[dbPlatform] || dbPlatform;
+
+					for (const arch of supportedArchitectures) {
+						const platformKey = `${platformName}-${arch}`;
+						platforms[platformKey] = {
+							// Registry download URL that will track and redirect
+							url: `https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platformKey}`,
+							checksum: "", // Will be populated by background job or GitHub Actions
+							size: 0 // Will be populated by background job or GitHub Actions
+						};
+					}
 				}
 			}
 
 			// Normalize plugin name to match CLI expectations
-			const normalizedName = normalizePluginName(plugin.name, plugin.type);
+			const normalizedName = normalizePluginName(plugin.name, plugin.type, plugin.id);
+
+			// Extract structured data from plugin supports field
+			const supports = plugin.supports as any || {};
+			const requirements = extractRequirements(supports);
+			const dependencies = extractDependencies(supports);
+			const conflicts = extractConflicts(supports);
 
 			registryPlugins[normalizedName] = {
 				name: normalizedName,
@@ -85,8 +119,10 @@ export const GET = withRateLimit(async function handler() {
 				author: "DevEx Team",
 				repository: plugin.githubUrl || "",
 				platforms: platforms,
-				dependencies: [], // TODO: Parse from plugin metadata
-				tags: extractTagsFromType(plugin.type)
+				dependencies: dependencies,
+				conflicts: conflicts,
+				tags: extractTagsFromType(plugin.type),
+				requirements: requirements
 			};
 		}
 
@@ -104,6 +140,9 @@ export const GET = withRateLimit(async function handler() {
 				"X-Registry-Source": "database",
 				"X-Registry-Version": REGISTRY_CONFIG.REGISTRY_VERSION,
 				"X-Plugin-Count": Object.keys(registryPlugins).length.toString(),
+				"X-Total-Count": totalCount.toString(),
+				"X-Pagination-Limit": limit.toString(),
+				"X-Pagination-Offset": offset.toString(),
 			},
 		});
 	} catch (error) {
@@ -122,13 +161,15 @@ function extractVersionFromGithubPath(githubPath: string | null): string | null 
 }
 
 // Helper function to normalize plugin names to match CLI expectations
-function normalizePluginName(pluginName: string, pluginType: string): string {
+function normalizePluginName(pluginName: string, pluginType: string, pluginId?: string): string {
 	// Validate inputs to prevent null/undefined issues
 	if (!pluginName || typeof pluginName !== 'string') {
-		throw new Error('Plugin name must be a non-empty string');
+		const context = pluginId ? ` (plugin ID: ${pluginId})` : '';
+		throw new Error(`Plugin name must be a non-empty string${context}. Received: ${typeof pluginName} "${pluginName}"`);
 	}
 	if (!pluginType || typeof pluginType !== 'string') {
-		throw new Error('Plugin type must be a non-empty string');
+		const context = pluginId ? ` (plugin ID: ${pluginId})` : '';
+		throw new Error(`Plugin type must be a non-empty string${context}. Received: ${typeof pluginType} "${pluginType}"`);
 	}
 
 	// If plugin name already has the type prefix, return as-is
@@ -165,6 +206,64 @@ function extractTagsFromType(type: string): string[] {
 	}
 
 	return tags;
+}
+
+// Helper function to extract requirements from plugin supports data
+function extractRequirements(supports: any): {
+	os_version?: string;
+	arch?: string[];
+	memory_mb?: number;
+	disk_mb?: number;
+} | undefined {
+	if (!supports || typeof supports !== 'object') {
+		return undefined;
+	}
+
+	const requirements: any = {};
+
+	if (supports.os_version) {
+		requirements.os_version = supports.os_version;
+	}
+
+	if (supports.architectures && Array.isArray(supports.architectures)) {
+		requirements.arch = supports.architectures;
+	}
+
+	if (typeof supports.memory_mb === 'number') {
+		requirements.memory_mb = supports.memory_mb;
+	}
+
+	if (typeof supports.disk_mb === 'number') {
+		requirements.disk_mb = supports.disk_mb;
+	}
+
+	return Object.keys(requirements).length > 0 ? requirements : undefined;
+}
+
+// Helper function to extract dependencies from plugin supports data
+function extractDependencies(supports: any): string[] {
+	if (!supports || typeof supports !== 'object') {
+		return [];
+	}
+
+	if (supports.dependencies && Array.isArray(supports.dependencies)) {
+		return supports.dependencies.filter((dep: any) => typeof dep === 'string');
+	}
+
+	return [];
+}
+
+// Helper function to extract conflicts from plugin supports data
+function extractConflicts(supports: any): string[] {
+	if (!supports || typeof supports !== 'object') {
+		return [];
+	}
+
+	if (supports.conflicts && Array.isArray(supports.conflicts)) {
+		return supports.conflicts.filter((conflict: any) => typeof conflict === 'string');
+	}
+
+	return [];
 }
 
 // Handle CORS preflight

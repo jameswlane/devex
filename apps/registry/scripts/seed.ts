@@ -4,6 +4,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import fs from "fs/promises";
 import { existsSync, readFileSync } from "fs";
 import path from "path";
+import { binaryMetadataService } from "../lib/binary-metadata";
 
 const prisma = new PrismaClient();
 
@@ -241,7 +242,8 @@ async function seedPlugins() {
 		}
 
 		const plugins = [];
-		const concurrencyLimit = 3; // Process 3 packages at a time to avoid overwhelming filesystem
+		const concurrencyLimit = parseInt(process.env.SEED_CONCURRENCY || '3', 10); // Configurable via env var
+		console.log(`📦 Processing packages with concurrency limit of ${concurrencyLimit}...`);
 
 		// Process packages in batches to prevent race conditions
 		for (let i = 0; i < packageDirs.length; i += concurrencyLimit) {
@@ -273,6 +275,8 @@ async function seedPlugins() {
 					const packageData = JSON.parse(packageContent);
 
 					// Only process DevEx plugins
+					// Note: Using package.json devex.plugin section as canonical metadata source
+					// This standardizes on a single source of truth for plugin metadata
 					if (packageData.name?.startsWith("@devex/") && packageData.devex?.plugin) {
 						const pluginConfig = packageData.devex.plugin;
 						const pluginName = packageData.name.replace("@devex/", "");
@@ -328,7 +332,7 @@ async function seedPlugins() {
 		console.log(`Found ${plugins.length} plugins to seed`);
 
 		// Process database operations in batches to prevent connection exhaustion
-		const dbBatchSize = 5;
+		const dbBatchSize = parseInt(process.env.SEED_DB_BATCH_SIZE || '5', 10);
 		const batchTimeout = 30000; // 30 seconds per batch
 
 		for (let i = 0; i < plugins.length; i += dbBatchSize) {
@@ -340,26 +344,40 @@ async function seedPlugins() {
 
 				const githubPath = await getGitHubPath("plugin", plugin.name);
 
-				// Determine supported platforms based on plugin type and dependencies
-				let platforms = ["linux", "macos", "windows"];
-				if (plugin.tags.includes("linux")) {
-					platforms = ["linux"];
-				} else if (plugin.type === "package-manager") {
+				// Determine supported platforms based on structured plugin data
+				let platforms = plugin.platforms && plugin.platforms.length > 0
+					? plugin.platforms
+					: ["linux", "macos", "windows"]; // Default fallback
+
+				// Override with type-specific logic if no explicit platforms specified
+				if (plugin.platforms.length === 0 && plugin.type === "package-manager") {
 					// Package managers are typically platform-specific
-					if (
-						plugin.tags.includes("debian") ||
-						plugin.tags.includes("ubuntu") ||
-						plugin.tags.includes("apt")
-					) {
+					if (plugin.name.includes("apt") || plugin.name.includes("deb")) {
 						platforms = ["linux"];
-					} else if (
-						plugin.tags.includes("macos") ||
-						plugin.tags.includes("brew")
-					) {
+					} else if (plugin.name.includes("brew") || plugin.name.includes("mas")) {
 						platforms = ["macos"];
-					} else if (plugin.tags.includes("windows")) {
+					} else if (plugin.name.includes("winget") || plugin.name.includes("choco")) {
 						platforms = ["windows"];
+					} else if (plugin.name.includes("dnf") || plugin.name.includes("rpm")) {
+						platforms = ["linux"];
+					} else if (plugin.name.includes("pacman") || plugin.name.includes("yay")) {
+						platforms = ["linux"];
 					}
+				}
+
+				// Generate binary metadata for the plugin
+				let binariesMetadata = {};
+				try {
+					if (plugin.repository && plugin.repository.includes('github.com')) {
+						binariesMetadata = await binaryMetadataService.generatePluginBinaryMetadata(
+							plugin.name,
+							plugin.repository,
+							plugin.version
+						);
+						console.log(`    Generated binary metadata for ${plugin.name}: ${Object.keys(binariesMetadata).length} platforms`);
+					}
+				} catch (error) {
+					console.warn(`    Could not generate binary metadata for ${plugin.name}:`, error instanceof Error ? error.message : String(error));
 				}
 
 				// Add timeout to database operations
@@ -374,6 +392,7 @@ async function seedPlugins() {
 						platforms: platforms,
 						githubUrl: plugin.repository,
 						githubPath: githubPath,
+						binaries: binariesMetadata,
 						lastSynced: new Date(),
 					},
 					create: {
@@ -386,6 +405,7 @@ async function seedPlugins() {
 						platforms: platforms,
 						githubUrl: plugin.repository,
 						githubPath: githubPath,
+						binaries: binariesMetadata,
 						downloadCount: 0,
 						lastSynced: new Date(),
 					},

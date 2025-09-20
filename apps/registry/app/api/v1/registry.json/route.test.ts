@@ -10,6 +10,7 @@ jest.mock('@/lib/prisma', () => ({
   prisma: {
     plugin: {
       findMany: jest.fn(),
+      count: jest.fn(),
     },
   },
 }));
@@ -52,13 +53,16 @@ describe('/api/v1/registry.json', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
     ];
 
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
-    const response = await GET();
+    const response = await GET(request);
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -72,7 +76,7 @@ describe('/api/v1/registry.json', () => {
     (prisma.plugin.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
-    const response = await GET();
+    const response = await GET(request);
 
     expect(response.status).toBe(500);
   });
@@ -89,6 +93,8 @@ describe('/api/v1/registry.json', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
       {
         id: 'test-plugin-2',
@@ -100,12 +106,16 @@ describe('/api/v1/registry.json', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
     ];
 
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const response = await GET();
+    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const response = await GET(request);
     const data = await response.json();
 
     expect(data.plugins).toHaveProperty('package-manager-apt');
@@ -116,8 +126,10 @@ describe('/api/v1/registry.json', () => {
 
   it('should include proper cache headers', async () => {
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(0);
 
-    const response = await GET();
+    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const response = await GET(request);
 
     expect(response.headers.get('Cache-Control')).toBeTruthy();
     expect(response.headers.get('CDN-Cache-Control')).toBeTruthy();
@@ -143,12 +155,16 @@ describe('normalizePluginName', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
     ];
 
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const response = await GET();
+    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const response = await GET(request);
 
     // Should return 500 due to error in normalization
     expect(response.status).toBe(500);
@@ -166,12 +182,16 @@ describe('normalizePluginName', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
     ];
 
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const response = await GET();
+    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const response = await GET(request);
 
     // Should return 500 due to error in normalization
     expect(response.status).toBe(500);
@@ -191,12 +211,16 @@ describe('extractVersionFromGithubPath', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
     ];
 
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const response = await GET();
+    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const response = await GET(request);
     const data = await response.json();
 
     expect(data.plugins['package-manager-apt'].version).toBe('1.2.3');
@@ -214,12 +238,16 @@ describe('extractVersionFromGithubPath', () => {
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
+        supports: {},
+        binaries: null,
       },
     ];
 
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const response = await GET();
+    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const response = await GET(request);
     const data = await response.json();
 
     expect(data.plugins['package-manager-apt'].version).toBe('latest');
