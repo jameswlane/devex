@@ -395,6 +395,16 @@ export function validateRequest(request: NextRequest): ValidationResult {
   }
 }
 
+// Helper: repeatedly apply a replacement until no matches remain
+function repeatedReplace(input: string, pattern: RegExp, replacement: string): string {
+  let previous: string;
+  do {
+    previous = input;
+    input = input.replace(pattern, replacement);
+  } while (previous !== input);
+  return input;
+}
+
 // Enhanced search query sanitization with injection detection
 export function sanitizeSearchQuery(query: any, request?: NextRequest): string {
   if (!query || typeof query !== 'string') {
@@ -445,9 +455,10 @@ export function sanitizeSearchQuery(query: any, request?: NextRequest): string {
     .replace(/\r\n|\r|\n/g, ' ') // Replace line breaks with spaces
     .replace(/\s+/g, ' ') // Normalize multiple spaces
     .replace(/\$\{|\#\{/g, '') // Remove template injection attempts
-    .replace(/javascript:|vbscript:|data:/gi, '') // Remove script protocols
-    .replace(/\.\.\//g, '') // Remove path traversal
-    .trim();
+    .replace(/javascript:|vbscript:|data:/gi, ''); // Remove script protocols
+
+  // Remove path traversal, repeatedly to handle nested patterns
+  sanitized = repeatedReplace(sanitized, /\.\.\//g, '').trim();
 
   // Limit length
   if (sanitized.length > 100) {
