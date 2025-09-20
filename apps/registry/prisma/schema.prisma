@@ -1,0 +1,305 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PRISMA_DATABASE_URL")
+}
+
+model Application {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  category    String   @db.VarChar(50)
+  official    Boolean  @default(false)
+  default     Boolean  @default(false)
+  tags        String[]
+
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
+  // Optimized platform support - embedded JSON for better performance
+  platforms Json @default("{}")
+
+  // Computed platform support columns for efficient querying
+  supportsLinux   Boolean @default(false)
+  supportsMacOS   Boolean @default(false)
+  supportsWindows Boolean @default(false)
+
+  // Desktop Environment support
+  desktopEnvironments String[]
+
+  // GitHub source transparency
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
+  lastSynced    DateTime @default(now())
+
+  // Download tracking
+  downloadCount Int      @default(0)
+  lastDownload  DateTime?
+
+  // Binary metadata for different platforms
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Installation metadata
+  installMethods Json    @default("{}") // Available installation methods per platform
+  dependencies   String[] @default([])  // System dependencies
+
+  // Metadata
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Single column indexes
+  @@index([category])
+  @@index([official])
+  @@index([default])
+  @@index([name])
+  
+  // Optimized platform support indexes for efficient filtering
+  @@index([supportsLinux])
+  @@index([supportsMacOS])  
+  @@index([supportsWindows])
+  
+  // Optimized GIN indexes for JSON platform queries (fallback)
+  @@index([platforms], type: Gin)
+  
+  // Composite indexes for query optimization
+  @@index([official(sort: Desc), default(sort: Desc), name(sort: Asc)], name: "idx_applications_official_default_name")
+  @@index([category, official(sort: Desc)], name: "idx_applications_category_official")
+  @@index([category, supportsLinux], name: "idx_applications_category_linux")
+  @@index([category, supportsMacOS], name: "idx_applications_category_macos")
+  @@index([category, supportsWindows], name: "idx_applications_category_windows")
+  
+  @@map("applications")
+}
+
+model Plugin {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  type        String   @db.VarChar(50) // package-manager, installer, utility, etc.
+  priority    Int      @default(50)
+  status      String   @default("active") @db.VarChar(20) // active, deprecated, experimental
+
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
+  // Capabilities
+  supports Json @default("{}")
+
+  // Platform support - plugins are typically cross-platform
+  platforms String[] @default(["linux", "macos", "windows"])
+
+  // GitHub source transparency
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
+  lastSynced    DateTime @default(now())
+
+  // Registry metadata
+  downloadCount Int      @default(0)
+  lastDownload  DateTime?
+
+  // Binary metadata for different platforms
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Plugin SDK metadata
+  sdkVersion    String?  @db.VarChar(50) // Compatible SDK version
+  apiVersion    String?  @db.VarChar(50) // Plugin API version
+  dependencies  String[] @default([])    // Plugin dependencies
+  conflicts     String[] @default([])    // Conflicting plugins
+
+  // Metadata
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Single column indexes
+  @@index([type])
+  @@index([priority])
+  @@index([status])
+  @@index([name])
+  
+  // Composite indexes for query optimization
+  @@index([type, status], name: "idx_plugins_type_status")
+  @@index([status, priority(sort: Desc), name(sort: Asc)], name: "idx_plugins_status_priority_name")
+  @@index([type, priority(sort: Desc)], name: "idx_plugins_type_priority")
+  @@index([downloadCount(sort: Desc), lastDownload(sort: Desc)], name: "idx_plugins_downloads_recent")
+  
+  @@map("plugins")
+}
+
+model Config {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  category    String   @db.VarChar(50) // system, development, desktop, etc.
+  type        String   @db.VarChar(20) // yaml, json, toml, etc.
+
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
+  // Target platforms
+  platforms String[]
+
+  // Configuration content
+  content   Json
+  schema    Json? // JSON schema for validation
+
+  // GitHub source transparency
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
+  lastSynced    DateTime @default(now())
+
+  // Usage tracking
+  downloadCount Int      @default(0)
+  lastDownload  DateTime?
+
+  // Binary/file metadata for different platforms
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Configuration metadata
+  dependencies  String[] @default([])    // Required applications/plugins
+  conflicts     String[] @default([])    // Conflicting configurations
+  variables     Json     @default("{}") // Template variables
+
+  // Metadata
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Single column indexes
+  @@index([category])
+  @@index([type])
+  @@index([name])
+  
+  // Composite indexes for query optimization
+  @@index([category, type], name: "idx_configs_category_type")
+  @@index([category, downloadCount(sort: Desc)], name: "idx_configs_category_downloads")
+  @@index([downloadCount(sort: Desc), lastDownload(sort: Desc)], name: "idx_configs_downloads_recent")
+  
+  @@map("configs")
+}
+
+model Stack {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(100)
+  description String   @db.Text
+  category    String   @db.VarChar(50) // web, mobile, data, devops, etc.
+
+  // Version and release information
+  version       String   @default("latest") @db.VarChar(50)
+  latestVersion String?  @db.VarChar(50)
+
+  // Stack composition
+  applications String[] // References to application names
+  configs      String[] // References to config names
+  plugins      String[] // References to plugin names
+
+  // Platform support
+  platforms            String[]
+  desktopEnvironments  String[]
+
+  // Prerequisites
+  prerequisites Json @default("[]") // System requirements, other stacks, etc.
+
+  // GitHub source transparency
+  githubUrl     String?   @db.VarChar(500)
+  githubPath    String?   @db.VarChar(500)
+  lastSynced    DateTime @default(now())
+
+  // Usage tracking
+  downloadCount Int      @default(0)
+  lastDownload  DateTime?
+
+  // Binary/file metadata for different platforms (stack definition files)
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+
+  // Stack metadata
+  dependencies  String[] @default([])    // Required system dependencies
+  conflicts     String[] @default([])    // Conflicting stacks
+  variables     Json     @default("{}") // Stack configuration variables
+
+  // Metadata
+  author       String?  @db.VarChar(100)
+  license      String?  @db.VarChar(50)
+  homepage     String?  @db.VarChar(500)
+  repository   String?  @db.VarChar(500)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Single column indexes
+  @@index([category])
+  @@index([name])
+  
+  // Composite indexes for query optimization
+  @@index([category, downloadCount(sort: Desc)], name: "idx_stacks_category_downloads")
+  @@index([downloadCount(sort: Desc), lastDownload(sort: Desc)], name: "idx_stacks_downloads_recent")
+  
+  @@map("stacks")
+}
+
+
+model RegistryStats {
+  id        String   @id @default(cuid())
+  date      DateTime @unique @default(now())
+
+  // Counts
+  totalApplications Int @default(0)
+  totalPlugins      Int @default(0)
+  totalConfigs      Int @default(0)
+  totalStacks       Int @default(0)
+
+  // Platform distribution
+  linuxSupported   Int @default(0)
+  macosSupported   Int @default(0)
+  windowsSupported Int @default(0)
+
+  // Activity metrics
+  totalDownloads Int @default(0)
+  dailyDownloads Int @default(0)
+
+  @@map("registry_stats")
+}
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  type      String   @db.VarChar(20) // application, plugin, config, stack
+  name      String   @db.VarChar(100)
+  action    String   @db.VarChar(20) // create, update, delete
+  githubUrl String?  @db.VarChar(500)
+
+  // Sync details
+  success   Boolean
+  error     String?  @db.Text
+  changes   Json?    // What changed during sync
+
+  createdAt DateTime @default(now())
+
+  // Single column indexes
+  @@index([type])
+  @@index([createdAt])
+  @@index([success])
+  
+  // Composite indexes for query optimization
+  @@index([type, createdAt(sort: Desc)], name: "idx_sync_logs_type_created")
+  @@index([success, createdAt(sort: Desc)], name: "idx_sync_logs_success_created")
+  
+  @@map("sync_logs")
+}

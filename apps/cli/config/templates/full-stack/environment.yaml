@@ -1,0 +1,42 @@
+# Full-Stack Template Environment Configuration
+# Template Version: 1.2.0
+# Default shell configuration
+shell: zsh
+# Default editor
+editor: vscode
+# Programming languages and runtime management
+languages:
+  - name: node
+    version: "18.17.0"
+    manager: mise
+    default: true
+  - name: python
+    version: "3.11.4"
+    manager: mise
+    default: true
+  - name: go
+    version: "1.21.0"
+    manager: mise
+    default: true
+# Environment variables
+environment_variables:
+  NODE_ENV: development
+  PYTHON_PATH: /usr/local/bin/python3
+  GO_PATH: $HOME/go
+# Shell aliases
+aliases:
+  ll: ls -la
+  la: ls -A
+  l: ls -CF
+  '...': cd ../..
+  gg: git status
+  gp: git push
+  gl: git pull
+  dc: docker-compose
+  dcu: docker-compose up
+  dcd: docker-compose down
+# Path additions
+path_additions:
+  - $HOME/.local/bin
+  - $HOME/go/bin
+  - $HOME/.cargo/bin

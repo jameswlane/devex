@@ -1,0 +1,18 @@
+# Keep 5000 lines of history within the shell and save it to ~/.zsh_history:
+HISTSIZE=5000
+SAVEHIST=5000
+HISTFILE=~/.zsh_history
+
+# Autocompletion
+# source /usr/share/bash-completion/bash_completion
+
+# Set complete path
+export PATH="./bin:$HOME/.local/bin:$HOME/.local/share/devex/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+set +h
+
+export DEVEX_PATH="/home/$USER/.local/share/devex"
+
+# Enable mise if available
+if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate zsh)"
+fi

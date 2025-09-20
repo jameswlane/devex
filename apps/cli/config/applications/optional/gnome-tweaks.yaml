@@ -1,0 +1,9 @@
+name: GNOME Tweaks
+description: Advanced GNOME 3 settings
+category: Optional Apps
+desktop_environments:
+  - gnome
+linux:
+  install_method: apt
+  install_command: gnome-tweaks
+  uninstall_command: gnome-tweaks

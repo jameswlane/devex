@@ -1,0 +1,9 @@
+name: Ruby
+description: Ruby programming language
+category: Programming Languages
+install_method: mise
+install_command: ruby@latest
+uninstall_command: ruby
+default: false
+dependencies:
+  - mise

@@ -1,0 +1,704 @@
+---
+title: Team Setup Guide
+description: Setting up DevEx for teams and organizations to ensure consistent development environments
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Team Setup Guide
+
+DevEx excels at creating consistent development environments across team members, operating systems, and deployment environments. This guide covers best practices for implementing DevEx in team and organizational settings.
+
+## Benefits of Team DevEx
+
+<Cards>
+  <Card title="Environment Consistency" description="Identical tooling across all team members" />
+  <Card title="Faster Onboarding" description="New developers productive in minutes" />
+  <Card title="Reduced Support" description="Fewer 'works on my machine' issues" />
+  <Card title="Standardized Tooling" description="Consistent versions and configurations" />
+</Cards>
+
+## Team Configuration Strategy
+
+<Callout type="info">
+This guide builds on concepts from the [Getting Started Guide](/docs/guides/getting-started). For security considerations in team environments, review our [Security Guide](/docs/guides/security).
+</Callout>
+
+### Centralized Configuration Management
+
+<Steps>
+  <Step>
+    ### Create Team Configuration Repository
+    
+    Set up a central repository for your team's DevEx configuration:
+    
+    ```bash
+    # Create the repository
+    mkdir team-devex-config
+    cd team-devex-config
+    git init
+    
+    # Create directory structure
+    mkdir -p configs/{shared,projects,roles}
+    mkdir -p templates
+    mkdir -p scripts
+    ```
+  </Step>
+  
+  <Step>
+    ### Define Base Configuration
+    
+    Create a shared base configuration that all team members will use:
+    
+    ```yaml
+    # configs/shared/applications.yaml
+    applications:
+      development:
+        - name: git
+          description: "Version control system"
+          default: true
+          
+        - name: docker
+          description: "Container platform"
+          default: true
+          
+        - name: vscode
+          description: "Team standard editor"
+          default: true
+          post_install:
+            - shell: "code --install-extension ms-vscode.vscode-typescript-next"
+            - shell: "code --install-extension esbenp.prettier-vscode"
+            - shell: "code --install-extension bradlc.vscode-tailwindcss"
+    ```
+  </Step>
+  
+  <Step>
+    ### Create Role-Based Configurations
+    
+    Define specific tools for different team roles:
+    
+    <Tabs items={['Frontend Team', 'Backend Team', 'DevOps Team', 'QA Team']}>
+      <Tab value="Frontend Team">
+        ```yaml
+        # configs/roles/frontend.yaml
+        applications:
+          development:
+            - name: node
+              install_method: mise
+              install_command: node@lts
+              default: true
+              
+            - name: pnpm
+              description: "Fast package manager"
+              default: true
+              
+            - name: chrome
+              description: "Primary browser for testing"
+              default: true
+              
+            - name: firefox
+              description: "Cross-browser testing"
+              default: false
+        ```
+      </Tab>
+      
+      <Tab value="Backend Team">
+        ```yaml
+        # configs/roles/backend.yaml
+        applications:
+          development:
+            - name: python
+              install_method: mise
+              install_command: python@3.11
+              default: true
+              
+            - name: go
+              install_method: mise
+              install_command: go@latest
+              default: true
+              
+          databases:
+            - name: postgresql
+              default: true
+              
+            - name: redis
+              default: true
+        ```
+      </Tab>
+      
+      <Tab value="DevOps Team">
+        ```yaml
+        # configs/roles/devops.yaml
+        applications:
+          development:
+            - name: kubectl
+              default: true
+              
+            - name: helm
+              default: true
+              
+            - name: terraform
+              default: true
+              
+            - name: ansible
+              default: true
+        ```
+      </Tab>
+      
+      <Tab value="QA Team">
+        ```yaml
+        # configs/roles/qa.yaml
+        applications:
+          development:
+            - name: playwright
+              default: true
+              
+            - name: selenium
+              default: true
+              
+            - name: postman
+              default: true
+              
+            - name: jmeter
+              default: false
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step>
+    ### Project-Specific Configurations
+    
+    Create configurations for specific projects:
+    
+    ```yaml
+    # configs/projects/mobile-app.yaml
+    applications:
+      development:
+        - name: react-native-cli
+          default: true
+          
+        - name: android-studio
+          default: true
+          desktop_environments: ['all']
+          
+        - name: xcode
+          default: true
+          macos:
+            install_method: mas
+            install_command: "497799835"
+    ```
+  </Step>
+</Steps>
+
+## Implementation Strategies
+
+### Option 1: Shared Configuration Repository
+
+Best for teams that want centralized control:
+
+```bash
+# Team members clone the shared config
+git clone https://github.com/yourcompany/devex-config.git ~/.devex
+
+# Install DevEx with team configuration
+devex install
+
+# Stay updated with team changes
+cd ~/.devex && git pull
+devex install --update
+```
+
+### Option 2: Configuration Templates
+
+Best for teams that want flexibility with standards:
+
+```bash
+# Create team template
+devex template create --name company-standard \
+  --from-config configs/shared/applications.yaml
+
+# Team members use template
+devex template apply company-standard
+
+# Customize per developer needs
+devex install additional-tools --category optional
+```
+
+### Option 3: Layered Configuration
+
+Best for complex organizations with multiple teams:
+
+```yaml
+# ~/.devex/config-layers.yaml
+layers:
+  - name: "company-base"
+    source: "https://github.com/company/devex-base"
+    priority: 10
+    
+  - name: "team-frontend"
+    source: "https://github.com/company/devex-frontend"
+    priority: 20
+    condition: "team == 'frontend'"
+    
+  - name: "project-mobile"
+    source: "https://github.com/company/devex-mobile"
+    priority: 30
+    condition: "project == 'mobile-app'"
+    
+  - name: "personal"
+    source: "~/.devex/personal.yaml"
+    priority: 100
+```
+
+## Onboarding Automation
+
+### Automated Setup Script
+
+Create a script for new team members:
+
+```bash
+#!/bin/bash
+# scripts/onboard-developer.sh
+
+set -e
+
+echo "🚀 Welcome to the team! Setting up your development environment..."
+
+# Install DevEx
+if ! command -v devex &> /dev/null; then
+  echo "📦 Installing DevEx..."
+  # See /docs/guides/security for best practices
+  curl -fsSL https://devex.sh/install | bash
+  source ~/.bashrc
+fi
+
+# Clone team configuration
+echo "⚙️ Setting up team configuration..."
+if [ ! -d ~/.devex ]; then
+  git clone https://github.com/yourcompany/devex-config.git ~/.devex
+fi
+
+# Set up user-specific configuration
+echo "👤 Setting up your personal configuration..."
+read -p "Enter your full name: " fullname
+read -p "Enter your email: " email
+read -p "Enter your team (frontend/backend/devops/qa): " team
+
+# Configure Git
+git config --global user.name "$fullname"
+git config --global user.email "$email"
+
+# Apply team configuration
+echo "🔧 Installing team tools..."
+devex install --config ~/.devex/configs/shared/applications.yaml
+devex install --config ~/.devex/configs/roles/${team}.yaml
+
+# Set up SSH key
+if [ ! -f ~/.ssh/id_ed25519 ]; then
+  echo "🔐 Generating SSH key..."
+  ssh-keygen -t ed25519 -C "$email" -f ~/.ssh/id_ed25519 -N ""
+  echo "📋 Add this public key to GitHub:"
+  cat ~/.ssh/id_ed25519.pub
+fi
+
+echo "✅ Setup complete! You're ready to code!"
+```
+
+### GitHub Codespaces Integration
+
+Configure DevEx for GitHub Codespaces:
+
+```json
+// .devcontainer/devcontainer.json
+{
+  "name": "Team Development Environment",
+  "image": "mcr.microsoft.com/devcontainers/universal:latest",
+  "postCreateCommand": "curl -fsSL https://devex.sh/install | bash && devex install --config .devcontainer/devex.yaml",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  }
+}
+```
+
+```yaml
+# .devcontainer/devex.yaml
+applications:
+  development:
+    - name: node
+      install_method: mise
+      install_command: node@lts
+      default: true
+    - name: python
+      install_method: mise
+      install_command: python@3.11
+      default: true
+```
+
+## CI/CD Integration
+
+### GitHub Actions Workflow
+
+```yaml
+# .github/workflows/devex-validation.yml
+name: Validate DevEx Configuration
+
+on:
+  pull_request:
+    paths:
+      - 'configs/**'
+      - '.devex/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install DevEx
+        run: |
+          # Install DevEx with version pinning for CI reproducibility
+          curl -fsSL https://devex.sh/install | bash
+        
+      - name: Validate Configuration
+        run: |
+          echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
+          devex config validate configs/shared/applications.yaml
+          devex config validate configs/roles/
+          
+      - name: Test Installation (Dry Run)
+        run: |
+          devex install --config configs/shared/applications.yaml --dry-run
+```
+
+### Docker Development Environment
+
+```dockerfile
+# Dockerfile.dev
+FROM ubuntu:22.04
+
+# Install DevEx with security considerations
+RUN apt-get update && apt-get install -y curl sudo ca-certificates
+RUN curl -fsSL https://devex.sh/install | bash
+
+# Copy team configuration
+COPY configs/ /opt/devex-config/
+
+# Install team tools
+RUN /root/.local/share/devex/bin/devex install --config /opt/devex-config/shared/applications.yaml
+
+# Set up development user
+RUN useradd -m -s /bin/bash developer
+USER developer
+WORKDIR /home/developer
+
+# Apply user configuration
+RUN /root/.local/share/devex/bin/devex config apply --user
+```
+
+## Team Policies and Standards
+
+### Configuration Standards
+
+<Callout type="info">
+**Team Configuration Standards:**
+
+1. **Version Pinning**: Pin language versions for consistency
+2. **Security Tools**: Include security scanners and linters
+3. **Documentation Tools**: Standardize on documentation formats
+4. **Testing Tools**: Include testing frameworks and tools
+5. **Code Quality**: Enforce code formatting and linting
+</Callout>
+
+Example standards file:
+
+```yaml
+# configs/standards.yaml
+standards:
+  programming_languages:
+    node:
+      version: "18.17.0"  # LTS version
+      package_manager: "pnpm"
+      
+    python:
+      version: "3.11.5"
+      package_manager: "pip"
+      virtual_env: "venv"
+      
+  code_quality:
+    linters:
+      - eslint
+      - pylint
+      - golangci-lint
+      
+    formatters:
+      - prettier
+      - black
+      - gofmt
+      
+  security:
+    scanners:
+      - snyk
+      - bandit
+      - gosec
+      
+  testing:
+    frameworks:
+      - jest
+      - pytest
+      - go-test
+```
+
+### Role-Based Access Control
+
+Control access to different tools based on team roles:
+
+```yaml
+# configs/access-control.yaml
+roles:
+  junior_developer:
+    allowed_categories:
+      - development
+      - editors
+    restricted_tools:
+      - kubernetes-cli
+      - terraform
+      
+  senior_developer:
+    allowed_categories: ["all"]
+    
+  devops_engineer:
+    allowed_categories: ["all"]
+    required_tools:
+      - kubectl
+      - terraform
+      - ansible
+```
+
+## Monitoring and Compliance
+
+### Usage Tracking
+
+Track tool usage across the team:
+
+```bash
+# Generate team usage report
+devex report usage --team --output team-usage.json
+
+# Check compliance with team standards
+devex report compliance --standards configs/standards.yaml
+```
+
+### Update Management
+
+Manage updates across the team:
+
+```bash
+# Check for updates
+devex update check --all
+
+# Staged rollout
+devex update apply --group beta-testers
+devex update apply --group all --after-validation
+```
+
+## Troubleshooting Team Issues
+
+### Common Team Challenges
+
+<Tabs items={['Version Conflicts', 'Platform Differences', 'Network Issues', 'Permission Problems']}>
+  <Tab value="Version Conflicts">
+    **Problem**: Team members have different tool versions
+    
+    **Solution**:
+    ```bash
+    # Pin versions in team configuration
+    applications:
+      development:
+        - name: node
+          install_method: mise
+          install_command: node@18.17.0  # Specific version
+          global: true
+    
+    # Verify team alignment
+    devex report versions --team
+    ```
+  </Tab>
+  
+  <Tab value="Platform Differences">
+    **Problem**: Tools work differently across Linux/macOS/Windows
+    
+    **Solution**:
+    ```yaml
+    applications:
+      development:
+        - name: universal-tool
+          linux:
+            install_method: apt
+            install_command: tool-name
+          macos:
+            install_method: brew
+            install_command: tool-name
+          windows:
+            install_method: winget
+            install_command: Publisher.ToolName
+    ```
+  </Tab>
+  
+  <Tab value="Network Issues">
+    **Problem**: Corporate firewall blocks downloads
+    
+    **Solution**:
+    ```bash
+    # Configure proxy
+    export https_proxy=http://proxy.company.com:8080
+    devex config set proxy.https "$https_proxy"
+    
+    # Use internal mirrors
+    devex config set mirrors.npm "https://npm.company.com"
+    devex config set mirrors.python "https://pypi.company.com"
+    ```
+  </Tab>
+  
+  <Tab value="Permission Problems">
+    **Problem**: Insufficient permissions for system packages
+    
+    **Solution**:
+    ```bash
+    # Use user-space installations
+    devex config set install.prefer_user_space true
+    
+    # Or request admin privileges
+    devex install --request-admin --reason "Team development setup"
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Team Features
+
+### Custom Team Commands
+
+Create team-specific DevEx commands:
+
+```bash
+# scripts/team-commands.sh
+#!/bin/bash
+
+case "$1" in
+  "sync")
+    echo "🔄 Syncing with team configuration..."
+    cd ~/.devex && git pull
+    devex install --update
+    ;;
+  "status")
+    echo "📊 Team environment status:"
+    devex report compliance --standards ~/.devex/configs/standards.yaml
+    ;;
+  "reset")
+    echo "🔄 Resetting to team defaults..."
+    devex uninstall --all --confirm
+    devex install --config ~/.devex/configs/shared/applications.yaml
+    ;;
+esac
+```
+
+### Integration with Team Tools
+
+#### Slack Integration
+
+```bash
+#!/bin/bash
+# scripts/slack-notify.sh
+# Notify team of environment changes
+
+webhook_url="https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+
+curl -X POST -H 'Content-type: application/json' \
+  --data "{\"text\":\"🔧 $USER updated their development environment\"}" \
+  $webhook_url
+```
+
+#### Jira Integration
+
+```bash
+# Link environment setup to Jira tickets
+devex install --ticket PROJ-123 --comment "Setting up environment for new feature"
+```
+
+## Best Practices for Teams
+
+<Callout type="tip">
+**Team DevEx Best Practices:**
+
+1. **Start Simple**: Begin with core tools, add complexity gradually
+2. **Version Everything**: Use version control for all configurations
+3. **Test Changes**: Validate configuration changes before rolling out
+4. **Document Decisions**: Record why specific tools were chosen
+5. **Regular Reviews**: Periodically review and update team standards
+6. **Feedback Loop**: Collect feedback from team members regularly
+7. **Security First**: Include security tools and practices by default
+8. **Backup Configurations**: Keep backups of working configurations
+</Callout>
+
+### Team Workflow Example
+
+```bash
+# 1. Developer proposes new tool
+git checkout -b add-new-tool
+# Edit configs/shared/applications.yaml
+git commit -m "Add new-tool for improved productivity"
+git push origin add-new-tool
+
+# 2. Team reviews via PR
+# - Automated validation runs
+# - Team members review and test
+# - Security team approves
+
+# 3. Merge and rollout
+git checkout main
+git merge add-new-tool
+
+# 4. Team updates their environments
+# Automated notification sent to team
+# Team members run: devex team sync
+```
+
+## Measuring Success
+
+Track the impact of DevEx on your team:
+
+### Metrics to Monitor
+
+- **Onboarding Time**: Time from hire to first commit
+- **Environment Issues**: Support tickets related to setup
+- **Tool Adoption**: Usage of standardized tools
+- **Development Velocity**: Sprint completion rates
+- **Developer Satisfaction**: Team happiness surveys
+
+### Reporting Dashboard
+
+```bash
+# Generate team metrics
+devex metrics generate --team --period monthly
+
+# Key metrics to track:
+# - Setup time (average minutes to productive environment)
+# - Issue resolution (setup-related support tickets)
+# - Compliance rate (% using standard tools)
+# - Update adoption (% on latest configurations)
+```
+
+<Cards>
+  <Card title="Customization Guide" href="/docs/guides/customization" description="Advanced DevEx customization for teams" />
+  <Card title="Automation Guide" href="/docs/guides/automation" description="Automate DevEx in CI/CD pipelines" />
+  <Card title="Examples" href="/docs/examples" description="Real-world team setups" />
+  <Card title="CLI Reference" href="/docs/cli-reference" description="Complete command reference" />
+</Cards>

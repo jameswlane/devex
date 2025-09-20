@@ -1,0 +1,11 @@
+name: KDE Connect
+description: Integrate Android/iOS devices with your desktop
+category: Optional Apps
+desktop_environments:
+  - kde
+  - gnome
+  - xfce
+linux:
+  install_method: apt
+  install_command: kdeconnect
+  uninstall_command: kdeconnect

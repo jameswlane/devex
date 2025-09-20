@@ -1,0 +1,49 @@
+# Minimal Dockerfile for DevEx CLI testing (busybox-based)
+# Ultra-lightweight testing environment with minimal attack surface
+
+# Stage 1: Build environment
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /src
+COPY . .
+
+# Build static binary
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-w -s -extldflags=-static" \
+    -o devex ./cmd/main.go
+
+# Stage 2: Minimal runtime
+FROM busybox:1.36-glibc
+
+# Metadata
+LABEL maintainer="DevEx Team"
+LABEL description="DevEx CLI testing environment (minimal)"
+LABEL version="2.0"
+
+# Install minimal required tools
+RUN mkdir -p /tmp /var/tmp /usr/local/bin
+
+# Create non-root user
+RUN adduser -D -s /bin/sh -u 1001 testuser
+
+# Switch to user and create directories
+USER testuser
+WORKDIR /home/testuser
+
+RUN mkdir -p ~/.local/share/devex/assets ~/.local/share/devex/bin ~/.local/share/devex/config ~/.local/share/devex/help ~/.local/share/devex/cache ~/.local/share/devex/logs ~/.local/share/devex/themes \
+    && mkdir -p ~/.devex/{templates,backups} \
+    && mkdir -p ~/workspace
+
+# Copy DevEx binary and assets
+COPY --from=builder --chown=1001:1001 /src/devex ~/.local/share/devex/bin/devex
+COPY --chown=1001:1001 assets/ ~/.local/share/devex/assets/
+COPY --chown=1001:1001 config/ ~/.local/share/devex/config/
+COPY --chown=1001:1001 help/ ~/.local/share/devex/help/
+
+# Set environment
+ENV PATH="/home/testuser/.local/share/devex/bin:$PATH"
+ENV DEVEX_HOME="/home/testuser/.local/share/devex"
+ENV DEVEX_TEST_MODE=true
+
+# Default command
+CMD ["/bin/sh"]

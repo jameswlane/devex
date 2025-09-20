@@ -1,0 +1,52 @@
+version: 2
+project_name: devex-plugin-desktop-cinnamon
+monorepo:
+  tag_prefix: plugin-desktop-cinnamon-
+  dir: packages/desktop-cinnamon
+builds:
+  - id: plugin-desktop-cinnamon
+    main: .
+    binary: devex-plugin-desktop-cinnamon
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+      - "-X main.commit={{.Commit}}"
+      - "-X main.date={{.Date}}"
+archives:
+  - id: plugin-desktop-cinnamon-archive
+    name_template: "devex-plugin-desktop-cinnamon_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+  groups:
+    - title: New Features
+      regexp: ^.*?feat(\([[:word:]]+\))??!?:.+$
+      order: 0
+    - title: Bug Fixes
+      regexp: ^.*?fix(\([[:word:]]+\))??!?:.+$
+      order: 1
+    - title: Others
+      order: 999
+release:
+  github:
+    owner: jameswlane
+    name: devex
+  name_template: "devex-plugin-desktop-cinnamon v{{ .Version }}"
+  mode: replace
+  draft: false
+  prerelease: auto

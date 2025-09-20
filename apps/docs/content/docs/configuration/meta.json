@@ -1,0 +1,12 @@
+{
+	"title": "Configuration",
+	"pages": [
+		"index",
+		"applications",
+		"environment",
+		"desktop",
+		"system",
+		"templates",
+		"validation"
+	]
+}

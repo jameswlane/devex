@@ -1,0 +1,9 @@
+# To use custom prompt with OMF, create it after OMF loads:
+function my_custom_prompt
+    printf '\uf0a9 '
+end
+
+# Set it as your prompt after OMF initialization
+function fish_prompt
+    my_custom_prompt
+end

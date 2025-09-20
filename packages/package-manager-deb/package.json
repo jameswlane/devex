@@ -1,0 +1,46 @@
+{
+	"name": "@devex/package-manager-deb",
+	"private": true,
+	"version": "1.9.0",
+	"description": "DEB plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-deb .",
+		"dev": "go build -race -o devex-plugin-package-manager-deb main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"deb",
+		"debian",
+		"package"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-deb"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"dependencies": [
+				"dpkg"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

@@ -1,0 +1,9 @@
+name: Bun
+description: A fast all-in-one JavaScript runtime
+category: Programming Languages
+install_method: mise
+install_command: bun@latest
+uninstall_command: bun
+default: false
+dependencies:
+  - mise

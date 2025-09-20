@@ -1,0 +1,238 @@
+# GitHub Actions workflow for DevEx CLI Docker testing
+name: Docker Testing
+'on':
+  push:
+    branches: [main, develop]
+    paths:
+      - 'apps/cli/**'
+      - '.github/workflows/docker-test.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/cli/**'
+      - '.github/workflows/docker-test.yml'
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: devex-test
+jobs:
+  # Build CLI binary once for all tests
+  build-cli:
+    name: Build CLI Binary
+    runs-on: ubuntu-latest
+    outputs:
+      cli-version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+      - name: Cache Go modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Install task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Build CLI
+        working-directory: apps/cli
+        run: task build
+      - name: Get version
+        id: version
+        working-directory: apps/cli
+        run: echo "version=$(./bin/devex --version | cut -d' ' -f3)" >> $GITHUB_OUTPUT
+      - name: Upload CLI binary
+        uses: actions/upload-artifact@v3
+        with:
+          name: devex-cli-${{ steps.version.outputs.version }}
+          path: apps/cli/bin/devex
+          retention-days: 1
+  # Test matrix for different distributions
+  test-distributions:
+    name: Test ${{ matrix.distro }}
+    runs-on: ubuntu-latest
+    needs: build-cli
+    strategy:
+      fail-fast: false
+      matrix:
+        distro:
+          - debian
+          - ubuntu
+          - arch
+          - fedora
+          - alpine
+          - redhat
+          - suse
+        include:
+          - distro: debian
+            priority: 1
+          - distro: ubuntu
+            priority: 1
+          - distro: arch
+            priority: 2
+          - distro: fedora
+            priority: 2
+          - distro: alpine
+            priority: 2
+          - distro: redhat
+            priority: 2
+          - distro: suse
+            priority: 2
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download CLI binary
+        uses: actions/download-artifact@v3
+        with:
+          name: devex-cli-${{ needs.build-cli.outputs.cli-version }}
+          path: apps/cli/bin/
+      - name: Make CLI executable
+        run: chmod +x apps/cli/bin/devex
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Docker image
+        working-directory: apps/cli
+        run: |
+          docker build -f docker/Dockerfile.${{ matrix.distro }} \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.distro }} .
+      - name: Test Docker image
+        working-directory: apps/cli
+        env:
+          DISTRO: ${{ matrix.distro }}
+          VERBOSE: true
+        run: |
+          ./scripts/cli-docker-test-enhanced.sh test basic
+          ./scripts/cli-docker-test-enhanced.sh test config
+          ./scripts/cli-docker-test-enhanced.sh test apps
+      - name: Run health check
+        working-directory: apps/cli
+        env:
+          DISTRO: ${{ matrix.distro }}
+        run: ./scripts/cli-docker-test-enhanced.sh health-check
+      - name: Push to registry (on main branch)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.distro }}
+  # Comprehensive testing
+  test-comprehensive:
+    name: Comprehensive Testing
+    runs-on: ubuntu-latest
+    needs: [build-cli, test-distributions]
+    if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[comprehensive]')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download CLI binary
+        uses: actions/download-artifact@v3
+        with:
+          name: devex-cli-${{ needs.build-cli.outputs.cli-version }}
+          path: apps/cli/bin/
+      - name: Make CLI executable
+        run: chmod +x apps/cli/bin/devex
+      - name: Run comprehensive tests
+        working-directory: apps/cli
+        env:
+          TEST_SUITE: all
+          VERBOSE: true
+        run: ./scripts/cli-docker-test-enhanced.sh test-parallel
+      - name: Generate test report
+        if: always()
+        working-directory: apps/cli
+        run: |
+          echo "# DevEx CLI Test Report" > test-report.md
+          echo "## Test Results" >> test-report.md
+          echo "- CLI Version: ${{ needs.build-cli.outputs.cli-version }}" >> test-report.md
+          echo "- Commit: ${{ github.sha }}" >> test-report.md
+          echo "- Date: $(date)" >> test-report.md
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ github.run_id }}
+          path: |
+            apps/cli/test-report.md
+            apps/cli/test-*.json
+          retention-days: 7
+  # Security scanning
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: test-distributions
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    strategy:
+      matrix:
+        distro: [debian, alpine]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build image for scanning
+        working-directory: apps/cli
+        run: |
+          docker build -f docker/Dockerfile.${{ matrix.distro }} \
+            -t devex-test:${{ matrix.distro }}-scan .
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'devex-test:${{ matrix.distro }}-scan'
+          format: 'sarif'
+          output: 'trivy-results-${{ matrix.distro }}.sarif'
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results-${{ matrix.distro }}.sarif'
+  # Performance benchmarking
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    needs: build-cli
+    if: github.event_name == 'schedule' || contains(github.event.head_commit.message, '[benchmark]')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Download CLI binary
+        uses: actions/download-artifact@v3
+        with:
+          name: devex-cli-${{ needs.build-cli.outputs.cli-version }}
+          path: apps/cli/bin/
+      - name: Make CLI executable
+        run: chmod +x apps/cli/bin/devex
+      - name: Run performance benchmarks
+        working-directory: apps/cli
+        env:
+          DISTRO: alpine # Use Alpine for fastest startup
+        run: |
+          echo "Running performance benchmarks..."
+          time ./scripts/cli-docker-test-enhanced.sh benchmark
+      - name: Generate benchmark report
+        working-directory: apps/cli
+        run: |
+          echo "# Performance Benchmark Report" > benchmark-report.md
+          echo "## System Information" >> benchmark-report.md
+          echo "- Runner: ${{ runner.os }}" >> benchmark-report.md
+          echo "- CLI Version: ${{ needs.build-cli.outputs.cli-version }}" >> benchmark-report.md
+          echo "- Date: $(date)" >> benchmark-report.md
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: apps/cli/benchmark-report.md
+          retention-days: 30

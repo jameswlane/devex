@@ -1,0 +1,69 @@
+name: Ulauncher
+description: A fast application launcher for Linux
+category: Utility
+default: false
+desktop_environments:
+  - all
+linux:
+  install_method: apt
+  install_command: ulauncher
+  uninstall_command: ulauncher
+  official_support: true
+  platform_requirements:
+    - os: ubuntu
+  pre_install:
+    - shell: add-apt-repository universe -y
+    - shell: add-apt-repository ppa:agornostal/ulauncher -y
+    - shell: apt update
+  alternatives:
+    - install_method: deb
+      install_command: ulauncher_5.15.7_all.deb
+      uninstall_command: ulauncher
+      download_url: https://github.com/Ulauncher/Ulauncher/releases/download/5.15.7/ulauncher_5.15.7_all.deb
+      official_support: true
+      platform_requirements:
+        - os: debian
+        - os: ubuntu
+    - install_method: apt
+      install_command: ulauncher
+      uninstall_command: ulauncher
+      official_support: true
+      platform_requirements:
+        - os: debian
+      apt_sources:
+        - key_source: http://keyserver.ubuntu.com/pks/lookup?op=get&search=0xfaf1020699503176
+          key_name: /usr/share/keyrings/ulauncher-archive-keyring.gpg
+          source_repo: deb [signed-by=/usr/share/keyrings/ulauncher-archive-keyring.gpg] http://ppa.launchpad.net/agornostal/ulauncher/ubuntu jammy main
+          source_name: /etc/apt/sources.list.d/ulauncher-jammy.list
+          require_dearmor: true
+    - install_method: yay
+      install_command: ulauncher
+      uninstall_command: ulauncher
+      official_support: true
+      platform_requirements:
+        - os: arch
+    - install_method: makepkg
+      install_command: ulauncher
+      uninstall_command: ulauncher
+      official_support: true
+      platform_requirements:
+        - os: arch
+      pre_install:
+        - shell: git clone https://aur.archlinux.org/ulauncher.git
+        - shell: cd ulauncher
+      post_install:
+        - shell: makepkg -is
+    - install_method: dnf
+      install_command: ulauncher
+      uninstall_command: ulauncher
+      official_support: true
+      platform_requirements:
+        - os: fedora
+  config_files:
+    - source: ~/.local/share/devex/configs/ulauncher.desktop
+      destination: ~/.config/autostart/ulauncher.desktop
+    - source: ~/.local/share/devex/configs/ulauncher.json
+      destination: ~/.config/ulauncher/settings.json
+  post_install:
+    - shell: gtk-launch ulauncher.desktop
+    - sleep: 2

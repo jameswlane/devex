@@ -1,0 +1,16 @@
+extends: default
+rules:
+  document-start: disable
+  line-length:
+    max: 120
+    ignore:
+      - .github/*
+      - apps/cli/config/*
+      - apps/cli/test/configs/cross-platform/applications.yaml
+      - packages/plugin-sdk/.goreleaser.yml
+  truthy:
+    ignore:
+      - .github/*
+ignore:
+  - node_modules
+  - pnpm-lock.yaml

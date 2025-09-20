@@ -1,0 +1,573 @@
+---
+title: devex status & list
+description: Check installation status and browse available applications
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex status & list
+
+The `status` and `list` commands provide essential information about your development environment. Use `status` to check what's installed and working, and `list` to browse available applications and discover new tools.
+
+## devex status
+
+Check the installation status of applications in your development environment.
+
+### Usage
+
+```bash
+devex status [flags]
+```
+
+### Options
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--format` | `-f` | `string` | `table` | Output format (table, json, yaml, csv) |
+| `--category` | `-c` | `string` | `all` | Filter by category |
+| `--verbose` | `-v` | `bool` | `false` | Show detailed information |
+| `--check-updates` | `-u` | `bool` | `false` | Check for available updates |
+| `--problems-only` | `-p` | `bool` | `false` | Show only problematic installations |
+
+### Basic Status Output
+
+<Tabs items={['Table Format', 'Verbose Mode', 'JSON Output', 'Problems Only']}>
+  <Tab value="Table Format">
+    ```bash
+    devex status
+    
+    Installation Status:
+    ┌─────────────────┬─────────┬─────────────┬─────────────┬──────────────────┐
+    │ Application     │ Status  │ Method      │ Version     │ Last Updated     │
+    ├─────────────────┼─────────┼─────────────┼─────────────┼──────────────────┤
+    │ git             │ ✓       │ apt         │ 2.39.2      │ 2024-08-15       │
+    │ docker          │ ✓       │ apt         │ 24.0.5      │ 2024-08-17       │
+    │ node            │ ✓       │ mise        │ 20.5.1      │ 2024-08-17       │
+    │ python          │ ✓       │ mise        │ 3.11.4      │ 2024-08-16       │
+    │ vscode          │ ✓       │ apt         │ 1.91.1      │ 2024-08-17       │
+    │ postgresql      │ ⚠       │ apt         │ 14.8        │ 2024-08-10       │
+    │ slack           │ ✗       │ flatpak     │ -           │ Never            │
+    └─────────────────┴─────────┴─────────────┴─────────────┴──────────────────┘
+    
+    Summary: 5 installed, 1 warning, 1 not installed
+    ```
+  </Tab>
+  
+  <Tab value="Verbose Mode">
+    ```bash
+    devex status --verbose
+    
+    git (✓ Installed)
+      Method: apt
+      Version: 2.39.2
+      Location: /usr/bin/git
+      Config: ~/.gitconfig (configured)
+      Last Updated: 2024-08-15
+      Health: ✓ Working correctly
+    
+    postgresql (⚠ Warning)
+      Method: apt
+      Version: 14.8
+      Location: /usr/bin/psql
+      Service: ✗ Not running (sudo systemctl start postgresql)
+      Last Updated: 2024-08-10
+      Health: ⚠ Service needs to be started
+    
+    slack (✗ Not Installed)
+      Method: flatpak
+      Reason: Installation pending
+      Suggestion: Run 'devex install slack' or 'devex add slack --install'
+    ```
+  </Tab>
+  
+  <Tab value="JSON Output">
+    ```bash
+    devex status --format json
+    
+    {
+      "summary": {
+        "total": 7,
+        "installed": 5,
+        "warnings": 1,
+        "not_installed": 1,
+        "last_check": "2024-08-17T14:30:00Z"
+      },
+      "applications": [
+        {
+          "name": "git",
+          "status": "installed",
+          "method": "apt",
+          "version": "2.39.2",
+          "location": "/usr/bin/git",
+          "last_updated": "2024-08-15T10:30:00Z",
+          "health": "healthy"
+        }
+      ]
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Problems Only">
+    ```bash
+    devex status --problems-only
+    
+    Issues Found:
+    ⚠ postgresql - Service not running
+      → Fix: sudo systemctl start postgresql
+    
+    ✗ slack - Not installed
+      → Fix: devex install slack
+    
+    ⚠ docker - User not in docker group
+      → Fix: sudo usermod -aG docker $USER && newgrp docker
+    
+    Run 'devex recovery check' for automated diagnostics
+    ```
+  </Tab>
+</Tabs>
+
+### Status Categories
+
+<Cards>
+  <Card title="✓ Installed" description="Application is installed and working correctly" />
+  <Card title="⚠ Warning" description="Application is installed but has issues (service not running, misconfigured, etc.)" />
+  <Card title="✗ Not Installed" description="Application is configured but not installed" />
+  <Card title="? Unknown" description="Cannot determine installation status" />
+</Cards>
+
+### Category-Specific Status
+
+```bash
+# Check development tools only
+devex status --category development
+
+# Check databases only
+devex status --category databases
+
+# Check programming languages
+devex status --category environment
+
+# Check optional applications
+devex status --category optional
+```
+
+### Update Checking
+
+```bash
+# Check for application updates
+devex status --check-updates
+
+# Shows available updates:
+# ┌─────────────────┬─────────────┬─────────────┬──────────────┐
+# │ Application     │ Current     │ Available   │ Update Type  │
+# ├─────────────────┼─────────────┼─────────────┼──────────────┤
+# │ node            │ 20.5.1      │ 20.6.0      │ Minor        │
+# │ docker          │ 24.0.5      │ 24.0.6      │ Patch        │
+# │ vscode          │ 1.91.1      │ 1.92.0      │ Minor        │
+# └─────────────────┴─────────────┴─────────────┴──────────────┘
+```
+
+## devex list
+
+Browse and discover available applications that can be installed with DevEx.
+
+### Usage
+
+```bash
+devex list [flags]
+```
+
+### Options
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--category` | `-c` | `string` | `all` | Filter by category |
+| `--search` | `-s` | `string` | | Search by name or description |
+| `--installed` | `-i` | `bool` | `false` | Show only installed applications |
+| `--available` | `-a` | `bool` | `false` | Show only available (not installed) applications |
+| `--format` | `-f` | `string` | `table` | Output format (table, json, yaml, list) |
+| `--platform` | `-p` | `string` | `auto` | Filter by platform (linux, macos, windows) |
+| `--detailed` | `-d` | `bool` | `false` | Show detailed information |
+
+### Basic Listing
+
+<Tabs items={['All Applications', 'By Category', 'Search Results', 'Platform Specific']}>
+  <Tab value="All Applications">
+    ```bash
+    devex list
+    
+    Available Applications:
+    ┌─────────────────┬─────────────────────┬─────────────────────┬──────────┐
+    │ Name            │ Description         │ Category            │ Status   │
+    ├─────────────────┼─────────────────────┼─────────────────────┼──────────┤
+    │ git             │ Version control     │ Development Tools   │ ✓        │
+    │ docker          │ Container platform  │ Development Tools   │ ✓        │
+    │ vscode          │ Code editor         │ Development Tools   │ ✓        │
+    │ node            │ JavaScript runtime  │ Programming Lang.   │ ✓        │
+    │ python          │ Python runtime      │ Programming Lang.   │ ✓        │
+    │ postgresql      │ SQL database        │ Databases           │ ⚠        │
+    │ mysql           │ SQL database        │ Databases           │ ✗        │
+    │ redis           │ In-memory store     │ Databases           │ ✗        │
+    │ slack           │ Team communication  │ Optional            │ ✗        │
+    │ chrome          │ Web browser         │ Optional            │ ✗        │
+    └─────────────────┴─────────────────────┴─────────────────────┴──────────┘
+    
+    Total: 247 applications (5 installed, 1 warning, 241 available)
+    ```
+  </Tab>
+  
+  <Tab value="By Category">
+    ```bash
+    devex list --category development
+    
+    Development Tools:
+    ┌─────────────────┬──────────────────────────────────┬──────────┐
+    │ Name            │ Description                      │ Status   │
+    ├─────────────────┼──────────────────────────────────┼──────────┤
+    │ git             │ Distributed version control      │ ✓        │
+    │ docker          │ Container platform              │ ✓        │
+    │ docker-compose  │ Multi-container orchestration   │ ✗        │
+    │ kubectl         │ Kubernetes CLI                  │ ✗        │
+    │ vscode          │ Lightweight code editor         │ ✓        │
+    │ vim             │ Modal text editor               │ ✓        │
+    │ curl            │ HTTP client                     │ ✓        │
+    │ jq              │ JSON processor                  │ ✗        │
+    │ postman         │ API development platform        │ ✗        │
+    └─────────────────┴──────────────────────────────────┴──────────┘
+    ```
+  </Tab>
+  
+  <Tab value="Search Results">
+    ```bash
+    devex list --search "database"
+    
+    Search Results for "database":
+    ┌─────────────────┬──────────────────────────────────┬──────────┐
+    │ Name            │ Description                      │ Status   │
+    ├─────────────────┼──────────────────────────────────┼──────────┤
+    │ postgresql      │ Advanced open source database    │ ⚠        │
+    │ mysql           │ Popular relational database      │ ✗        │
+    │ sqlite          │ Lightweight database            │ ✗        │
+    │ mongodb         │ Document-oriented database      │ ✗        │
+    │ dbeaver         │ Universal database client       │ ✗        │
+    │ pgadmin         │ PostgreSQL administration       │ ✗        │
+    └─────────────────┴──────────────────────────────────┴──────────┘
+    ```
+  </Tab>
+  
+  <Tab value="Platform Specific">
+    ```bash
+    devex list --platform macos
+    
+    macOS Applications:
+    ┌─────────────────┬──────────────────────────────────┬─────────────┐
+    │ Name            │ Description                      │ Install Via │
+    ├─────────────────┼──────────────────────────────────┼─────────────┤
+    │ xcode           │ Apple development tools          │ mas         │
+    │ finder-path     │ Show path in Finder             │ defaults    │
+    │ dock-spacer     │ Add spacers to Dock             │ defaults    │
+    │ homebrew        │ Package manager for macOS       │ curl        │
+    │ iterm2          │ Terminal replacement            │ brew        │
+    └─────────────────┴──────────────────────────────────┴─────────────┘
+    ```
+  </Tab>
+</Tabs>
+
+### Detailed Application Information
+
+```bash
+devex list --detailed docker
+
+Docker - Container platform for developers
+┌─────────────────────┬─────────────────────────────────────────┐
+│ Category            │ Development Tools                       │
+│ Default Install     │ Yes                                     │
+│ Status              │ ✓ Installed                            │
+│ Version             │ 24.0.5                                 │
+│ Platform Support    │ Linux, macOS, Windows                  │
+├─────────────────────┼─────────────────────────────────────────┤
+│ Linux Install       │ apt (official repository)              │
+│ Dependencies        │ curl, gnupg                            │
+│ Post-install        │ Add user to docker group               │
+│ Service             │ systemd (docker.service)               │
+├─────────────────────┼─────────────────────────────────────────┤
+│ macOS Install       │ brew cask                              │
+│ Alternative         │ Docker Desktop                         │
+├─────────────────────┼─────────────────────────────────────────┤
+│ Windows Install     │ winget                                 │
+│ Alternative         │ Docker Desktop, chocolatey             │
+└─────────────────────┴─────────────────────────────────────────┘
+
+Description:
+Docker enables you to separate your applications from your infrastructure 
+so you can deliver software quickly. Docker provides the ability to package 
+and run an application in a loosely isolated environment called a container.
+```
+
+### Filter Options
+
+<Tabs items={['Installation Status', 'Categories', 'Platform Support', 'Search']}>
+  <Tab value="Installation Status">
+    ```bash
+    # Show only installed applications
+    devex list --installed
+    
+    # Show only available (not installed) applications
+    devex list --available
+    
+    # Show applications with warnings
+    devex list --problems-only
+    ```
+  </Tab>
+  
+  <Tab value="Categories">
+    ```bash
+    # Development tools
+    devex list --category development
+    
+    # Programming languages
+    devex list --category environment
+    
+    # Databases
+    devex list --category databases
+    
+    # Optional applications
+    devex list --category optional
+    ```
+  </Tab>
+  
+  <Tab value="Platform Support">
+    ```bash
+    # Linux-specific applications
+    devex list --platform linux
+    
+    # macOS-specific applications
+    devex list --platform macos
+    
+    # Windows-specific applications
+    devex list --platform windows
+    
+    # Cross-platform applications
+    devex list --platform all
+    ```
+  </Tab>
+  
+  <Tab value="Search">
+    ```bash
+    # Search by name
+    devex list --search docker
+    
+    # Search by description
+    devex list --search "code editor"
+    
+    # Search with wildcards
+    devex list --search "*sql*"
+    
+    # Case-insensitive search
+    devex list --search NODE
+    ```
+  </Tab>
+</Tabs>
+
+## devex detect
+
+Detect and display information about your current platform and environment.
+
+### Usage
+
+```bash
+devex detect [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--verbose` | `bool` | `false` | Show detailed detection information |
+| `--format` | `string` | `table` | Output format (table, json, yaml) |
+
+### Platform Detection Output
+
+<Tabs items={['Basic Info', 'Verbose Mode', 'JSON Output']}>
+  <Tab value="Basic Info">
+    ```bash
+    devex detect
+    
+    Platform Information:
+    ┌─────────────────────┬─────────────────────────────────┐
+    │ Operating System    │ Linux                           │
+    │ Distribution        │ Ubuntu 22.04 LTS               │
+    │ Architecture        │ x86_64                          │
+    │ Desktop Environment │ GNOME 42.9                     │
+    │ Shell               │ zsh 5.8.1                      │
+    │ Terminal            │ gnome-terminal                  │
+    └─────────────────────┴─────────────────────────────────┘
+    
+    Package Managers:
+    ✓ apt (primary)
+    ✓ flatpak 
+    ✓ snap
+    ✓ mise (for languages)
+    
+    Recommendations:
+    → Primary installer: apt
+    → Universal packages: flatpak
+    → Programming languages: mise
+    ```
+  </Tab>
+  
+  <Tab value="Verbose Mode">
+    ```bash
+    devex detect --verbose
+    
+    System Details:
+    OS: Linux (Ubuntu 22.04.3 LTS)
+    Kernel: 5.15.0-78-generic
+    Architecture: x86_64
+    CPU: 8 cores (Intel Core i7-10700K)
+    Memory: 16 GB
+    Disk: 512 GB SSD (78% free)
+    
+    Desktop Environment:
+    DE: GNOME 42.9
+    Window Manager: Mutter
+    Display Server: Wayland
+    Theme: Adwaita-dark
+    
+    Development Environment:
+    Shell: zsh 5.8.1 (/usr/bin/zsh)
+    Terminal: gnome-terminal 3.44.0
+    Editor: $EDITOR not set
+    
+    Package Managers:
+    ✓ apt 2.4.9 (system packages)
+    ✓ flatpak 1.12.7 (universal apps)
+    ✓ snap 2.60.3 (snap packages)
+    ✓ mise 2024.8.3 (language versions)
+    ✗ docker not available
+    
+    Network:
+    Connectivity: ✓ Online
+    DNS: 8.8.8.8, 8.8.4.4
+    Proxy: None detected
+    ```
+  </Tab>
+  
+  <Tab value="JSON Output">
+    ```bash
+    devex detect --format json
+    
+    {
+      "os": "linux",
+      "distribution": "ubuntu",
+      "version": "22.04",
+      "architecture": "x86_64",
+      "desktop_environment": "gnome",
+      "shell": "zsh",
+      "package_managers": {
+        "primary": "apt",
+        "available": ["apt", "flatpak", "snap", "mise"],
+        "recommended": "apt"
+      },
+      "capabilities": {
+        "gui": true,
+        "containers": false,
+        "virtualization": true
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Output Formats
+
+All commands support multiple output formats for integration with other tools:
+
+<Tabs items={['Table (Default)', 'JSON', 'YAML', 'CSV']}>
+  <Tab value="Table (Default)">
+    Human-readable table format with colors and symbols:
+    ```bash
+    devex status
+    # ┌─────────────────┬─────────┬─────────────┐
+    # │ Application     │ Status  │ Method      │
+    # ├─────────────────┼─────────┼─────────────┤
+    # │ git             │ ✓       │ apt         │
+    ```
+  </Tab>
+  
+  <Tab value="JSON">
+    Machine-readable JSON for scripts and integrations:
+    ```bash
+    devex status --format json | jq '.applications[] | select(.status == "installed")'
+    ```
+  </Tab>
+  
+  <Tab value="YAML">
+    Human-readable structured format:
+    ```bash
+    devex status --format yaml > status.yaml
+    ```
+  </Tab>
+  
+  <Tab value="CSV">
+    Spreadsheet-compatible format:
+    ```bash
+    devex status --format csv > status.csv
+    ```
+  </Tab>
+</Tabs>
+
+## Integration Examples
+
+### Scripting with Status Commands
+
+```bash
+#!/bin/bash
+# Check if required tools are installed
+
+required_apps=("git" "docker" "node")
+missing_apps=()
+
+for app in "${required_apps[@]}"; do
+    if ! devex status --format json | jq -r ".applications[] | select(.name == \"$app\" and .status == \"installed\") | .name" | grep -q "$app"; then
+        missing_apps+=("$app")
+    fi
+done
+
+if [ ${#missing_apps[@]} -ne 0 ]; then
+    echo "Missing required applications: ${missing_apps[*]}"
+    echo "Installing missing applications..."
+    devex add "${missing_apps[@]}" --install
+fi
+```
+
+### Monitoring and Alerting
+
+```bash
+# Check for problems and send alerts
+problems=$(devex status --problems-only --format json)
+if [ "$problems" != "[]" ]; then
+    echo "$problems" | mail -s "DevEx Issues Detected" admin@company.com
+fi
+
+# Check for updates weekly
+if [ "$(date +%u)" -eq 1 ]; then  # Monday
+    updates=$(devex status --check-updates --format json)
+    if [ "$updates" != "[]" ]; then
+        echo "Updates available: $updates"
+    fi
+fi
+```
+
+## Related Commands
+
+- [`devex install`](/docs/cli-reference/install) - Install applications shown in list
+- [`devex add`](/docs/cli-reference/add-remove#add) - Add applications from list to configuration
+- [`devex recovery`](/docs/cli-reference/recovery) - Fix issues found in status
+- [`devex config`](/docs/cli-reference/config) - Manage application configurations
+
+<Callout type="tip">
+Use `devex status` regularly to monitor your environment health, and `devex list` to discover new tools that could improve your workflow.
+</Callout>

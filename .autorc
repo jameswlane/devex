@@ -1,0 +1,42 @@
+{
+  "plugins": [
+    "conventional-commits"
+  ],
+  "owner": "jameswlane",
+  "repo": "devex",
+  "name": "DevEx Release Bot",
+  "email": "action@github.com",
+  "noVersionPrefix": false,
+  "prereleaseBranches": ["beta", "alpha"],
+  "labels": {
+    "patch": {
+      "name": "patch",
+      "changelogTitle": "🐛 Bug Fix",
+      "description": "A bug fix",
+      "releaseType": "patch"
+    },
+    "minor": {
+      "name": "minor", 
+      "changelogTitle": "🚀 Enhancement",
+      "description": "A new feature",
+      "releaseType": "minor"
+    },
+    "major": {
+      "name": "major",
+      "changelogTitle": "💥 Breaking Change", 
+      "description": "A breaking change",
+      "releaseType": "major"
+    },
+    "documentation": {
+      "name": "documentation",
+      "changelogTitle": "📝 Documentation",
+      "description": "Documentation changes",
+      "releaseType": "none"
+    }
+  },
+  "onlyPublishWithReleaseLabel": false,
+  "shipit": {
+    "onlyGraduateWithReleaseLabel": false,
+    "message": "Update version to: %v [skip ci]"
+  }
+}

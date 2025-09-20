@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  test-service:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.${TEST_DISTRO} # Use an environment variable for distro
+    container_name: devex-test-service
+    volumes:
+      - ..:/workspace:rw
+    working_dir: /workspace
+    tty: true
+    stdin_open: true
+    environment:
+      - DEVEX_TEST_MODE=true
+    command: /bin/bash

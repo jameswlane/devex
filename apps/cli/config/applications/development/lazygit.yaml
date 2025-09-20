@@ -1,0 +1,127 @@
+name: LazyGit
+description: A simple terminal UI for git commands
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: lazygit
+  uninstall_command: lazygit
+  official_support: true
+  alternatives:
+    - install_method: macports
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      pre_install:
+        - shell: sudo port install lazygit
+windows:
+  install_method: winget
+  install_command: JesseDuffield.lazygit
+  uninstall_command: JesseDuffield.lazygit
+  official_support: true
+  alternatives:
+    - install_method: chocolatey
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+    - install_method: scoop
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      pre_install:
+        - shell: scoop bucket add extras
+linux:
+  install_method: curlpipe
+  download_url: https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_*_Linux_x86_64.tar.gz
+  destination: /usr/local/bin
+  official_support: true
+  pre_install:
+    - shell: 'LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po ''"tag_name": *"v\K[^"]*'')'
+    - shell: curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/download/v${LAZYGIT_VERSION}/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz"
+    - shell: tar xf lazygit.tar.gz lazygit
+  post_install:
+    - shell: sudo install lazygit -D -t /usr/local/bin/ && rm -f lazygit.tar.gz lazygit
+  alternatives:
+    - install_method: apt
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: debian
+          version: 13+
+        - os: ubuntu
+          version: 25.10+
+    - install_method: dnf
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: fedora
+        - os: amazonlinux
+          version: 2023+
+        - os: centos
+          version: 9+
+      pre_install:
+        - shell: sudo dnf copr enable dejan/lazygit
+    - install_method: pacman
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: arch
+        - os: manjaro
+    - install_method: zypper
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: opensuse-tumbleweed
+        - os: opensuse-leap
+      pre_install:
+        - shell: source /etc/os-release && sudo zypper ar https://download.opensuse.org/repositories/devel:/languages:/go/$VERSION_ID/devel:languages:go.repo
+        - shell: sudo zypper ref
+    - install_method: emerge
+      install_command: dev-vcs/lazygit
+      uninstall_command: dev-vcs/lazygit
+      official_support: false
+      platform_requirements:
+        - os: gentoo
+        - os: funtoo
+      pre_install:
+        - shell: sudo eselect repository enable guru
+        - shell: sudo emaint sync -r guru
+    - install_method: xbps
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: eopkg
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: solus
+    - install_method: nixpkgs
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: apk
+      install_command: lazygit
+      uninstall_command: lazygit
+      official_support: false
+      platform_requirements:
+        - os: alpine
+freebsd:
+  install_method: pkg
+  install_command: lazygit
+  uninstall_command: lazygit
+  official_support: true
+system_requirements:
+  git_version: '>=2.0'
+  required_commands:
+    - git

@@ -1,0 +1,46 @@
+{
+  "name": "@devex/tool-shell",
+  "private": true,
+  "version": "1.8.2",
+  "description": "Shell configuration plugin for DevEx CLI",
+  "main": "main.go",
+  "scripts": {
+    "build": "go build -o devex-plugin-tool-shell .",
+    "dev": "go build -race -o devex-plugin-tool-shell main.go",
+    "test": "go test ./...",
+    "lint": "golangci-lint run",
+    "download": "go mod download",
+    "mod": "go mod tidy"
+  },
+  "keywords": [
+    "shell",
+    "bash",
+    "zsh",
+    "fish"
+  ],
+  "author": "DevEx Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jameswlane/devex",
+    "directory": "packages/tool-shell"
+  },
+  "devex": {
+    "plugin": {
+      "type": "tool",
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "dependencies": [],
+      "priority": 7,
+      "supports": {
+        "setup": true,
+        "switch": true,
+        "config": true,
+        "backup": true
+      }
+    }
+  }
+}

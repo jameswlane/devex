@@ -1,0 +1,14 @@
+{
+	"name": "@devex/get",
+	"version": "1.0.0",
+	"description": "Minimal static file server for DevEx installation scripts",
+	"private": true,
+	"scripts": {
+		"build": "echo 'Static files only - no build needed'",
+		"dev": "npx serve public",
+		"start": "npx serve public"
+	},
+	"devDependencies": {
+		"serve": "^14.2.3"
+	}
+}

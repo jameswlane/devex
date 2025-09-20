@@ -1,0 +1,108 @@
+# DevEx Enterprise Security Configuration
+# This configuration is designed for enterprise environments where
+# administrators need maximum flexibility while maintaining transparency
+# Documentation: https://docs.devex.sh/security/enterprise
+# Enterprise security level - allows everything with warnings
+level: 3 # Enterprise
+# Enterprise mode enables additional bypass capabilities
+enterprise_mode: true
+# Show warnings for transparency but don't block operations
+warn_on_overrides: true
+# Comprehensive global overrides for enterprise development teams
+global_overrides:
+  # Allow all curl/wget piping for rapid prototyping
+  - rule_type: "command-injection"
+    pattern: "(curl|wget).*\\|.*(bash|sh|python)"
+    reason: "Enterprise teams need rapid access to installation scripts"
+    warn_user: true
+  # Allow complex shell operations
+  - rule_type: "command-injection"
+    pattern: "bash -c '.*'"
+    reason: "Complex shell operations required for enterprise automation"
+    warn_user: true
+  # Allow sudo operations (assuming enterprise security controls)
+  - rule_type: "privilege-escalation"
+    pattern: "sudo.*"
+    reason: "Enterprise administrators have sudo access with proper controls"
+    warn_user: false
+  # Allow system service management
+  - rule_type: "privilege-escalation"
+    pattern: "(systemctl|service).*"
+    reason: "Enterprise teams manage system services"
+    warn_user: false
+  # Allow network tools
+  - rule_type: "network-access"
+    pattern: "(nc|netcat|telnet|ssh).*"
+    reason: "Enterprise development requires network debugging tools"
+    warn_user: true
+  # Allow package management from any source
+  - rule_type: "unknown-executable"
+    pattern: "(apt|yum|dnf|pacman|pip|npm|yarn|cargo|go get).*"
+    reason: "Enterprise teams install packages from various sources"
+    warn_user: false
+# Enterprise-specific application overrides
+app_overrides:
+  # Custom enterprise tools
+  enterprise-deploy:
+    - rule_type: "dangerous-command"
+      pattern: "rm -rf /tmp/enterprise-.*"
+      reason: "Enterprise deployment scripts clean up temporary directories"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "mkdir -p /opt/enterprise/.*"
+      reason: "Enterprise applications install to /opt/enterprise"
+      warn_user: false
+  # Database administration
+  database-admin:
+    - rule_type: "privilege-escalation"
+      pattern: "sudo -u postgres.*"
+      reason: "Database administrators need postgres user access"
+      warn_user: false
+    - rule_type: "network-access"
+      pattern: "psql.*-h.*"
+      reason: "Remote database connections for administration"
+      warn_user: false
+  # Container orchestration
+  kubernetes:
+    - rule_type: "unknown-executable"
+      pattern: "kubectl.*"
+      reason: "Kubernetes administration tools"
+      warn_user: false
+    - rule_type: "unknown-executable"
+      pattern: "helm.*"
+      reason: "Helm package manager for Kubernetes"
+      warn_user: false
+  # Cloud tools
+  aws-cli:
+    - rule_type: "network-access"
+      pattern: "aws.*"
+      reason: "AWS CLI for cloud infrastructure management"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "aws configure.*"
+      reason: "AWS credential configuration"
+      warn_user: true
+  # Security tools
+  security-scanner:
+    - rule_type: "network-access"
+      pattern: "(nmap|nessus|openvas).*"
+      reason: "Enterprise security scanning tools"
+      warn_user: true
+    - rule_type: "unknown-executable"
+      pattern: "(sqlmap|metasploit|burpsuite).*"
+      reason: "Authorized penetration testing tools"
+      warn_user: true
+  # CI/CD tools
+  jenkins:
+    - rule_type: "privilege-escalation"
+      pattern: "sudo.*jenkins.*"
+      reason: "Jenkins automation requires system access"
+      warn_user: false
+    - rule_type: "filesystem-access"
+      pattern: "chmod.*jenkins.*"
+      reason: "Jenkins workspace management"
+      warn_user: false
+
+# Note: In enterprise mode, even with overrides, the 4 critical dangerous
+# patterns (rm -rf /, dd to disks, mkfs, fork bombs) are still blocked
+# unless explicitly overridden with VERY specific reasons.

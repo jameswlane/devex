@@ -1,0 +1,40 @@
+plugins:
+  - - "@semantic-release/commit-analyzer"
+    - preset: "conventionalcommits"
+      releaseRules:
+        # Treat breaking changes as minor bumps while in 0.x
+        - breaking: true
+          release: "minor"
+        - type: "feat"
+          release: "minor"
+        - type: "fix"
+          release: "patch"
+        - type: "perf"
+          release: "patch"
+        - type: "revert"
+          release: "patch"
+        - type: "docs"
+          release: false
+        - type: "style"
+          release: false
+        - type: "refactor"
+          release: false
+        - type: "test"
+          release: false
+        - type: "build"
+          release: false
+        - type: "ci"
+          release: false
+        - type: "chore"
+          release: false
+  - "@semantic-release/release-notes-generator"
+  - "@semantic-release/changelog"
+  - "@semantic-release/github"
+  - "@semantic-release/git"
+branches:
+  - main
+success: false
+fail: false
+npmPublish: false
+tarballDir: false
+tagFormat: "${version}"

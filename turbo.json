@@ -1,0 +1,181 @@
+{
+	"$schema": "https://turborepo.com/schema.json",
+	"globalDependencies": ["**/.env.*local"],
+	"ui": "tui",
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build", "download", "db:generate"],
+			"outputs": [
+				".next/**",
+				"!.next/cache/**",
+				"bin/**",
+				"out/**",
+				"dist/**",
+				"build/**",
+				"*.exe",
+				"devex-plugin-*",
+				"**/*.a"
+			],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"src/**",
+				"cmd/**",
+				"pkg/**",
+				"*.go",
+				"go.mod",
+				"go.sum",
+				"Taskfile.yml",
+				"app/**",
+				"prisma/**",
+				"package.json",
+				"tsconfig.json",
+				".env.production.local",
+				".env.local",
+				".env.production",
+				".env"
+			],
+			"env": [
+				"GOOS",
+				"GOARCH",
+				"CGO_ENABLED",
+				"DATABASE_URL",
+				"POSTGRES_URL",
+				"PRISMA_DATABASE_URL"
+			]
+		},
+		"db:generate": {
+			"dependsOn": [],
+			"inputs": ["prisma/**"],
+			"outputs": ["node_modules/.prisma/**", ".prisma/**"],
+			"cache": true,
+			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
+		},
+		"build:web": {
+			"dependsOn": ["generate"]
+		},
+		"download": {
+			"inputs": ["go.mod", "go.sum"],
+			"cache": false
+		},
+		"generate": {
+			"dependsOn": [],
+			"outputs": ["apps/web/app/generated/**"],
+			"inputs": ["apps/cli/config/applications/**/*.yaml"],
+			"cache": true
+		},
+		"build:go": {
+			"dependsOn": ["^build:go"],
+			"outputs": ["bin/**"],
+			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"cache": true
+		},
+		"build:local": {
+			"dependsOn": [],
+			"outputs": ["bin/**"],
+			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"cache": false
+		},
+		"check-types": {
+			"dependsOn": ["^check-types"],
+			"inputs": ["**/*.ts", "**/*.tsx", "tsconfig.json"]
+		},
+		"lint": {
+			"dependsOn": ["^lint"],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				".golangci.yml",
+				"biome.json"
+			],
+			"cache": true
+		},
+		"lint:go": {
+			"dependsOn": [],
+			"inputs": ["**/*.go", ".golangci.yml"],
+			"cache": true
+		},
+		"lint:fix": {
+			"dependsOn": [],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				".golangci.yml",
+				"biome.json"
+			],
+			"cache": false
+		},
+		"test": {
+			"dependsOn": ["build"],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				"go.mod",
+				"go.sum",
+				"**/*_test.go"
+			],
+			"outputs": [],
+			"cache": true
+		},
+		"test:go": {
+			"dependsOn": ["build:go"],
+			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
+			"outputs": [],
+			"cache": true
+		},
+		"test:ginkgo": {
+			"dependsOn": ["build:go"],
+			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
+			"cache": true
+		},
+		"vulncheck": {
+			"dependsOn": [],
+			"inputs": ["go.mod", "go.sum"],
+			"cache": true
+		},
+		"mod": {
+			"dependsOn": [],
+			"inputs": ["go.mod"],
+			"outputs": ["go.sum"],
+			"cache": true
+		},
+		"install": {
+			"dependsOn": ["build:go"],
+			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"cache": false
+		},
+		"clean": {
+			"cache": false
+		},
+		"dev": {
+			"persistent": true,
+			"cache": false,
+			"dependsOn": ["^build"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				".env.development.local",
+				".env.local",
+				".env.development",
+				".env"
+			]
+		},
+		"start": {
+			"dependsOn": ["build"],
+			"cache": false
+		},
+		"release": {
+			"dependsOn": ["build", "test", "lint"],
+			"outputs": ["dist/**"],
+			"env": ["GITHUB_TOKEN", "GORELEASER_KEY"]
+		}
+	},
+	"globalEnv": [
+		"CI",
+		"VERCEL_URL",
+		"DATABASE_URL",
+		"POSTGRES_URL",
+		"PRISMA_DATABASE_URL"
+	]
+}

@@ -1,0 +1,318 @@
+---
+title: Installation Guide
+description: How to install and set up DevEx on your system
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# Installation Guide
+
+DevEx provides multiple installation methods to suit different needs and preferences.
+
+## Quick Install (Recommended)
+
+The fastest way to get started with DevEx is using our one-line installer:
+
+<Callout type="warn">
+**Security Notice**: Before running any script with elevated privileges, review our [Security Best Practices](/docs/guides/security) guide. You can inspect the installer script first:
+
+```bash
+# Download and review the installer before execution
+curl -fsSL https://devex.sh/install -o devex-install.sh
+less devex-install.sh  # Review the script contents
+```
+</Callout>
+
+```bash
+# Using wget (most common) - v1.0.0
+wget -qO- https://devex.sh/install | bash
+
+# Or using curl - v1.0.0
+curl -fsSL https://devex.sh/install | bash
+```
+
+The installer automatically detects which tool you have available and will install missing dependencies if needed.
+
+This installer will:
+1. **Download the latest DevEx release** for your platform
+2. **Verify checksums** for security
+3. **Install to** `~/.local/share/devex/`
+4. **Update your PATH** in `~/.bashrc`
+5. **Run the setup** with default configurations
+
+### What Gets Installed
+
+The quick installer automatically installs all applications marked with `default: true` in the configuration files:
+
+- **Development tools**: Git, GitHub CLI, Neovim, fzf, ripgrep
+- **Programming languages**: Node.js LTS (via mise)
+- **System utilities**: curl, htop, tree
+- **Desktop themes**: Tokyo Night theme for GNOME
+- **Shell configuration**: Zsh with Oh My Zsh (if selected)
+
+## Manual Installation
+
+For more control over the installation process:
+
+### 1. Download the Binary
+
+Visit the [GitHub releases page](https://github.com/jameswlane/devex/releases) and download the appropriate binary for your system:
+
+```bash
+# Example for Linux x86_64 - Pin to specific version for security
+wget https://github.com/jameswlane/devex/releases/download/v1.0.0/devex_linux_amd64.tar.gz
+
+# Verify checksum (recommended)
+wget https://github.com/jameswlane/devex/releases/download/v1.0.0/checksums.txt
+sha256sum -c checksums.txt
+
+# Extract
+tar -xzf devex_linux_amd64.tar.gz
+
+# Make executable
+chmod +x devex
+
+# Move to PATH
+sudo mv devex /usr/local/bin/
+```
+
+### 2. Initialize Configuration
+
+```bash
+# Create configuration directory
+mkdir -p ~/.local/share/devex/config
+
+# Download default configurations
+devex config init
+```
+
+### 3. Run Setup
+
+```bash
+# Install with dry-run to preview changes
+devex install --dry-run
+
+# Install default applications
+sudo devex install
+
+# Or install specific categories
+sudo devex install --category development
+```
+
+## Platform-Specific Instructions
+
+<Callout type="info">
+For detailed platform-specific configurations, see our [Platform Guides](/docs/platforms). For automated deployment, check our [Automation Guide](/docs/guides/automation).
+</Callout>
+
+### Linux (Ubuntu/Debian)
+
+```bash
+# Prerequisites - Install required tools
+sudo apt update
+sudo apt install -y wget curl ca-certificates
+
+# Install DevEx (review security guide first)
+wget -qO- https://devex.sh/install | bash
+```
+
+### Linux (Fedora/RHEL)
+
+```bash
+# Prerequisites - Install required tools
+sudo dnf install -y wget curl ca-certificates
+
+# Install DevEx (review security guide first)
+wget -qO- https://devex.sh/install | bash
+```
+
+### Linux (Arch)
+
+```bash
+# Prerequisites - Install required tools
+sudo pacman -S wget curl ca-certificates
+
+# Install DevEx (review security guide first)
+wget -qO- https://devex.sh/install | bash
+```
+
+### macOS
+
+```bash
+# Using Homebrew (recommended - most secure)
+brew install jameswlane/tap/devex
+
+# Or using the installer (review security guide first)
+curl -fsSL https://devex.sh/install | bash
+```
+
+### Windows
+
+```powershell
+# Using winget
+winget install jameswlane.devex
+
+# Or download from releases page
+# https://github.com/jameswlane/devex/releases
+```
+
+## Docker Installation
+
+For containerized environments:
+
+```bash
+# Run DevEx in a container
+docker run --rm -it \
+  -v $HOME/.devex:/root/.devex \
+  -v $HOME/.local/share/devex:/root/.local/share/devex \
+  jameswlane/devex:latest
+
+# Or build from source
+git clone https://github.com/jameswlane/devex.git
+cd devex
+docker build -t devex .
+```
+
+## CI/CD Integration
+
+<Callout type="tip">
+For comprehensive CI/CD integration examples and advanced automation patterns, see our detailed [Automation Guide](/docs/guides/automation).
+</Callout>
+
+### GitHub Actions
+
+```yaml
+name: Setup Development Environment
+on: [push, pull_request]
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install DevEx
+        run: |
+          # Pin to specific version for CI reproducibility
+          wget -qO- https://devex.sh/install | bash
+          echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
+      
+      - name: Setup environment
+        run: devex install --category development
+```
+
+### GitLab CI
+
+```yaml
+setup_environment:
+  stage: setup
+  image: ubuntu:22.04  # Pin to specific version
+  before_script:
+    - apt-get update && apt-get install -y wget curl sudo ca-certificates
+  script:
+    # Pin to specific version for CI reproducibility
+    - wget -qO- https://devex.sh/install | bash
+    - export PATH="$PATH:$HOME/.local/share/devex/bin"
+    - devex install --dry-run
+```
+
+## Verification
+
+After installation, verify DevEx is working correctly:
+
+```bash
+# Check version
+devex --version
+
+# Validate configuration
+devex config validate
+
+# List available installers
+devex install --list
+
+# Check system compatibility
+devex system info
+```
+
+## Uninstallation
+
+To completely remove DevEx:
+
+```bash
+# Remove installed applications (if desired)
+devex uninstall --all
+
+# Remove DevEx binary and data
+rm -rf ~/.local/share/devex
+rm -rf ~/.devex
+
+# Remove from PATH (edit ~/.bashrc)
+# Remove the line: export PATH="$PATH:$HOME/.local/share/devex/bin"
+```
+
+## Troubleshooting
+
+<Callout type="info">
+For comprehensive troubleshooting guidance, see our [Troubleshooting Guide](/docs/guides/troubleshooting). For configuration issues, check the [Configuration Guide](/docs/configuration).
+</Callout>
+
+### Permission Issues
+
+If you encounter permission errors:
+
+```bash
+# Ensure proper ownership
+sudo chown -R $USER:$USER ~/.local/share/devex
+sudo chown -R $USER:$USER ~/.devex
+
+# Fix binary permissions
+chmod +x ~/.local/share/devex/bin/devex
+```
+
+### Network Issues
+
+If downloads fail:
+
+```bash
+# Use curl instead of wget (with certificate verification)
+curl -fsSL https://devex.sh/install | bash
+
+# Or set proxy with security considerations
+export https_proxy=http://your-proxy:port
+export http_proxy=http://your-proxy:port
+wget -qO- https://devex.sh/install | bash
+```
+
+### Configuration Issues
+
+If configuration loading fails:
+
+```bash
+# Reset to defaults
+devex config reset
+
+# Validate configuration
+devex config validate
+
+# Debug mode
+devex --verbose install --dry-run
+```
+
+## Next Steps
+
+After installation:
+
+1. **Review security practices** - Read our [Security Guide](/docs/guides/security)
+2. **Review the configuration** - Check `~/.local/share/devex/config/` files
+3. **Customize settings** - Copy files to `~/.devex/` and modify
+4. **Add applications** - Extend the configuration with your tools
+5. **Set up themes** - Configure desktop appearance
+6. **Configure git** - Set up your development identity
+
+<Cards>
+  <Card title="Security Guide" href="/docs/guides/security" description="Essential security practices" />
+  <Card title="Configuration Guide" href="/docs/configuration" description="Detailed configuration options" />
+  <Card title="Usage Examples" href="/docs/examples" description="Real-world setup examples" />
+  <Card title="Customization" href="/docs/guides/customization" description="Advanced customization" />
+</Cards>

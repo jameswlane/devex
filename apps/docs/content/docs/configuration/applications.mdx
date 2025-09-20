@@ -1,0 +1,623 @@
+---
+title: Applications Configuration
+description: Complete guide to configuring applications in DevEx
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# Applications Configuration
+
+The `applications.yaml` file defines all installable applications, development tools, databases, and system utilities. This is the primary configuration file that determines what software DevEx will manage in your environment.
+
+## File Location
+
+```bash
+# Default configuration
+~/.local/share/devex/config/applications.yaml
+
+# User override (higher priority)
+~/.devex/applications.yaml
+```
+
+## File Structure
+
+```yaml
+applications:
+  development:     # Development tools and utilities
+    - name: string
+      # ... application definition
+      
+  databases:       # Database systems
+    - name: string
+      # ... application definition
+      
+  system_tools:    # System utilities
+    - name: string
+      # ... application definition
+      
+  optional:        # Optional applications
+    - name: string
+      # ... application definition
+```
+
+## Application Definition Schema
+
+Each application can have the following fields:
+
+### Required Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Unique application identifier |
+| `description` | `string` | Human-readable description |
+| `category` | `string` | Application category for grouping |
+
+### Optional Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `default` | `bool` | `false` | Install by default |
+| `dependencies` | `string[]` | `[]` | Required applications |
+| `tags` | `string[]` | `[]` | Tags for filtering |
+| `priority` | `int` | `50` | Installation priority (1-100) |
+| `desktop_environments` | `string[]` | `["all"]` | Supported desktop environments |
+
+## Platform-Specific Configuration
+
+Each application can define platform-specific installation methods:
+
+### Linux Configuration
+
+<Tabs items={['APT (Debian/Ubuntu)', 'DNF (Fedora/RHEL)', 'Pacman (Arch)', 'Universal']}>
+  <Tab value="APT (Debian/Ubuntu)">
+    ```yaml
+    linux:
+      install_method: apt
+      install_command: package-name
+      uninstall_command: package-name
+      
+      # APT repository configuration
+      apt_sources:
+        - key_source: "https://example.com/key.gpg"
+          key_name: "/etc/apt/keyrings/app.gpg"
+          source_repo: "deb [signed-by=/etc/apt/keyrings/app.gpg] https://repo.example.com stable main"
+          source_name: "/etc/apt/sources.list.d/app.list"
+          require_dearmor: true
+      
+      # Platform requirements
+      platform_requirements:
+        - os: "ubuntu"
+          versions: ["20.04", "22.04", "24.04"]
+        - os: "debian"
+          versions: ["11", "12"]
+    ```
+  </Tab>
+  
+  <Tab value="DNF (Fedora/RHEL)">
+    ```yaml
+    linux:
+      install_method: dnf
+      install_command: package-name
+      uninstall_command: package-name
+      
+      # DNF repository configuration
+      dnf_repos:
+        - name: "app-repo"
+          baseurl: "https://repo.example.com/fedora/$releasever/$basearch/"
+          gpgkey: "https://repo.example.com/RPM-GPG-KEY"
+          enabled: true
+      
+      platform_requirements:
+        - os: "fedora"
+          versions: ["38", "39", "40"]
+        - os: "rhel"
+          versions: ["8", "9"]
+    ```
+  </Tab>
+  
+  <Tab value="Pacman (Arch)">
+    ```yaml
+    linux:
+      install_method: pacman
+      install_command: package-name
+      uninstall_command: package-name
+      
+      # AUR support
+      aur:
+        enabled: true
+        helper: yay  # or paru, trizen
+      
+      platform_requirements:
+        - os: "arch"
+        - os: "manjaro"
+    ```
+  </Tab>
+  
+  <Tab value="Universal">
+    ```yaml
+    linux:
+      # Flatpak installation
+      install_method: flatpak
+      install_command: com.example.Application
+      remote: flathub
+      
+      # Or Snap installation
+      install_method: snap
+      install_command: application-name
+      channel: stable  # stable, candidate, beta, edge
+      classic: false   # Classic confinement
+      
+      # Or AppImage
+      install_method: appimage
+      download_url: "https://example.com/app.AppImage"
+      install_path: "~/.local/bin/"
+    ```
+  </Tab>
+</Tabs>
+
+### macOS Configuration
+
+```yaml
+macos:
+  install_method: brew        # Primary method
+  install_command: package-name
+  cask: true                  # Use brew cask for GUI apps
+  
+  # Mac App Store
+  install_method: mas
+  install_command: "1234567890"  # App Store ID
+  
+  # Direct download
+  install_method: dmg
+  download_url: "https://example.com/app.dmg"
+  
+  # Alternative installation methods
+  alternatives:
+    - install_method: macports
+      install_command: package-name
+```
+
+### Windows Configuration
+
+```yaml
+windows:
+  install_method: winget
+  install_command: Publisher.ApplicationName
+  
+  # Chocolatey
+  install_method: chocolatey
+  install_command: package-name
+  
+  # Scoop
+  install_method: scoop
+  install_command: package-name
+  bucket: main  # main, extras, versions
+  
+  # Direct installer
+  install_method: installer
+  download_url: "https://example.com/setup.exe"
+  silent_args: "/S /NCRC"  # Silent installation arguments
+```
+
+## Advanced Application Features
+
+### Pre and Post Installation Scripts
+
+```yaml
+applications:
+  development:
+    - name: docker
+      linux:
+        install_method: apt
+        install_command: docker-ce
+        
+        # Run before installation
+        pre_install:
+          - shell: "sudo apt-get update"
+          - shell: "sudo apt-get install -y ca-certificates curl gnupg"
+          
+        # Run after installation
+        post_install:
+          - shell: "sudo systemctl enable docker"
+          - shell: "sudo usermod -aG docker $USER"
+          - shell: "echo 'Docker installed successfully'"
+```
+
+### Configuration File Management
+
+```yaml
+applications:
+  development:
+    - name: vscode
+      config_files:
+        # Copy configuration files
+        - source: "~/.local/share/devex/assets/vscode/settings.json"
+          destination: "~/.config/Code/User/settings.json"
+          backup: true  # Backup existing file
+          
+        # Template-based configuration
+        - template: "~/.local/share/devex/templates/vscode.conf"
+          destination: "~/.config/Code/User/keybindings.json"
+          variables:
+            theme: "Tokyo Night"
+            font_size: 14
+```
+
+### Service Management
+
+```yaml
+applications:
+  databases:
+    - name: postgresql
+      linux:
+        install_method: apt
+        install_command: postgresql-14
+        
+        # Service configuration
+        service:
+          name: postgresql
+          enabled: true  # Enable at boot
+          started: true  # Start after installation
+          
+        # Service validation
+        service_check:
+          command: "systemctl is-active postgresql"
+          expected: "active"
+```
+
+### Version Management
+
+```yaml
+applications:
+  development:
+    - name: node
+      # Use mise for version management
+      install_method: mise
+      install_command: node@lts  # or node@18.17.0
+      global: true  # Set as global default
+      
+      # Version constraints
+      version_constraint: ">=18.0.0 <21.0.0"
+      
+      # Multiple versions
+      versions:
+        - "18.17.0"  # LTS
+        - "20.5.1"   # Current
+        - "21.0.0"   # Latest
+```
+
+## Application Categories
+
+### Development Tools
+
+<Cards>
+  <Card title="Version Control" description="git, mercurial, svn" />
+  <Card title="Editors" description="vscode, vim, neovim, emacs" />
+  <Card title="Containers" description="docker, podman, kubernetes" />
+  <Card title="Build Tools" description="make, cmake, gradle, maven" />
+</Cards>
+
+Example configuration:
+
+```yaml
+applications:
+  development:
+    - name: git
+      description: "Distributed version control system"
+      category: "Version Control"
+      default: true
+      priority: 10  # Install early
+      
+    - name: docker
+      description: "Container platform"
+      category: "Containers"
+      default: true
+      dependencies: ["curl", "gnupg"]
+      
+    - name: vscode
+      description: "Visual Studio Code"
+      category: "Editors"
+      default: false
+      desktop_environments: ["gnome", "kde", "xfce"]
+```
+
+### Databases
+
+```yaml
+applications:
+  databases:
+    - name: postgresql
+      description: "Advanced open source database"
+      category: "Databases"
+      default: false
+      
+      linux:
+        install_method: apt
+        install_command: postgresql-14
+        post_install:
+          - shell: "sudo -u postgres createuser --superuser $USER"
+          
+    - name: redis
+      description: "In-memory data structure store"
+      category: "Databases"
+      service:
+        name: redis-server
+        enabled: true
+```
+
+### Optional Applications
+
+```yaml
+applications:
+  optional:
+    - name: slack
+      description: "Team communication platform"
+      category: "Communication"
+      default: false
+      desktop_environments: ["gnome", "kde", "xfce"]
+      
+      linux:
+        install_method: flatpak
+        install_command: com.slack.Slack
+        
+      macos:
+        install_method: brew
+        install_command: slack
+        cask: true
+        
+      windows:
+        install_method: winget
+        install_command: SlackTechnologies.Slack
+```
+
+## Dependency Management
+
+### Direct Dependencies
+
+```yaml
+applications:
+  development:
+    - name: docker-compose
+      dependencies:
+        - docker  # Must be installed first
+        
+    - name: kubectl
+      dependencies:
+        - curl    # Required for download
+```
+
+### Conditional Dependencies
+
+```yaml
+applications:
+  development:
+    - name: vscode
+      optional_dependencies:
+        - git     # Enhanced Git integration
+        - docker  # Docker extension support
+        - python  # Python development
+```
+
+### Dependency Resolution
+
+DevEx automatically:
+1. Analyzes dependency graph
+2. Determines installation order
+3. Detects circular dependencies
+4. Handles missing dependencies
+
+## Desktop Environment Compatibility
+
+```yaml
+applications:
+  development:
+    - name: gnome-tweaks
+      desktop_environments: ["gnome", "unity"]
+      
+    - name: konsole
+      desktop_environments: ["kde"]
+      
+    - name: terminal
+      desktop_environments: ["all"]  # Works everywhere
+```
+
+## Real-World Examples
+
+### Complex Application with Multiple Install Methods
+
+```yaml
+applications:
+  development:
+    - name: neovim
+      description: "Hyperextensible Vim-based text editor"
+      category: "Editors"
+      default: false
+      tags: ["editor", "vim", "terminal"]
+      
+      linux:
+        # Primary method: Package manager
+        install_method: apt
+        install_command: neovim
+        
+        # Alternative: Build from source
+        alternatives:
+          - install_method: source
+            git_repo: "https://github.com/neovim/neovim"
+            build_commands:
+              - "make CMAKE_BUILD_TYPE=Release"
+              - "sudo make install"
+            dependencies: ["cmake", "build-essential"]
+            
+          - install_method: appimage
+            download_url: "https://github.com/neovim/neovim/releases/latest/download/nvim.appimage"
+            
+      macos:
+        install_method: brew
+        install_command: neovim
+        
+      windows:
+        install_method: winget
+        install_command: Neovim.Neovim
+        
+      # Post-installation setup
+      post_install:
+        - shell: "mkdir -p ~/.config/nvim"
+        - file:
+            source: "~/.local/share/devex/assets/nvim/init.vim"
+            destination: "~/.config/nvim/init.vim"
+```
+
+### Application with Service and Configuration
+
+```yaml
+applications:
+  databases:
+    - name: postgresql
+      description: "PostgreSQL database server"
+      category: "Databases"
+      
+      linux:
+        install_method: apt
+        install_command: postgresql-14
+        
+        apt_sources:
+          - key_source: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+            source_repo: "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main"
+            
+        service:
+          name: postgresql
+          enabled: true
+          started: true
+          
+        post_install:
+          # Create user and database
+          - shell: "sudo -u postgres createuser --superuser $USER"
+          - shell: "sudo -u postgres createdb $USER"
+          
+          # Configure authentication
+          - file:
+              content: |
+                local   all   all                     trust
+                host    all   all   127.0.0.1/32      trust
+                host    all   all   ::1/128           trust
+              destination: "/etc/postgresql/14/main/pg_hba.conf"
+              sudo: true
+              
+          # Restart service
+          - shell: "sudo systemctl restart postgresql"
+        
+        # Validation
+        validation:
+          - command: "psql -c 'SELECT version();'"
+            expected_pattern: "PostgreSQL 14"
+```
+
+## Best Practices
+
+<Callout type="tip">
+**Application Configuration Best Practices:**
+
+1. **Use descriptive names** - Application names should be recognizable
+2. **Include descriptions** - Help users understand what each app does
+3. **Set appropriate defaults** - Mark essential tools as `default: true`
+4. **Define dependencies** - Ensure proper installation order
+5. **Test on target platforms** - Verify installation methods work
+6. **Provide alternatives** - Multiple installation methods increase reliability
+</Callout>
+
+## Validation
+
+Validate your applications configuration:
+
+```bash
+# Validate syntax and schema
+devex config validate applications
+
+# Check specific application
+devex config validate --app docker
+
+# Test installation (dry-run)
+devex install docker --dry-run
+```
+
+## Troubleshooting
+
+### Common Issues
+
+<Tabs items={['Missing Dependencies', 'Platform Mismatch', 'Service Failures', 'Repository Issues']}>
+  <Tab value="Missing Dependencies">
+    ```yaml
+    # Problem: Dependency not found
+    applications:
+      development:
+        - name: app
+          dependencies: ["missing-dep"]
+    
+    # Solution: Ensure dependency is defined
+    applications:
+      development:
+        - name: missing-dep
+          # ... definition
+        - name: app
+          dependencies: ["missing-dep"]
+    ```
+  </Tab>
+  
+  <Tab value="Platform Mismatch">
+    ```yaml
+    # Problem: Application not available on platform
+    applications:
+      development:
+        - name: xcode
+          linux:  # Wrong platform
+            install_method: apt
+    
+    # Solution: Use correct platform
+    applications:
+      development:
+        - name: xcode
+          macos:  # Correct platform
+            install_method: mas
+    ```
+  </Tab>
+  
+  <Tab value="Service Failures">
+    ```bash
+    # Check service status
+    devex recovery check --service postgresql
+    
+    # Repair service configuration
+    devex recovery repair --service postgresql
+    
+    # Manual service management
+    sudo systemctl restart postgresql
+    ```
+  </Tab>
+  
+  <Tab value="Repository Issues">
+    ```bash
+    # Update repository keys
+    devex recovery repair --update-keys
+    
+    # Clear repository cache
+    devex cache clean --repos
+    
+    # Manually update repositories
+    sudo apt update  # Debian/Ubuntu
+    brew update      # macOS
+    ```
+  </Tab>
+</Tabs>
+
+## Related Documentation
+
+- [Environment Configuration](/docs/configuration/environment) - Programming languages and tools
+- [Configuration Validation](/docs/configuration/validation) - Validating your configurations
+- [Platform Support](/docs/platforms) - Platform-specific details
+- [CLI Reference: Add/Remove](/docs/cli-reference/add-remove) - Managing applications
+
+<Callout type="info">
+The applications.yaml file is the core of DevEx's package management. A well-structured applications configuration ensures reliable, reproducible development environment setup across different machines and team members.
+</Callout>

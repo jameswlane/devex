@@ -1,0 +1,74 @@
+name: LazyDocker
+description: A simple terminal UI for both docker and docker-compose
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+dependencies:
+  - docker
+macos:
+  install_method: brew
+  install_command: jesseduffield/lazydocker/lazydocker
+  uninstall_command: lazydocker
+  official_support: true
+  brew_tap: jesseduffield/lazydocker
+  system_requirements:
+    docker_version: 20.10+
+    min_memory_mb: 512
+    min_disk_space_mb: 100
+  alternatives:
+    - install_method: brew
+      install_command: lazydocker
+      uninstall_command: lazydocker
+      official_support: true
+windows:
+  install_method: scoop
+  install_command: lazydocker
+  uninstall_command: lazydocker
+  official_support: true
+  system_requirements:
+    docker_version: 20.10+
+    min_memory_mb: 512
+    min_disk_space_mb: 100
+  alternatives:
+    - install_method: chocolatey
+      install_command: lazydocker
+      uninstall_command: lazydocker
+      official_support: true
+linux:
+  install_method: curlpipe
+  install_command: curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
+  uninstall_command: rm -f $HOME/.local/bin/lazydocker
+  official_support: true
+  system_requirements:
+    docker_version: 20.10+
+    min_memory_mb: 512
+    min_disk_space_mb: 100
+    required_services:
+      - docker
+  alternatives:
+    - install_method: pacman
+      install_command: lazydocker
+      uninstall_command: lazydocker
+      official_support: false
+      platform_requirements:
+        - os: arch
+    - install_method: go
+      install_command: github.com/jesseduffield/lazydocker@latest
+      uninstall_command: lazydocker
+      official_support: true
+      platform_requirements:
+        - go_version: 1.19+
+      system_requirements:
+        docker_version: 20.10+
+        go_version: 1.19+
+        min_memory_mb: 512
+        min_disk_space_mb: 100
+        required_services:
+          - docker
+    - install_method: asdf
+      install_command: lazydocker latest
+      uninstall_command: lazydocker
+      official_support: false
+      pre_install:
+        - shell: asdf plugin add lazydocker https://github.com/comdotlinux/asdf-lazydocker.git

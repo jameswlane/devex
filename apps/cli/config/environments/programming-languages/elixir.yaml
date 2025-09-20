@@ -1,0 +1,10 @@
+name: Elixir
+description: ''
+category: Programming Languages
+install_method: mise
+install_command: elixir@latest
+uninstall_command: elixir
+default: false
+dependencies:
+  - mise
+  - erlang

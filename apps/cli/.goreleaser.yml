@@ -1,0 +1,80 @@
+version: 2
+builds:
+  - id: devex
+    main: ./cmd/main.go
+    binary: bin/devex
+    ldflags:
+      - -X main.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm
+      - arm64
+archives:
+  - id: devex
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    # Sets the given file info to all the binaries included from the `builds`.
+    #
+    # Default: copied from the source binary.
+    # builds_info:
+    # group: root
+    # owner: root
+    # mode: 0644
+    # format is `time.RFC3339Nano`
+    # mtime: 2008-01-02T15:04:05Z
+    # Additional files/globs you want to add to the archive.
+    #
+    # Default: [ 'LICENSE*', 'README*', 'CHANGELOG', 'license*', 'readme*', 'changelog'].
+    # Templates: allowed.
+    files:
+      - assets/**/*
+      - config/*
+      - help/*
+# Whether to enable the size reporting or not.
+report_sizes: true
+release:
+  github:
+    owner: jameswlane
+    name: devex
+  draft: false
+  replace_existing_draft: true
+  target_commitish: '{{ .Commit }}'
+  replace_existing_artifacts: true
+  discussion_category_name: General
+  prerelease: auto
+  make_latest: true
+  mode: append
+  header: |
+    ## DevEx Release ({{ .Date }})
+    Welcome to this new release!
+  footer: |
+    ## Thanks
+    Those were the changes on {{ .Tag }}!
+  name_template: '{{.ProjectName}}-v{{.Version}}'
+  include_meta: true
+snapshot:
+  version_template: '{{.Version}}'
+checksum:
+  name_template: 'devex_checksums.txt'
+changelog:
+  use: github
+  format: '{{.SHA}}: {{.Message}} (@{{.AuthorUsername}})'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: 'Bug fixes'
+      regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - typo
+      - (?i)foo
+    include:
+      - '^feat:'

@@ -1,0 +1,37 @@
+# Add go bin path:
+set -gx GOPATH $HOME/go
+set -gx PATH $PATH $GOPATH/bin
+
+# Walk
+function lk
+    cd (walk --icons $argv)
+end
+
+# Editor
+set -gx EDITOR nano
+
+# bun completions
+if test -s "$HOME/.bun/_bun"
+    source "$HOME/.bun/_bun"
+end
+
+# bun
+set -gx BUN_INSTALL "$HOME/.bun"
+set -gx PATH "$BUN_INSTALL/bin" $PATH
+
+function fcd
+    set dir (find (test -n "$argv[1]"; and echo $argv[1]; or echo .) -type d -not -path '*/\.*' 2>/dev/null | fzf +m)
+    if test -n "$dir"
+        cd "$dir"
+    end
+end
+
+# pnpm
+set -gx PNPM_HOME "$HOME/Library/pnpm"
+if not contains $PNPM_HOME $PATH
+    set -gx PATH $PNPM_HOME $PATH
+end
+# pnpm end
+
+# Cargo
+set -gx PATH "$HOME/.cargo/bin" $PATH

@@ -1,0 +1,9 @@
+name: MySQL Development Libraries
+description: Development libraries for MySQL
+category: Databases
+linux:
+  install_method: apt
+  install_command: default-libmysqlclient-dev
+  uninstall_command: default-libmysqlclient-dev
+  dependencies:
+    - apt

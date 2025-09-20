@@ -1,0 +1,29 @@
+id: backend
+name: Backend Development
+version: 1.1.0
+description: Backend development environment with Go, databases, and containers
+author: DevEx Team
+homepage: https://devex.sh/templates/backend
+license: MIT
+min_devex_version: 1.0.0
+categories:
+  - development
+  - backend
+  - api
+tags:
+  - golang
+  - python
+  - rust
+  - database
+  - docker
+  - kubernetes
+files:
+  - applications.yaml
+  - environment.yaml
+  - system.yaml
+metadata:
+  stack_type: backend
+  primary_languages: go,python,rust
+  includes_database: "true"
+  includes_containers: "true"
+  includes_orchestration: "true"

@@ -1,0 +1,52 @@
+{
+  "name": "@devex/desktop-cinnamon",
+  "private": true,
+  "version": "1.8.2",
+  "description": "Cinnamon desktop environment configuration plugin for DevEx CLI",
+  "main": "main.go",
+  "scripts": {
+    "build": "go build -o devex-plugin-desktop-cinnamon .",
+    "dev": "go build -race -o devex-plugin-desktop-cinnamon main.go",
+    "test": "go test ./...",
+    "lint": "golangci-lint run",
+    "download": "go mod download",
+    "mod": "go mod tidy"
+  },
+  "keywords": [
+    "devex",
+    "plugin",
+    "cinnamon",
+    "desktop",
+    "linux",
+    "mint"
+  ],
+  "author": "DevEx Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jameswlane/devex",
+    "directory": "packages/desktop-cinnamon"
+  },
+  "devex": {
+    "plugin": {
+      "type": "desktop-environment",
+      "platforms": [
+        "linux"
+      ],
+      "desktop": "cinnamon",
+      "dependencies": [
+        "gsettings",
+        "dconf",
+        "cinnamon-settings"
+      ],
+      "priority": 10,
+      "capabilities": {
+        "themes": true,
+        "wallpapers": true,
+        "applets": true,
+        "settings": true,
+        "backup": true
+      }
+    }
+  }
+}

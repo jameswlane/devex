@@ -1,0 +1,82 @@
+# Backend Template Applications Configuration
+# Template Version: 1.1.0
+applications:
+  # Core Development Tools
+  - name: git
+    category: development
+    description: Distributed version control system
+    default: true
+    install_method: apt
+    install_command: git
+  - name: curl
+    category: development
+    description: Command line tool for transferring data
+    default: true
+    install_method: apt
+    install_command: curl
+  - name: jq
+    category: development
+    description: Command-line JSON processor
+    default: true
+    install_method: apt
+    install_command: jq
+  # Containerization & Orchestration
+  - name: docker
+    category: container
+    description: Container platform
+    default: true
+    install_method: apt
+    install_command: docker.io
+  - name: kubectl
+    category: container
+    description: Kubernetes command-line tool
+    default: true
+    install_method: curlpipe
+    install_command: |
+      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+  - name: helm
+    category: container
+    description: Kubernetes package manager
+    default: true
+    install_method: curlpipe
+    install_command: |
+      curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  # Database Systems
+  - name: postgresql
+    category: database
+    description: PostgreSQL database server
+    default: true
+    install_method: apt
+    install_command: postgresql postgresql-contrib
+  - name: redis
+    category: database
+    description: In-memory data structure store
+    default: true
+    install_method: apt
+    install_command: redis-server
+  - name: mongodb
+    category: database
+    description: Document database
+    default: false
+    install_method: apt
+    install_command: mongodb
+  # Message Queues
+  - name: rabbitmq
+    category: infrastructure
+    description: Message broker
+    default: true
+    install_method: apt
+    install_command: rabbitmq-server
+  # Monitoring & Observability
+  - name: htop
+    category: system
+    description: Interactive process viewer
+    default: true
+    install_method: apt
+    install_command: htop
+  - name: netstat
+    category: system
+    description: Network statistics tool
+    default: true
+    install_method: apt
+    install_command: net-tools

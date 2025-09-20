@@ -1,0 +1,98 @@
+name: Eza
+description: A modern alternative to ls
+category: System Utilities
+default: true
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: eza
+  uninstall_command: eza
+  official_support: true
+windows:
+  install_method: winget
+  install_command: eza-community.eza
+  uninstall_command: eza-community.eza
+  official_support: true
+  alternatives:
+    - install_method: scoop
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+    - install_method: cargo
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+linux:
+  install_method: apt
+  install_command: eza
+  uninstall_command: eza
+  official_support: true
+  apt_sources:
+    - key_source: https://raw.githubusercontent.com/eza-community/eza/main/deb.asc
+      key_name: /etc/apt/keyrings/gierens.gpg
+      source_repo: deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main
+      source_name: /etc/apt/sources.list.d/gierens.list
+      require_dearmor: true
+  platform_requirements:
+    - os: debian
+      dependencies:
+        - curl
+        - gpg
+    - os: ubuntu
+      dependencies:
+        - curl
+        - gpg
+  alternatives:
+    - install_method: pacman
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: arch
+    - install_method: dnf
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: fedora
+    - install_method: zypper
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: opensuse
+    - install_method: emerge
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: gentoo
+    - install_method: xbps
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: void
+    - install_method: pkg
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: freebsd
+    - install_method: pkg_add
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: openbsd
+    - install_method: nixpkgs
+      install_command: eza
+      uninstall_command: eza
+      official_support: true
+      platform_requirements:
+        - os: nixos
+    - install_method: cargo
+      install_command: eza
+      uninstall_command: eza
+      official_support: true

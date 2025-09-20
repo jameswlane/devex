@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@layer base {
+	html {
+		font-family: system-ui, sans-serif;
+	}
+}
+
+@utility stat-card {
+	@apply bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow;
+}
+
+@utility stat-title {
+	@apply text-lg font-semibold text-gray-800 mb-2;
+}
+
+@utility stat-value {
+	@apply text-3xl font-bold text-blue-600 mb-1;
+}
+
+@utility stat-description {
+	@apply text-sm text-gray-600;
+}

@@ -1,0 +1,83 @@
+version: 2
+project_name: devex-plugin-sdk
+monorepo:
+  tag_prefix: "@devex/plugin-sdk@"
+before:
+  hooks:
+    - go mod tidy
+    - go test ./...
+builds:
+  - skip: true # This is a library, not an executable
+archives:
+  - format: tar.gz
+    # this name template makes the OS and Arch compatible with the results of uname.
+    name_template: >-
+      {{ .ProjectName }}_ {{- title .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else if eq .Arch "386" }}i386 {{- else }}{{ .Arch }}{{ end }} {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows archives
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE*
+      - README*
+      - CHANGELOG*
+      - src: "*.md"
+        dst: docs
+        strip_parent: true
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - '^build:'
+      - '^style:'
+      - '^refactor:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: '🚀 Features'
+      regexp: '^feat'
+    - title: '🐛 Bug Fixes'
+      regexp: '^fix'
+    - title: '⚡ Performance'
+      regexp: '^perf'
+    - title: '🔒 Security'
+      regexp: '^security'
+    - title: '📦 Dependencies'
+      regexp: '^deps'
+    - title: '🔨 Breaking Changes'
+      regexp: '^breaking'
+    - title: 'Others'
+      order: 999
+release:
+  github:
+    owner: jameswlane
+    name: devex
+  draft: false
+  prerelease: auto
+  mode: append
+  header: |
+    ## DevEx Plugin SDK {{ .Tag }}
+
+    The official SDK for building DevEx plugins.
+
+    ### Installation
+    ```bash
+    go get github.com/jameswlane/devex/packages/plugin-sdk@{{ .Tag }}
+    ```
+  footer: |
+    **Full Changelog**: https://github.com/jameswlane/devex/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ---
+    _Built with ❤️ by the DevEx team_
+  name_template: "Plugin SDK {{ .Tag }}"
+  disable: false

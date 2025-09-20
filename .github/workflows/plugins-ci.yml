@@ -1,0 +1,127 @@
+name: Plugins Build, Lint, and Test
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/**'
+      - '!packages/plugin-sdk/**'
+      - '.github/workflows/plugins-ci.yml'
+  pull_request:
+    paths:
+      - 'packages/**'
+      - '!packages/plugin-sdk/**'
+      - '.github/workflows/plugins-ci.yml'
+permissions:
+  contents: read
+jobs:
+  detect-changed-plugins:
+    runs-on: ubuntu-latest
+    outputs:
+      plugin-matrix: ${{ steps.matrix.outputs.plugins }}
+      has-changes: ${{ steps.matrix.outputs.has-changes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changed plugins
+        id: matrix
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            # For PRs, compare against the base branch
+            changed_files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD)
+          else
+            # For pushes, compare against the previous commit
+            changed_files=$(git diff --name-only HEAD~1 HEAD)
+          fi
+
+          changed_plugins=()
+
+          for file in $changed_files; do
+            if [[ $file == packages/* ]]; then
+              plugin_dir=$(echo $file | cut -d'/' -f2)
+              # Skip plugin-sdk and ensure plugin has main.go
+              if [ "$plugin_dir" != "plugin-sdk" ] && \
+                 [ -f "packages/$plugin_dir/main.go" ]; then
+                if [[ ! " ${changed_plugins[@]} " =~ " $plugin_dir " ]]; then
+                  changed_plugins+=("$plugin_dir")
+                fi
+              fi
+            fi
+          done
+
+          # Convert to JSON array for matrix
+          if [ ${#changed_plugins[@]} -gt 0 ]; then
+            plugins_json=$(printf '%s\n' "${changed_plugins[@]}" | jq -R . | jq -s -c .)
+            echo "plugins=$plugins_json" >> $GITHUB_OUTPUT
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+            echo "Changed plugins: ${changed_plugins[*]}"
+          else
+            echo "plugins=[]" >> $GITHUB_OUTPUT
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+            echo "No plugins changed"
+          fi
+  test-plugins:
+    needs: detect-changed-plugins
+    if: needs.detect-changed-plugins.outputs.has-changes == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.detect-changed-plugins.outputs.plugin-matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Test plugin ${{ matrix.plugin }}
+        run: |
+          cd packages/${{ matrix.plugin }}
+
+          echo "::group::Updating dependencies for ${{ matrix.plugin }}"
+          go mod tidy
+          go mod download
+          echo "::endgroup::"
+
+          echo "::group::Linting ${{ matrix.plugin }}"
+          golangci-lint run
+          echo "::endgroup::"
+
+          echo "::group::Building ${{ matrix.plugin }}"
+          go build -v -o devex-plugin-${{ matrix.plugin }} .
+          echo "::endgroup::"
+
+          echo "::group::Testing plugin functionality"
+          ./devex-plugin-${{ matrix.plugin }} --plugin-info || echo "Plugin info command not available"
+          echo "::endgroup::"
+
+          echo "::group::Running Go tests"
+          if ls *_test.go >/dev/null 2>&1; then
+            go test -v ./...
+          else
+            echo "No Go tests found for ${{ matrix.plugin }}"
+          fi
+          echo "::endgroup::"
+  build-all-plugins:
+    runs-on: ubuntu-latest
+    if: needs.detect-changed-plugins.outputs.has-changes == 'false'
+    needs: detect-changed-plugins
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install dependencies
+        run: pnpm install
+      - name: Build all plugins with Turborepo
+        run: |
+          echo "No specific plugins changed, building all plugins to ensure they still work"
+          pnpm turbo lint --filter='@devex/package-manager-*' --filter='@devex/desktop-*' --filter='@devex/tool-*' --filter='@devex/system-*' --concurrency=1
+          pnpm turbo build --filter='@devex/package-manager-*' --filter='@devex/desktop-*' --filter='@devex/tool-*' --filter='@devex/system-*'

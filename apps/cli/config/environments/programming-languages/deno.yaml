@@ -1,0 +1,9 @@
+name: Deno
+description: A modern runtime for JavaScript and TypeScript
+category: Programming Languages
+install_method: mise
+install_command: deno@latest
+uninstall_command: deno
+default: false
+dependencies:
+  - mise

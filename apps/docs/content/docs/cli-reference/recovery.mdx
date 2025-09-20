@@ -1,0 +1,707 @@
+---
+title: devex recovery & rollback
+description: Diagnose problems, repair installations, and rollback changes
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex recovery & rollback
+
+The `recovery` and `rollback` commands provide comprehensive tools for diagnosing problems, repairing broken installations, and reverting changes when something goes wrong. These commands are essential for maintaining a healthy development environment.
+
+## devex recovery
+
+Diagnose and repair problems in your development environment.
+
+### Usage
+
+```bash
+devex recovery <subcommand> [flags]
+```
+
+### Recovery Subcommands
+
+<Cards>
+  <Card title="check" description="Comprehensive system health check and diagnostics" />
+  <Card title="repair" description="Automatically fix common issues" />
+  <Card title="clean" description="Clean up broken installations and cache" />
+  <Card title="doctor" description="Interactive problem diagnosis and resolution" />
+</Cards>
+
+## devex recovery check
+
+Perform a comprehensive health check of your development environment.
+
+### Usage
+
+```bash
+devex recovery check [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--verbose` | `bool` | `false` | Show detailed diagnostic information |
+| `--fix` | `bool` | `false` | Automatically fix issues found |
+| `--report` | `string` | | Save diagnostic report to file |
+| `--category` | `string` | `all` | Check specific category only |
+
+### Health Check Output
+
+<Tabs items={['Summary View', 'Detailed Diagnostics', 'Fix Mode', 'Category Specific']}>
+  <Tab value="Summary View">
+    ```bash
+    devex recovery check
+    
+    System Health Check Results:
+    ┌─────────────────────┬─────────┬─────────────────────────────┐
+    │ Component           │ Status  │ Issues                      │
+    ├─────────────────────┼─────────┼─────────────────────────────┤
+    │ Package Managers    │ ✓       │ All working correctly       │
+    │ Installed Apps      │ ⚠       │ 2 apps need attention      │
+    │ Dependencies        │ ✓       │ All dependencies met        │
+    │ Services            │ ✗       │ PostgreSQL not running      │
+    │ Permissions         │ ⚠       │ Docker group membership     │
+    │ Configuration       │ ✓       │ Valid configuration         │
+    │ Disk Space          │ ✓       │ 45% used (sufficient)       │
+    │ Network             │ ✓       │ All repositories accessible │
+    └─────────────────────┴─────────┴─────────────────────────────┘
+    
+    Summary: 5 OK, 2 Warnings, 1 Error
+    
+    Critical Issues:
+    ✗ PostgreSQL service not running
+      → Fix: sudo systemctl start postgresql
+    
+    Warnings:
+    ⚠ User not in docker group (requires logout/login)
+      → Fix: sudo usermod -aG docker $USER
+    ⚠ VS Code extensions need update
+      → Fix: code --install-extension ms-python.python
+    
+    Run 'devex recovery check --fix' to automatically resolve fixable issues
+    ```
+  </Tab>
+  
+  <Tab value="Detailed Diagnostics">
+    ```bash
+    devex recovery check --verbose
+    
+    🔍 Package Manager Health:
+    ✓ apt: Working correctly (last update: 2024-08-17)
+    ✓ flatpak: Working correctly (12 apps installed)
+    ✓ snap: Working correctly (5 apps installed)
+    ✓ mise: Working correctly (3 languages managed)
+    
+    🔍 Application Status:
+    ✓ git: Installed and configured
+      - Version: 2.39.2
+      - Location: /usr/bin/git
+      - Config: ~/.gitconfig (valid)
+    
+    ⚠ docker: Installed but service issues
+      - Version: 24.0.5
+      - Location: /usr/bin/docker
+      - Service: ✗ Not running (inactive)
+      - User Groups: ✗ User not in docker group
+      - Socket: ✗ Cannot connect to Docker daemon
+    
+    ✗ postgresql: Service not running
+      - Version: 14.8
+      - Location: /usr/bin/psql
+      - Service: ✗ Stopped (systemctl shows inactive)
+      - Logs: No recent errors in journal
+      - Suggestion: Start service with 'sudo systemctl start postgresql'
+    
+    🔍 System Resources:
+    ✓ Memory: 8.2GB/16GB used (51%)
+    ✓ Disk: 234GB/512GB used (45%)
+    ✓ CPU: Load average 0.45 (normal)
+    ✓ Network: Internet connectivity confirmed
+    
+    🔍 Configuration Validation:
+    ✓ ~/.devex/applications.yaml: Valid syntax
+    ✓ ~/.devex/environment.yaml: Valid syntax
+    ✓ ~/.local/share/devex/config/: All defaults valid
+    ⚠ Some applications configured but not installed
+    ```
+  </Tab>
+  
+  <Tab value="Fix Mode">
+    ```bash
+    devex recovery check --fix
+    
+    Running automated fixes...
+    
+    🔧 Fixing Docker group membership...
+    ✓ Added user to docker group
+    ⚠ Logout/login required for group change to take effect
+    
+    🔧 Starting PostgreSQL service...
+    ✓ Started postgresql.service
+    ✓ Enabled postgresql.service for auto-start
+    
+    🔧 Updating VS Code extensions...
+    ✓ Updated ms-python.python to latest version
+    ✓ Updated ms-vscode.vscode-typescript-next
+    
+    🔧 Cleaning package cache...
+    ✓ Cleaned APT cache (freed 127MB)
+    ✓ Cleaned Flatpak cache (freed 45MB)
+    
+    Summary: 4 issues fixed, 1 requires manual action
+    
+    Manual Action Required:
+    ⚠ Docker group membership: Please logout and login again
+      → Or run: newgrp docker
+    
+    All other issues have been resolved automatically.
+    ```
+  </Tab>
+  
+  <Tab value="Category Specific">
+    ```bash
+    # Check only services
+    devex recovery check --category services
+    
+    Service Health Check:
+    ┌─────────────────┬─────────┬──────────────────────────┐
+    │ Service         │ Status  │ Details                  │
+    ├─────────────────┼─────────┼──────────────────────────┤
+    │ docker          │ ✓       │ Active and running       │
+    │ postgresql      │ ✗       │ Inactive (stopped)       │
+    │ redis           │ ✗       │ Not installed            │
+    │ nginx           │ ✓       │ Active and running       │
+    └─────────────────┴─────────┴──────────────────────────┘
+    
+    # Check only applications
+    devex recovery check --category applications
+    
+    # Check only configuration
+    devex recovery check --category config
+    ```
+  </Tab>
+</Tabs>
+
+## devex recovery repair
+
+Automatically repair common issues in your development environment.
+
+### Usage
+
+```bash
+devex recovery repair [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--app` | `string[]` | | Repair specific applications |
+| `--service` | `string[]` | | Repair specific services |
+| `--permissions` | `bool` | `false` | Fix permission issues |
+| `--reinstall` | `bool` | `false` | Reinstall broken applications |
+| `--dry-run` | `bool` | `false` | Show what would be repaired |
+
+### Repair Categories
+
+<Tabs items={['Service Repair', 'Application Repair', 'Permission Repair', 'Configuration Repair']}>
+  <Tab value="Service Repair">
+    ```bash
+    devex recovery repair --service postgresql,docker
+    
+    Repairing Services:
+    
+    🔧 PostgreSQL:
+    ✓ Starting postgresql.service
+    ✓ Enabling auto-start
+    ✓ Checking configuration files
+    ✓ Testing database connection
+    ✓ Service repair completed
+    
+    🔧 Docker:
+    ✓ Starting docker.service
+    ✓ Checking socket permissions
+    ✓ Testing Docker daemon connection
+    ⚠ User group membership required
+      → Added user to docker group
+      → Logout/login required
+    ✓ Service repair completed
+    
+    Summary: 2 services repaired successfully
+    ```
+  </Tab>
+  
+  <Tab value="Application Repair">
+    ```bash
+    devex recovery repair --app vscode,node
+    
+    Repairing Applications:
+    
+    🔧 VS Code:
+    ✓ Checking installation integrity
+    ✓ Updating to latest version
+    ✓ Repairing extension database
+    ✓ Installing missing extensions
+    ✓ Checking configuration files
+    ✓ Application repair completed
+    
+    🔧 Node.js (via mise):
+    ✓ Checking mise installation
+    ✓ Verifying Node.js installation
+    ✓ Updating to specified version (LTS)
+    ✓ Rebuilding npm cache
+    ✓ Updating global packages
+    ✓ Application repair completed
+    
+    Summary: 2 applications repaired successfully
+    ```
+  </Tab>
+  
+  <Tab value="Permission Repair">
+    ```bash
+    devex recovery repair --permissions
+    
+    Fixing Permission Issues:
+    
+    🔧 DevEx Configuration:
+    ✓ Fixed ~/.devex/ directory permissions (755)
+    ✓ Fixed configuration file permissions (644)
+    ✓ Fixed backup directory permissions (755)
+    
+    🔧 Application Permissions:
+    ✓ Added user to docker group
+    ✓ Fixed /usr/local/bin permissions
+    ✓ Fixed ~/.local/share/devex permissions
+    
+    🔧 SSH Permissions:
+    ✓ Fixed ~/.ssh/ directory permissions (700)
+    ✓ Fixed private key permissions (600)
+    ✓ Fixed public key permissions (644)
+    
+    Summary: All permission issues resolved
+    Note: Some changes require logout/login to take effect
+    ```
+  </Tab>
+  
+  <Tab value="Configuration Repair">
+    ```bash
+    devex recovery repair --config
+    
+    Repairing Configuration Issues:
+    
+    🔧 Configuration Files:
+    ✓ Validated YAML syntax in all files
+    ✓ Fixed indentation issues in applications.yaml
+    ✓ Resolved duplicate entries
+    ✓ Updated deprecated configuration options
+    
+    🔧 Environment Variables:
+    ✓ Updated PATH for mise
+    ✓ Fixed DOCKER_HOST variable
+    ✓ Restored missing shell aliases
+    
+    🔧 Application Settings:
+    ✓ Regenerated Git configuration
+    ✓ Fixed VS Code workspace settings
+    ✓ Restored default shell configuration
+    
+    Summary: Configuration repaired successfully
+    ```
+  </Tab>
+</Tabs>
+
+## devex recovery clean
+
+Clean up broken installations, cache, and temporary files.
+
+### Usage
+
+```bash
+devex recovery clean [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--cache` | `bool` | `true` | Clean package manager caches |
+| `--broken` | `bool` | `true` | Remove broken installations |
+| `--logs` | `bool` | `false` | Clean old log files |
+| `--temp` | `bool` | `false` | Clean temporary files |
+| `--aggressive` | `bool` | `false` | Perform deep cleaning |
+
+### Clean Operations
+
+<Steps>
+  <Step>
+    **Cache Cleanup**
+    ```bash
+    devex recovery clean --cache
+    
+    Cleaning Package Caches:
+    ✓ APT cache: Freed 245MB
+    ✓ Flatpak cache: Freed 67MB
+    ✓ Snap cache: Freed 123MB
+    ✓ mise cache: Freed 89MB
+    ✓ DevEx cache: Freed 34MB
+    
+    Total space freed: 558MB
+    ```
+  </Step>
+  
+  <Step>
+    **Broken Installation Cleanup**
+    ```bash
+    devex recovery clean --broken
+    
+    Removing Broken Installations:
+    ✓ Removed incomplete Slack installation
+    ✓ Cleaned up failed Docker Compose install
+    ✓ Removed orphaned configuration files
+    ✓ Fixed broken symlinks
+    
+    Summary: 4 broken installations cleaned
+    ```
+  </Step>
+  
+  <Step>
+    **Deep Cleaning (Aggressive)**
+    ```bash
+    devex recovery clean --aggressive
+    
+    Performing Deep Cleanup:
+    ✓ Removed unused packages (autoremove)
+    ✓ Cleaned old kernel versions
+    ✓ Removed orphaned dependencies
+    ✓ Cleaned application logs older than 30 days
+    ✓ Removed temporary download files
+    ✓ Compacted package databases
+    
+    Total space freed: 1.2GB
+    ```
+  </Step>
+</Steps>
+
+## devex recovery doctor
+
+Interactive diagnosis and resolution of complex problems.
+
+### Usage
+
+```bash
+devex recovery doctor [flags]
+```
+
+The doctor command provides an interactive session to diagnose and resolve issues:
+
+<Steps>
+  <Step>
+    **Initial Diagnosis**
+    ```
+    DevEx Doctor - Interactive Problem Resolution
+    
+    🏥 Running initial diagnosis...
+    
+    Found 3 potential issues:
+    1. Docker service not responding
+    2. Node.js version mismatch
+    3. PostgreSQL connection refused
+    
+    Let's work through these one by one.
+    ```
+  </Step>
+  
+  <Step>
+    **Issue-by-Issue Resolution**
+    ```
+    Issue 1: Docker service not responding
+    
+    Symptoms:
+    - docker commands hang
+    - Cannot connect to Docker daemon
+    - Service appears running but unresponsive
+    
+    Possible causes:
+    1. Service stuck in unhealthy state
+    2. Permission issues with socket
+    3. Out of disk space
+    4. Corrupted Docker data
+    
+    What would you like to try first?
+    [1] Restart Docker service
+    [2] Check disk space
+    [3] Reset Docker data (destructive)
+    [4] Check permissions
+    [q] Skip this issue
+    
+    Choice: 1
+    
+    🔧 Restarting Docker service...
+    ✓ Stopped docker.service
+    ✓ Started docker.service
+    ✓ Testing Docker daemon...
+    ✓ Docker is now responding correctly!
+    
+    Issue resolved! Moving to next issue...
+    ```
+  </Step>
+  
+  <Step>
+    **Resolution Summary**
+    ```
+    DevEx Doctor Session Complete
+    
+    Issues Resolved:
+    ✅ Docker service - Restarted successfully
+    ✅ Node.js version - Updated to LTS via mise
+    ✅ PostgreSQL connection - Started service and fixed permissions
+    
+    Summary:
+    - 3 issues identified
+    - 3 issues resolved
+    - 0 issues require manual intervention
+    
+    Your development environment is now healthy!
+    
+    💡 Recommendations:
+    - Run 'devex status' to verify all applications
+    - Consider setting up automatic service monitoring
+    - Create a backup of your working configuration
+    ```
+  </Step>
+</Steps>
+
+## devex rollback
+
+Rollback recent changes to restore a previous working state.
+
+### Usage
+
+```bash
+devex rollback [flags]
+```
+
+### Options
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--to` | `string` | | Rollback to specific backup or timestamp |
+| `--steps` | `int` | `1` | Number of operations to rollback |
+| `--dry-run` | `bool` | `false` | Show what would be rolled back |
+| `--interactive` | `bool` | `true` | Prompt for confirmation |
+
+### Rollback Operations
+
+<Tabs items={['Recent Changes', 'Specific Backup', 'Time-based', 'Operation-based']}>
+  <Tab value="Recent Changes">
+    ```bash
+    devex rollback
+    
+    Recent Changes (last 24 hours):
+    ┌────┬─────────────────────┬─────────────────┬─────────────────────┐
+    │ ID │ Operation           │ Files Changed   │ Timestamp           │
+    ├────┼─────────────────────┼─────────────────┼─────────────────────┤
+    │ 1  │ add docker kubectl  │ applications    │ 2024-08-17 14:30:00 │
+    │ 2  │ template apply      │ all configs     │ 2024-08-17 13:15:00 │
+    │ 3  │ config edit         │ environment     │ 2024-08-17 12:00:00 │
+    └────┴─────────────────────┴─────────────────┴─────────────────────┘
+    
+    Rollback last operation? (add docker kubectl) [Y/n]
+    
+    🔄 Rolling back operation 1...
+    ✓ Restored applications.yaml
+    ✓ Removed added applications from configuration
+    ✓ Cleaned up Docker and kubectl installations
+    ✓ Rollback completed successfully
+    
+    Configuration restored to state before adding Docker and kubectl.
+    ```
+  </Tab>
+  
+  <Tab value="Specific Backup">
+    ```bash
+    devex rollback --to backup-20240817-morning
+    
+    Rolling back to: backup-20240817-morning (2024-08-17 09:00:00)
+    
+    This will restore:
+    - applications.yaml (23 changes)
+    - environment.yaml (5 changes)
+    - system.yaml (2 changes)
+    - desktop.yaml (1 change)
+    
+    Changes that will be lost:
+    - Added applications: docker, kubectl, postman
+    - Updated Node.js to latest version
+    - Applied backend development template
+    - Changed Git configuration
+    
+    Proceed with rollback? [y/N]
+    
+    🔄 Restoring from backup...
+    ✓ Restored all configuration files
+    ✓ Reverted installed applications
+    ✓ Reset environment configuration
+    ✓ Restored system settings
+    
+    Environment rolled back to morning state.
+    ```
+  </Tab>
+  
+  <Tab value="Time-based">
+    ```bash
+    # Rollback to yesterday
+    devex rollback --to "2024-08-16 18:00"
+    
+    # Rollback 2 hours ago
+    devex rollback --to "2 hours ago"
+    
+    # Rollback to last week
+    devex rollback --to "1 week ago"
+    ```
+  </Tab>
+  
+  <Tab value="Operation-based">
+    ```bash
+    # Rollback last 3 operations
+    devex rollback --steps 3
+    
+    # Rollback specific operation type
+    devex rollback --operation "template apply"
+    
+    # Rollback all changes today
+    devex rollback --since today
+    ```
+  </Tab>
+</Tabs>
+
+## Backup Integration
+
+Both recovery and rollback commands integrate closely with DevEx's backup system:
+
+### Automatic Backups
+
+```bash
+# DevEx automatically creates backups before:
+# - Major configuration changes
+# - Template applications
+# - Bulk application additions/removals
+# - System-level modifications
+
+# View backup history
+devex config backup list
+
+# Create manual backup before risky operation
+devex config backup create --name "before-experimental-setup"
+```
+
+### Backup-based Recovery
+
+```bash
+# Restore from specific backup
+devex recovery restore backup-20240817-1430
+
+# Compare current state with backup
+devex config diff backup-20240817-1430
+
+# List available restore points
+devex recovery list-restore-points
+```
+
+## Common Recovery Scenarios
+
+<Tabs items={['Installation Failures', 'Service Issues', 'Configuration Problems', 'Permission Issues']}>
+  <Tab value="Installation Failures">
+    ```bash
+    # Application failed to install properly
+    devex recovery repair --app docker --reinstall
+    
+    # Package manager issues
+    devex recovery check --category packages --fix
+    
+    # Dependency conflicts
+    devex recovery clean --broken
+    devex install docker  # retry installation
+    ```
+  </Tab>
+  
+  <Tab value="Service Issues">
+    ```bash
+    # Services not starting
+    devex recovery check --category services --fix
+    
+    # Database connection issues
+    devex recovery repair --service postgresql
+    
+    # Docker daemon problems
+    devex recovery doctor  # Interactive diagnosis
+    ```
+  </Tab>
+  
+  <Tab value="Configuration Problems">
+    ```bash
+    # Invalid configuration syntax
+    devex config validate --fix
+    
+    # Corrupted configuration
+    devex rollback --to "last working backup"
+    
+    # Missing configuration files
+    devex recovery repair --config
+    ```
+  </Tab>
+  
+  <Tab value="Permission Issues">
+    ```bash
+    # Fix all permission issues
+    devex recovery repair --permissions
+    
+    # Docker permission issues specifically
+    sudo usermod -aG docker $USER
+    newgrp docker
+    
+    # DevEx configuration permissions
+    devex recovery check --category permissions --fix
+    ```
+  </Tab>
+</Tabs>
+
+## Prevention and Monitoring
+
+<Callout type="tip">
+**Proactive Health Monitoring:**
+
+1. **Regular health checks**: Run `devex recovery check` weekly
+2. **Automatic backups**: Enable before major changes
+3. **Monitor service status**: Include in startup scripts
+4. **Keep logs**: Enable verbose logging for troubleshooting
+</Callout>
+
+### Health Check Automation
+
+```bash
+# Add to crontab for weekly health checks
+0 9 * * 1 devex recovery check --report /var/log/devex-health.log
+
+# Check health before important work
+alias devwork='devex recovery check --fix && echo "Environment ready!"'
+
+# Monitor service health
+devex status --problems-only || devex recovery repair --service
+```
+
+## Related Commands
+
+- [`devex status`](/docs/cli-reference/status-list#status) - Check current installation status
+- [`devex config backup`](/docs/cli-reference/config#backup) - Manage configuration backups
+- [`devex install`](/docs/cli-reference/install) - Reinstall applications after recovery
+- [`devex config validate`](/docs/cli-reference/config#validate) - Validate configuration integrity
+
+<Callout type="warn">
+**Important**: Always create a backup before performing recovery operations that might modify your configuration or reinstall applications.
+</Callout>

@@ -1,0 +1,525 @@
+---
+title: Security Best Practices
+description: Essential security guidelines for installing and using DevEx safely
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+
+# Security Best Practices
+
+Security is paramount when automating development environment setup. This guide covers essential security practices for using DevEx safely and securely.
+
+<Callout type="warn">
+**Security Warning**: Always review scripts before executing them with elevated privileges. Never blindly run commands from untrusted sources.
+</Callout>
+
+## Installation Security
+
+### Script Review Guidelines
+
+Before running any installation script, including DevEx's installer:
+
+<Steps>
+  <Step>
+    ### Download and Inspect First
+    
+    Always download scripts for review before execution:
+    
+    ```bash
+    # Download the installer script for review
+    curl -fsSL https://devex.sh/install -o devex-install.sh
+    
+    # Review the script contents
+    less devex-install.sh
+    
+    # Check for suspicious patterns
+    grep -E "(sudo|curl|wget|rm|chmod)" devex-install.sh
+    ```
+  </Step>
+  
+  <Step>
+    ### Verify Script Integrity
+    
+    Check the script's authenticity and integrity:
+    
+    ```bash
+    # Verify the script hasn't been tampered with
+    curl -fsSL https://devex.sh/install.sha256 -o install.sha256
+    sha256sum -c install.sha256
+    
+    # Check HTTPS certificate
+    curl -I https://devex.sh/install
+    ```
+  </Step>
+  
+  <Step>
+    ### Execute with Caution
+    
+    Only execute after thorough review:
+    
+    ```bash
+    # Make executable and run
+    chmod +x devex-install.sh
+    ./devex-install.sh
+    
+    # Or pipe directly (only after verification)
+    curl -fsSL https://devex.sh/install | bash
+    ```
+  </Step>
+</Steps>
+
+### Red Flags to Watch For
+
+<Callout type="error">
+**Dangerous Patterns** - Never run scripts that contain:
+
+- Unconditional `sudo rm -rf` commands
+- Downloads from non-HTTPS sources
+- Execution of additional remote scripts without user consent
+- Modification of system-critical files without backup
+- Disabled security features (SELinux, firewalls)
+- Hardcoded credentials or API keys
+</Callout>
+
+### DevEx Installation Verification
+
+DevEx's official installer is designed with security in mind:
+
+```bash
+# Verify installer source and integrity
+curl -I https://devex.sh/install
+# Should return 200 OK with valid HTTPS certificate
+
+# Check installer signature (when available)
+curl -fsSL https://devex.sh/install.sig -o install.sig
+curl -fsSL https://devex.sh/install -o install.sh
+gpg --verify install.sig install.sh
+```
+
+## Configuration Security
+
+### Safe Configuration Practices
+
+<Cards>
+  <Card title="Principle of Least Privilege" description="Only install applications you actually need" />
+  <Card title="Version Pinning" description="Pin specific versions for reproducibility" />
+  <Card title="Input Validation" description="Validate all configuration inputs" />
+  <Card title="Backup First" description="Always backup before making changes" />
+</Cards>
+
+### Secure Configuration Examples
+
+**Pin Specific Versions:**
+
+```yaml
+# ✅ Good: Pin specific versions
+applications:
+  development:
+    - name: node
+      version: "20.11.0"  # Pin to specific LTS version
+      description: "Node.js JavaScript runtime"
+      
+    - name: docker
+      version: "24.0.7"   # Pin to known stable version
+      description: "Container platform"
+
+# ❌ Bad: Using 'latest' versions
+applications:
+  development:
+    - name: node
+      version: "latest"   # Unpredictable, potential security risk
+```
+
+**Validate Input Sources:**
+
+```yaml
+# ✅ Good: Use trusted, official sources
+applications:
+  development:
+    - name: vscode
+      linux:
+        install_method: apt
+        repository: "https://packages.microsoft.com/repos/code"
+        key_url: "https://packages.microsoft.com/keys/microsoft.asc"
+
+# ❌ Bad: Untrusted or unknown sources
+applications:
+  development:
+    - name: some-tool
+      linux:
+        install_method: curlpipe
+        install_command: "http://random-site.com/install.sh"  # HTTP, untrusted
+```
+
+### Configuration Validation
+
+Always validate configurations before applying:
+
+```bash
+# Validate configuration syntax and security
+devex config validate
+
+# Check for security issues in configuration
+devex config security-check
+
+# Preview changes before applying
+devex install --dry-run
+
+# Review specific application installation
+devex install docker --dry-run --verbose
+```
+
+## System Permissions
+
+### Understanding Permission Requirements
+
+DevEx requires different permission levels for different operations:
+
+<Tabs items={['User Level', 'System Level', 'Root Level']}>
+  <Tab value="User Level">
+    **No elevated privileges required:**
+    
+    - Reading configuration files
+    - Validating configurations
+    - Listing available applications
+    - Checking installation status
+    - Using `--dry-run` mode
+    
+    ```bash
+    # Safe operations (no sudo needed)
+    devex --version
+    devex config validate
+    devex install --dry-run
+    devex list --available
+    ```
+  </Tab>
+  
+  <Tab value="System Level">
+    **Sudo required for system packages:**
+    
+    - Installing system packages via apt/dnf/pacman
+    - Modifying system-wide configurations
+    - Installing to system directories
+    
+    ```bash
+    # System package installation
+    sudo devex install git
+    sudo devex install docker
+    
+    # System configuration
+    sudo devex system configure
+    ```
+  </Tab>
+  
+  <Tab value="Root Level">
+    **Root access (use sparingly):**
+    
+    - Modifying core system files
+    - Installing kernel modules
+    - Changing system security settings
+    
+    ```bash
+    # Only when absolutely necessary
+    sudo devex system security-setup
+    ```
+  </Tab>
+</Tabs>
+
+### Permission Best Practices
+
+<Callout type="tip">
+**Permission Guidelines:**
+
+1. **Start with dry-run** - Always preview changes first
+2. **Use minimal permissions** - Don't use sudo unless required
+3. **Review sudo operations** - Understand what requires elevation
+4. **User-space first** - Prefer user-space installations when possible
+5. **Backup before system changes** - Create restore points
+</Callout>
+
+```bash
+# ✅ Good: Minimal permission approach
+devex install --dry-run                    # Preview first
+devex install --user-space node python     # User-space when possible
+sudo devex install docker                  # System-level only when needed
+
+# ❌ Bad: Unnecessary elevation
+sudo devex config validate                 # No sudo needed
+sudo devex --version                       # No sudo needed
+```
+
+## Network Security
+
+### Secure Download Practices
+
+**Verify HTTPS and Certificates:**
+
+```bash
+# ✅ Good: Verify HTTPS connection
+curl -fsSL https://devex.sh/install | bash
+
+# ❌ Bad: Insecure HTTP connection
+curl -fsSL http://devex.sh/install | bash  # Missing HTTPS
+
+# ✅ Good: Verify certificate explicitly
+curl --cacert /etc/ssl/certs/ca-certificates.crt https://devex.sh/install
+```
+
+**Use Checksums for Verification:**
+
+```bash
+# Download and verify integrity
+wget https://github.com/jameswlane/devex/releases/download/v1.0.0/devex_linux_amd64.tar.gz
+wget https://github.com/jameswlane/devex/releases/download/v1.0.0/checksums.txt
+
+# Verify checksum
+sha256sum -c checksums.txt
+```
+
+### Proxy and Firewall Configuration
+
+For corporate environments:
+
+```bash
+# Configure proxy for DevEx
+export HTTPS_PROXY=https://proxy.company.com:8080
+export HTTP_PROXY=http://proxy.company.com:8080
+
+# Verify proxy configuration
+devex config test-network
+
+# Configure DevEx to use proxy
+devex config set network.proxy "https://proxy.company.com:8080"
+```
+
+## Secret Management
+
+### Handling Sensitive Data
+
+<Callout type="error">
+**Never Store Secrets in Configuration Files**
+
+DevEx configuration files should never contain:
+- API keys or tokens
+- Passwords or passphrases  
+- Private keys or certificates
+- Database connection strings with credentials
+</Callout>
+
+**Use Environment Variables:**
+
+```yaml
+# ✅ Good: Reference environment variables
+system:
+  git:
+    username: "${GIT_USERNAME}"
+    email: "${GIT_EMAIL}"
+  
+  ssh:
+    key_path: "${HOME}/.ssh/id_rsa"
+
+# ❌ Bad: Hardcoded secrets
+system:
+  api:
+    key: "sk-1234567890abcdef"  # Never do this!
+```
+
+**Secure Secret Storage:**
+
+```bash
+# Use system keyring for secrets
+secret-tool store --label="DevEx API Key" application devex key api
+
+# Retrieve secrets securely
+export DEVEX_API_KEY=$(secret-tool lookup application devex key api)
+
+# Use with DevEx
+devex install --api-key="${DEVEX_API_KEY}"
+```
+
+## Incident Response
+
+### Security Monitoring
+
+Monitor DevEx operations for security issues:
+
+```bash
+# Check DevEx audit logs
+devex logs --security
+
+# Review installed applications
+devex list --installed --detailed
+
+# Check for unauthorized changes
+devex status --security-check
+
+# Verify system integrity
+devex system verify
+```
+
+### Incident Response Plan
+
+<Steps>
+  <Step>
+    ### Immediate Response
+    
+    If you suspect a security incident:
+    
+    ```bash
+    # Stop all DevEx operations
+    devex stop --all
+    
+    # Disconnect from network (if necessary)
+    sudo ip link set down eth0
+    
+    # Preserve evidence
+    devex logs export --security > security-incident-$(date +%Y%m%d-%H%M%S).log
+    ```
+  </Step>
+  
+  <Step>
+    ### Investigation
+    
+    Investigate the scope of the incident:
+    
+    ```bash
+    # Check recent installations
+    devex list --installed --since="24 hours ago"
+    
+    # Review configuration changes
+    devex config history --security-sensitive
+    
+    # Check system modifications
+    devex system changes --since="24 hours ago"
+    ```
+  </Step>
+  
+  <Step>
+    ### Recovery
+    
+    Clean up and restore system:
+    
+    ```bash
+    # Remove suspicious applications
+    devex uninstall suspicious-app
+    
+    # Restore from backup
+    devex config restore --backup-id="pre-incident"
+    
+    # Update and patch
+    devex update --security-patches
+    ```
+  </Step>
+</Steps>
+
+## Security Compliance
+
+### Enterprise Security Standards
+
+For organizations with security requirements:
+
+**SOC 2 Compliance:**
+
+```yaml
+# Example security-hardened configuration
+security:
+  audit_logging: true
+  require_signatures: true
+  allowed_sources:
+    - "https://packages.microsoft.com"
+    - "https://download.docker.com"
+    - "https://github.com/jameswlane/devex"
+  
+  prohibited_patterns:
+    - "curl.*http://"  # Block HTTP downloads
+    - "rm -rf /"       # Block dangerous commands
+    - "chmod 777"      # Block overly permissive permissions
+```
+
+**GDPR Compliance:**
+
+```bash
+# Data privacy controls
+devex config set privacy.telemetry false
+devex config set privacy.crash_reporting false
+devex config set privacy.analytics false
+
+# Data export for compliance
+devex data export --user-data-only
+```
+
+### Security Auditing
+
+Regular security audits:
+
+```bash
+# Weekly security check
+devex security audit --comprehensive
+
+# Vulnerability scanning
+devex security scan --installed-packages
+
+# Configuration compliance check
+devex config compliance --standard=SOC2
+```
+
+## Community Security
+
+### Reporting Security Issues
+
+If you discover security vulnerabilities:
+
+<Callout type="info">
+**Security Contact:**
+
+- **Email**: security@devex.sh
+- **PGP Key**: Available at https://devex.sh/.well-known/security.txt
+- **Response Time**: Within 72 hours
+- **Disclosure**: Coordinated disclosure process
+</Callout>
+
+### Security Updates
+
+Stay informed about security updates:
+
+```bash
+# Subscribe to security notifications
+devex security subscribe
+
+# Check for security updates
+devex update --security-only
+
+# Enable automatic security updates
+devex config set auto_update.security true
+```
+
+## Security Checklist
+
+Before deploying DevEx in production:
+
+- [ ] Review and approve the installation script
+- [ ] Verify HTTPS connections and certificates
+- [ ] Pin versions in configuration files
+- [ ] Set up proper permission boundaries
+- [ ] Configure audit logging
+- [ ] Establish backup and recovery procedures
+- [ ] Document incident response plan
+- [ ] Train team on security practices
+- [ ] Set up monitoring and alerting
+- [ ] Regular security audits scheduled
+
+<Callout type="success">
+**Security is Shared Responsibility**: DevEx provides secure defaults and tools, but proper security requires ongoing vigilance and adherence to best practices by all users.
+</Callout>
+
+## Related Documentation
+
+<Cards>
+  <Card title="Installation Guide" href="/docs/installation" description="Secure installation procedures" />
+  <Card title="Configuration" href="/docs/configuration" description="Safe configuration practices" />
+  <Card title="Troubleshooting" href="/docs/guides/troubleshooting" description="Security-related issue resolution" />
+  <Card title="CLI Reference" href="/docs/cli-reference" description="Security-focused command options" />
+</Cards>

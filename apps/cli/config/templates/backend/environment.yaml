@@ -1,0 +1,49 @@
+# Backend Template Environment Configuration
+# Template Version: 1.1.0
+# Default shell configuration
+shell: zsh
+# Default editor
+editor: vim
+# Programming languages and runtime management
+languages:
+  - name: go
+    version: "1.21.0"
+    manager: mise
+    default: true
+  - name: python
+    version: "3.11.4"
+    manager: mise
+    default: true
+  - name: rust
+    version: "1.70.0"
+    manager: mise
+    default: true
+# Environment variables
+environment_variables:
+  GOPATH: $HOME/go
+  GOBIN: $HOME/go/bin
+  RUST_LOG: info
+  DATABASE_URL: postgresql://localhost/devex_dev
+# Shell aliases
+aliases:
+  ll: ls -la
+  la: ls -A
+  l: ls -CF
+  '...': cd ../..
+  gg: git status
+  gp: git push
+  gl: git pull
+  dc: docker-compose
+  dcu: docker-compose up
+  dcd: docker-compose down
+  k: kubectl
+  kgp: kubectl get pods
+  kgs: kubectl get services
+  kaf: kubectl apply -f
+  psql-dev: psql postgresql://localhost/devex_dev
+# Path additions
+path_additions:
+  - $HOME/.local/bin
+  - $HOME/go/bin
+  - $HOME/.cargo/bin
+  - $HOME/.krew/bin

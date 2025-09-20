@@ -1,0 +1,306 @@
+# Enterprise Backend Custom Template - System Configuration
+# Template Version: 1.0.0
+# Organization: Enterprise
+# Git configuration with enterprise security
+configure_git: true
+git_config:
+  user:
+    name: "" # Will be populated from LDAP during setup
+    email: "" # Will be populated from LDAP during setup
+  core:
+    editor: vim
+    autocrlf: input
+    filemode: true
+    # Enterprise security settings
+    sshCommand: "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+  commit:
+    gpgsign: true # Require GPG signing for all commits
+  pull:
+    rebase: true
+  push:
+    gpgsign: if-asked # Sign pushes when requested
+  init:
+    defaultBranch: main
+  # Enterprise-specific Git settings
+  url:
+    "https://github.company.com/":
+      insteadOf: "https://github.com/"
+  credential:
+    helper: "vault" # Use Vault for credential management
+# SSH configuration with enterprise security
+configure_ssh: true
+ssh_config:
+  generate_key: true
+  key_type: ed25519
+  key_comment: "DevEx Enterprise Backend Setup"
+  key_size: 4096
+  # Enterprise SSH settings
+  host_key_verification: strict
+  certificate_authentication: true
+  ldap_key_distribution: true
+# Enterprise system packages
+system_packages:
+  # Build essentials
+  - build-essential
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - pkg-config
+  # Security packages
+  - libssl-dev
+  - openssl
+  - ca-certificates-java
+  - gnupg2
+  - pass
+  # Development libraries
+  - protobuf-compiler
+  - libprotobuf-dev
+  - libc6-dev
+  - gcc
+  - g++
+  # Enterprise security tools
+  - fail2ban
+  - ufw
+  - apparmor
+  - apparmor-utils
+  - auditd
+  - rkhunter
+  - chkrootkit
+  - clamav
+  - clamav-daemon
+  # Monitoring and logging
+  - rsyslog
+  - logrotate
+  - htop
+  - iotop
+  - netstat-nat
+  - tcpdump
+  - wireshark-common
+  # Network tools
+  - net-tools
+  - dnsutils
+  - telnet
+  - nmap
+  - traceroute
+  - mtr
+  # Enterprise backup tools
+  - rsync
+  - duplicity
+  - borgbackup
+# Enterprise services to enable
+services:
+  # Core enterprise services
+  - docker
+  - postgresql
+  - redis-server
+  - rabbitmq-server
+  # Security services
+  - fail2ban
+  - ufw
+  - apparmor
+  - auditd
+  - clamav-daemon
+  # Monitoring services
+  - rsyslog
+  - prometheus
+  - grafana-server
+  # Enterprise infrastructure
+  - vault
+  - consul
+# Enterprise performance tuning
+kernel_parameters:
+  # File system limits for enterprise workloads
+  fs.file-max: 1048576
+  fs.nr_open: 1048576
+  # Network performance for high-throughput applications
+  net.core.somaxconn: 65535
+  net.ipv4.tcp_max_syn_backlog: 65535
+  net.core.netdev_max_backlog: 30000
+  net.core.rmem_max: 134217728
+  net.core.wmem_max: 134217728
+  net.ipv4.tcp_rmem: "4096 87380 134217728"
+  net.ipv4.tcp_wmem: "4096 65536 134217728"
+  # Security hardening
+  kernel.dmesg_restrict: 1
+  kernel.kptr_restrict: 2
+  kernel.yama.ptrace_scope: 1
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
+  net.ipv4.ip_forward: 0
+  net.ipv6.conf.all.forwarding: 0
+  net.ipv4.conf.all.log_martians: 1
+  net.ipv4.conf.default.log_martians: 1
+  # Memory management for enterprise applications
+  vm.swappiness: 10
+  vm.dirty_ratio: 15
+  vm.dirty_background_ratio: 5
+# Enterprise security configuration
+security:
+  # Firewall configuration
+  firewall:
+    enabled: true
+    default_policy: deny
+    rules:
+      # SSH with rate limiting
+      - port: 22
+        protocol: tcp
+        description: "SSH access"
+        rate_limit: "10/min"
+      # HTTP/HTTPS for web services
+      - port: 80
+        protocol: tcp
+        description: "HTTP"
+        source: "enterprise_network"
+      - port: 443
+        protocol: tcp
+        description: "HTTPS"
+        source: "enterprise_network"
+      # Development servers (restricted)
+      - port: 8080
+        protocol: tcp
+        description: "Development server"
+        source: "127.0.0.1"
+      - port: 3000
+        protocol: tcp
+        description: "React dev server"
+        source: "127.0.0.1"
+      # Database ports (internal only)
+      - port: 5432
+        protocol: tcp
+        description: "PostgreSQL"
+        source: "enterprise_network"
+      - port: 6379
+        protocol: tcp
+        description: "Redis"
+        source: "enterprise_network"
+      # Message queue (internal only)
+      - port: 5672
+        protocol: tcp
+        description: "RabbitMQ"
+        source: "enterprise_network"
+      - port: 15672
+        protocol: tcp
+        description: "RabbitMQ Management"
+        source: "enterprise_network"
+      # Monitoring (internal only)
+      - port: 9090
+        protocol: tcp
+        description: "Prometheus"
+        source: "enterprise_network"
+      - port: 3000
+        protocol: tcp
+        description: "Grafana"
+        source: "enterprise_network"
+      # Vault (secure)
+      - port: 8200
+        protocol: tcp
+        description: "Vault API"
+        source: "vault_clients"
+  # AppArmor profiles
+  apparmor:
+    enabled: true
+    enforce_mode: true
+    profiles:
+      - docker-default
+      - usr.bin.vim
+      - usr.bin.git
+  # Audit configuration
+  audit:
+    enabled: true
+    rules:
+      - "-w /etc/passwd -p wa -k passwd_changes"
+      - "-w /etc/group -p wa -k group_changes"
+      - "-w /etc/shadow -p wa -k shadow_changes"
+      - "-w /etc/sudoers -p wa -k sudoers_changes"
+      - "-w /var/log/auth.log -p wa -k auth_log"
+      - "-w /var/log/audit/ -p wa -k audit_log"
+      - "-a always,exit -F arch=b64 -S execve -k process_execution"
+  # Password policy
+  password_policy:
+    min_length: 12
+    require_uppercase: true
+    require_lowercase: true
+    require_numbers: true
+    require_special: true
+    max_age_days: 90
+    min_age_days: 1
+    remember_last: 12
+# Enterprise system limits
+limits:
+  # File descriptor limits for enterprise applications
+  - domain: "*"
+    type: soft
+    item: nofile
+    value: 65536
+  - domain: "*"
+    type: hard
+    item: nofile
+    value: 65536
+  # Process limits
+  - domain: "*"
+    type: soft
+    item: nproc
+    value: 32768
+  - domain: "*"
+    type: hard
+    item: nproc
+    value: 32768
+  # Memory limits for containers
+  - domain: docker
+    type: soft
+    item: memlock
+    value: unlimited
+  - domain: docker
+    type: hard
+    item: memlock
+    value: unlimited
+# Enterprise backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *" # Daily at 2 AM
+  retention_days: 30
+  destinations:
+    - type: s3
+      bucket: "enterprise-backups"
+      path: "devex-configs"
+      encryption: true
+    - type: local
+      path: "/opt/enterprise-backups"
+      encryption: true
+# Compliance settings
+compliance:
+  standards:
+    - GDPR
+    - SOX
+    - HIPAA
+    - PCI-DSS
+  audit_logging: true
+  data_classification: true
+  encryption_at_rest: true
+  encryption_in_transit: true
+  # Data retention policies
+  log_retention_days: 2555 # 7 years for compliance
+  config_retention_days: 365
+  audit_retention_days: 2555
+# Enterprise monitoring configuration
+monitoring:
+  enabled: true
+  metrics_collection: true
+  log_aggregation: true
+  alerting: true
+  agents:
+    - prometheus-node-exporter
+    - filebeat
+    - auditbeat
+    - metricbeat
+  dashboards:
+    - system-overview
+    - security-dashboard
+    - application-metrics
+    - compliance-reporting

@@ -1,0 +1,6 @@
+name: ca-certificates
+description: Common CA certificates
+category: Dependency
+linux:
+  install_method: apt
+  install_command: ca-certificates

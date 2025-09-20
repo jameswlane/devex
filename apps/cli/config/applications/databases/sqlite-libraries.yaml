@@ -1,0 +1,9 @@
+name: SQLite Libraries
+description: SQLite libraries for database operations
+category: Databases
+linux:
+  install_method: apt
+  install_command: sqlite3 libsqlite3-0
+  uninstall_command: sqlite3 libsqlite3-0
+  dependencies:
+    - apt

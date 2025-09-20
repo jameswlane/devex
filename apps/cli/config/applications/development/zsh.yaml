@@ -1,0 +1,7 @@
+name: zsh
+description: A powerful shell with many features
+category: System Utilities
+default: false
+linux:
+  install_method: apt
+  install_command: zsh

@@ -1,0 +1,254 @@
+{
+	"registry_version": "1.0.0",
+	"plugin_count": 33,
+	"last_updated": "2025-09-09T23:29:22.027Z",
+	"plugins": [
+		{
+			"name": "tool-stackdetector",
+			"description": "Development stack detection plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["development", "stack", "detection"]
+		},
+		{
+			"name": "tool-shell",
+			"description": "Shell configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["shell", "bash", "zsh", "fish"]
+		},
+		{
+			"name": "tool-git",
+			"description": "Git configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["git", "vcs", "development"]
+		},
+		{
+			"name": "package-manager-zypper",
+			"description": "Zypper plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["zypper", "opensuse", "suse", "linux"]
+		},
+		{
+			"name": "package-manager-yay",
+			"description": "Yay plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["yay", "aur", "arch", "linux"]
+		},
+		{
+			"name": "package-manager-xbps",
+			"description": "XBPS plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["xbps", "void", "linux"]
+		},
+		{
+			"name": "package-manager-snap",
+			"description": "Snap plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["snap", "universal", "linux"]
+		},
+		{
+			"name": "package-manager-rpm",
+			"description": "RPM plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["rpm", "redhat", "linux"]
+		},
+		{
+			"name": "package-manager-pip",
+			"description": "Pip plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["pip", "python", "packages"]
+		},
+		{
+			"name": "package-manager-pacman",
+			"description": "Pacman plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["pacman", "arch", "linux"]
+		},
+		{
+			"name": "package-manager-nixpkgs",
+			"description": "Nixpkgs plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["nix", "nixpkgs", "functional"]
+		},
+		{
+			"name": "package-manager-nixflake",
+			"description": "Nix Flake plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["nix", "flake", "functional"]
+		},
+		{
+			"name": "package-manager-mise",
+			"description": "Mise plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["mise", "tools", "development"]
+		},
+		{
+			"name": "package-manager-flatpak",
+			"description": "Flatpak plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["flatpak", "universal", "linux"]
+		},
+		{
+			"name": "package-manager-eopkg",
+			"description": "Eopkg plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["eopkg", "solus", "linux"]
+		},
+		{
+			"name": "package-manager-emerge",
+			"description": "Emerge plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["emerge", "portage", "gentoo", "linux"]
+		},
+		{
+			"name": "package-manager-docker",
+			"description": "Docker plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["docker", "containers", "linux"]
+		},
+		{
+			"name": "package-manager-dnf",
+			"description": "DNF plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["dnf", "fedora", "rhel", "linux"]
+		},
+		{
+			"name": "package-manager-deb",
+			"description": "DEB plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["deb", "debian", "package"]
+		},
+		{
+			"name": "package-manager-curlpipe",
+			"description": "Curl Pipe plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["curl", "download", "script"]
+		},
+		{
+			"name": "package-manager-brew",
+			"description": "Homebrew plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["brew", "homebrew", "macos", "linux"]
+		},
+		{
+			"name": "package-manager-apt",
+			"description": "APT package manager plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": [
+				"devex",
+				"plugin",
+				"apt",
+				"package-manager",
+				"debian",
+				"ubuntu",
+				"linux"
+			]
+		},
+		{
+			"name": "package-manager-appimage",
+			"description": "AppImage plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["appimage", "linux"]
+		},
+		{
+			"name": "package-manager-apk",
+			"description": "APK package manager plugin for Alpine Linux",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "apk", "package-manager", "alpine", "linux"]
+		},
+		{
+			"name": "desktop-xfce",
+			"description": "XFCE desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "xfce", "desktop", "linux", "gtk"]
+		},
+		{
+			"name": "desktop-pantheon",
+			"description": "Pantheon desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "pantheon", "desktop", "linux", "elementary"]
+		},
+		{
+			"name": "desktop-mate",
+			"description": "MATE desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "mate", "desktop", "linux", "gtk"]
+		},
+		{
+			"name": "desktop-lxqt",
+			"description": "LXQt desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "lxqt", "desktop", "linux", "qt"]
+		},
+		{
+			"name": "desktop-kde",
+			"description": "KDE Plasma desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "kde", "plasma", "desktop", "linux", "qt"]
+		},
+		{
+			"name": "desktop-gnome",
+			"description": "GNOME desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "gnome", "desktop", "linux", "gtk"]
+		},
+		{
+			"name": "desktop-cosmic",
+			"description": "COSMIC desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": [
+				"devex",
+				"plugin",
+				"cosmic",
+				"desktop",
+				"linux",
+				"system76",
+				"rust"
+			]
+		},
+		{
+			"name": "desktop-cinnamon",
+			"description": "Cinnamon desktop environment configuration plugin for DevEx CLI",
+			"version": "1.1.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "cinnamon", "desktop", "linux", "mint"]
+		},
+		{
+			"name": "desktop-budgie",
+			"description": "Budgie desktop environment configuration plugin for DevEx CLI",
+			"version": "1.2.0",
+			"platforms": [],
+			"tags": ["devex", "plugin", "budgie", "desktop", "linux", "solus"]
+		}
+	]
+}

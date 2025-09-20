@@ -1,0 +1,47 @@
+# Full-Stack Template System Configuration
+# Template Version: 1.2.0
+# Git configuration
+configure_git: true
+git_config:
+  user:
+    name: "" # Will be prompted during setup
+    email: "" # Will be prompted during setup
+  core:
+    editor: vscode
+    autocrlf: input
+  pull:
+    rebase: false
+  init:
+    defaultBranch: main
+# SSH configuration
+configure_ssh: true
+ssh_config:
+  generate_key: true
+  key_type: ed25519
+  key_comment: "DevEx Full-Stack Setup"
+# Global theme (optional)
+global_theme: "Tokyo Night"
+# System packages that should be installed
+system_packages:
+  - build-essential
+  - apt-transport-https
+  - ca-certificates
+  - gnupg
+  - lsb-release
+  - software-properties-common
+# Services to enable
+services:
+  - docker
+  - postgresql
+  - redis-server
+# Firewall rules (if needed)
+firewall_rules:
+  - port: 3000
+    protocol: tcp
+    description: "Node.js development server"
+  - port: 5432
+    protocol: tcp
+    description: "PostgreSQL database"
+  - port: 6379
+    protocol: tcp
+    description: "Redis server"

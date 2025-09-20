@@ -1,0 +1,52 @@
+version: 2
+project_name: devex-plugin-package-manager-emerge
+monorepo:
+  tag_prefix: plugin-package-manager-emerge-
+  dir: packages/package-manager-emerge
+builds:
+  - id: plugin-package-manager-emerge
+    main: .
+    binary: devex-plugin-package-manager-emerge
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+      - "-X main.commit={{.Commit}}"
+      - "-X main.date={{.Date}}"
+archives:
+  - id: plugin-package-manager-emerge-archive
+    name_template: "devex-plugin-package-manager-emerge_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+  groups:
+    - title: New Features
+      regexp: ^.*?feat(\([[:word:]]+\))??!?:.+$
+      order: 0
+    - title: Bug Fixes
+      regexp: ^.*?fix(\([[:word:]]+\))??!?:.+$
+      order: 1
+    - title: Others
+      order: 999
+release:
+  github:
+    owner: jameswlane
+    name: devex
+  name_template: "devex-plugin-package-manager-emerge v{{ .Version }}"
+  mode: replace
+  draft: false
+  prerelease: auto

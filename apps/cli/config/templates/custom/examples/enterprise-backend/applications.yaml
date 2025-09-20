@@ -1,0 +1,164 @@
+# Enterprise Backend Custom Template - Applications
+# Template Version: 1.0.0
+# Organization: Enterprise
+applications:
+  # Core Development Tools with Security Focus
+  - name: git
+    category: development
+    description: Distributed version control system with enterprise configuration
+    default: true
+    install_method: apt
+    install_command: git
+    config:
+      # Enterprise Git configuration will be applied
+      enterprise_signed_commits: true
+      commit_signing_required: true
+  # Security & Authentication
+  - name: vault
+    category: security
+    description: HashiCorp Vault for secrets management
+    default: true
+    install_method: curlpipe
+    install_command: |
+      wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+      echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+      sudo apt update && sudo apt install vault
+  - name: ldap-utils
+    category: security
+    description: LDAP utilities for enterprise authentication
+    default: true
+    install_method: apt
+    install_command: ldap-utils
+  # Containerization & Orchestration (Enterprise)
+  - name: docker
+    category: container
+    description: Container platform with enterprise security
+    default: true
+    install_method: apt
+    install_command: docker.io
+    config:
+      enterprise_registry: "registry.company.com"
+      security_scanning: true
+  - name: kubectl
+    category: container
+    description: Kubernetes command-line tool
+    default: true
+    install_method: curlpipe
+    install_command: |
+      curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+  - name: helm
+    category: container
+    description: Kubernetes package manager
+    default: true
+    install_method: curlpipe
+    install_command: |
+      curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  # Databases (Enterprise Grade)
+  - name: postgresql
+    category: database
+    description: PostgreSQL database server with enterprise extensions
+    default: true
+    install_method: apt
+    install_command: postgresql postgresql-contrib postgresql-plpython3
+  - name: redis
+    category: database
+    description: Redis with enterprise security
+    default: true
+    install_method: apt
+    install_command: redis-server
+    config:
+      auth_required: true
+      tls_enabled: true
+  # Monitoring & Observability (Enterprise)
+  - name: prometheus
+    category: monitoring
+    description: Prometheus monitoring system
+    default: true
+    install_method: curlpipe
+    install_command: |
+      wget https://github.com/prometheus/prometheus/releases/download/v2.40.0/prometheus-2.40.0.linux-amd64.tar.gz
+  - name: grafana
+    category: monitoring
+    description: Grafana dashboard and visualization
+    default: true
+    install_method: apt
+    install_command: |
+      sudo apt-get install -y adduser libfontconfig1
+      wget https://dl.grafana.com/oss/release/grafana_9.3.2_amd64.deb
+      sudo dpkg -i grafana_9.3.2_amd64.deb
+  - name: jaeger
+    category: monitoring
+    description: Jaeger distributed tracing
+    default: true
+    install_method: curlpipe
+    install_command: |
+      docker run -d --name jaeger \
+        -p 16686:16686 \
+        -p 14268:14268 \
+        jaegertracing/all-in-one:latest
+  # API & Message Queues (Enterprise)
+  - name: rabbitmq
+    category: infrastructure
+    description: RabbitMQ message broker with management
+    default: true
+    install_method: apt
+    install_command: rabbitmq-server rabbitmq-management
+  - name: apache-kafka
+    category: infrastructure
+    description: Apache Kafka for enterprise streaming
+    default: true
+    install_method: curlpipe
+    install_command: |
+      wget https://downloads.apache.org/kafka/2.13-3.3.1/kafka_2.13-3.3.1.tgz
+  # Security Tools
+  - name: clamav
+    category: security
+    description: Antivirus scanning
+    default: true
+    install_method: apt
+    install_command: clamav clamav-daemon
+  - name: fail2ban
+    category: security
+    description: Intrusion prevention system
+    default: true
+    install_method: apt
+    install_command: fail2ban
+  - name: auditd
+    category: security
+    description: Linux audit daemon for compliance
+    default: true
+    install_method: apt
+    install_command: auditd
+  # Development Tools
+  - name: make
+    category: development
+    description: Build automation tool
+    default: true
+    install_method: apt
+    install_command: make build-essential
+  - name: jq
+    category: development
+    description: Command-line JSON processor
+    default: true
+    install_method: apt
+    install_command: jq
+  - name: curl
+    category: development
+    description: Command line tool for transferring data
+    default: true
+    install_method: apt
+    install_command: curl
+  - name: htop
+    category: system
+    description: Interactive process viewer
+    default: true
+    install_method: apt
+    install_command: htop
+  # Enterprise Code Quality
+  - name: sonarqube-scanner
+    category: development
+    description: SonarQube scanner for code quality
+    default: true
+    install_method: curlpipe
+    install_command: |
+      wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip

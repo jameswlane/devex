@@ -1,0 +1,775 @@
+---
+title: System Configuration
+description: Configure Git settings, SSH keys, terminal preferences, and global system settings
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# System Configuration
+
+The `system.yaml` file manages global system settings including Git configuration, SSH settings, terminal preferences, and global themes. These settings provide the foundation for a consistent development environment.
+
+## File Location
+
+```bash
+# Default configuration
+~/.local/share/devex/config/system.yaml
+
+# User override (higher priority)
+~/.devex/system.yaml
+```
+
+## File Structure
+
+```yaml
+git:
+  aliases:               # Git command aliases
+    co: 'checkout'
+    br: 'branch'
+    # ... more aliases
+  settings:              # Git configuration settings
+    pull:
+      rebase: true
+    # ... more settings
+    
+ssh: {}                  # SSH configuration (extensible)
+
+terminal: {}             # Terminal configuration (extensible)
+
+global_theme: 'Tokyo Night'  # Global theme preference
+```
+
+## Git Configuration
+
+DevEx manages Git settings including aliases, configuration options, and global behavior settings.
+
+### Git Aliases
+
+Common Git command shortcuts that improve productivity:
+
+```yaml
+git:
+  aliases:
+    # Basic commands
+    co: 'checkout'
+    br: 'branch'
+    ci: 'commit'
+    st: 'status'
+    
+    # Advanced shortcuts
+    unstage: 'reset HEAD --'
+    last: 'log -1 HEAD'
+    visual: '!gitk'
+    
+    # Branch management
+    switch: 'checkout'
+    new-branch: 'checkout -b'
+    delete-branch: 'branch -d'
+    
+    # Log and history
+    lg: 'log --oneline --graph --decorate --all'
+    ll: 'log --oneline'
+    hist: 'log --pretty=format:"%h %ad | %s%d [%an]" --graph --date=short'
+    
+    # Diff shortcuts
+    dt: 'difftool'
+    mt: 'mergetool'
+```
+
+### Git Settings
+
+Global Git configuration that applies to all repositories:
+
+<Tabs items={['Workflow Settings', 'User Configuration', 'Merge & Diff', 'Performance']}>
+  <Tab value="Workflow Settings">
+    ```yaml
+    git:
+      settings:
+        # Rebase by default when pulling
+        pull:
+          rebase: true
+          
+        # Automatically setup tracking branches
+        push:
+          default: 'current'
+          autoSetupRemote: true
+          
+        # Branch management
+        branch:
+          autosetupmerge: 'always'
+          autosetuprebase: 'always'
+          
+        # Automatically prune deleted remote branches
+        fetch:
+          prune: true
+    ```
+  </Tab>
+  
+  <Tab value="User Configuration">
+    ```yaml
+    git:
+      settings:
+        # User information (typically overridden by user)
+        user:
+          name: 'Your Name'
+          email: 'you@example.com'
+          
+        # GPG signing (optional)
+        commit:
+          gpgsign: true
+        user:
+          signingkey: 'YOUR_GPG_KEY_ID'
+          
+        # Editor preferences
+        core:
+          editor: 'code --wait'  # VS Code
+          # editor: 'vim'        # Vim
+          # editor: 'nano'       # Nano
+    ```
+  </Tab>
+  
+  <Tab value="Merge & Diff">
+    ```yaml
+    git:
+      settings:
+        # Merge behavior
+        merge:
+          tool: 'vscode'
+          conflictstyle: 'diff3'
+          
+        # Diff tool configuration
+        diff:
+          tool: 'vscode'
+          
+        # Tool-specific settings
+        difftool:
+          prompt: false
+        mergetool:
+          prompt: false
+          keepBackup: false
+          
+        # VS Code as merge/diff tool
+        'difftool "vscode"':
+          cmd: 'code --wait --diff $LOCAL $REMOTE'
+        'mergetool "vscode"':
+          cmd: 'code --wait $MERGED'
+    ```
+  </Tab>
+  
+  <Tab value="Performance">
+    ```yaml
+    git:
+      settings:
+        # Performance optimizations
+        core:
+          preloadindex: true
+          fscache: true  # Windows optimization
+          
+        # Status optimizations
+        status:
+          showUntrackedFiles: 'all'
+          
+        # Pack optimizations
+        pack:
+          threads: 0  # Use all available cores
+          
+        # Garbage collection
+        gc:
+          auto: 256
+    ```
+  </Tab>
+</Tabs>
+
+### Complete Git Configuration Example
+
+```yaml
+git:
+  aliases:
+    # Essential shortcuts
+    co: 'checkout'
+    br: 'branch'
+    ci: 'commit'
+    st: 'status'
+    unstage: 'reset HEAD --'
+    
+    # Workflow aliases
+    switch: 'checkout'
+    new: 'checkout -b'
+    save: 'commit -am'
+    undo: 'reset --soft HEAD~1'
+    
+    # Logging and history
+    lg: 'log --oneline --graph --decorate --all'
+    hist: 'log --pretty=format:"%h %ad | %s%d [%an]" --graph --date=short'
+    last: 'log -1 HEAD'
+    
+    # Branch operations
+    branches: 'branch -a'
+    remotes: 'remote -v'
+    
+  settings:
+    # Workflow settings
+    pull:
+      rebase: true
+    push:
+      default: 'current'
+      autoSetupRemote: true
+    branch:
+      autosetupmerge: 'always'
+      autosetuprebase: 'always'
+    fetch:
+      prune: true
+      
+    # Merge and diff
+    merge:
+      conflictstyle: 'diff3'
+    diff:
+      colorMoved: 'default'
+      
+    # Core settings
+    core:
+      editor: 'code --wait'
+      autocrlf: false  # Consistent line endings
+      safecrlf: true
+      
+    # Color settings
+    color:
+      ui: 'auto'
+      branch: 'auto'
+      diff: 'auto'
+      status: 'auto'
+```
+
+## SSH Configuration
+
+SSH settings for secure connections to remote repositories and servers.
+
+### Current Structure
+
+```yaml
+ssh: {}  # Empty object - ready for extension
+```
+
+### Planned SSH Features
+
+<Steps>
+
+<Step>
+**SSH Key Management**: Automatic SSH key generation and configuration
+</Step>
+
+<Step>
+**Host Configuration**: Common SSH host configurations for development
+</Step>
+
+<Step>
+**Security Settings**: SSH security best practices and hardening
+</Step>
+
+<Step>
+**Agent Configuration**: SSH agent setup and key forwarding
+</Step>
+
+</Steps>
+
+### Future SSH Configuration
+
+```yaml
+# Planned SSH configuration structure
+ssh:
+  # SSH key management
+  keys:
+    - name: 'github'
+      type: 'ed25519'
+      comment: 'GitHub key for development'
+      file: '~/.ssh/id_ed25519_github'
+      
+    - name: 'work'
+      type: 'rsa'
+      bits: 4096
+      comment: 'Work server access'
+      file: '~/.ssh/id_rsa_work'
+      
+  # Host configurations
+  hosts:
+    - host: 'github.com'
+      hostname: 'github.com'
+      user: 'git'
+      identityFile: '~/.ssh/id_ed25519_github'
+      
+    - host: 'work-server'
+      hostname: 'work.example.com'
+      user: 'developer'
+      port: 2222
+      identityFile: '~/.ssh/id_rsa_work'
+      
+  # Global SSH settings
+  settings:
+    addKeysToAgent: 'yes'
+    useKeychain: 'yes'  # macOS
+    serverAliveInterval: 60
+    compression: 'yes'
+```
+
+## Terminal Configuration
+
+Terminal-specific settings and preferences for consistent command-line experience.
+
+### Current Structure
+
+```yaml
+terminal: {}  # Empty object - ready for extension
+```
+
+### Planned Terminal Features
+
+<Steps>
+
+<Step>
+**Profile Management**: Terminal profiles with themes and fonts
+</Step>
+
+<Step>
+**Shell Integration**: Shell-specific configurations and prompt themes
+</Step>
+
+<Step>
+**Color Schemes**: Terminal color themes matching global themes
+</Step>
+
+<Step>
+**Keybindings**: Consistent terminal shortcuts across platforms
+</Step>
+
+</Steps>
+
+### Future Terminal Configuration
+
+```yaml
+# Planned terminal configuration structure
+terminal:
+  # Default terminal preferences
+  default_shell: '/bin/zsh'
+  
+  # Terminal profiles
+  profiles:
+    - name: 'Development'
+      font: 'JetBrainsMono Nerd Font'
+      font_size: 12
+      theme: 'tokyo-night'
+      opacity: 0.95
+      
+    - name: 'Presentation'
+      font: 'CascadiaMono Nerd Font'
+      font_size: 16
+      theme: 'light'
+      opacity: 1.0
+      
+  # Color schemes
+  themes:
+    - name: 'tokyo-night'
+      background: '#1a1b26'
+      foreground: '#c0caf5'
+      colors:
+        black: '#15161e'
+        red: '#f7768e'
+        # ... more colors
+        
+  # Keybindings
+  keybindings:
+    - key: 'ctrl+shift+t'
+      action: 'new_tab'
+    - key: 'ctrl+shift+w'
+      action: 'close_tab'
+```
+
+## Global Theme Management
+
+The global theme preference coordinates color schemes across all applications.
+
+### Theme Configuration
+
+```yaml
+global_theme: 'Tokyo Night'
+```
+
+### Supported Themes
+
+<Cards>
+  <Card title="Tokyo Night" description="Dark theme with purple accents" />
+  <Card title="Kanagawa" description="Inspired by Japanese wave painting" />
+  <Card title="Gruvbox" description="Retro groove color scheme" />
+  <Card title="Catppuccin" description="Soothing pastel theme" />
+</Cards>
+
+### Theme Integration
+
+The global theme setting influences:
+
+- **Neovim colorschemes**: Automatically set matching Neovim themes
+- **Terminal themes**: Terminal color schemes
+- **Desktop themes**: GNOME/KDE theme selection
+- **VS Code themes**: Editor theme preferences
+- **Application themes**: Consistent theming across development tools
+
+```yaml
+# Theme affects multiple configurations
+global_theme: 'Tokyo Night'
+
+# This influences:
+# - ~/.config/nvim/colorscheme.lua
+# - ~/.config/gnome/theme-settings
+# - ~/.config/Code/User/settings.json (workbench.colorTheme)
+# - ~/.config/alacritty/alacritty.yml (colors)
+```
+
+## Real-World Configuration Examples
+
+### Team Development Setup
+
+```yaml
+# Standardized team configuration
+git:
+  aliases:
+    # Team-agreed shortcuts
+    co: 'checkout'
+    br: 'branch'
+    ci: 'commit'
+    st: 'status'
+    
+    # Workflow aliases
+    sync: 'pull --rebase origin main'
+    publish: 'push -u origin HEAD'
+    wip: 'commit -m "WIP: work in progress"'
+    
+  settings:
+    # Consistent workflow
+    pull:
+      rebase: true
+    push:
+      default: 'current'
+      autoSetupRemote: true
+    branch:
+      autosetupmerge: 'always'
+      
+    # Code review settings
+    merge:
+      conflictstyle: 'diff3'
+    diff:
+      tool: 'vscode'
+    difftool:
+      prompt: false
+      
+global_theme: 'Tokyo Night'  # Team standard theme
+```
+
+### Solo Developer Setup
+
+```yaml
+git:
+  aliases:
+    # Personal productivity shortcuts
+    co: 'checkout'
+    br: 'branch'
+    ci: 'commit'
+    st: 'status'
+    
+    # Extended personal aliases
+    unstage: 'reset HEAD --'
+    uncommit: 'reset --soft HEAD~1'
+    recommit: 'commit --amend --no-edit'
+    
+    # Advanced logging
+    lg: 'log --oneline --graph --decorate --all'
+    tree: 'log --graph --pretty=format:"%h -%d %s (%cr) <%an>" --abbrev-commit --all'
+    
+    # Cleanup aliases
+    cleanup: 'branch --merged | grep -v "\\*\\|main\\|master" | xargs -n 1 git branch -d'
+    prune-remote: 'remote prune origin'
+    
+  settings:
+    pull:
+      rebase: true
+    push:
+      default: 'current'
+      autoSetupRemote: true
+    fetch:
+      prune: true
+      
+    # Personal preferences
+    core:
+      editor: 'nvim'
+    commit:
+      template: '~/.gitmessage'  # Custom commit template
+      
+global_theme: 'Gruvbox'  # Personal preference
+```
+
+### Open Source Contributor Setup
+
+```yaml
+git:
+  aliases:
+    # Open source workflow
+    co: 'checkout'
+    br: 'branch'
+    ci: 'commit'
+    st: 'status'
+    
+    # Fork workflow
+    upstream: 'remote add upstream'
+    sync-upstream: 'fetch upstream && checkout main && merge upstream/main'
+    feature: 'checkout -b feature/'
+    
+    # Contribution helpers
+    review: 'log --oneline --graph origin/main..HEAD'
+    signoff: 'commit --signoff'
+    
+  settings:
+    pull:
+      rebase: true
+    push:
+      default: 'current'
+      
+    # Contribution settings
+    commit:
+      gpgsign: true  # Sign commits
+    user:
+      signingkey: 'YOUR_GPG_KEY'
+      
+    # Clean commit history
+    rebase:
+      autoStash: true
+      autoSquash: true
+      
+global_theme: 'Catppuccin'
+```
+
+## Configuration Management
+
+### Git Configuration Files
+
+DevEx manages these Git configuration locations:
+
+```bash
+# Global Git config (managed by DevEx)
+~/.gitconfig
+
+# Repository-specific configs (user-managed)
+project-dir/.git/config
+
+# System-wide config (admin-managed)
+/etc/gitconfig
+```
+
+### Configuration Precedence
+
+1. **Repository-specific** (`.git/config`) - Highest priority
+2. **User global** (`~/.gitconfig`) - DevEx managed
+3. **System-wide** (`/etc/gitconfig`) - Lowest priority
+
+### Applying System Configuration
+
+```bash
+# Apply all system configurations
+devex system apply
+
+# Apply only Git settings
+devex system apply --git
+
+# Preview changes (dry-run)
+devex system apply --dry-run
+
+# Check current Git configuration
+git config --list --show-origin
+```
+
+## Validation and Testing
+
+### Configuration Validation
+
+```bash
+# Validate system configuration
+devex config validate system
+
+# Test Git configuration
+git config --list | grep alias
+git config --list | grep pull.rebase
+
+# Verify SSH configuration
+ssh -T git@github.com
+
+# Test terminal configuration
+echo $SHELL
+```
+
+### Git Configuration Testing
+
+<Tabs items={['Aliases', 'Settings', 'Tools', 'SSH']}>
+  <Tab value="Aliases">
+    ```bash
+    # Test Git aliases
+    git co --help        # Should show checkout help
+    git br               # Should list branches
+    git lg               # Should show graph log
+    
+    # List all configured aliases
+    git config --get-regexp alias
+    ```
+  </Tab>
+  
+  <Tab value="Settings">
+    ```bash
+    # Verify pull rebase setting
+    git config pull.rebase  # Should return 'true'
+    
+    # Check push default
+    git config push.default  # Should return 'current'
+    
+    # Verify editor setting
+    git config core.editor
+    ```
+  </Tab>
+  
+  <Tab value="Tools">
+    ```bash
+    # Test diff tool
+    git difftool --help
+    
+    # Test merge tool
+    git mergetool --help
+    
+    # Verify tool configuration
+    git config diff.tool
+    git config merge.tool
+    ```
+  </Tab>
+  
+  <Tab value="SSH">
+    ```bash
+    # Test SSH connection to GitHub
+    ssh -T git@github.com
+    
+    # List SSH keys
+    ssh-add -l
+    
+    # Test SSH config
+    ssh -F ~/.ssh/config -T git@github.com
+    ```
+  </Tab>
+</Tabs>
+
+## Troubleshooting
+
+<Tabs items={['Git Issues', 'SSH Problems', 'Configuration Conflicts', 'Theme Issues']}>
+  <Tab value="Git Issues">
+    ```bash
+    # Reset Git configuration
+    git config --global --unset-all alias.co
+    git config --global --unset pull.rebase
+    
+    # Check configuration conflicts
+    git config --list --show-origin | grep pull.rebase
+    
+    # Debug Git operations
+    GIT_TRACE=1 git pull
+    
+    # Repair repository
+    git fsck
+    git gc --prune=now
+    ```
+  </Tab>
+  
+  <Tab value="SSH Problems">
+    ```bash
+    # Debug SSH connection
+    ssh -vT git@github.com
+    
+    # Check SSH agent
+    eval "$(ssh-agent -s)"
+    ssh-add ~/.ssh/id_ed25519
+    
+    # Test SSH config
+    ssh -F ~/.ssh/config -T git@github.com
+    
+    # Reset SSH permissions
+    chmod 700 ~/.ssh
+    chmod 600 ~/.ssh/id_*
+    chmod 644 ~/.ssh/id_*.pub
+    ```
+  </Tab>
+  
+  <Tab value="Configuration Conflicts">
+    ```bash
+    # Find configuration conflicts
+    git config --list --show-origin | sort
+    
+    # Check for conflicting settings
+    git config --get-all pull.rebase
+    
+    # Remove conflicting entries
+    git config --global --unset-all setting.name
+    
+    # Backup current config
+    cp ~/.gitconfig ~/.gitconfig.backup
+    ```
+  </Tab>
+  
+  <Tab value="Theme Issues">
+    ```bash
+    # Check theme application
+    echo $DEVEX_THEME
+    
+    # Verify theme files exist
+    ls ~/.local/share/devex/themes/
+    
+    # Test theme switching
+    devex theme set tokyo-night
+    
+    # Reset to default theme
+    devex theme reset
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Callout type="tip">
+**System Configuration Best Practices:**
+
+1. **Use meaningful aliases** - Short but descriptive Git shortcuts
+2. **Enable rebase by default** - Cleaner Git history
+3. **Sign commits** - For open source contributions
+4. **Use SSH keys** - More secure than HTTPS
+5. **Consistent themes** - Matching color schemes across tools
+6. **Team standards** - Shared configurations for team consistency
+7. **Regular updates** - Keep configurations current with new features
+</Callout>
+
+### Team Configuration Sharing
+
+```bash
+# Export team Git configuration
+git config --list > team-git-config.txt
+
+# Share SSH host configurations
+# Include in team documentation:
+# Host work-server
+#   HostName work.example.com
+#   User developer
+#   Port 2222
+```
+
+## Related Documentation
+
+- [Environment Configuration](/docs/configuration/environment) - Programming languages and fonts
+- [Desktop Configuration](/docs/configuration/desktop) - Desktop environment settings
+- [Configuration Validation](/docs/configuration/validation) - Validating configurations
+- [CLI Reference: System](/docs/cli-reference/system) - System management commands
+
+<Callout type="info">
+System configuration provides the foundation for a consistent development environment. Proper Git, SSH, and terminal settings ensure smooth workflows and team collaboration.
+</Callout>

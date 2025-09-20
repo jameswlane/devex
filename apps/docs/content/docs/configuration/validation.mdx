@@ -1,0 +1,845 @@
+---
+title: Configuration Validation
+description: Validate YAML syntax, schema compliance, and configuration integrity
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Configuration Validation
+
+DevEx provides comprehensive validation for all configuration files, ensuring YAML syntax correctness, schema compliance, and logical consistency. Validation helps catch configuration errors early and maintains reliable development environment setups.
+
+## Validation Overview
+
+### What Gets Validated
+
+<Cards>
+  <Card title="YAML Syntax" description="Proper YAML formatting and structure" />
+  <Card title="Schema Compliance" description="Required fields and data types" />
+  <Card title="Logical Consistency" description="Dependencies, conflicts, and constraints" />
+  <Card title="Platform Compatibility" description="Platform-specific requirements" />
+</Cards>
+
+### Validation Levels
+
+1. **Syntax Validation**: YAML parsing and basic structure
+2. **Schema Validation**: Field types, required properties, constraints
+3. **Semantic Validation**: Dependencies, conflicts, platform compatibility
+4. **Runtime Validation**: Available installers, network resources
+
+## Configuration Schema
+
+### Application Schema
+
+The application configuration schema defines strict validation rules:
+
+```yaml
+# Schema for application definitions
+application:
+  type: object
+  required: [name, description, category]
+  properties:
+    name:
+      type: string
+      pattern: "^[a-zA-Z0-9._-]+$"
+      minLength: 1
+      maxLength: 50
+    description:
+      type: string
+      minLength: 10
+      maxLength: 200
+    category:
+      type: string
+      enum: [
+        "Development", "Databases", "System Tools", 
+        "Productivity", "Communication", "Multimedia"
+      ]
+    default:
+      type: boolean
+      default: false
+    install_method:
+      type: string
+      enum: [
+        "apt", "dnf", "pacman", "brew", "winget", 
+        "chocolatey", "scoop", "flatpak", "snap", 
+        "mise", "docker", "curlpipe"
+      ]
+    dependencies:
+      type: array
+      items:
+        type: string
+        pattern: "^[a-zA-Z0-9._-]+$"
+    platforms:
+      type: array
+      items:
+        type: string
+        enum: ["linux", "macos", "windows"]
+```
+
+### Environment Schema
+
+Programming languages and environment validation:
+
+```yaml
+# Programming language schema
+programming_language:
+  type: object
+  required: [name, category, install_method, install_command]
+  properties:
+    name:
+      type: string
+      pattern: "^[a-zA-Z0-9. ]+$"
+    category:
+      type: string
+      const: "Programming Languages"
+    install_method:
+      type: string
+      const: "mise"
+    install_command:
+      type: string
+      pattern: "^[a-zA-Z0-9@.:-]+$"
+    dependencies:
+      type: array
+      items:
+        type: string
+
+# Font schema
+font:
+  type: object
+  required: [name, method]
+  properties:
+    name:
+      type: string
+      minLength: 1
+    method:
+      type: string
+      enum: ["url", "package", "oh-my-posh", "homebrew"]
+    url:
+      type: string
+      format: uri
+      # Required when method is "url"
+    destination:
+      type: string
+      pattern: "^[~./].*"
+```
+
+### Desktop Schema
+
+Desktop environment configuration validation:
+
+```yaml
+# Desktop application schema
+desktop_application:
+  type: object
+  required: [name, description, category]
+  properties:
+    desktop_environments:
+      type: array
+      items:
+        type: string
+        enum: ["gnome", "kde", "xfce", "i3", "macos", "windows", "all"]
+    linux:
+      $ref: "#/definitions/platform_config"
+    macos:
+      $ref: "#/definitions/platform_config"
+    windows:
+      $ref: "#/definitions/platform_config"
+
+# Platform configuration schema
+platform_config:
+  type: object
+  required: [install_method, install_command]
+  properties:
+    install_method:
+      type: string
+    install_command:
+      type: string
+    official_support:
+      type: boolean
+      default: true
+    alternatives:
+      type: array
+      items:
+        $ref: "#/definitions/platform_config"
+```
+
+### System Schema
+
+System configuration validation:
+
+```yaml
+# Git configuration schema
+git_config:
+  type: object
+  properties:
+    aliases:
+      type: object
+      patternProperties:
+        "^[a-zA-Z0-9-]+$":
+          type: string
+    settings:
+      type: object
+      properties:
+        pull:
+          type: object
+          properties:
+            rebase:
+              type: boolean
+        push:
+          type: object
+          properties:
+            default:
+              type: string
+              enum: ["simple", "current", "upstream", "matching"]
+
+# Theme validation
+global_theme:
+  type: string
+  enum: [
+    "Tokyo Night", "Gruvbox", "Catppuccin", 
+    "Dracula", "Nord", "One Dark", "Solarized"
+  ]
+```
+
+## Validation Commands
+
+### Basic Validation
+
+<Tabs items={['All Configs', 'Specific Config', 'Syntax Only', 'Deep Validation']}>
+  <Tab value="All Configs">
+    ```bash
+    # Validate all configuration files
+    devex config validate
+    
+    # Validate with detailed output
+    devex config validate --verbose
+    
+    # Validate and show warnings
+    devex config validate --warnings
+    
+    # Quick validation (syntax only)
+    devex config validate --quick
+    ```
+  </Tab>
+  
+  <Tab value="Specific Config">
+    ```bash
+    # Validate specific configuration
+    devex config validate applications
+    devex config validate environment
+    devex config validate desktop
+    devex config validate system
+    
+    # Validate specific application
+    devex config validate --app docker
+    
+    # Validate specific section
+    devex config validate applications --section development
+    ```
+  </Tab>
+  
+  <Tab value="Syntax Only">
+    ```bash
+    # Check YAML syntax only
+    devex config validate --syntax-only
+    
+    # Parse YAML without schema validation
+    devex config parse applications.yaml
+    
+    # Check file structure
+    devex config structure --file applications.yaml
+    ```
+  </Tab>
+  
+  <Tab value="Deep Validation">
+    ```bash
+    # Full validation including external checks
+    devex config validate --deep
+    
+    # Validate with network connectivity checks
+    devex config validate --check-urls
+    
+    # Validate with installer availability
+    devex config validate --check-installers
+    
+    # Validate platform compatibility
+    devex config validate --platform-check
+    ```
+  </Tab>
+</Tabs>
+
+### Validation Output
+
+DevEx provides structured validation output:
+
+```bash
+# Example validation output
+$ devex config validate applications
+
+✓ YAML Syntax: Valid
+✓ Schema Compliance: Valid
+✗ Dependency Check: 2 issues found
+✗ Platform Compatibility: 1 issue found
+
+Issues:
+[ERROR] applications.yaml:45 - Missing dependency 'curl' for application 'docker'
+[ERROR] applications.yaml:67 - Dependency cycle detected: git -> gitui -> git
+[WARN]  applications.yaml:123 - Application 'xcode' not available on linux platform
+[INFO]  Found 23 applications, 15 marked as default
+
+Recommendations:
+- Add 'curl' to docker dependencies
+- Resolve circular dependency between git and gitui
+- Consider platform-specific application definitions
+```
+
+## Common Validation Issues
+
+### YAML Syntax Errors
+
+<Tabs items={['Indentation', 'Quotes', 'Lists', 'Special Characters']}>
+  <Tab value="Indentation">
+    ```yaml
+    # ❌ Incorrect indentation
+    applications:
+      development:
+      - name: git  # Should be indented under development
+        description: "Version control"
+        
+    # ✅ Correct indentation
+    applications:
+      development:
+        - name: git
+          description: "Version control"
+    ```
+  </Tab>
+  
+  <Tab value="Quotes">
+    ```yaml
+    # ❌ Incorrect quotes
+    applications:
+      development:
+        - name: docker
+          description: Container platform  # Missing quotes with special chars
+          
+    # ✅ Correct quotes
+    applications:
+      development:
+        - name: docker
+          description: "Container platform"
+    ```
+  </Tab>
+  
+  <Tab value="Lists">
+    ```yaml
+    # ❌ Incorrect list format
+    dependencies: curl, git, make  # Should be YAML list
+    
+    # ✅ Correct list format
+    dependencies:
+      - curl
+      - git
+      - make
+    ```
+  </Tab>
+  
+  <Tab value="Special Characters">
+    ```yaml
+    # ❌ Unescaped special characters
+    command: echo "Hello: World"  # Colon needs escaping in quotes
+    
+    # ✅ Properly escaped
+    command: 'echo "Hello: World"'
+    # or
+    command: "echo \"Hello: World\""
+    ```
+  </Tab>
+</Tabs>
+
+### Schema Validation Errors
+
+<Steps>
+
+<Step>
+**Missing Required Fields**: All applications must have name, description, category
+</Step>
+
+<Step>
+**Invalid Field Types**: Boolean fields cannot contain strings
+</Step>
+
+<Step>
+**Enum Violations**: Category must be one of predefined values
+</Step>
+
+<Step>
+**Pattern Mismatches**: Names must follow naming conventions
+</Step>
+
+</Steps>
+
+```yaml
+# ❌ Schema violations
+applications:
+  development:
+    - name: ""  # Empty name not allowed
+      # Missing required description and category
+      default: "yes"  # Should be boolean, not string
+      category: "Tools"  # Not in allowed enum values
+      
+# ✅ Schema compliant
+applications:
+  development:
+    - name: "git"
+      description: "Distributed version control system"
+      category: "Development"
+      default: true
+```
+
+### Dependency Validation Issues
+
+Common dependency problems:
+
+<Tabs items={['Missing Dependencies', 'Circular Dependencies', 'Platform Conflicts', 'Version Conflicts']}>
+  <Tab value="Missing Dependencies">
+    ```yaml
+    # ❌ Missing dependency
+    applications:
+      development:
+        - name: docker-compose
+          dependencies:
+            - docker  # OK
+            - python  # Not defined in configuration
+            
+    # ✅ All dependencies defined
+    applications:
+      development:
+        - name: python
+          # python definition
+        - name: docker
+          # docker definition  
+        - name: docker-compose
+          dependencies:
+            - docker
+            - python
+    ```
+  </Tab>
+  
+  <Tab value="Circular Dependencies">
+    ```yaml
+    # ❌ Circular dependency
+    applications:
+      development:
+        - name: git
+          dependencies:
+            - gitui
+        - name: gitui
+          dependencies:
+            - git  # Creates cycle
+            
+    # ✅ No circular dependencies
+    applications:
+      development:
+        - name: git
+          # No dependencies on gitui
+        - name: gitui
+          dependencies:
+            - git  # One-way dependency
+    ```
+  </Tab>
+  
+  <Tab value="Platform Conflicts">
+    ```yaml
+    # ❌ Platform conflict
+    applications:
+      development:
+        - name: xcode
+          platforms: ["macos"]
+          dependencies:
+            - apt  # APT not available on macOS
+            
+    # ✅ Platform-aware dependencies
+    applications:
+      development:
+        - name: xcode
+          platforms: ["macos"]
+          macos:
+            dependencies:
+              - homebrew  # macOS-appropriate dependency
+    ```
+  </Tab>
+  
+  <Tab value="Version Conflicts">
+    ```yaml
+    # ❌ Version conflict
+    programming_languages:
+      - name: Python 3.8
+        install_command: 'python@3.8'
+      - name: Python 3.11
+        install_command: 'python@3.11'  # Can conflict
+        
+    # ✅ Version management through mise
+    programming_languages:
+      - name: Python
+        install_command: 'python@latest'
+        # mise handles multiple versions automatically
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Validation
+
+### Custom Validation Rules
+
+DevEx supports custom validation rules for organization-specific requirements:
+
+```yaml
+# .devex/validation-rules.yaml
+custom_rules:
+  - name: "require_security_tools"
+    description: "All configurations must include security tools"
+    rule: |
+      applications.development must contain {
+        name: "1password" or name: "bitwarden"
+      }
+    severity: "error"
+    
+  - name: "standardize_editor"
+    description: "Limit editor choices to approved list"
+    rule: |
+      applications.development.name in ["vscode", "nvim", "emacs"]
+      when category == "Editors"
+    severity: "warning"
+    
+  - name: "version_pinning"
+    description: "Production environments must pin versions"
+    rule: |
+      programming_languages.install_command must not contain "@latest"
+      when environment_type == "production"
+    severity: "error"
+```
+
+### Template Validation
+
+Template-specific validation ensures template integrity:
+
+```bash
+# Validate template structure
+devex template validate web-development
+
+# Check template variables
+devex template validate --check-vars web-development
+
+# Validate template on all platforms
+devex template validate --all-platforms mobile-development
+
+# Test template application
+devex template validate --apply-test data-science
+```
+
+### Network Validation
+
+Validate external resources and URLs:
+
+```bash
+# Check URL accessibility
+devex config validate --check-urls
+
+# Validate repository access
+devex config validate --check-repos
+
+# Test package availability
+devex config validate --check-packages
+
+# Verify installer functionality
+devex config validate --test-installers
+```
+
+## Validation in CI/CD
+
+### Pre-commit Validation
+
+Set up validation in Git pre-commit hooks:
+
+```bash
+# .git/hooks/pre-commit
+#!/bin/bash
+echo "Validating DevEx configuration..."
+
+# Validate all configurations
+if ! devex config validate --quick; then
+    echo "❌ Configuration validation failed"
+    echo "Run 'devex config validate' for details"
+    exit 1
+fi
+
+echo "✅ Configuration validation passed"
+```
+
+### GitHub Actions Validation
+
+```yaml
+# .github/workflows/validate-config.yml
+name: Validate DevEx Configuration
+
+on:
+  push:
+    paths:
+      - '.devex/**'
+      - 'config/**'
+  pull_request:
+    paths:
+      - '.devex/**'
+      - 'config/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Install DevEx
+        run: |
+          # Review security guide before installation
+          wget -qO- https://devex.sh/install | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          
+      - name: Validate Configuration
+        run: |
+          devex config validate --verbose
+          
+      - name: Check Template Validity
+        run: |
+          devex template validate --all
+          
+      - name: Test Configuration Application
+        run: |
+          devex install --dry-run --all
+```
+
+### Team Validation Workflow
+
+<Steps>
+
+<Step>
+**Local Validation**: Developers validate before committing
+</Step>
+
+<Step>
+**Pre-commit Hooks**: Automatic validation on commit
+</Step>
+
+<Step>
+**CI Pipeline**: Validation in pull requests
+</Step>
+
+<Step>
+**Regular Audits**: Periodic validation of live configurations
+</Step>
+
+</Steps>
+
+## Fixing Validation Issues
+
+### Auto-fix Common Issues
+
+DevEx can automatically fix some validation issues:
+
+```bash
+# Auto-fix formatting issues
+devex config fix --format
+
+# Fix missing required fields with defaults
+devex config fix --add-defaults
+
+# Sort and organize configuration
+devex config fix --organize
+
+# Fix dependency order
+devex config fix --dependencies
+```
+
+### Manual Fix Guidelines
+
+<Tabs items={['YAML Fixes', 'Schema Fixes', 'Dependency Fixes', 'Platform Fixes']}>
+  <Tab value="YAML Fixes">
+    ```bash
+    # Check YAML syntax with detailed errors
+    devex config parse applications.yaml --verbose
+    
+    # Use YAML linter
+    yamllint ~/.devex/applications.yaml
+    
+    # Format YAML correctly
+    devex config format applications.yaml
+    ```
+  </Tab>
+  
+  <Tab value="Schema Fixes">
+    ```bash
+    # Show schema requirements
+    devex config schema applications
+    
+    # Validate against specific schema version
+    devex config validate --schema-version 2.1.0
+    
+    # Generate template with required fields
+    devex config generate --template application
+    ```
+  </Tab>
+  
+  <Tab value="Dependency Fixes">
+    ```bash
+    # Analyze dependency graph
+    devex config dependencies --graph
+    
+    # Find missing dependencies
+    devex config dependencies --missing
+    
+    # Resolve circular dependencies
+    devex config dependencies --fix-cycles
+    ```
+  </Tab>
+  
+  <Tab value="Platform Fixes">
+    ```bash
+    # Check platform compatibility
+    devex config validate --platform linux
+    
+    # Show platform-specific issues
+    devex config platform-check
+    
+    # Generate platform-specific config
+    devex config generate --platform macos
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Callout type="tip">
+**Configuration Validation Best Practices:**
+
+1. **Validate Early**: Check configurations before committing
+2. **Use Pre-commit Hooks**: Automatic validation in development workflow
+3. **Regular Audits**: Periodic validation of live configurations
+4. **Document Custom Rules**: Clear documentation for organization-specific validation
+5. **Test Templates**: Validate templates on all target platforms
+6. **Monitor Dependencies**: Regular checks for missing or outdated dependencies
+7. **Version Control Validation Rules**: Track changes to validation requirements
+</Callout>
+
+### Validation Workflow
+
+```bash
+# Daily development workflow
+git add .devex/
+devex config validate        # Local validation
+git commit -m "Update config"  # Triggers pre-commit validation
+
+# Team configuration changes
+devex config validate --deep  # Comprehensive validation
+devex template validate --all  # Template validation
+devex config test-apply --dry-run  # Test actual application
+```
+
+### Error Prevention
+
+```yaml
+# Use descriptive names and documentation
+applications:
+  development:
+    - name: "docker"
+      description: "Container platform for application deployment"
+      category: "Development"
+      # Clear, specific configuration reduces validation errors
+      
+    # Document custom or complex configurations
+    - name: "custom-tool"
+      description: "Company-specific development tool"
+      # NOTE: This tool requires VPN access
+      install_method: "curlpipe"
+      install_command: "internal.company.com/tools/install.sh"
+```
+
+## Troubleshooting Validation
+
+<Tabs items={['Validation Failures', 'Schema Errors', 'Performance Issues', 'Network Problems']}>
+  <Tab value="Validation Failures">
+    ```bash
+    # Debug validation with maximum verbosity
+    devex config validate --debug --verbose
+    
+    # Check specific validation rule
+    devex config validate --rule dependency_check
+    
+    # Skip problematic validations temporarily
+    devex config validate --skip-network-checks
+    
+    # Validate with specific schema version
+    devex config validate --schema-version 2.0.0
+    ```
+  </Tab>
+  
+  <Tab value="Schema Errors">
+    ```bash
+    # Show full schema specification
+    devex config schema --full applications
+    
+    # Validate with schema debugging
+    devex config validate --schema-debug
+    
+    # Check schema version compatibility
+    devex config schema --version-check
+    
+    # Generate valid example
+    devex config example applications
+    ```
+  </Tab>
+  
+  <Tab value="Performance Issues">
+    ```bash
+    # Quick validation for large configs
+    devex config validate --quick --parallel
+    
+    # Profile validation performance
+    devex config validate --profile
+    
+    # Validate in chunks
+    devex config validate --section development
+    
+    # Cache validation results
+    devex config validate --cache
+    ```
+  </Tab>
+  
+  <Tab value="Network Problems">
+    ```bash
+    # Skip network-dependent validations
+    devex config validate --offline
+    
+    # Test network connectivity
+    devex config test-connectivity
+    
+    # Validate with timeout settings
+    devex config validate --timeout 30
+    
+    # Use proxy for validation
+    devex config validate --proxy http://proxy:8080
+    ```
+  </Tab>
+</Tabs>
+
+## Related Documentation
+
+- [Configuration Index](/docs/configuration) - Overview of all configurations
+- [Applications Configuration](/docs/configuration/applications) - Application validation specifics
+- [Template System](/docs/configuration/templates) - Template validation
+- [CLI Reference: Config](/docs/cli-reference/config) - Configuration management commands
+
+<Callout type="info">
+Configuration validation ensures reliable, consistent development environments by catching errors early and enforcing best practices. Regular validation prevents configuration drift and maintains team standards.
+</Callout>

@@ -1,0 +1,9 @@
+name: Rust
+description: Rust programming language
+category: Programming Languages
+install_method: mise
+install_command: rust@latest
+uninstall_command: rust
+default: false
+dependencies:
+  - mise

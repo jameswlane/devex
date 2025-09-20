@@ -1,0 +1,9 @@
+{
+	"id": "001_add_rate_limit_tables",
+	"name": "Add Rate Limiting Tables",
+	"description": "Create tables for advanced rate limiting and API usage tracking",
+	"warning": "This migration adds new tables for rate limiting. Existing functionality will not be affected.",
+	"up": "CREATE TABLE IF NOT EXISTS api_rate_limits (\n  id VARCHAR(255) PRIMARY KEY,\n  endpoint VARCHAR(500) NOT NULL,\n  ip_address VARCHAR(45) NOT NULL,\n  requests_count INT NOT NULL DEFAULT 0,\n  window_start TIMESTAMP NOT NULL,\n  window_end TIMESTAMP NOT NULL,\n  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n  INDEX idx_rate_limits_endpoint_ip (endpoint, ip_address),\n  INDEX idx_rate_limits_window (window_start, window_end),\n  INDEX idx_rate_limits_updated (updated_at)\n);\n\nCREATE TABLE IF NOT EXISTS api_usage_logs (\n  id BIGINT AUTO_INCREMENT PRIMARY KEY,\n  endpoint VARCHAR(500) NOT NULL,\n  method VARCHAR(10) NOT NULL,\n  ip_address VARCHAR(45) NOT NULL,\n  user_agent TEXT,\n  status_code INT NOT NULL,\n  response_time_ms INT NOT NULL,\n  rate_limit_remaining INT,\n  timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n  INDEX idx_usage_logs_endpoint (endpoint),\n  INDEX idx_usage_logs_ip (ip_address),\n  INDEX idx_usage_logs_timestamp (timestamp),\n  INDEX idx_usage_logs_status (status_code)\n);",
+	"down": "DROP TABLE IF EXISTS api_usage_logs;\nDROP TABLE IF EXISTS api_rate_limits;",
+	"checksum": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456"
+}

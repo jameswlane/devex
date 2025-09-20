@@ -1,0 +1,365 @@
+---
+title: DevEx Configuration Guide
+description: Complete guide to configuring DevEx for your development environment
+---
+
+# DevEx Configuration Guide
+
+DevEx uses a modern, cross-platform configuration system that automatically detects your operating system and applies the appropriate settings. This guide covers all configuration files, their purposes, and where they should be stored.
+
+## Configuration File Locations
+
+DevEx follows the XDG Base Directory Specification for configuration storage:
+
+- **Default configs**: `~/.local/share/devex/config/`
+- **User overrides**: `~/.devex/`
+
+The system loads default configurations first, then applies any user overrides from the `~/.devex/` directory.
+
+## Configuration Files Overview
+
+DevEx uses four main configuration files:
+
+<Cards>
+  <Card title="applications.yaml" href="#applications-configuration" />
+  <Card title="environment.yaml" href="#environment-configuration" />
+  <Card title="desktop.yaml" href="#desktop-configuration" />
+  <Card title="system.yaml" href="#system-configuration" />
+</Cards>
+
+---
+
+## Applications Configuration
+
+**File**: `applications.yaml`  
+**Purpose**: Defines all installable applications, development tools, databases, and system utilities
+
+### Structure
+
+```yaml
+applications:
+  development:
+    - name: "Application Name"
+      description: "Application description"
+      category: "Development Tools"
+      default: true
+      linux:
+        install_method: "apt"
+        install_command: "package-name"
+        uninstall_command: "package-name"
+        dependencies:
+          - "git"
+          - "curl"
+        pre_install:
+          - shell: "command to run before install"
+        post_install:
+          - shell: "command to run after install"
+        config_files:
+          - source: "~/.local/share/devex/assets/app/config.yml"
+            destination: "~/.config/app/config.yml"
+        apt_sources:
+          - key_source: "https://example.com/key.gpg"
+            key_name: "/etc/apt/keyrings/app-keyring.gpg"
+            source_repo: "deb [signed-by=/etc/apt/keyrings/app-keyring.gpg] https://repo.example.com stable main"
+            source_name: "/etc/apt/sources.list.d/app.list"
+            require_dearmor: true
+      macos:
+        install_method: "brew"
+        install_command: "application-name"
+      windows:
+        install_method: "winget"
+        install_command: "Publisher.ApplicationName"
+
+  databases:
+    # Database applications configuration
+
+  system_tools:
+    # System utility applications
+
+  optional:
+    # Optional applications (default: false)
+```
+
+### Cross-Platform Support
+
+Each application can define platform-specific configurations:
+
+- **linux**: Configuration for Linux distributions
+- **macos**: Configuration for macOS systems  
+- **windows**: Configuration for Windows systems
+
+### Installation Methods
+
+DevEx supports multiple installation methods per platform:
+
+**Linux:**
+- `apt` - APT package manager (Debian/Ubuntu)
+- `dnf` - DNF package manager (Fedora/RHEL) 
+- `pacman` - Pacman package manager (Arch)
+- `flatpak` - Flatpak universal packages
+- `snap` - Snap packages
+- `mise` - Programming language version manager
+- `curlpipe` - Download and execute scripts
+- `docker` - Docker containers
+
+**macOS:**
+- `brew` - Homebrew package manager
+- `mas` - Mac App Store
+- `mise` - Programming language version manager
+
+**Windows:**
+- `winget` - Windows Package Manager
+- `chocolatey` - Chocolatey package manager
+- `scoop` - Scoop package manager
+
+---
+
+## Environment Configuration
+
+**File**: `environment.yaml`  
+**Purpose**: Configures programming languages, fonts, and shell environments
+
+### Structure
+
+```yaml
+programming_languages:
+  - name: "Node.js LTS"
+    description: "JavaScript runtime environment"
+    category: "Programming Languages"
+    install_method: "mise"
+    install_command: "node@lts"
+    default: true
+    shell_updates:
+      - "export NODE_OPTIONS='--max-old-space-size=4096'"
+
+  - name: "Python 3.11"
+    install_method: "mise"
+    install_command: "python@3.11"
+    post_install:
+      - shell: "pip install --upgrade pip"
+      - shell: "pip install virtualenv"
+
+fonts:
+  - name: "JetBrains Mono"
+    description: "A typeface for developers"
+    method: "url"
+    url: "https://download.jetbrains.com/fonts/JetBrainsMono-2.304.zip"
+    destination: "~/.local/share/fonts/"
+    post_install:
+      - shell: "fc-cache -fv"
+
+shell:
+  default_shell: "zsh"
+  oh_my_zsh: true
+  plugins:
+    - "git"
+    - "docker"
+    - "kubectl"
+  theme: "agnoster"
+```
+
+### Programming Language Management
+
+DevEx uses [mise](https://mise.jdx.dev/) for managing programming language versions:
+
+- **Automatic version detection** from `.tool-versions` files
+- **Global and project-specific** version management
+- **Multiple language support**: Node.js, Python, Go, Ruby, Java, etc.
+
+### Font Installation
+
+Fonts can be installed via:
+- **URL download**: Direct download from URLs
+- **Package managers**: Through system package managers
+- **Git repositories**: Clone font repositories
+
+---
+
+## Desktop Configuration  
+
+**File**: `desktop.yaml`  
+**Purpose**: Desktop environment settings, themes, and window manager configurations
+
+### Structure
+
+```yaml
+desktop_environments:
+  gnome:
+    platforms: ["linux"]
+    themes:
+      - name: "Adwaita Dark"
+        type: "gtk"
+        package: "adwaita-icon-theme"
+        settings:
+          - key: "org.gnome.desktop.interface.gtk-theme"
+            value: "Adwaita-dark"
+          - key: "org.gnome.desktop.wm.preferences.theme"
+            value: "Adwaita-dark"
+    
+    extensions:
+      - name: "Dash to Dock"
+        uuid: "dash-to-dock@micxgx.gmail.com"
+        settings:
+          dock-position: "BOTTOM"
+          dock-size-limit: 48
+    
+    settings:
+      - key: "org.gnome.desktop.interface.enable-hot-corners"
+        value: false
+      - key: "org.gnome.desktop.interface.show-battery-percentage"
+        value: true
+    
+    keybindings:
+      - key: "org.gnome.desktop.wm.keybindings.switch-to-workspace-1"
+        value: "['<Super>1']"
+
+  kde:
+    platforms: ["linux"]
+    # KDE Plasma configuration
+
+  macos:
+    platforms: ["darwin"]
+    dock:
+      position: "bottom"
+      autohide: true
+      icon_size: 48
+    
+    defaults:
+      - domain: "com.apple.dock"
+        key: "orientation"
+        value: "bottom"
+```
+
+### Desktop Environment Support
+
+- **GNOME**: Full support for themes, extensions, keybindings, and settings
+- **KDE Plasma**: Theme and configuration management
+- **macOS**: Dock settings and system defaults
+- **Windows**: Future support for Windows 11 customization
+
+---
+
+## System Configuration
+
+**File**: `system.yaml`  
+**Purpose**: Git configuration, SSH settings, and terminal preferences
+
+### Structure
+
+```yaml
+git:
+  user:
+    name: "Your Name"
+    email: "your.email@example.com"
+  
+  aliases:
+    co: "checkout"
+    br: "branch"
+    ci: "commit"
+    st: "status"
+    unstage: "reset HEAD --"
+    last: "log -1 HEAD"
+    visual: "!gitk"
+  
+  settings:
+    - key: "core.editor"
+      value: "nvim"
+    - key: "init.defaultBranch"
+      value: "main"
+    - key: "pull.rebase"
+      value: "false"
+
+ssh:
+  config:
+    - host: "github.com"
+      hostname: "github.com"
+      user: "git"
+      identity_file: "~/.ssh/id_ed25519"
+    
+    - host: "production"
+      hostname: "prod.example.com"
+      user: "deploy"
+      port: 2222
+
+terminal:
+  default: "gnome-terminal"
+  profiles:
+    - name: "Development"
+      background_color: "#1e1e1e"
+      foreground_color: "#d4d4d4"
+      font: "JetBrains Mono 12"
+```
+
+### Git Configuration
+
+DevEx automatically configures Git with:
+- **User information**: Name and email
+- **Useful aliases**: Common Git shortcuts
+- **Best practices**: Default branch, pull behavior, editor settings
+
+### SSH Configuration
+
+- **Host configurations**: Predefined SSH connections
+- **Key management**: SSH key generation and configuration
+- **Security settings**: Proper permissions and key types
+
+---
+
+## Configuration Validation
+
+DevEx includes built-in validation for all configuration files:
+
+```bash
+# Validate all configurations
+devex config validate
+
+# Validate specific file
+devex config validate --file applications.yaml
+
+# Show configuration status
+devex config status
+```
+
+### Validation Features
+
+- **YAML syntax checking**: Ensures valid YAML format
+- **Schema validation**: Validates against expected structure
+- **Cross-reference checking**: Verifies dependencies exist
+- **Platform compatibility**: Checks platform-specific configurations
+
+---
+
+## Override Configurations
+
+You can override any default configuration by creating files in `~/.devex/`:
+
+```bash
+# Create user override directory
+mkdir -p ~/.devex
+
+# Override specific applications
+cp ~/.local/share/devex/config/applications.yaml ~/.devex/
+# Edit ~/.devex/applications.yaml with your changes
+
+# Override just environment settings
+cp ~/.local/share/devex/config/environment.yaml ~/.devex/
+```
+
+### Override Priority
+
+1. **User overrides** (`~/.devex/`) - highest priority
+2. **Default configs** (`~/.local/share/devex/config/`) - fallback
+3. **Built-in defaults** - last resort
+
+---
+
+## Platform Detection
+
+DevEx automatically detects your platform and applies appropriate configurations:
+
+- **Operating System**: Linux, macOS, Windows
+- **Linux Distribution**: Ubuntu, Debian, Fedora, Arch, etc.
+- **Desktop Environment**: GNOME, KDE, XFCE, etc.
+- **Architecture**: x86_64, arm64, etc.
+
+This ensures that the right package managers and configurations are used for your system.

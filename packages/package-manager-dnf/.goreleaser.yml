@@ -1,0 +1,52 @@
+version: 2
+project_name: devex-plugin-package-manager-dnf
+monorepo:
+  tag_prefix: plugin-package-manager-dnf-
+  dir: packages/package-manager-dnf
+builds:
+  - id: plugin-package-manager-dnf
+    main: .
+    binary: devex-plugin-package-manager-dnf
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - "-s -w"
+      - "-X main.version={{.Version}}"
+      - "-X main.commit={{.Commit}}"
+      - "-X main.date={{.Date}}"
+archives:
+  - id: plugin-package-manager-dnf-archive
+    name_template: "devex-plugin-package-manager-dnf_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+checksum:
+  name_template: checksums.txt
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+  groups:
+    - title: New Features
+      regexp: ^.*?feat(\([[:word:]]+\))??!?:.+$
+      order: 0
+    - title: Bug Fixes
+      regexp: ^.*?fix(\([[:word:]]+\))??!?:.+$
+      order: 1
+    - title: Others
+      order: 999
+release:
+  github:
+    owner: jameswlane
+    name: devex
+  name_template: "devex-plugin-package-manager-dnf v{{ .Version }}"
+  mode: replace
+  draft: false
+  prerelease: auto

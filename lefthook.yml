@@ -1,0 +1,230 @@
+pre-commit:
+  parallel: false
+  commands:
+    check-large-files:
+      run: |
+        git diff --cached --name-only | \
+          xargs -I {} find {} -size +10M 2>/dev/null | \
+          head -1 | grep -q . && echo "Large files detected" && exit 1 || exit 0
+      stage_fixed: true
+    yamlfmt:
+      glob: "*.{yml,yaml}"
+      run: yamlfmt {staged_files}
+      stage_fixed: true
+    yamllint:
+      glob: "*.{yml,yaml}"
+      run: yamllint {staged_files}
+    biome:
+      glob: '*.{json}'
+      run: pnpm exec biome check --write {staged_files}
+      stage_fixed: true
+    go-fmt:
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+    go-imports:
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: goimports -w {staged_files}
+      stage_fixed: true
+    go-lint:
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: golangci-lint run --fix
+      stage_fixed: true
+    plugin-go-fmt:
+      root: 'packages/'
+      glob: '**/*.go'
+      run: |
+        for file in {staged_files}; do
+          plugin_dir=$(dirname "$file")
+          case "$plugin_dir" in
+            *plugin-sdk*|*apps*) ;;
+            *)
+              echo "Formatting Go files in $plugin_dir"
+              (cd "$plugin_dir" && gofmt -w *.go 2>/dev/null && goimports -w *.go 2>/dev/null)
+              ;;
+          esac
+        done
+      stage_fixed: true
+    plugin-go-mod-tidy:
+      root: 'packages/'
+      glob: '{**/go.mod,**/main.go}'
+      run: |
+        for file in {staged_files}; do
+          plugin_dir=$(dirname "$file")
+          if [ -f "$plugin_dir/go.mod" ]; then
+            case "$plugin_dir" in
+              *apps*) ;;
+              *)
+                echo "Updating dependencies for $plugin_dir"
+                (cd "$plugin_dir" && go mod tidy)
+                ;;
+            esac
+          fi
+        done
+      stage_fixed: true
+    plugin-package-json-check:
+      root: 'packages/'
+      glob: '**/package.json'
+      run: |
+        for file in {staged_files}; do
+          case "$file" in
+            "package.json"|*"apps/"*) continue ;;
+          esac
+          echo "Validating package.json: $file"
+          if ! jq empty "$file" >/dev/null 2>&1; then
+            echo "❌ Invalid JSON in $file" && exit 1
+          fi
+          case "$file" in
+            *"packages/"*)
+              case "$file" in
+                *"plugin-sdk"*) continue ;;
+              esac
+              if ! jq -e '.name and .version and .description' "$file" >/dev/null; then
+                echo "❌ Missing required fields in $file" && exit 1
+              fi
+              ;;
+          esac
+        done
+    biome-web:
+      root: 'apps/web/'
+      glob: '*.{js,ts,jsx,tsx}'
+      run: pnpm exec biome check --write {staged_files}
+      stage_fixed: true
+    biome-docs:
+      root: 'apps/docs/'
+      glob: '*.{js,ts,jsx,tsx}'
+      run: pnpm exec biome check --write {staged_files}
+      stage_fixed: true
+    turborepo-build-changed:
+      run: |
+        echo "🔨 Building changed packages with Turborepo..."
+        pnpm build --filter="...[HEAD~1]"
+      stage_fixed: true
+    turborepo-lint-changed:
+      run: |
+        echo "🧹 Linting changed packages with Turborepo..."
+        pnpm lint --filter="...[HEAD~1]" --concurrency=1
+      stage_fixed: true
+commit-msg:
+  commands:
+    commitlint:
+      run: pnpm commitlint --edit $1
+post-commit:
+  commands:
+    package-status:
+      run: |
+        # Check if any package files were modified in the last commit
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/"; then
+          echo ""
+          echo "🔧 Package changes detected in your commit!"
+          echo "📋 Run 'pnpm build --filter=\"...[HEAD~1]\"' to build changed packages"
+          echo "🧹 Run 'pnpm lint --filter=\"...[HEAD~1]\"' to lint changed packages"
+          echo "🧪 Run 'pnpm test --filter=\"...[HEAD~1]\"' to test changed packages"
+          echo ""
+        fi
+pre-push:
+  parallel: true
+  commands:
+    turborepo-build:
+      run: |
+        echo "🏗️ Building changed packages only for faster pre-push..."
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+          pnpm build --filter="...[HEAD~1]" || {
+            echo "❌ Build failed - see details above"
+            echo "💡 Fix the build issues and try again"
+            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
+            exit 1
+          }
+        else
+          echo "✅ No package changes detected, skipping build"
+        fi
+    turborepo-lint:
+      run: |
+        echo "🧹 Linting changed packages only for faster pre-push..."
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+          pnpm lint --filter="...[HEAD~1]" --concurrency=1 || {
+            echo "❌ Lint failed - see details above"
+            echo "💡 Fix lint issues with: pnpm lint --filter=\"...[HEAD~1]\" --fix --concurrency=1"
+            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
+            exit 1
+          }
+        else
+          echo "✅ No package changes detected, skipping lint"
+        fi
+    turborepo-test:
+      run: |
+        echo "🧪 Testing changed packages only for faster pre-push..."
+        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+          pnpm test --filter="...[HEAD~1]" || {
+            echo "❌ Tests failed - see details above"
+            echo "💡 Fix the failing tests and try again"
+            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
+            exit 1
+          }
+        else
+          echo "✅ No package changes detected, skipping tests"
+        fi
+    go-vulncheck:
+      skip: no matching push files
+      root: 'apps/cli/'
+      glob: '*.go'
+      run: |
+        echo "🔐 Checking for security vulnerabilities..."
+        govulncheck ./... || {
+          echo "⚠️ Security vulnerabilities found - consider fixing"
+          echo "🚀 Run 'git push --no-verify' to bypass if needed"
+          exit 1
+        }
+commands: &commands
+  turborepo-lint-cli:
+    run: pnpm lint --filter=@devex/cli
+  turborepo-test-cli:
+    run: pnpm test --filter=@devex/cli
+  format-all:
+    run: pnpm exec biome check --write .
+  lint-web:
+    root: 'apps/web/'
+    run: pnpm exec biome check --write .
+  lint-docs:
+    root: 'apps/docs/'
+    run: pnpm exec biome check --write .
+  format-yaml:
+    run: yamlfmt .
+  lint-yaml:
+    run: yamllint .
+  # Turborepo Development Commands
+  # ==============================
+  turborepo-build-all:
+    run: pnpm build
+  turborepo-build-changed:
+    run: pnpm build --filter="...[HEAD~1]"
+  turborepo-lint-all:
+    run: pnpm lint
+  turborepo-lint-changed:
+    run: pnpm lint --filter="...[HEAD~1]"
+  turborepo-test-all:
+    run: pnpm test
+  turborepo-test-changed:
+    run: pnpm test --filter="...[HEAD~1]"
+  package-status:
+    run: |
+      echo "📦 Package Status:"
+      echo "Build all: pnpm build"
+      echo "Build changed: pnpm build --filter=\"...[HEAD~1]\""
+      echo "Test all: pnpm test"
+      echo "Lint all: pnpm lint"
+  package-tidy-all:
+    run: |
+      echo "🧹 Running go mod tidy on all packages..."
+      find packages -name go.mod -not -path "*/node_modules/*" -execdir go mod tidy \;
+  package-format-all:
+    run: |
+      echo "🎨 Formatting all package Go files..."
+      find packages -name "*.go" -not -path "*/node_modules/*" -exec gofmt -w {} \;
+      find packages -name "*.go" -not -path "*/node_modules/*" -exec goimports -w {} \;
+scripts:
+  'commands/*':
+    runner: bash

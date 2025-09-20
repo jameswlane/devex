@@ -1,0 +1,4 @@
+source ~/.local/share/devex/defaults/bash/shell
+source ~/.local/share/devex/defaults/bash/aliases
+source ~/.local/share/devex/defaults/bash/prompt
+source ~/.local/share/devex/defaults/bash/init

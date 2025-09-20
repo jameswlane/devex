@@ -1,0 +1,9 @@
+name: Go
+description: Go programming language
+category: Programming Languages
+install_method: mise
+install_command: go@latest
+uninstall_command: go
+default: false
+dependencies:
+  - mise

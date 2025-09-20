@@ -1,0 +1,2152 @@
+---
+title: Mobile Development Environment
+description: Complete mobile app development setup for React Native, Flutter, and native iOS/Android development
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Mobile Development Environment
+
+This example provides a comprehensive mobile development environment supporting React Native, Flutter, native iOS, and Android development with proper tooling, emulators, and testing capabilities.
+
+## Quick Start
+
+<Steps>
+  <Step>
+    ### Download Configuration
+    
+    ```bash
+    # Download the mobile development configuration
+    curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/examples/mobile-development.yaml > ~/.devex/mobile-dev.yaml
+    
+    # Preview what will be installed
+    devex config apply --file ~/.devex/mobile-dev.yaml --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Apply Configuration
+    
+    ```bash
+    # Apply the configuration
+    devex config apply --file ~/.devex/mobile-dev.yaml
+    
+    # Install all tools
+    devex install
+    ```
+  </Step>
+  
+  <Step>
+    ### Verify Installation
+    
+    ```bash
+    # Check installed tools
+    node --version
+    react-native --version
+    flutter --version  # if Flutter was selected
+    adb version
+    ```
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+<Tabs items={['Full Environment', 'React Native Focus', 'Flutter Focus', 'Native Development']}>
+  <Tab value="Full Environment">
+    ```yaml
+    # ~/.devex/mobile-development.yaml
+    # Complete Mobile Development Environment
+    
+    applications:
+      development:
+        # Version Control
+        - name: git
+          description: "Distributed version control system"
+          category: "Version Control"
+          default: true
+          priority: 10
+          
+        - name: git-lfs
+          description: "Git Large File Storage for assets"
+          category: "Version Control"
+          default: true
+          dependencies: ["git"]
+          
+        # Code Editors and IDEs
+        - name: vscode
+          description: "Visual Studio Code with mobile development extensions"
+          category: "Editors"
+          default: true
+          post_install:
+            # Mobile development extensions
+            - shell: "code --install-extension ms-vscode.vscode-typescript-next"
+            - shell: "code --install-extension ms-vscode.vscode-eslint"
+            - shell: "code --install-extension esbenp.prettier-vscode"
+            - shell: "code --install-extension bradlc.vscode-tailwindcss"
+            - shell: "code --install-extension ms-vscode.vscode-json"
+            - shell: "code --install-extension redhat.vscode-yaml"
+            - shell: "code --install-extension ms-vscode-remote.remote-containers"
+            # React Native specific
+            - shell: "code --install-extension msjsdiag.vscode-react-native"
+            - shell: "code --install-extension ms-vscode.vscode-react-native"
+            # Flutter specific (if using Flutter)
+            - shell: "code --install-extension Dart-Code.dart-code"
+            - shell: "code --install-extension Dart-Code.flutter"
+            # Android development
+            - shell: "code --install-extension vscjava.vscode-java-pack"
+            - shell: "code --install-extension redhat.java"
+          config_files:
+            - source: "~/.devex/assets/vscode/mobile-dev-settings.json"
+              destination: "~/.config/Code/User/settings.json"
+              
+        - name: android-studio
+          description: "Android Studio IDE"
+          category: "IDEs"
+          default: true
+          linux:
+            install_method: flatpak
+            install_command: com.google.AndroidStudio
+          macos:
+            install_method: brew
+            install_command: android-studio
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Google.AndroidStudio
+          post_install:
+            - shell: "echo 'export ANDROID_HOME=$HOME/Android/Sdk' >> ~/.bashrc"
+            - shell: "echo 'export PATH=$PATH:$ANDROID_HOME/emulator' >> ~/.bashrc"
+            - shell: "echo 'export PATH=$PATH:$ANDROID_HOME/tools' >> ~/.bashrc"
+            - shell: "echo 'export PATH=$PATH:$ANDROID_HOME/tools/bin' >> ~/.bashrc"
+            - shell: "echo 'export PATH=$PATH:$ANDROID_HOME/platform-tools' >> ~/.bashrc"
+            
+        # macOS only - Xcode for iOS development
+        - name: xcode
+          description: "Xcode for iOS development"
+          category: "IDEs"
+          default: true
+          condition:
+            platform: "darwin"
+          macos:
+            install_method: mas
+            install_command: "497799835"
+          post_install:
+            - shell: "sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer"
+            - shell: "sudo xcodebuild -license accept"
+            
+        # Android Development Tools
+        - name: android-sdk
+          description: "Android SDK and tools"
+          category: "Mobile Development"
+          default: true
+          dependencies: ["android-studio"]
+          
+        - name: adb
+          description: "Android Debug Bridge"
+          category: "Mobile Development"
+          default: true
+          linux:
+            install_method: apt
+            install_command: adb
+          macos:
+            install_method: brew
+            install_command: android-platform-tools
+          windows:
+            install_method: winget
+            install_command: Google.PlatformTools
+            
+        # React Native Development
+        - name: react-native-cli
+          description: "React Native CLI"
+          category: "Mobile Development"
+          default: true
+          dependencies: ["node"]
+          install_method: npm
+          install_command: "@react-native-community/cli"
+          global: true
+          
+        - name: expo-cli
+          description: "Expo CLI for React Native"
+          category: "Mobile Development"
+          default: true
+          dependencies: ["node"]
+          install_method: npm
+          install_command: "@expo/cli"
+          global: true
+          
+        # Flutter Development (optional)
+        - name: flutter
+          description: "Flutter SDK"
+          category: "Mobile Development"
+          default: false
+          linux:
+            install_method: curlpipe
+            install_command: "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.13.0-stable.tar.xz"
+          macos:
+            install_method: brew
+            install_command: flutter
+          windows:
+            install_method: winget
+            install_command: Google.Flutter
+          post_install:
+            - shell: "echo 'export PATH=$PATH:$HOME/flutter/bin' >> ~/.bashrc"
+            - shell: "flutter doctor"
+            - shell: "flutter config --enable-web"
+            
+        # iOS Development Tools (macOS only)
+        - name: ios-simulator
+          description: "iOS Simulator"
+          category: "Mobile Development"
+          default: true
+          condition:
+            platform: "darwin"
+          dependencies: ["xcode"]
+          
+        - name: cocoapods
+          description: "CocoaPods dependency manager"
+          category: "Mobile Development"
+          default: true
+          condition:
+            platform: "darwin"
+          install_method: gem
+          install_command: cocoapods
+          
+        # Cross-platform tools
+        - name: node
+          description: "Node.js for React Native development"
+          category: "Programming Languages"
+          install_method: mise
+          install_command: node@lts
+          default: true
+          priority: 20
+          shell_updates:
+            - "export NODE_OPTIONS='--max-old-space-size=4096'"
+          post_install:
+            - shell: "npm install -g npm@latest"
+            - shell: "npm install -g yarn pnpm"
+            
+        # Java (required for Android development)
+        - name: java
+          description: "Java JDK for Android development"
+          category: "Programming Languages"
+          install_method: mise
+          install_command: java@openjdk-17
+          default: true
+          post_install:
+            - shell: "echo 'export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))' >> ~/.bashrc"
+            
+        # Testing and Debugging Tools
+        - name: flipper
+          description: "Mobile app debugging platform"
+          category: "Debugging"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: com.facebook.flipper
+          macos:
+            install_method: brew
+            install_command: flipper
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Facebook.Flipper
+            
+        - name: reactotron
+          description: "React Native debugging tool"
+          category: "Debugging"
+          default: false
+          install_method: npm
+          install_command: reactotron-cli
+          global: true
+          
+        # Design and Prototyping
+        - name: figma-linux
+          description: "Figma design tool"
+          category: "Design"
+          default: false
+          desktop_environments: ["gnome", "kde", "xfce"]
+          linux:
+            install_method: flatpak
+            install_command: io.github.Figma_Linux.figma_linux
+            
+        # Version Control for Mobile Assets
+        - name: fastlane
+          description: "Mobile app automation"
+          category: "Deployment"
+          default: false
+          install_method: gem
+          install_command: fastlane
+          
+        # Container Support
+        - name: docker
+          description: "Container platform for CI/CD"
+          category: "Containers"
+          default: true
+          post_install:
+            - shell: "docker pull reactnativecommunity/react-native-android"
+            
+        # Terminal and Shell Tools
+        - name: zsh
+          description: "Zsh shell with mobile development plugins"
+          category: "Shell"
+          default: true
+          post_install:
+            - shell: "sh -c '$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)'"
+            
+        - name: watchman
+          description: "File watching service"
+          category: "Development Tools"
+          default: true
+          linux:
+            install_method: apt
+            install_command: watchman
+          macos:
+            install_method: brew
+            install_command: watchman
+          windows:
+            # Watchman for Windows is more complex to install
+            install_method: manual
+    
+    # Programming Languages
+    programming_languages:
+      - name: Node.js
+        description: "JavaScript runtime for React Native"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: node@lts
+        default: true
+        shell_updates:
+          - "export NODE_OPTIONS='--max-old-space-size=4096'"
+        post_install:
+          # React Native development packages
+          - shell: "npm install -g react-native-cli @react-native-community/cli"
+          - shell: "npm install -g expo-cli @expo/cli"
+          - shell: "npm install -g react-devtools"
+          - shell: "npm install -g metro-bundler"
+          
+          # Testing tools
+          - shell: "npm install -g detox-cli"
+          - shell: "npm install -g appium"
+          
+          # Development utilities
+          - shell: "npm install -g react-native-rename"
+          - shell: "npm install -g react-native-version"
+          
+      - name: Java
+        description: "Java JDK for Android development"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: java@openjdk-17
+        default: true
+        shell_updates:
+          - "export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))"
+          
+      - name: Dart
+        description: "Dart language for Flutter"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: dart@latest
+        default: false
+        condition:
+          flutter_enabled: true
+        dependencies: ["flutter"]
+        
+      - name: Python
+        description: "Python for mobile automation scripts"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: python@3.11
+        default: false
+        post_install:
+          - shell: "pip install appium-python-client"
+          - shell: "pip install pytest pytest-xdist"
+          
+      - name: Ruby
+        description: "Ruby for Fastlane and iOS automation"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: ruby@latest
+        default: false
+        condition:
+          platform: "darwin"
+        post_install:
+          - shell: "gem install fastlane"
+          - shell: "gem install cocoapods"
+    
+    # Mobile Databases and Backend Services
+    databases:
+      - name: sqlite
+        description: "SQLite for local mobile database"
+        category: "Mobile Databases"
+        default: true
+        
+      - name: realm-studio
+        description: "Realm database browser"
+        category: "Mobile Databases"
+        default: false
+        macos:
+          install_method: brew
+          install_command: realm-studio
+          cask: true
+        windows:
+          install_method: winget
+          install_command: Realm.RealmStudio
+          
+      - name: firebase-cli
+        description: "Firebase CLI for backend services"
+        category: "Backend Services"
+        default: false
+        install_method: npm
+        install_command: firebase-tools
+        global: true
+    
+    # Environment Configuration
+    environment:
+      shell:
+        default_shell: "zsh"
+        oh_my_zsh: true
+        plugins:
+          - "git"
+          - "node"
+          - "npm"
+          - "react-native"
+          - "android"
+          - "flutter"  # if Flutter enabled
+        theme: "agnoster"
+        
+      fonts:
+        - name: "JetBrains Mono"
+          description: "Programming font for mobile development"
+          method: "url"
+          url: "https://download.jetbrains.com/fonts/JetBrainsMono-2.304.zip"
+          destination: "~/.local/share/fonts/"
+          post_install:
+            - shell: "fc-cache -fv"
+    
+    # System Configuration
+    system:
+      git:
+        settings:
+          - key: "core.editor"
+            value: "code --wait"
+          - key: "init.defaultBranch"
+            value: "main"
+          - key: "pull.rebase"
+            value: "false"
+          - key: "lfs.track"
+            value: "*.png *.jpg *.jpeg *.gif *.svg *.mp4 *.mov *.avi"
+            
+      android:
+        sdk_path: "$HOME/Android/Sdk"
+        ndk_version: "25.1.8937393"
+        build_tools_version: "33.0.0"
+        emulator_config:
+          avd_name: "DevEx_Pixel_6_API_33"
+          system_image: "system-images;android-33;google_apis;x86_64"
+          
+      node:
+        global_packages:
+          - "@react-native-community/cli"
+          - "@expo/cli"
+          - "react-devtools"
+          - "metro-bundler"
+          - "flipper-pkg"
+          
+      environment_variables:
+        ANDROID_HOME: "$HOME/Android/Sdk"
+        ANDROID_SDK_ROOT: "$HOME/Android/Sdk"
+        JAVA_HOME: "$JAVA_HOME"
+        FLUTTER_ROOT: "$HOME/flutter"  # if Flutter enabled
+        REACT_EDITOR: "code"
+        EXPO_EDITOR: "code"
+    ```
+  </Tab>
+  
+  <Tab value="React Native Focus">
+    ```yaml
+    # React Native focused configuration
+    applications:
+      development:
+        - name: node
+          install_method: mise
+          install_command: node@lts
+          default: true
+        - name: react-native-cli
+          install_method: npm
+          install_command: "@react-native-community/cli"
+          global: true
+        - name: expo-cli
+          install_method: npm
+          install_command: "@expo/cli"
+          global: true
+        - name: android-studio
+          default: true
+        - name: xcode
+          default: true
+          condition:
+            platform: "darwin"
+            
+    programming_languages:
+      - name: node
+        post_install:
+          - shell: "npm install -g react-native-cli"
+          - shell: "npm install -g @react-native-community/cli"
+          - shell: "npm install -g expo-cli"
+          - shell: "npm install -g react-devtools"
+          - shell: "npm install -g flipper-pkg"
+    ```
+  </Tab>
+  
+  <Tab value="Flutter Focus">
+    ```yaml
+    # Flutter focused configuration
+    applications:
+      development:
+        - name: flutter
+          default: true
+        - name: android-studio
+          default: true
+        - name: xcode
+          default: true
+          condition:
+            platform: "darwin"
+        - name: dart-devtools
+          install_method: flutter
+          install_command: "pub global activate devtools"
+          
+    programming_languages:
+      - name: dart
+        install_method: mise
+        install_command: dart@latest
+        default: true
+        post_install:
+          - shell: "dart pub global activate devtools"
+          - shell: "dart pub global activate flutterfire_cli"
+    ```
+  </Tab>
+  
+  <Tab value="Native Development">
+    ```yaml
+    # Native iOS and Android development
+    applications:
+      development:
+        - name: android-studio
+          default: true
+        - name: xcode
+          default: true
+          condition:
+            platform: "darwin"
+        - name: gradle
+          default: true
+          install_method: brew  # or appropriate package manager
+          
+    programming_languages:
+      - name: java
+        install_method: mise
+        install_command: java@openjdk-17
+        default: true
+      - name: kotlin
+        install_method: mise
+        install_command: kotlin@latest
+        default: false
+      - name: swift
+        condition:
+          platform: "darwin"
+        default: true
+    ```
+  </Tab>
+</Tabs>
+
+## React Native Development
+
+### Project Setup and Configuration
+
+<Tabs items={['New Project Setup', 'Expo Project', 'Bare React Native', 'TypeScript Setup']}>
+  <Tab value="New Project Setup">
+    ```bash
+    # Create new React Native project
+    npx react-native@latest init MyAwesomeApp
+    cd MyAwesomeApp
+    
+    # Install additional dependencies
+    npm install react-navigation/native react-navigation/stack
+    npm install react-native-screens react-native-safe-area-context
+    npm install @reduxjs/toolkit react-redux
+    npm install react-native-vector-icons
+    npm install react-native-async-storage/async-storage
+    
+    # Development dependencies
+    npm install --save-dev @types/react @types/react-native
+    npm install --save-dev eslint @typescript-eslint/parser
+    npm install --save-dev prettier eslint-config-prettier
+    npm install --save-dev jest @testing-library/react-native
+    npm install --save-dev detox
+    
+    # iOS dependencies (macOS only)
+    cd ios && pod install && cd ..
+    
+    # Start Metro bundler
+    npx react-native start
+    
+    # Run on Android
+    npx react-native run-android
+    
+    # Run on iOS (macOS only)
+    npx react-native run-ios
+    ```
+  </Tab>
+  
+  <Tab value="Expo Project">
+    ```bash
+    # Create new Expo project
+    npx create-expo-app MyExpoApp
+    cd MyExpoApp
+    
+    # Install additional Expo packages
+    npx expo install expo-camera expo-location
+    npx expo install expo-notifications expo-updates
+    npx expo install expo-sqlite expo-file-system
+    npx expo install expo-auth-session expo-crypto
+    
+    # Install navigation
+    npm install @react-navigation/native @react-navigation/stack
+    npx expo install react-native-screens react-native-safe-area-context
+    
+    # Install state management
+    npm install @reduxjs/toolkit react-redux
+    npm install zustand  # Alternative state management
+    
+    # Start development server
+    npx expo start
+    
+    # Run on specific platform
+    npx expo start --android
+    npx expo start --ios
+    npx expo start --web
+    ```
+  </Tab>
+  
+  <Tab value="Bare React Native">
+    ```bash
+    # Create bare React Native project
+    npx react-native@latest init MyBareApp --template react-native-template-typescript
+    cd MyBareApp
+    
+    # Add native dependencies
+    npm install react-native-permissions
+    npm install react-native-keychain
+    npm install react-native-biometrics
+    npm install react-native-device-info
+    
+    # Install development tools
+    npm install --save-dev reactotron-react-native
+    npm install --save-dev flipper-react-native
+    
+    # Configure Metro for better performance
+    cat > metro.config.js << 'EOF'
+    const { getDefaultConfig } = require('metro-config');
+    
+    module.exports = (async () => {
+      const {
+        resolver: { sourceExts, assetExts },
+      } = await getDefaultConfig();
+      
+      return {
+        transformer: {
+          babelTransformerPath: require.resolve('react-native-svg-transformer'),
+        },
+        resolver: {
+          assetExts: assetExts.filter(ext => ext !== 'svg'),
+          sourceExts: [...sourceExts, 'svg'],
+        },
+      };
+    })();
+    EOF
+    
+    # Setup linking for iOS
+    cd ios && pod install && cd ..
+    ```
+  </Tab>
+  
+  <Tab value="TypeScript Setup">
+    ```bash
+    # Convert existing project to TypeScript
+    npm install --save-dev typescript @types/react @types/react-native
+    npm install --save-dev @typescript-eslint/eslint-plugin @typescript-eslint/parser
+    
+    # Create TypeScript configuration
+    cat > tsconfig.json << 'EOF'
+    {
+      "compilerOptions": {
+        "allowJs": true,
+        "allowSyntheticDefaultImports": true,
+        "esModuleInterop": true,
+        "isolatedModules": true,
+        "jsx": "react-native",
+        "lib": ["es2017"],
+        "moduleResolution": "node",
+        "noEmit": true,
+        "strict": true,
+        "target": "esnext",
+        "baseUrl": ".",
+        "paths": {
+          "@/*": ["src/*"],
+          "@components/*": ["src/components/*"],
+          "@screens/*": ["src/screens/*"],
+          "@utils/*": ["src/utils/*"]
+        }
+      },
+      "exclude": [
+        "node_modules",
+        "babel.config.js",
+        "metro.config.js",
+        "jest.config.js"
+      ]
+    }
+    EOF
+    
+    # Update package.json scripts
+    npm pkg set scripts.type-check="tsc --noEmit"
+    npm pkg set scripts.lint="eslint . --ext .js,.jsx,.ts,.tsx"
+    ```
+  </Tab>
+</Tabs>
+
+### React Native Project Structure
+
+```
+MyReactNativeApp/
+├── android/                 # Android native code
+├── ios/                     # iOS native code
+├── src/
+│   ├── components/          # Reusable UI components
+│   │   ├── common/
+│   │   └── forms/
+│   ├── screens/            # Screen components
+│   │   ├── auth/
+│   │   ├── home/
+│   │   └── profile/
+│   ├── navigation/         # Navigation configuration
+│   ├── services/           # API and external services
+│   ├── store/             # State management (Redux/Zustand)
+│   ├── utils/             # Utility functions
+│   ├── hooks/             # Custom React hooks
+│   ├── types/             # TypeScript type definitions
+│   └── assets/            # Images, fonts, etc.
+├── __tests__/             # Test files
+├── e2e/                   # End-to-end tests
+├── package.json
+├── tsconfig.json          # TypeScript configuration
+├── babel.config.js        # Babel configuration
+├── metro.config.js        # Metro bundler configuration
+└── react-native.config.js # React Native configuration
+```
+
+## Flutter Development
+
+### Flutter Project Setup
+
+<Tabs items={['New Flutter App', 'Flutter Packages', 'State Management', 'Native Integration']}>
+  <Tab value="New Flutter App">
+    ```bash
+    # Create new Flutter project
+    flutter create my_flutter_app
+    cd my_flutter_app
+    
+    # Add common dependencies
+    flutter pub add http
+    flutter pub add shared_preferences
+    flutter pub add provider
+    flutter pub add flutter_bloc
+    flutter pub add go_router
+    flutter pub add cached_network_image
+    flutter pub add sqflite
+    
+    # Add development dependencies
+    flutter pub add --dev flutter_test
+    flutter pub add --dev integration_test
+    flutter pub add --dev flutter_lints
+    flutter pub add --dev mockito
+    flutter pub add --dev build_runner
+    
+    # Get dependencies
+    flutter pub get
+    
+    # Run the app
+    flutter run
+    
+    # Run on specific device
+    flutter devices
+    flutter run -d android
+    flutter run -d ios
+    flutter run -d chrome
+    ```
+  </Tab>
+  
+  <Tab value="Flutter Packages">
+    ```bash
+    # Essential Flutter packages
+    flutter pub add dio                    # HTTP client
+    flutter pub add riverpod               # State management
+    flutter pub add go_router             # Routing
+    flutter pub add hive                  # Local database
+    flutter pub add flutter_secure_storage # Secure storage
+    flutter pub add permission_handler    # Permissions
+    flutter pub add image_picker          # Image selection
+    flutter pub add camera                # Camera access
+    flutter pub add geolocator            # Location services
+    flutter pub add firebase_core        # Firebase
+    flutter pub add firebase_auth        # Authentication
+    flutter pub add cloud_firestore      # Firestore database
+    
+    # UI/UX packages
+    flutter pub add flutter_svg
+    flutter pub add lottie
+    flutter pub add shimmer
+    flutter pub add flutter_staggered_grid_view
+    
+    # Development tools
+    flutter pub add --dev flutter_launcher_icons
+    flutter pub add --dev flutter_native_splash
+    flutter pub add --dev json_serializable
+    flutter pub add --dev json_annotation
+    ```
+  </Tab>
+  
+  <Tab value="State Management">
+    ```dart
+    // Using Riverpod for state management
+    // pubspec.yaml
+    dependencies:
+      flutter_riverpod: ^2.4.0
+      riverpod_annotation: ^2.1.1
+    
+    dev_dependencies:
+      riverpod_generator: ^2.2.3
+      build_runner: ^2.4.6
+    
+    // lib/providers/counter_provider.dart
+    import 'package:riverpod_annotation/riverpod_annotation.dart';
+    
+    part 'counter_provider.g.dart';
+    
+    @riverpod
+    class Counter extends _$Counter {
+      @override
+      int build() => 0;
+    
+      void increment() => state++;
+      void decrement() => state--;
+    }
+    
+    // lib/main.dart
+    import 'package:flutter/material.dart';
+    import 'package:flutter_riverpod/flutter_riverpod.dart';
+    import 'providers/counter_provider.dart';
+    
+    void main() {
+      runApp(ProviderScope(child: MyApp()));
+    }
+    
+    class MyApp extends StatelessWidget {
+      @override
+      Widget build(BuildContext context) {
+        return MaterialApp(
+          title: 'Flutter Demo',
+          home: CounterPage(),
+        );
+      }
+    }
+    
+    class CounterPage extends ConsumerWidget {
+      @override
+      Widget build(BuildContext context, WidgetRef ref) {
+        final counter = ref.watch(counterProvider);
+        
+        return Scaffold(
+          appBar: AppBar(title: Text('Counter')),
+          body: Center(
+            child: Text('Count: $counter'),
+          ),
+          floatingActionButton: FloatingActionButton(
+            onPressed: () => ref.read(counterProvider.notifier).increment(),
+            child: Icon(Icons.add),
+          ),
+        );
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Native Integration">
+    ```dart
+    // Platform channels for native integration
+    // lib/services/native_service.dart
+    import 'package:flutter/services.dart';
+    
+    class NativeService {
+      static const platform = MethodChannel('com.example.app/native');
+      
+      static Future<String> getBatteryLevel() async {
+        try {
+          final result = await platform.invokeMethod('getBatteryLevel');
+          return 'Battery level: $result%';
+        } on PlatformException catch (e) {
+          return 'Failed to get battery level: ${e.message}';
+        }
+      }
+      
+      static Future<void> openNativeSettings() async {
+        try {
+          await platform.invokeMethod('openSettings');
+        } on PlatformException catch (e) {
+          print('Failed to open settings: ${e.message}');
+        }
+      }
+    }
+    
+    // Android implementation (android/app/src/main/kotlin/MainActivity.kt)
+    import io.flutter.embedding.android.FlutterActivity
+    import io.flutter.embedding.engine.FlutterEngine
+    import io.flutter.plugin.common.MethodChannel
+    import android.content.Context
+    import android.content.Intent
+    import android.provider.Settings
+    import android.os.BatteryManager
+    
+    class MainActivity: FlutterActivity() {
+        private val CHANNEL = "com.example.app/native"
+        
+        override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+            super.configureFlutterEngine(flutterEngine)
+            
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+                .setMethodCallHandler { call, result ->
+                    when (call.method) {
+                        "getBatteryLevel" -> {
+                            val batteryLevel = getBatteryLevel()
+                            if (batteryLevel != -1) {
+                                result.success(batteryLevel)
+                            } else {
+                                result.error("UNAVAILABLE", "Battery level not available.", null)
+                            }
+                        }
+                        "openSettings" -> {
+                            openSettings()
+                            result.success(null)
+                        }
+                        else -> result.notImplemented()
+                    }
+                }
+        }
+        
+        private fun getBatteryLevel(): Int {
+            val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+            return batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        }
+        
+        private fun openSettings() {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Android Development
+
+### Native Android Setup
+
+<Tabs items={['New Android Project', 'Gradle Configuration', 'Architecture Components', 'Testing Setup']}>
+  <Tab value="New Android Project">
+    ```bash
+    # Create new Android project using Android Studio
+    # Or use command line with Android SDK
+    
+    # Project structure for modern Android development
+    MyAndroidApp/
+    ├── app/
+    │   ├── src/
+    │   │   ├── main/
+    │   │   │   ├── java/com/example/myapp/
+    │   │   │   │   ├── ui/
+    │   │   │   │   │   ├── activities/
+    │   │   │   │   │   ├── fragments/
+    │   │   │   │   │   └── adapters/
+    │   │   │   │   ├── data/
+    │   │   │   │   │   ├── repositories/
+    │   │   │   │   │   ├── models/
+    │   │   │   │   │   └── network/
+    │   │   │   │   ├── viewmodels/
+    │   │   │   │   └── utils/
+    │   │   │   ├── res/
+    │   │   │   └── AndroidManifest.xml
+    │   │   ├── test/        # Unit tests
+    │   │   └── androidTest/ # Instrumented tests
+    │   ├── build.gradle
+    │   └── proguard-rules.pro
+    ├── build.gradle
+    └── gradle.properties
+    ```
+  </Tab>
+  
+  <Tab value="Gradle Configuration">
+    ```kotlin
+    // app/build.gradle (Module level)
+    plugins {
+        id 'com.android.application'
+        id 'org.jetbrains.kotlin.android'
+        id 'kotlin-kapt'
+        id 'dagger.hilt.android.plugin'
+    }
+    
+    android {
+        namespace 'com.example.myapp'
+        compileSdk 34
+        
+        defaultConfig {
+            applicationId "com.example.myapp"
+            minSdk 24
+            targetSdk 34
+            versionCode 1
+            versionName "1.0"
+            
+            testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        }
+        
+        buildTypes {
+            release {
+                minifyEnabled false
+                proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            }
+        }
+        
+        compileOptions {
+            sourceCompatibility JavaVersion.VERSION_1_8
+            targetCompatibility JavaVersion.VERSION_1_8
+        }
+        
+        kotlinOptions {
+            jvmTarget = '1.8'
+        }
+        
+        buildFeatures {
+            viewBinding true
+            dataBinding true
+            compose true
+        }
+        
+        composeOptions {
+            kotlinCompilerExtensionVersion '1.5.0'
+        }
+    }
+    
+    dependencies {
+        // Android Core
+        implementation 'androidx.core:core-ktx:1.10.1'
+        implementation 'androidx.appcompat:appcompat:1.6.1'
+        implementation 'com.google.android.material:material:1.9.0'
+        implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+        
+        // Architecture Components
+        implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.6.1'
+        implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.6.1'
+        implementation 'androidx.navigation:navigation-fragment-ktx:2.6.0'
+        implementation 'androidx.navigation:navigation-ui-ktx:2.6.0'
+        
+        // Dependency Injection
+        implementation 'com.google.dagger:hilt-android:2.44'
+        kapt 'com.google.dagger:hilt-compiler:2.44'
+        
+        // Networking
+        implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+        implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+        implementation 'com.squareup.okhttp3:logging-interceptor:4.11.0'
+        
+        // Database
+        implementation 'androidx.room:room-runtime:2.5.0'
+        implementation 'androidx.room:room-ktx:2.5.0'
+        kapt 'androidx.room:room-compiler:2.5.0'
+        
+        // Image Loading
+        implementation 'com.github.bumptech.glide:glide:4.15.1'
+        
+        // Jetpack Compose
+        implementation 'androidx.compose.ui:ui:1.5.0'
+        implementation 'androidx.compose.ui:ui-tooling-preview:1.5.0'
+        implementation 'androidx.activity:activity-compose:1.7.2'
+        
+        // Testing
+        testImplementation 'junit:junit:4.13.2'
+        testImplementation 'org.mockito:mockito-core:5.4.0'
+        androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+        androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Architecture Components">
+    ```kotlin
+    // ViewModel with Repository pattern
+    // viewmodels/UserViewModel.kt
+    @HiltViewModel
+    class UserViewModel @Inject constructor(
+        private val userRepository: UserRepository
+    ) : ViewModel() {
+        
+        private val _users = MutableLiveData<List<User>>()
+        val users: LiveData<List<User>> = _users
+        
+        private val _loading = MutableLiveData<Boolean>()
+        val loading: LiveData<Boolean> = _loading
+        
+        fun loadUsers() {
+            viewModelScope.launch {
+                _loading.value = true
+                try {
+                    val userList = userRepository.getUsers()
+                    _users.value = userList
+                } catch (e: Exception) {
+                    // Handle error
+                } finally {
+                    _loading.value = false
+                }
+            }
+        }
+    }
+    
+    // Repository pattern
+    // data/repositories/UserRepository.kt
+    @Singleton
+    class UserRepository @Inject constructor(
+        private val apiService: ApiService,
+        private val userDao: UserDao
+    ) {
+        suspend fun getUsers(): List<User> {
+            return try {
+                val users = apiService.getUsers()
+                userDao.insertUsers(users)
+                users
+            } catch (e: Exception) {
+                userDao.getAllUsers()
+            }
+        }
+    }
+    
+    // Room Database
+    // data/database/UserDao.kt
+    @Dao
+    interface UserDao {
+        @Query("SELECT * FROM users")
+        suspend fun getAllUsers(): List<User>
+        
+        @Insert(onConflict = OnConflictStrategy.REPLACE)
+        suspend fun insertUsers(users: List<User>)
+    }
+    
+    @Entity(tableName = "users")
+    data class User(
+        @PrimaryKey val id: Int,
+        val name: String,
+        val email: String
+    )
+    ```
+  </Tab>
+  
+  <Tab value="Testing Setup">
+    ```kotlin
+    // Unit test example
+    // test/UserViewModelTest.kt
+    @RunWith(MockitoJUnitRunner::class)
+    class UserViewModelTest {
+        
+        @Mock
+        private lateinit var userRepository: UserRepository
+        
+        private lateinit var viewModel: UserViewModel
+        
+        @Before
+        fun setup() {
+            viewModel = UserViewModel(userRepository)
+        }
+        
+        @Test
+        fun `loadUsers should update users LiveData`() = runTest {
+            // Given
+            val expectedUsers = listOf(
+                User(1, "John Doe", "john@example.com"),
+                User(2, "Jane Smith", "jane@example.com")
+            )
+            `when`(userRepository.getUsers()).thenReturn(expectedUsers)
+            
+            // When
+            viewModel.loadUsers()
+            
+            // Then
+            verify(userRepository).getUsers()
+            assertEquals(expectedUsers, viewModel.users.value)
+        }
+    }
+    
+    // Instrumented test example
+    // androidTest/MainActivityTest.kt
+    @RunWith(AndroidJUnit4::class)
+    class MainActivityTest {
+        
+        @get:Rule
+        val activityRule = ActivityScenarioRule(MainActivity::class.java)
+        
+        @Test
+        fun testUserListDisplay() {
+            // Test UI interactions
+            onView(withId(R.id.recyclerView))
+                .check(matches(isDisplayed()))
+            
+            onView(withText("John Doe"))
+                .check(matches(isDisplayed()))
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## iOS Development (macOS only)
+
+### iOS Project Setup
+
+<Tabs items={['Xcode Project', 'Swift Package Manager', 'Core Data', 'SwiftUI']}>
+  <Tab value="Xcode Project">
+    ```swift
+    // iOS Project Structure
+    MyiOSApp/
+    ├── MyiOSApp/
+    │   ├── Models/           # Data models
+    │   ├── Views/           # UI components
+    │   ├── ViewModels/      # MVVM pattern
+    │   ├── Services/        # API and data services
+    │   ├── Utilities/       # Helper functions
+    │   ├── Resources/       # Assets, strings, etc.
+    │   ├── AppDelegate.swift
+    │   ├── SceneDelegate.swift
+    │   └── Info.plist
+    ├── MyiOSAppTests/       # Unit tests
+    ├── MyiOSAppUITests/     # UI tests
+    └── MyiOSApp.xcodeproj
+    
+    // Podfile for CocoaPods dependencies
+    platform :ios, '14.0'
+    use_frameworks!
+    
+    target 'MyiOSApp' do
+      # Networking
+      pod 'Alamofire', '~> 5.7'
+      pod 'SDWebImage', '~> 5.17'
+      
+      # UI
+      pod 'SnapKit', '~> 5.6'
+      
+      # Database
+      pod 'RealmSwift', '~> 10.40'
+      
+      # Testing
+      target 'MyiOSAppTests' do
+        inherit! :search_paths
+        pod 'Quick', '~> 6.1'
+        pod 'Nimble', '~> 11.2'
+      end
+    end
+    ```
+  </Tab>
+  
+  <Tab value="Swift Package Manager">
+    ```swift
+    // Package.swift for Swift Package Manager
+    // swift-tools-version: 5.8
+    import PackageDescription
+    
+    let package = Package(
+        name: "MyiOSApp",
+        platforms: [
+            .iOS(.v14)
+        ],
+        products: [
+            .library(
+                name: "MyiOSApp",
+                targets: ["MyiOSApp"]),
+        ],
+        dependencies: [
+            .package(url: "https://github.com/Alamofire/Alamofire.git", from: "5.7.1"),
+            .package(url: "https://github.com/SnapKit/SnapKit.git", from: "5.6.0"),
+            .package(url: "https://github.com/realm/realm-swift.git", from: "10.40.0"),
+        ],
+        targets: [
+            .target(
+                name: "MyiOSApp",
+                dependencies: [
+                    "Alamofire",
+                    "SnapKit",
+                    .product(name: "RealmSwift", package: "realm-swift")
+                ]),
+            .testTarget(
+                name: "MyiOSAppTests",
+                dependencies: ["MyiOSApp"]),
+        ]
+    )
+    
+    // MVVM Pattern Example
+    // ViewModels/UserViewModel.swift
+    import Foundation
+    import Combine
+    
+    class UserViewModel: ObservableObject {
+        @Published var users: [User] = []
+        @Published var isLoading = false
+        @Published var errorMessage: String?
+        
+        private let userService: UserService
+        private var cancellables = Set<AnyCancellable>()
+        
+        init(userService: UserService = UserService()) {
+            self.userService = userService
+        }
+        
+        func loadUsers() {
+            isLoading = true
+            
+            userService.fetchUsers()
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] completion in
+                        self?.isLoading = false
+                        if case .failure(let error) = completion {
+                            self?.errorMessage = error.localizedDescription
+                        }
+                    },
+                    receiveValue: { [weak self] users in
+                        self?.users = users
+                    }
+                )
+                .store(in: &cancellables)
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Core Data">
+    ```swift
+    // Core Data Stack
+    // Services/CoreDataStack.swift
+    import CoreData
+    
+    class CoreDataStack {
+        static let shared = CoreDataStack()
+        
+        private init() {}
+        
+        lazy var persistentContainer: NSPersistentContainer = {
+            let container = NSPersistentContainer(name: "DataModel")
+            container.loadPersistentStores { _, error in
+                if let error = error {
+                    fatalError("Core Data failed to load: \(error.localizedDescription)")
+                }
+            }
+            return container
+        }()
+        
+        var context: NSManagedObjectContext {
+            return persistentContainer.viewContext
+        }
+        
+        func save() {
+            if context.hasChanges {
+                do {
+                    try context.save()
+                } catch {
+                    print("Failed to save context: \(error)")
+                }
+            }
+        }
+    }
+    
+    // Core Data Repository
+    // Services/UserRepository.swift
+    import CoreData
+    
+    class UserRepository {
+        private let context = CoreDataStack.shared.context
+        
+        func fetchUsers() -> [UserEntity] {
+            let request: NSFetchRequest<UserEntity> = UserEntity.fetchRequest()
+            
+            do {
+                return try context.fetch(request)
+            } catch {
+                print("Failed to fetch users: \(error)")
+                return []
+            }
+        }
+        
+        func saveUser(_ user: User) {
+            let userEntity = UserEntity(context: context)
+            userEntity.id = Int32(user.id)
+            userEntity.name = user.name
+            userEntity.email = user.email
+            
+            CoreDataStack.shared.save()
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab value="SwiftUI">
+    ```swift
+    // SwiftUI App Structure
+    // MyiOSApp.swift
+    import SwiftUI
+    
+    @main
+    struct MyiOSApp: App {
+        let persistenceController = PersistenceController.shared
+        
+        var body: some Scene {
+            WindowGroup {
+                ContentView()
+                    .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            }
+        }
+    }
+    
+    // SwiftUI View with MVVM
+    // Views/UserListView.swift
+    import SwiftUI
+    
+    struct UserListView: View {
+        @StateObject private var viewModel = UserViewModel()
+        
+        var body: some View {
+            NavigationView {
+                List(viewModel.users) { user in
+                    UserRowView(user: user)
+                }
+                .navigationTitle("Users")
+                .onAppear {
+                    viewModel.loadUsers()
+                }
+                .refreshable {
+                    viewModel.loadUsers()
+                }
+            }
+        }
+    }
+    
+    struct UserRowView: View {
+        let user: User
+        
+        var body: some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(user.name)
+                    .font(.headline)
+                Text(user.email)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+    
+    // SwiftUI with Combine
+    // ViewModels/UserViewModel.swift
+    import SwiftUI
+    import Combine
+    
+    class UserViewModel: ObservableObject {
+        @Published var users: [User] = []
+        @Published var isLoading = false
+        
+        private let userService = UserService()
+        private var cancellables = Set<AnyCancellable>()
+        
+        func loadUsers() {
+            isLoading = true
+            
+            userService.fetchUsers()
+                .receive(on: DispatchQueue.main)
+                .sink(
+                    receiveCompletion: { [weak self] _ in
+                        self?.isLoading = false
+                    },
+                    receiveValue: { [weak self] users in
+                        self?.users = users
+                    }
+                )
+                .store(in: &cancellables)
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Testing and Debugging
+
+### Mobile Testing Setup
+
+<Tabs items={['React Native Testing', 'Flutter Testing', 'Android Testing', 'iOS Testing']}>
+  <Tab value="React Native Testing">
+    ```javascript
+    // Jest configuration for React Native
+    // jest.config.js
+    module.exports = {
+      preset: 'react-native',
+      setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+      transformIgnorePatterns: [
+        'node_modules/(?!(react-native|@react-native|@react-navigation)/)',
+      ],
+      collectCoverageFrom: [
+        'src/**/*.{js,jsx,ts,tsx}',
+        '!src/**/*.d.ts',
+        '!src/**/*.stories.{js,jsx,ts,tsx}',
+      ],
+      coverageThreshold: {
+        global: {
+          branches: 80,
+          functions: 80,
+          lines: 80,
+          statements: 80,
+        },
+      },
+    };
+    
+    // jest.setup.js
+    import 'react-native-gesture-handler/jestSetup';
+    import mockAsyncStorage from '@react-native-async-storage/async-storage/jest/async-storage-mock';
+    
+    jest.mock('@react-native-async-storage/async-storage', () => mockAsyncStorage);
+    
+    // Component test example
+    // __tests__/components/UserList.test.tsx
+    import React from 'react';
+    import { render, fireEvent, waitFor } from '@testing-library/react-native';
+    import { UserList } from '../src/components/UserList';
+    
+    const mockUsers = [
+      { id: 1, name: 'John Doe', email: 'john@example.com' },
+      { id: 2, name: 'Jane Smith', email: 'jane@example.com' },
+    ];
+    
+    describe('UserList', () => {
+      it('renders user list correctly', async () => {
+        const { getByText, getByTestId } = render(
+          <UserList users={mockUsers} onUserPress={jest.fn()} />
+        );
+        
+        await waitFor(() => {
+          expect(getByText('John Doe')).toBeTruthy();
+          expect(getByText('Jane Smith')).toBeTruthy();
+        });
+      });
+      
+      it('calls onUserPress when user is tapped', () => {
+        const onUserPress = jest.fn();
+        const { getByText } = render(
+          <UserList users={mockUsers} onUserPress={onUserPress} />
+        );
+        
+        fireEvent.press(getByText('John Doe'));
+        expect(onUserPress).toHaveBeenCalledWith(mockUsers[0]);
+      });
+    });
+    
+    // E2E testing with Detox
+    // e2e/firstTest.e2e.js
+    describe('User List Screen', () => {
+      beforeAll(async () => {
+        await device.launchApp();
+      });
+      
+      beforeEach(async () => {
+        await device.reloadReactNative();
+      });
+      
+      it('should display user list', async () => {
+        await expect(element(by.text('Users'))).toBeVisible();
+        await expect(element(by.id('userList'))).toBeVisible();
+      });
+      
+      it('should navigate to user detail', async () => {
+        await element(by.text('John Doe')).tap();
+        await expect(element(by.text('User Details'))).toBeVisible();
+      });
+    });
+    ```
+  </Tab>
+  
+  <Tab value="Flutter Testing">
+    ```dart
+    // test/widget_test.dart
+    import 'package:flutter/material.dart';
+    import 'package:flutter_test/flutter_test.dart';
+    import 'package:my_flutter_app/main.dart';
+    
+    void main() {
+      group('Counter App Tests', () {
+        testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+          // Build app and trigger a frame
+          await tester.pumpWidget(MyApp());
+          
+          // Verify initial counter is 0
+          expect(find.text('0'), findsOneWidget);
+          expect(find.text('1'), findsNothing);
+          
+          // Tap the '+' icon and trigger a frame
+          await tester.tap(find.byIcon(Icons.add));
+          await tester.pump();
+          
+          // Verify counter has incremented
+          expect(find.text('0'), findsNothing);
+          expect(find.text('1'), findsOneWidget);
+        });
+        
+        testWidgets('Counter decrements', (WidgetTester tester) async {
+          await tester.pumpWidget(MyApp());
+          
+          // Increment first
+          await tester.tap(find.byIcon(Icons.add));
+          await tester.pump();
+          
+          // Then decrement
+          await tester.tap(find.byIcon(Icons.remove));
+          await tester.pump();
+          
+          expect(find.text('0'), findsOneWidget);
+        });
+      });
+    }
+    
+    // Unit test example
+    // test/services/user_service_test.dart
+    import 'package:flutter_test/flutter_test.dart';
+    import 'package:mockito/mockito.dart';
+    import 'package:my_flutter_app/services/user_service.dart';
+    import 'package:my_flutter_app/models/user.dart';
+    
+    class MockHttpClient extends Mock implements HttpClient {}
+    
+    void main() {
+      group('UserService Tests', () {
+        late UserService userService;
+        late MockHttpClient mockHttpClient;
+        
+        setUp(() {
+          mockHttpClient = MockHttpClient();
+          userService = UserService(httpClient: mockHttpClient);
+        });
+        
+        test('fetchUsers returns list of users', () async {
+          // Arrange
+          when(mockHttpClient.get('/users'))
+              .thenAnswer((_) async => [
+                    {'id': 1, 'name': 'John Doe', 'email': 'john@example.com'},
+                    {'id': 2, 'name': 'Jane Smith', 'email': 'jane@example.com'},
+                  ]);
+          
+          // Act
+          final users = await userService.fetchUsers();
+          
+          // Assert
+          expect(users, hasLength(2));
+          expect(users[0].name, equals('John Doe'));
+          expect(users[1].name, equals('Jane Smith'));
+        });
+      });
+    }
+    
+    // Integration test
+    // integration_test/app_test.dart
+    import 'package:flutter/material.dart';
+    import 'package:flutter_test/flutter_test.dart';
+    import 'package:integration_test/integration_test.dart';
+    import 'package:my_flutter_app/main.dart' as app;
+    
+    void main() {
+      IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+      
+      group('end-to-end test', () {
+        testWidgets('tap on floating action button, verify counter', (tester) async {
+          app.main();
+          await tester.pumpAndSettle();
+          
+          // Verify initial state
+          expect(find.text('0'), findsOneWidget);
+          
+          // Find floating action button and tap it
+          final Finder fab = find.byTooltip('Increment');
+          await tester.tap(fab);
+          await tester.pumpAndSettle();
+          
+          // Verify counter has incremented
+          expect(find.text('1'), findsOneWidget);
+        });
+      });
+    }
+    ```
+  </Tab>
+  
+  <Tab value="Android Testing">
+    ```kotlin
+    // Unit test with JUnit and Mockito
+    // test/UserViewModelTest.kt
+    @RunWith(MockitoJUnitRunner::class)
+    class UserViewModelTest {
+        
+        @Mock
+        private lateinit var userRepository: UserRepository
+        
+        @Mock
+        private lateinit var observer: Observer<List<User>>
+        
+        private lateinit var viewModel: UserViewModel
+        
+        @Before
+        fun setup() {
+            viewModel = UserViewModel(userRepository)
+            viewModel.users.observeForever(observer)
+        }
+        
+        @After
+        fun tearDown() {
+            viewModel.users.removeObserver(observer)
+        }
+        
+        @Test
+        fun `loadUsers should call repository and update LiveData`() = runTest {
+            // Given
+            val expectedUsers = listOf(
+                User(1, "John", "john@example.com"),
+                User(2, "Jane", "jane@example.com")
+            )
+            whenever(userRepository.getUsers()).thenReturn(expectedUsers)
+            
+            // When
+            viewModel.loadUsers()
+            
+            // Then
+            verify(userRepository).getUsers()
+            verify(observer).onChanged(expectedUsers)
+        }
+    }
+    
+    // Instrumented test with Espresso
+    // androidTest/MainActivityTest.kt
+    @RunWith(AndroidJUnit4::class)
+    @LargeTest
+    class MainActivityTest {
+        
+        @get:Rule
+        val activityRule = ActivityScenarioRule(MainActivity::class.java)
+        
+        @Test
+        fun testUserListDisplaysCorrectly() {
+            // Check if RecyclerView is displayed
+            onView(withId(R.id.recyclerView))
+                .check(matches(isDisplayed()))
+            
+            // Check if first user is displayed
+            onView(withText("John Doe"))
+                .check(matches(isDisplayed()))
+            
+            // Click on first user
+            onView(withText("John Doe"))
+                .perform(click())
+            
+            // Verify navigation to detail screen
+            onView(withId(R.id.userDetailLayout))
+                .check(matches(isDisplayed()))
+        }
+        
+        @Test
+        fun testAddUserFlow() {
+            // Click add user button
+            onView(withId(R.id.addUserFab))
+                .perform(click())
+            
+            // Fill in user details
+            onView(withId(R.id.nameEditText))
+                .perform(typeText("New User"))
+            
+            onView(withId(R.id.emailEditText))
+                .perform(typeText("newuser@example.com"))
+            
+            // Close keyboard
+            Espresso.closeSoftKeyboard()
+            
+            // Save user
+            onView(withId(R.id.saveButton))
+                .perform(click())
+            
+            // Verify user appears in list
+            onView(withText("New User"))
+                .check(matches(isDisplayed()))
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab value="iOS Testing">
+    ```swift
+    // Unit test with XCTest
+    // MyiOSAppTests/UserViewModelTests.swift
+    import XCTest
+    import Combine
+    @testable import MyiOSApp
+    
+    class UserViewModelTests: XCTestCase {
+        var viewModel: UserViewModel!
+        var mockUserService: MockUserService!
+        var cancellables: Set<AnyCancellable>!
+        
+        override func setUp() {
+            super.setUp()
+            mockUserService = MockUserService()
+            viewModel = UserViewModel(userService: mockUserService)
+            cancellables = Set<AnyCancellable>()
+        }
+        
+        override func tearDown() {
+            cancellables = nil
+            viewModel = nil
+            mockUserService = nil
+            super.tearDown()
+        }
+        
+        func testLoadUsersSuccess() {
+            // Given
+            let expectedUsers = [
+                User(id: 1, name: "John Doe", email: "john@example.com"),
+                User(id: 2, name: "Jane Smith", email: "jane@example.com")
+            ]
+            mockUserService.users = expectedUsers
+            
+            let expectation = self.expectation(description: "Users loaded")
+            
+            // When
+            viewModel.$users
+                .dropFirst()
+                .sink { users in
+                    // Then
+                    XCTAssertEqual(users.count, 2)
+                    XCTAssertEqual(users[0].name, "John Doe")
+                    XCTAssertEqual(users[1].name, "Jane Smith")
+                    expectation.fulfill()
+                }
+                .store(in: &cancellables)
+            
+            viewModel.loadUsers()
+            
+            waitForExpectations(timeout: 1.0)
+        }
+    }
+    
+    class MockUserService: UserServiceProtocol {
+        var users: [User] = []
+        var shouldFail = false
+        
+        func fetchUsers() -> AnyPublisher<[User], Error> {
+            if shouldFail {
+                return Fail(error: NSError(domain: "TestError", code: 1))
+                    .eraseToAnyPublisher()
+            } else {
+                return Just(users)
+                    .setFailureType(to: Error.self)
+                    .eraseToAnyPublisher()
+            }
+        }
+    }
+    
+    // UI test with XCUITest
+    // MyiOSAppUITests/UserListUITests.swift
+    import XCTest
+    
+    class UserListUITests: XCTestCase {
+        var app: XCUIApplication!
+        
+        override func setUp() {
+            super.setUp()
+            continueAfterFailure = false
+            app = XCUIApplication()
+            app.launch()
+        }
+        
+        func testUserListDisplaysCorrectly() {
+            // Wait for user list to appear
+            let userList = app.tables["UserList"]
+            XCTAssertTrue(userList.waitForExistence(timeout: 5))
+            
+            // Verify first user cell exists
+            let firstUserCell = userList.cells.element(boundBy: 0)
+            XCTAssertTrue(firstUserCell.exists)
+            
+            // Tap on first user
+            firstUserCell.tap()
+            
+            // Verify navigation to detail screen
+            let detailView = app.otherElements["UserDetailView"]
+            XCTAssertTrue(detailView.waitForExistence(timeout: 2))
+        }
+        
+        func testAddNewUser() {
+            // Tap add button
+            let addButton = app.buttons["AddUser"]
+            addButton.tap()
+            
+            // Fill in user details
+            let nameField = app.textFields["NameField"]
+            nameField.tap()
+            nameField.typeText("Test User")
+            
+            let emailField = app.textFields["EmailField"]
+            emailField.tap()
+            emailField.typeText("test@example.com")
+            
+            // Save user
+            let saveButton = app.buttons["SaveUser"]
+            saveButton.tap()
+            
+            // Verify user appears in list
+            let userList = app.tables["UserList"]
+            let newUserCell = userList.staticTexts["Test User"]
+            XCTAssertTrue(newUserCell.waitForExistence(timeout: 2))
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Development Automation
+
+### Mobile Development Scripts
+
+```bash
+#!/bin/bash
+# scripts/mobile-dev-setup.sh
+# Mobile development environment automation
+
+set -e
+
+PLATFORM="${1:-all}"  # react-native, flutter, android, ios, all
+
+echo "📱 Setting up mobile development environment for: $PLATFORM"
+
+setup_react_native() {
+    echo "⚛️ Setting up React Native environment..."
+    
+    # Install React Native CLI
+    npm install -g @react-native-community/cli
+    npm install -g @expo/cli
+    
+    # Install development tools
+    npm install -g react-devtools
+    npm install -g flipper-pkg
+    npm install -g reactotron-cli
+    
+    echo "✅ React Native setup complete"
+}
+
+setup_flutter() {
+    echo "🐦 Setting up Flutter environment..."
+    
+    # Verify Flutter installation
+    if command -v flutter &> /dev/null; then
+        flutter doctor
+        flutter config --enable-web
+        flutter config --enable-linux-desktop
+        flutter config --enable-macos-desktop
+        flutter config --enable-windows-desktop
+    else
+        echo "❌ Flutter not found. Please install Flutter first."
+        exit 1
+    fi
+    
+    echo "✅ Flutter setup complete"
+}
+
+setup_android() {
+    echo "🤖 Setting up Android development..."
+    
+    # Set Android environment variables
+    export ANDROID_HOME="$HOME/Android/Sdk"
+    export PATH="$PATH:$ANDROID_HOME/emulator"
+    export PATH="$PATH:$ANDROID_HOME/tools"
+    export PATH="$PATH:$ANDROID_HOME/tools/bin"
+    export PATH="$PATH:$ANDROID_HOME/platform-tools"
+    
+    # Create AVD if it doesn't exist
+    if ! avdmanager list avd | grep -q "DevEx_Pixel_6_API_33"; then
+        echo "📱 Creating Android Virtual Device..."
+        avdmanager create avd -n "DevEx_Pixel_6_API_33" \
+            -k "system-images;android-33;google_apis;x86_64" \
+            --device "pixel_6"
+    fi
+    
+    echo "✅ Android setup complete"
+}
+
+setup_ios() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "🍎 Setting up iOS development..."
+        
+        # Install CocoaPods
+        if ! command -v pod &> /dev/null; then
+            sudo gem install cocoapods
+        fi
+        
+        # Setup pod repo
+        pod setup
+        
+        echo "✅ iOS setup complete"
+    else
+        echo "ℹ️ iOS development only available on macOS"
+    fi
+}
+
+case $PLATFORM in
+    "react-native")
+        setup_react_native
+        setup_android
+        setup_ios
+        ;;
+    "flutter")
+        setup_flutter
+        setup_android
+        setup_ios
+        ;;
+    "android")
+        setup_android
+        ;;
+    "ios")
+        setup_ios
+        ;;
+    "all")
+        setup_react_native
+        setup_flutter
+        setup_android
+        setup_ios
+        ;;
+    *)
+        echo "❌ Unknown platform: $PLATFORM"
+        echo "Usage: $0 [react-native|flutter|android|ios|all]"
+        exit 1
+        ;;
+esac
+
+echo "🎉 Mobile development environment setup complete for $PLATFORM!"
+```
+
+### Build and Deployment Automation
+
+```bash
+#!/bin/bash
+# scripts/mobile-build.sh
+# Automated mobile app building and deployment
+
+set -e
+
+PROJECT_TYPE="${1:-react-native}"  # react-native, flutter, android, ios
+BUILD_TYPE="${2:-debug}"           # debug, release
+PLATFORM="${3:-both}"              # android, ios, both
+
+echo "🏗️ Building $PROJECT_TYPE app ($BUILD_TYPE) for $PLATFORM"
+
+build_react_native() {
+    echo "⚛️ Building React Native app..."
+    
+    if [[ "$PLATFORM" == "android" || "$PLATFORM" == "both" ]]; then
+        echo "🤖 Building Android..."
+        if [[ "$BUILD_TYPE" == "release" ]]; then
+            cd android && ./gradlew assembleRelease && cd ..
+        else
+            cd android && ./gradlew assembleDebug && cd ..
+        fi
+    fi
+    
+    if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "both" ]]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "🍎 Building iOS..."
+            cd ios && pod install && cd ..
+            if [[ "$BUILD_TYPE" == "release" ]]; then
+                npx react-native run-ios --configuration Release
+            else
+                npx react-native run-ios
+            fi
+        else
+            echo "ℹ️ iOS build skipped (not on macOS)"
+        fi
+    fi
+}
+
+build_flutter() {
+    echo "🐦 Building Flutter app..."
+    
+    if [[ "$PLATFORM" == "android" || "$PLATFORM" == "both" ]]; then
+        echo "🤖 Building Android..."
+        if [[ "$BUILD_TYPE" == "release" ]]; then
+            flutter build apk --release
+            flutter build appbundle --release
+        else
+            flutter build apk --debug
+        fi
+    fi
+    
+    if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "both" ]]; then
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "🍎 Building iOS..."
+            if [[ "$BUILD_TYPE" == "release" ]]; then
+                flutter build ios --release
+            else
+                flutter build ios --debug
+            fi
+        else
+            echo "ℹ️ iOS build skipped (not on macOS)"
+        fi
+    fi
+}
+
+case $PROJECT_TYPE in
+    "react-native")
+        build_react_native
+        ;;
+    "flutter")
+        build_flutter
+        ;;
+    *)
+        echo "❌ Unknown project type: $PROJECT_TYPE"
+        exit 1
+        ;;
+esac
+
+echo "✅ Build complete!"
+```
+
+<Callout type="tip">
+**Mobile Development Best Practices:**
+
+1. **Cross-Platform Consistency**: Use shared business logic and platform-specific UI
+2. **Performance Optimization**: Profile and optimize for mobile constraints
+3. **Testing Strategy**: Implement unit, integration, and E2E tests
+4. **State Management**: Use proper state management solutions (Redux, Riverpod, etc.)
+5. **Security**: Implement proper authentication and data encryption
+6. **Offline Support**: Design for offline-first functionality
+7. **App Store Guidelines**: Follow platform-specific guidelines and policies
+8. **CI/CD**: Automate builds, tests, and deployments
+</Callout>
+
+This mobile development environment provides comprehensive tooling for building modern mobile applications across React Native, Flutter, and native platforms with proper testing, debugging, and deployment capabilities.
+
+<Cards>
+  <Card title="Web Development" href="/docs/examples/web-development" description="Frontend development environment" />
+  <Card title="Backend Development" href="/docs/examples/backend-development" description="Server-side development setup" />
+  <Card title="Data Science" href="/docs/examples/data-science" description="Python data science environment" />
+  <Card title="Team Setup" href="/docs/guides/team-setup" description="Configure DevEx for teams" />
+</Cards>

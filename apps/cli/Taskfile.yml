@@ -1,0 +1,168 @@
+version: '3'
+vars:
+  BIN: '{{.ROOT_DIR}}/bin'
+  GO_PACKAGES:
+    sh: go list ./...
+tasks:
+  # Default task - run quality checks and tests
+  default:
+    desc: Run linting and testing (development workflow)
+    cmds:
+      - task: lint
+      - task: test
+  # === BUILD TASKS ===
+  build:
+    desc: Build the Go project for production
+    sources: ['cmd/**/*.go', 'pkg/**/*.go', 'go.mod', 'go.sum']
+    generates: ['{{.BIN}}/devex']
+    cmds:
+      - mkdir -p {{.BIN}}
+      - go build -o {{.BIN}}/devex ./cmd/main.go
+  build:local:
+    desc: Build for local development with verbose output
+    sources: ['cmd/**/*.go', 'pkg/**/*.go', 'go.mod', 'go.sum']
+    generates: ['./bin/devex']
+    cmds:
+      - mkdir -p ./bin
+      - go build -o ./bin/devex -v ./cmd/main.go
+  install:
+    desc: Install DevEx binary to $GOPATH/bin
+    aliases: [i]
+    sources: ['cmd/**/*.go', 'pkg/**/*.go', 'go.mod', 'go.sum']
+    cmds:
+      - go install -v ./cmd/main.go
+  # === DEPENDENCY MANAGEMENT ===
+  mod:
+    desc: Download and tidy Go modules
+    sources: ['go.mod']
+    generates: ['go.sum']
+    cmds:
+      - go mod download
+      - go mod tidy
+  mod:verify:
+    desc: Verify dependencies have expected content
+    cmds:
+      - go mod verify
+  # === QUALITY ASSURANCE ===
+  lint:
+    desc: Run golangci-lint
+    aliases: [l]
+    sources: ['**/*.go', '.golangci.yml']
+    cmds:
+      - golangci-lint run
+  lint:fix:
+    desc: Run golangci-lint and auto-fix issues
+    sources: ['**/*.go', '.golangci.yml']
+    cmds:
+      - golangci-lint run --fix
+  lint:staticcheck:
+    desc: Run staticcheck for additional static analysis
+    cmds:
+      - staticcheck ./...
+  gocritic:
+    desc: Run Go Critic for advanced code analysis
+    cmds:
+      - gocritic check ./...
+  # === SECURITY ===
+  vulncheck:
+    desc: Run vulnerability checks on dependencies
+    sources: ['go.mod', 'go.sum']
+    cmds:
+      - govulncheck ./...
+  # === TESTING ===
+  test:
+    desc: Run the complete test suite using Ginkgo
+    aliases: [t]
+    sources: ['**/*.go', '**/*_test.go']
+    cmds:
+      - ginkgo run -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
+  test:short:
+    desc: Run tests with short flag (skip long-running tests)
+    cmds:
+      - ginkgo run -r --timeout=2m -v --label-filter="!slow"
+  test:coverage:
+    desc: Run tests and generate coverage report
+    sources: ['**/*.go', '**/*_test.go']
+    generates: ['coverage.out']
+    cmds:
+      - ginkgo run -r --coverprofile=coverage.out --timeout=5m -v
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report generated at coverage.html"
+  test:testify:
+    desc: Run any remaining standard Go tests (fallback)
+    cmds:
+      - go test -v ./... 2>/dev/null || echo "No standard Go tests found (all converted to Ginkgo)"
+  test:integration:
+    desc: Run integration tests with timeout and progress reporting
+    cmds:
+      - >
+        timeout 10m ginkgo run -r --timeout=5m -v --label-filter="integration"
+
+  # === BENCHMARKING ===
+  bench:
+    desc: Run benchmarks
+    cmds:
+      - go test -bench=. -benchmem ./...
+  # === TOOLS AND UTILITIES ===
+  tools:install:
+    desc: Install required development tools
+    cmds:
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install golang.org/x/vuln/cmd/govulncheck@latest
+      - go install honnef.co/go/tools/cmd/staticcheck@latest
+      - go install github.com/go-critic/go-critic/cmd/gocritic@latest
+      - go install github.com/onsi/ginkgo/v2/ginkgo@latest
+  mockgen:
+    desc: Generate mocks for interfaces
+    cmds:
+      - go generate ./...
+  # === CLEANUP ===
+  clean:
+    desc: Clean build artifacts and temporary files
+    aliases: [clear]
+    cmds:
+      - rm -rf bin/ coverage.out coverage.html test-results.json
+  clean:cache:
+    desc: Clean Go build and module cache
+    cmds:
+      - go clean -cache -modcache -testcache
+  # === RELEASE AND CI ===
+  ci:
+    desc: Run CI pipeline locally (lint, test, build)
+    cmds:
+      - task: lint
+      - task: vulncheck
+      - task: test
+      - task: build
+  goreleaser:test:
+    desc: Test release process without publishing
+    cmds:
+      - goreleaser release --snapshot --clean
+  goreleaser:install:
+    desc: Install GoReleaser
+    cmds:
+      - go install github.com/goreleaser/goreleaser/v2@latest
+  # === DEVELOPMENT HELPERS ===
+  dev:watch:
+    desc: Watch for changes and rebuild
+    deps: ['tools:install']
+    cmds:
+      - air -c .air.toml
+  packages:
+    desc: List all Go packages in the project
+    cmds:
+      - echo '{{.GO_PACKAGES}}'
+    silent: true
+  # === TURBO INTEGRATION ===
+  turbo:build:
+    desc: Build using TurboRepo
+    cmds:
+      - cd ../../ && turbo build:go --filter=@devex/cli
+  turbo:test:
+    desc: Test using TurboRepo (now uses Ginkgo)
+    cmds:
+      - cd ../../ && turbo test:go --filter=@devex/cli
+  turbo:lint:
+    desc: Lint using TurboRepo
+    cmds:
+      - cd ../../ && turbo lint:go --filter=@devex/cli

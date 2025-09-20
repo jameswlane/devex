@@ -1,0 +1,32 @@
+metadata:
+  name: minimal
+  version: 1.0.0
+  description: Minimal setup with just essential development tools
+  category: development
+  tags:
+    - minimal
+    - basic
+    - essential
+  platforms:
+    - linux
+    - macos
+    - windows
+  difficulty: beginner
+  estimated_time: 15 minutes
+  icon: ⚡
+  additive: true
+applications:
+  - baseconfig:
+      name: vim
+      description: Text editor
+      category: development
+    install_method: apt
+    install_command: vim
+    default: true
+environment:
+  shell: bash
+  editor: vim
+  languages: []
+system:
+  git_config: true
+  ssh_config: true

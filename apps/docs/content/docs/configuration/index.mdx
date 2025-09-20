@@ -1,0 +1,641 @@
+---
+title: Configuration Overview
+description: Complete guide to DevEx configuration system and files
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# Configuration Overview
+
+DevEx uses a flexible, YAML-based configuration system that allows you to define your entire development environment declaratively. This guide covers all aspects of the configuration system, from basic concepts to advanced customization.
+
+<Callout type="tip">
+New to DevEx? Start with our [Getting Started Guide](/docs/guides/getting-started) first. For team configurations, see [Team Setup Guide](/docs/guides/team-setup).
+</Callout>
+
+## Configuration Architecture
+
+<Cards>
+  <Card title="applications.yaml" description="Define all installable applications, tools, and software" href="/docs/configuration/applications" />
+  <Card title="environment.yaml" description="Configure programming languages, fonts, and shells" href="/docs/configuration/environment" />
+  <Card title="desktop.yaml" description="Desktop environment themes, extensions, and settings" href="/docs/configuration/desktop" />
+  <Card title="system.yaml" description="System-level settings like Git, SSH, and terminal" href="/docs/configuration/system" />
+</Cards>
+
+## Configuration Locations
+
+DevEx follows the XDG Base Directory Specification for configuration storage:
+
+### Directory Structure
+
+```
+~/.local/share/devex/config/   # Default configurations
+├── applications.yaml           # Application definitions
+├── environment.yaml           # Language and environment settings
+├── desktop.yaml               # Desktop environment configuration
+├── system.yaml                # System-level settings
+└── templates/                 # Configuration templates
+    ├── backend/
+    ├── frontend/
+    └── custom/
+
+~/.devex/                      # User overrides (higher priority)
+├── applications.yaml          # Override default applications
+├── environment.yaml           # Custom environment settings
+├── desktop.yaml              # Personal desktop preferences
+└── system.yaml               # Personal system settings
+
+~/.cache/devex/               # Cache directory
+├── downloads/                # Downloaded packages
+├── metadata/                 # Package metadata
+└── repositories/             # Repository information
+```
+
+## Configuration Priority
+
+DevEx uses a layered configuration system with clear priority rules:
+
+<Steps>
+  <Step>
+    **User Overrides** (Highest Priority)
+    
+    Files in `~/.devex/` override all other configurations:
+    ```yaml
+    # ~/.devex/applications.yaml
+    applications:
+      development:
+        - name: vscode
+          extensions:
+            - ms-python.python  # This overrides default extensions
+    ```
+  </Step>
+  
+  <Step>
+    **Team/Template Configurations**
+    
+    Applied templates modify the base configuration:
+    ```bash
+    devex template apply backend-team
+    # Applies team-specific settings
+    ```
+  </Step>
+  
+  <Step>
+    **Default Configurations** (Lowest Priority)
+    
+    Built-in defaults in `~/.local/share/devex/config/`:
+    ```yaml
+    # Default configuration shipped with DevEx
+    ```
+  </Step>
+</Steps>
+
+## Configuration Syntax
+
+All DevEx configuration files use YAML syntax with specific schema requirements.
+
+### Basic Structure
+
+<Tabs items={['Applications', 'Environment', 'Desktop', 'System']}>
+  <Tab value="Applications">
+    ```yaml
+    applications:
+      development:
+        - name: docker
+          description: "Container platform"
+          category: "Development Tools"
+          default: true
+          linux:
+            install_method: apt
+            install_command: docker-ce
+          macos:
+            install_method: brew
+            install_command: docker
+          windows:
+            install_method: winget
+            install_command: Docker.DockerDesktop
+    ```
+  </Tab>
+  
+  <Tab value="Environment">
+    ```yaml
+    programming_languages:
+      - name: "Node.js LTS"
+        install_method: mise
+        install_command: node@lts
+        default: true
+        
+    fonts:
+      - name: "JetBrains Mono"
+        method: url
+        url: "https://download.jetbrains.com/fonts/JetBrainsMono.zip"
+        
+    shell:
+      default_shell: zsh
+      oh_my_zsh: true
+      plugins:
+        - git
+        - docker
+    ```
+  </Tab>
+  
+  <Tab value="Desktop">
+    ```yaml
+    desktop_environments:
+      gnome:
+        platforms: ["linux"]
+        themes:
+          - name: "Adwaita Dark"
+            package: adwaita-icon-theme
+        extensions:
+          - name: "Dash to Dock"
+            uuid: "dash-to-dock@micxgx.gmail.com"
+        settings:
+          - key: "org.gnome.desktop.interface.enable-hot-corners"
+            value: false
+    ```
+  </Tab>
+  
+  <Tab value="System">
+    ```yaml
+    git:
+      user:
+        name: "Your Name"
+        email: "email@example.com"
+      aliases:
+        co: checkout
+        br: branch
+      settings:
+        - key: core.editor
+          value: nvim
+          
+    ssh:
+      config:
+        - host: github.com
+          hostname: github.com
+          user: git
+    ```
+  </Tab>
+</Tabs>
+
+## Cross-Platform Configuration
+
+DevEx supports platform-specific configurations within the same file:
+
+### Platform Detection
+
+```yaml
+# DevEx automatically detects:
+# - Operating System: Linux, macOS, Windows
+# - Distribution: Ubuntu, Fedora, Arch (Linux)
+# - Architecture: x86_64, arm64
+# - Desktop Environment: GNOME, KDE, XFCE (Linux)
+```
+
+### Platform-Specific Settings
+
+```yaml
+applications:
+  development:
+    - name: vscode
+      # Common settings for all platforms
+      description: "Visual Studio Code"
+      category: "Development Tools"
+      
+      # Platform-specific installation
+      linux:
+        install_method: apt
+        install_command: code
+        apt_sources:
+          - key_source: "https://packages.microsoft.com/keys/microsoft.asc"
+          
+      macos:
+        install_method: brew
+        install_command: visual-studio-code
+        
+      windows:
+        install_method: winget
+        install_command: Microsoft.VisualStudioCode
+```
+
+## Configuration Validation
+
+DevEx validates all configuration files before use:
+
+<Callout type="info">
+DevEx automatically validates configuration files when:
+- Loading configurations during any command
+- Editing configuration files with `devex config edit`
+- Running `devex config validate` explicitly
+</Callout>
+
+### Validation Rules
+
+```bash
+# Run validation
+devex config validate
+
+# Validation checks:
+✓ YAML syntax correctness
+✓ Required fields presence
+✓ Value type correctness
+✓ Cross-reference integrity
+✓ Platform compatibility
+✓ Dependency resolution
+```
+
+### Common Validation Errors
+
+<Tabs items={['Syntax Errors', 'Schema Errors', 'Reference Errors', 'Platform Errors']}>
+  <Tab value="Syntax Errors">
+    ```yaml
+    # Invalid YAML
+    applications:
+      development:
+        - name: docker
+        description: "Missing dash"  # Error: Wrong indentation
+    
+    # Fix:
+    applications:
+      development:
+        - name: docker
+          description: "Container platform"
+    ```
+  </Tab>
+  
+  <Tab value="Schema Errors">
+    ```yaml
+    # Missing required field
+    applications:
+      development:
+        - description: "Git version control"  # Error: Missing 'name'
+    
+    # Fix:
+    applications:
+      development:
+        - name: git
+          description: "Git version control"
+    ```
+  </Tab>
+  
+  <Tab value="Reference Errors">
+    ```yaml
+    # Invalid dependency reference
+    applications:
+      development:
+        - name: docker-compose
+          dependencies:
+            - docker-missing  # Error: Referenced app doesn't exist
+    
+    # Fix: Ensure dependency exists
+    ```
+  </Tab>
+  
+  <Tab value="Platform Errors">
+    ```yaml
+    # Platform mismatch
+    applications:
+      development:
+        - name: xcode
+          linux:  # Error: Xcode not available on Linux
+            install_method: apt
+    
+    # Fix: Use correct platform
+    applications:
+      development:
+        - name: xcode
+          macos:
+            install_method: mas
+    ```
+  </Tab>
+</Tabs>
+
+## Configuration Inheritance
+
+DevEx supports configuration inheritance for complex scenarios:
+
+### Inheritance Chain
+
+```
+User Override (~/.devex/)
+        ↓ (merges with)
+Team Configuration (from template)
+        ↓ (merges with)
+Environment Configuration
+        ↓ (merges with)
+Default Configuration
+        ↓
+Final Effective Configuration
+```
+
+### Merge Strategies
+
+<Tabs items={['Replace', 'Merge', 'Append', 'Override']}>
+  <Tab value="Replace">
+    ```yaml
+    # Default configuration
+    applications:
+      development:
+        - name: git
+        - name: curl
+    
+    # User override (replace mode)
+    applications:  # Completely replaces default
+      development:
+        - name: git
+        - name: docker
+    
+    # Result: Only git and docker (curl removed)
+    ```
+  </Tab>
+  
+  <Tab value="Merge">
+    ```yaml
+    # Default configuration
+    git:
+      aliases:
+        co: checkout
+        br: branch
+    
+    # User override (merge mode)
+    git:
+      aliases:
+        st: status  # Added to existing aliases
+    
+    # Result: co, br, and st aliases
+    ```
+  </Tab>
+  
+  <Tab value="Append">
+    ```yaml
+    # Default configuration
+    shell:
+      plugins:
+        - git
+        - docker
+    
+    # User override (append mode)
+    shell:
+      plugins: !append
+        - kubectl  # Appended to list
+    
+    # Result: git, docker, kubectl plugins
+    ```
+  </Tab>
+  
+  <Tab value="Override">
+    ```yaml
+    # Default configuration
+    applications:
+      development:
+        - name: vscode
+          extensions:
+            - ms-python.python
+    
+    # User override (specific override)
+    applications:
+      development:
+        - name: vscode
+          extensions: !override
+            - ms-go.go  # Completely replaces extensions
+    
+    # Result: Only ms-go.go extension
+    ```
+  </Tab>
+</Tabs>
+
+## Advanced Configuration Features
+
+### Variables and Templating
+
+```yaml
+# Define variables
+variables:
+  user_name: "${USER}"
+  home_dir: "${HOME}"
+  config_dir: "${HOME}/.config"
+
+# Use variables
+applications:
+  development:
+    - name: custom-tool
+      config_files:
+        - source: "./configs/tool.conf"
+          destination: "${config_dir}/tool/config"
+```
+
+### Conditional Configuration
+
+```yaml
+# Platform conditions
+applications:
+  development:
+    - name: docker
+      linux:
+        when: "${DISTRO}" == "ubuntu"
+        install_method: apt
+      
+      macos:
+        when: "${ARCH}" == "arm64"
+        install_method: brew
+        install_command: docker-arm64
+```
+
+### Configuration Fragments
+
+```yaml
+# Include other configuration files
+include:
+  - ~/.devex/fragments/databases.yaml
+  - ~/.devex/fragments/languages.yaml
+  
+# Or include from URLs
+include:
+  - https://company.com/configs/standard.yaml
+```
+
+## Best Practices
+
+<Callout type="tip">
+**Configuration Best Practices:**
+
+1. **Keep configurations modular** - Separate concerns into different files
+2. **Use version control** - Track your configurations in Git
+3. **Document custom settings** - Add comments explaining non-obvious configurations
+4. **Validate regularly** - Run `devex config validate` after changes
+5. **Use templates for teams** - Create reusable templates for consistency
+6. **Backup before major changes** - Use `devex config backup create`
+</Callout>
+
+### Configuration Management Workflow
+
+<Steps>
+  <Step>
+    **Initial Setup**
+    ```bash
+    # Start with default configuration
+    devex setup
+    
+    # Or apply a template
+    devex template apply backend
+    ```
+  </Step>
+  
+  <Step>
+    **Customization**
+    ```bash
+    # Edit configurations
+    devex config edit applications
+    
+    # Add specific tools
+    devex add docker postgresql
+    ```
+  </Step>
+  
+  <Step>
+    **Validation**
+    ```bash
+    # Validate changes
+    devex config validate
+    
+    # Test with dry-run
+    devex install --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    **Version Control**
+    ```bash
+    # Initialize Git repository
+    cd ~/.devex
+    git init
+    git add .
+    git commit -m "Initial DevEx configuration"
+    ```
+  </Step>
+  
+  <Step>
+    **Sharing**
+    ```bash
+    # Export for team sharing
+    devex config export --output team-config.tar.gz
+    
+    # Or create a template
+    devex template create team-backend
+    ```
+  </Step>
+</Steps>
+
+## Configuration Examples
+
+### Minimal Configuration
+
+```yaml
+# Minimal setup for basic development
+applications:
+  development:
+    - name: git
+    - name: curl
+    - name: vim
+
+programming_languages:
+  - name: "Python"
+    install_method: mise
+    install_command: python@3.11
+```
+
+### Full-Stack Configuration
+
+```yaml
+# Complete full-stack development setup
+applications:
+  development:
+    - name: git
+    - name: docker
+    - name: vscode
+    - name: postman
+  databases:
+    - name: postgresql
+    - name: redis
+    - name: mongodb
+
+programming_languages:
+  - name: "Node.js LTS"
+    install_method: mise
+  - name: "Python 3.11"
+    install_method: mise
+  - name: "Go"
+    install_method: mise
+```
+
+## Troubleshooting Configuration Issues
+
+<Tabs items={['Validation Errors', 'Loading Issues', 'Merge Conflicts', 'Performance']}>
+  <Tab value="Validation Errors">
+    ```bash
+    # Check for syntax errors
+    devex config validate --verbose
+    
+    # Auto-fix common issues
+    devex config validate --fix
+    
+    # Validate specific file
+    devex config validate applications
+    ```
+  </Tab>
+  
+  <Tab value="Loading Issues">
+    ```bash
+    # Debug configuration loading
+    DEVEX_DEBUG=true devex config show
+    
+    # Check configuration paths
+    devex config show --verbose
+    
+    # Reset to defaults
+    mv ~/.devex ~/.devex.backup
+    devex config reset
+    ```
+  </Tab>
+  
+  <Tab value="Merge Conflicts">
+    ```bash
+    # Show effective configuration
+    devex config show --effective
+    
+    # Compare configurations
+    devex config diff default current
+    
+    # Reset specific file
+    devex config reset applications
+    ```
+  </Tab>
+  
+  <Tab value="Performance">
+    ```bash
+    # Profile configuration loading
+    time devex config validate
+    
+    # Optimize large configurations
+    devex config optimize
+    
+    # Clean cache
+    devex cache clean
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+- [Applications Configuration](/docs/configuration/applications) - Deep dive into application definitions
+- [Environment Configuration](/docs/configuration/environment) - Programming languages and shells
+- [Desktop Configuration](/docs/configuration/desktop) - Themes and desktop environments
+- [System Configuration](/docs/configuration/system) - Git, SSH, and system settings
+- [Templates Guide](/docs/configuration/templates) - Creating and using templates
+
+<Callout type="info">
+The configuration system is the heart of DevEx. Understanding it well allows you to create powerful, reproducible development environments tailored to your exact needs.
+</Callout>

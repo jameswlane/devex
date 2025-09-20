@@ -1,0 +1,1635 @@
+---
+title: Data Science Environment
+description: Complete Python data science setup with Jupyter, pandas, machine learning libraries, and visualization tools
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Data Science Environment
+
+This example provides a comprehensive data science development environment with Python, Jupyter, machine learning libraries, visualization tools, and data engineering capabilities.
+
+## Quick Start
+
+<Steps>
+  <Step>
+    ### Download Configuration
+    
+    ```bash
+    # Download the data science configuration
+    curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/examples/data-science.yaml > ~/.devex/data-science.yaml
+    
+    # Preview what will be installed
+    devex config apply --file ~/.devex/data-science.yaml --dry-run
+    ```
+  </Step>
+  
+  <Step>
+    ### Apply Configuration
+    
+    ```bash
+    # Apply the configuration
+    devex config apply --file ~/.devex/data-science.yaml
+    
+    # Install all tools
+    devex install
+    ```
+  </Step>
+  
+  <Step>
+    ### Verify Installation
+    
+    ```bash
+    # Check Python and key libraries
+    python --version
+    jupyter --version
+    pip show pandas numpy matplotlib
+    ```
+  </Step>
+</Steps>
+
+## Complete Configuration
+
+<Tabs items={['Full Environment', 'ML Focus', 'Data Engineering', 'Research Setup']}>
+  <Tab value="Full Environment">
+    ```yaml
+    # ~/.devex/data-science.yaml
+    # Complete Data Science Development Environment
+    
+    applications:
+      development:
+        # Version Control
+        - name: git
+          description: "Distributed version control system"
+          category: "Version Control"
+          default: true
+          priority: 10
+          
+        - name: git-lfs
+          description: "Git Large File Storage for datasets"
+          category: "Version Control"
+          default: true
+          dependencies: ["git"]
+          
+        # Code Editors
+        - name: vscode
+          description: "Visual Studio Code with data science extensions"
+          category: "Editors"
+          default: true
+          post_install:
+            # Data Science VS Code extensions
+            - shell: "code --install-extension ms-python.python"
+            - shell: "code --install-extension ms-toolsai.jupyter"
+            - shell: "code --install-extension ms-python.pylint"
+            - shell: "code --install-extension ms-python.black-formatter"
+            - shell: "code --install-extension ms-python.isort"
+            - shell: "code --install-extension charliermarsh.ruff"
+            - shell: "code --install-extension ms-vscode.vscode-json"
+            - shell: "code --install-extension redhat.vscode-yaml"
+            - shell: "code --install-extension ms-vscode-remote.remote-containers"
+            - shell: "code --install-extension GitHub.copilot"
+          config_files:
+            - source: "~/.devex/assets/vscode/data-science-settings.json"
+              destination: "~/.config/Code/User/settings.json"
+              
+        # Jupyter Environment
+        - name: jupyter
+          description: "Jupyter Notebook and JupyterLab"
+          category: "Data Science"
+          default: true
+          dependencies: ["python"]
+          install_method: pip
+          install_command: "jupyter jupyterlab notebook"
+          post_install:
+            # Jupyter extensions
+            - shell: "pip install jupyterlab-git"
+            - shell: "pip install jupyterlab-drawio"
+            - shell: "pip install jupyterlab-variableinspector"
+            - shell: "pip install jupyterlab-code-formatter"
+            - shell: "pip install jupytext"
+            - shell: "jupyter labextension install @jupyter-widgets/jupyterlab-manager"
+            
+        # Alternative Data Science IDEs
+        - name: spyder
+          description: "Scientific Python IDE"
+          category: "Data Science"
+          default: false
+          dependencies: ["python"]
+          install_method: pip
+          install_command: spyder
+          
+        - name: rstudio
+          description: "RStudio IDE for R"
+          category: "Data Science"
+          default: false
+          linux:
+            install_method: apt
+            install_command: rstudio
+          macos:
+            install_method: brew
+            install_command: rstudio
+            cask: true
+          windows:
+            install_method: winget
+            install_command: RStudio.RStudio
+            
+        # Database Tools
+        - name: dbeaver
+          description: "Universal database tool"
+          category: "Database Tools"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: io.dbeaver.DBeaverCommunity
+          macos:
+            install_method: brew
+            install_command: dbeaver-community
+            cask: true
+          windows:
+            install_method: winget
+            install_command: dbeaver.dbeaver
+            
+        - name: pgadmin
+          description: "PostgreSQL administration tool"
+          category: "Database Tools"
+          default: false
+          linux:
+            install_method: flatpak
+            install_command: org.pgadmin.pgAdmin4
+            
+        # Data Visualization Tools
+        - name: tableau-public
+          description: "Tableau Public for data visualization"
+          category: "Visualization"
+          default: false
+          macos:
+            install_method: brew
+            install_command: tableau-public
+            cask: true
+          windows:
+            install_method: winget
+            install_command: Tableau.TableauPublic
+            
+        # Terminal and Shell Tools
+        - name: zsh
+          description: "Zsh shell with data science plugins"
+          category: "Shell"
+          default: true
+          post_install:
+            - shell: "sh -c '$(curl -fsSL https://raw.github.com/ohmyzsh/ohmyzsh/master/tools/install.sh)'"
+            
+        - name: fzf
+          description: "Fuzzy finder for files and data"
+          category: "Utilities"
+          default: true
+          
+        - name: ripgrep
+          description: "Fast text search in datasets"
+          category: "Utilities"
+          default: true
+          
+        - name: jq
+          description: "JSON processor for data manipulation"
+          category: "Utilities"
+          default: true
+          
+        - name: csvkit
+          description: "CSV data manipulation tools"
+          category: "Data Tools"
+          default: true
+          install_method: pip
+          install_command: csvkit
+          
+        # Container and Virtualization
+        - name: docker
+          description: "Container platform for reproducible environments"
+          category: "Containers"
+          default: true
+          post_install:
+            - shell: "docker pull jupyter/scipy-notebook"
+            - shell: "docker pull jupyter/datascience-notebook"
+            
+        - name: conda
+          description: "Package and environment manager"
+          category: "Package Managers"
+          default: true
+          linux:
+            install_method: curlpipe
+            install_command: "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+          macos:
+            install_method: brew
+            install_command: miniconda
+            cask: true
+          post_install:
+            - shell: "conda config --set auto_activate_base false"
+            - shell: "conda create -n datascience python=3.11 -y"
+    
+    # Programming Languages
+    programming_languages:
+      - name: Python
+        description: "Python for data science and machine learning"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: python@3.11
+        default: true
+        priority: 20
+        shell_updates:
+          - "export PYTHONPATH=$PYTHONPATH:."
+        post_install:
+          # Core data science packages
+          - shell: "pip install --upgrade pip setuptools wheel"
+          - shell: "pip install numpy pandas matplotlib seaborn"
+          - shell: "pip install scikit-learn scipy statsmodels"
+          - shell: "pip install jupyter jupyterlab notebook"
+          - shell: "pip install plotly bokeh altair"
+          - shell: "pip install requests beautifulsoup4 scrapy"
+          - shell: "pip install openpyxl xlrd SQLAlchemy"
+          
+          # Machine Learning and Deep Learning
+          - shell: "pip install tensorflow torch torchvision"
+          - shell: "pip install transformers datasets"
+          - shell: "pip install lightgbm xgboost catboost"
+          - shell: "pip install optuna hyperopt"
+          
+          # Development and Quality Tools
+          - shell: "pip install black isort flake8 mypy"
+          - shell: "pip install pytest pytest-cov"
+          - shell: "pip install pre-commit"
+          - shell: "pip install ipython ipdb"
+          
+          # Specialized Libraries
+          - shell: "pip install geopandas folium"
+          - shell: "pip install networkx igraph"
+          - shell: "pip install nltk spacy textblob"
+          - shell: "pip install opencv-python pillow"
+          
+      - name: R
+        description: "R programming language for statistics"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: r@latest
+        default: false
+        post_install:
+          - shell: "R -e \"install.packages(c('tidyverse', 'ggplot2', 'dplyr', 'shiny'), repos='https://cran.rstudio.com/')\""
+          - shell: "R -e \"install.packages(c('caret', 'randomForest', 'e1071'), repos='https://cran.rstudio.com/')\""
+          
+      - name: Julia
+        description: "Julia language for high-performance computing"
+        category: "Programming Languages"
+        install_method: mise
+        install_command: julia@latest
+        default: false
+        post_install:
+          - shell: "julia -e 'using Pkg; Pkg.add([\"DataFrames\", \"Plots\", \"MLJ\", \"IJulia\"])'"
+    
+    # Databases and Data Storage
+    databases:
+      - name: postgresql
+        description: "PostgreSQL database for data storage"
+        category: "SQL Databases"
+        default: true
+        service:
+          name: postgresql
+          enabled: true
+          started: true
+        post_install:
+          - shell: "sudo -u postgres createuser --superuser $USER"
+          - shell: "sudo -u postgres createdb $USER"
+          - shell: "createdb datasets"
+          
+      - name: redis
+        description: "Redis for caching and data structures"
+        category: "NoSQL Databases"
+        default: false
+        service:
+          name: redis-server
+          enabled: true
+          started: true
+          
+      - name: mongodb
+        description: "MongoDB for document storage"
+        category: "NoSQL Databases"
+        default: false
+        service:
+          name: mongod
+          enabled: true
+          started: true
+          
+      - name: sqlite
+        description: "SQLite for lightweight data storage"
+        category: "SQL Databases"
+        default: true
+    
+    # Big Data and Analytics Tools
+    big_data:
+      - name: spark
+        description: "Apache Spark for big data processing"
+        category: "Big Data"
+        default: false
+        install_method: curlpipe
+        install_command: "https://archive.apache.org/dist/spark/spark-3.5.0/spark-3.5.0-bin-hadoop3.tgz"
+        
+      - name: kafka
+        description: "Apache Kafka for data streaming"
+        category: "Streaming"
+        default: false
+        
+      - name: elasticsearch
+        description: "Elasticsearch for search and analytics"
+        category: "Search"
+        default: false
+    
+    # Environment Configuration
+    environment:
+      shell:
+        default_shell: "zsh"
+        oh_my_zsh: true
+        plugins:
+          - "git"
+          - "python"
+          - "docker"
+          - "conda"
+          - "jupyter"
+        theme: "agnoster"
+        
+      fonts:
+        - name: "JetBrains Mono"
+          description: "Programming font for code and notebooks"
+          method: "url"
+          url: "https://download.jetbrains.com/fonts/JetBrainsMono-2.304.zip"
+          destination: "~/.local/share/fonts/"
+          post_install:
+            - shell: "fc-cache -fv"
+            
+      python:
+        global_packages:
+          # Core data science stack
+          - "numpy>=1.24.0"
+          - "pandas>=2.0.0"
+          - "matplotlib>=3.7.0"
+          - "seaborn>=0.12.0"
+          - "scikit-learn>=1.3.0"
+          - "scipy>=1.10.0"
+          - "statsmodels>=0.14.0"
+          
+          # Jupyter ecosystem
+          - "jupyter>=1.0.0"
+          - "jupyterlab>=4.0.0"
+          - "notebook>=7.0.0"
+          - "ipython>=8.0.0"
+          
+          # Visualization
+          - "plotly>=5.0.0"
+          - "bokeh>=3.0.0"
+          - "altair>=5.0.0"
+          
+          # Machine Learning
+          - "tensorflow>=2.13.0"
+          - "torch>=2.0.0"
+          - "transformers>=4.20.0"
+          - "lightgbm>=4.0.0"
+          - "xgboost>=1.7.0"
+          
+          # Data Tools
+          - "requests>=2.31.0"
+          - "beautifulsoup4>=4.12.0"
+          - "openpyxl>=3.1.0"
+          - "SQLAlchemy>=2.0.0"
+          - "psycopg2-binary>=2.9.0"
+          
+          # Development Tools
+          - "black>=23.0.0"
+          - "isort>=5.12.0"
+          - "flake8>=6.0.0"
+          - "mypy>=1.5.0"
+          - "pytest>=7.4.0"
+          - "pre-commit>=3.3.0"
+    
+    # System Configuration
+    system:
+      git:
+        settings:
+          - key: "core.editor"
+            value: "code --wait"
+          - key: "init.defaultBranch"
+            value: "main"
+          - key: "pull.rebase"
+            value: "false"
+          - key: "lfs.track"
+            value: "*.csv *.json *.parquet *.h5 *.pkl *.joblib"
+            
+      jupyter:
+        config:
+          notebook_dir: "~/notebooks"
+          browser: "google-chrome"
+          port: 8888
+          
+      environment_variables:
+        JUPYTER_CONFIG_DIR: "~/.jupyter"
+        PYTHONPATH: "$PYTHONPATH:."
+        MPLBACKEND: "Agg"
+        OMP_NUM_THREADS: "4"
+        OPENBLAS_NUM_THREADS: "4"
+        MKL_NUM_THREADS: "4"
+        NUMEXPR_NUM_THREADS: "4"
+    ```
+  </Tab>
+  
+  <Tab value="ML Focus">
+    ```yaml
+    # Machine Learning focused configuration
+    programming_languages:
+      - name: python
+        install_method: mise
+        install_command: python@3.11
+        post_install:
+          # Deep Learning Frameworks
+          - shell: "pip install tensorflow torch torchvision torchaudio"
+          - shell: "pip install transformers datasets accelerate"
+          - shell: "pip install pytorch-lightning"
+          
+          # ML Libraries
+          - shell: "pip install scikit-learn xgboost lightgbm catboost"
+          - shell: "pip install optuna hyperopt ray[tune]"
+          - shell: "pip install mlflow wandb tensorboard"
+          
+          # Computer Vision
+          - shell: "pip install opencv-python pillow albumentations"
+          - shell: "pip install torchvision timm"
+          
+          # NLP
+          - shell: "pip install nltk spacy textblob gensim"
+          - shell: "pip install sentence-transformers"
+          
+          # Model Deployment
+          - shell: "pip install fastapi uvicorn gradio streamlit"
+          - shell: "pip install onnx onnxruntime"
+    ```
+  </Tab>
+  
+  <Tab value="Data Engineering">
+    ```yaml
+    # Data Engineering focused configuration
+    applications:
+      development:
+        - name: apache-airflow
+          install_method: pip
+          install_command: "apache-airflow[postgres,redis]"
+        - name: dbt
+          install_method: pip
+          install_command: "dbt-core dbt-postgres"
+        - name: great-expectations
+          install_method: pip
+          install_command: great_expectations
+          
+    programming_languages:
+      - name: python
+        post_install:
+          # Data Processing
+          - shell: "pip install pandas polars dask"
+          - shell: "pip install pyarrow fastparquet"
+          - shell: "pip install pyspark"
+          
+          # Database Connectors
+          - shell: "pip install SQLAlchemy psycopg2-binary pymongo"
+          - shell: "pip install redis-py elasticsearch-py"
+          
+          # Cloud Providers
+          - shell: "pip install boto3 azure-storage-blob google-cloud-storage"
+          
+          # Workflow Tools
+          - shell: "pip install prefect dagster"
+    ```
+  </Tab>
+  
+  <Tab value="Research Setup">
+    ```yaml
+    # Academic and research focused configuration
+    applications:
+      development:
+        - name: latex
+          description: "LaTeX for academic papers"
+          default: true
+        - name: pandoc
+          description: "Document converter"
+          default: true
+        - name: zotero
+          description: "Reference manager"
+          default: false
+          
+    programming_languages:
+      - name: python
+        post_install:
+          # Research Tools
+          - shell: "pip install papermill nbconvert"
+          - shell: "pip install sphinx sphinx-rtd-theme"
+          - shell: "pip install pytest-benchmark"
+          
+          # Statistical Analysis
+          - shell: "pip install statsmodels pingouin"
+          - shell: "pip install lifelines survival-analysis"
+          
+          # Reproducibility
+          - shell: "pip install dvc sacred mlflow"
+          - shell: "pip install conda-pack"
+      
+      - name: r
+        default: true
+        post_install:
+          - shell: "R -e \"install.packages(c('knitr', 'rmarkdown', 'bookdown'), repos='https://cran.rstudio.com/')\""
+    ```
+  </Tab>
+</Tabs>
+
+## Jupyter Environment Setup
+
+### JupyterLab Configuration
+
+```python
+# ~/.jupyter/jupyter_lab_config.py
+c = get_config()
+
+# Server configuration
+c.ServerApp.ip = 'localhost'
+c.ServerApp.port = 8888
+c.ServerApp.open_browser = True
+c.ServerApp.notebook_dir = '~/notebooks'
+
+# Security
+c.ServerApp.token = ''
+c.ServerApp.password = ''
+c.ServerApp.disable_check_xsrf = False
+
+# Extensions
+c.LabApp.default_url = '/lab'
+
+# Resource limits
+c.ResourceUseDisplay.mem_limit = 8 * 1024**3  # 8GB
+c.ResourceUseDisplay.track_cpu_percent = True
+```
+
+### Jupyter Notebook Templates
+
+<Tabs items={['Data Analysis', 'ML Experiment', 'EDA Template', 'Research Paper']}>
+  <Tab value="Data Analysis">
+    ```python
+    # Data Analysis Template
+    # notebooks/templates/data_analysis_template.ipynb
+    
+    # Cell 1: Imports and Setup
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from pathlib import Path
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Set style
+    plt.style.use('default')
+    sns.set_palette("husl")
+    
+    # Configuration
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', 100)
+    
+    print("📊 Data Analysis Environment Ready!")
+    
+    # Cell 2: Data Loading
+    def load_data(file_path):
+        """Load data with automatic format detection"""
+        file_path = Path(file_path)
+        
+        if file_path.suffix == '.csv':
+            return pd.read_csv(file_path)
+        elif file_path.suffix == '.parquet':
+            return pd.read_parquet(file_path)
+        elif file_path.suffix in ['.xlsx', '.xls']:
+            return pd.read_excel(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {file_path.suffix}")
+    
+    # Load your data
+    # df = load_data('data/your_dataset.csv')
+    
+    # Cell 3: Initial Data Exploration
+    def explore_data(df):
+        """Generate comprehensive data exploration report"""
+        print("📈 Dataset Overview")
+        print(f"Shape: {df.shape}")
+        print(f"Memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+        print("\n📋 Column Information:")
+        print(df.info())
+        print("\n📊 Statistical Summary:")
+        print(df.describe(include='all'))
+        print("\n🔍 Missing Values:")
+        missing = df.isnull().sum()
+        print(missing[missing > 0])
+        
+    # explore_data(df)
+    
+    # Cell 4: Visualization Functions
+    def plot_distributions(df, numeric_cols=None, figsize=(15, 10)):
+        """Plot distributions of numeric columns"""
+        if numeric_cols is None:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+        
+        n_cols = min(3, len(numeric_cols))
+        n_rows = (len(numeric_cols) + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
+        axes = axes.flatten() if n_rows > 1 else [axes]
+        
+        for i, col in enumerate(numeric_cols):
+            if i < len(axes):
+                df[col].hist(bins=30, ax=axes[i], alpha=0.7)
+                axes[i].set_title(f'Distribution of {col}')
+                axes[i].set_xlabel(col)
+                axes[i].set_ylabel('Frequency')
+        
+        # Hide extra subplots
+        for i in range(len(numeric_cols), len(axes)):
+            axes[i].set_visible(False)
+        
+        plt.tight_layout()
+        plt.show()
+    
+    # plot_distributions(df)
+    ```
+  </Tab>
+  
+  <Tab value="ML Experiment">
+    ```python
+    # Machine Learning Experiment Template
+    # notebooks/templates/ml_experiment_template.ipynb
+    
+    # Cell 1: Imports and Setup
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from sklearn.model_selection import train_test_split, cross_val_score
+    from sklearn.preprocessing import StandardScaler, LabelEncoder
+    from sklearn.metrics import classification_report, confusion_matrix
+    from sklearn.ensemble import RandomForestClassifier
+    import joblib
+    from datetime import datetime
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Experiment configuration
+    RANDOM_STATE = 42
+    TEST_SIZE = 0.2
+    CV_FOLDS = 5
+    
+    # Create experiment log
+    experiment_log = {
+        'timestamp': datetime.now(),
+        'random_state': RANDOM_STATE,
+        'test_size': TEST_SIZE,
+        'cv_folds': CV_FOLDS
+    }
+    
+    print("🧪 ML Experiment Environment Ready!")
+    
+    # Cell 2: Data Loading and Preprocessing
+    def preprocess_data(df, target_col):
+        """Preprocess data for machine learning"""
+        # Separate features and target
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
+        
+        # Handle categorical variables
+        categorical_cols = X.select_dtypes(include=['object']).columns
+        for col in categorical_cols:
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col])
+        
+        # Handle missing values
+        X = X.fillna(X.mean())
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE, stratify=y
+        )
+        
+        # Scale features
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        return X_train_scaled, X_test_scaled, y_train, y_test, scaler
+    
+    # Cell 3: Model Training and Evaluation
+    def train_and_evaluate_model(X_train, X_test, y_train, y_test, model=None):
+        """Train and evaluate a machine learning model"""
+        if model is None:
+            model = RandomForestClassifier(random_state=RANDOM_STATE)
+        
+        # Train model
+        model.fit(X_train, y_train)
+        
+        # Cross-validation
+        cv_scores = cross_val_score(model, X_train, y_train, cv=CV_FOLDS)
+        
+        # Predictions
+        y_pred = model.predict(X_test)
+        
+        # Evaluation
+        print("📊 Model Performance:")
+        print(f"Cross-validation scores: {cv_scores}")
+        print(f"Mean CV score: {cv_scores.mean():.4f} (+/- {cv_scores.std() * 2:.4f})")
+        print("\n📋 Classification Report:")
+        print(classification_report(y_test, y_pred))
+        
+        # Confusion matrix
+        plt.figure(figsize=(8, 6))
+        cm = confusion_matrix(y_test, y_pred)
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+        plt.title('Confusion Matrix')
+        plt.ylabel('True Label')
+        plt.xlabel('Predicted Label')
+        plt.show()
+        
+        # Feature importance
+        if hasattr(model, 'feature_importances_'):
+            feature_importance = pd.DataFrame({
+                'feature': range(len(model.feature_importances_)),
+                'importance': model.feature_importances_
+            }).sort_values('importance', ascending=False)
+            
+            plt.figure(figsize=(10, 6))
+            sns.barplot(data=feature_importance.head(10), y='feature', x='importance')
+            plt.title('Top 10 Feature Importances')
+            plt.show()
+        
+        return model, cv_scores, y_pred
+    
+    # Cell 4: Experiment Tracking
+    def save_experiment_results(model, cv_scores, experiment_log, filename=None):
+        """Save experiment results"""
+        if filename is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"experiment_{timestamp}"
+        
+        # Save model
+        joblib.dump(model, f'models/{filename}_model.pkl')
+        
+        # Update experiment log
+        experiment_log.update({
+            'cv_mean': cv_scores.mean(),
+            'cv_std': cv_scores.std(),
+            'model_type': type(model).__name__,
+            'filename': filename
+        })
+        
+        # Save experiment log
+        pd.DataFrame([experiment_log]).to_csv(f'experiments/{filename}_log.csv', index=False)
+        
+        print(f"💾 Experiment saved as {filename}")
+        return filename
+    ```
+  </Tab>
+  
+  <Tab value="EDA Template">
+    ```python
+    # Exploratory Data Analysis Template
+    # notebooks/templates/eda_template.ipynb
+    
+    # Cell 1: Setup and Imports
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Configure plotting
+    plt.style.use('default')
+    sns.set_palette("husl")
+    pd.set_option('display.max_columns', None)
+    
+    print("🔍 Exploratory Data Analysis Environment Ready!")
+    
+    # Cell 2: Automated EDA Functions
+    def generate_eda_report(df):
+        """Generate comprehensive EDA report"""
+        print("=" * 50)
+        print("📊 EXPLORATORY DATA ANALYSIS REPORT")
+        print("=" * 50)
+        
+        # Basic info
+        print(f"\n📈 Dataset Shape: {df.shape}")
+        print(f"📦 Memory Usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+        
+        # Data types
+        print(f"\n📋 Data Types:")
+        print(df.dtypes.value_counts())
+        
+        # Missing values
+        print(f"\n🔍 Missing Values:")
+        missing = df.isnull().sum()
+        missing_percent = (missing / len(df)) * 100
+        missing_df = pd.DataFrame({
+            'Count': missing,
+            'Percentage': missing_percent
+        }).sort_values('Count', ascending=False)
+        print(missing_df[missing_df['Count'] > 0])
+        
+        # Numeric summary
+        numeric_cols = df.select_dtypes(include=[np.number]).columns
+        if len(numeric_cols) > 0:
+            print(f"\n📊 Numeric Columns Summary:")
+            print(df[numeric_cols].describe())
+        
+        # Categorical summary
+        categorical_cols = df.select_dtypes(include=['object']).columns
+        if len(categorical_cols) > 0:
+            print(f"\n📝 Categorical Columns Summary:")
+            for col in categorical_cols:
+                unique_count = df[col].nunique()
+                print(f"{col}: {unique_count} unique values")
+                if unique_count <= 10:
+                    print(df[col].value_counts().head())
+                print()
+    
+    def plot_missing_values(df):
+        """Visualize missing values pattern"""
+        missing = df.isnull().sum()
+        missing = missing[missing > 0].sort_values(ascending=False)
+        
+        if len(missing) > 0:
+            plt.figure(figsize=(12, 6))
+            
+            # Missing values bar plot
+            plt.subplot(1, 2, 1)
+            missing.plot(kind='bar')
+            plt.title('Missing Values Count')
+            plt.ylabel('Count')
+            plt.xticks(rotation=45)
+            
+            # Missing values heatmap
+            plt.subplot(1, 2, 2)
+            missing_matrix = df[missing.index].isnull()
+            sns.heatmap(missing_matrix, cbar=True, yticklabels=False)
+            plt.title('Missing Values Pattern')
+            
+            plt.tight_layout()
+            plt.show()
+        else:
+            print("✅ No missing values found!")
+    
+    def plot_correlation_matrix(df):
+        """Plot correlation matrix for numeric columns"""
+        numeric_df = df.select_dtypes(include=[np.number])
+        
+        if len(numeric_df.columns) > 1:
+            plt.figure(figsize=(12, 10))
+            correlation_matrix = numeric_df.corr()
+            
+            # Create mask for upper triangle
+            mask = np.triu(np.ones_like(correlation_matrix, dtype=bool))
+            
+            sns.heatmap(
+                correlation_matrix, 
+                mask=mask, 
+                annot=True, 
+                cmap='coolwarm', 
+                center=0,
+                square=True,
+                fmt='.2f'
+            )
+            plt.title('Correlation Matrix')
+            plt.tight_layout()
+            plt.show()
+        else:
+            print("❌ Not enough numeric columns for correlation analysis")
+    
+    def plot_distributions(df, cols=None, max_cols=6):
+        """Plot distributions of specified columns"""
+        if cols is None:
+            cols = df.select_dtypes(include=[np.number]).columns[:max_cols]
+        
+        n_cols = min(3, len(cols))
+        n_rows = (len(cols) + n_cols - 1) // n_cols
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
+        axes = axes.flatten() if n_rows > 1 else [axes]
+        
+        for i, col in enumerate(cols):
+            if i < len(axes):
+                # Histogram
+                axes[i].hist(df[col].dropna(), bins=30, alpha=0.7, edgecolor='black')
+                axes[i].set_title(f'Distribution of {col}')
+                axes[i].set_xlabel(col)
+                axes[i].set_ylabel('Frequency')
+                
+                # Add statistics
+                mean_val = df[col].mean()
+                median_val = df[col].median()
+                axes[i].axvline(mean_val, color='red', linestyle='--', label=f'Mean: {mean_val:.2f}')
+                axes[i].axvline(median_val, color='blue', linestyle='--', label=f'Median: {median_val:.2f}')
+                axes[i].legend()
+        
+        # Hide extra subplots
+        for i in range(len(cols), len(axes)):
+            axes[i].set_visible(False)
+        
+        plt.tight_layout()
+        plt.show()
+    
+    # Generate initial report
+    # generate_eda_report(df)
+    # plot_missing_values(df)
+    # plot_correlation_matrix(df)
+    # plot_distributions(df)
+    ```
+  </Tab>
+  
+  <Tab value="Research Paper">
+    ```python
+    # Research Paper Analysis Template
+    # notebooks/templates/research_paper_template.ipynb
+    
+    # Cell 1: Research Setup
+    import pandas as pd
+    import numpy as np
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    from scipy import stats
+    from statsmodels.stats.power import ttest_power
+    import warnings
+    warnings.filterwarnings('ignore')
+    
+    # Research configuration
+    ALPHA = 0.05  # Significance level
+    POWER = 0.8   # Desired statistical power
+    
+    # Set publication-ready plotting style
+    plt.style.use('default')
+    plt.rcParams['figure.dpi'] = 300
+    plt.rcParams['savefig.dpi'] = 300
+    plt.rcParams['font.size'] = 12
+    plt.rcParams['axes.titlesize'] = 14
+    plt.rcParams['axes.labelsize'] = 12
+    plt.rcParams['xtick.labelsize'] = 10
+    plt.rcParams['ytick.labelsize'] = 10
+    plt.rcParams['legend.fontsize'] = 10
+    
+    print("🔬 Research Analysis Environment Ready!")
+    print(f"Alpha level: {ALPHA}")
+    print(f"Desired power: {POWER}")
+    
+    # Cell 2: Research Functions
+    def calculate_sample_size(effect_size, alpha=ALPHA, power=POWER):
+        """Calculate required sample size for t-test"""
+        from statsmodels.stats.power import ttest_power
+        
+        # Calculate sample size
+        n = 1
+        while ttest_power(effect_size, n, alpha) < power:
+            n += 1
+        
+        return n
+    
+    def perform_descriptive_analysis(df, group_col, measure_col):
+        """Perform descriptive analysis by groups"""
+        print("📊 DESCRIPTIVE STATISTICS")
+        print("=" * 40)
+        
+        # Group statistics
+        descriptive = df.groupby(group_col)[measure_col].agg([
+            'count', 'mean', 'std', 'min', 'max', 'median'
+        ]).round(3)
+        
+        print(descriptive)
+        
+        # Effect size (Cohen's d)
+        groups = df[group_col].unique()
+        if len(groups) == 2:
+            group1 = df[df[group_col] == groups[0]][measure_col]
+            group2 = df[df[group_col] == groups[1]][measure_col]
+            
+            pooled_std = np.sqrt(((len(group1) - 1) * group1.var() + 
+                                (len(group2) - 1) * group2.var()) / 
+                               (len(group1) + len(group2) - 2))
+            
+            cohens_d = (group1.mean() - group2.mean()) / pooled_std
+            print(f"\nCohen's d (effect size): {cohens_d:.3f}")
+            
+            # Interpret effect size
+            if abs(cohens_d) < 0.2:
+                interpretation = "negligible"
+            elif abs(cohens_d) < 0.5:
+                interpretation = "small"
+            elif abs(cohens_d) < 0.8:
+                interpretation = "medium"
+            else:
+                interpretation = "large"
+            
+            print(f"Effect size interpretation: {interpretation}")
+        
+        return descriptive
+    
+    def perform_statistical_tests(df, group_col, measure_col):
+        """Perform appropriate statistical tests"""
+        print("\n🧪 STATISTICAL TESTS")
+        print("=" * 40)
+        
+        groups = [group for name, group in df.groupby(group_col)[measure_col]]
+        
+        # Normality tests
+        print("Normality Tests (Shapiro-Wilk):")
+        for i, group in enumerate(groups):
+            stat, p = stats.shapiro(group)
+            group_name = df[group_col].unique()[i]
+            print(f"  {group_name}: p = {p:.4f}")
+        
+        # Homogeneity of variance (Levene's test)
+        stat, p = stats.levene(*groups)
+        print(f"\nLevene's test (equal variances): p = {p:.4f}")
+        
+        # Choose appropriate test
+        if len(groups) == 2:
+            # Independent t-test or Mann-Whitney U
+            stat, p = stats.ttest_ind(*groups)
+            print(f"\nIndependent t-test: t = {stat:.4f}, p = {p:.4f}")
+            
+            # Non-parametric alternative
+            stat_np, p_np = stats.mannwhitneyu(*groups)
+            print(f"Mann-Whitney U test: U = {stat_np:.4f}, p = {p_np:.4f}")
+        
+        elif len(groups) > 2:
+            # One-way ANOVA or Kruskal-Wallis
+            stat, p = stats.f_oneway(*groups)
+            print(f"\nOne-way ANOVA: F = {stat:.4f}, p = {p:.4f}")
+            
+            # Non-parametric alternative
+            stat_np, p_np = stats.kruskal(*groups)
+            print(f"Kruskal-Wallis test: H = {stat_np:.4f}, p = {p_np:.4f}")
+    
+    def create_publication_plots(df, group_col, measure_col):
+        """Create publication-ready plots"""
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        
+        # Box plot
+        sns.boxplot(data=df, x=group_col, y=measure_col, ax=axes[0, 0])
+        axes[0, 0].set_title('Box Plot')
+        
+        # Violin plot
+        sns.violinplot(data=df, x=group_col, y=measure_col, ax=axes[0, 1])
+        axes[0, 1].set_title('Violin Plot')
+        
+        # Histogram by group
+        for group in df[group_col].unique():
+            subset = df[df[group_col] == group][measure_col]
+            axes[1, 0].hist(subset, alpha=0.6, label=group, bins=20)
+        axes[1, 0].set_xlabel(measure_col)
+        axes[1, 0].set_ylabel('Frequency')
+        axes[1, 0].set_title('Histograms by Group')
+        axes[1, 0].legend()
+        
+        # Q-Q plots for normality
+        groups = df[group_col].unique()
+        colors = plt.cm.Set1(np.linspace(0, 1, len(groups)))
+        
+        for i, group in enumerate(groups):
+            subset = df[df[group_col] == group][measure_col]
+            stats.probplot(subset, dist="norm", plot=axes[1, 1])
+            axes[1, 1].get_lines()[i*2].set_color(colors[i])
+            axes[1, 1].get_lines()[i*2+1].set_color(colors[i])
+        
+        axes[1, 1].set_title('Q-Q Plot (Normality Check)')
+        
+        plt.tight_layout()
+        plt.show()
+    
+    # Cell 3: Research Workflow Template
+    def complete_research_analysis(df, group_col, measure_col):
+        """Complete research analysis workflow"""
+        print("🔬 COMPLETE RESEARCH ANALYSIS")
+        print("=" * 50)
+        
+        # 1. Descriptive analysis
+        descriptive = perform_descriptive_analysis(df, group_col, measure_col)
+        
+        # 2. Statistical tests
+        perform_statistical_tests(df, group_col, measure_col)
+        
+        # 3. Visualizations
+        create_publication_plots(df, group_col, measure_col)
+        
+        # 4. Research summary
+        print("\n📝 RESEARCH SUMMARY")
+        print("=" * 40)
+        print("1. Report descriptive statistics")
+        print("2. Check assumptions (normality, equal variances)")
+        print("3. Choose appropriate statistical test")
+        print("4. Report effect size")
+        print("5. Interpret results in context")
+        
+        return descriptive
+    
+    # Usage example:
+    # results = complete_research_analysis(df, 'group_column', 'measure_column')
+    ```
+  </Tab>
+</Tabs>
+
+## VS Code Data Science Configuration
+
+```json
+// ~/.devex/assets/vscode/data-science-settings.json
+{
+  "python.defaultInterpreterPath": "~/.local/share/mise/installs/python/3.11/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.formatting.provider": "black",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.linting.flake8Enabled": true,
+  
+  "jupyter.askForKernelRestart": false,
+  "jupyter.interactiveWindowMode": "perFile",
+  "jupyter.sendSelectionToInteractiveWindow": true,
+  "jupyter.alwaysTrustNotebooks": true,
+  "jupyter.widgetScriptSources": ["jsdelivr.com", "unpkg.com"],
+  
+  "files.associations": {
+    "*.ipynb": "jupyter-notebook"
+  },
+  
+  "editor.rulers": [79, 88],
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true
+  },
+  
+  "workbench.colorTheme": "Visual Studio Dark",
+  "workbench.editorAssociations": {
+    "*.ipynb": "jupyter.notebook.ipynb"
+  },
+  
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": true
+    }
+  },
+  
+  "[jupyter]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  }
+}
+```
+
+## Data Science Project Structure
+
+### Standard Project Template
+
+```bash
+# Create standardized data science project structure
+mkdir -p ~/projects/data-science-template/{data/{raw,processed,external},notebooks/{exploratory,experiments,reports},src/{data,features,models,visualization},models,reports/{figures,papers},scripts,tests}
+
+# Create project structure
+cat > ~/projects/data-science-template/README.md << 'EOF'
+# Data Science Project Template
+
+## Project Structure
+
+```
+├── data/
+│   ├── raw/                # Original, immutable data
+│   ├── processed/          # Cleaned, transformed data
+│   └── external/           # External data sources
+├── notebooks/
+│   ├── exploratory/        # EDA notebooks
+│   ├── experiments/        # ML experiments
+│   └── reports/           # Final analysis notebooks
+├── src/
+│   ├── data/              # Data loading and preprocessing
+│   ├── features/          # Feature engineering
+│   ├── models/            # Model training and prediction
+│   └── visualization/     # Plotting utilities
+├── models/                # Trained models
+├── reports/
+│   ├── figures/           # Generated graphics
+│   └── papers/            # Research papers
+├── scripts/               # Automation scripts
+└── tests/                 # Unit tests
+```
+
+## Getting Started
+
+1. Install dependencies: `pip install -r requirements.txt`
+2. Set up pre-commit hooks: `pre-commit install`
+3. Start with notebooks in `notebooks/exploratory/`
+4. Move reusable code to `src/`
+5. Save final models in `models/`
+EOF
+
+# Create requirements.txt
+cat > ~/projects/data-science-template/requirements.txt << 'EOF'
+# Core data science libraries
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+scipy>=1.10.0
+scikit-learn>=1.3.0
+jupyter>=1.0.0
+jupyterlab>=4.0.0
+
+# Machine learning
+tensorflow>=2.13.0
+torch>=2.0.0
+lightgbm>=4.0.0
+xgboost>=1.7.0
+
+# Visualization
+plotly>=5.0.0
+bokeh>=3.0.0
+
+# Development tools
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+pytest>=7.4.0
+pre-commit>=3.3.0
+EOF
+
+# Create environment setup script
+cat > ~/projects/data-science-template/setup_environment.sh << 'EOF'
+#!/bin/bash
+# Setup data science environment
+
+echo "🔬 Setting up data science environment..."
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install requirements
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Set up pre-commit hooks
+pre-commit install
+
+# Create Jupyter kernel
+python -m ipykernel install --user --name=datascience --display-name="Data Science"
+
+echo "✅ Environment setup complete!"
+echo "Activate with: source venv/bin/activate"
+EOF
+
+chmod +x ~/projects/data-science-template/setup_environment.sh
+```
+
+## Specialized Setups
+
+### Computer Vision Environment
+
+<Tabs items={['Deep Learning', 'Traditional CV', 'Medical Imaging']}>
+  <Tab value="Deep Learning">
+    ```bash
+    # Computer Vision with Deep Learning
+    pip install torch torchvision torchaudio
+    pip install tensorflow tensorflow-gpu
+    pip install opencv-python opencv-contrib-python
+    pip install albumentations
+    pip install timm  # PyTorch Image Models
+    pip install segmentation-models-pytorch
+    pip install detectron2
+    pip install ultralytics  # YOLOv8
+    pip install transformers  # Vision Transformers
+    
+    # Visualization and annotation
+    pip install matplotlib seaborn
+    pip install plotly dash
+    pip install labelimg roboflow
+    ```
+  </Tab>
+  
+  <Tab value="Traditional CV">
+    ```bash
+    # Traditional Computer Vision
+    pip install opencv-python opencv-contrib-python
+    pip install scikit-image
+    pip install pillow
+    pip install imageio
+    pip install mahotas
+    pip install SimpleITK
+    
+    # Feature extraction
+    pip install sklearn
+    pip install skimage
+    ```
+  </Tab>
+  
+  <Tab value="Medical Imaging">
+    ```bash
+    # Medical Image Processing
+    pip install SimpleITK
+    pip install nibabel  # NIfTI files
+    pip install pydicom  # DICOM files
+    pip install monai    # Medical AI
+    pip install medpy
+    pip install ants     # Advanced Normalization Tools
+    ```
+  </Tab>
+</Tabs>
+
+### Natural Language Processing Environment
+
+```bash
+# NLP Libraries
+pip install nltk spacy textblob gensim
+pip install transformers datasets
+pip install sentence-transformers
+pip install wordcloud
+pip install flair
+pip install stanza
+
+# Download language models
+python -m spacy download en_core_web_sm
+python -m spacy download en_core_web_lg
+python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords')"
+```
+
+### Time Series Analysis Environment
+
+```bash
+# Time Series Libraries
+pip install statsmodels
+pip install prophet
+pip install pmdarima
+pip install arch  # GARCH models
+pip install pyflux
+pip install tsfresh  # Feature extraction
+pip install tslearn  # Time series clustering
+pip install sktime   # Time series scikit-learn
+
+# Financial data
+pip install yfinance
+pip install pandas-datareader
+pip install quandl
+```
+
+## Development Workflow
+
+### Automated Data Science Workflow
+
+```bash
+#!/bin/bash
+# scripts/ds-workflow.sh
+# Automated data science workflow
+
+set -e
+
+PROJECT_NAME="$1"
+if [ -z "$PROJECT_NAME" ]; then
+    echo "Usage: ds-workflow.sh <project-name>"
+    exit 1
+fi
+
+echo "🔬 Creating data science project: $PROJECT_NAME"
+
+# Create project structure
+mkdir -p "$PROJECT_NAME"/{data/{raw,processed,external},notebooks/{exploratory,experiments,reports},src/{data,features,models,visualization},models,reports/{figures,papers},scripts,tests}
+
+cd "$PROJECT_NAME"
+
+# Initialize git repository
+git init
+echo "__pycache__/
+*.py[cod]
+*$py.class
+.DS_Store
+.ipynb_checkpoints/
+.env
+venv/
+.venv/
+data/raw/*
+!data/raw/.gitkeep
+models/*.pkl
+models/*.h5
+.pytest_cache/" > .gitignore
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install requirements
+cat > requirements.txt << 'EOF'
+numpy>=1.24.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+scikit-learn>=1.3.0
+jupyter>=1.0.0
+black>=23.0.0
+isort>=5.12.0
+pytest>=7.4.0
+EOF
+
+pip install -r requirements.txt
+
+# Create initial notebook
+cp ~/.devex/templates/data_analysis_template.ipynb notebooks/exploratory/01_initial_exploration.ipynb
+
+# Set up pre-commit
+cat > .pre-commit-config.yaml << 'EOF'
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+  - repo: https://github.com/pycqa/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+EOF
+
+pre-commit install
+
+# Create Jupyter kernel
+python -m ipykernel install --user --name="$PROJECT_NAME" --display-name="$PROJECT_NAME"
+
+# Initial commit
+git add .
+git commit -m "Initial project setup"
+
+echo "✅ Data science project '$PROJECT_NAME' created successfully!"
+echo "📁 Location: $(pwd)"
+echo "🔬 Activate environment: source venv/bin/activate"
+echo "📓 Start Jupyter: jupyter lab"
+```
+
+### Model Deployment Pipeline
+
+```python
+# scripts/deploy_model.py
+import joblib
+import pandas as pd
+from pathlib import Path
+import yaml
+import json
+from datetime import datetime
+
+def deploy_model(model_path, config_path, target_environment='staging'):
+    """Deploy trained model to specified environment"""
+    
+    # Load model
+    model = joblib.load(model_path)
+    
+    # Load deployment config
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    
+    # Model metadata
+    metadata = {
+        'model_path': str(model_path),
+        'model_type': type(model).__name__,
+        'deployment_time': datetime.now().isoformat(),
+        'environment': target_environment,
+        'version': config.get('version', '1.0.0')
+    }
+    
+    print(f"🚀 Deploying model to {target_environment}")
+    print(f"📦 Model: {metadata['model_type']}")
+    print(f"📅 Time: {metadata['deployment_time']}")
+    
+    # Create deployment package
+    deployment_dir = Path(f"deployments/{target_environment}")
+    deployment_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Copy model
+    joblib.dump(model, deployment_dir / "model.pkl")
+    
+    # Save metadata
+    with open(deployment_dir / "metadata.json", 'w') as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"✅ Model deployed to {deployment_dir}")
+    
+    return deployment_dir
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 3:
+        print("Usage: python deploy_model.py <model_path> <config_path>")
+        sys.exit(1)
+    
+    model_path = sys.argv[1]
+    config_path = sys.argv[2]
+    
+    deploy_model(model_path, config_path)
+```
+
+## Monitoring and Performance
+
+### Resource Monitoring
+
+```python
+# scripts/monitor_resources.py
+import psutil
+import GPUtil
+import time
+import pandas as pd
+from datetime import datetime
+
+class ResourceMonitor:
+    def __init__(self):
+        self.metrics = []
+    
+    def collect_metrics(self):
+        """Collect system resource metrics"""
+        # CPU and Memory
+        cpu_percent = psutil.cpu_percent(interval=1)
+        memory = psutil.virtual_memory()
+        
+        # GPU metrics (if available)
+        gpu_metrics = {}
+        try:
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                gpu = gpus[0]  # First GPU
+                gpu_metrics = {
+                    'gpu_load': gpu.load * 100,
+                    'gpu_memory_used': gpu.memoryUsed,
+                    'gpu_memory_total': gpu.memoryTotal,
+                    'gpu_temperature': gpu.temperature
+                }
+        except:
+            pass
+        
+        metrics = {
+            'timestamp': datetime.now(),
+            'cpu_percent': cpu_percent,
+            'memory_percent': memory.percent,
+            'memory_used_gb': memory.used / (1024**3),
+            'memory_total_gb': memory.total / (1024**3),
+            **gpu_metrics
+        }
+        
+        self.metrics.append(metrics)
+        return metrics
+    
+    def monitor_training(self, duration_minutes=60, interval_seconds=30):
+        """Monitor resources during model training"""
+        print(f"📊 Starting resource monitoring for {duration_minutes} minutes")
+        
+        end_time = time.time() + (duration_minutes * 60)
+        
+        while time.time() < end_time:
+            metrics = self.collect_metrics()
+            print(f"CPU: {metrics['cpu_percent']:.1f}% | "
+                  f"Memory: {metrics['memory_percent']:.1f}% | "
+                  f"GPU Load: {metrics.get('gpu_load', 'N/A')}")
+            
+            time.sleep(interval_seconds)
+        
+        # Save metrics
+        df = pd.DataFrame(self.metrics)
+        df.to_csv(f"monitoring/training_metrics_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", index=False)
+        
+        print("✅ Monitoring complete. Metrics saved.")
+        return df
+
+# Usage
+# monitor = ResourceMonitor()
+# monitor.monitor_training(duration_minutes=30)
+```
+
+<Callout type="tip">
+**Data Science Best Practices:**
+
+1. **Version Control**: Use Git LFS for large datasets and models
+2. **Reproducibility**: Pin package versions and use random seeds
+3. **Documentation**: Document data sources, preprocessing steps, and model decisions
+4. **Testing**: Write tests for data processing and model functions
+5. **Monitoring**: Track model performance and data drift in production
+6. **Security**: Don't commit API keys or sensitive data
+7. **Collaboration**: Use shared data sources and standardized project structure
+8. **Environment Management**: Use virtual environments and requirements.txt
+</Callout>
+
+This data science environment provides a comprehensive foundation for research, experimentation, and production machine learning workflows with proper tooling for reproducibility and collaboration.
+
+<Cards>
+  <Card title="Web Development" href="/docs/examples/web-development" description="Frontend development environment" />
+  <Card title="Backend Development" href="/docs/examples/backend-development" description="Server-side development setup" />
+  <Card title="Mobile Development" href="/docs/examples/mobile-development" description="Mobile app development environment" />
+  <Card title="Customization Guide" href="/docs/guides/customization" description="Advanced DevEx customization" />
+</Cards>

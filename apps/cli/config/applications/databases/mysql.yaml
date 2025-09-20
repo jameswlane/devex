@@ -1,0 +1,14 @@
+name: MySQL
+description: MySQL relational database management system
+category: Databases
+all_platforms:
+  install_method: docker
+  install_command: mysql:8.4
+  docker_options:
+    ports:
+      - 127.0.0.1:3306:3306
+    container_name: mysql8
+    environment:
+      - MYSQL_ROOT_PASSWORD=
+      - MYSQL_ALLOW_EMPTY_PASSWORD=true
+    restart_policy: unless-stopped

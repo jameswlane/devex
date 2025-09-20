@@ -1,0 +1,752 @@
+---
+title: Advanced Customization
+description: Deep dive into customizing DevEx for advanced use cases, themes, and complex configurations
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Advanced Customization
+
+DevEx provides extensive customization capabilities for power users, teams, and organizations. This guide covers advanced configuration techniques, custom themes, and complex automation scenarios.
+
+## Advanced Configuration Techniques
+
+### Configuration Inheritance
+
+DevEx supports layered configuration inheritance for complex setups:
+
+```yaml
+# ~/.devex/config.yaml
+inheritance:
+  base: "~/.local/share/devex/config/"
+  layers:
+    - name: "company-base"
+      source: "https://raw.githubusercontent.com/company/devex-config/main/base.yaml"
+      priority: 10
+      
+    - name: "team-specific"
+      source: "~/.devex/team/frontend.yaml"
+      priority: 20
+      condition:
+        team: "frontend"
+        
+    - name: "project-overrides"
+      source: "~/.devex/projects/mobile-app.yaml"
+      priority: 30
+      condition:
+        project: "mobile-app"
+        
+    - name: "personal"
+      source: "~/.devex/personal.yaml"
+      priority: 100
+```
+
+### Conditional Configuration
+
+Use conditions to apply configurations based on context:
+
+```yaml
+applications:
+  development:
+    - name: xcode
+      description: "Apple's IDE for iOS development"
+      condition:
+        platform: "darwin"
+        project_type: "mobile"
+      macos:
+        install_method: mas
+        install_command: "497799835"
+        
+    - name: android-studio
+      description: "Android development IDE"
+      condition:
+        project_type: "mobile"
+      linux:
+        install_method: flatpak
+        install_command: com.google.AndroidStudio
+      macos:
+        install_method: brew
+        install_command: android-studio
+        cask: true
+```
+
+### Dynamic Variables
+
+Use variables in configurations for flexibility:
+
+```yaml
+# ~/.devex/variables.yaml
+variables:
+  nodejs_version: "18.17.0"
+  python_version: "3.11.5"
+  company_domain: "company.com"
+  team_name: "frontend"
+
+# Referenced in applications.yaml
+applications:
+  development:
+    - name: node
+      install_method: mise
+      install_command: "node@${nodejs_version}"
+      
+    - name: company-cli
+      install_method: curlpipe
+      install_command: "https://cli.${company_domain}/install.sh"
+```
+
+## Custom Application Definitions
+
+### Creating Complex Installers
+
+Define applications with complex installation logic:
+
+```yaml
+applications:
+  development:
+    - name: custom-development-stack
+      description: "Our complete development stack"
+      category: "Development Stacks"
+      
+      # Multi-step installation
+      installation_steps:
+        - name: "prepare"
+          commands:
+            - shell: "mkdir -p ~/.local/share/custom-stack"
+            - shell: "curl -fsSL https://example.com/setup.sh | bash"  # Always review scripts first
+            
+        - name: "languages"
+          parallel: true
+          applications:
+            - node
+            - python
+            - go
+            
+        - name: "tools"
+          dependencies: ["languages"]
+          applications:
+            - docker
+            - kubernetes-cli
+            - terraform
+            
+        - name: "configure"
+          commands:
+            - template:
+                source: "~/.devex/templates/dev-stack.conf"
+                destination: "~/.local/share/custom-stack/config.yaml"
+                variables:
+                  stack_version: "2024.1"
+                  user_name: "${USER}"
+```
+
+### Source-Based Installation
+
+Install applications from source with custom build logic:
+
+```yaml
+applications:
+  development:
+    - name: neovim-nightly
+      description: "Neovim built from source (latest)"
+      category: "Editors"
+      
+      source:
+        git_repo: "https://github.com/neovim/neovim.git"
+        branch: "master"
+        shallow_clone: true
+        
+      build:
+        dependencies:
+          linux: ["cmake", "build-essential", "libtool-bin"]
+          macos: ["cmake", "ninja"]
+          
+        configure_command: "make CMAKE_BUILD_TYPE=Release"
+        build_command: "make -j$(nproc)"
+        install_command: "sudo make install"
+        
+        # Custom build flags
+        environment:
+          CMAKE_INSTALL_PREFIX: "/usr/local"
+          CMAKE_BUILD_TYPE: "Release"
+          
+      validation:
+        - command: "nvim --version"
+          expected_pattern: "NVIM v0\\."
+          
+      post_install:
+        - shell: "mkdir -p ~/.config/nvim"
+        - file:
+            source: "~/.devex/assets/nvim/init.lua"
+            destination: "~/.config/nvim/init.lua"
+```
+
+## Advanced Theme System
+
+### Custom Theme Creation
+
+Create sophisticated desktop themes:
+
+```yaml
+# ~/.devex/themes/corporate-theme.yaml
+theme:
+  name: "Corporate Professional"
+  description: "Professional theme for corporate environments"
+  version: "1.0.0"
+  author: "DevOps Team"
+  
+  # GNOME Configuration
+  gnome:
+    gtk_theme: "Adwaita-dark"
+    icon_theme: "Adwaita"
+    cursor_theme: "Adwaita"
+    
+    # Shell theme
+    shell:
+      theme: "corporate-shell"
+      source: "~/.devex/themes/corporate-theme/gnome-shell.css"
+      
+    # Wallpaper
+    wallpaper:
+      source: "~/.devex/themes/corporate-theme/wallpaper.jpg"
+      mode: "scaled"
+      
+    # Extensions
+    extensions:
+      - name: "dash-to-dock"
+        uuid: "dash-to-dock@micxgx.gmail.com"
+        enabled: true
+        settings:
+          dock-position: "BOTTOM"
+          dock-size-limit: 48
+          transparency-mode: "FIXED"
+          background-opacity: 0.8
+          
+      - name: "user-themes"
+        uuid: "user-theme@gnome-shell-extensions.gcampax.github.com"
+        enabled: true
+        
+    # Keybindings
+    keybindings:
+      - key: "org.gnome.desktop.wm.keybindings.switch-to-workspace-1"
+        value: "['<Super>1']"
+      - key: "org.gnome.settings-daemon.plugins.media-keys.terminal"
+        value: "['<Ctrl><Alt>t']"
+        
+    # Fonts
+    fonts:
+      document: "Inter 11"
+      interface: "Inter 11"
+      monospace: "JetBrains Mono 10"
+      window_title: "Inter Bold 11"
+      
+  # VS Code theme
+  vscode:
+    theme: "GitHub Dark"
+    extensions:
+      - "GitHub.github-vscode-theme"
+      - "PKief.material-icon-theme"
+    settings:
+      "editor.fontFamily": "JetBrains Mono"
+      "editor.fontSize": 14
+      "editor.lineHeight": 1.6
+      "workbench.colorTheme": "GitHub Dark"
+      "workbench.iconTheme": "material-icon-theme"
+      
+  # Terminal theme
+  terminal:
+    profile: "Corporate"
+    background_color: "#1a1a1a"
+    foreground_color: "#ffffff"
+    palette:
+      - "#000000"  # Black
+      - "#cd3131"  # Red
+      - "#0dbc79"  # Green
+      - "#e5e510"  # Yellow
+      - "#2472c8"  # Blue
+      - "#bc3fbc"  # Magenta
+      - "#11a8cd"  # Cyan
+      - "#e5e5e5"  # White
+    font: "JetBrains Mono 12"
+    
+  # Git configuration
+  git:
+    delta_theme: "GitHub"
+    diff_tool: "code --wait --diff"
+```
+
+### Theme Assets Management
+
+Organize theme assets:
+
+```
+~/.devex/themes/corporate-theme/
+├── theme.yaml              # Theme definition
+├── assets/
+│   ├── wallpaper.jpg       # Desktop wallpaper
+│   ├── login-background.jpg # Login screen background
+│   └── logo.png           # Company logo
+├── gnome-shell/
+│   ├── gnome-shell.css    # Shell theme CSS
+│   └── metadata.json      # Theme metadata
+├── vscode/
+│   ├── settings.json      # VS Code settings
+│   └── keybindings.json   # Custom keybindings
+└── templates/
+    ├── bashrc.template    # Shell configuration
+    └── gitconfig.template # Git configuration
+```
+
+### Theme Installation and Management
+
+```bash
+# Install custom theme
+devex theme install ~/.devex/themes/corporate-theme.yaml
+
+# Apply theme
+devex theme apply corporate-professional
+
+# List available themes
+devex theme list
+
+# Export current configuration as theme
+devex theme export my-current-setup
+
+# Share theme with team
+devex theme package corporate-professional --output corporate-theme.tar.gz
+```
+
+## Configuration Templates
+
+### Template System
+
+Create reusable configuration templates:
+
+```yaml
+# ~/.devex/templates/development-env.yaml
+template:
+  name: "Modern Development Environment"
+  description: "Full-stack development setup with modern tools"
+  parameters:
+    - name: "primary_language"
+      type: "choice"
+      choices: ["javascript", "python", "go", "rust"]
+      default: "javascript"
+      
+    - name: "include_databases"
+      type: "boolean"
+      default: true
+      
+    - name: "team_tools"
+      type: "list"
+      default: ["slack", "zoom"]
+      
+  # Conditional application lists
+  applications:
+    development:
+      - name: "git"
+        default: true
+        
+      # Language-specific tools
+      - name: "node"
+        condition: "primary_language == 'javascript'"
+        install_method: "mise"
+        install_command: "node@lts"
+        
+      - name: "python"
+        condition: "primary_language == 'python'"
+        install_method: "mise"
+        install_command: "python@3.11"
+        
+      - name: "go"
+        condition: "primary_language == 'go'"
+        install_method: "mise"
+        install_command: "go@latest"
+        
+    databases:
+      - name: "postgresql"
+        condition: "include_databases == true"
+        default: true
+        
+      - name: "redis"
+        condition: "include_databases == true"
+        default: false
+        
+    optional:
+      - name: "{{ item }}"
+        condition: "item in team_tools"
+        default: false
+        for_each: "team_tools"
+```
+
+### Template Usage
+
+```bash
+# Use template interactively
+devex template apply development-env
+
+# Use template with parameters
+devex template apply development-env \
+  --param primary_language=python \
+  --param include_databases=true \
+  --param team_tools=slack,discord
+
+# Generate configuration from template
+devex template generate development-env \
+  --output ~/.devex/my-project.yaml \
+  --param primary_language=go
+```
+
+## Advanced Automation
+
+### Custom Hooks and Scripts
+
+Implement custom automation with hooks:
+
+```yaml
+# ~/.devex/hooks.yaml
+hooks:
+  pre_install:
+    - name: "backup-current-config"
+      script: |
+        #!/bin/bash
+        backup_dir="$HOME/.devex/backups/$(date +%Y%m%d-%H%M%S)"
+        mkdir -p "$backup_dir"
+        cp -r ~/.config "$backup_dir/"
+        echo "Backup created at $backup_dir"
+        
+  post_install:
+    - name: "notify-team"
+      script: |
+        #!/bin/bash
+        curl -X POST -H 'Content-type: application/json' \
+          --data "{\"text\":\"🔧 $USER updated their dev environment\"}" \
+          "$SLACK_WEBHOOK_URL"
+          
+    - name: "setup-git-hooks"
+      script: |
+        #!/bin/bash
+        if [ -d .git ]; then
+          cp ~/.devex/assets/git-hooks/* .git/hooks/
+          chmod +x .git/hooks/*
+        fi
+        
+  pre_uninstall:
+    - name: "confirm-removal"
+      script: |
+        #!/bin/bash
+        read -p "Are you sure you want to remove these applications? (y/N) " confirm
+        [[ $confirm == [yY] ]] || exit 1
+```
+
+### Integration with External Systems
+
+#### HashiCorp Vault Integration
+
+```yaml
+# ~/.devex/integrations/vault.yaml
+vault:
+  address: "https://vault.company.com"
+  auth_method: "ldap"
+  
+  secrets:
+    - path: "secret/devex/ssh-keys"
+      destination: "~/.ssh/"
+      files:
+        - "id_ed25519"
+        - "id_ed25519.pub"
+        
+    - path: "secret/devex/certificates"
+      destination: "~/.devex/certs/"
+      files:
+        - "company-ca.crt"
+```
+
+#### LDAP/Active Directory Integration
+
+```yaml
+# ~/.devex/integrations/ldap.yaml
+ldap:
+  server: "ldap.company.com"
+  base_dn: "dc=company,dc=com"
+  
+  user_mapping:
+    groups:
+      "cn=developers,ou=groups": ["development"]
+      "cn=devops,ou=groups": ["development", "infrastructure"]
+      "cn=qa,ou=groups": ["development", "testing"]
+      
+  application_access:
+    kubectl:
+      required_groups: ["devops", "senior-developers"]
+    terraform:
+      required_groups: ["devops"]
+```
+
+## Performance Optimization
+
+### Parallel Installation
+
+Configure parallel installation for speed:
+
+```yaml
+# ~/.devex/performance.yaml
+performance:
+  parallel_installations: true
+  max_concurrent: 4
+  
+  # Prioritize critical tools
+  priority_queue:
+    high: ["git", "docker", "vscode"]
+    medium: ["node", "python", "go"]
+    low: ["optional-tools"]
+    
+  # Caching configuration
+  cache:
+    enabled: true
+    directory: "~/.devex/cache"
+    ttl: "7d"
+    
+    # Cache downloaded files
+    downloads: true
+    # Cache package manager metadata
+    metadata: true
+    # Cache installation verification
+    verification: true
+```
+
+### Resource Management
+
+Control resource usage during installation:
+
+```yaml
+# ~/.devex/resources.yaml
+resources:
+  memory:
+    max_usage: "80%"
+    swap_usage: "50%"
+    
+  cpu:
+    max_usage: "75%"
+    background_priority: true
+    
+  disk:
+    min_free_space: "5GB"
+    temp_directory: "/tmp/devex"
+    
+  network:
+    timeout: "300s"
+    retry_attempts: 3
+    bandwidth_limit: "10MB/s"
+```
+
+## Security and Compliance
+
+### Security Hardening
+
+Implement security best practices:
+
+```yaml
+# ~/.devex/security.yaml
+security:
+  verification:
+    # Verify checksums for all downloads
+    require_checksums: true
+    # Verify GPG signatures
+    require_signatures: true
+    # Verify SSL certificates
+    verify_ssl: true
+    
+  sandboxing:
+    # Run installations in containers
+    use_containers: true
+    container_runtime: "docker"
+    
+  permissions:
+    # Minimize required permissions
+    principle_of_least_privilege: true
+    # Audit permission requests
+    audit_permissions: true
+    
+  compliance:
+    # SOC 2 compliance mode
+    soc2_mode: true
+    # Log all activities
+    audit_log: "~/.devex/audit.log"
+    # Encrypt sensitive data
+    encrypt_secrets: true
+```
+
+### Compliance Reporting
+
+Generate compliance reports:
+
+```bash
+# Generate security compliance report
+devex security audit --format json --output security-audit.json
+
+# Check for vulnerabilities
+devex security scan --applications --output vuln-report.json
+
+# Validate against security policies
+devex security validate --policy ~/.devex/security-policy.yaml
+```
+
+## Custom Installer Development
+
+### Creating Custom Installers
+
+Develop custom installation methods:
+
+```go
+// ~/.devex/installers/custom_installer.go
+package installers
+
+import (
+    "context"
+    "fmt"
+    "github.com/jameswlane/devex/pkg/types"
+)
+
+type CustomInstaller struct {
+    baseInstaller
+}
+
+func (c *CustomInstaller) Install(ctx context.Context, app types.Application) error {
+    // Custom installation logic
+    fmt.Printf("Installing %s with custom method\n", app.Name)
+    
+    // Download from custom source
+    if err := c.downloadFromCustomSource(app); err != nil {
+        return fmt.Errorf("download failed: %w", err)
+    }
+    
+    // Custom verification
+    if err := c.verifyInstallation(app); err != nil {
+        return fmt.Errorf("verification failed: %w", err)
+    }
+    
+    return nil
+}
+
+func (c *CustomInstaller) IsAvailable() bool {
+    // Check if custom installer is available
+    return true
+}
+
+func (c *CustomInstaller) Name() string {
+    return "custom"
+}
+```
+
+### Plugin System
+
+Extend DevEx with plugins:
+
+```yaml
+# ~/.devex/plugins.yaml
+plugins:
+  - name: "company-plugin"
+    source: "https://github.com/company/devex-plugin"
+    version: "v1.2.0"
+    enabled: true
+    
+  - name: "security-scanner"
+    source: "~/.devex/plugins/security-scanner"
+    enabled: true
+    config:
+      scan_frequency: "daily"
+      report_endpoint: "https://security.company.com/reports"
+```
+
+## Troubleshooting Advanced Configurations
+
+### Debug Mode
+
+Enable detailed debugging:
+
+```bash
+# Enable debug mode
+export DEVEX_DEBUG=1
+export DEVEX_TRACE=1
+
+# Run with detailed logging
+devex --verbose --log-level debug install complex-application
+
+# Analyze logs
+tail -f ~/.devex/logs/debug.log
+```
+
+### Configuration Validation
+
+Validate complex configurations:
+
+```bash
+# Validate all configurations
+devex config validate --recursive ~/.devex/
+
+# Check for circular dependencies
+devex config check-dependencies
+
+# Lint configuration files
+devex config lint --fix
+
+# Test configuration without applying
+devex config test --dry-run
+```
+
+<Callout type="tip">
+**Advanced Customization Best Practices:**
+
+1. **Start Simple**: Build complexity gradually
+2. **Version Control**: Keep all customizations in version control
+3. **Test Thoroughly**: Test configurations before deploying
+4. **Document Everything**: Document custom configurations and their purposes
+5. **Security First**: Always consider security implications
+6. **Performance Impact**: Monitor performance impact of customizations
+7. **Backup Configurations**: Maintain backups of working configurations
+8. **Regular Reviews**: Periodically review and update customizations
+</Callout>
+
+## Real-World Examples
+
+### Enterprise Development Environment
+
+```yaml
+# ~/.devex/enterprise/complete-setup.yaml
+# Enterprise-grade development environment with security and compliance
+
+applications:
+  security:
+    - name: company-vpn
+      install_method: custom
+      source: "https://vpn.company.com/install"
+      required: true
+      
+    - name: security-agent
+      install_method: custom
+      source: "https://security.company.com/agent"
+      required: true
+      
+  development:
+    - name: approved-ide
+      alternatives:
+        - name: vscode
+          condition: "role != 'security-sensitive'"
+        - name: secure-ide
+          condition: "role == 'security-sensitive'"
+          
+compliance:
+  soc2: true
+  iso27001: true
+  audit_logging: true
+  encryption_at_rest: true
+```
+
+<Cards>
+  <Card title="Team Setup" href="/docs/guides/team-setup" description="Implement DevEx for team collaboration" />
+  <Card title="Automation" href="/docs/guides/automation" description="Automate DevEx in CI/CD pipelines" />
+  <Card title="Examples" href="/docs/examples" description="Real-world configuration examples" />
+  <Card title="CLI Reference" href="/docs/cli-reference" description="Complete command reference" />
+</Cards>

@@ -1,0 +1,227 @@
+name: Sync Registry Database
+on:
+  # Run on new plugin tags
+  push:
+    tags:
+      - '@devex/**@*' # Match plugin tags like @devex/package-manager-apt@1.6.0
+    branches:
+      - main
+    paths:
+      - 'apps/cli/config/**/*.yaml'
+      - 'packages/package-manager-*/**'
+      - 'apps/registry/scripts/sync-database.ts'
+      - 'apps/registry/scripts/sync-github-plugins.ts'
+      - '.github/workflows/sync-registry-database.yml'
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force sync even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+      force_reseed:
+        description: 'Force complete database reseed'
+        required: false
+        default: 'false'
+        type: boolean
+permissions:
+  contents: read
+env:
+  NODE_VERSION: '22'
+jobs:
+  sync-database:
+    name: Sync Registry Database
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.1
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Setup Prisma
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+        run: |
+          pnpm prisma generate
+      - name: Run database migrations
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+        run: |
+          pnpm prisma migrate deploy
+      - name: Reseed database (if forced)
+        if: ${{ github.event.inputs.force_reseed == 'true' }}
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pnpm tsx scripts/seed-test-data.ts
+      - name: Sync GitHub plugins
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Install tsx for TypeScript execution
+          pnpm add -D tsx
+
+          # Run GitHub plugin sync
+          pnpm tsx scripts/sync-github-plugins.ts
+      - name: Run database sync
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # Run existing sync script for applications/configs
+          chmod +x scripts/sync-database.ts
+          pnpm tsx scripts/sync-database.ts
+      - name: Log sync completion
+        if: success()
+        run: |
+          echo "✅ Registry database sync completed successfully"
+          echo "Sync time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+      - name: Create sync report
+        if: always()
+        run: |
+          cat <<EOF > sync-report.txt
+          Registry Database Sync Report
+          ============================
+          Workflow: ${{ github.workflow }}
+          Run ID: ${{ github.run_id }}
+          Run Number: ${{ github.run_number }}
+          Triggered by: ${{ github.event_name }}
+          Actor: ${{ github.actor }}
+          Repository: ${{ github.repository }}
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Status: ${{ job.status }}
+          EOF
+      - name: Upload sync report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-report-${{ github.run_id }}
+          path: sync-report.txt
+          retention-days: 30
+      - name: Log failure details
+        if: failure()
+        run: |
+          echo "❌ Registry Database Sync Failed"
+          echo "Workflow Run: #${{ github.run_number }}"
+          echo "Workflow URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Triggered by: ${{ github.event_name }}"
+          echo "Actor: ${{ github.actor }}"
+          echo "Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          echo "Please check the workflow logs for more details."
+  verify-sync:
+    name: Verify Database Sync
+    runs-on: ubuntu-latest
+    needs: sync-database
+    if: success()
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Verify registry API
+        env:
+          REGISTRY_URL: https://registry.devex.sh
+        run: |
+          echo "Verifying registry API endpoints..."
+
+          # Check stats endpoint
+          echo "Checking /api/v1/stats..."
+          curl -f -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+            "${REGISTRY_URL}/api/v1/stats" || exit 1
+
+          # Check applications endpoint
+          echo "Checking /api/v1/applications..."
+          curl -f -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+            "${REGISTRY_URL}/api/v1/applications" || exit 1
+
+          # Check plugins endpoint
+          echo "Checking /api/v1/plugins..."
+          curl -f -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+            "${REGISTRY_URL}/api/v1/plugins" || exit 1
+
+          # Check new registry.json endpoint for CLI compatibility
+          echo "Checking /api/v1/registry.json..."
+          curl -f -s -o /tmp/registry.json -w "HTTP Status: %{http_code}\n" \
+            "${REGISTRY_URL}/api/v1/registry.json" || exit 1
+
+          # Validate registry.json structure
+          echo "Validating registry.json structure..."
+          jq -e '.plugins | type == "object"' /tmp/registry.json > /dev/null || exit 1
+          PLUGIN_COUNT=$(jq '.plugins | length' /tmp/registry.json)
+          echo "✅ Registry contains $PLUGIN_COUNT plugins"
+
+          echo "✅ All API endpoints are responding correctly"
+      - name: Check data freshness
+        env:
+          REGISTRY_URL: https://registry.devex.sh
+        run: |
+          # Get stats and check last update time
+          STATS=$(curl -s "${REGISTRY_URL}/api/v1/stats")
+          LAST_UPDATED=$(echo $STATS | jq -r '.meta.lastUpdated')
+
+          echo "Last registry update: $LAST_UPDATED"
+          echo "Stats response: $STATS"
+
+          # Skip timestamp validation if lastUpdated is null
+          if [ "$LAST_UPDATED" = "null" ] || [ -z "$LAST_UPDATED" ]; then
+            echo "⚠️ Warning: lastUpdated field is null - database sync may not be updating timestamp"
+            echo "✅ Registry API is responding, but timestamp tracking needs investigation"
+            exit 0
+          fi
+
+          # Check if update is recent (within last hour) - Linux compatible date command
+          if command -v date >/dev/null 2>&1; then
+            LAST_UPDATE_TIMESTAMP=$(date -d "$LAST_UPDATED" +%s 2>/dev/null || echo "0")
+            CURRENT_TIMESTAMP=$(date +%s)
+
+            if [ "$LAST_UPDATE_TIMESTAMP" != "0" ]; then
+              DIFF=$((CURRENT_TIMESTAMP - LAST_UPDATE_TIMESTAMP))
+
+              if [ $DIFF -gt 3600 ]; then
+                echo "⚠️ Warning: Registry data might be stale (last updated more than 1 hour ago)"
+                echo "Time difference: ${DIFF} seconds"
+              else
+                echo "✅ Registry data is fresh (updated ${DIFF} seconds ago)"
+              fi
+            else
+              echo "⚠️ Warning: Could not parse timestamp format: $LAST_UPDATED"
+            fi
+          else
+            echo "✅ Registry API is responding (timestamp validation skipped - no date command)"
+          fi

@@ -1,0 +1,24 @@
+/main
+vendor/
+
+# Build artifacts
+bin/
+*.out
+*.test
+coverage.out
+coverage.html
+test-results.json
+
+# Development files
+tmp/
+.air/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

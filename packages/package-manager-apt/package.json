@@ -1,0 +1,59 @@
+{
+	"name": "@devex/package-manager-apt",
+	"version": "1.12.4",
+	"description": "APT package manager plugin for DevEx CLI",
+	"private": true,
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-apt .",
+		"test": "go test ./...",
+		"dev": "go build -race -o devex-plugin-package-manager-apt .",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"dependencies": {
+		"@devex/plugin-sdk": "workspace:*"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"apt",
+		"package-manager",
+		"debian",
+		"ubuntu",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-apt"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"distros": [
+				"debian",
+				"ubuntu",
+				"mint",
+				"elementary"
+			],
+			"dependencies": [
+				"apt"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

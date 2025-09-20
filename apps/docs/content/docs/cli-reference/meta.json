@@ -1,0 +1,14 @@
+{
+	"title": "CLI Reference",
+	"pages": [
+		"index",
+		"setup",
+		"install",
+		"config",
+		"template",
+		"add-remove",
+		"status-list",
+		"recovery",
+		"global-flags"
+	]
+}

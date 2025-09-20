@@ -1,0 +1,378 @@
+---
+title: Examples Overview
+description: Real-world DevEx configurations and use cases for different development scenarios
+---
+
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# Examples Overview
+
+This section provides real-world examples of DevEx configurations for different development scenarios. Each example includes complete configuration files, setup instructions, and best practices.
+
+## Available Examples
+
+<Callout type="info">
+These examples build on the concepts in our [Configuration Guide](/docs/configuration). For basic setup, start with [Getting Started](/docs/guides/getting-started).
+</Callout>
+
+<Cards>
+  <Card 
+    title="Web Development"
+    href="/docs/examples/web-development"
+    description="Complete frontend development environment with React, Vue, and modern tools"
+  />
+  <Card 
+    title="Backend Development" 
+    href="/docs/examples/backend-development"
+    description="Server-side development with Node.js, Python, Go, and databases"
+  />
+  <Card 
+    title="Data Science"
+    href="/docs/examples/data-science" 
+    description="Python data science stack with Jupyter, pandas, and ML libraries"
+  />
+  <Card 
+    title="Mobile Development"
+    href="/docs/examples/mobile-development"
+    description="React Native and native mobile development environment"
+  />
+</Cards>
+
+## How to Use These Examples
+
+Each example provides:
+
+### 1. Complete Configuration Files
+Ready-to-use YAML files that you can copy to your `~/.devex/` directory:
+
+```bash
+# Copy an example configuration
+curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/examples/web-development.yaml > ~/.devex/web-dev.yaml
+
+# Apply the configuration
+devex config apply --file ~/.devex/web-dev.yaml
+devex install
+```
+
+### 2. Step-by-Step Setup Instructions
+Detailed walkthrough of the setup process, including:
+- Prerequisites and system requirements
+- Installation commands
+- Configuration explanations
+- Verification steps
+
+### 3. Customization Options
+Guidelines for adapting the examples to your specific needs:
+- Adding or removing tools
+- Modifying versions
+- Team-specific adjustments
+
+### 4. Best Practices
+Proven approaches for:
+- Team collaboration
+- CI/CD integration
+- Environment management
+- Troubleshooting
+
+## Common Patterns
+
+### Multi-Environment Setup
+
+Most examples follow this pattern for handling different environments:
+
+```yaml
+# Base configuration for all environments
+applications:
+  development:
+    - name: git
+      default: true
+    - name: docker
+      default: true
+
+# Development-specific tools
+development:
+  applications:
+    - name: docker-compose
+      default: true
+    - name: dev-tools
+      default: true
+
+# Production-specific configurations
+production:
+  applications:
+    - name: monitoring-agent
+      default: true
+  security:
+    enabled: true
+```
+
+### Team Collaboration Structure
+
+Examples include team-friendly configurations:
+
+```yaml
+# Team base configuration
+team:
+  name: "frontend-team"
+  tools:
+    editor: "vscode"
+    shell: "zsh"
+    theme: "tokyo-night"
+
+# Role-based additions
+roles:
+  senior-developer:
+    additional_tools:
+      - kubernetes-cli
+      - terraform
+  
+  junior-developer:
+    guided_setup: true
+    documentation_tools:
+      - devdocs
+```
+
+### Cross-Platform Compatibility
+
+All examples include platform-specific configurations:
+
+```yaml
+applications:
+  development:
+    - name: node
+      linux:
+        install_method: mise
+        install_command: node@lts
+      macos:
+        install_method: mise
+        install_command: node@lts
+      windows:
+        install_method: mise
+        install_command: node@lts
+```
+
+## Quick Start with Examples
+
+### 1. Explore Available Examples
+
+```bash
+# List all available examples
+devex examples list
+
+# Show example details
+devex examples show web-development
+
+# Preview what would be installed
+devex examples preview web-development
+```
+
+### 2. Apply an Example
+
+```bash
+# Apply example directly
+devex examples apply web-development
+
+# Or download and customize
+devex examples download web-development --output ~/.devex/my-config.yaml
+# Edit ~/.devex/my-config.yaml
+devex config apply --file ~/.devex/my-config.yaml
+```
+
+### 3. Combine Multiple Examples
+
+```bash
+# Combine examples for full-stack development
+devex examples apply web-development backend-development
+
+# Merge specific categories
+devex examples apply web-development --category frontend
+devex examples apply backend-development --category databases
+```
+
+## Example Categories
+
+### Development Stacks
+
+**Frontend-Focused:**
+- React development environment
+- Vue.js development setup
+- Angular development stack
+- Static site generation tools
+
+**Backend-Focused:**
+- Node.js API development
+- Python web development
+- Go microservices
+- Java enterprise development
+
+**Full-Stack:**
+- MEAN/MERN stack
+- JAMstack development
+- Serverless development
+- Microservices architecture
+
+### Specialized Environments
+
+**Data & Analytics:**
+- Python data science
+- R statistical analysis
+- Machine learning development
+- Business intelligence tools
+
+**Mobile Development:**
+- React Native setup
+- Flutter development
+- Native iOS development
+- Native Android development
+
+**DevOps & Infrastructure:**
+- Kubernetes development
+- Terraform infrastructure
+- Ansible automation
+- Monitoring and observability
+
+### Industry-Specific
+
+**Enterprise Development:**
+- Java enterprise stack
+- .NET development
+- Security-hardened environments
+- Compliance-ready setups
+
+**Startup Environment:**
+- Rapid prototyping tools
+- Multi-language support
+- Cost-optimized tooling
+- Collaboration-focused setup
+
+## Contributing Examples
+
+Have a useful DevEx configuration? Contribute it to help others!
+
+### Example Structure
+
+```
+examples/
+├── example-name/
+│   ├── README.md                 # Description and instructions
+│   ├── devex.yaml              # Main configuration
+│   ├── team/                   # Team variations
+│   │   ├── frontend.yaml
+│   │   └── backend.yaml
+│   ├── environments/           # Environment-specific configs
+│   │   ├── development.yaml
+│   │   ├── staging.yaml
+│   │   └── production.yaml
+│   └── assets/                 # Supporting files
+│       ├── vscode-settings.json
+│       └── git-hooks/
+```
+
+### Contribution Guidelines
+
+1. **Complete Documentation**: Include clear README with setup instructions
+2. **Cross-Platform Support**: Test on Linux, macOS, and Windows
+3. **Security Best Practices**: Follow security guidelines
+4. **Real-World Testing**: Verify the configuration works in practice
+5. **Team Feedback**: Get feedback from actual users
+
+```bash
+# Fork the repository
+git clone https://github.com/yourusername/devex.git
+
+# Create your example
+mkdir -p examples/my-development-stack
+cd examples/my-development-stack
+
+# Create configuration files
+# ... add your files ...
+
+# Test the example
+devex config apply --file devex.yaml --dry-run
+devex examples test my-development-stack
+
+# Submit pull request
+git add .
+git commit -m "Add my-development-stack example"
+git push origin my-example-branch
+```
+
+<Callout type="tip">
+**Example Best Practices:**
+
+1. **Start Simple**: Begin with essential tools, add complexity gradually
+2. **Document Decisions**: Explain why specific tools were chosen
+3. **Include Alternatives**: Provide options for different preferences
+4. **Test Thoroughly**: Verify on clean systems and different platforms
+5. **Keep Updated**: Maintain examples as tools and versions evolve
+6. **Real-World Focus**: Base examples on actual development needs
+</Callout>
+
+## Community Examples
+
+Beyond the official examples, the DevEx community shares configurations:
+
+- **Company Examples**: Real configurations from various companies
+- **Open Source Projects**: Configurations from popular open source projects
+- **Personal Setups**: Individual developer configurations
+- **Educational**: Examples for learning and teaching
+
+### Finding Community Examples
+
+```bash
+# Search community examples
+devex community search "react development"
+
+# Browse by category
+devex community browse --category "data-science"
+
+# Install community example
+devex community install awesome-python-setup --author @pythonista
+```
+
+## Getting Help
+
+If you need help with examples:
+
+<Cards>
+  <Card title="GitHub Discussions" href="https://github.com/jameswlane/devex/discussions" />
+  <Card title="Discord Community" href="#" />
+  <Card title="Stack Overflow" href="#" />
+  <Card title="Reddit Community" href="#" />
+</Cards>
+
+### Example-Specific Support
+
+When asking for help with examples:
+
+1. **Specify the example** you're using
+2. **Share your modifications** if any
+3. **Include error messages** in full
+4. **Mention your platform** (OS, version, etc.)
+5. **Provide context** about your development needs
+
+Ready to explore specific examples? Choose from the categories below:
+
+<Cards>
+  <Card 
+    title="Web Development"
+    href="/docs/examples/web-development"
+    description="Modern frontend development with React, Vue, and cutting-edge tools"
+  />
+  <Card 
+    title="Backend Development" 
+    href="/docs/examples/backend-development"
+    description="Server-side development across multiple languages and frameworks"
+  />
+  <Card 
+    title="Data Science"
+    href="/docs/examples/data-science" 
+    description="Complete Python data science and machine learning environment"
+  />
+  <Card 
+    title="Mobile Development"
+    href="/docs/examples/mobile-development"
+    description="Cross-platform and native mobile development setup"
+  />
+</Cards>

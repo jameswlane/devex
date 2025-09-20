@@ -1,0 +1,46 @@
+{
+	"version": 2,
+	"redirects": [
+		{
+			"source": "/install",
+			"has": [
+				{
+					"type": "header",
+					"key": "user-agent",
+					"value": "(?i).*(windows|win32|win64).*"
+				}
+			],
+			"destination": "/install.ps1",
+			"permanent": false
+		}
+	],
+	"headers": [
+		{
+			"source": "/install",
+			"headers": [
+				{
+					"key": "Content-Type",
+					"value": "text/plain; charset=utf-8"
+				}
+			]
+		},
+		{
+			"source": "/install.ps1",
+			"headers": [
+				{
+					"key": "Content-Type",
+					"value": "text/plain; charset=utf-8"
+				}
+			]
+		},
+		{
+			"source": "/(.*)",
+			"headers": [
+				{
+					"key": "Cache-Control",
+					"value": "public, max-age=3600"
+				}
+			]
+		}
+	]
+}

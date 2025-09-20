@@ -1,0 +1,56 @@
+# Multi-stage Dockerfile for DevEx CLI testing on Manjaro
+# Stage 1: Base system setup
+FROM manjarolinux/base:latest AS base
+
+# Metadata
+LABEL maintainer="DevEx Team"
+LABEL description="DevEx CLI testing environment for Manjaro"
+LABEL version="2.0"
+
+ENV TERM=xterm-256color
+ENV DEVEX_TEST_MODE=true
+
+# Update system and install essential dependencies
+RUN pacman -Syu --noconfirm && pacman -S --noconfirm \
+    curl \
+    wget \
+    git \
+    unzip \
+    sudo \
+    ca-certificates \
+    procps-ng \
+    which \
+    gnupg \
+    && pacman -Scc --noconfirm
+
+# Stage 2: User setup and DevEx preparation
+FROM base AS devex-ready
+
+# Create non-root user with passwordless sudo (more secure)
+RUN useradd -m -s /bin/bash -G sudo testuser \
+    && echo 'testuser ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers \
+    && chmod 0440 /etc/sudoers
+
+# Switch to test user and set working directory
+USER testuser
+WORKDIR /home/testuser
+
+# Create DevEx directory structure
+RUN mkdir -p ~/.local/share/devex/assets ~/.local/share/devex/bin ~/.local/share/devex/config ~/.local/share/devex/help ~/.local/share/devex/cache ~/.local/share/devex/logs ~/.local/share/devex/themes \
+    && mkdir -p ~/.devex/{templates,backups} \
+    && mkdir -p ~/workspace
+
+# Copy DevEx binary and assets
+COPY --chown=testuser:testuser bin/devex /home/testuser/.local/share/devex/bin/devex
+COPY --chown=testuser:testuser assets/ /home/testuser/.local/share/devex/assets/
+COPY --chown=testuser:testuser config/ /home/testuser/.local/share/devex/config/
+COPY --chown=testuser:testuser help/ /home/testuser/.local/share/devex/help/
+
+# Configure environment
+RUN echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc \
+    && echo 'export DEVEX_HOME="$HOME/.local/share/devex"' >> ~/.bashrc \
+    && echo 'export DEVEX_TEST_MODE=true' >> ~/.bashrc \
+    && echo 'alias ll="ls -la"' >> ~/.bashrc
+
+# Set container entrypoint
+CMD ["/bin/bash"]

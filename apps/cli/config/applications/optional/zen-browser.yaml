@@ -1,0 +1,11 @@
+name: Zen Browser
+description: A secure and private browser
+category: Optional Apps
+desktop_environments:
+  - all
+linux:
+  install_method: flatpak
+  install_command: flatpak install flathub io.github.zen_browser.zen
+  uninstall_command: flatpak remove io.github.zen_browser.zen
+  dependencies:
+    - flatpak

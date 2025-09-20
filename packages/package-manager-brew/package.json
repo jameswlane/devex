@@ -1,0 +1,48 @@
+{
+	"name": "@devex/package-manager-brew",
+	"private": true,
+	"version": "1.9.0",
+	"description": "Homebrew plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-brew .",
+		"dev": "go build -race -o devex-plugin-package-manager-brew main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"brew",
+		"homebrew",
+		"macos",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-brew"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"darwin",
+				"linux"
+			],
+			"dependencies": [
+				"brew"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

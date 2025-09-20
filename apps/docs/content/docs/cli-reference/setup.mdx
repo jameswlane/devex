@@ -1,0 +1,348 @@
+---
+title: devex setup
+description: Interactive guided setup for your development environment
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Step, Steps } from 'fumadocs-ui/components/steps'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+
+# devex setup
+
+The `setup` command provides an interactive, guided installation experience for configuring your development environment. It walks you through selecting programming languages, databases, and applications to create a customized setup tailored to your needs.
+
+## Usage
+
+```bash
+devex setup [flags]
+```
+
+## Description
+
+The setup command includes:
+
+- **Programming language selection** (Node.js, Python, Go, Ruby, etc.)
+- **Database installation** (PostgreSQL, MySQL, Redis)
+- **Essential development tools** and terminal applications
+- **Desktop applications** (if desktop environment detected)
+- **Automatic dependency management** and ordering
+- **Git configuration** setup
+- **Theme and desktop environment** configuration
+
+## Options
+
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--non-interactive` | | `bool` | `false` | Run automated setup without user interaction |
+| `--verbose` | `-v` | `bool` | `false` | Enable verbose output |
+| `--dry-run` | `-n` | `bool` | `false` | Show what would be installed without executing |
+
+## Interactive Setup Flow
+
+<Steps>
+  <Step>
+    **Platform Detection**
+    
+    DevEx automatically detects your operating system, distribution, and desktop environment.
+    
+    ```
+    Platform detected: Ubuntu 22.04 (GNOME 42)
+    Package managers: apt, flatpak, snap
+    ```
+  </Step>
+  
+  <Step>
+    **Shell Selection**
+    
+    Choose your preferred shell and configure it with useful plugins and themes.
+    
+    <Tabs items={['zsh', 'bash', 'fish']}>
+      <Tab value="zsh">
+        - Oh My Zsh installation
+        - Popular plugins (git, docker, kubectl)
+        - Agnoster theme
+        - Auto-suggestions and syntax highlighting
+      </Tab>
+      <Tab value="bash">
+        - Bash completion
+        - Custom PS1 prompt
+        - Useful aliases
+      </Tab>
+      <Tab value="fish">
+        - Fish shell with modern features
+        - Built-in autocompletion
+        - Syntax highlighting
+      </Tab>
+    </Tabs>
+  </Step>
+  
+  <Step>
+    **Programming Languages**
+    
+    Select the programming languages you work with:
+    
+    <Cards>
+      <Card title="Node.js" description="JavaScript runtime with npm/yarn" />
+      <Card title="Python" description="Python 3.x with pip and virtualenv" />
+      <Card title="Go" description="Go programming language" />
+      <Card title="Ruby" description="Ruby with RVM or rbenv" />
+      <Card title="Rust" description="Rust with cargo" />
+      <Card title="Java" description="OpenJDK with Maven" />
+    </Cards>
+  </Step>
+  
+  <Step>
+    **Databases**
+    
+    Choose databases for your development environment:
+    
+    ```
+    ◯ PostgreSQL - Advanced open source database
+    ◯ MySQL - Popular relational database
+    ◯ Redis - In-memory data structure store
+    ◯ SQLite - Lightweight file-based database
+    ◯ MongoDB - Document-oriented NoSQL database
+    ```
+  </Step>
+  
+  <Step>
+    **Development Tools**
+    
+    Essential tools are pre-selected, with options to add more:
+    
+    **Pre-selected (essential):**
+    - Git - Version control
+    - curl/wget - HTTP clients
+    - Docker - Containerization
+    - VS Code or Neovim - Code editor
+    
+    **Optional additions:**
+    - Postman - API testing
+    - DBeaver - Database client
+    - Slack/Discord - Communication
+    - Chrome/Firefox - Web browsers
+  </Step>
+  
+  <Step>
+    **Git Configuration**
+    
+    Set up your Git identity and preferences:
+    
+    ```
+    Full Name: [Your Name]
+    Email: [your.email@example.com]
+    
+    Git aliases will be configured:
+    ✓ git co (checkout)
+    ✓ git br (branch)  
+    ✓ git ci (commit)
+    ✓ git st (status)
+    ```
+  </Step>
+  
+  <Step>
+    **Desktop Theme** (Linux with desktop environment)
+    
+    Choose a visual theme for your desktop environment:
+    
+    ```
+    ◯ Tokyo Night - Dark theme with purple accents
+    ◯ Dracula - Dark theme with purple/pink
+    ◯ Gruvbox - Retro warm colors
+    ◯ Adwaita Dark - GNOME default dark theme
+    ```
+  </Step>
+  
+  <Step>
+    **Installation**
+    
+    Review your selections and begin installation:
+    
+    ```
+    Installation Summary:
+    ┌─────────────────────┬─────────────────┐
+    │ Category            │ Items           │
+    ├─────────────────────┼─────────────────┤
+    │ Programming Lang.   │ Node.js, Python │
+    │ Databases          │ PostgreSQL      │
+    │ Development Tools  │ 12 applications │
+    │ Desktop Apps       │ 5 applications  │
+    └─────────────────────┴─────────────────┘
+    
+    Proceed with installation? [Y/n]
+    ```
+  </Step>
+</Steps>
+
+## Examples
+
+### Basic Setup
+
+```bash
+# Start interactive guided setup
+devex setup
+```
+
+### Non-Interactive Setup
+
+```bash
+# Run with default selections
+devex setup --non-interactive
+
+# Non-interactive with verbose output
+devex setup --non-interactive --verbose
+```
+
+### Preview Mode
+
+```bash
+# See what would be installed without doing it
+devex setup --dry-run
+```
+
+## Configuration Integration
+
+The setup command works with your configuration files in `~/.local/share/devex/config/`:
+
+<Tabs items={['Default Behavior', 'Custom Configs', 'Team Configs']}>
+  <Tab value="Default Behavior">
+    Uses built-in default configurations for all selections. Perfect for getting started quickly.
+    
+    ```bash
+    devex setup
+    # Uses defaults from:
+    # - applications.yaml
+    # - environment.yaml  
+    # - desktop.yaml
+    # - system.yaml
+    ```
+  </Tab>
+  
+  <Tab value="Custom Configs">
+    If you have custom configurations in `~/.devex/`, setup will use those instead.
+    
+    ```bash
+    # Create custom config
+    mkdir -p ~/.devex
+    cp ~/.local/share/devex/config/applications.yaml ~/.devex/
+    # Edit ~/.devex/applications.yaml
+    
+    devex setup  # Now uses your custom config
+    ```
+  </Tab>
+  
+  <Tab value="Team Configs">
+    Use a team configuration template for consistent environments.
+    
+    ```bash
+    # First get the team template
+    devex template list
+    devex template apply backend-team
+    
+    # Then run setup
+    devex setup
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+<Callout type="warn">
+If setup encounters errors, it will:
+
+1. **Continue with other installations** when possible
+2. **Show a summary** of what succeeded and failed
+3. **Provide specific error messages** for troubleshooting
+4. **Suggest recovery commands** for common issues
+</Callout>
+
+### Common Issues
+
+**Permission Errors:**
+```bash
+# Setup will prompt for sudo when needed
+# If issues persist, check:
+sudo chmod 755 /usr/local/bin
+```
+
+**Network Issues:**
+```bash
+# Retry with verbose output
+devex setup --verbose
+
+# Check network connectivity
+curl -I https://github.com
+```
+
+**Package Manager Issues:**
+```bash
+# Update package lists first
+sudo apt update  # Ubuntu/Debian
+brew update      # macOS
+```
+
+## Advanced Options
+
+### Custom Installation Order
+
+Setup automatically determines the optimal installation order based on dependencies, but you can influence this:
+
+```yaml
+# In your applications.yaml
+applications:
+  development:
+    - name: docker
+      priority: 1  # Install first
+    - name: node
+      priority: 2  # Install after docker
+```
+
+### Platform-Specific Behavior
+
+Setup adapts to your platform:
+
+<Tabs items={['Linux', 'macOS', 'Windows']}>
+  <Tab value="Linux">
+    - Detects distribution (Ubuntu, Fedora, Arch, etc.)
+    - Uses appropriate package manager (apt, dnf, pacman)
+    - Configures desktop environment (GNOME, KDE, XFCE)
+    - Sets up systemd services when needed
+  </Tab>
+  
+  <Tab value="macOS">
+    - Uses Homebrew as primary package manager
+    - Configures macOS defaults and dock
+    - Installs from Mac App Store when available
+    - Sets up macOS-specific development tools
+  </Tab>
+  
+  <Tab value="Windows">
+    - Uses winget as primary package manager
+    - Falls back to Chocolatey or Scoop
+    - Configures Windows Terminal
+    - Sets up WSL if requested
+  </Tab>
+</Tabs>
+
+## Post-Setup
+
+After setup completes:
+
+<Steps>
+  <Step>**Review Installation**: Check the summary for any failed installations</Step>
+  <Step>**Shell Reload**: Restart your terminal or run `source ~/.zshrc`</Step>
+  <Step>**Verify Tools**: Run `devex status` to confirm everything installed</Step>
+  <Step>**Customize**: Use `devex config` to fine-tune your setup</Step>
+</Steps>
+
+## Related Commands
+
+- [`devex install`](/docs/cli-reference/install) - Install without interactive prompts
+- [`devex config`](/docs/cli-reference/config) - Manage configuration files
+- [`devex status`](/docs/cli-reference/status-list#status) - Check installation status
+- [`devex add`](/docs/cli-reference/add-remove#add) - Add individual applications later
+
+<Callout type="tip">
+**Pro Tip**: Run `devex setup` in a new environment, then use `devex config export` to save your selections as a reusable template for other machines.
+</Callout>

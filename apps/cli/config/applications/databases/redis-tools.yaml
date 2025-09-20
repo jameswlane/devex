@@ -1,0 +1,10 @@
+name: Redis Tools
+description: Tools for working with Redis
+category: Databases
+linux:
+  install_method: apt
+  install_command: redis-tools
+  uninstall_command: redis-tools
+  dependencies:
+    - redis
+    - apt

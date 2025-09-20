@@ -1,0 +1,9 @@
+name: Swift
+description: ''
+category: Programming Languages
+install_method: mise
+install_command: swift@latest
+uninstall_command: swift
+default: false
+dependencies:
+  - mise

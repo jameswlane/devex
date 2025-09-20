@@ -1,0 +1,59 @@
+metadata:
+  name: web-development
+  version: 1.0.0
+  description: Complete web development environment with React, Vue, Angular support and modern tooling
+  category: development
+  tags:
+    - web
+    - frontend
+    - react
+    - vue
+    - angular
+    - javascript
+    - typescript
+  platforms:
+    - linux
+    - macos
+    - windows
+  difficulty: intermediate
+  estimated_time: 45 minutes
+  icon: 🌐
+  additive: true
+applications:
+  - baseconfig:
+      name: node
+      description: Node.js JavaScript runtime
+      category: development
+    install_method: mise
+    install_command: node
+    default: true
+  - baseconfig:
+      name: vscode
+      description: Visual Studio Code editor
+      category: development
+    install_method: apt
+    install_command: code
+    default: true
+  - baseconfig:
+      name: chrome
+      description: Google Chrome browser
+      category: browser
+    install_method: apt
+    install_command: google-chrome-stable
+    default: true
+environment:
+  shell: zsh
+  editor: vscode
+  languages:
+    - node
+    - typescript
+  variables:
+    NODE_ENV: development
+system:
+  git_config: true
+  ssh_config: true
+  global_theme: VS Code Dark+
+  directories:
+    - ~/Projects
+    - ~/Projects/personal
+    - ~/Projects/work

@@ -1,0 +1,816 @@
+---
+title: Template System
+description: Use configuration templates for team setups, project types, and common development patterns
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs'
+import { Callout } from 'fumadocs-ui/components/callout'
+import { Card, Cards } from 'fumadocs-ui/components/card'
+import { Steps, Step } from 'fumadocs-ui/components/steps'
+
+# Template System
+
+DevEx's template system allows you to create predefined configuration sets for different development scenarios, team setups, or project types. Templates make it easy to standardize environments and quickly bootstrap new development setups.
+
+## Template Concepts
+
+### What are Templates?
+
+Templates are collections of configuration files that define a complete development environment setup. They can include:
+
+- **Application selections**: Specific tools and software
+- **Environment settings**: Programming languages, fonts, shell configs
+- **Desktop configurations**: Themes, extensions, GUI applications
+- **System settings**: Git config, SSH settings, terminal preferences
+
+### Template Types
+
+<Cards>
+  <Card title="Project Templates" description="Frontend, backend, mobile, data science setups" />
+  <Card title="Team Templates" description="Shared configurations for development teams" />
+  <Card title="Role Templates" description="DevOps, QA, designer-specific environments" />
+  <Card title="Platform Templates" description="Linux, macOS, Windows optimized setups" />
+</Cards>
+
+## Template Structure
+
+### Template Directory Layout
+
+```bash
+~/.local/share/devex/templates/
+├── web-development/
+│   ├── template.yaml
+│   ├── applications.yaml
+│   ├── environment.yaml
+│   ├── desktop.yaml
+│   └── system.yaml
+├── data-science/
+│   ├── template.yaml
+│   └── ...
+└── team-standard/
+    ├── template.yaml
+    └── ...
+```
+
+### Template Metadata
+
+Each template includes a `template.yaml` file with metadata:
+
+```yaml
+# template.yaml
+name: 'Web Development'
+description: 'Full-stack web development environment'
+version: '1.0.0'
+author: 'DevEx Team'
+tags: ['web', 'frontend', 'backend', 'javascript']
+
+# Template configuration
+includes:
+  - applications.yaml
+  - environment.yaml
+  - desktop.yaml
+  - system.yaml
+  
+# Variables for customization
+variables:
+  preferred_editor: 'vscode'  # or 'nvim', 'cursor'
+  node_version: 'lts'         # or 'latest', '18.17.0'
+  theme: 'tokyo-night'        # or 'gruvbox', 'catppuccin'
+  
+# Platform-specific overrides
+platforms:
+  linux:
+    additional_packages: ['gnome-tweaks']
+  macos:
+    additional_packages: ['rectangle']
+  windows:
+    additional_packages: ['powertoys']
+    
+# Requirements
+requirements:
+  min_disk_space: '10GB'
+  supported_platforms: ['linux', 'macos', 'windows']
+  dependencies: ['git', 'curl']
+```
+
+## Built-in Templates
+
+### Web Development Template
+
+Complete setup for modern web development:
+
+<Tabs items={['Applications', 'Environment', 'Desktop', 'System']}>
+  <Tab value="Applications">
+    ```yaml
+    # applications.yaml
+    applications:
+      development:
+        - name: git
+          default: true
+        - name: node
+          default: true
+        - name: docker
+          default: true
+        - name: vscode
+          default: true
+        - name: chrome
+          default: true
+          
+      databases:
+        - name: postgresql
+          default: false
+        - name: redis
+          default: false
+        - name: mongodb
+          default: false
+          
+      optional:
+        - name: figma
+          default: false
+        - name: postman
+          default: false
+        - name: slack
+          default: false
+    ```
+  </Tab>
+  
+  <Tab value="Environment">
+    ```yaml
+    # environment.yaml
+    programming_languages:
+      - name: Node.js
+        install_command: 'node@${node_version}'
+        default: true
+      - name: Python
+        install_command: 'python@latest'
+        default: false
+      - name: Go
+        install_command: 'go@latest'
+        default: false
+        
+    fonts:
+      - name: 'JetBrains Mono'
+        method: 'url'
+        url: 'https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip'
+        destination: '~/.local/share/fonts'
+        
+    shell:
+      - name: 'starship'
+        type: 'prompt'
+        theme: '${theme}'
+    ```
+  </Tab>
+  
+  <Tab value="Desktop">
+    ```yaml
+    # desktop.yaml (Linux/GNOME specific)
+    desktop_applications:
+      development:
+        - name: VS Code
+          install_method: 'snap'
+          install_command: 'code --classic'
+          
+      productivity:
+        - name: Firefox
+          install_method: 'snap'
+          install_command: 'firefox'
+          
+    themes:
+      - name: '${theme}'
+        theme_color: 'purple'
+        
+    extensions:
+      - id: 'tactile@lundal.io'  # Window tiling
+      - id: 'blur-my-shell@aunetx'  # Visual effects
+    ```
+  </Tab>
+  
+  <Tab value="System">
+    ```yaml
+    # system.yaml
+    git:
+      aliases:
+        co: 'checkout'
+        br: 'branch'
+        ci: 'commit'
+        st: 'status'
+        sync: 'pull --rebase origin main'
+        
+      settings:
+        pull:
+          rebase: true
+        push:
+          default: 'current'
+          autoSetupRemote: true
+          
+    global_theme: '${theme}'
+    ```
+  </Tab>
+</Tabs>
+
+### Data Science Template
+
+Python-focused data science environment:
+
+```yaml
+# template.yaml
+name: 'Data Science'
+description: 'Python data science and ML environment'
+version: '1.0.0'
+tags: ['python', 'data-science', 'ml', 'jupyter']
+
+variables:
+  python_version: '3.11'
+  jupyter_lab: true
+  deep_learning: false
+
+# applications.yaml
+applications:
+  development:
+    - name: python
+      install_command: 'python@${python_version}'
+      default: true
+    - name: jupyter
+      default: '${jupyter_lab}'
+    - name: vscode
+      default: true
+      
+  optional:
+    - name: r
+      default: false
+    - name: rstudio
+      default: false
+      
+# environment.yaml  
+programming_languages:
+  - name: Python
+    install_command: 'python@${python_version}'
+    default: true
+    post_install:
+      - pip: 'pandas numpy matplotlib seaborn scikit-learn'
+      - pip: 'jupyter jupyterlab'
+      - pip: 'torch tensorflow'  # if deep_learning
+```
+
+### Team Standard Template
+
+Shared team configuration:
+
+```yaml
+# template.yaml
+name: 'Team Standard'
+description: 'Company-wide development environment'
+version: '2.1.0'
+author: 'DevOps Team'
+tags: ['team', 'standard', 'company']
+
+# Locked configurations (cannot be overridden)
+locked_settings:
+  git:
+    user:
+      email_domain: '@company.com'
+  theme: 'company-brand'
+  required_apps: ['git', 'docker', 'vscode']
+  
+# Team-specific configurations
+team_settings:
+  code_review_tool: 'github'
+  ci_cd_platform: 'github-actions'
+  monitoring: 'datadog'
+  communication: 'slack'
+```
+
+## Creating Custom Templates
+
+### Template Creation Workflow
+
+<Steps>
+
+<Step>
+**Define Template Structure**: Create template directory and metadata file
+</Step>
+
+<Step>
+**Configure Components**: Set up applications, environment, desktop, and system configs
+</Step>
+
+<Step>
+**Add Variables**: Define customizable parameters
+</Step>
+
+<Step>
+**Test Template**: Validate template on target platforms
+</Step>
+
+<Step>
+**Document Usage**: Create template documentation and examples
+</Step>
+
+</Steps>
+
+### Creating a Mobile Development Template
+
+```bash
+# Create template directory
+mkdir -p ~/.local/share/devex/templates/mobile-development
+
+# Create template metadata
+cat > ~/.local/share/devex/templates/mobile-development/template.yaml << 'EOF'
+name: 'Mobile Development'
+description: 'React Native and Flutter mobile development'
+version: '1.0.0'
+author: 'Mobile Team'
+tags: ['mobile', 'react-native', 'flutter', 'ios', 'android']
+
+variables:
+  platform: 'react-native'  # or 'flutter', 'both'
+  ios_development: false
+  android_development: true
+  
+platforms:
+  macos:
+    ios_development: true  # Override for macOS
+  windows:
+    ios_development: false  # Force false on Windows
+  linux:
+    ios_development: false  # Force false on Linux
+EOF
+```
+
+```yaml
+# applications.yaml
+applications:
+  development:
+    - name: node
+      default: true
+      condition: '${platform} == "react-native" || ${platform} == "both"'
+    - name: flutter
+      default: true
+      condition: '${platform} == "flutter" || ${platform} == "both"'
+    - name: android-studio
+      default: '${android_development}'
+    - name: xcode
+      default: '${ios_development}'
+      platforms: ['macos']
+      
+  tools:
+    - name: scrcpy  # Android device mirroring
+      default: '${android_development}'
+    - name: flipper  # Mobile debugging
+      default: true
+      
+# environment.yaml
+programming_languages:
+  - name: Node.js
+    install_command: 'node@lts'
+    default: true
+    condition: '${platform} != "flutter"'
+  - name: Dart
+    install_command: 'dart@latest'
+    default: true
+    condition: '${platform} != "react-native"'
+  - name: Java
+    install_command: 'java@11'
+    default: '${android_development}'
+```
+
+### DevOps Template
+
+Infrastructure and operations focused setup:
+
+```yaml
+# template.yaml
+name: 'DevOps Engineer'
+description: 'Infrastructure and operations toolkit'
+version: '1.0.0'
+tags: ['devops', 'infrastructure', 'kubernetes', 'terraform']
+
+variables:
+  cloud_provider: 'aws'  # aws, gcp, azure
+  kubernetes: true
+  terraform: true
+  monitoring_stack: 'prometheus'
+  
+# applications.yaml
+applications:
+  development:
+    - name: docker
+      default: true
+    - name: kubectl
+      default: '${kubernetes}'
+    - name: terraform
+      default: '${terraform}'
+    - name: ansible
+      default: true
+      
+  cloud_tools:
+    - name: awscli
+      default: true
+      condition: '${cloud_provider} == "aws"'
+    - name: gcloud
+      default: true
+      condition: '${cloud_provider} == "gcp"'
+    - name: azure-cli
+      default: true
+      condition: '${cloud_provider} == "azure"'
+      
+  monitoring:
+    - name: prometheus
+      default: true
+      condition: '${monitoring_stack} == "prometheus"'
+    - name: grafana
+      default: true
+      condition: '${monitoring_stack} == "prometheus"'
+```
+
+## Template Usage
+
+### Applying Templates
+
+```bash
+# List available templates
+devex template list
+
+# Apply a template
+devex template apply web-development
+
+# Apply with custom variables
+devex template apply web-development \
+  --var node_version=18.17.0 \
+  --var theme=gruvbox \
+  --var preferred_editor=nvim
+
+# Preview template changes (dry-run)
+devex template apply data-science --dry-run
+
+# Apply template to specific configuration
+devex template apply team-standard --config-only applications
+```
+
+### Template Variables
+
+<Tabs items={['String Variables', 'Boolean Variables', 'Conditional Logic', 'Platform Variables']}>
+  <Tab value="String Variables">
+    ```yaml
+    # Template definition
+    variables:
+      editor: 'vscode'
+      theme: 'tokyo-night'
+      node_version: 'lts'
+      
+    # Usage in configuration
+    programming_languages:
+      - name: Node.js
+        install_command: 'node@${node_version}'
+        
+    # CLI usage
+    devex template apply web-dev \
+      --var editor=nvim \
+      --var theme=gruvbox \
+      --var node_version=18.17.0
+    ```
+  </Tab>
+  
+  <Tab value="Boolean Variables">
+    ```yaml
+    # Template definition
+    variables:
+      include_docker: true
+      install_databases: false
+      
+    # Usage in configuration
+    applications:
+      development:
+        - name: docker
+          default: '${include_docker}'
+        - name: postgresql
+          default: '${install_databases}'
+          
+    # CLI usage
+    devex template apply web-dev \
+      --var include_docker=false \
+      --var install_databases=true
+    ```
+  </Tab>
+  
+  <Tab value="Conditional Logic">
+    ```yaml
+    # Conditional installation
+    applications:
+      development:
+        - name: xcode
+          default: true
+          condition: '${platform} == "ios" && ${os} == "macos"'
+        - name: android-studio
+          default: true
+          condition: '${platform} == "android" || ${platform} == "both"'
+          
+    # Complex conditions
+    - name: flutter
+      default: true
+      condition: '(${framework} == "flutter") && (${mobile_dev} == true)'
+    ```
+  </Tab>
+  
+  <Tab value="Platform Variables">
+    ```yaml
+    # Platform-specific overrides
+    variables:
+      editor: 'vscode'
+      
+    platforms:
+      linux:
+        editor: 'nvim'  # Prefer nvim on Linux
+      macos:
+        additional_apps: ['rectangle', 'homebrew']
+      windows:
+        additional_apps: ['powertoys', 'wsl2']
+    ```
+  </Tab>
+</Tabs>
+
+## Template Management
+
+### Template Validation
+
+```bash
+# Validate template structure
+devex template validate web-development
+
+# Check template variables
+devex template inspect mobile-development
+
+# Test template application
+devex template test data-science --dry-run
+
+# Validate all templates
+devex template validate --all
+```
+
+### Template Sharing
+
+<Steps>
+
+<Step>
+**Export Template**: Package template for sharing
+</Step>
+
+<Step>
+**Version Control**: Store templates in Git repositories
+</Step>
+
+<Step>
+**Team Distribution**: Share via internal registries
+</Step>
+
+<Step>
+**Documentation**: Provide usage examples and customization guides
+</Step>
+
+</Steps>
+
+```bash
+# Export template as archive
+devex template export web-development --output web-dev-template.tar.gz
+
+# Import template from archive
+devex template import web-dev-template.tar.gz
+
+# Sync templates from Git repository
+devex template sync --repo https://github.com/company/devex-templates.git
+
+# List remote templates
+devex template list --remote
+```
+
+### Team Template Repository
+
+```bash
+# Template repository structure
+company-devex-templates/
+├── templates/
+│   ├── frontend-developer/
+│   ├── backend-developer/
+│   ├── devops-engineer/
+│   ├── qa-engineer/
+│   └── team-lead/
+├── assets/
+│   ├── themes/
+│   ├── fonts/
+│   └── configs/
+└── docs/
+    ├── template-guide.md
+    └── customization.md
+```
+
+## Real-World Examples
+
+### Startup Development Team
+
+```yaml
+# startup-team template
+name: 'Startup Team'
+description: 'Lean startup development environment'
+version: '1.0.0'
+
+variables:
+  team_size: 'small'  # small, medium, large
+  budget_tier: 'free'  # free, paid, enterprise
+  focus: 'web'  # web, mobile, api
+
+# Focus on free/open source tools
+applications:
+  development:
+    - name: vscode  # Free alternative to paid IDEs
+      default: true
+    - name: git
+      default: true
+    - name: docker
+      default: true
+      
+  communication:
+    - name: discord  # Free alternative to Slack
+      default: true
+      condition: '${budget_tier} == "free"'
+    - name: slack
+      default: true
+      condition: '${budget_tier} != "free"'
+```
+
+### Enterprise Development Team
+
+```yaml
+# enterprise-team template
+name: 'Enterprise Team'
+description: 'Enterprise-grade development environment'
+version: '1.0.0'
+
+# Enterprise-focused configurations
+locked_settings:
+  security:
+    required_tools: ['1password', 'vpn-client']
+    code_signing: true
+    compliance: 'sox'
+    
+  monitoring:
+    apm: 'datadog'
+    logging: 'splunk'
+    
+# Compliance requirements
+compliance_tools:
+  - name: 'security-scanner'
+    required: true
+  - name: 'license-checker'
+    required: true
+```
+
+### Remote Team Template
+
+```yaml
+# remote-team template
+name: 'Remote Team'
+description: 'Remote-optimized development setup'
+version: '1.0.0'
+
+# Remote work optimizations
+applications:
+  communication:
+    - name: zoom
+      default: true
+    - name: slack
+      default: true
+    - name: notion
+      default: true
+      
+  productivity:
+    - name: toggl  # Time tracking
+      default: true
+    - name: localsend  # File sharing
+      default: true
+    - name: caffeine  # Prevent sleep during calls
+      default: true
+      
+# Timezone-aware configurations
+variables:
+  timezone: 'UTC'
+  meeting_hours: '9-17'
+  async_communication: true
+```
+
+## Best Practices
+
+<Callout type="tip">
+**Template Best Practices:**
+
+1. **Keep templates focused** - One template per use case
+2. **Use meaningful variables** - Clear parameter names and defaults
+3. **Document thoroughly** - Include usage examples and customization guides
+4. **Version templates** - Track changes and maintain compatibility
+5. **Test across platforms** - Ensure templates work on target systems
+6. **Provide fallbacks** - Handle missing dependencies gracefully
+7. **Regular updates** - Keep templates current with tool updates
+</Callout>
+
+### Template Naming Conventions
+
+```bash
+# Good template names
+web-development        # Clear, descriptive
+data-science-python   # Specific technology focus
+team-standard-2024    # Versioned team configs
+mobile-react-native   # Technology-specific
+
+# Avoid
+frontend               # Too generic
+my-setup              # Not descriptive
+template1             # Not meaningful
+```
+
+### Variable Design
+
+```yaml
+# Good variable design
+variables:
+  # Clear names with sensible defaults
+  node_version: 'lts'           # Not 'nv' or 'version'
+  include_testing_tools: true   # Not 'testing'
+  database_type: 'postgresql'  # Not 'db'
+  
+  # Provide documentation
+  theme: 'tokyo-night'  # Available: tokyo-night, gruvbox, catppuccin
+```
+
+## Troubleshooting
+
+<Tabs items={['Template Errors', 'Variable Issues', 'Platform Problems', 'Version Conflicts']}>
+  <Tab value="Template Errors">
+    ```bash
+    # Debug template application
+    devex template apply web-dev --debug --dry-run
+    
+    # Check template syntax
+    devex template validate web-development
+    
+    # View template structure
+    devex template inspect mobile-development
+    
+    # Clear template cache
+    devex template cache clear
+    ```
+  </Tab>
+  
+  <Tab value="Variable Issues">
+    ```bash
+    # List template variables
+    devex template vars web-development
+    
+    # Check variable types
+    devex template inspect --variables web-development
+    
+    # Test with different variables
+    devex template apply web-dev \
+      --var node_version=latest \
+      --dry-run
+    ```
+  </Tab>
+  
+  <Tab value="Platform Problems">
+    ```bash
+    # Check platform compatibility
+    devex template inspect --platforms mobile-dev
+    
+    # Override platform detection
+    devex template apply web-dev --platform linux
+    
+    # Skip platform-specific components
+    devex template apply web-dev --skip-platform-specific
+    ```
+  </Tab>
+  
+  <Tab value="Version Conflicts">
+    ```bash
+    # Check template version
+    devex template info web-development
+    
+    # Update template
+    devex template update web-development
+    
+    # Use specific template version
+    devex template apply web-development@1.2.0
+    
+    # Rollback to previous version
+    devex template rollback web-development
+    ```
+  </Tab>
+</Tabs>
+
+## Related Documentation
+
+- [Configuration Index](/docs/configuration) - Overview of all configurations
+- [Applications Configuration](/docs/configuration/applications) - Application setup
+- [CLI Reference: Template](/docs/cli-reference/template) - Template management commands
+- [Team Setup Guide](/docs/guides/team-setup) - Team configuration strategies
+
+<Callout type="info">
+Templates provide a powerful way to standardize development environments across teams and projects. They enable consistent setups while allowing customization for specific needs and preferences.
+</Callout>

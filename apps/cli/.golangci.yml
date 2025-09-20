@@ -1,0 +1,136 @@
+# golangci-lint configuration for Go CLI project
+version: "2"
+linters:
+  # Default set of linters to enable
+  default: standard
+  # Enable specific linters for CLI projects
+  enable:
+    # Code quality and correctness
+    - errcheck # Check for unchecked errors
+    - gosec # Security issues
+    - govet # Go vet issues
+    - ineffassign # Detect ineffective assignments
+    - staticcheck # Advanced static analysis
+    - unused # Detect unused code
+    - gocritic # Comprehensive Go source code linter
+    - revive # Fast, configurable, extensible linter
+    # Code style and formatting
+    - misspell # Find commonly misspelled English words
+    - unconvert # Remove unnecessary type conversions
+    - whitespace # Detect leading/trailing whitespace
+    # Performance and best practices
+    - prealloc # Find slice declarations that could potentially be pre-allocated
+    - bodyclose # Check whether HTTP response body is closed successfully
+    # CLI-specific useful linters
+    - errname # Check that error types are of the form FooError
+    - errorlint # Find code that will cause problems with the error wrapping scheme
+    - contextcheck # Check whether the function uses a non-inherited context
+  # Disable linters that can be too noisy for CLI projects
+  disable:
+    - funlen # Function length can vary in CLI apps
+    - gocyclo # Cyclomatic complexity can be high in CLI parsing
+    - lll # Line length limits can be restrictive
+    - gocognit # Cognitive complexity can be high in CLI apps
+    - nestif # Nested if statements are common in CLI logic
+    - gochecknoglobals # CLI apps often need some global variables
+    - exhaustruct # Too strict for CLI apps
+    - varnamelen # Can be too restrictive for CLI variables
+    - wrapcheck # Can be noisy in CLI apps
+    - noctx # Allow context issues during migration
+  # Linter-specific settings
+  settings:
+    errcheck:
+      # Report about not checking of errors in type assertions
+      check-type-assertions: true
+      # Don't report about assignment of errors to blank identifier
+      check-blank: false
+    gosec:
+      # Exclude some gosec checks for CLI apps and secure file permissions
+      excludes:
+        - G204 # Subprocess launched with function call (common in CLI tools)
+        - G301 # Poor file permissions (we use secure permissions intentionally)
+        - G302 # Poor file permissions (we use secure permissions intentionally)
+        - G306 # Poor file permissions (we use secure permissions intentionally)
+    revive:
+      rules:
+        # Disable some rules that can be too strict for CLI apps
+        - name: var-naming
+          disabled: true
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: unused-parameter
+          disabled: true # Allow unused parameters during migration
+    staticcheck:
+      # Enable all checks except some that can be noisy
+      checks: ["all", "-ST1000", "-ST1003", "-SA4010"]
+    unused:
+      # Allow unused code during migration period
+      local-variables-are-used: false
+  # Configure exclusions for issues
+  exclusions:
+    # Use lax mode for generated files (more permissive)
+    generated: lax
+    # Warn about unused exclusion rules
+    warn-unused: true
+    # Use predefined exclusion presets
+    presets:
+      - comments
+      - std-error-handling
+      - common-false-positives
+    # Custom exclusion rules
+    rules:
+      # Exclude some linters from test files
+      - path: _test\.go
+        linters:
+          - gosec
+          - errcheck
+          - gocritic
+          - gocyclo
+      # Allow unused functions in migration code (temporary)
+      - text: "is unused"
+        linters: [unused]
+      # Allow secure file permissions
+      - text: "(G301|G302|G306): .* permissions"
+        linters: [gosec]
+      # Allow secure file permissions (alternative pattern)
+      - text: "G30[1-6]"
+        linters: [gosec]
+      # Allow context issues during migration
+      - text: "context.Context should be the first parameter"
+        linters: [contextcheck]
+issues:
+  # Show all issues
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  # Don't make issues unique by line (can hide multiple issues on same line)
+  uniq-by-line: false
+run:
+  # Timeout for analysis
+  timeout: 5m
+  # Include test files
+  tests: true
+  # Use gomod for relative paths (common for Go projects)
+  relative-path-mode: gomod
+  # Go version
+  go: '1.24.6'
+  # Set concurrency (adjust based on your CI environment)
+  concurrency: 0 # 0 = auto-detect
+output:
+  # Sort results by linter for easier review
+  sort-results: true
+  sort-order:
+    - linter
+    - file
+    # severity:
+  # Set default severity
+  # default: error
+  # Set specific severities for certain linters
+  # rules:
+  #   - linters:
+  #       - revive
+  #     severity: warning
+  #   - linters:
+  #       - unused
+  #     severity: warning # Make unused warnings instead of errors during migration

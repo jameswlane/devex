@@ -1,0 +1,47 @@
+# Keep 5000 lines of history within the shell and save it to ~/.bash_history:
+HISTSIZE=5000
+HISTFILESIZE=5000
+HISTFILE=~/.bash_history
+
+# Don't put duplicate lines or lines starting with space in the history
+HISTCONTROL=ignoreboth:erasedups
+
+# Append to the history file, don't overwrite it
+shopt -s histappend
+
+# Enable additional bash options for better experience
+shopt -s checkwinsize     # Check window size after each command
+shopt -s cdspell          # Correct minor directory spelling mistakes
+shopt -s dirspell         # Correct directory spelling mistakes during tab completion
+shopt -s autocd          # Change to a directory just by typing its name
+shopt -s globstar        # Enable ** globbing
+shopt -s nocaseglob      # Case-insensitive globbing
+
+# Better tab completion
+bind 'set completion-ignore-case on'
+bind 'set completion-map-case on'
+bind 'set show-all-if-ambiguous on'
+bind 'set colored-completion-prefix on'
+bind 'set menu-complete-display-prefix on'
+
+# Autocompletion
+if [ -f /usr/share/bash-completion/bash_completion ]; then
+    source /usr/share/bash-completion/bash_completion
+fi
+
+# Load system-wide completions
+if [ -d /etc/bash_completion.d ]; then
+    for completion in /etc/bash_completion.d/*; do
+        [ -r "$completion" ] && source "$completion"
+    done
+fi
+
+# Set complete path
+export PATH="./bin:$HOME/.local/bin:$HOME/.local/share/devex/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+export DEVEX_PATH="$HOME/.local/share/devex"
+
+# Enable mise if available
+if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate bash)"
+fi

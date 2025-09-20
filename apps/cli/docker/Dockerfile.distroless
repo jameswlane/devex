@@ -1,0 +1,59 @@
+# Distroless Dockerfile for DevEx CLI testing (minimal footprint)
+# Multi-stage build with distroless final image for security and size optimization
+
+# Stage 1: Build environment
+FROM golang:1.21-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache git ca-certificates
+
+# Copy source and build DevEx CLI
+WORKDIR /src
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o devex ./cmd/main.go
+
+# Stage 2: Create user and directories
+FROM alpine:latest AS user-setup
+
+# Create user structure that will be copied to distroless
+RUN adduser -D -s /bin/sh -u 1001 testuser
+
+# Create directory structure
+USER testuser
+RUN mkdir -p /home/testuser/.local/share/devex/assets /home/testuser/.local/share/devex/bin /home/testuser/.local/share/devex/config /home/testuser/.local/share/devex/help /home/testuser/.local/share/devex/cache /home/testuser/.local/share/devex/logs /home/testuser/.local/share/devex/themes \
+    && mkdir -p /home/testuser/.devex/{templates,backups} \
+    && mkdir -p /home/testuser/workspace
+
+# Stage 3: Distroless final image
+FROM gcr.io/distroless/static-debian12:nonroot
+
+# Metadata
+LABEL maintainer="DevEx Team"
+LABEL description="DevEx CLI testing environment (distroless)"
+LABEL version="2.0"
+
+# Copy user structure from previous stage
+COPY --from=user-setup /etc/passwd /etc/passwd
+COPY --from=user-setup /etc/group /etc/group
+COPY --from=user-setup --chown=1001:1001 /home/testuser /home/testuser
+
+# Copy DevEx binary
+COPY --from=builder --chown=1001:1001 /src/devex /home/testuser/.local/share/devex/bin/devex
+
+# Copy necessary files
+COPY --chown=1001:1001 assets/ /home/testuser/.local/share/devex/assets/
+COPY --chown=1001:1001 config/ /home/testuser/.local/share/devex/config/
+COPY --chown=1001:1001 help/ /home/testuser/.local/share/devex/help/
+
+# Set user and working directory
+USER 1001
+WORKDIR /home/testuser
+
+# Set environment variables
+ENV PATH="/home/testuser/.local/share/devex/bin:$PATH"
+ENV DEVEX_HOME="/home/testuser/.local/share/devex"
+ENV DEVEX_TEST_MODE=true
+
+# Default command
+ENTRYPOINT ["/home/testuser/.local/share/devex/bin/devex"]
+CMD ["--help"]

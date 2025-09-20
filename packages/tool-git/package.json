@@ -1,0 +1,46 @@
+{
+  "name": "@devex/tool-git",
+  "private": true,
+  "version": "1.8.2",
+  "description": "Git configuration plugin for DevEx CLI",
+  "main": "main.go",
+  "scripts": {
+    "build": "go build -o devex-plugin-tool-git .",
+    "dev": "go build -race -o devex-plugin-tool-git main.go",
+    "test": "go test ./...",
+    "lint": "golangci-lint run",
+    "download": "go mod download",
+    "mod": "go mod tidy"
+  },
+  "keywords": [
+    "git",
+    "vcs",
+    "development"
+  ],
+  "author": "DevEx Team",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jameswlane/devex",
+    "directory": "packages/tool-git"
+  },
+  "devex": {
+    "plugin": {
+      "type": "tool",
+      "platforms": [
+        "linux",
+        "darwin",
+        "windows"
+      ],
+      "dependencies": [
+        "git"
+      ],
+      "priority": 5,
+      "supports": {
+        "config": true,
+        "aliases": true,
+        "status": true
+      }
+    }
+  }
+}
