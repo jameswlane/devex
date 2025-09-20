@@ -40,7 +40,7 @@ jobs:
 
       - name: Install semantic-release plugins
         run: |
-          pnpm add -D \
+          pnpm add -w -D \
             semantic-release \
             @semantic-release/changelog \
             @semantic-release/git \
