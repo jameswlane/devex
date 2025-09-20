@@ -107,7 +107,7 @@ func isDebugMode() bool {
 func handleError(context string, err error) {
 	if err != nil {
 		log.Error("Error occurred", err, "context", context)
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
 		Exit(1)
 	}
 }
