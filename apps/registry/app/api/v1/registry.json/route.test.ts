@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { GET } from './route';
+import { pluginCache } from '@/lib/plugin-cache';
 
 // Mock Prisma
 jest.mock('@/lib/prisma', () => ({
@@ -39,6 +40,17 @@ const { prisma } = require('@/lib/prisma');
 describe('/api/v1/registry.json', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Clear plugin cache between tests to prevent interference
+    if (pluginCache && typeof pluginCache.clear === 'function') {
+      pluginCache.clear();
+    }
+  });
+
+  afterEach(() => {
+    // Also clear cache after each test to ensure clean state
+    if (pluginCache && typeof pluginCache.clear === 'function') {
+      pluginCache.clear();
+    }
   });
 
   it('should return registry response with plugins', async () => {
@@ -74,6 +86,7 @@ describe('/api/v1/registry.json', () => {
 
   it('should handle database errors gracefully', async () => {
     (prisma.plugin.findMany as jest.Mock).mockRejectedValue(new Error('Database error'));
+    (prisma.plugin.count as jest.Mock).mockRejectedValue(new Error('Database error'));
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
     const response = await GET(request);
@@ -140,14 +153,12 @@ describe('/api/v1/registry.json', () => {
 
 // Test the helper functions separately
 describe('normalizePluginName', () => {
-  // We need to import the function or make it exportable for proper testing
-  // For now, we'll test it through the main API endpoint
-
-  it('should throw error for null plugin name', async () => {
-    const mockPlugins = [
+  it('should handle invalid plugin data and return 500', async () => {
+    // Mock findMany to throw an error during processing
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue([
       {
         id: 'test-plugin-1',
-        name: null,
+        name: null, // This will cause normalizePluginName to throw
         type: 'package-manager',
         description: 'Test plugin',
         platforms: ['linux'],
@@ -158,10 +169,8 @@ describe('normalizePluginName', () => {
         supports: {},
         binaries: null,
       },
-    ];
-
-    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
-    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
+    ]);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(1);
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
     const response = await GET(request);
@@ -170,12 +179,13 @@ describe('normalizePluginName', () => {
     expect(response.status).toBe(500);
   });
 
-  it('should throw error for undefined plugin type', async () => {
-    const mockPlugins = [
+  it('should handle missing plugin type and return 500', async () => {
+    // Mock findMany to throw an error during processing
+    (prisma.plugin.findMany as jest.Mock).mockResolvedValue([
       {
         id: 'test-plugin-1',
         name: 'test',
-        type: undefined,
+        type: undefined, // This will cause normalizePluginName to throw
         description: 'Test plugin',
         platforms: ['linux'],
         githubPath: '@devex/test@1.0.0',
@@ -185,10 +195,8 @@ describe('normalizePluginName', () => {
         supports: {},
         binaries: null,
       },
-    ];
-
-    (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
-    (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
+    ]);
+    (prisma.plugin.count as jest.Mock).mockResolvedValue(1);
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
     const response = await GET(request);
@@ -199,10 +207,18 @@ describe('normalizePluginName', () => {
 });
 
 describe('extractVersionFromGithubPath', () => {
+  beforeEach(() => {
+    // Ensure clean mocks for each test in this describe block
+    jest.clearAllMocks();
+    if (pluginCache && typeof pluginCache.clear === 'function') {
+      pluginCache.clear();
+    }
+  });
+
   it('should extract version from valid GitHub path', async () => {
     const mockPlugins = [
       {
-        id: 'test-plugin-1',
+        id: 'version-test-plugin-1',
         name: 'apt',
         type: 'package-manager',
         description: 'APT package manager',
@@ -219,17 +235,23 @@ describe('extractVersionFromGithubPath', () => {
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
     (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const request = new NextRequest(`https://registry.devex.sh/api/v1/registry.json?test=version-extract&t=${Date.now()}`);
     const response = await GET(request);
     const data = await response.json();
 
+    // The plugin name gets normalized to 'package-manager-apt' by the normalizePluginName function
+    expect(response.status).toBe(200);
+    expect(data.plugins).toBeDefined();
+    const pluginKeys = Object.keys(data.plugins);
+    expect(pluginKeys.length).toBeGreaterThan(0);
+    expect(data.plugins['package-manager-apt']).toBeDefined();
     expect(data.plugins['package-manager-apt'].version).toBe('1.2.3');
   });
 
   it('should return "latest" for invalid GitHub path', async () => {
     const mockPlugins = [
       {
-        id: 'test-plugin-1',
+        id: 'latest-test-plugin-1',
         name: 'apt',
         type: 'package-manager',
         description: 'APT package manager',
@@ -246,10 +268,16 @@ describe('extractVersionFromGithubPath', () => {
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue(mockPlugins);
     (prisma.plugin.count as jest.Mock).mockResolvedValue(mockPlugins.length);
 
-    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const request = new NextRequest(`https://registry.devex.sh/api/v1/registry.json?test=latest-version&t=${Date.now()}`);
     const response = await GET(request);
     const data = await response.json();
 
+    // The plugin name gets normalized to 'package-manager-apt' by the normalizePluginName function
+    expect(response.status).toBe(200);
+    expect(data.plugins).toBeDefined();
+    const pluginKeys = Object.keys(data.plugins);
+    expect(pluginKeys.length).toBeGreaterThan(0);
+    expect(data.plugins['package-manager-apt']).toBeDefined();
     expect(data.plugins['package-manager-apt'].version).toBe('latest');
   });
 });

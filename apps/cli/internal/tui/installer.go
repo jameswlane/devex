@@ -706,10 +706,8 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 				si.sendLog("INFO", formattedWarning)
 			}
 
-			// Add a brief pause for critical warnings to ensure visibility
-			if warning.Level == performance.WarningLevelCritical {
-				time.Sleep(2 * time.Second)
-			}
+			// Note: Removed synchronous sleep to prevent TUI thread blocking
+			// Critical warnings are highlighted through styling instead
 		}
 
 		if len(warnings) > 0 {
@@ -1587,10 +1585,12 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 				installer.sendLog("INFO", "Installation completed successfully")
 			}
 
-			// Send quit message to exit TUI after a brief delay to show completion
-			time.Sleep(2 * time.Second)
+			// Send quit message to exit TUI - use a timer instead of blocking sleep
 			if p != nil {
-				p.Send(tea.Quit())
+				go func() {
+					time.Sleep(2 * time.Second)
+					p.Send(tea.Quit())
+				}()
 			}
 		}
 	}()

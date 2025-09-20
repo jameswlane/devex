@@ -73,6 +73,17 @@ export class BinaryMetadataService {
     assetName: string
   ): Promise<{ downloadUrl: string; size: number } | null> {
     try {
+      // Input validation and sanitization
+      if (!this.isValidGitHubParam(owner) || !this.isValidGitHubParam(repo)) {
+        throw new Error('Invalid owner or repo parameter');
+      }
+      if (!this.isValidTag(tag)) {
+        throw new Error('Invalid tag parameter');
+      }
+      if (!this.isValidAssetName(assetName)) {
+        throw new Error('Invalid asset name parameter');
+      }
+
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'DevEx-Registry/1.0'
@@ -82,7 +93,8 @@ export class BinaryMetadataService {
         headers['Authorization'] = `Bearer ${this.githubApiToken}`;
       }
 
-      const releaseUrl = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`;
+      // Use encodeURIComponent for safe URL construction
+      const releaseUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases/tags/${encodeURIComponent(tag)}`;
       const response = await fetch(releaseUrl, { headers });
 
       if (!response.ok) {
@@ -94,9 +106,23 @@ export class BinaryMetadataService {
       }
 
       const release = await response.json();
-      const asset = release.assets?.find((a: any) => a.name === assetName);
 
-      if (!asset) {
+      // Validate GitHub API response structure
+      if (!this.isValidGitHubRelease(release)) {
+        throw new Error('Invalid GitHub API response structure');
+      }
+
+      // Safe array access with bounds checking
+      if (!Array.isArray(release.assets) || release.assets.length === 0) {
+        console.warn(`No assets found in release ${tag} for ${owner}/${repo}`);
+        return null;
+      }
+
+      const asset = release.assets.find((a: any) =>
+        a && typeof a === 'object' && a.name === assetName
+      );
+
+      if (!asset || !this.isValidGitHubAsset(asset)) {
         console.warn(`Asset ${assetName} not found in release ${tag} for ${owner}/${repo}`);
         return null;
       }
@@ -311,6 +337,52 @@ export class BinaryMetadataService {
     }
 
     return formatted;
+  }
+
+  /**
+   * Validation helper methods for security
+   */
+  private isValidGitHubParam(param: string): boolean {
+    if (!param || typeof param !== 'string') return false;
+    // GitHub usernames and repo names: alphanumeric, hyphens, underscores, dots
+    const githubNameRegex = /^[a-zA-Z0-9._-]+$/;
+    return githubNameRegex.test(param) && param.length <= 100;
+  }
+
+  private isValidTag(tag: string): boolean {
+    if (!tag || typeof tag !== 'string') return false;
+    // Git tags: no null bytes, control characters, or path separators
+    const invalidChars = /[\x00-\x1f\x7f\/\\:*?"<>|]/;
+    return !invalidChars.test(tag) && tag.length <= 250;
+  }
+
+  private isValidAssetName(name: string): boolean {
+    if (!name || typeof name !== 'string') return false;
+    // Asset names: reasonable filename restrictions
+    const filenameRegex = /^[a-zA-Z0-9._-]+$/;
+    return filenameRegex.test(name) && name.length <= 255;
+  }
+
+  private isValidGitHubRelease(release: any): boolean {
+    return (
+      release &&
+      typeof release === 'object' &&
+      Array.isArray(release.assets) &&
+      typeof release.tag_name === 'string'
+    );
+  }
+
+  private isValidGitHubAsset(asset: any): boolean {
+    return (
+      asset &&
+      typeof asset === 'object' &&
+      typeof asset.name === 'string' &&
+      typeof asset.browser_download_url === 'string' &&
+      typeof asset.size === 'number' &&
+      asset.size >= 0 &&
+      asset.browser_download_url.startsWith('https://') &&
+      !asset.browser_download_url.includes('../')
+    );
   }
 }
 

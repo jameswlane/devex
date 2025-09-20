@@ -12,7 +12,7 @@ import (
 )
 
 // downloadDebFile downloads a .deb file from a URL
-func (d *DebInstaller) downloadDebFile(url string) (string, error) {
+func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (string, error) {
 	// Validate URL
 	if err := d.validateURL(url); err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
@@ -27,8 +27,15 @@ func (d *DebInstaller) downloadDebFile(url string) (string, error) {
 
 	d.logger.Debug("Downloading to temporary file: %s", tmpFile.Name())
 
-	// Download the file
-	resp, err := http.Get(url)
+	// Download the file with proper context propagation
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to download: %w", err)

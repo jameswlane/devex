@@ -2,6 +2,7 @@ package platform
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Platform represents the detected platform information
@@ -148,7 +150,10 @@ func (d *Detector) parseOSRelease() (map[string]string, error) {
 
 // detectMacOSVersion detects macOS version
 func (d *Detector) detectMacOSVersion(platform *Platform) error {
-	cmd := exec.Command("sw_vers", "-productVersion")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sw_vers", "-productVersion")
 	output, err := cmd.Output()
 	if err != nil {
 		return err
@@ -161,11 +166,14 @@ func (d *Detector) detectMacOSVersion(platform *Platform) error {
 
 // detectWindowsVersion detects Windows version
 func (d *Detector) detectWindowsVersion(platform *Platform) error {
-	cmd := exec.Command("powershell", "-Command", "(Get-CimInstance Win32_OperatingSystem).Version")
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "powershell", "-Command", "(Get-CimInstance Win32_OperatingSystem).Version")
 	output, err := cmd.Output()
 	if err != nil {
 		// Fallback to older method
-		cmd = exec.Command("cmd", "/c", "ver")
+		cmd = exec.CommandContext(ctx, "cmd", "/c", "ver")
 		output, err = cmd.Output()
 		if err != nil {
 			return err
@@ -246,7 +254,10 @@ func (d *Detector) processExists(name string) bool {
 		return false
 	}
 
-	cmd := exec.Command("pgrep", name)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "pgrep", name)
 	err := cmd.Run()
 	return err == nil
 }

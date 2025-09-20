@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
@@ -19,7 +21,62 @@ import (
 const (
 	// Default plugin registry URL - you would host this
 	DefaultRegistryURL = "https://registry.devex.sh"
+	// Cache duration for bootstrap initialization
+	BootstrapCacheDuration = 24 * time.Hour
 )
+
+// BootstrapCache stores cached bootstrap results
+type BootstrapCache struct {
+	mu            sync.RWMutex
+	platformCache *platform.Platform
+	platformTime  time.Time
+	pluginsCache  []string
+	pluginsTime   time.Time
+}
+
+// getCachedPlatform returns cached platform if valid, nil otherwise
+func (c *BootstrapCache) getCachedPlatform() *platform.Platform {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.platformCache != nil && time.Since(c.platformTime) < BootstrapCacheDuration {
+		return c.platformCache
+	}
+	return nil
+}
+
+// setCachedPlatform stores platform in cache
+func (c *BootstrapCache) setCachedPlatform(p *platform.Platform) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.platformCache = p
+	c.platformTime = time.Now()
+}
+
+// getCachedPlugins returns cached required plugins if valid, nil otherwise
+func (c *BootstrapCache) getCachedPlugins() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.pluginsCache != nil && time.Since(c.pluginsTime) < BootstrapCacheDuration {
+		// Return a copy to prevent external modification
+		plugins := make([]string, len(c.pluginsCache))
+		copy(plugins, c.pluginsCache)
+		return plugins
+	}
+	return nil
+}
+
+// setCachedPlugins stores required plugins in cache
+func (c *BootstrapCache) setCachedPlugins(plugins []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.pluginsCache = make([]string, len(plugins))
+	copy(c.pluginsCache, plugins)
+	c.pluginsTime = time.Now()
+}
 
 // PluginBootstrap handles the automatic plugin discovery and loading
 type PluginBootstrap struct {
@@ -28,6 +85,7 @@ type PluginBootstrap struct {
 	manager      *sdk.ExecutableManager
 	platform     *platform.Platform
 	skipDownload bool
+	cache        *BootstrapCache
 }
 
 // GetRegistryURL returns the plugin registry URL from environment or default
@@ -118,21 +176,43 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 		downloader:   downloader,
 		manager:      sdk.NewExecutableManager(pluginDir),
 		skipDownload: skipDownload,
+		cache:        &BootstrapCache{},
 	}, nil
 }
 
-// Initialize performs the complete plugin bootstrap process
+// Initialize performs the complete plugin bootstrap process with caching
 func (b *PluginBootstrap) Initialize(ctx context.Context) error {
-	// Detect platform
-	platform, err := b.detector.DetectPlatform()
-	if err != nil {
-		return fmt.Errorf("failed to detect platform: %w", err)
+	// Try to get cached platform first
+	platform := b.cache.getCachedPlatform()
+	if platform == nil {
+		// Cache miss - detect platform
+		var err error
+		platform, err = b.detector.DetectPlatform()
+		if err != nil {
+			return fmt.Errorf("failed to detect platform: %w", err)
+		}
+		// Cache the detected platform
+		b.cache.setCachedPlatform(platform)
+		log.Debug("Platform detection cached")
+	} else {
+		log.Debug("Using cached platform detection")
 	}
 	b.platform = platform
 
 	// Download required plugins (unless skipped)
 	if !b.skipDownload {
-		requiredPlugins := platform.GetRequiredPlugins()
+		// Try to get cached required plugins
+		requiredPlugins := b.cache.getCachedPlugins()
+		if requiredPlugins == nil {
+			// Cache miss - get required plugins
+			requiredPlugins = platform.GetRequiredPlugins()
+			// Cache the required plugins list
+			b.cache.setCachedPlugins(requiredPlugins)
+			log.Debug("Required plugins list cached")
+		} else {
+			log.Debug("Using cached required plugins list")
+		}
+
 		if err := b.downloader.DownloadRequiredPluginsWithContext(ctx, requiredPlugins); err != nil {
 			log.Warning("Failed to download some plugins: %v", err)
 			// Continue anyway - some plugins might still be available

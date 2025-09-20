@@ -172,11 +172,71 @@ type GitConfiguration struct {
 
 // InstallationState tracks the current installation progress and errors
 type InstallationState struct {
+	mu            sync.RWMutex // Protects all fields below
 	installing    bool
 	installStatus string
 	progress      float64
 	installErrors []string
 	hasErrors     bool
+}
+
+// Thread-safe methods for InstallationState
+func (is *InstallationState) setStatus(status string) {
+	is.mu.Lock()
+	defer is.mu.Unlock()
+	is.installStatus = status
+}
+
+func (is *InstallationState) getStatus() string {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	return is.installStatus
+}
+
+func (is *InstallationState) setProgress(progress float64) {
+	is.mu.Lock()
+	defer is.mu.Unlock()
+	is.progress = progress
+}
+
+func (is *InstallationState) getProgress() float64 {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	return is.progress
+}
+
+func (is *InstallationState) addError(err string) {
+	is.mu.Lock()
+	defer is.mu.Unlock()
+	is.installErrors = append(is.installErrors, err)
+	is.hasErrors = true
+}
+
+func (is *InstallationState) getErrors() []string {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	// Return a copy to prevent external modification
+	errors := make([]string, len(is.installErrors))
+	copy(errors, is.installErrors)
+	return errors
+}
+
+func (is *InstallationState) hasInstallErrors() bool {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	return is.hasErrors
+}
+
+func (is *InstallationState) setInstalling(installing bool) {
+	is.mu.Lock()
+	defer is.mu.Unlock()
+	is.installing = installing
+}
+
+func (is *InstallationState) isInstalling() bool {
+	is.mu.RLock()
+	defer is.mu.RUnlock()
+	return is.installing
 }
 
 // PluginState manages plugin installation state
@@ -602,11 +662,10 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case PluginInstallMsg:
-		m.installation.installStatus = msg.Status
-		m.installation.progress = msg.Progress
+		m.installation.setStatus(msg.Status)
+		m.installation.setProgress(msg.Progress)
 		if msg.Error != nil {
-			m.installation.installErrors = addErrorStringSafe(m.installation.installErrors, msg.Error.Error())
-			m.installation.hasErrors = true
+			m.installation.addError(msg.Error.Error())
 		}
 		return m, nil
 
@@ -643,8 +702,8 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case InstallProgressMsg:
-		m.installation.installStatus = msg.Status
-		m.installation.progress = msg.Progress
+		m.installation.setStatus(msg.Status)
+		m.installation.setProgress(msg.Progress)
 		if msg.Progress >= 1.0 {
 			m.step = StepComplete
 		}
@@ -726,7 +785,7 @@ func (m *SetupModel) View() string {
 			s += "Downloading and installing plugins...\n\n"
 			s += m.renderProgressBar()
 			s += "\n\n"
-			s += fmt.Sprintf("Status: %s\n", m.installation.installStatus)
+			s += fmt.Sprintf("Status: %s\n", m.installation.getStatus())
 			s += "\nThis may take a moment. Please wait..."
 		case atomic.LoadInt32(&m.plugins.pluginsInstalled) == 1:
 			if m.installation.hasErrors {
@@ -991,7 +1050,7 @@ func (m *SetupModel) View() string {
 	case StepInstalling:
 		s = titleStyle.Render("⚙️  Installing...")
 		s += "\n\n"
-		s += fmt.Sprintf("Status: %s\n", m.installation.installStatus)
+		s += fmt.Sprintf("Status: %s\n", m.installation.getStatus())
 		s += "\n"
 		s += m.renderProgressBar()
 		s += "\n\n"
@@ -1641,7 +1700,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 func (m *SetupModel) waitForActivity() tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(time.Millisecond * WaitActivityInterval)
-		return InstallProgressMsg{Status: m.installation.installStatus, Progress: m.installation.progress}
+		return InstallProgressMsg{Status: m.installation.getStatus(), Progress: m.installation.getProgress()}
 	}
 }
 

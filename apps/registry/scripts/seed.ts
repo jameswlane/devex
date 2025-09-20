@@ -6,6 +6,38 @@ import { existsSync, readFileSync } from "fs";
 import path from "path";
 import { binaryMetadataService } from "../lib/binary-metadata";
 
+// Path traversal protection utilities
+function sanitizePath(inputPath: string): string {
+	// Remove any directory traversal sequences
+	const sanitized = inputPath.replace(/\.\./g, '').replace(/[\/\\]+/g, path.sep);
+	// Ensure path doesn't start with path separator
+	return sanitized.replace(/^[\/\\]+/, '');
+}
+
+function validatePath(inputPath: string, allowedBasePath: string): string {
+	const resolvedInput = path.resolve(inputPath);
+	const resolvedBase = path.resolve(allowedBasePath);
+
+	// Ensure the resolved path is within the allowed base path
+	if (!resolvedInput.startsWith(resolvedBase)) {
+		throw new Error(`Path traversal detected: ${inputPath} is outside allowed directory ${allowedBasePath}`);
+	}
+
+	return resolvedInput;
+}
+
+function isValidDirectoryName(dirName: string): boolean {
+	// Allow only alphanumeric characters, hyphens, underscores, and dots
+	// Prevent directory traversal patterns
+	const validPattern = /^[a-zA-Z0-9._-]+$/;
+	return validPattern.test(dirName) &&
+		   !dirName.includes('..') &&
+		   !dirName.includes('/') &&
+		   !dirName.includes('\\') &&
+		   dirName.length > 0 &&
+		   dirName.length < 256;
+}
+
 const prisma = new PrismaClient();
 
 interface WebTool {
@@ -121,10 +153,12 @@ async function seedApplications() {
 	console.log("🌱 Seeding applications...");
 
 	try {
-		// Read applications from the web tools.json
-		const webToolsPath = path.join(
-			process.cwd(),
-			"../web/app/generated/tools.json",
+		// Read applications from the web tools.json with path traversal protection
+		const currentWorkingDir = process.cwd();
+		const webRelativePath = "../web/app/generated/tools.json";
+		const webToolsPath = validatePath(
+			path.join(currentWorkingDir, webRelativePath),
+			path.resolve(currentWorkingDir, "../web")
 		);
 
 		// Safe JSON parsing with error handling
@@ -219,8 +253,13 @@ async function seedPlugins() {
 	console.log("🌱 Seeding plugins...");
 
 	try {
-		// Read plugins from packages directory with retry logic
-		const packagesDir = path.join(process.cwd(), "../../packages");
+		// Read plugins from packages directory with retry logic and path traversal protection
+		const currentWorkingDir = process.cwd();
+		const packagesRelativePath = "../../packages";
+		const packagesDir = validatePath(
+			path.join(currentWorkingDir, packagesRelativePath),
+			path.resolve(currentWorkingDir, "../../")
+		);
 
 		// Add timeout and retry logic for directory reading
 		let packageDirs: string[] = [];
@@ -249,7 +288,16 @@ async function seedPlugins() {
 		for (let i = 0; i < packageDirs.length; i += concurrencyLimit) {
 			const batch = packageDirs.slice(i, i + concurrencyLimit);
 			const batchPromises = batch.map(async (dir) => {
-				const packageJsonPath = path.join(packagesDir, dir, "package.json");
+				// Validate directory name to prevent path traversal
+				if (!isValidDirectoryName(dir)) {
+					console.warn(`Skipping invalid directory name: ${dir}`);
+					return null;
+				}
+
+				const packageJsonPath = validatePath(
+					path.join(packagesDir, sanitizePath(dir), "package.json"),
+					packagesDir
+				);
 
 				try {
 					// Check if file exists before reading with timeout

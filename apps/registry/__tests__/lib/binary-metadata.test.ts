@@ -103,6 +103,7 @@ describe('BinaryMetadataService', () => {
 
     it('should fetch asset metadata successfully', async () => {
       const mockRelease = {
+        tag_name: 'v1.0.0',
         assets: [
           {
             name: 'plugin-linux-amd64',
@@ -149,6 +150,7 @@ describe('BinaryMetadataService', () => {
 
     it('should return null for non-existent asset', async () => {
       const mockRelease = {
+        tag_name: 'v1.0.0',
         assets: [
           {
             name: 'different-asset',
@@ -235,6 +237,7 @@ describe('BinaryMetadataService', () => {
 
     it('should generate metadata for valid GitHub repository', async () => {
       const mockRelease = {
+        tag_name: 'v1.0.0',
         assets: [
           {
             name: 'test-plugin-linux-amd64',
