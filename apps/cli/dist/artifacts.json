@@ -1,0 +1,311 @@
+[
+  {
+    "name": "metadata.json",
+    "path": "dist/metadata.json",
+    "internal_type": 39,
+    "type": "Metadata"
+  },
+  {
+    "name": "bin/devex",
+    "path": "dist/devex_linux_arm_6/bin/devex",
+    "goos": "linux",
+    "goarch": "arm",
+    "goarm": "6",
+    "target": "linux_arm_6",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": "",
+      "ID": "devex",
+      "Size": 28494624
+    }
+  },
+  {
+    "name": "bin/devex",
+    "path": "dist/devex_linux_arm64_v8.0/bin/devex",
+    "goos": "linux",
+    "goarch": "arm64",
+    "goarm64": "v8.0",
+    "target": "linux_arm64_v8.0",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": "",
+      "ID": "devex",
+      "Size": 28849426
+    }
+  },
+  {
+    "name": "bin/devex",
+    "path": "dist/devex_darwin_amd64_v1/bin/devex",
+    "goos": "darwin",
+    "goarch": "amd64",
+    "goamd64": "v1",
+    "target": "darwin_amd64_v1",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": "",
+      "ID": "devex",
+      "Size": 30396752
+    }
+  },
+  {
+    "name": "bin/devex",
+    "path": "dist/devex_darwin_arm64_v8.0/bin/devex",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "goarm64": "v8.0",
+    "target": "darwin_arm64_v8.0",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": "",
+      "ID": "devex",
+      "Size": 29053458
+    }
+  },
+  {
+    "name": "bin/devex.exe",
+    "path": "dist/devex_windows_amd64_v1/bin/devex.exe",
+    "goos": "windows",
+    "goarch": "amd64",
+    "goamd64": "v1",
+    "target": "windows_amd64_v1",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": ".exe",
+      "ID": "devex",
+      "Size": 30899200
+    }
+  },
+  {
+    "name": "bin/devex.exe",
+    "path": "dist/devex_windows_arm_6/bin/devex.exe",
+    "goos": "windows",
+    "goarch": "arm",
+    "goarm": "6",
+    "target": "windows_arm_6",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": ".exe",
+      "ID": "devex",
+      "Size": 29071360
+    }
+  },
+  {
+    "name": "bin/devex.exe",
+    "path": "dist/devex_windows_arm64_v8.0/bin/devex.exe",
+    "goos": "windows",
+    "goarch": "arm64",
+    "goarm64": "v8.0",
+    "target": "windows_arm64_v8.0",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": ".exe",
+      "ID": "devex",
+      "Size": 29085184
+    }
+  },
+  {
+    "name": "bin/devex",
+    "path": "dist/devex_linux_amd64_v1/bin/devex",
+    "goos": "linux",
+    "goarch": "amd64",
+    "goamd64": "v1",
+    "target": "linux_amd64_v1",
+    "internal_type": 4,
+    "type": "Binary",
+    "extra": {
+      "Binary": "devex",
+      "Builder": "go",
+      "Ext": "",
+      "ID": "devex",
+      "Size": 33421056
+    }
+  },
+  {
+    "name": "devex_0.30.1_linux_arm.tar.gz",
+    "path": "dist/devex_0.30.1_linux_arm.tar.gz",
+    "goos": "linux",
+    "goarch": "arm",
+    "goarm": "6",
+    "target": "linux_arm_6",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex"
+      ],
+      "Checksum": "sha256:1d77b131efb1d10b25d6caf5695ec46856c21ff0731404b7978785322554af16",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 21154397,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_windows_arm64.tar.gz",
+    "path": "dist/devex_0.30.1_windows_arm64.tar.gz",
+    "goos": "windows",
+    "goarch": "arm64",
+    "goarm64": "v8.0",
+    "target": "windows_arm64_v8.0",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex.exe"
+      ],
+      "Checksum": "sha256:05ce89e03ed9e9779be5b3f1b1bdf5d2c24d34b33d8da967c1aa5ffa1528f149",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 21246420,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_linux_arm64.tar.gz",
+    "path": "dist/devex_0.30.1_linux_arm64.tar.gz",
+    "goos": "linux",
+    "goarch": "arm64",
+    "goarm64": "v8.0",
+    "target": "linux_arm64_v8.0",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex"
+      ],
+      "Checksum": "sha256:5ceb41ed2a6f973a5bf6ac833b351d1de0ce37c62bfce3636df3c9febe5e14d4",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 21091011,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_linux_amd64.tar.gz",
+    "path": "dist/devex_0.30.1_linux_amd64.tar.gz",
+    "goos": "linux",
+    "goarch": "amd64",
+    "goamd64": "v1",
+    "target": "linux_amd64_v1",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex"
+      ],
+      "Checksum": "sha256:2b8f6306e31cb81427c064ee19258f7d148b14e4d74cdaa697e43d6d81714a25",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 24255971,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_darwin_amd64.tar.gz",
+    "path": "dist/devex_0.30.1_darwin_amd64.tar.gz",
+    "goos": "darwin",
+    "goarch": "amd64",
+    "goamd64": "v1",
+    "target": "darwin_amd64_v1",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex"
+      ],
+      "Checksum": "sha256:8942a2a44697e2a9afbfcc40deb0beed2ec62972f37099e8ccad881a8093c276",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 21961233,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_darwin_arm64.tar.gz",
+    "path": "dist/devex_0.30.1_darwin_arm64.tar.gz",
+    "goos": "darwin",
+    "goarch": "arm64",
+    "goarm64": "v8.0",
+    "target": "darwin_arm64_v8.0",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex"
+      ],
+      "Checksum": "sha256:7b3ce383de9b7a7c87374705f7f4a42d3585c59a901f820b8aa7cc560dfeacfe",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 21224941,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_windows_arm.tar.gz",
+    "path": "dist/devex_0.30.1_windows_arm.tar.gz",
+    "goos": "windows",
+    "goarch": "arm",
+    "goarm": "6",
+    "target": "windows_arm_6",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex.exe"
+      ],
+      "Checksum": "sha256:4fd1b3044badcac3da7d8d34bb998d1958a13fd6e71756ab6347e38d9f2f6096",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 21370812,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_0.30.1_windows_amd64.tar.gz",
+    "path": "dist/devex_0.30.1_windows_amd64.tar.gz",
+    "goos": "windows",
+    "goarch": "amd64",
+    "goamd64": "v1",
+    "target": "windows_amd64_v1",
+    "internal_type": 1,
+    "type": "Archive",
+    "extra": {
+      "Binaries": [
+        "bin/devex.exe"
+      ],
+      "Checksum": "sha256:48db7c5da414d5d51753bdf9b1946820a1e2b12986155eb49737fd7b4920ad58",
+      "Format": "tar.gz",
+      "ID": "devex",
+      "Size": 22349056,
+      "WrappedIn": ""
+    }
+  },
+  {
+    "name": "devex_checksums.txt",
+    "path": "dist/devex_checksums.txt",
+    "internal_type": 12,
+    "type": "Checksum",
+    "extra": {}
+  }
+]
