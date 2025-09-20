@@ -1,7 +1,7 @@
 {
   "name": "@devex/package-manager-dnf",
   "private": true,
-  "version": "1.8.2",
+  "version": "1.9.0",
   "description": "DNF plugin for DevEx CLI",
   "main": "main.go",
   "scripts": {
