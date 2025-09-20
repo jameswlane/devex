@@ -11,13 +11,54 @@ export enum CacheCategory {
   TRANSFORM = "transform", // Data transformations
 }
 
-// Cache durations in seconds
+// Cache durations in seconds with tiered caching strategy
 const CACHE_DURATIONS: Record<CacheCategory, number> = {
   [CacheCategory.AGGREGATION]: 600,  // 10 minutes for expensive aggregations
   [CacheCategory.SEARCH]: 300,       // 5 minutes for search results
-  [CacheCategory.LIST]: 180,         // 3 minutes for lists
-  [CacheCategory.DETAIL]: 120,       // 2 minutes for detail views
-  [CacheCategory.TRANSFORM]: 300,    // 5 minutes for transformations
+  [CacheCategory.LIST]: 240,         // 4 minutes for lists
+  [CacheCategory.DETAIL]: 180,       // 3 minutes for detail views
+  [CacheCategory.TRANSFORM]: 600,    // 10 minutes for transformations
+};
+
+// Multi-layer cache configuration
+interface MultiLayerCacheConfig {
+  memoryEnabled: boolean;
+  memoryTTL: number;      // Shorter TTL for memory cache
+  redisTTL: number;       // Longer TTL for Redis cache
+  maxMemoryItems: number;
+}
+
+const MULTI_LAYER_CONFIG: Record<CacheCategory, MultiLayerCacheConfig> = {
+  [CacheCategory.AGGREGATION]: {
+    memoryEnabled: true,
+    memoryTTL: 60,        // 1 minute in memory
+    redisTTL: 600,        // 10 minutes in Redis
+    maxMemoryItems: 100,
+  },
+  [CacheCategory.SEARCH]: {
+    memoryEnabled: true,
+    memoryTTL: 30,        // 30 seconds in memory
+    redisTTL: 300,        // 5 minutes in Redis
+    maxMemoryItems: 200,
+  },
+  [CacheCategory.LIST]: {
+    memoryEnabled: true,
+    memoryTTL: 45,        // 45 seconds in memory
+    redisTTL: 240,        // 4 minutes in Redis
+    maxMemoryItems: 150,
+  },
+  [CacheCategory.DETAIL]: {
+    memoryEnabled: true,
+    memoryTTL: 30,        // 30 seconds in memory
+    redisTTL: 180,        // 3 minutes in Redis
+    maxMemoryItems: 300,
+  },
+  [CacheCategory.TRANSFORM]: {
+    memoryEnabled: true,
+    memoryTTL: 120,       // 2 minutes in memory
+    redisTTL: 600,        // 10 minutes in Redis
+    maxMemoryItems: 50,
+  },
 };
 
 interface CacheOptions {
@@ -35,13 +76,128 @@ interface CacheMetrics {
   avgLatency: number;
 }
 
-// In-memory metrics for monitoring
-const metrics: CacheMetrics = {
+// In-memory cache implementation with LRU eviction
+class LRUCache<T> {
+  private cache = new Map<string, { value: T; timestamp: number; accessCount: number }>();
+  private maxSize: number;
+  private ttl: number;
+
+  constructor(maxSize: number, ttl: number) {
+    this.maxSize = maxSize;
+    this.ttl = ttl * 1000; // Convert to milliseconds
+  }
+
+  get(key: string): T | null {
+    const item = this.cache.get(key);
+    if (!item) return null;
+
+    // Check if expired
+    if (Date.now() - item.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    // Update access count and move to end (LRU)
+    item.accessCount++;
+    this.cache.delete(key);
+    this.cache.set(key, item);
+
+    return item.value;
+  }
+
+  set(key: string, value: T): void {
+    // Evict if at capacity
+    if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+      // Remove oldest (first) item
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) this.cache.delete(firstKey);
+    }
+
+    this.cache.set(key, {
+      value,
+      timestamp: Date.now(),
+      accessCount: 1,
+    });
+  }
+
+  delete(key: string): boolean {
+    return this.cache.delete(key);
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  size(): number {
+    return this.cache.size;
+  }
+
+  // Cleanup expired entries
+  cleanup(): void {
+    const now = Date.now();
+    for (const [key, item] of this.cache.entries()) {
+      if (now - item.timestamp > this.ttl) {
+        this.cache.delete(key);
+      }
+    }
+  }
+}
+
+// Create memory caches for each category
+const memoryCaches: Record<CacheCategory, LRUCache<any>> = {
+  [CacheCategory.AGGREGATION]: new LRUCache(
+    MULTI_LAYER_CONFIG[CacheCategory.AGGREGATION].maxMemoryItems,
+    MULTI_LAYER_CONFIG[CacheCategory.AGGREGATION].memoryTTL
+  ),
+  [CacheCategory.SEARCH]: new LRUCache(
+    MULTI_LAYER_CONFIG[CacheCategory.SEARCH].maxMemoryItems,
+    MULTI_LAYER_CONFIG[CacheCategory.SEARCH].memoryTTL
+  ),
+  [CacheCategory.LIST]: new LRUCache(
+    MULTI_LAYER_CONFIG[CacheCategory.LIST].maxMemoryItems,
+    MULTI_LAYER_CONFIG[CacheCategory.LIST].memoryTTL
+  ),
+  [CacheCategory.DETAIL]: new LRUCache(
+    MULTI_LAYER_CONFIG[CacheCategory.DETAIL].maxMemoryItems,
+    MULTI_LAYER_CONFIG[CacheCategory.DETAIL].memoryTTL
+  ),
+  [CacheCategory.TRANSFORM]: new LRUCache(
+    MULTI_LAYER_CONFIG[CacheCategory.TRANSFORM].maxMemoryItems,
+    MULTI_LAYER_CONFIG[CacheCategory.TRANSFORM].memoryTTL
+  ),
+};
+
+// Enhanced metrics for monitoring
+interface EnhancedCacheMetrics extends CacheMetrics {
+  memoryHits: number;
+  redisHits: number;
+  layerBreakdown: Record<CacheCategory, {
+    memoryHits: number;
+    redisHits: number;
+    misses: number;
+  }>;
+}
+
+const metrics: EnhancedCacheMetrics = {
   hits: 0,
   misses: 0,
   errors: 0,
   avgLatency: 0,
+  memoryHits: 0,
+  redisHits: 0,
+  layerBreakdown: {
+    [CacheCategory.AGGREGATION]: { memoryHits: 0, redisHits: 0, misses: 0 },
+    [CacheCategory.SEARCH]: { memoryHits: 0, redisHits: 0, misses: 0 },
+    [CacheCategory.LIST]: { memoryHits: 0, redisHits: 0, misses: 0 },
+    [CacheCategory.DETAIL]: { memoryHits: 0, redisHits: 0, misses: 0 },
+    [CacheCategory.TRANSFORM]: { memoryHits: 0, redisHits: 0, misses: 0 },
+  },
 };
+
+// Periodic cleanup of memory caches
+setInterval(() => {
+  Object.values(memoryCaches).forEach(cache => cache.cleanup());
+}, 60000); // Every minute
 
 /**
  * Generates a consistent cache key for query parameters
@@ -77,7 +233,7 @@ export function generateCacheKey(
 }
 
 /**
- * Query cache wrapper for expensive database operations
+ * Multi-layer query cache wrapper for expensive database operations
  */
 export async function withQueryCache<T>(
   operation: () => Promise<T>,
@@ -92,29 +248,67 @@ export async function withQueryCache<T>(
   }
 
   const cacheKey = generateCacheKey(category, identifier, {}, keyPrefix);
-  const cacheTTL = ttl || CACHE_DURATIONS[category];
+  const config = MULTI_LAYER_CONFIG[category];
+  const redisTTL = ttl || config.redisTTL;
 
   try {
-    // Check cache first (unless force refresh)
+    // Check cache layers (unless force refresh)
     if (!forceRefresh) {
       const startCache = Date.now();
-      const cached = await redis.get(cacheKey);
+
+      // Layer 1: Check memory cache first (fastest)
+      if (config.memoryEnabled) {
+        const memoryCache = memoryCaches[category];
+        const memoryCached = memoryCache.get(cacheKey);
+
+        if (memoryCached !== null) {
+          const cacheLatency = Date.now() - startCache;
+          metrics.hits++;
+          metrics.memoryHits++;
+          metrics.layerBreakdown[category].memoryHits++;
+          updateAverageLatency(cacheLatency);
+
+          logger.debug("Memory cache hit", {
+            key: cacheKey,
+            category,
+            latency: cacheLatency,
+            layer: "memory",
+          });
+
+          return memoryCached as T;
+        }
+      }
+
+      // Layer 2: Check Redis cache (slower but persistent)
+      const redisCached = await redis.get(cacheKey);
       const cacheLatency = Date.now() - startCache;
 
-      if (cached) {
+      if (redisCached) {
+        const parsed = JSON.parse(redisCached) as T;
+
+        // Store in memory cache for faster future access
+        if (config.memoryEnabled) {
+          memoryCaches[category].set(cacheKey, parsed);
+        }
+
         metrics.hits++;
+        metrics.redisHits++;
+        metrics.layerBreakdown[category].redisHits++;
         updateAverageLatency(cacheLatency);
 
         logger.debug("Cache hit", {
           key: cacheKey,
           category,
           latency: cacheLatency,
+          layer: "redis",
         });
 
-        return JSON.parse(cached) as T;
+        return parsed;
       }
 
+      // Cache miss
       metrics.misses++;
+      metrics.layerBreakdown[category].misses++;
       logger.debug("Cache miss", {
         key: cacheKey,
         category,
@@ -133,15 +327,24 @@ export async function withQueryCache<T>(
       cacheKey,
     });
 
-    // Store in cache
+    // Store in both cache layers
     const startStore = Date.now();
-    await redis.set(cacheKey, JSON.stringify(result), cacheTTL);
+
+    // Store in Redis
+    await redis.set(cacheKey, JSON.stringify(result), redisTTL);
+
+    // Store in memory cache
+    if (config.memoryEnabled) {
+      memoryCaches[category].set(cacheKey, result);
+    }
+
     const storeLatency = Date.now() - startStore;
 
-    logger.debug("Cache stored", {
+    logger.debug("Cache stored (multi-layer)", {
       key: cacheKey,
       category,
-      ttl: cacheTTL,
+      redisTTL,
+      memoryEnabled: config.memoryEnabled,
       operationLatency,
       storeLatency,
     });
@@ -253,10 +456,38 @@ export async function invalidateCache(
 }
 
 /**
- * Get current cache metrics
+ * Get current cache metrics with enhanced multi-layer information
  */
-export function getCacheMetrics(): CacheMetrics {
-  return { ...metrics };
+export function getCacheMetrics(): EnhancedCacheMetrics & {
+  memoryCacheStats: Record<CacheCategory, {
+    size: number;
+    maxSize: number;
+    hitRate: number;
+  }>;
+} {
+  const memoryCacheStats: Record<CacheCategory, {
+    size: number;
+    maxSize: number;
+    hitRate: number;
+  }> = {} as any;
+
+  // Calculate hit rates and sizes for each memory cache
+  Object.entries(memoryCaches).forEach(([category, cache]) => {
+    const cat = category as CacheCategory;
+    const breakdown = metrics.layerBreakdown[cat];
+    const totalRequests = breakdown.memoryHits + breakdown.redisHits + breakdown.misses;
+
+    memoryCacheStats[cat] = {
+      size: cache.size(),
+      maxSize: MULTI_LAYER_CONFIG[cat].maxMemoryItems,
+      hitRate: totalRequests > 0 ? breakdown.memoryHits / totalRequests : 0,
+    };
+  });
+
+  return {
+    ...metrics,
+    memoryCacheStats,
+  };
 }
 
 /**
@@ -267,6 +498,35 @@ export function resetCacheMetrics(): void {
   metrics.misses = 0;
   metrics.errors = 0;
   metrics.avgLatency = 0;
+  metrics.memoryHits = 0;
+  metrics.redisHits = 0;
+
+  // Reset layer breakdown
+  Object.keys(metrics.layerBreakdown).forEach(category => {
+    const cat = category as CacheCategory;
+    metrics.layerBreakdown[cat] = { memoryHits: 0, redisHits: 0, misses: 0 };
+  });
+}
+
+/**
+ * Clear all memory caches
+ */
+export function clearMemoryCaches(): void {
+  Object.values(memoryCaches).forEach(cache => cache.clear());
+  logger.info("All memory caches cleared");
+}
+
+/**
+ * Get cache configuration for monitoring
+ */
+export function getCacheConfiguration(): {
+  categories: typeof MULTI_LAYER_CONFIG;
+  durations: typeof CACHE_DURATIONS;
+} {
+  return {
+    categories: MULTI_LAYER_CONFIG,
+    durations: CACHE_DURATIONS,
+  };
 }
 
 // Helper to update average latency

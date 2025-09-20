@@ -82,8 +82,17 @@ function isNonRetryableError(error: unknown): boolean {
 	return nonRetryablePatterns.some(pattern => pattern.test(error.message));
 }
 
-// Create Prisma client with Accelerate extension and enhanced configuration
+// Database connection pool configuration
+interface DatabasePoolConfig {
+	connectionLimit?: number;
+	transactionMode?: 'readwrite' | 'readonly';
+	queryTimeout?: number;
+	poolTimeout?: number;
+}
+
+// Create Prisma client with Accelerate extension and enhanced connection pooling
 const createPrismaClient = () => {
+	// Enhanced configuration with connection pooling optimization
 	const config: any = {
 		log:
 			process.env.NODE_ENV === "development"
@@ -95,18 +104,116 @@ const createPrismaClient = () => {
 
 	// Only add datasources if PRISMA_DATABASE_URL is available (avoid build-time errors)
 	if (process.env.PRISMA_DATABASE_URL) {
+		// Parse and enhance the database URL with connection pooling parameters
+		const enhancedUrl = enhanceDatabaseUrlWithPooling(process.env.PRISMA_DATABASE_URL);
+
 		config.datasources = {
 			db: {
-				url: process.env.PRISMA_DATABASE_URL,
+				url: enhancedUrl,
 			},
 		};
 	}
 
 	const client = new PrismaClient(config);
 
-	// Extend with Accelerate since it's enabled on Prisma Cloud
+	// Extend with Accelerate since it's enabled on Prisma Cloud for additional connection pooling
 	return client.$extends(withAccelerate());
 };
+
+// Helper function to enhance database URL with connection pooling parameters
+function enhanceDatabaseUrlWithPooling(originalUrl: string): string {
+	try {
+		const url = new URL(originalUrl);
+
+		// Add connection pooling parameters if not already present
+		const params = url.searchParams;
+
+		// Set connection pool size (adjust based on your needs)
+		if (!params.has('connection_limit')) {
+			params.set('connection_limit', '20');
+		}
+
+		// Set pool timeout (time to wait for available connection)
+		if (!params.has('pool_timeout')) {
+			params.set('pool_timeout', '10');
+		}
+
+		// Set statement timeout
+		if (!params.has('statement_timeout')) {
+			params.set('statement_timeout', '30000'); // 30 seconds
+		}
+
+		// Enable connection pooling mode for better performance
+		if (!params.has('pgbouncer') && url.hostname.includes('pooler')) {
+			params.set('pgbouncer', 'true');
+		}
+
+		// Set schema for multi-tenant environments
+		if (!params.has('schema')) {
+			params.set('schema', 'public');
+		}
+
+		return url.toString();
+	} catch (error) {
+		logger.warn("Failed to enhance database URL with pooling parameters", {
+			error: error instanceof Error ? error.message : String(error)
+		});
+		// Return original URL if parsing fails
+		return originalUrl;
+	}
+}
+
+// Connection pool monitoring and management
+class ConnectionPoolManager {
+	private healthCheckInterval?: NodeJS.Timeout;
+	private lastHealthCheck: Date = new Date();
+	private isHealthy: boolean = true;
+
+	constructor() {
+		this.startHealthMonitoring();
+	}
+
+	private startHealthMonitoring(): void {
+		// Check connection health every 30 seconds
+		this.healthCheckInterval = setInterval(async () => {
+			await this.performHealthCheck();
+		}, 30000);
+	}
+
+	private async performHealthCheck(): Promise<void> {
+		try {
+			const health = await checkDatabaseHealth();
+			this.isHealthy = health.status === 'healthy';
+			this.lastHealthCheck = new Date();
+
+			if (!this.isHealthy) {
+				logger.warn("Database health check failed", { health });
+			}
+		} catch (error) {
+			this.isHealthy = false;
+			logger.error("Database health check error", {
+				error: error instanceof Error ? error.message : String(error)
+			});
+		}
+	}
+
+	public getStatus(): { healthy: boolean; lastCheck: Date } {
+		return {
+			healthy: this.isHealthy,
+			lastCheck: this.lastHealthCheck,
+		};
+	}
+
+	public stop(): void {
+		if (this.healthCheckInterval) {
+			clearInterval(this.healthCheckInterval);
+			this.healthCheckInterval = undefined;
+		}
+	}
+}
+
+// Initialize connection pool manager
+const poolManager = new ConnectionPoolManager();
 
 // Type the client properly to avoid union type issues
 type AcceleratedPrismaClient = ReturnType<typeof createPrismaClient>;
@@ -133,6 +240,8 @@ export {
 	isNonRetryableError,
 	type ConnectionPoolMetrics,
 	type RetryConfig,
+	type DatabasePoolConfig,
+	poolManager,
 };
 
 // Enhanced connection lifecycle management
@@ -222,18 +331,21 @@ export async function checkDatabaseHealth(): Promise<{
 if (process.env.NODE_ENV === "production") {
 	// Handle cleanup on function termination
 	process.on("beforeExit", async () => {
+		poolManager.stop();
 		await disconnectPrisma();
 	});
 
 	// Handle SIGTERM and SIGINT for graceful shutdown
 	process.on("SIGTERM", async () => {
 		logger.info("Received SIGTERM, shutting down gracefully");
+		poolManager.stop();
 		await disconnectPrisma();
 		process.exit(0);
 	});
 
 	process.on("SIGINT", async () => {
 		logger.info("Received SIGINT, shutting down gracefully");
+		poolManager.stop();
 		await disconnectPrisma();
 		process.exit(0);
 	});

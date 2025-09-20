@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, jest, afterEach } from '@jest/globals'
-import { 
-  withQueryCache, 
-  withBatchQueryCache, 
+import {
+  withQueryCache,
+  withBatchQueryCache,
   invalidateCache,
   generateCacheKey,
   getCacheMetrics,
   resetCacheMetrics,
+  clearMemoryCaches,
   CacheCategory,
   cacheAggregation
 } from '@/lib/query-cache'
@@ -29,6 +30,7 @@ jest.mock('@/lib/logger', () => ({
     debug: jest.fn(),
     error: jest.fn(),
     warn: jest.fn(),
+    info: jest.fn(),
   },
   logPerformance: jest.fn(),
 }))
@@ -45,6 +47,7 @@ describe('Query Cache System', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     resetCacheMetrics()
+    clearMemoryCaches()
     // Default successful Redis behavior
     mockRedis.get.mockResolvedValue(null)
     mockRedis.set.mockResolvedValue('OK')
@@ -57,6 +60,7 @@ describe('Query Cache System', () => {
 
   afterEach(() => {
     resetCacheMetrics()
+    clearMemoryCaches()
   })
 
   describe('Cache Key Generation', () => {
@@ -161,8 +165,10 @@ describe('Query Cache System', () => {
     })
 
     it('should use default TTL when not specified', async () => {
+      // Ensure cache miss by explicitly setting get to return null
+      mockRedis.get.mockResolvedValue(null)
       const operation = jest.fn().mockResolvedValue({ test: 'data' })
-      
+
       await withQueryCache(
         operation,
         'test-key',
@@ -255,9 +261,9 @@ describe('Query Cache System', () => {
     it('should fallback to operation when Redis get fails', async () => {
       const redisError = new Error('Redis connection failed')
       mockRedis.get.mockRejectedValue(redisError)
-      
+
       const operation = jest.fn().mockResolvedValue({ fallback: 'data' })
-      
+
       const result = await withQueryCache(
         operation,
         'test-key',
@@ -281,9 +287,9 @@ describe('Query Cache System', () => {
     it('should continue to operate when Redis set fails', async () => {
       mockRedis.get.mockResolvedValue(null)
       mockRedis.set.mockRejectedValue(new Error('Redis write failed'))
-      
+
       const operation = jest.fn().mockResolvedValue({ test: 'data' })
-      
+
       const result = await withQueryCache(
         operation,
         'test-key',
@@ -303,9 +309,9 @@ describe('Query Cache System', () => {
 
     it('should handle malformed cached data gracefully', async () => {
       mockRedis.get.mockResolvedValue('invalid-json{')
-      
+
       const operation = jest.fn().mockResolvedValue({ fresh: 'data' })
-      
+
       const result = await withQueryCache(
         operation,
         'test-key',
@@ -321,9 +327,9 @@ describe('Query Cache System', () => {
       const timeoutError = new Error('Redis operation timeout')
       timeoutError.name = 'TimeoutError'
       mockRedis.get.mockRejectedValue(timeoutError)
-      
+
       const operation = jest.fn().mockResolvedValue({ timeout: 'fallback' })
-      
+
       const result = await withQueryCache(
         operation,
         'test-key',

@@ -103,8 +103,7 @@ export function ToolSearch() {
 						const data: MetadataResponse = await response.json();
 						setMetadata(data);
 					},
-					3,
-					1000,
+					{ maxAttempts: 3, initialDelay: 1000 },
 					{ operation: "fetch_metadata" },
 				);
 			} catch (err) {
@@ -147,8 +146,7 @@ export function ToolSearch() {
 					setTools(data.tools);
 					setPagination(data.pagination);
 				},
-				3,
-				1000,
+				{ maxAttempts: 3, initialDelay: 1000 },
 				{
 					operation: "fetch_tools",
 					filters: {

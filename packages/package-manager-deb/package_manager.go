@@ -55,7 +55,7 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 			// Download the .deb file
 			d.logger.Printf("Downloading package from: %s\n", arg)
-			localPath, err := d.downloadDebFile(arg)
+			localPath, err := d.downloadDebFile(ctx, arg)
 			if err != nil {
 				// Clean up any temp files
 				for f := range tempFiles {

@@ -8,7 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { Octokit } from '@octokit/rest';
+import { githubApi } from '../lib/github-api';
 
 interface GitHubTag {
   name: string;
@@ -45,9 +45,6 @@ const GITHUB_REPO = 'devex';
 const PLUGIN_TAG_PREFIX = '@devex/';
 
 const prisma = new PrismaClient();
-const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
-});
 
 /**
  * Main sync function
@@ -78,19 +75,42 @@ async function syncPlugins() {
 }
 
 /**
- * Get all plugin tags from GitHub
+ * Get all plugin tags from GitHub with rate limiting and pagination
  */
 async function getPluginTags(): Promise<GitHubTag[]> {
   try {
-    const response = await octokit.repos.listTags({
-      owner: GITHUB_OWNER,
-      repo: GITHUB_REPO,
-      per_page: 100,
-    });
+    const allTags: GitHubTag[] = [];
+    let page = 1;
+    let hasMorePages = true;
 
-    return response.data.filter(tag =>
-      tag.name.startsWith(PLUGIN_TAG_PREFIX)
-    ) as GitHubTag[];
+    while (hasMorePages) {
+      console.log(`📋 Fetching tags page ${page}...`);
+
+      const tags = await githubApi.listTags(GITHUB_OWNER, GITHUB_REPO, {
+        per_page: 100,
+        page,
+      });
+
+      if (tags.length === 0) {
+        hasMorePages = false;
+        break;
+      }
+
+      const pluginTags = tags.filter(tag =>
+        tag.name.startsWith(PLUGIN_TAG_PREFIX)
+      ) as GitHubTag[];
+
+      allTags.push(...pluginTags);
+
+      // If we got less than 100 tags, we're on the last page
+      if (tags.length < 100) {
+        hasMorePages = false;
+      } else {
+        page++;
+      }
+    }
+
+    return allTags;
   } catch (error) {
     throw new Error(`Failed to fetch GitHub tags: ${error}`);
   }
@@ -248,17 +268,13 @@ async function generateBinaryInfo(
 }
 
 /**
- * Get release data by tag name
+ * Get release data by tag name with rate limiting
  */
 async function getReleaseByTag(tagName: string) {
   try {
-    const response = await octokit.repos.getReleaseByTag({
-      owner: GITHUB_OWNER,
-      repo: GITHUB_REPO,
-      tag: tagName,
-    });
-    return response.data;
+    return await githubApi.getReleaseByTag(GITHUB_OWNER, GITHUB_REPO, tagName);
   } catch (error) {
+    console.log(`⚠️  Could not fetch release for tag ${tagName}: ${error instanceof Error ? error.message : String(error)}`);
     return null;
   }
 }

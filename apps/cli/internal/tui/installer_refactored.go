@@ -320,7 +320,7 @@ func (rsi *RefactoredStreamingInstaller) analyzePreInstall(app types.CrossPlatfo
 		switch warning.Level {
 		case performance.WarningLevelCritical:
 			rsi.sendLog("CRITICAL", formattedWarning)
-			time.Sleep(2 * time.Second) // Brief pause for critical warnings
+			// Removed blocking sleep - critical warnings use styling for emphasis
 		case performance.WarningLevelWarning:
 			rsi.sendLog("WARN", formattedWarning)
 		case performance.WarningLevelCaution:
@@ -408,18 +408,24 @@ func StartRefactoredInstallation(apps []types.CrossPlatformApp, repo types.Repos
 			}
 		}()
 
-		time.Sleep(installer.config.InitializationDelay)
+		// Use non-blocking delay for initialization
+		go func() {
+			time.Sleep(installer.config.InitializationDelay)
 
-		if err := installer.InstallApps(ctx, apps, settings); err != nil {
-			installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
-		} else {
-			installer.sendLog("INFO", "Installation completed successfully")
-		}
+			if err := installer.InstallApps(ctx, apps, settings); err != nil {
+				installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
+			} else {
+				installer.sendLog("INFO", "Installation completed successfully")
+			}
 
-		time.Sleep(2 * time.Second)
-		if p != nil {
-			p.Send(tea.Quit())
-		}
+			// Non-blocking quit after completion
+			if p != nil {
+				go func() {
+					time.Sleep(2 * time.Second)
+					p.Send(tea.Quit())
+				}()
+			}
+		}()
 	}()
 
 	_, err = p.Run()

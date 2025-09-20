@@ -25,6 +25,7 @@ type Logger struct {
 }
 
 var logger *Logger
+var cliVersion = "unknown" // CLI version set during initialization
 
 // Log levels
 var (
@@ -51,6 +52,27 @@ func New(w io.Writer) *Logger {
 // InitDefaultLogger initializes the default logger with a specified writer.
 func InitDefaultLogger(w io.Writer) {
 	logger = New(w)
+}
+
+// SetCLIVersion sets the CLI version for inclusion in system information
+func SetCLIVersion(version string) {
+	if version != "" {
+		cliVersion = version
+		// Update the log file with correct version info if logger is initialized
+		updateLogFileHeader()
+	}
+}
+
+// updateLogFileHeader writes an updated system info header to the log file
+func updateLogFileHeader() {
+	if logger != nil && logger.logFile != nil {
+		// Write updated CLI version info to log file
+		header := fmt.Sprintf("\n%s\nUpdated CLI Version: %s\n%s\n",
+			strings.Repeat("-", 50),
+			cliVersion,
+			strings.Repeat("-", 50))
+		_, _ = logger.logFile.WriteString(header)
+	}
 }
 
 // InitTestLogger initializes a silent logger for tests.
@@ -342,6 +364,7 @@ func gatherBasicSystemInfo() string {
 
 	sb.WriteString("=== DEVEX SYSTEM INFORMATION ===\n")
 	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("CLI Version: %s\n", cliVersion))
 
 	// Basic platform info
 	sb.WriteString("=== PLATFORM ===\n")

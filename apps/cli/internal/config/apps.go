@@ -50,19 +50,23 @@ func ValidateApp(app types.AppConfig) error {
 	return nil
 }
 
-// ListAppsByCategory filters apps by categories.
+// ListAppsByCategory filters apps by categories using optimized data structures.
 func ListAppsByCategory(settings CrossPlatformSettings, categories []string) ([]types.AppConfig, error) {
 	log.Info("Filtering apps by categories", "categories", categories)
 
 	apps := settings.GetApplications()
+
+	// Use map for O(1) category lookup instead of O(n) loops
+	categorySet := make(map[string]bool, len(categories))
+	for _, category := range categories {
+		categorySet[category] = true
+	}
+
 	// Pre-allocate slice with reasonable capacity based on app count
 	filteredApps := make([]types.AppConfig, 0, len(apps)/2)
 	for _, app := range apps {
-		for _, category := range categories {
-			if app.Category == category {
-				filteredApps = append(filteredApps, app)
-				break // Avoid duplicate matches if app matches multiple categories
-			}
+		if categorySet[app.Category] {
+			filteredApps = append(filteredApps, app)
 		}
 	}
 

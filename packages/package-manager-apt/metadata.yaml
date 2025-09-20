@@ -1,0 +1,46 @@
+# Plugin Metadata for APT Package Manager
+name: package-manager-apt
+type: package-manager
+description: APT package manager support for Debian/Ubuntu systems
+version: 1.0.0
+author: DevEx Team
+license: MIT
+homepage: https://github.com/jameswlane/devex
+repository: https://github.com/jameswlane/devex
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - debian
+      - ubuntu
+      - mint
+      - pop
+      - elementary
+    architectures:
+      - amd64
+      - arm64
+    min_version: "18.04" # Minimum Ubuntu version (18.04 LTS) / Debian 10+ supported
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  install: true
+  uninstall: true
+  update: true
+  search: true
+  list: true
+  repository_management: true
+# Priority (lower number = higher priority)
+priority: 10
+# Tags for discovery
+tags:
+  - package-manager
+  - apt
+  - debian
+  - ubuntu
+  - linux
+  - system
