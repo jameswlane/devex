@@ -190,15 +190,18 @@ jobs:
           done <<< "$COMMITS"
 
           # Override with manual input if provided
-          if [[ "${{ github.event.inputs.version_bump }}" != "auto" ]]; then
-            case "${{ github.event.inputs.component }}" in
-              cli) cli_bump="${{ github.event.inputs.version_bump }}" ;;
-              sdk) sdk_bump="${{ github.event.inputs.version_bump }}" ;;
-              plugins) plugins_bump="${{ github.event.inputs.version_bump }}" ;;
+          VERSION_BUMP_INPUT="${{ github.event.inputs.version_bump }}"
+          COMPONENT_INPUT="${{ github.event.inputs.component }}"
+
+          if [[ "$VERSION_BUMP_INPUT" != "auto" ]]; then
+            case "$COMPONENT_INPUT" in
+              cli) cli_bump="$VERSION_BUMP_INPUT" ;;
+              sdk) sdk_bump="$VERSION_BUMP_INPUT" ;;
+              plugins) plugins_bump="$VERSION_BUMP_INPUT" ;;
               all)
-                cli_bump="${{ github.event.inputs.version_bump }}"
-                sdk_bump="${{ github.event.inputs.version_bump }}"
-                plugins_bump="${{ github.event.inputs.version_bump }}"
+                cli_bump="$VERSION_BUMP_INPUT"
+                sdk_bump="$VERSION_BUMP_INPUT"
+                plugins_bump="$VERSION_BUMP_INPUT"
                 ;;
             esac
           fi
