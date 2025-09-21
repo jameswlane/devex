@@ -676,16 +676,29 @@ func (vm *VersionManager) ListVersions() ([]*VersionInfo, error) {
 	return versions, nil
 }
 
+// ValidateVersionFormat validates that a version string follows semantic versioning
+func (vm *VersionManager) ValidateVersionFormat(version string) error {
+	if version == "" {
+		return fmt.Errorf("version cannot be empty")
+	}
+
+	// Allow 'dev' as a special case for development versions
+	if version == "dev" {
+		return nil
+	}
+
+	if _, err := semver.NewVersion(version); err != nil {
+		return fmt.Errorf("invalid version format '%s': must follow semantic versioning (e.g., 1.0.0, 2.1.3-beta.1)", version)
+	}
+
+	return nil
+}
+
 // RollbackToVersion rolls back to a specific version using backups
 func (vm *VersionManager) RollbackToVersion(targetVersion string) error {
 	// Validate target version format
-	if targetVersion == "" {
-		return fmt.Errorf("target version cannot be empty")
-	}
-
-	// Validate target version follows semantic versioning
-	if _, err := semver.NewVersion(targetVersion); err != nil {
-		return fmt.Errorf("invalid target version format: %w", err)
+	if err := vm.ValidateVersionFormat(targetVersion); err != nil {
+		return err
 	}
 
 	// Find the version in history
