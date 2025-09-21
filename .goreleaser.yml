@@ -14,10 +14,10 @@ metadata:
 
 # Environment-based configuration
 env:
-  # Default to false if not set
-  - RELEASE_CLI={{ .Env.RELEASE_CLI | default "false" }}
-  - RELEASE_SDK={{ .Env.RELEASE_SDK | default "false" }}
-  - RELEASE_PLUGINS={{ .Env.RELEASE_PLUGINS | default "false" }}
+  # Environment variables passed from workflow
+  - RELEASE_CLI={{ .Env.RELEASE_CLI }}
+  - RELEASE_SDK={{ .Env.RELEASE_SDK }}
+  - RELEASE_PLUGINS={{ .Env.RELEASE_PLUGINS }}
 
 # Build configuration
 builds:

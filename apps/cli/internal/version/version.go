@@ -23,6 +23,7 @@ const (
 	VersionTimeFormat = "2006-01-02T15:04:05Z07:00"
 	BackupTimeFormat  = "20060102_150405"
 	ValidationTimeout = 30 // seconds for configuration validation
+	MaxRetryAttempts  = 3  // maximum retry attempts for operations
 )
 
 // VersionManager manages configuration versions and migrations
