@@ -39,14 +39,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: jdx/mise-action@v3
         with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.17.0
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Get pnpm store directory
         id: pnpm-cache
         shell: bash
@@ -150,10 +147,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: jdx/mise-action@v3
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify registry API
         env:
           REGISTRY_URL: https://registry.devex.sh
