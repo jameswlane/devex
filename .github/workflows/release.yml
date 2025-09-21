@@ -102,7 +102,7 @@ jobs:
                  ! [[ $file =~ README.md$ ]] && \
                  ([ -f "packages/$plugin_dir/main.go" ] || [ -f "packages/$plugin_dir/package.json" ]); then
                 # Check if plugin_dir is not already in the array
-                if ! printf '%s\n' "${changed_plugins[@]}" | grep -q "^${plugin_dir}$"; then
+                if ! printf '%s\n' "${changed_plugins[@]}" | grep -Fxq "$plugin_dir"; then
                   changed_plugins+=("$plugin_dir")
                 fi
               fi
