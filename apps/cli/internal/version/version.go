@@ -697,7 +697,7 @@ func (vm *VersionManager) RollbackToVersion(targetVersion string) error {
 	}
 
 	if targetInfo == nil {
-		return fmt.Errorf("version %s not found in history", targetVersion)
+		return fmt.Errorf("version %s not found in history. Use 'devex version list' to see available versions", targetVersion)
 	}
 
 	// Restore from backup if available
