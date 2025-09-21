@@ -144,7 +144,7 @@ jobs:
               fi
 
               # Extract component from scope if present
-              if [[ $commit =~ \(([^)]+)\) ]]; then
+              if [[ $commit =~ \\(([^)]+)\\) ]]; then
                 component="${BASH_REMATCH[1]}"
               else
                 component=""
