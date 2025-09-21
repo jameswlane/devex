@@ -131,6 +131,16 @@ jobs:
             exit 0
           fi
 
+          # Check if current commit already has a release
+          CURRENT_SHA="${{ github.sha }}"
+          EXISTING_RELEASE=$(gh release list --limit 100 --json tagName,targetCommitish | jq -r '.[] | select(.targetCommitish == "'$CURRENT_SHA'") | .tagName' | head -1 || echo "")
+
+          if [ -n "$EXISTING_RELEASE" ]; then
+            echo "Release already exists for commit $CURRENT_SHA: $EXISTING_RELEASE"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           # Use Auto to determine if we should release
           VERSION=$(pnpm --silent auto version || echo "")
 
@@ -196,28 +206,22 @@ jobs:
           if [ "$EXISTING_TAGS" -eq 0 ]; then
             echo "No existing tags found - creating initial release"
 
-            # For first release, use individual commands
-            echo "Getting version..."
-            VERSION=$(pnpm --silent auto version)
-            echo "Version to release: $VERSION"
+            # For first release, let Auto handle everything consistently
+            echo "Running Auto shipit for initial release..."
+            pnpm auto shipit --dry-run=false || {
+              echo "Auto shipit failed, trying individual commands..."
 
-            if [ -n "$VERSION" ] && [ "$VERSION" != "" ]; then
-              echo "Creating changelog..."
-              pnpm auto changelog
-
-              echo "Creating version tag..."
-              # Create git tag manually since auto version doesn't have --apply flag
-              # npm version already adds 'v' prefix, so don't add another one
-              NEXT_VERSION=$(npm version --no-git-tag-version $VERSION)
-              git tag "$NEXT_VERSION"
-              git push origin "$NEXT_VERSION"
-
-              echo "Creating GitHub release..."
-              pnpm auto release
-            else
-              echo "No version detected by Auto"
-              exit 1
-            fi
+              # Fallback: use individual commands but let Auto create the tag
+              VERSION=$(pnpm --silent auto version)
+              if [ -n "$VERSION" ] && [ "$VERSION" != "" ]; then
+                echo "Creating changelog and release with Auto..."
+                pnpm auto changelog
+                pnpm auto release
+              else
+                echo "No version detected by Auto"
+                exit 1
+              fi
+            }
           else
             echo "Existing tags found - using shipit command"
             pnpm auto shipit
