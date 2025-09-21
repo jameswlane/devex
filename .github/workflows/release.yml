@@ -126,6 +126,11 @@ jobs:
           echo "Analyzing commits since $LAST_TAG:"
           echo "$COMMITS"
 
+          # Set component change flags from outputs
+          CLI_CHANGED="${{ steps.changes.outputs.cli }}"
+          SDK_CHANGED="${{ steps.changes.outputs.sdk }}"
+          PLUGINS_CHANGED="${{ steps.changes.outputs.plugins }}"
+
           # Initialize version bumps
           cli_bump="none"
           sdk_bump="none"
@@ -170,13 +175,13 @@ jobs:
               # Apply to components
               if [[ -z "$component" ]]; then
                 # No component specified - affects all changed components
-                if [[ "${{ steps.changes.outputs.cli }}" == "true" ]]; then
+                if [[ "$CLI_CHANGED" == "true" ]]; then
                   cli_bump=$(echo -e "$cli_bump\n$bump" | sort -V | tail -1)
                 fi
-                if [[ "${{ steps.changes.outputs.sdk }}" == "true" ]]; then
+                if [[ "$SDK_CHANGED" == "true" ]]; then
                   sdk_bump=$(echo -e "$sdk_bump\n$bump" | sort -V | tail -1)
                 fi
-                if [[ "${{ steps.changes.outputs.plugins }}" == "true" ]]; then
+                if [[ "$PLUGINS_CHANGED" == "true" ]]; then
                   plugins_bump=$(echo -e "$plugins_bump\n$bump" | sort -V | tail -1)
                 fi
               elif [[ $component == "cli" ]]; then
