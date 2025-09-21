@@ -24,7 +24,7 @@ builds:
   # CLI build (conditional on CLI releases or v* tags)
   - id: cli
     # Build if explicitly requested OR if tag starts with 'v'
-    skip: '{{ and (ne .Env.RELEASE_CLI "true") (not (hasPrefix .Tag "v")) }}'
+    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     main: ./apps/cli/cmd/main.go
     binary: devex
     dir: .
@@ -55,7 +55,7 @@ builds:
   # Plugin builds (conditional on plugin releases or plugins/* tags)
   - id: plugins
     # Build if explicitly requested OR if tag starts with 'plugins/'
-    skip: '{{ and (ne .Env.RELEASE_PLUGINS "true") (not (hasPrefix .Tag "plugins/")) }}'
+    if: '{{ or (eq .Env.RELEASE_PLUGINS "true") (hasPrefix .Tag "plugins/") }}'
     main: ./packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/main.go
     binary: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}'
     dir: .
@@ -107,6 +107,7 @@ archives:
   - id: cli-archive
     # Only archive if CLI was built
     builds: [cli]
+    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
@@ -119,11 +120,11 @@ archives:
       - apps/cli/help/**/*
     # Only create archive if this is a CLI release
     meta: true
-    rlcp: true
 
   - id: plugin-archive
     # Only archive if plugins were built
     builds: [plugins]
+    if: '{{ or (eq .Env.RELEASE_PLUGINS "true") (hasPrefix .Tag "plugins/") }}'
     name_template: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
@@ -134,7 +135,6 @@ archives:
       - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/LICENSE*'
     # Only create archive if this is a plugin release
     meta: true
-    rlcp: true
 
 # Release configuration
 release:
