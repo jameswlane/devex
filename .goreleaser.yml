@@ -65,13 +65,13 @@ includes:
 before:
   hooks:
     # Create component-specific tags before GoReleaser runs
-    - cmd: bash -c 'echo "Current main tag: $(git describe --tags --exact-match HEAD 2>/dev/null || echo "No tag on HEAD")"'
+    - cmd: 'echo "Current main tag: $(git describe --tags --exact-match HEAD 2>/dev/null || echo "No tag on HEAD")"'
       output: true
-    - cmd: bash -c 'if [ "$RELEASE_CLI" = "true" ]; then echo "CLI will be released"; fi'
+    - cmd: 'if [ "$RELEASE_CLI" = "true" ]; then echo "CLI will be released"; fi'
       output: true
-    - cmd: bash -c 'if [ "$RELEASE_SDK" = "true" ]; then echo "SDK will be released"; fi'
+    - cmd: 'if [ "$RELEASE_SDK" = "true" ]; then echo "SDK will be released"; fi'
       output: true
-    - cmd: bash -c 'if [ "$RELEASE_PLUGINS" = "true" ]; then echo "Plugins will be released"; fi'
+    - cmd: 'if [ "$RELEASE_PLUGINS" = "true" ]; then echo "Plugins will be released"; fi'
       output: true
 
 # Archive configuration
