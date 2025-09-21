@@ -153,10 +153,11 @@ jobs:
               fi
 
               # Extract component from scope if present
-              if [[ $commit =~ \\(([^)]+)\\) ]]; then
-                component="${BASH_REMATCH[1]}"
-              else
-                component=""
+              component=""
+              if [[ $commit == *"("* && $commit == *")"* ]]; then
+                # Extract text between first ( and first )
+                temp="${commit#*(}"
+                component="${temp%%)*}"
               fi
 
               echo "  Type: $type, Component: $component, Breaking: $is_breaking"
