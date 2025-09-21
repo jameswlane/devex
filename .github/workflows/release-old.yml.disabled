@@ -1,0 +1,322 @@
+name: Release
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even without conventional commits'
+        required: false
+        default: false
+        type: boolean
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  detect-release-needed:
+    name: Detect Release Needed
+    runs-on: ubuntu-latest
+    outputs:
+      has_release: ${{ steps.auto.outputs.has_release }}
+      version: ${{ steps.auto.outputs.version }}
+      changelog: ${{ steps.auto.outputs.changelog }}
+      cli_changed: ${{ steps.changes.outputs.cli }}
+      sdk_changed: ${{ steps.changes.outputs.sdk }}
+      plugins_changed: ${{ steps.changes.outputs.plugins }}
+      changed_plugins: ${{ steps.plugins.outputs.changed_plugins }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Detect changes since last release
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          base: ${{ github.event.repository.default_branch }}
+          filters: |
+            cli:
+              - 'apps/cli/**'
+              - '!apps/cli/docs/**'
+              - '!apps/cli/README.md'
+            sdk:
+              - 'packages/plugin-sdk/**'
+              - '!packages/plugin-sdk/docs/**'
+              - '!packages/plugin-sdk/README.md'
+            plugins:
+              - 'packages/**'
+              - '!packages/plugin-sdk/**'
+
+      - name: Detect specific changed plugins
+        if: steps.changes.outputs.plugins == 'true'
+        id: plugins
+        run: |
+          # Get the last tag or use initial commit
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          echo "Last tag: $LAST_TAG"
+
+          # Get changed files since last tag
+          CHANGED_FILES=$(git diff --name-only $LAST_TAG..HEAD)
+
+          changed_plugins=()
+          for file in $CHANGED_FILES; do
+            if [[ $file == packages/* ]]; then
+              plugin_dir=$(echo $file | cut -d'/' -f2)
+              # Skip plugin-sdk and docs/README changes
+              if [ "$plugin_dir" != "plugin-sdk" ] && \
+                 ! [[ $file =~ /docs/ ]] && \
+                 ! [[ $file =~ README.md$ ]] && \
+                 ([ -f "packages/$plugin_dir/main.go" ] || [ -f "packages/$plugin_dir/package.json" ]); then
+                if [[ ! " ${changed_plugins[@]} " =~ " $plugin_dir " ]]; then
+                  changed_plugins+=("$plugin_dir")
+                fi
+              fi
+            fi
+          done
+
+          echo "changed_plugins=$(IFS=,; echo "${changed_plugins[*]}")" >> $GITHUB_OUTPUT
+          echo "Changed plugins: ${changed_plugins[*]}"
+
+      - name: Check for release with Auto
+        id: auto
+        env:
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Set up git user for Auto
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Check if we should force a release
+          if [[ "${{ github.event.inputs.force_release }}" == "true" ]]; then
+            echo "Force release requested"
+            echo "has_release=true" >> $GITHUB_OUTPUT
+            echo "version=patch" >> $GITHUB_OUTPUT
+            echo "changelog=Forced release" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Skip if commit message contains [skip ci]
+          if [[ "$COMMIT_MESSAGE" == *"[skip ci]"* ]]; then
+            echo "Skipping release due to [skip ci] in commit message"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if there are relevant changes
+          if [[ "${{ steps.changes.outputs.cli }}" != "true" ]] && \
+             [[ "${{ steps.changes.outputs.sdk }}" != "true" ]] && \
+             [[ "${{ steps.changes.outputs.plugins }}" != "true" ]]; then
+            echo "No relevant changes detected"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if current commit already has a release
+          CURRENT_SHA="${{ github.sha }}"
+          EXISTING_RELEASE=$(gh release list --limit 100 --json tagName,targetCommitish | jq -r '.[] | select(.targetCommitish == "'$CURRENT_SHA'") | .tagName' | head -1 || echo "")
+
+          if [ -n "$EXISTING_RELEASE" ]; then
+            echo "Release already exists for commit $CURRENT_SHA: $EXISTING_RELEASE"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Use Auto to determine if we should release
+          VERSION=$(pnpm --silent auto version || echo "")
+
+          if [ -n "$VERSION" ] && [ "$VERSION" != "" ]; then
+            echo "Auto detected version: $VERSION"
+            echo "has_release=true" >> $GITHUB_OUTPUT
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+            # Generate changelog preview
+            CHANGELOG=$(pnpm --silent auto changelog --dry-run || echo "Release $VERSION")
+            # Escape multiline content for GitHub Actions output
+            CHANGELOG="${CHANGELOG//'%'/'%25'}"
+            CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+            CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
+            echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
+          else
+            echo "No release needed according to Auto"
+            echo "has_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: detect-release-needed
+    if: needs.detect-release-needed.outputs.has_release == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Set up git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Install GoReleaser Pro
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser-pro
+          version: '~> v2'
+          install-only: true
+        env:
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+
+      - name: Create release with Auto
+        id: auto_release
+        run: |
+          echo "Creating release with Auto..."
+
+          # Check if this is the first release (no existing tags)
+          EXISTING_TAGS=$(git tag -l | wc -l)
+
+          # Get current git ref for comparison
+          CURRENT_REF=$(git rev-parse HEAD)
+          echo "current_ref=$CURRENT_REF" >> $GITHUB_OUTPUT
+
+          if [ "$EXISTING_TAGS" -eq 0 ]; then
+            echo "No existing tags found - creating initial release"
+
+            # For first release, let Auto handle everything consistently
+            echo "Running Auto shipit for initial release..."
+            pnpm auto shipit --dry-run=false || {
+              echo "Auto shipit failed, trying individual commands..."
+
+              # Fallback: use individual commands but let Auto create the tag
+              VERSION=$(pnpm --silent auto version)
+              if [ -n "$VERSION" ] && [ "$VERSION" != "" ]; then
+                echo "Creating changelog and release with Auto..."
+                pnpm auto changelog
+                pnpm auto release
+                echo "auto_created_release=true" >> $GITHUB_OUTPUT
+              else
+                echo "No version detected by Auto"
+                echo "auto_created_release=false" >> $GITHUB_OUTPUT
+                exit 1
+              fi
+            }
+          else
+            echo "Existing tags found - using shipit command"
+            # Check if shipit will create a new release by checking exit code
+            if pnpm auto shipit; then
+              # Check if a new tag was created by comparing current HEAD with tagged commits
+              NEW_TAG=$(git tag --points-at HEAD | head -1)
+              if [ -n "$NEW_TAG" ]; then
+                echo "Auto created new tag: $NEW_TAG"
+                echo "auto_created_release=true" >> $GITHUB_OUTPUT
+                echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+              else
+                echo "Auto did not create a new tag"
+                echo "auto_created_release=false" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "Auto shipit failed or no release needed"
+              echo "auto_created_release=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser Pro
+        if: steps.auto_release.outputs.auto_created_release == 'true' && (needs.detect-release-needed.outputs.cli_changed == 'true' || needs.detect-release-needed.outputs.sdk_changed == 'true' || needs.detect-release-needed.outputs.plugins_changed == 'true')
+        run: |
+          echo "Running GoReleaser Pro for changed packages..."
+
+          # Set environment variables for conditional builds
+          export RELEASE_CLI="${{ needs.detect-release-needed.outputs.cli_changed }}"
+          export RELEASE_SDK="${{ needs.detect-release-needed.outputs.sdk_changed }}"
+          export RELEASE_PLUGINS="${{ needs.detect-release-needed.outputs.plugins_changed }}"
+          export CHANGED_PLUGINS="${{ needs.detect-release-needed.outputs.changed_plugins }}"
+
+          echo "RELEASE_CLI=$RELEASE_CLI"
+          echo "RELEASE_SDK=$RELEASE_SDK"
+          echo "RELEASE_PLUGINS=$RELEASE_PLUGINS"
+          echo "CHANGED_PLUGINS=$CHANGED_PLUGINS"
+
+          # Run GoReleaser from root directory
+          goreleaser release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+
+      - name: Update plugin registry
+        if: steps.auto_release.outputs.auto_created_release == 'true' && needs.detect-release-needed.outputs.plugins_changed == 'true'
+        run: |
+          echo "Updating plugin registry..."
+          cd scripts
+
+          # Install registry script dependencies if needed
+          if [ ! -d "node_modules" ]; then
+            npm install @octokit/rest
+          fi
+          cd ..
+
+          # Wait a moment for releases to be available
+          sleep 30
+
+          # Generate registry from all plugin tags
+          node scripts/generate-registry.js all || echo "Registry update failed but continuing"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notify Completion
+    runs-on: ubuntu-latest
+    needs: [detect-release-needed, release]
+    if: always()
+    steps:
+      - name: Notify success
+        if: needs.release.result == 'success'
+        run: |
+          echo "✅ Release completed successfully!"
+          echo "Version: ${{ needs.detect-release-needed.outputs.version }}"
+          echo "CLI changed: ${{ needs.detect-release-needed.outputs.cli_changed }}"
+          echo "SDK changed: ${{ needs.detect-release-needed.outputs.sdk_changed }}"
+          echo "Plugins changed: ${{ needs.detect-release-needed.outputs.plugins_changed }}"
+
+      - name: Notify failure
+        if: needs.release.result == 'failure'
+        run: |
+          echo "❌ Release failed!"
+          echo "Check the job logs for details"
+          exit 1
+
+      - name: Notify skipped
+        if: needs.detect-release-needed.outputs.has_release == 'false'
+        run: |
+          echo "ℹ️ No release needed"
+          echo "No conventional commits or relevant changes found"

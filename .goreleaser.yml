@@ -5,19 +5,26 @@ version: 2
 
 # Multi-component versioning strategy
 # Main CLI releases: v1.2.3
-# Plugin SDK releases: plugin-sdk/v1.2.3
+# Plugin SDK releases: packages/plugin-sdk/v1.2.3
 # Plugin releases: plugins/plugin-name/v1.2.3
 
 # Global metadata
 metadata:
   mod_timestamp: '{{ .CommitTimestamp }}'
 
+# Environment-based configuration
+env:
+  # Default to false if not set
+  - RELEASE_CLI={{ .Env.RELEASE_CLI | default "false" }}
+  - RELEASE_SDK={{ .Env.RELEASE_SDK | default "false" }}
+  - RELEASE_PLUGINS={{ .Env.RELEASE_PLUGINS | default "false" }}
+
 # Build configuration
 builds:
-  # CLI build (conditional on main version tags)
+  # CLI build (conditional on CLI releases or v* tags)
   - id: cli
-    # Only build if tag starts with 'v' (main CLI releases)
-    skip: '{{ not (hasPrefix .Tag "v") }}'
+    # Build if explicitly requested OR if tag starts with 'v'
+    skip: '{{ and (ne .Env.RELEASE_CLI "true") (not (hasPrefix .Tag "v")) }}'
     main: ./apps/cli/cmd/main.go
     binary: devex
     dir: .
@@ -25,6 +32,7 @@ builds:
       - -X main.version={{ .Version }}
       - -X main.commit={{ .Commit }}
       - -X main.date={{ .Date }}
+      - -X main.builtBy=goreleaser
     goos:
       - linux
       - darwin
@@ -32,20 +40,30 @@ builds:
     goarch:
       - amd64
       - arm64
+    ignore:
+      # Skip unsupported combinations
+      - goos: darwin
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
-  # Plugin builds (conditional on plugin tags)
+  # Plugin builds (conditional on plugin releases or plugins/* tags)
   - id: plugins
-    # Only build if tag starts with 'plugins/'
-    skip: '{{ not (hasPrefix .Tag "plugins/") }}'
-    main: ./packages/{{ trimPrefix .Tag "plugins/" | split "/" | first }}/main.go
-    binary: 'devex-plugin-{{ trimPrefix .Tag "plugins/" | split "/" | first }}'
+    # Build if explicitly requested OR if tag starts with 'plugins/'
+    skip: '{{ and (ne .Env.RELEASE_PLUGINS "true") (not (hasPrefix .Tag "plugins/")) }}'
+    main: ./packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/main.go
+    binary: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}'
     dir: .
     ldflags:
       - -X main.version={{ .Version }}
       - -X main.commit={{ .Commit }}
       - -X main.date={{ .Date }}
+      - -X main.builtBy=goreleaser
     goos:
       - linux
       - darwin
@@ -53,19 +71,35 @@ builds:
     goarch:
       - amd64
       - arm64
+    ignore:
+      # Skip unsupported combinations
+      - goos: darwin
+        goarch: "386"
+      - goos: windows
+        goarch: arm64
     env:
       - CGO_ENABLED=0
-
+    flags:
+      - -trimpath
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
 # Plugin SDK is a Go module, not a binary - no GoReleaser config needed
 
 # Global before hooks - prepare component-specific tags
 before:
   hooks:
-    # Create component-specific tags before GoReleaser runs
-    - cmd: echo "Current main tag:"
+    # Show current context for debugging
+    - cmd: echo "GoReleaser context:"
       output: true
-    - cmd: git describe --tags --exact-match HEAD || echo "No tag on HEAD"
+    - cmd: echo "Tag={{ .Tag }}"
+      output: true
+    - cmd: echo "Version={{ .Version }}"
+      output: true
+    - cmd: echo "RELEASE_CLI={{ .Env.RELEASE_CLI }}"
+      output: true
+    - cmd: echo "RELEASE_PLUGINS={{ .Env.RELEASE_PLUGINS }}"
+      output: true
+    - cmd: echo "CHANGED_PLUGINS={{ .Env.CHANGED_PLUGINS }}"
       output: true
 
 # Archive configuration
@@ -83,18 +117,24 @@ archives:
       - apps/cli/LICENSE*
       - apps/cli/config/**/*
       - apps/cli/help/**/*
+    # Only create archive if this is a CLI release
+    meta: true
+    rlcp: true
 
   - id: plugin-archive
     # Only archive if plugins were built
     builds: [plugins]
-    name_template: 'devex-plugin-{{ trimPrefix .Tag "plugins/" | split "/" | first }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    name_template: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
       - goos: windows
         format: zip
     files:
-      - 'packages/{{ trimPrefix .Tag "plugins/" | split "/" | first }}/README.md'
-      - 'packages/{{ trimPrefix .Tag "plugins/" | split "/" | first }}/LICENSE*'
+      - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/README.md'
+      - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/LICENSE*'
+    # Only create archive if this is a plugin release
+    meta: true
+    rlcp: true
 
 # Release configuration
 release:
@@ -218,8 +258,8 @@ signs:
 # Docker images (optional, for CLI)
 dockers:
   - id: cli-docker
-    # Only build if this is a CLI release (main version tag)
-    skip_push: '{{ not (hasPrefix .Tag "v") }}'
+    # Only build if this is a CLI release
+    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     image_templates:
       - "ghcr.io/jameswlane/devex:{{ .Version }}"
       - "ghcr.io/jameswlane/devex:latest"
@@ -240,7 +280,7 @@ dockers:
 brews:
   - name: devex
     # Only create brew formula if this is a CLI release
-    skip_upload: '{{ not (hasPrefix .Tag "v") }}'
+    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     repository:
       owner: jameswlane
       name: homebrew-devex
@@ -257,7 +297,7 @@ brews:
 nfpms:
   - id: cli-packages
     # Only create packages if this is a CLI release
-    if: '{{ hasPrefix .Tag "v" }}'
+    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     file_name_template: '{{ .ConventionalFileName }}'
     package_name: devex
     homepage: https://devex.sh
@@ -286,12 +326,13 @@ nfpms:
       - git
     recommends:
       - docker-ce
+    meta: true
 
 # Publishers (optional)
 publishers:
   - name: fury.io
     # Only publish if this is a CLI release
-    if: '{{ hasPrefix .Tag "v" }}'
+    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
     env:
       - FURY_TOKEN={{ .Env.FURY_TOKEN }}
