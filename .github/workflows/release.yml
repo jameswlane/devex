@@ -132,15 +132,22 @@ jobs:
             echo "Analyzing: $commit"
 
             # Extract component and type from conventional commit
-            # Use simpler regex pattern with better bash compatibility
-            if [[ $commit =~ ^(feat|fix|perf|revert|refactor)(\(([^)]+)\))?(!)?:.*$ ]]; then
+            # Use simpler approach to avoid complex regex patterns
+            if [[ $commit =~ ^(feat|fix|perf|revert|refactor) ]]; then
               type="${BASH_REMATCH[1]}"
-              component="${BASH_REMATCH[3]}"
-              breaking_marker="${BASH_REMATCH[4]}"
-              if [[ -n "$breaking_marker" ]]; then
+
+              # Check for breaking change marker
+              if [[ $commit =~ !: ]]; then
                 is_breaking=true
               else
                 is_breaking=false
+              fi
+
+              # Extract component from scope if present
+              if [[ $commit =~ \(([^)]+)\) ]]; then
+                component="${BASH_REMATCH[1]}"
+              else
+                component=""
               fi
 
               echo "  Type: $type, Component: $component, Breaking: $is_breaking"
