@@ -205,8 +205,11 @@ jobs:
               echo "Creating changelog..."
               pnpm auto changelog
 
-              echo "Creating and applying version tag..."
-              pnpm auto version --apply
+              echo "Creating version tag..."
+              # Create git tag manually since auto version doesn't have --apply flag
+              NEXT_VERSION="v$(npm version --no-git-tag-version $VERSION)"
+              git tag "$NEXT_VERSION"
+              git push origin "$NEXT_VERSION"
 
               echo "Creating GitHub release..."
               pnpm auto release
