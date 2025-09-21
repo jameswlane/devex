@@ -678,6 +678,11 @@ func (vm *VersionManager) ListVersions() ([]*VersionInfo, error) {
 
 // RollbackToVersion rolls back to a specific version using backups
 func (vm *VersionManager) RollbackToVersion(targetVersion string) error {
+	// Validate target version format
+	if targetVersion == "" {
+		return fmt.Errorf("target version cannot be empty")
+	}
+
 	// Find the version in history
 	history, err := vm.GetHistory()
 	if err != nil {
