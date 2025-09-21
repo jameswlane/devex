@@ -21,10 +21,8 @@ env:
 
 # Build configuration
 builds:
-  # CLI build (conditional on CLI releases or v* tags)
+  # CLI build (controlled by environment variables from workflow)
   - id: cli
-    # Build if explicitly requested OR if tag starts with 'v'
-    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     main: ./apps/cli/cmd/main.go
     binary: devex
     dir: .
@@ -52,10 +50,8 @@ builds:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
 
-  # Plugin builds (conditional on plugin releases or plugins/* tags)
+  # Plugin builds (controlled by environment variables from workflow)
   - id: plugins
-    # Build if explicitly requested OR if tag starts with 'plugins/'
-    if: '{{ or (eq .Env.RELEASE_PLUGINS "true") (hasPrefix .Tag "plugins/") }}'
     main: ./packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/main.go
     binary: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}'
     dir: .
@@ -105,9 +101,8 @@ before:
 # Archive configuration
 archives:
   - id: cli-archive
-    # Only archive if CLI was built
+    # Archive CLI builds
     builds: [cli]
-    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
@@ -118,13 +113,11 @@ archives:
       - apps/cli/LICENSE*
       - apps/cli/config/**/*
       - apps/cli/help/**/*
-    # Only create archive if this is a CLI release
     meta: true
 
   - id: plugin-archive
-    # Only archive if plugins were built
+    # Archive plugin builds
     builds: [plugins]
-    if: '{{ or (eq .Env.RELEASE_PLUGINS "true") (hasPrefix .Tag "plugins/") }}'
     name_template: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
@@ -133,7 +126,6 @@ archives:
     files:
       - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/README.md'
       - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/LICENSE*'
-    # Only create archive if this is a plugin release
     meta: true
 
 # Release configuration
@@ -258,8 +250,7 @@ signs:
 # Docker images (optional, for CLI)
 dockers:
   - id: cli-docker
-    # Only build if this is a CLI release
-    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
+    # Build CLI Docker image
     image_templates:
       - "ghcr.io/jameswlane/devex:{{ .Version }}"
       - "ghcr.io/jameswlane/devex:latest"
@@ -279,8 +270,7 @@ dockers:
 # Package managers
 brews:
   - name: devex
-    # Only create brew formula if this is a CLI release
-    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
+    # Create brew formula for CLI
     repository:
       owner: jameswlane
       name: homebrew-devex
@@ -296,8 +286,7 @@ brews:
 
 nfpms:
   - id: cli-packages
-    # Only create packages if this is a CLI release
-    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
+    # Create packages for CLI
     file_name_template: '{{ .ConventionalFileName }}'
     package_name: devex
     homepage: https://devex.sh
@@ -331,8 +320,7 @@ nfpms:
 # Publishers (optional)
 publishers:
   - name: fury.io
-    # Only publish if this is a CLI release
-    if: '{{ or (eq .Env.RELEASE_CLI "true") (hasPrefix .Tag "v") }}'
+    # Publish CLI packages
     cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
     env:
       - FURY_TOKEN={{ .Env.FURY_TOKEN }}
