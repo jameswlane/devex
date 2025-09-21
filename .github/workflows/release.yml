@@ -131,10 +131,11 @@ jobs:
             echo "Analyzing: $commit"
 
             # Extract component and type from conventional commit
-            if [[ $commit =~ ^(feat|fix|perf|revert|refactor)(\(([^)]+)\))?!?: ]]; then
+            if [[ $commit =~ ^(feat|fix|perf|revert|refactor)(\(([^)]+)\))?(!)?: ]]; then
               type="${BASH_REMATCH[1]}"
               component="${BASH_REMATCH[3]}"
-              if [[ "${commit: -1}" == "!" ]]; then
+              breaking_marker="${BASH_REMATCH[4]}"
+              if [[ -n "$breaking_marker" ]]; then
                 is_breaking=true
               else
                 is_breaking=false
