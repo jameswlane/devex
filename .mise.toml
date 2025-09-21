@@ -1,6 +1,6 @@
 [tools]
 go = "1.24.6"
-pnpm = "10.15.1"
+pnpm = "10.17.0"
 node = "22"
 lefthook = "latest"
 golangci-lint = "latest"
