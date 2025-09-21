@@ -21,6 +21,7 @@ const (
 	MigrationsDir     = "migrations"
 	CurrentVersion    = "dev"
 	VersionTimeFormat = "2006-01-02T15:04:05Z07:00"
+	BackupTimeFormat  = "20060102_150405"
 )
 
 // VersionManager manages configuration versions and migrations
