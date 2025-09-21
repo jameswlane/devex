@@ -52,8 +52,8 @@ builds:
 
   # Plugin builds (controlled by environment variables from workflow)
   - id: plugins
-    main: ./packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/main.go
-    binary: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}'
+    main: ./packages/$CHANGED_PLUGINS/main.go
+    binary: 'devex-plugin-$CHANGED_PLUGINS'
     dir: .
     ldflags:
       - -X main.version={{ .Version }}
@@ -91,11 +91,11 @@ before:
       output: true
     - cmd: echo "Version={{ .Version }}"
       output: true
-    - cmd: echo "RELEASE_CLI={{ .Env.RELEASE_CLI }}"
+    - cmd: echo "RELEASE_CLI=$RELEASE_CLI"
       output: true
-    - cmd: echo "RELEASE_PLUGINS={{ .Env.RELEASE_PLUGINS }}"
+    - cmd: echo "RELEASE_PLUGINS=$RELEASE_PLUGINS"
       output: true
-    - cmd: echo "CHANGED_PLUGINS={{ .Env.CHANGED_PLUGINS }}"
+    - cmd: echo "CHANGED_PLUGINS=$CHANGED_PLUGINS"
       output: true
 
 # Archive configuration
@@ -118,14 +118,14 @@ archives:
   - id: plugin-archive
     # Archive plugin builds
     builds: [plugins]
-    name_template: 'devex-plugin-{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    name_template: 'devex-plugin-${CHANGED_PLUGINS}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
       - goos: windows
         format: zip
     files:
-      - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/README.md'
-      - 'packages/{{ .Env.CHANGED_PLUGINS | default (trimPrefix .Tag "plugins/" | split "/" | first) }}/LICENSE*'
+      - 'packages/$CHANGED_PLUGINS/README.md'
+      - 'packages/$CHANGED_PLUGINS/LICENSE*'
     meta: true
 
 # Release configuration
@@ -155,8 +155,8 @@ release:
     {{ end }}
 
     {{ if hasPrefix .Tag "plugins/" }}
-    ### 🔌 Plugin Release: {{ trimPrefix .Tag "plugins/" | split "/" | first }}
-    This release includes updates for the {{ trimPrefix .Tag "plugins/" | split "/" | first }} plugin.
+    ### 🔌 Plugin Release: $CHANGED_PLUGINS
+    This release includes updates for the $CHANGED_PLUGINS plugin.
     {{ end }}
 
     ## Installation
@@ -182,10 +182,10 @@ release:
     {{ end }}
 
     {{ if hasPrefix .Tag "plugins/" }}
-    ### Plugin: {{ trimPrefix .Tag "plugins/" | split "/" | first }}
+    ### Plugin: $CHANGED_PLUGINS
     ```bash
     # Download from releases below or use DevEx CLI
-    devex plugin install {{ trimPrefix .Tag "plugins/" | split "/" | first }}
+    devex plugin install $CHANGED_PLUGINS
     ```
     {{ end }}
 
