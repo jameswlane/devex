@@ -189,7 +189,35 @@ jobs:
       - name: Create release with Auto
         run: |
           echo "Creating release with Auto..."
-          pnpm auto shipit
+
+          # Check if this is the first release (no existing tags)
+          EXISTING_TAGS=$(git tag -l | wc -l)
+
+          if [ "$EXISTING_TAGS" -eq 0 ]; then
+            echo "No existing tags found - creating initial release"
+
+            # For first release, use individual commands
+            echo "Getting version..."
+            VERSION=$(pnpm --silent auto version)
+            echo "Version to release: $VERSION"
+
+            if [ -n "$VERSION" ] && [ "$VERSION" != "" ]; then
+              echo "Creating changelog..."
+              pnpm auto changelog
+
+              echo "Creating version tag..."
+              pnpm auto version
+
+              echo "Creating GitHub release..."
+              pnpm auto release
+            else
+              echo "No version detected by Auto"
+              exit 1
+            fi
+          else
+            echo "Existing tags found - using shipit command"
+            pnpm auto shipit
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
