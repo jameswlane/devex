@@ -141,6 +141,10 @@ jobs:
 
             # Generate changelog preview
             CHANGELOG=$(pnpm --silent auto changelog --dry-run || echo "Release $VERSION")
+            # Escape multiline content for GitHub Actions output
+            CHANGELOG="${CHANGELOG//'%'/'%25'}"
+            CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
+            CHANGELOG="${CHANGELOG//$'\r'/'%0D'}"
             echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
           else
             echo "No release needed according to Auto"
