@@ -26,6 +26,7 @@ const (
 	MaxRetryAttempts  = 3  // maximum retry attempts for operations
 	DefaultRetryDelay = 1  // seconds between retry attempts
 	MaxBackoffDelay   = 30 // maximum backoff delay in seconds
+	MinRetryDelay     = 1  // minimum retry delay in seconds
 )
 
 // VersionManager manages configuration versions and migrations

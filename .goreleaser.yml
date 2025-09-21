@@ -63,11 +63,11 @@ before:
       output: true
     - cmd: echo "Version={{ .Version }}"
       output: true
-    - cmd: echo "RELEASE_CLI=$RELEASE_CLI"
+    - cmd: echo "RELEASE_CLI=${RELEASE_CLI:-}"
       output: true
-    - cmd: echo "RELEASE_PLUGINS=$RELEASE_PLUGINS"
+    - cmd: echo "RELEASE_PLUGINS=${RELEASE_PLUGINS:-}"
       output: true
-    - cmd: echo "CHANGED_PLUGINS=$CHANGED_PLUGINS"
+    - cmd: echo "CHANGED_PLUGINS=${CHANGED_PLUGINS:-}"
       output: true
 
 # Archive configuration
@@ -115,8 +115,8 @@ release:
     {{ end }}
 
     {{ if hasPrefix .Tag "plugins/" }}
-    ### 🔌 Plugin Release: $CHANGED_PLUGINS
-    This release includes updates for the $CHANGED_PLUGINS plugin.
+    ### 🔌 Plugin Release
+    This release includes plugin updates.
     {{ end }}
 
     ## Installation
@@ -142,10 +142,10 @@ release:
     {{ end }}
 
     {{ if hasPrefix .Tag "plugins/" }}
-    ### Plugin: $CHANGED_PLUGINS
+    ### Plugin Installation
     ```bash
     # Download from releases below or use DevEx CLI
-    devex plugin install $CHANGED_PLUGINS
+    devex plugin install [plugin-name]
     ```
     {{ end }}
 
