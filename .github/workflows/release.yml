@@ -207,7 +207,8 @@ jobs:
 
               echo "Creating version tag..."
               # Create git tag manually since auto version doesn't have --apply flag
-              NEXT_VERSION="v$(npm version --no-git-tag-version $VERSION)"
+              # npm version already adds 'v' prefix, so don't add another one
+              NEXT_VERSION=$(npm version --no-git-tag-version $VERSION)
               git tag "$NEXT_VERSION"
               git push origin "$NEXT_VERSION"
 
