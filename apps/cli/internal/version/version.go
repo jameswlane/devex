@@ -25,6 +25,7 @@ const (
 	ValidationTimeout = 30 // seconds for configuration validation
 	MaxRetryAttempts  = 3  // maximum retry attempts for operations
 	DefaultRetryDelay = 1  // seconds between retry attempts
+	MaxBackoffDelay   = 30 // maximum backoff delay in seconds
 )
 
 // VersionManager manages configuration versions and migrations

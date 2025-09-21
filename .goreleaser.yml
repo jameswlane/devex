@@ -23,9 +23,9 @@ env:
 builds:
   # CLI build (controlled by environment variables from workflow)
   - id: cli
-    main: ./apps/cli/cmd/main.go
+    main: ./cmd/main.go
     binary: devex
-    dir: .
+    dir: ./apps/cli
     ldflags:
       - -X main.version={{ .Version }}
       - -X main.commit={{ .Commit }}
@@ -50,34 +50,6 @@ builds:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
 
-  # Plugin builds (controlled by environment variables from workflow)
-  - id: plugins
-    main: ./packages/$CHANGED_PLUGINS/main.go
-    binary: 'devex-plugin-$CHANGED_PLUGINS'
-    dir: .
-    ldflags:
-      - -X main.version={{ .Version }}
-      - -X main.commit={{ .Commit }}
-      - -X main.date={{ .Date }}
-      - -X main.builtBy=goreleaser
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-    ignore:
-      # Skip unsupported combinations
-      - goos: darwin
-        goarch: "386"
-      - goos: windows
-        goarch: arm64
-    env:
-      - CGO_ENABLED=0
-    flags:
-      - -trimpath
-    mod_timestamp: '{{ .CommitTimestamp }}'
 
 # Plugin SDK is a Go module, not a binary - no GoReleaser config needed
 
@@ -109,24 +81,12 @@ archives:
       - goos: windows
         format: zip
     files:
-      - apps/cli/README.md
-      - apps/cli/LICENSE*
-      - apps/cli/config/**/*
-      - apps/cli/help/**/*
+      - README.md
+      - LICENSE*
+      - config/**/*
+      - help/**/*
     meta: true
 
-  - id: plugin-archive
-    # Archive plugin builds
-    builds: [plugins]
-    name_template: 'devex-plugin-${CHANGED_PLUGINS}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
-    format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
-    files:
-      - 'packages/$CHANGED_PLUGINS/README.md'
-      - 'packages/$CHANGED_PLUGINS/LICENSE*'
-    meta: true
 
 # Release configuration
 release:
