@@ -132,7 +132,7 @@ jobs:
 
             # Extract component and type from conventional commit
             # Use simpler regex pattern with better bash compatibility
-            if [[ $commit =~ ^(feat|fix|perf|revert|refactor)(\(([^)]+)\))?(!)?:\ ]]; then
+            if [[ $commit =~ ^(feat|fix|perf|revert|refactor)(\(([^)]+)\))?(!)?:.*$ ]]; then
               type="${BASH_REMATCH[1]}"
               component="${BASH_REMATCH[3]}"
               breaking_marker="${BASH_REMATCH[4]}"
