@@ -9,8 +9,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/jameswlane/devex/packages/plugin-sdk => ../plugin-sdk
-
 require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect

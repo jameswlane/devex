@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
 	github.com/fatih/color v1.18.0
-	github.com/jameswlane/devex/packages/plugin-sdk v0.0.0-00010101000000-000000000000
+	github.com/jameswlane/devex/packages/plugin-sdk v0.0.1
 	github.com/mattn/go-sqlite3 v1.14.29
 	github.com/muesli/reflow v0.3.0
 	github.com/onsi/ginkgo/v2 v2.25.2
@@ -26,7 +26,6 @@ require (
 	go.opentelemetry.io/otel v1.38.0
 	go.opentelemetry.io/otel/trace v1.38.0
 	golang.org/x/text v0.28.0
-	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -96,5 +95,3 @@ require (
 	golang.org/x/term v0.34.0 // indirect
 	golang.org/x/tools v0.36.0 // indirect
 )
-
-replace github.com/jameswlane/devex/packages/plugin-sdk => ../../packages/plugin-sdk

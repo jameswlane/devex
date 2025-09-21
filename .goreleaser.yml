@@ -3,9 +3,10 @@ version: 2
 # Root-level GoReleaser Pro configuration for monorepo
 # This file orchestrates releases for CLI, SDK, and plugins based on environment variables
 
-# Monorepo configuration - use main repo tags (v1.2.3)
-monorepo:
-  tag_prefix: v
+# Multi-component versioning strategy
+# Main CLI releases: v1.2.3
+# Plugin SDK releases: plugin-sdk/v1.2.3
+# Plugin releases: plugins/plugin-name/v1.2.3
 
 # Global metadata
 metadata:
@@ -13,10 +14,10 @@ metadata:
 
 # Build configuration
 builds:
-  # CLI build (conditional)
+  # CLI build (conditional on main version tags)
   - id: cli
-    # Only build if RELEASE_CLI is true
-    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    # Only build if tag starts with 'v' (main CLI releases)
+    skip: '{{ not (hasPrefix .Tag "v") }}'
     main: ./apps/cli/cmd/main.go
     binary: devex
     dir: .
@@ -34,12 +35,12 @@ builds:
     env:
       - CGO_ENABLED=0
 
-  # Plugin SDK build (conditional)
-  - id: plugin-sdk
-    # Only build if RELEASE_SDK is true
-    skip: '{{ ne .Env.RELEASE_SDK "true" }}'
-    main: ./packages/plugin-sdk/cmd/main.go
-    binary: devex-plugin-sdk
+  # Plugin builds (conditional on plugin tags)
+  - id: plugins
+    # Only build if tag starts with 'plugins/'
+    skip: '{{ not (hasPrefix .Tag "plugins/") }}'
+    main: ./packages/{{ trimPrefix .Tag "plugins/" | split "/" | first }}/main.go
+    binary: 'devex-plugin-{{ trimPrefix .Tag "plugins/" | split "/" | first }}'
     dir: .
     ldflags:
       - -X main.version={{ .Version }}
@@ -55,11 +56,8 @@ builds:
     env:
       - CGO_ENABLED=0
 
-# Include individual plugin configurations conditionally
-includes:
-  # Plugin SDK GoReleaser config
-  - from_file:
-      path: packages/plugin-sdk/.goreleaser.yml
+
+# Plugin SDK is a Go module, not a binary - no GoReleaser config needed
 
 # Global before hooks - prepare component-specific tags
 before:
@@ -90,17 +88,17 @@ archives:
       - apps/cli/config/**/*
       - apps/cli/help/**/*
 
-  - id: sdk-archive
-    # Only archive if SDK was built
-    builds: [plugin-sdk]
-    name_template: '{{ .ProjectName }}-plugin-sdk_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+  - id: plugin-archive
+    # Only archive if plugins were built
+    builds: [plugins]
+    name_template: 'devex-plugin-{{ trimPrefix .Tag "plugins/" | split "/" | first }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
     format: tar.gz
     format_overrides:
       - goos: windows
         format: zip
     files:
-      - packages/plugin-sdk/README.md
-      - packages/plugin-sdk/LICENSE*
+      - 'packages/{{ trimPrefix .Tag "plugins/" | split "/" | first }}/README.md'
+      - 'packages/{{ trimPrefix .Tag "plugins/" | split "/" | first }}/LICENSE*'
 
 # Release configuration
 release:
@@ -118,21 +116,24 @@ release:
   header: |
     ## DevEx Release {{ .Tag }}
 
-    {{ if eq .Env.RELEASE_CLI "true" }}
-    ### 🚀 CLI Changes
+    {{ if hasPrefix .Tag "v" }}
+    ### 🚀 CLI Release
+    This release includes CLI improvements and new features.
     {{ end }}
 
-    {{ if eq .Env.RELEASE_SDK "true" }}
-    ### 🔧 Plugin SDK Changes
+    {{ if hasPrefix .Tag "plugin-sdk/" }}
+    ### 🔧 Plugin SDK Release
+    This release includes Plugin SDK updates for plugin developers.
     {{ end }}
 
-    {{ if eq .Env.RELEASE_PLUGINS "true" }}
-    ### 🔌 Plugin Changes
-    Changed plugins: {{ .Env.CHANGED_PLUGINS }}
+    {{ if hasPrefix .Tag "plugins/" }}
+    ### 🔌 Plugin Release: {{ trimPrefix .Tag "plugins/" | split "/" | first }}
+    This release includes updates for the {{ trimPrefix .Tag "plugins/" | split "/" | first }} plugin.
     {{ end }}
 
     ## Installation
 
+    {{ if hasPrefix .Tag "v" }}
     ### CLI
     ```bash
     # Linux/macOS
@@ -143,11 +144,22 @@ release:
 
     # Or download from releases below
     ```
+    {{ end }}
 
+    {{ if hasPrefix .Tag "plugin-sdk/" }}
     ### Plugin SDK
     ```go
     go get github.com/jameswlane/devex/packages/plugin-sdk@{{ .Tag }}
     ```
+    {{ end }}
+
+    {{ if hasPrefix .Tag "plugins/" }}
+    ### Plugin: {{ trimPrefix .Tag "plugins/" | split "/" | first }}
+    ```bash
+    # Download from releases below or use DevEx CLI
+    devex plugin install {{ trimPrefix .Tag "plugins/" | split "/" | first }}
+    ```
+    {{ end }}
 
   footer: |
     ## What's Changed
@@ -210,8 +222,8 @@ signs:
 # Docker images (optional, for CLI)
 dockers:
   - id: cli-docker
-    # Only build if CLI was built
-    skip_push: '{{ ne .Env.RELEASE_CLI "true" }}'
+    # Only build if this is a CLI release (main version tag)
+    skip_push: '{{ not (hasPrefix .Tag "v") }}'
     image_templates:
       - "ghcr.io/jameswlane/devex:{{ .Version }}"
       - "ghcr.io/jameswlane/devex:latest"
@@ -231,8 +243,8 @@ dockers:
 # Package managers
 brews:
   - name: devex
-    # Only create brew formula if CLI was built
-    skip_upload: '{{ ne .Env.RELEASE_CLI "true" }}'
+    # Only create brew formula if this is a CLI release
+    skip_upload: '{{ not (hasPrefix .Tag "v") }}'
     repository:
       owner: jameswlane
       name: homebrew-devex
@@ -248,7 +260,8 @@ brews:
 
 nfpms:
   - id: cli-packages
-    # Only create packages if CLI was built
+    # Only create packages if this is a CLI release
+    skip: '{{ not (hasPrefix .Tag "v") }}'
     file_name_template: '{{ .ConventionalFileName }}'
     package_name: devex
     homepage: https://devex.sh
@@ -281,7 +294,8 @@ nfpms:
 # Publishers (optional)
 publishers:
   - name: fury.io
-    # Only publish if CLI was built
+    # Only publish if this is a CLI release
+    skip: '{{ not (hasPrefix .Tag "v") }}'
     cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
     env:
       - FURY_TOKEN={{ .Env.FURY_TOKEN }}
