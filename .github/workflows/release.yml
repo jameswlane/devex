@@ -132,7 +132,7 @@ jobs:
           fi
 
           # Use Auto to determine if we should release
-          VERSION=$(pnpm auto version 2>/dev/null || echo "")
+          VERSION=$(pnpm --silent auto version || echo "")
 
           if [ -n "$VERSION" ] && [ "$VERSION" != "" ]; then
             echo "Auto detected version: $VERSION"
@@ -140,7 +140,7 @@ jobs:
             echo "version=$VERSION" >> $GITHUB_OUTPUT
 
             # Generate changelog preview
-            CHANGELOG=$(pnpm auto changelog --dry-run 2>/dev/null || echo "Release $VERSION")
+            CHANGELOG=$(pnpm --silent auto changelog --dry-run || echo "Release $VERSION")
             echo "changelog=$CHANGELOG" >> $GITHUB_OUTPUT
           else
             echo "No release needed according to Auto"

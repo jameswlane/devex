@@ -58,6 +58,7 @@
 		"@commitlint/config-conventional": "^19.8.1",
 		"@commitlint/format": "^19.8.1",
 		"@octokit/rest": "^22.0.0",
+		"auto": "^11.3.0",
 		"commitlint": "^19.8.0",
 		"glob": "^11.0.3",
 		"js-yaml": "^4.1.0",

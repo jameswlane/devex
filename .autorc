@@ -1,7 +1,20 @@
 {
   "plugins": [
-    "conventional-commits",
-    "git-tag"
+    ["conventional-commits", {
+      "releaseTypes": {
+        "feat": "minor",
+        "fix": "patch",
+        "perf": "patch",
+        "revert": "patch",
+        "docs": "none",
+        "style": "none",
+        "refactor": "patch",
+        "test": "none",
+        "build": "none",
+        "ci": "none",
+        "chore": "none"
+      }
+    }]
   ],
   "owner": "jameswlane",
   "repo": "devex",
@@ -10,62 +23,47 @@
   "noVersionPrefix": false,
   "baseBranch": "main",
   "prereleaseBranches": ["beta", "alpha"],
-  "labels": {
-    "patch": {
+  "labels": [
+    {
       "name": "patch",
       "changelogTitle": "🐛 Bug Fix",
       "description": "A bug fix",
       "releaseType": "patch"
     },
-    "minor": {
+    {
       "name": "minor",
       "changelogTitle": "🚀 Enhancement",
       "description": "A new feature",
       "releaseType": "minor"
     },
-    "major": {
+    {
       "name": "major",
       "changelogTitle": "💥 Breaking Change",
       "description": "A breaking change",
       "releaseType": "major"
     },
-    "documentation": {
+    {
       "name": "documentation",
       "changelogTitle": "📝 Documentation",
       "description": "Documentation changes",
       "releaseType": "none"
     },
-    "internal": {
+    {
       "name": "internal",
       "changelogTitle": "🏠 Internal",
       "description": "Internal changes",
       "releaseType": "none"
     },
-    "ci": {
+    {
       "name": "ci",
       "changelogTitle": "🔧 CI",
       "description": "CI/CD improvements",
       "releaseType": "none"
     }
-  },
+  ],
   "onlyPublishWithReleaseLabel": false,
   "shipit": {
     "onlyGraduateWithReleaseLabel": false,
     "message": "chore: release %v [skip ci]"
-  },
-  "conventionalCommits": {
-    "releaseTypes": {
-      "feat": "minor",
-      "fix": "patch",
-      "perf": "patch",
-      "revert": "patch",
-      "docs": "none",
-      "style": "none",
-      "refactor": "patch",
-      "test": "none",
-      "build": "none",
-      "ci": "none",
-      "chore": "none"
-    }
   }
 }
