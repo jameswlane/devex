@@ -683,11 +683,23 @@ func (vm *VersionManager) ValidateVersionFormat(version string) error {
 	}
 
 	// Allow 'dev' as a special case for development versions
-	if version == "dev" {
+	if version == "dev" || version == "latest" {
 		return nil
 	}
 
+	// Check for common version format mistakes
+	if strings.HasPrefix(version, "v") {
+		return fmt.Errorf("invalid version format '%s': version should not start with 'v' prefix (use %s instead)", version, strings.TrimPrefix(version, "v"))
+	}
+
 	if _, err := semver.NewVersion(version); err != nil {
+		// Provide more helpful error messages for common mistakes
+		if strings.Contains(version, "_") {
+			return fmt.Errorf("invalid version format '%s': use hyphens instead of underscores (e.g., 1.0.0-beta.1)", version)
+		}
+		if !strings.Contains(version, ".") {
+			return fmt.Errorf("invalid version format '%s': version must include major.minor.patch components (e.g., 1.0.0)", version)
+		}
 		return fmt.Errorf("invalid version format '%s': must follow semantic versioning (e.g., 1.0.0, 2.1.3-beta.1)", version)
 	}
 
