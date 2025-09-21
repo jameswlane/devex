@@ -92,7 +92,7 @@ jobs:
           # Get changed files since last tag
           CHANGED_FILES=$(git diff --name-only $LAST_TAG..HEAD)
 
-          changed_plugins=()
+          changed_plugins=""
           for file in $CHANGED_FILES; do
             if [[ $file == packages/* ]]; then
               plugin_dir=$(echo $file | cut -d'/' -f2)
@@ -101,16 +101,20 @@ jobs:
                  ! [[ $file =~ /docs/ ]] && \
                  ! [[ $file =~ README.md$ ]] && \
                  ([ -f "packages/$plugin_dir/main.go" ] || [ -f "packages/$plugin_dir/package.json" ]); then
-                # Check if plugin_dir is not already in the array
-                if ! printf '%s\n' "${changed_plugins[@]}" | grep -Fxq "$plugin_dir"; then
-                  changed_plugins+=("$plugin_dir")
+                # Check if plugin_dir is not already in the list
+                if ! echo "$changed_plugins" | grep -q "$plugin_dir"; then
+                  if [ -z "$changed_plugins" ]; then
+                    changed_plugins="$plugin_dir"
+                  else
+                    changed_plugins="$changed_plugins,$plugin_dir"
+                  fi
                 fi
               fi
             fi
           done
 
-          echo "changed_plugins=$(IFS=,; echo "${changed_plugins[*]}")" >> $GITHUB_OUTPUT
-          echo "Changed plugins: ${changed_plugins[*]}"
+          echo "changed_plugins=$changed_plugins" >> $GITHUB_OUTPUT
+          echo "Changed plugins: $changed_plugins"
 
       - name: Analyze conventional commits for version bumps
         id: conventional
