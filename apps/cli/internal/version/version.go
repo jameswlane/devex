@@ -683,6 +683,11 @@ func (vm *VersionManager) RollbackToVersion(targetVersion string) error {
 		return fmt.Errorf("target version cannot be empty")
 	}
 
+	// Validate target version follows semantic versioning
+	if _, err := semver.NewVersion(targetVersion); err != nil {
+		return fmt.Errorf("invalid target version format: %w", err)
+	}
+
 	// Find the version in history
 	history, err := vm.GetHistory()
 	if err != nil {

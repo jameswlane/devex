@@ -197,11 +197,16 @@ jobs:
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
 
       - name: Create release with Auto
+        id: auto_release
         run: |
           echo "Creating release with Auto..."
 
           # Check if this is the first release (no existing tags)
           EXISTING_TAGS=$(git tag -l | wc -l)
+
+          # Get current git ref for comparison
+          CURRENT_REF=$(git rev-parse HEAD)
+          echo "current_ref=$CURRENT_REF" >> $GITHUB_OUTPUT
 
           if [ "$EXISTING_TAGS" -eq 0 ]; then
             echo "No existing tags found - creating initial release"
@@ -217,20 +222,37 @@ jobs:
                 echo "Creating changelog and release with Auto..."
                 pnpm auto changelog
                 pnpm auto release
+                echo "auto_created_release=true" >> $GITHUB_OUTPUT
               else
                 echo "No version detected by Auto"
+                echo "auto_created_release=false" >> $GITHUB_OUTPUT
                 exit 1
               fi
             }
           else
             echo "Existing tags found - using shipit command"
-            pnpm auto shipit
+            # Check if shipit will create a new release by checking exit code
+            if pnpm auto shipit; then
+              # Check if a new tag was created by comparing current HEAD with tagged commits
+              NEW_TAG=$(git tag --points-at HEAD | head -1)
+              if [ -n "$NEW_TAG" ]; then
+                echo "Auto created new tag: $NEW_TAG"
+                echo "auto_created_release=true" >> $GITHUB_OUTPUT
+                echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+              else
+                echo "Auto did not create a new tag"
+                echo "auto_created_release=false" >> $GITHUB_OUTPUT
+              fi
+            else
+              echo "Auto shipit failed or no release needed"
+              echo "auto_created_release=false" >> $GITHUB_OUTPUT
+            fi
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run GoReleaser Pro
-        if: needs.detect-release-needed.outputs.cli_changed == 'true' || needs.detect-release-needed.outputs.sdk_changed == 'true' || needs.detect-release-needed.outputs.plugins_changed == 'true'
+        if: steps.auto_release.outputs.auto_created_release == 'true' && (needs.detect-release-needed.outputs.cli_changed == 'true' || needs.detect-release-needed.outputs.sdk_changed == 'true' || needs.detect-release-needed.outputs.plugins_changed == 'true')
         run: |
           echo "Running GoReleaser Pro for changed packages..."
 
@@ -252,7 +274,7 @@ jobs:
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
 
       - name: Update plugin registry
-        if: needs.detect-release-needed.outputs.plugins_changed == 'true'
+        if: steps.auto_release.outputs.auto_created_release == 'true' && needs.detect-release-needed.outputs.plugins_changed == 'true'
         run: |
           echo "Updating plugin registry..."
           cd scripts
