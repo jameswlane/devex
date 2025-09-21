@@ -261,7 +261,7 @@ brews:
 nfpms:
   - id: cli-packages
     # Only create packages if this is a CLI release
-    skip: '{{ not (hasPrefix .Tag "v") }}'
+    if: '{{ hasPrefix .Tag "v" }}'
     file_name_template: '{{ .ConventionalFileName }}'
     package_name: devex
     homepage: https://devex.sh
@@ -295,7 +295,7 @@ nfpms:
 publishers:
   - name: fury.io
     # Only publish if this is a CLI release
-    skip: '{{ not (hasPrefix .Tag "v") }}'
+    if: '{{ hasPrefix .Tag "v" }}'
     cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
     env:
       - FURY_TOKEN={{ .Env.FURY_TOKEN }}
