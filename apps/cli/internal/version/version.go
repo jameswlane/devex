@@ -701,7 +701,7 @@ func (vm *VersionManager) ValidateVersionFormat(version string) error {
 			return fmt.Errorf("invalid version format '%s': version must include major.minor.patch components (e.g., 1.0.0)", version)
 		}
 		if strings.Contains(version, " ") {
-			return fmt.Errorf("invalid version format '%s': version cannot contain spaces", version)
+			return fmt.Errorf("invalid version format '%s': version cannot contain whitespace", version)
 		}
 		return fmt.Errorf("invalid version format '%s': must follow semantic versioning (e.g., 1.0.0, 2.1.3-beta.1)", version)
 	}
