@@ -1,5 +1,5 @@
 // Package sdk provides core functionality for DevEx plugin development and management
-// Version: v0.1.0
+// Version: v0.1.0 - improved error handling and timeout configuration
 package sdk
 
 import (
