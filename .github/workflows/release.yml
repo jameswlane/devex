@@ -205,8 +205,8 @@ jobs:
               echo "Creating changelog..."
               pnpm auto changelog
 
-              echo "Creating version tag..."
-              pnpm auto version
+              echo "Creating and applying version tag..."
+              pnpm auto version --apply
 
               echo "Creating GitHub release..."
               pnpm auto release
