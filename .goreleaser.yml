@@ -3,6 +3,10 @@ version: 2
 # Root-level GoReleaser Pro configuration for monorepo
 # This file orchestrates releases for CLI, SDK, and plugins based on environment variables
 
+# Monorepo configuration - use main repo tags (v1.2.3)
+monorepo:
+  tag_prefix: v
+
 # Global metadata
 metadata:
   mod_timestamp: '{{ .CommitTimestamp }}'
@@ -56,13 +60,19 @@ includes:
   # Plugin SDK GoReleaser config
   - from_file:
       path: packages/plugin-sdk/.goreleaser.yml
-    conditions:
-      - '{{ eq .Env.RELEASE_SDK "true" }}'
 
-# Hooks to detect and include changed plugins
+# Global before hooks - prepare component-specific tags
 before:
   hooks:
-    - bash -c 'if [ "$RELEASE_PLUGINS" = "true" ]; then ./scripts/detect-plugin-changes.sh; fi'
+    # Create component-specific tags before GoReleaser runs
+    - cmd: bash -c 'echo "Current main tag: $(git describe --tags --exact-match HEAD 2>/dev/null || echo "No tag on HEAD")"'
+      output: true
+    - cmd: bash -c 'if [ "$RELEASE_CLI" = "true" ]; then echo "CLI will be released"; fi'
+      output: true
+    - cmd: bash -c 'if [ "$RELEASE_SDK" = "true" ]; then echo "SDK will be released"; fi'
+      output: true
+    - cmd: bash -c 'if [ "$RELEASE_PLUGINS" = "true" ]; then echo "Plugins will be released"; fi'
+      output: true
 
 # Archive configuration
 archives:
@@ -201,7 +211,7 @@ signs:
 dockers:
   - id: cli-docker
     # Only build if CLI was built
-    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    skip_push: '{{ ne .Env.RELEASE_CLI "true" }}'
     image_templates:
       - "ghcr.io/jameswlane/devex:{{ .Version }}"
       - "ghcr.io/jameswlane/devex:latest"
@@ -222,7 +232,7 @@ dockers:
 brews:
   - name: devex
     # Only create brew formula if CLI was built
-    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    skip_upload: '{{ ne .Env.RELEASE_CLI "true" }}'
     repository:
       owner: jameswlane
       name: homebrew-devex
@@ -239,7 +249,6 @@ brews:
 nfpms:
   - id: cli-packages
     # Only create packages if CLI was built
-    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
     file_name_template: '{{ .ConventionalFileName }}'
     package_name: devex
     homepage: https://devex.sh
@@ -273,7 +282,6 @@ nfpms:
 publishers:
   - name: fury.io
     # Only publish if CLI was built
-    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
     cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
     env:
       - FURY_TOKEN={{ .Env.FURY_TOKEN }}
