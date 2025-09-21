@@ -1,0 +1,19 @@
+# Act configuration for local GitHub Actions testing
+# Use the latest Ubuntu runner with all tools pre-installed
+-P ubuntu-latest=catthehacker/ubuntu:act-latest
+
+# Provide dummy secrets for testing (replace with real values when needed)
+-s GITHUB_TOKEN=dummy_token_for_testing
+-s GORELEASER_KEY=dummy_key_for_testing
+
+# Set up artifact server for downloading build outputs
+--artifact-server-path /tmp/artifacts
+
+# Use host networking for better performance
+--use-gitignore=false
+
+# Verbose output for debugging
+-v
+
+# Container options for better resource usage
+--container-options --rm --memory=4g --cpus=2

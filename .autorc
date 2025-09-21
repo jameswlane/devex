@@ -1,12 +1,14 @@
 {
   "plugins": [
-    "conventional-commits"
+    "conventional-commits",
+    "git-tag"
   ],
   "owner": "jameswlane",
   "repo": "devex",
   "name": "DevEx Release Bot",
   "email": "action@github.com",
   "noVersionPrefix": false,
+  "baseBranch": "main",
   "prereleaseBranches": ["beta", "alpha"],
   "labels": {
     "patch": {
@@ -16,14 +18,14 @@
       "releaseType": "patch"
     },
     "minor": {
-      "name": "minor", 
+      "name": "minor",
       "changelogTitle": "🚀 Enhancement",
       "description": "A new feature",
       "releaseType": "minor"
     },
     "major": {
       "name": "major",
-      "changelogTitle": "💥 Breaking Change", 
+      "changelogTitle": "💥 Breaking Change",
       "description": "A breaking change",
       "releaseType": "major"
     },
@@ -32,11 +34,38 @@
       "changelogTitle": "📝 Documentation",
       "description": "Documentation changes",
       "releaseType": "none"
+    },
+    "internal": {
+      "name": "internal",
+      "changelogTitle": "🏠 Internal",
+      "description": "Internal changes",
+      "releaseType": "none"
+    },
+    "ci": {
+      "name": "ci",
+      "changelogTitle": "🔧 CI",
+      "description": "CI/CD improvements",
+      "releaseType": "none"
     }
   },
   "onlyPublishWithReleaseLabel": false,
   "shipit": {
     "onlyGraduateWithReleaseLabel": false,
-    "message": "Update version to: %v [skip ci]"
+    "message": "chore: release %v [skip ci]"
+  },
+  "conventionalCommits": {
+    "releaseTypes": {
+      "feat": "minor",
+      "fix": "patch",
+      "perf": "patch",
+      "revert": "patch",
+      "docs": "none",
+      "style": "none",
+      "refactor": "patch",
+      "test": "none",
+      "build": "none",
+      "ci": "none",
+      "chore": "none"
+    }
   }
 }

@@ -1,0 +1,282 @@
+version: 2
+
+# Root-level GoReleaser Pro configuration for monorepo
+# This file orchestrates releases for CLI, SDK, and plugins based on environment variables
+
+# Global metadata
+metadata:
+  mod_timestamp: '{{ .CommitTimestamp }}'
+
+# Build configuration
+builds:
+  # CLI build (conditional)
+  - id: cli
+    # Only build if RELEASE_CLI is true
+    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    main: ./apps/cli/cmd/main.go
+    binary: devex
+    dir: .
+    ldflags:
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+
+  # Plugin SDK build (conditional)
+  - id: plugin-sdk
+    # Only build if RELEASE_SDK is true
+    skip: '{{ ne .Env.RELEASE_SDK "true" }}'
+    main: ./packages/plugin-sdk/cmd/main.go
+    binary: devex-plugin-sdk
+    dir: .
+    ldflags:
+      - -X main.version={{ .Version }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .Date }}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+
+# Include individual plugin configurations conditionally
+includes:
+  # Plugin SDK GoReleaser config
+  - from_file:
+      path: packages/plugin-sdk/.goreleaser.yml
+    conditions:
+      - '{{ eq .Env.RELEASE_SDK "true" }}'
+
+# Hooks to detect and include changed plugins
+before:
+  hooks:
+    - bash -c 'if [ "$RELEASE_PLUGINS" = "true" ]; then ./scripts/detect-plugin-changes.sh; fi'
+
+# Archive configuration
+archives:
+  - id: cli-archive
+    # Only archive if CLI was built
+    builds: [cli]
+    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - apps/cli/README.md
+      - apps/cli/LICENSE*
+      - apps/cli/config/**/*
+      - apps/cli/help/**/*
+
+  - id: sdk-archive
+    # Only archive if SDK was built
+    builds: [plugin-sdk]
+    name_template: '{{ .ProjectName }}-plugin-sdk_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - packages/plugin-sdk/README.md
+      - packages/plugin-sdk/LICENSE*
+
+# Release configuration
+release:
+  github:
+    owner: jameswlane
+    name: devex
+  draft: false
+  replace_existing_draft: true
+  target_commitish: '{{ .Commit }}'
+  replace_existing_artifacts: true
+  discussion_category_name: General
+  prerelease: auto
+  make_latest: true
+  mode: append
+  header: |
+    ## DevEx Release {{ .Tag }}
+
+    {{ if eq .Env.RELEASE_CLI "true" }}
+    ### 🚀 CLI Changes
+    {{ end }}
+
+    {{ if eq .Env.RELEASE_SDK "true" }}
+    ### 🔧 Plugin SDK Changes
+    {{ end }}
+
+    {{ if eq .Env.RELEASE_PLUGINS "true" }}
+    ### 🔌 Plugin Changes
+    Changed plugins: {{ .Env.CHANGED_PLUGINS }}
+    {{ end }}
+
+    ## Installation
+
+    ### CLI
+    ```bash
+    # Linux/macOS
+    curl -fsSL https://devex.sh/install | bash
+
+    # Windows (PowerShell)
+    iwr -useb https://devex.sh/install.ps1 | iex
+
+    # Or download from releases below
+    ```
+
+    ### Plugin SDK
+    ```go
+    go get github.com/jameswlane/devex/packages/plugin-sdk@{{ .Tag }}
+    ```
+
+  footer: |
+    ## What's Changed
+
+    **Full Changelog**: https://github.com/jameswlane/devex/compare/{{ .PreviousTag }}...{{ .Tag }}
+
+    ---
+
+    ## Contributors
+
+    Thank you to all the contributors who made this release possible! 🎉
+
+# Changelog configuration
+changelog:
+  use: github
+  sort: asc
+  abbrev: 0
+  groups:
+    - title: '🚀 New Features'
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: '🐛 Bug Fixes'
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: '📝 Documentation'
+      regexp: '^.*?docs(\(.+\))??!?:.+$'
+      order: 2
+    - title: '🔧 Other Changes'
+      order: 999
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^style:'
+      - 'merge conflict'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+      - go mod tidy
+
+# Checksum configuration
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+# Sign configuration (optional, requires signing keys)
+signs:
+  - cmd: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+    certificate: '${artifact}.pem'
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - --yes
+    artifacts: checksum
+
+# Docker images (optional, for CLI)
+dockers:
+  - id: cli-docker
+    # Only build if CLI was built
+    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    image_templates:
+      - "ghcr.io/jameswlane/devex:{{ .Version }}"
+      - "ghcr.io/jameswlane/devex:latest"
+    dockerfile: apps/cli/Dockerfile
+    build_flag_templates:
+      - --pull
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/jameswlane/devex
+      - --label=org.opencontainers.image.source=https://github.com/jameswlane/devex
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+      - --label=org.opencontainers.image.licenses=Apache-2.0
+
+# Package managers
+brews:
+  - name: devex
+    # Only create brew formula if CLI was built
+    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    repository:
+      owner: jameswlane
+      name: homebrew-devex
+      token: "{{ .Env.GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: https://devex.sh
+    description: "Developer experience toolkit for streamlined development environment setup"
+    license: Apache-2.0
+    test: |
+      system "#{bin}/devex version"
+    install: |-
+      bin.install "devex"
+
+nfpms:
+  - id: cli-packages
+    # Only create packages if CLI was built
+    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    file_name_template: '{{ .ConventionalFileName }}'
+    package_name: devex
+    homepage: https://devex.sh
+    description: |-
+      DevEx is a developer experience toolkit that streamlines
+      development environment setup across different platforms.
+    maintainer: James Lane <james@jameswlane.com>
+    license: Apache-2.0
+    vendor: DevEx
+    bindir: /usr/bin
+    section: utils
+    contents:
+      - src: ./apps/cli/LICENSE
+        dst: /usr/share/doc/devex/copyright
+        file_info:
+          mode: 0644
+      - src: ./apps/cli/README.md
+        dst: /usr/share/doc/devex/README.md
+        file_info:
+          mode: 0644
+    formats:
+      - apk
+      - deb
+      - rpm
+    dependencies:
+      - git
+    recommends:
+      - docker-ce
+
+# Publishers (optional)
+publishers:
+  - name: fury.io
+    # Only publish if CLI was built
+    skip: '{{ ne .Env.RELEASE_CLI "true" }}'
+    cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
+    env:
+      - FURY_TOKEN={{ .Env.FURY_TOKEN }}
+
+# Report sizes
+report_sizes: true

@@ -169,6 +169,37 @@
 			"dependsOn": ["build", "test", "lint"],
 			"outputs": ["dist/**"],
 			"env": ["GITHUB_TOKEN", "GORELEASER_KEY"]
+		},
+		"release:detect": {
+			"dependsOn": [],
+			"inputs": [
+				"**/*.go",
+				"**/*.ts",
+				"**/*.tsx",
+				"**/*.md",
+				"package.json",
+				"go.mod",
+				"go.sum"
+			],
+			"outputs": ["release-plan.json"],
+			"cache": false
+		},
+		"release:version": {
+			"dependsOn": ["release:detect"],
+			"cache": false,
+			"env": ["GITHUB_TOKEN"]
+		},
+		"release:changelog": {
+			"dependsOn": ["release:version"],
+			"outputs": ["CHANGELOG.md"],
+			"cache": false,
+			"env": ["GITHUB_TOKEN"]
+		},
+		"release:build": {
+			"dependsOn": ["build", "test", "lint", "release:version"],
+			"outputs": ["dist/**", "bin/**"],
+			"cache": false,
+			"env": ["GITHUB_TOKEN", "GORELEASER_KEY"]
 		}
 	},
 	"globalEnv": [
