@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-zypper
 monorepo:
-  tag_prefix: plugin-package-manager-zypper-
+  tag_prefix: packages/package-manager-zypper/v
   dir: packages/package-manager-zypper
 builds:
   - id: plugin-package-manager-zypper
     main: .
     binary: devex-plugin-package-manager-zypper
+    dir: packages/package-manager-zypper
     env:
       - CGO_ENABLED=0
     goos:
