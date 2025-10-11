@@ -1,11 +1,12 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-apt
-# Set git tag pattern to match clean semver tags (v1.2.3)
-git:
-  tag_sort: -version:refname
+monorepo:
+  tag_prefix: packages/package-manager-apt/v
+  dir: packages/package-manager-apt
 builds:
   - id: plugin-package-manager-apt
-    main: ./packages/package-manager-apt
+    main: .
     binary: devex-plugin-package-manager-apt
     dir: packages/package-manager-apt
     env:
