@@ -6,8 +6,10 @@ monorepo:
   dir: packages/plugin-sdk
 before:
   hooks:
-    - go mod tidy
-    - go test ./...
+    - cmd: go mod tidy
+      dir: packages/plugin-sdk
+    - cmd: go test ./...
+      dir: packages/plugin-sdk
 builds:
   - skip: true # This is a library, not an executable
 archives:
