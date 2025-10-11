@@ -4,24 +4,15 @@ import { NextRequest } from 'next/server'
 // Setup all mocks before imports
 jest.mock('@/lib/prisma-client', () => ({
   ensurePrisma: jest.fn(() => ({
+    $queryRaw: jest.fn(),
     application: {
-      count: jest.fn(),
       groupBy: jest.fn(),
-      aggregate: jest.fn(),
     },
     plugin: {
-      count: jest.fn(),
       groupBy: jest.fn(),
-      aggregate: jest.fn(),
     },
     config: {
-      count: jest.fn(),
       groupBy: jest.fn(),
-      aggregate: jest.fn(),
-    },
-    stack: {
-      count: jest.fn(),
-      aggregate: jest.fn(),
     },
     registryStats: {
       findFirst: jest.fn(),
@@ -75,37 +66,45 @@ const createMockRequest = (params: Record<string, string> = {}) => {
 
 describe('/api/v1/stats', () => {
   let mockPrismaClient: any
+  let mockQueryRaw: jest.MockedFunction<any>
 
   beforeEach(() => {
     jest.clearAllMocks()
-    
+
+    // Create the mock $queryRaw function
+    mockQueryRaw = jest.fn().mockResolvedValue([{
+      app_count: BigInt(50),
+      plugin_count: BigInt(25),
+      config_count: BigInt(15),
+      stack_count: BigInt(10),
+      linux_count: BigInt(30),
+      macos_count: BigInt(25),
+      windows_count: BigInt(20),
+      plugin_downloads: BigInt(1000),
+      config_downloads: BigInt(500),
+      stack_downloads: BigInt(300),
+    }])
+
     mockPrismaClient = {
+      // Mock the optimized combined query
+      $queryRaw: mockQueryRaw,
       application: {
-        count: jest.fn().mockResolvedValue(50),
         groupBy: jest.fn().mockResolvedValue([
           { category: 'development', _count: { category: 30 } },
           { category: 'productivity', _count: { category: 20 } },
         ]),
       },
       plugin: {
-        count: jest.fn().mockResolvedValue(25),
         groupBy: jest.fn().mockResolvedValue([
           { type: 'package-manager', _count: { type: 15 } },
           { type: 'installer', _count: { type: 10 } },
         ]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 1000 } }),
       },
       config: {
-        count: jest.fn().mockResolvedValue(15),
         groupBy: jest.fn().mockResolvedValue([
           { category: 'system', _count: { category: 8 } },
           { category: 'development', _count: { category: 7 } },
         ]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 500 } }),
-      },
-      stack: {
-        count: jest.fn().mockResolvedValue(10),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 300 } }),
       },
       registryStats: {
         findFirst: jest.fn().mockResolvedValue({
@@ -115,7 +114,8 @@ describe('/api/v1/stats', () => {
       },
     }
 
-    ensurePrisma.mockReturnValue(mockPrismaClient)
+    // Ensure ensurePrisma returns our mock
+    ;(ensurePrisma as jest.MockedFunction<typeof ensurePrisma>).mockReturnValue(mockPrismaClient)
   })
 
   describe('GET', () => {
@@ -154,22 +154,19 @@ describe('/api/v1/stats', () => {
     })
 
     it('should return platform distribution statistics', async () => {
-      // Mock platform-specific counts
-      mockPrismaClient.application.count
-        .mockResolvedValueOnce(50) // total
-        .mockResolvedValueOnce(30) // linux
-        .mockResolvedValueOnce(25) // macos
-        .mockResolvedValueOnce(20) // windows
-
       const req = createMockRequest()
       const response = await GET(req)
       const data = await response.json()
 
+      // Platform counts come from the optimized $queryRaw
       expect(data.platforms).toEqual({
         linux: 30,
         macos: 25,
         windows: 20,
       })
+
+      // Verify $queryRaw was called once for all counts
+      expect(mockQueryRaw).toHaveBeenCalledTimes(1)
     })
 
     it('should return category breakdown for each resource type', async () => {
@@ -229,10 +226,19 @@ describe('/api/v1/stats', () => {
     })
 
     it('should aggregate download counts correctly', async () => {
-      // Set specific aggregate values
-      mockPrismaClient.plugin.aggregate.mockResolvedValue({ _sum: { downloadCount: 1500 } })
-      mockPrismaClient.config.aggregate.mockResolvedValue({ _sum: { downloadCount: 800 } })
-      mockPrismaClient.stack.aggregate.mockResolvedValue({ _sum: { downloadCount: 200 } })
+      // Set specific aggregate values via $queryRaw
+      mockQueryRaw.mockResolvedValueOnce([{
+        app_count: BigInt(50),
+        plugin_count: BigInt(25),
+        config_count: BigInt(15),
+        stack_count: BigInt(10),
+        linux_count: BigInt(30),
+        macos_count: BigInt(25),
+        windows_count: BigInt(20),
+        plugin_downloads: BigInt(1500),
+        config_downloads: BigInt(800),
+        stack_downloads: BigInt(200),
+      }])
 
       const req = createMockRequest()
       const response = await GET(req)
@@ -242,9 +248,19 @@ describe('/api/v1/stats', () => {
     })
 
     it('should handle null download counts gracefully', async () => {
-      mockPrismaClient.plugin.aggregate.mockResolvedValue({ _sum: { downloadCount: null } })
-      mockPrismaClient.config.aggregate.mockResolvedValue({ _sum: { downloadCount: null } })
-      mockPrismaClient.stack.aggregate.mockResolvedValue({ _sum: { downloadCount: null } })
+      // Mock $queryRaw with 0 downloads (COALESCE handles NULL in SQL)
+      mockQueryRaw.mockResolvedValueOnce([{
+        app_count: BigInt(50),
+        plugin_count: BigInt(25),
+        config_count: BigInt(15),
+        stack_count: BigInt(10),
+        linux_count: BigInt(30),
+        macos_count: BigInt(25),
+        windows_count: BigInt(20),
+        plugin_downloads: BigInt(0),
+        config_downloads: BigInt(0),
+        stack_downloads: BigInt(0),
+      }])
 
       const req = createMockRequest()
       const response = await GET(req)

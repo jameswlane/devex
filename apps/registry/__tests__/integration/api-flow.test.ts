@@ -36,28 +36,21 @@ jest.mock('@/lib/prisma', () => ({
 
 jest.mock('@/lib/prisma-client', () => ({
   ensurePrisma: jest.fn(() => ({
+    $queryRaw: jest.fn(),
     application: {
       findMany: jest.fn(),
-      count: jest.fn(),
       groupBy: jest.fn(),
-      aggregate: jest.fn(),
     },
     plugin: {
       findMany: jest.fn(),
-      count: jest.fn(),
       groupBy: jest.fn(),
-      aggregate: jest.fn(),
     },
     config: {
       findMany: jest.fn(),
-      count: jest.fn(),
       groupBy: jest.fn(),
-      aggregate: jest.fn(),
     },
     stack: {
       findMany: jest.fn(),
-      count: jest.fn(),
-      aggregate: jest.fn(),
     },
     registryStats: {
       findFirst: jest.fn(),
@@ -231,37 +224,35 @@ describe('API Integration Flow', () => {
     
     // Setup default mock responses for all endpoints
     const statsClient = {
+      $queryRaw: jest.fn().mockResolvedValue([{
+        app_count: BigInt(100),
+        plugin_count: BigInt(50),
+        config_count: BigInt(25),
+        stack_count: BigInt(15),
+        linux_count: BigInt(80),
+        macos_count: BigInt(60),
+        windows_count: BigInt(40),
+        plugin_downloads: BigInt(3000),
+        config_downloads: BigInt(1000),
+        stack_downloads: BigInt(500),
+      }]),
       application: {
-        count: jest.fn()
-          .mockResolvedValueOnce(100) // total
-          .mockResolvedValueOnce(80)  // linux
-          .mockResolvedValueOnce(60)  // macos
-          .mockResolvedValueOnce(40), // windows
         groupBy: jest.fn().mockResolvedValue([
           { category: 'development', _count: { category: 60 } },
           { category: 'productivity', _count: { category: 40 } },
         ]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 5000 } }),
       },
       plugin: {
-        count: jest.fn().mockResolvedValue(50),
         groupBy: jest.fn().mockResolvedValue([
           { type: 'package-manager', _count: { type: 30 } },
           { type: 'installer', _count: { type: 20 } },
         ]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 3000 } }),
       },
       config: {
-        count: jest.fn().mockResolvedValue(25),
         groupBy: jest.fn().mockResolvedValue([
           { category: 'system', _count: { category: 15 } },
           { category: 'development', _count: { category: 10 } },
         ]),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 1000 } }),
-      },
-      stack: {
-        count: jest.fn().mockResolvedValue(15),
-        aggregate: jest.fn().mockResolvedValue({ _sum: { downloadCount: 500 } }),
       },
       registryStats: {
         findFirst: jest.fn().mockResolvedValue(mockData.stats),

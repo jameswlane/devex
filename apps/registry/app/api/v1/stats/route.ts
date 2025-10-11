@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { logger, logPerformance } from "../../../../lib/logger";
-import { withQueryCache, CacheCategory } from "../../../../lib/query-cache";
-import { ensurePrisma } from "../../../../lib/prisma-client";
-import { withErrorHandling, safeDatabase } from "../../../../lib/error-handler";
-import { createOptimizedResponse, ResponseType } from "../../../../lib/response-optimization";
-import { Prisma } from "@prisma/client";
+import type { NextRequest, NextResponse } from "next/server";
+import { logPerformance } from "@/lib/logger";
+import { withQueryCache, CacheCategory } from "@/lib/query-cache";
+import { ensurePrisma } from "@/lib/prisma-client";
+import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
+import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
 
 async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 	const url = new URL(request.url);
@@ -26,50 +25,37 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 			return await safeDatabase(async () => {
 				const startTime = Date.now();
 
-				// Get current counts and statistics
-				const [
-					applicationsCount,
-					pluginsCount,
-					configsCount,
-					stacksCount,
-					linuxApps,
-					macosApps,
-					windowsApps,
-					totalDownloads,
-					recentStats,
-				] = await Promise.all([
-					prismaClient.application.count(),
-					prismaClient.plugin.count(),
-					prismaClient.config.count(),
-					prismaClient.stack.count(),
-					// Optimized platform counts using boolean columns for high performance
-					prismaClient.application.count({
-						where: { supportsLinux: true },
-					}),
-					prismaClient.application.count({
-						where: { supportsMacOS: true },
-					}),
-					prismaClient.application.count({
-						where: { supportsWindows: true },
-					}),
-					// Sum up download counts
-					Promise.all([
-						prismaClient.plugin.aggregate({ _sum: { downloadCount: true } }),
-						prismaClient.config.aggregate({ _sum: { downloadCount: true } }),
-						prismaClient.stack.aggregate({ _sum: { downloadCount: true } }),
-					]).then((results) =>
-						results.reduce(
-							(sum, result) => sum + (result._sum.downloadCount || 0),
-							0,
-						),
-					),
+				// Combine all counts and aggregations into a single optimized query
+				// This reduces 11 separate queries to 1, dramatically improving performance
+				const [countsResult, recentStats, appCategories, pluginTypes, configCategories] = await Promise.all([
+					prismaClient.$queryRaw<[{
+						app_count: bigint;
+						plugin_count: bigint;
+						config_count: bigint;
+						stack_count: bigint;
+						linux_count: bigint;
+						macos_count: bigint;
+						windows_count: bigint;
+						plugin_downloads: bigint;
+						config_downloads: bigint;
+						stack_downloads: bigint;
+					}]>`
+						SELECT
+							(SELECT COUNT(*) FROM applications) as app_count,
+							(SELECT COUNT(*) FROM plugins) as plugin_count,
+							(SELECT COUNT(*) FROM configs) as config_count,
+							(SELECT COUNT(*) FROM stacks) as stack_count,
+							(SELECT COUNT(*) FROM applications WHERE "supportsLinux" = true) as linux_count,
+							(SELECT COUNT(*) FROM applications WHERE "supportsMacOS" = true) as macos_count,
+							(SELECT COUNT(*) FROM applications WHERE "supportsWindows" = true) as windows_count,
+							(SELECT COALESCE(SUM("downloadCount"), 0) FROM plugins) as plugin_downloads,
+							(SELECT COALESCE(SUM("downloadCount"), 0) FROM configs) as config_downloads,
+							(SELECT COALESCE(SUM("downloadCount"), 0) FROM stacks) as stack_downloads
+					`,
 					prismaClient.registryStats.findFirst({
 						orderBy: { date: "desc" },
 					}),
-				]);
-
-				// Get category breakdown
-				const [appCategories, pluginTypes, configCategories] = await Promise.all([
+					// Get category breakdowns in parallel with counts
 					prismaClient.application.groupBy({
 						by: ["category"],
 						_count: { category: true },
@@ -83,6 +69,19 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 						_count: { category: true },
 					}),
 				]);
+
+				// Extract counts from the single query result
+				const counts = countsResult[0];
+				const applicationsCount = Number(counts.app_count);
+				const pluginsCount = Number(counts.plugin_count);
+				const configsCount = Number(counts.config_count);
+				const stacksCount = Number(counts.stack_count);
+				const linuxApps = Number(counts.linux_count);
+				const macosApps = Number(counts.macos_count);
+				const windowsApps = Number(counts.windows_count);
+				const totalDownloads = Number(counts.plugin_downloads) +
+					Number(counts.config_downloads) +
+					Number(counts.stack_downloads);
 
 				const queryTime = Date.now() - startTime;
 				logPerformance("stats:aggregation", queryTime, {
