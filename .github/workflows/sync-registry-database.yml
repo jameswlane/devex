@@ -84,10 +84,7 @@ jobs:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Install tsx for TypeScript execution
-          pnpm add -D tsx
-
-          # Run GitHub plugin sync
+          # Run GitHub plugin sync (tsx already in dependencies)
           pnpm tsx scripts/sync-github-plugins.ts
       - name: Run database sync
         working-directory: apps/registry
