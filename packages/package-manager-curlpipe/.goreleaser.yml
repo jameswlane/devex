@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-curlpipe
 monorepo:
-  tag_prefix: plugin-package-manager-curlpipe-
+  tag_prefix: packages/package-manager-curlpipe/v
   dir: packages/package-manager-curlpipe
 builds:
   - id: plugin-package-manager-curlpipe
     main: .
     binary: devex-plugin-package-manager-curlpipe
+    dir: packages/package-manager-curlpipe
     env:
       - CGO_ENABLED=0
     goos:
