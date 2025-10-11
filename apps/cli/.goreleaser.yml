@@ -4,6 +4,7 @@ builds:
   - id: devex
     main: ./cmd/main.go
     binary: bin/devex
+    dir: apps/cli
     ldflags:
       - -X main.version={{.Version}}
     goos:
