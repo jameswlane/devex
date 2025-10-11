@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-lxqt
 monorepo:
-  tag_prefix: plugin-desktop-lxqt-
+  tag_prefix: packages/desktop-lxqt/v
   dir: packages/desktop-lxqt
 builds:
   - id: plugin-desktop-lxqt
     main: .
     binary: devex-plugin-desktop-lxqt
+    dir: packages/desktop-lxqt
     env:
       - CGO_ENABLED=0
     goos:
