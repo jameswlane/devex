@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-cinnamon
 monorepo:
-  tag_prefix: plugin-desktop-cinnamon-
+  tag_prefix: packages/desktop-cinnamon/v
   dir: packages/desktop-cinnamon
 builds:
   - id: plugin-desktop-cinnamon
     main: .
     binary: devex-plugin-desktop-cinnamon
+    dir: packages/desktop-cinnamon
     env:
       - CGO_ENABLED=0
     goos:
