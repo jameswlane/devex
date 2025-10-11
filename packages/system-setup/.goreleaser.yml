@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-system-setup
 monorepo:
-  tag_prefix: plugin-system-setup-
+  tag_prefix: packages/system-setup/v
   dir: packages/system-setup
 builds:
   - id: plugin-system-setup
     main: .
     binary: devex-plugin-system-setup
+    dir: packages/system-setup
     env:
       - CGO_ENABLED=0
     goos:
