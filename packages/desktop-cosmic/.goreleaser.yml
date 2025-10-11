@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-cosmic
 monorepo:
-  tag_prefix: plugin-desktop-cosmic-
+  tag_prefix: packages/desktop-cosmic/v
   dir: packages/desktop-cosmic
 builds:
   - id: plugin-desktop-cosmic
     main: .
     binary: devex-plugin-desktop-cosmic
+    dir: packages/desktop-cosmic
     env:
       - CGO_ENABLED=0
     goos:
