@@ -1,11 +1,13 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-gnome
 monorepo:
-  tag_prefix: plugin-desktop-gnome-
+  tag_prefix: packages/desktop-gnome/v
   dir: packages/desktop-gnome
 builds:
   - id: plugin-desktop-gnome
     main: .
+    dir: packages/desktop-gnome
     binary: devex-plugin-desktop-gnome
     env:
       - CGO_ENABLED=0
