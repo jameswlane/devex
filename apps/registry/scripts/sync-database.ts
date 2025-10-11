@@ -478,13 +478,16 @@ async function main() {
       console.log("✨ Database sync completed successfully!");
     } else {
       console.log("⚠️  Database sync completed with some failures");
+      await prisma.$disconnect();
       process.exit(1);
     }
   } catch (error) {
     console.error("❌ Database sync failed:", error);
+    await prisma.$disconnect();
     process.exit(1);
   } finally {
     await prisma.$disconnect();
+    process.exit(0);
   }
 }
 

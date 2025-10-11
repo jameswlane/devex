@@ -68,9 +68,11 @@ async function syncPlugins() {
     console.log('✅ Plugin sync completed successfully');
   } catch (error) {
     console.error('❌ Plugin sync failed:', error);
+    await prisma.$disconnect();
     process.exit(1);
   } finally {
     await prisma.$disconnect();
+    process.exit(0);
   }
 }
 
