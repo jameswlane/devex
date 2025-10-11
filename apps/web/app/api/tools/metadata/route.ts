@@ -43,10 +43,11 @@ async function getRegistryMetadata() {
 		// Extract categories from all items
 		const categories = new Set<string>();
 
+		// Access data from the correct path (.data.*)
+		const dataObj = registryData.data || {};
+
 		// Add application categories
-		const applications = Object.values(
-			registryData.applications || {},
-		) as any[];
+		const applications = Object.values(dataObj.applications || {}) as any[];
 		for (const app of applications) {
 			if (app.category) {
 				categories.add(app.category);
@@ -54,42 +55,30 @@ async function getRegistryMetadata() {
 		}
 
 		// Add plugin category if plugins exist
-		if (Object.keys(registryData.plugins || {}).length > 0) {
+		if (Object.keys(dataObj.plugins || {}).length > 0) {
 			categories.add("Plugin");
 		}
 
 		// Add config categories
-		const configs = Object.values(registryData.configs || {}) as any[];
+		const configs = Object.values(dataObj.configs || {}) as any[];
 		for (const config of configs) {
 			if (config.category) {
 				categories.add(config.category);
 			}
 		}
 
-		// Transform stats to expected format
+		// Use stats from API (most accurate) as primary source
 		const transformedStats = {
-			total: {
-				applications:
-					registryData.stats?.total?.applications ||
-					Object.keys(registryData.applications || {}).length,
-				plugins:
-					registryData.stats?.total?.plugins ||
-					Object.keys(registryData.plugins || {}).length,
-				configs:
-					registryData.stats?.total?.configs ||
-					Object.keys(registryData.configs || {}).length,
-				stacks:
-					registryData.stats?.total?.stacks ||
-					Object.keys(registryData.stacks || {}).length,
+			total: registryData.stats?.total || {
+				applications: Object.keys(dataObj.applications || {}).length,
+				plugins: Object.keys(dataObj.plugins || {}).length,
+				configs: Object.keys(dataObj.configs || {}).length,
+				stacks: Object.keys(dataObj.stacks || {}).length,
 				all:
-					(registryData.stats?.total?.applications ||
-						Object.keys(registryData.applications || {}).length) +
-					(registryData.stats?.total?.plugins ||
-						Object.keys(registryData.plugins || {}).length) +
-					(registryData.stats?.total?.configs ||
-						Object.keys(registryData.configs || {}).length) +
-					(registryData.stats?.total?.stacks ||
-						Object.keys(registryData.stacks || {}).length),
+					Object.keys(dataObj.applications || {}).length +
+					Object.keys(dataObj.plugins || {}).length +
+					Object.keys(dataObj.configs || {}).length +
+					Object.keys(dataObj.stacks || {}).length,
 			},
 			platforms: registryData.stats?.platforms || {
 				linux: 0,
