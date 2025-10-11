@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-nixflake
 monorepo:
-  tag_prefix: plugin-package-manager-nixflake-
+  tag_prefix: packages/package-manager-nixflake/v
   dir: packages/package-manager-nixflake
 builds:
   - id: plugin-package-manager-nixflake
     main: .
     binary: devex-plugin-package-manager-nixflake
+    dir: packages/package-manager-nixflake
     env:
       - CGO_ENABLED=0
     goos:
