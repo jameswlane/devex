@@ -1,17 +1,12 @@
 name: Sync Registry Database
 on:
-  # Run on new plugin tags
-  push:
-    tags:
-      - '@devex/**@*' # Match plugin tags like @devex/package-manager-apt@1.6.0
+  # Run after successful goreleaser workflow
+  workflow_run:
+    workflows: ["goreleaser"]
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - 'apps/cli/config/**/*.yaml'
-      - 'packages/package-manager-*/**'
-      - 'apps/registry/scripts/sync-database.ts'
-      - 'apps/registry/scripts/sync-github-plugins.ts'
-      - '.github/workflows/sync-registry-database.yml'
   # Allow manual trigger
   workflow_dispatch:
     inputs:
@@ -33,6 +28,8 @@ jobs:
   sync-database:
     name: Sync Registry Database
     runs-on: ubuntu-latest
+    # Only run if triggered manually or if goreleaser was successful
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     environment: production
     steps:
       - name: Checkout repository
