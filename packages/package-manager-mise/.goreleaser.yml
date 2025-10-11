@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-mise
 monorepo:
-  tag_prefix: plugin-package-manager-mise-
+  tag_prefix: packages/package-manager-mise/v
   dir: packages/package-manager-mise
 builds:
   - id: plugin-package-manager-mise
     main: .
     binary: devex-plugin-package-manager-mise
+    dir: packages/package-manager-mise
     env:
       - CGO_ENABLED=0
     goos:
