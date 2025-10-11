@@ -4,7 +4,7 @@
 	"ui": "tui",
 	"tasks": {
 		"build": {
-			"dependsOn": ["^build", "download", "db:generate"],
+			"dependsOn": ["^build", "^db:generate", "download"],
 			"outputs": [
 				".next/**",
 				"!.next/cache/**",
@@ -45,9 +45,31 @@
 		},
 		"db:generate": {
 			"dependsOn": [],
-			"inputs": ["prisma/**"],
-			"outputs": ["node_modules/.prisma/**", ".prisma/**"],
-			"cache": true,
+			"inputs": ["prisma/**", ".env*"],
+			"outputs": [
+				"node_modules/.prisma/**",
+				"node_modules/@prisma/client/**",
+				".prisma/**",
+				"generated/**"
+			],
+			"cache": false,
+			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
+		},
+		"db:migrate": {
+			"cache": false,
+			"persistent": true,
+			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
+		},
+		"db:deploy": {
+			"cache": false,
+			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
+		},
+		"db:push": {
+			"cache": false,
+			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
+		},
+		"db:seed": {
+			"cache": false,
 			"env": ["DATABASE_URL", "POSTGRES_URL", "PRISMA_DATABASE_URL"]
 		},
 		"build:web": {
@@ -152,7 +174,7 @@
 		"dev": {
 			"persistent": true,
 			"cache": false,
-			"dependsOn": ["^build"],
+			"dependsOn": ["^db:generate"],
 			"inputs": [
 				"$TURBO_DEFAULT$",
 				".env.development.local",
