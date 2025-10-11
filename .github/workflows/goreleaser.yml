@@ -1,0 +1,44 @@
+name: goreleaser
+on:
+  push:
+    tags: ['v*', 'packages/plugin-sdk/v*', 'packages/*/v*']
+permissions:
+  contents: write
+  packages: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      flags: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: 'apps/cli/go.mod'
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      # Route based on tag prefix (official GoReleaser monorepo pattern)
+      - name: Route CLI releases
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, 'packages/')
+        run: echo "flags=-f ./apps/cli/.goreleaser.yml" >> $GITHUB_ENV
+      - name: Route SDK releases
+        if: startsWith(github.ref, 'refs/tags/packages/plugin-sdk/v')
+        run: echo "flags=-f ./packages/plugin-sdk/.goreleaser.yml" >> $GITHUB_ENV
+      - name: Route plugin releases
+        if: startsWith(github.ref, 'refs/tags/packages/') && !contains(github.ref, 'plugin-sdk')
+        run: |
+          PLUGIN=$(echo $GITHUB_REF | sed 's|refs/tags/packages/||' | cut -d'/' -f1)
+          echo "flags=-f ./packages/$PLUGIN/.goreleaser.yml" >> $GITHUB_ENV
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          args: release --clean ${{ env.flags }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}

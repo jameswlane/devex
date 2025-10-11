@@ -50,7 +50,7 @@
 	"keywords": [],
 	"author": "James W Lane",
 	"license": "Apache-2.0",
-	"packageManager": "pnpm@10.17.0",
+	"packageManager": "pnpm@10.18.2",
 	"devDependencies": {
 		"@auto-it/conventional-commits": "^11.2.1",
 		"@auto-it/core": "^11.2.1",

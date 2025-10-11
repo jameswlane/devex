@@ -1,7 +1,9 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-sdk
 monorepo:
-  tag_prefix: "@devex/plugin-sdk@"
+  tag_prefix: packages/plugin-sdk/v
+  dir: packages/plugin-sdk
 before:
   hooks:
     - go mod tidy
@@ -9,14 +11,10 @@ before:
 builds:
   - skip: true # This is a library, not an executable
 archives:
-  - format: tar.gz
+  - id: plugin-sdk
     # this name template makes the OS and Arch compatible with the results of uname.
     name_template: >-
       {{ .ProjectName }}_ {{- title .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else if eq .Arch "386" }}i386 {{- else }}{{ .Arch }}{{ end }} {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - LICENSE*
       - README*

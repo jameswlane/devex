@@ -1,5 +1,5 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
-
 # Root-level GoReleaser Pro configuration for monorepo
 # This file orchestrates releases for CLI, SDK, and plugins based on environment variables
 
@@ -11,14 +11,12 @@ version: 2
 # Global metadata
 metadata:
   mod_timestamp: '{{ .CommitTimestamp }}'
-
 # Environment-based configuration
 env:
   # Environment variables passed from workflow
   - RELEASE_CLI={{ .Env.RELEASE_CLI }}
   - RELEASE_SDK={{ .Env.RELEASE_SDK }}
   - RELEASE_PLUGINS={{ .Env.RELEASE_PLUGINS }}
-
 # Build configuration
 builds:
   # CLI build (controlled by environment variables from workflow)
@@ -49,8 +47,6 @@ builds:
     flags:
       - -trimpath
     mod_timestamp: '{{ .CommitTimestamp }}'
-
-
 # Plugin SDK is a Go module, not a binary - no GoReleaser config needed
 
 # Global before hooks - prepare component-specific tags
@@ -69,25 +65,17 @@ before:
       output: true
     - cmd: echo "CHANGED_PLUGINS=${CHANGED_PLUGINS:-}"
       output: true
-
 # Archive configuration
 archives:
   - id: cli-archive
     # Archive CLI builds
-    builds: [cli]
     name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .OS }}_{{ .Arch }}'
-    format: tar.gz
-    format_overrides:
-      - goos: windows
-        format: zip
     files:
       - README.md
       - LICENSE*
       - config/**/*
       - help/**/*
     meta: true
-
-
 # Release configuration
 release:
   github:
@@ -148,7 +136,6 @@ release:
     devex plugin install [plugin-name]
     ```
     {{ end }}
-
   footer: |
     ## What's Changed
 
@@ -159,7 +146,6 @@ release:
     ## Contributors
 
     Thank you to all the contributors who made this release possible! 🎉
-
 # Changelog configuration
 changelog:
   use: github
@@ -187,12 +173,10 @@ changelog:
       - Merge remote-tracking branch
       - Merge branch
       - go mod tidy
-
 # Checksum configuration
 checksum:
   name_template: 'checksums.txt'
   algorithm: sha256
-
 # Sign configuration (optional, requires signing keys)
 signs:
   - cmd: cosign
@@ -206,77 +190,6 @@ signs:
       - '${artifact}'
       - --yes
     artifacts: checksum
-
-# Docker images (optional, for CLI)
-dockers:
-  - id: cli-docker
-    # Build CLI Docker image
-    image_templates:
-      - "ghcr.io/jameswlane/devex:{{ .Version }}"
-      - "ghcr.io/jameswlane/devex:latest"
-    dockerfile: apps/cli/Dockerfile
-    build_flag_templates:
-      - --pull
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/jameswlane/devex
-      - --label=org.opencontainers.image.source=https://github.com/jameswlane/devex
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-      - --label=org.opencontainers.image.licenses=Apache-2.0
-
-# Package managers
-brews:
-  - name: devex
-    # Create brew formula for CLI
-    repository:
-      owner: jameswlane
-      name: homebrew-devex
-      token: "{{ .Env.GITHUB_TOKEN }}"
-    directory: Formula
-    homepage: https://devex.sh
-    description: "Developer experience toolkit for streamlined development environment setup"
-    license: Apache-2.0
-    test: |
-      system "#{bin}/devex version"
-    install: |-
-      bin.install "devex"
-
-nfpms:
-  - id: cli-packages
-    # Create packages for CLI
-    file_name_template: '{{ .ConventionalFileName }}'
-    package_name: devex
-    homepage: https://devex.sh
-    description: |-
-      DevEx is a developer experience toolkit that streamlines
-      development environment setup across different platforms.
-    maintainer: James Lane <james@jameswlane.com>
-    license: Apache-2.0
-    vendor: DevEx
-    bindir: /usr/bin
-    section: utils
-    contents:
-      - src: ./apps/cli/LICENSE
-        dst: /usr/share/doc/devex/copyright
-        file_info:
-          mode: 0644
-      - src: ./apps/cli/README.md
-        dst: /usr/share/doc/devex/README.md
-        file_info:
-          mode: 0644
-    formats:
-      - apk
-      - deb
-      - rpm
-    dependencies:
-      - git
-    recommends:
-      - docker-ce
-    meta: true
-
 # Publishers (optional)
 publishers:
   - name: fury.io
@@ -284,6 +197,5 @@ publishers:
     cmd: bash -c 'curl -F package=@{{ .ArtifactPath }} https://push.fury.io/jameswlane/'
     env:
       - FURY_TOKEN={{ .Env.FURY_TOKEN }}
-
 # Report sizes
 report_sizes: true

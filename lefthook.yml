@@ -98,16 +98,6 @@ pre-commit:
       glob: '*.{js,ts,jsx,tsx}'
       run: pnpm exec biome check --write {staged_files}
       stage_fixed: true
-    turborepo-build-changed:
-      run: |
-        echo "🔨 Building changed packages with Turborepo..."
-        pnpm build --filter="...[HEAD~1]"
-      stage_fixed: true
-    turborepo-lint-changed:
-      run: |
-        echo "🧹 Linting changed packages with Turborepo..."
-        pnpm lint --filter="...[HEAD~1]" --concurrency=1
-      stage_fixed: true
 commit-msg:
   commands:
     commitlint:
