@@ -277,14 +277,24 @@ async function syncConfigs() {
   console.log("⚙️ Syncing configs...");
 
   const configFiles = [
-    { file: "system.yaml", category: "system", type: "yaml" },
-    { file: "desktop.yaml", category: "desktop", type: "yaml" },
-    { file: "environment.yaml", category: "development", type: "yaml" },
+    { file: "plugins.yaml", category: "plugins", type: "yaml" },
+    { file: "mise.yaml", category: "development", type: "yaml" },
+    { file: "dotfiles.yaml", category: "system", type: "yaml" },
+    { file: "security.yaml", category: "security", type: "yaml" },
   ];
 
   for (const configFile of configFiles) {
     try {
       const configPath = path.join(process.cwd(), "../../apps/cli/config", configFile.file);
+
+      // Check if file exists before attempting to read
+      try {
+        await fs.access(configPath);
+      } catch {
+        console.log(`  ⏭️  Skipping ${configFile.file} (file does not exist)`);
+        continue;
+      }
+
       const content = await fs.readFile(configPath, "utf-8");
       const parsed = yaml.parse(content);
 
