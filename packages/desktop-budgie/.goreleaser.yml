@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-budgie
 monorepo:
-  tag_prefix: plugin-desktop-budgie-
+  tag_prefix: packages/desktop-budgie/v
   dir: packages/desktop-budgie
 builds:
   - id: plugin-desktop-budgie
     main: .
     binary: devex-plugin-desktop-budgie
+    dir: packages/desktop-budgie
     env:
       - CGO_ENABLED=0
     goos:
