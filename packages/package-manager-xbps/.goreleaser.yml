@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-xbps
 monorepo:
-  tag_prefix: plugin-package-manager-xbps-
+  tag_prefix: packages/package-manager-xbps/v
   dir: packages/package-manager-xbps
 builds:
   - id: plugin-package-manager-xbps
     main: .
     binary: devex-plugin-package-manager-xbps
+    dir: packages/package-manager-xbps
     env:
       - CGO_ENABLED=0
     goos:
