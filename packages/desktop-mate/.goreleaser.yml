@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-mate
 monorepo:
-  tag_prefix: plugin-desktop-mate-
+  tag_prefix: packages/desktop-mate/v
   dir: packages/desktop-mate
 builds:
   - id: plugin-desktop-mate
     main: .
     binary: devex-plugin-desktop-mate
+    dir: packages/desktop-mate
     env:
       - CGO_ENABLED=0
     goos:
