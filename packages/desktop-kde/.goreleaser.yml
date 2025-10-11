@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-kde
 monorepo:
-  tag_prefix: plugin-desktop-kde-
+  tag_prefix: packages/desktop-kde/v
   dir: packages/desktop-kde
 builds:
   - id: plugin-desktop-kde
     main: .
     binary: devex-plugin-desktop-kde
+    dir: packages/desktop-kde
     env:
       - CGO_ENABLED=0
     goos:
