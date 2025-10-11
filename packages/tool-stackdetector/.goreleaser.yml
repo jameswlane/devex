@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-tool-stackdetector
 monorepo:
-  tag_prefix: plugin-tool-stackdetector-
+  tag_prefix: packages/tool-stackdetector/v
   dir: packages/tool-stackdetector
 builds:
   - id: plugin-tool-stackdetector
     main: .
     binary: devex-plugin-tool-stackdetector
+    dir: packages/tool-stackdetector
     env:
       - CGO_ENABLED=0
     goos:
