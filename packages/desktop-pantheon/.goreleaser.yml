@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-pantheon
 monorepo:
-  tag_prefix: plugin-desktop-pantheon-
+  tag_prefix: packages/desktop-pantheon/v
   dir: packages/desktop-pantheon
 builds:
   - id: plugin-desktop-pantheon
     main: .
     binary: devex-plugin-desktop-pantheon
+    dir: packages/desktop-pantheon
     env:
       - CGO_ENABLED=0
     goos:
