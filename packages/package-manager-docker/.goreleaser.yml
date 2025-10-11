@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
-project_name: devex-plugin-package-manager-
+project_name: devex-plugin-package-manager-docker
 monorepo:
-  tag_prefix: plugin-package-manager-docker-
+  tag_prefix: packages/package-manager-docker/v
   dir: packages/package-manager-docker
 builds:
   - id: plugin-package-manager-docker
     main: .
     binary: devex-plugin-package-manager-docker
+    dir: packages/package-manager-docker
     env:
       - CGO_ENABLED=0
     goos:
