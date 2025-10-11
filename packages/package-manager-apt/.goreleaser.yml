@@ -24,7 +24,7 @@ builds:
 archives:
   - id: plugin-package-manager-apt-archive
     name_template: "devex-plugin-package-manager-apt_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    builds:
+    ids:
       - plugin-package-manager-apt
 checksum:
   name_template: checksums.txt
