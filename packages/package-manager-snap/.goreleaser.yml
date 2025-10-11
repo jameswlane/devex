@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-snap
 monorepo:
-  tag_prefix: plugin-package-manager-snap-
+  tag_prefix: packages/package-manager-snap/v
   dir: packages/package-manager-snap
 builds:
   - id: plugin-package-manager-snap
     main: .
     binary: devex-plugin-package-manager-snap
+    dir: packages/package-manager-snap
     env:
       - CGO_ENABLED=0
     goos:
