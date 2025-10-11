@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-pacman
 monorepo:
-  tag_prefix: plugin-package-manager-pacman-
+  tag_prefix: packages/package-manager-pacman/v
   dir: packages/package-manager-pacman
 builds:
   - id: plugin-package-manager-pacman
     main: .
     binary: devex-plugin-package-manager-pacman
+    dir: packages/package-manager-pacman
     env:
       - CGO_ENABLED=0
     goos:
