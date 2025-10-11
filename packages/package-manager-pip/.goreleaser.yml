@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-pip
 monorepo:
-  tag_prefix: plugin-package-manager-pip-
+  tag_prefix: packages/package-manager-pip/v
   dir: packages/package-manager-pip
 builds:
   - id: plugin-package-manager-pip
     main: .
     binary: devex-plugin-package-manager-pip
+    dir: packages/package-manager-pip
     env:
       - CGO_ENABLED=0
     goos:
