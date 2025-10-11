@@ -1,11 +1,13 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-appimage
 monorepo:
-  tag_prefix: plugin-package-manager-appimage-
+  tag_prefix: packages/package-manager-appimage/v
   dir: packages/package-manager-appimage
 builds:
   - id: plugin-package-manager-appimage
     main: .
+    dir: packages/package-manager-appimage
     binary: devex-plugin-package-manager-appimage
     env:
       - CGO_ENABLED=0
