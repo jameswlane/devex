@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-tool-shell
 monorepo:
-  tag_prefix: plugin-tool-shell-
+  tag_prefix: packages/tool-shell/v
   dir: packages/tool-shell
 builds:
   - id: plugin-tool-shell
     main: .
     binary: devex-plugin-tool-shell
+    dir: packages/tool-shell
     env:
       - CGO_ENABLED=0
     goos:
