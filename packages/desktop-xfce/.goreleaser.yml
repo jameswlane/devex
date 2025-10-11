@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-desktop-xfce
 monorepo:
-  tag_prefix: plugin-desktop-xfce-
+  tag_prefix: packages/desktop-xfce/v
   dir: packages/desktop-xfce
 builds:
   - id: plugin-desktop-xfce
     main: .
     binary: devex-plugin-desktop-xfce
+    dir: packages/desktop-xfce
     env:
       - CGO_ENABLED=0
     goos:
