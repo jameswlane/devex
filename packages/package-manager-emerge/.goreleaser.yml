@@ -1,12 +1,14 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
 project_name: devex-plugin-package-manager-emerge
 monorepo:
-  tag_prefix: plugin-package-manager-emerge-
+  tag_prefix: packages/package-manager-emerge/v
   dir: packages/package-manager-emerge
 builds:
   - id: plugin-package-manager-emerge
     main: .
     binary: devex-plugin-package-manager-emerge
+    dir: packages/package-manager-emerge
     env:
       - CGO_ENABLED=0
     goos:
