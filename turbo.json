@@ -35,12 +35,17 @@
 				".env"
 			],
 			"env": [
-				"GOOS",
-				"GOARCH",
 				"CGO_ENABLED",
 				"DATABASE_URL",
+				"GOARCH",
+				"GOOS",
+				"KV_REST_API_READ_ONLY_TOKEN",
+				"KV_REST_API_TOKEN",
+				"KV_REST_API_URL",
+				"KV_URL",
 				"POSTGRES_URL",
-				"PRISMA_DATABASE_URL"
+				"PRISMA_DATABASE_URL",
+				"REDIS_URL"
 			]
 		},
 		"db:generate": {
