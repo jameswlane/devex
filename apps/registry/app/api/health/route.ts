@@ -6,40 +6,59 @@ import { getStartupHealth } from "@/lib/startup";
 // GET /api/health - Basic health check
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  
-  try {
-    // Check if this is a detailed health check (for internal monitoring)
-    const url = new URL(request.url);
-    const detailed = url.searchParams.get("detailed") === "true";
-    const recovery = url.searchParams.get("recovery") === "true";
 
-    // Attempt recovery if requested and needed
-    if (recovery) {
-      const needsRecovery = await DatabaseRecovery.isRecoveryNeeded();
-      if (needsRecovery) {
-        const recovered = await DatabaseRecovery.attemptRecovery();
-        if (!recovered) {
-          return createApiError("Database recovery failed", 503);
+  try {
+    // Add request-level timeout to prevent hanging (10 seconds max)
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Health check timed out after 10 seconds")), 10000);
+    });
+
+    const healthCheckPromise = (async (): Promise<{ startupHealth: any; dbHealth: any; detailed: boolean } | null> => {
+      // Check if this is a detailed health check (for internal monitoring)
+      const url = new URL(request.url);
+      const detailed = url.searchParams.get("detailed") === "true";
+      const recovery = url.searchParams.get("recovery") === "true";
+
+      // Attempt recovery if requested and needed
+      if (recovery) {
+        const needsRecovery = await DatabaseRecovery.isRecoveryNeeded();
+        if (needsRecovery) {
+          const recovered = await DatabaseRecovery.attemptRecovery();
+          if (!recovered) {
+            // Return null to signal failure
+            return null;
+          }
         }
       }
+
+      // Get startup health information
+      let startupHealth;
+      try {
+        startupHealth = await getStartupHealth();
+      } catch (error) {
+        logger.warn("Failed to get startup health information", {
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+        startupHealth = {
+          status: "failed" as const,
+          uptime: process.uptime() * 1000,
+        };
+      }
+
+      // Get database and Redis health
+      const dbHealth = await dbHealthMonitor.checkHealth();
+
+      return { startupHealth, dbHealth, detailed };
+    })();
+
+    const result = await Promise.race([timeoutPromise, healthCheckPromise]);
+
+    // Handle recovery failure
+    if (result === null) {
+      return createApiError("Database recovery failed", 503);
     }
 
-    // Get startup health information
-    let startupHealth;
-    try {
-      startupHealth = await getStartupHealth();
-    } catch (error) {
-      logger.warn("Failed to get startup health information", {
-        error: error instanceof Error ? error.message : "Unknown error",
-      });
-      startupHealth = {
-        status: "failed" as const,
-        uptime: process.uptime() * 1000,
-      };
-    }
-
-    // Get database and Redis health
-    const dbHealth = await dbHealthMonitor.checkHealth();
+    const { startupHealth, dbHealth, detailed } = result;
     
     // Return enhanced health check response with startup information
     const responseTime = Date.now() - startTime;

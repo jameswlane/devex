@@ -36,8 +36,8 @@ export class DatabaseHealthMonitor {
   constructor(config?: Partial<HealthCheckConfig>) {
     this.config = {
       cacheTimeMs: config?.cacheTimeMs ?? 30000, // 30 seconds default
-      timeout: config?.timeout ?? 5000, // 5 seconds default
-      retries: config?.retries ?? 2, // 2 retries default
+      timeout: config?.timeout ?? 3000, // 3 seconds default (reduced)
+      retries: config?.retries ?? 1, // 1 retry default (reduced)
     };
   }
 
@@ -239,8 +239,8 @@ export class DatabaseHealthMonitor {
 // Global health monitor instance with environment-based configuration
 export const dbHealthMonitor = new DatabaseHealthMonitor({
   cacheTimeMs: parseInt(process.env.HEALTH_CHECK_CACHE_MS || "30000", 10),
-  timeout: parseInt(process.env.HEALTH_CHECK_TIMEOUT_MS || "5000", 10),
-  retries: parseInt(process.env.HEALTH_CHECK_RETRIES || "2", 10),
+  timeout: parseInt(process.env.HEALTH_CHECK_TIMEOUT_MS || "3000", 10),
+  retries: parseInt(process.env.HEALTH_CHECK_RETRIES || "1", 10),
 });
 
 // Health check endpoint handler

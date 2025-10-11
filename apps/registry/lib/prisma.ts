@@ -138,9 +138,9 @@ function enhanceDatabaseUrlWithPooling(originalUrl: string): string {
 			params.set('pool_timeout', '10');
 		}
 
-		// Set statement timeout
+		// Set statement timeout (reduced for faster failure detection)
 		if (!params.has('statement_timeout')) {
-			params.set('statement_timeout', '30000'); // 30 seconds
+			params.set('statement_timeout', '10000'); // 10 seconds
 		}
 
 		// Enable connection pooling mode for better performance

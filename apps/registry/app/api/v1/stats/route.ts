@@ -7,14 +7,21 @@ import { createOptimizedResponse, ResponseType } from "../../../../lib/response-
 import { Prisma } from "@prisma/client";
 
 async function handleGetStats(request: NextRequest): Promise<NextResponse> {
-		const url = new URL(request.url);
-		const forceRefresh = url.searchParams.get("refresh") === "true";
+	const url = new URL(request.url);
+	const forceRefresh = url.searchParams.get("refresh") === "true";
 
 	// Get Prisma client with proper error handling
 	const prismaClient = ensurePrisma();
 
+	// Add request-level timeout to prevent hanging (15 seconds max)
+	const timeoutPromise = new Promise<never>((_, reject) => {
+		setTimeout(() => reject(new Error("Stats query timed out after 15 seconds")), 15000);
+	});
+
 	// Wrap expensive aggregation in a cache with database retry logic
-	const stats = await withQueryCache(
+	const stats = await Promise.race([
+		timeoutPromise,
+		withQueryCache(
 		async () => {
 			return await safeDatabase(async () => {
 				const startTime = Date.now();
@@ -158,7 +165,8 @@ async function handleGetStats(request: NextRequest): Promise<NextResponse> {
 			ttl: 600, // 10 minutes
 			forceRefresh,
 		}
-	);
+		)
+	]);
 
 	return createOptimizedResponse(stats, {
 		type: ResponseType.DYNAMIC,
