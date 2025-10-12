@@ -166,10 +166,11 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 
 	downloader := sdk.NewDownloader(registryURL, pluginDir)
 
-	// Configure downloader logger based on test mode
-	if log.IsTestMode() {
-		downloader.SetSilent(true)
-	}
+	// Configure downloader to use CLI logger adapter
+	// In test mode, silence stdout but still log to file
+	// In production, log everything to file (silent mode for TUI compatibility)
+	loggerAdapter := NewSDKLoggerAdapter(true) // Always silent to avoid TUI conflicts
+	downloader.SetLogger(loggerAdapter)
 
 	return &PluginBootstrap{
 		detector:     platform.NewDetector(),
