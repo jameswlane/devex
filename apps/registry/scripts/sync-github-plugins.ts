@@ -28,10 +28,13 @@ interface PluginMetadata {
   author?: string;
   license?: string;
   repository?: string;
+  homepage?: string;
   platforms: string[];
   binaries: Record<string, BinaryInfo>;
   sdkVersion?: string;
+  apiVersion?: string;
   dependencies: string[];
+  conflicts?: string[];
 }
 
 interface BinaryInfo {
@@ -205,9 +208,13 @@ async function getPluginMetadata(
     author: 'DevEx Team',
     license: 'MIT',
     repository: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
+    homepage: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tree/main/packages/plugins/${pluginInfo.name}`,
     platforms: ['linux', 'macos', 'windows'],
     binaries: await generateBinaryInfo(pluginInfo, tag),
+    sdkVersion: '1.0.0', // Default SDK version, should be extracted from plugin
+    apiVersion: 'v1',    // Default API version for registry compatibility
     dependencies: [],
+    conflicts: [],
   };
 
   // Try to get more detailed metadata from release or package files
@@ -251,6 +258,10 @@ async function generateBinaryInfo(
     { os: 'windows', arch: 'arm64' },
   ];
 
+  // Fetch release assets to get checksums and sizes
+  const releaseData = await getReleaseByTag(tag.name);
+  const assets = releaseData?.assets || [];
+
   for (const platform of platforms) {
     const platformKey = `${platform.os}-${platform.arch}`;
     const fileExtension = platform.os === 'windows' ? 'zip' : 'tar.gz';
@@ -259,10 +270,30 @@ async function generateBinaryInfo(
     // Build GitHub download URL
     const downloadUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${tag.name}/${assetName}`;
 
+    // Find matching asset to get real size
+    const asset = assets.find((a: any) => a.name === assetName);
+
+    // Find checksum file for this asset
+    const checksumAssetName = `${assetName}.sha256`;
+    const checksumAsset = assets.find((a: any) => a.name === checksumAssetName);
+
+    let checksum = '';
+    if (checksumAsset) {
+      try {
+        // Fetch the checksum file content
+        const checksumResponse = await fetch(checksumAsset.browser_download_url);
+        const checksumText = await checksumResponse.text();
+        // Checksum files typically contain: "checksum  filename"
+        checksum = checksumText.split(/\s+/)[0];
+      } catch (error) {
+        console.log(`⚠️  Could not fetch checksum for ${assetName}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+
     binaries[platformKey] = {
       url: downloadUrl,
-      checksum: '', // TODO: Calculate or fetch from release assets
-      size: 0,      // TODO: Get from release assets
+      checksum: checksum,
+      size: asset?.size || 0,
     };
   }
 
@@ -308,8 +339,12 @@ async function updatePlugin(
       binaries: metadata.binaries as any,
       author: metadata.author,
       license: metadata.license,
+      homepage: metadata.homepage,
       repository: metadata.repository,
       dependencies: metadata.dependencies,
+      conflicts: metadata.conflicts || [],
+      sdkVersion: metadata.sdkVersion,
+      apiVersion: metadata.apiVersion,
       githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
       githubPath: tag.name,
       lastSynced: new Date(),
@@ -333,8 +368,12 @@ async function createPlugin(metadata: PluginMetadata, tag: GitHubTag) {
       binaries: metadata.binaries as any,
       author: metadata.author,
       license: metadata.license,
+      homepage: metadata.homepage,
       repository: metadata.repository,
       dependencies: metadata.dependencies,
+      conflicts: metadata.conflicts || [],
+      sdkVersion: metadata.sdkVersion,
+      apiVersion: metadata.apiVersion,
       githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
       githubPath: tag.name,
       lastSynced: new Date(),

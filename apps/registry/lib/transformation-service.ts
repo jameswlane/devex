@@ -8,7 +8,13 @@ import type {
 	StackResponse,
 	PaginatedResponse,
 } from "./types/registry";
-import type { Plugin, Application, Config, Stack, RegistryStats } from "@prisma/client";
+import type {
+	Plugin,
+	Application,
+	Config,
+	Stack,
+	RegistryStats,
+} from "@prisma/client";
 
 // Cache configuration for transformations
 const TRANSFORMATION_CACHE = {
@@ -40,6 +46,17 @@ type PluginWithExtras = {
 	status: string;
 	supports: PluginCapabilities;
 	platforms: string[];
+	version: string;
+	latestVersion: string | null;
+	binaries: any; // JSON field containing Record<string, PlatformBinary>
+	author: string | null;
+	license: string | null;
+	homepage: string | null;
+	repository: string | null;
+	dependencies: string[];
+	conflicts: string[];
+	sdkVersion: string | null;
+	apiVersion: string | null;
 	githubUrl: string | null;
 	githubPath: string | null;
 	downloadCount: number;
@@ -58,37 +75,39 @@ interface PlatformSupportInfo {
 	}>;
 }
 
-type ApplicationWithSupport = {
-	name: string;
-	description: string;
-	category: string;
-	official: boolean;
-	default: boolean;
-	tags: string[];
-	desktopEnvironments: string[];
-	githubUrl: string | null;
-	githubPath: string | null;
-	// Optimized JSON platform support structure
-	platforms: {
-		linux?: PlatformSupportInfo | null;
-		macos?: PlatformSupportInfo | null;
-		windows?: PlatformSupportInfo | null;
-	};
-} | {
-	// Legacy support format for backward compatibility
-	name: string;
-	description: string;
-	category: string;
-	official: boolean;
-	default: boolean;
-	tags: string[];
-	desktopEnvironments: string[];
-	githubUrl: string | null;
-	githubPath: string | null;
-	linuxSupport: PlatformSupportInfo | null;
-	macosSupport: PlatformSupportInfo | null;
-	windowsSupport: PlatformSupportInfo | null;
-};
+type ApplicationWithSupport =
+	| {
+			name: string;
+			description: string;
+			category: string;
+			official: boolean;
+			default: boolean;
+			tags: string[];
+			desktopEnvironments: string[];
+			githubUrl: string | null;
+			githubPath: string | null;
+			// Optimized JSON platform support structure
+			platforms: {
+				linux?: PlatformSupportInfo | null;
+				macos?: PlatformSupportInfo | null;
+				windows?: PlatformSupportInfo | null;
+			};
+	  }
+	| {
+			// Legacy support format for backward compatibility
+			name: string;
+			description: string;
+			category: string;
+			official: boolean;
+			default: boolean;
+			tags: string[];
+			desktopEnvironments: string[];
+			githubUrl: string | null;
+			githubPath: string | null;
+			linuxSupport: PlatformSupportInfo | null;
+			macosSupport: PlatformSupportInfo | null;
+			windowsSupport: PlatformSupportInfo | null;
+	  };
 
 // Configuration content interface based on type
 interface ConfigContent {
@@ -183,18 +202,25 @@ export class RegistryTransformationService {
 		} else {
 			this.cacheStats.misses++;
 		}
-		this.cacheStats.hitRate = this.cacheStats.totalRequests > 0
-			? this.cacheStats.hits / this.cacheStats.totalRequests
-			: 0;
+		this.cacheStats.hitRate =
+			this.cacheStats.totalRequests > 0
+				? this.cacheStats.hits / this.cacheStats.totalRequests
+				: 0;
 	}
 
 	// Persist cache statistics to Redis
 	private async persistCacheStats(): Promise<void> {
 		try {
 			const statsKey = `${TRANSFORMATION_CACHE.STATS_PREFIX}global`;
-			await redis.set(statsKey, JSON.stringify(this.cacheStats), TRANSFORMATION_CACHE.LONG_TTL);
+			await redis.set(
+				statsKey,
+				JSON.stringify(this.cacheStats),
+				TRANSFORMATION_CACHE.LONG_TTL,
+			);
 		} catch (error) {
-			logger.warn("Failed to persist cache stats", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to persist cache stats", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -207,7 +233,9 @@ export class RegistryTransformationService {
 				this.cacheStats = { ...this.cacheStats, ...JSON.parse(cached) };
 			}
 		} catch (error) {
-			logger.warn("Failed to load cache stats", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to load cache stats", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -221,11 +249,13 @@ export class RegistryTransformationService {
 			// For Upstash Redis, we'll store as a JSON array since it doesn't support sets
 			const [existingKeys, existingTimestamps] = await Promise.all([
 				redis.get(trackingKey),
-				redis.get(timestampKey)
+				redis.get(timestampKey),
 			]);
 
 			const keySet = existingKeys ? JSON.parse(existingKeys) : [];
-			const timestampMap = existingTimestamps ? JSON.parse(existingTimestamps) : {};
+			const timestampMap = existingTimestamps
+				? JSON.parse(existingTimestamps)
+				: {};
 
 			if (!keySet.includes(cacheKey)) {
 				keySet.push(cacheKey);
@@ -234,8 +264,13 @@ export class RegistryTransformationService {
 				// Limit tracking to prevent unbounded growth with LRU-like cleanup
 				if (keySet.length > TRANSFORMATION_CACHE.MAX_TRACKED_KEYS) {
 					// Remove the oldest 20% of keys
-					const sortedKeys = Object.keys(timestampMap).sort((a, b) => timestampMap[a] - timestampMap[b]);
-					const keysToRemove = sortedKeys.slice(0, Math.floor(TRANSFORMATION_CACHE.MAX_TRACKED_KEYS * 0.2));
+					const sortedKeys = Object.keys(timestampMap).sort(
+						(a, b) => timestampMap[a] - timestampMap[b],
+					);
+					const keysToRemove = sortedKeys.slice(
+						0,
+						Math.floor(TRANSFORMATION_CACHE.MAX_TRACKED_KEYS * 0.2),
+					);
 
 					for (const keyToRemove of keysToRemove) {
 						const index = keySet.indexOf(keyToRemove);
@@ -246,15 +281,25 @@ export class RegistryTransformationService {
 
 				// Update tracking with longer TTL than the cache itself
 				await Promise.all([
-					redis.set(trackingKey, JSON.stringify(keySet), TRANSFORMATION_CACHE.TTL * 2),
-					redis.set(timestampKey, JSON.stringify(timestampMap), TRANSFORMATION_CACHE.TTL * 2)
+					redis.set(
+						trackingKey,
+						JSON.stringify(keySet),
+						TRANSFORMATION_CACHE.TTL * 2,
+					),
+					redis.set(
+						timestampKey,
+						JSON.stringify(timestampMap),
+						TRANSFORMATION_CACHE.TTL * 2,
+					),
 				]);
 
 				this.cacheStats.cacheSize = keySet.length;
 			}
 		} catch (error) {
 			// Don't fail the operation if tracking fails
-			logger.warn("Failed to track cache key", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to track cache key", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -265,7 +310,9 @@ export class RegistryTransformationService {
 			const existingKeys = await redis.get(trackingKey);
 			return existingKeys ? JSON.parse(existingKeys) : [];
 		} catch (error) {
-			logger.warn("Failed to get tracked keys", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to get tracked keys", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 			return [];
 		}
 	}
@@ -287,12 +334,21 @@ export class RegistryTransformationService {
 		// For more sensitive caching, include content-based hash
 		if (useContent && data.length <= 10) {
 			// Only hash content for small datasets to avoid performance issues
-			hashData.contentHash = Buffer.from(JSON.stringify(data.map(item =>
-				({ name: item.name, updated: item.updatedAt || item.createdAt })
-			))).toString("base64").slice(0, 8);
+			hashData.contentHash = Buffer.from(
+				JSON.stringify(
+					data.map((item) => ({
+						name: item.name,
+						updated: item.updatedAt || item.createdAt,
+					})),
+				),
+			)
+				.toString("base64")
+				.slice(0, 8);
 		}
 
-		return Buffer.from(JSON.stringify(hashData)).toString("base64").slice(0, 16);
+		return Buffer.from(JSON.stringify(hashData))
+			.toString("base64")
+			.slice(0, 16);
 	}
 
 	// Determine appropriate TTL based on data characteristics
@@ -313,11 +369,15 @@ export class RegistryTransformationService {
 		}
 
 		// Small datasets can have longer cache since they're cheaper to regenerate
-		return dataLength <= 10 ? TRANSFORMATION_CACHE.LONG_TTL : TRANSFORMATION_CACHE.TTL;
+		return dataLength <= 10
+			? TRANSFORMATION_CACHE.LONG_TTL
+			: TRANSFORMATION_CACHE.TTL;
 	}
 
 	// Transform plugins with caching
-	async transformPlugins(plugins: PluginWithExtras[]): Promise<PluginResponse[]> {
+	async transformPlugins(
+		plugins: PluginWithExtras[],
+	): Promise<PluginResponse[]> {
 		if (plugins.length === 0) return [];
 
 		// Load cache stats on first use
@@ -336,7 +396,9 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			logger.warn("Failed to get cached plugin transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to get cached plugin transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		// Cache miss
@@ -357,11 +419,18 @@ export class RegistryTransformationService {
 				supports: plugin.supports as Record<string, boolean>,
 				platforms: plugin.platforms,
 				tags: [],
-				version: REGISTRY_CONFIG.PLUGIN_VERSION,
-				author: REGISTRY_CONFIG.PLUGIN_AUTHOR,
-				repository: plugin.githubUrl || REGISTRY_CONFIG.PLUGIN_REPOSITORY,
-				dependencies: [],
-				release_tag: `@devex/${plugin.name}@${REGISTRY_CONFIG.PLUGIN_VERSION}`,
+				version: plugin.version,
+				latestVersion: plugin.latestVersion,
+				author: plugin.author,
+				license: plugin.license,
+				homepage: plugin.homepage,
+				repository: plugin.repository || plugin.githubUrl,
+				dependencies: plugin.dependencies,
+				conflicts: plugin.conflicts,
+				binaries: plugin.binaries as Record<string, { url: string; checksum: string; size: number }>,
+				sdkVersion: plugin.sdkVersion,
+				apiVersion: plugin.apiVersion,
+				release_tag: `packages/${plugin.name}@${plugin.version}`,
 				githubPath: plugin.githubPath,
 				downloadCount: plugin.downloadCount,
 				lastDownload: plugin.lastDownload?.toISOString(),
@@ -381,14 +450,18 @@ export class RegistryTransformationService {
 				await this.persistCacheStats();
 			}
 		} catch (error) {
-			logger.warn("Failed to cache plugin transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to cache plugin transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		return transformed;
 	}
 
 	// Transform applications with caching
-	async transformApplications(applications: ApplicationWithSupport[]): Promise<ApplicationResponse[]> {
+	async transformApplications(
+		applications: ApplicationWithSupport[],
+	): Promise<ApplicationResponse[]> {
 		if (applications.length === 0) return [];
 
 		const hash = this.generateDataHash(applications, applications.length <= 50);
@@ -401,7 +474,9 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			logger.warn("Failed to get cached application transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to get cached application transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		this.updateCacheStats(false);
@@ -409,38 +484,50 @@ export class RegistryTransformationService {
 		// Transform applications in batches
 		const transformed: ApplicationResponse[] = [];
 
-		for (let i = 0; i < applications.length; i += TRANSFORMATION_CACHE.BATCH_SIZE) {
+		for (
+			let i = 0;
+			i < applications.length;
+			i += TRANSFORMATION_CACHE.BATCH_SIZE
+		) {
 			const batch = applications.slice(i, i + TRANSFORMATION_CACHE.BATCH_SIZE);
 
 			const batchTransformed = batch.map((app) => {
 				// Handle both new JSON format and legacy format
-				const getPlatformSupport = (platformName: 'linux' | 'macos' | 'windows') => {
+				const getPlatformSupport = (
+					platformName: "linux" | "macos" | "windows",
+				) => {
 					// New JSON format
-					if ('platforms' in app && app.platforms) {
+					if ("platforms" in app && app.platforms) {
 						const platform = app.platforms[platformName];
-						return platform ? {
-							installMethod: platform.installMethod,
-							installCommand: platform.installCommand,
-							officialSupport: platform.officialSupport,
-							alternatives: (platform.alternatives as Array<{
-								method: string;
-								command: string;
-							}>) || [],
-						} : null;
+						return platform
+							? {
+									installMethod: platform.installMethod,
+									installCommand: platform.installCommand,
+									officialSupport: platform.officialSupport,
+									alternatives:
+										(platform.alternatives as Array<{
+											method: string;
+											command: string;
+										}>) || [],
+								}
+							: null;
 					}
-					
+
 					// Legacy format
 					const legacyApp = app as any;
 					const legacyPlatform = legacyApp[`${platformName}Support`];
-					return legacyPlatform ? {
-						installMethod: legacyPlatform.installMethod,
-						installCommand: legacyPlatform.installCommand,
-						officialSupport: legacyPlatform.officialSupport,
-						alternatives: (legacyPlatform.alternatives as Array<{
-							method: string;
-							command: string;
-						}>) || [],
-					} : null;
+					return legacyPlatform
+						? {
+								installMethod: legacyPlatform.installMethod,
+								installCommand: legacyPlatform.installCommand,
+								officialSupport: legacyPlatform.officialSupport,
+								alternatives:
+									(legacyPlatform.alternatives as Array<{
+										method: string;
+										command: string;
+									}>) || [],
+							}
+						: null;
 				};
 
 				return {
@@ -451,9 +538,9 @@ export class RegistryTransformationService {
 					official: app.official,
 					default: app.default,
 					platforms: {
-						linux: getPlatformSupport('linux'),
-						macos: getPlatformSupport('macos'),
-						windows: getPlatformSupport('windows'),
+						linux: getPlatformSupport("linux"),
+						macos: getPlatformSupport("macos"),
+						windows: getPlatformSupport("windows"),
 					},
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments,
@@ -475,14 +562,18 @@ export class RegistryTransformationService {
 				await this.persistCacheStats();
 			}
 		} catch (error) {
-			logger.warn("Failed to cache application transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to cache application transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		return transformed;
 	}
 
 	// Transform configs with caching
-	async transformConfigs(configs: ConfigWithExtras[]): Promise<ConfigResponse[]> {
+	async transformConfigs(
+		configs: ConfigWithExtras[],
+	): Promise<ConfigResponse[]> {
 		if (configs.length === 0) return [];
 
 		const hash = this.generateDataHash(configs, configs.length <= 20);
@@ -495,7 +586,9 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			logger.warn("Failed to get cached config transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to get cached config transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		this.updateCacheStats(false);
@@ -524,7 +617,9 @@ export class RegistryTransformationService {
 				await this.persistCacheStats();
 			}
 		} catch (error) {
-			logger.warn("Failed to cache config transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to cache config transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		return transformed;
@@ -544,7 +639,9 @@ export class RegistryTransformationService {
 				return JSON.parse(cached);
 			}
 		} catch (error) {
-			logger.warn("Failed to get cached stack transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to get cached stack transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		this.updateCacheStats(false);
@@ -575,7 +672,9 @@ export class RegistryTransformationService {
 				await this.persistCacheStats();
 			}
 		} catch (error) {
-			logger.warn("Failed to cache stack transformations", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Failed to cache stack transformations", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 
 		return transformed;
@@ -598,13 +697,17 @@ export class RegistryTransformationService {
 		limit: number;
 	}): Promise<PaginatedResponse> {
 		// Use Promise.all to transform all data types in parallel
-		const [pluginsFormatted, applicationsFormatted, configsFormatted, stacksFormatted] =
-			await Promise.all([
-				this.transformPlugins(data.plugins),
-				this.transformApplications(data.applications),
-				this.transformConfigs(data.configs),
-				this.transformStacks(data.stacks),
-			]);
+		const [
+			pluginsFormatted,
+			applicationsFormatted,
+			configsFormatted,
+			stacksFormatted,
+		] = await Promise.all([
+			this.transformPlugins(data.plugins),
+			this.transformApplications(data.applications),
+			this.transformConfigs(data.configs),
+			this.transformStacks(data.stacks),
+		]);
 
 		const response: PaginatedResponse = {
 			base_url: REGISTRY_CONFIG.BASE_URL,
@@ -648,10 +751,11 @@ export class RegistryTransformationService {
 					plugins: data.totalCounts.plugins,
 					configs: data.totalCounts.configs,
 					stacks: data.totalCounts.stacks,
-					all: data.totalCounts.applications +
-						 data.totalCounts.plugins +
-						 data.totalCounts.configs +
-						 data.totalCounts.stacks,
+					all:
+						data.totalCounts.applications +
+						data.totalCounts.plugins +
+						data.totalCounts.configs +
+						data.totalCounts.stacks,
 				},
 				platforms: {
 					linux: data.stats?.linuxSupported || 0,
@@ -662,7 +766,8 @@ export class RegistryTransformationService {
 					totalDownloads: data.stats?.totalDownloads || 0,
 					dailyDownloads: data.stats?.dailyDownloads || 0,
 				},
-				lastUpdated: data.stats?.date?.toISOString() || new Date().toISOString(),
+				lastUpdated:
+					data.stats?.date?.toISOString() || new Date().toISOString(),
 			},
 		};
 
@@ -670,9 +775,16 @@ export class RegistryTransformationService {
 	}
 
 	// Invalidate transformation cache when data changes
-	async invalidateTransformationCache(types?: ("plugins" | "applications" | "configs" | "stacks")[]): Promise<void> {
+	async invalidateTransformationCache(
+		types?: ("plugins" | "applications" | "configs" | "stacks")[],
+	): Promise<void> {
 		try {
-			const typesToInvalidate = types || ["plugins", "applications", "configs", "stacks"];
+			const typesToInvalidate = types || [
+				"plugins",
+				"applications",
+				"configs",
+				"stacks",
+			];
 
 			// Use tracked keys for efficient cache invalidation
 			const promises = typesToInvalidate.map(async (type) => {
@@ -681,7 +793,11 @@ export class RegistryTransformationService {
 
 			await Promise.all(promises);
 		} catch (error) {
-			logger.error("Failed to invalidate transformation cache", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+			logger.error(
+				"Failed to invalidate transformation cache",
+				{ error: error instanceof Error ? error.message : String(error) },
+				error instanceof Error ? error : undefined,
+			);
 		}
 	}
 
@@ -699,7 +815,7 @@ export class RegistryTransformationService {
 
 			for (let i = 0; i < trackedKeys.length; i += batchSize) {
 				const batch = trackedKeys.slice(i, i + batchSize);
-				const deletePromises = batch.map(key => redis.del(key));
+				const deletePromises = batch.map((key) => redis.del(key));
 				await Promise.all(deletePromises);
 				deletedCount += batch.length;
 			}
@@ -710,7 +826,11 @@ export class RegistryTransformationService {
 
 			return deletedCount;
 		} catch (error) {
-			logger.error("Failed to delete tracked keys", { type, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+			logger.error(
+				"Failed to delete tracked keys",
+				{ type, error: error instanceof Error ? error.message : String(error) },
+				error instanceof Error ? error : undefined,
+			);
 			// Fallback to pattern-based deletion
 			const pattern = `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:*`;
 			return await this.deleteKeysByPattern(pattern);
@@ -721,8 +841,10 @@ export class RegistryTransformationService {
 	private async deleteKeysByPattern(pattern: string): Promise<number> {
 		try {
 			// Check if Redis client supports scan operation
-			if (typeof redis.ping !== 'function') {
-				logger.warn("Redis client doesn't support pattern scanning, skipping cache invalidation");
+			if (typeof redis.ping !== "function") {
+				logger.warn(
+					"Redis client doesn't support pattern scanning, skipping cache invalidation",
+				);
 				return 0;
 			}
 
@@ -739,7 +861,15 @@ export class RegistryTransformationService {
 					cursor = scanResult.cursor;
 					keysToDelete.push(...scanResult.keys);
 				} catch (scanError) {
-					logger.warn("SCAN operation failed, falling back to key tracking approach", { error: scanError instanceof Error ? scanError.message : String(scanError) });
+					logger.warn(
+						"SCAN operation failed, falling back to key tracking approach",
+						{
+							error:
+								scanError instanceof Error
+									? scanError.message
+									: String(scanError),
+						},
+					);
 					// Fallback: try to delete common patterns
 					await this.fallbackKeyDeletion(pattern);
 					return 0;
@@ -751,7 +881,7 @@ export class RegistryTransformationService {
 				const batchSize = 50;
 				for (let i = 0; i < keysToDelete.length; i += batchSize) {
 					const batch = keysToDelete.slice(i, i + batchSize);
-					const deletePromises = batch.map(key => redis.del(key));
+					const deletePromises = batch.map((key) => redis.del(key));
 					await Promise.all(deletePromises);
 					deletedCount += batch.length;
 				}
@@ -759,22 +889,39 @@ export class RegistryTransformationService {
 
 			return deletedCount;
 		} catch (error) {
-			logger.error("Failed to delete keys by pattern", { pattern, error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+			logger.error(
+				"Failed to delete keys by pattern",
+				{
+					pattern,
+					error: error instanceof Error ? error.message : String(error),
+				},
+				error instanceof Error ? error : undefined,
+			);
 			return 0;
 		}
 	}
 
 	// Scan keys helper method - abstracts Redis SCAN operation
-	private async scanKeys(cursor: number, pattern: string, count: number): Promise<{ cursor: number; keys: string[] }> {
+	private async scanKeys(
+		cursor: number,
+		pattern: string,
+		count: number,
+	): Promise<{ cursor: number; keys: string[] }> {
 		// For most Redis clients, this would use the SCAN command
 		// For Upstash Redis REST API, we need to implement differently
 
 		// Try to use native scan if available
-		if ('scan' in redis && typeof (redis as any).scan === 'function') {
-			const result = await (redis as any).scan(cursor, 'MATCH', pattern, 'COUNT', count);
+		if ("scan" in redis && typeof (redis as any).scan === "function") {
+			const result = await (redis as any).scan(
+				cursor,
+				"MATCH",
+				pattern,
+				"COUNT",
+				count,
+			);
 			return {
 				cursor: parseInt(result[0]),
-				keys: result[1] || []
+				keys: result[1] || [],
 			};
 		}
 
@@ -793,14 +940,16 @@ export class RegistryTransformationService {
 
 		// Generate some common hash patterns to try deleting
 		// This is not perfect but better than nothing
-		const commonHashes = ['empty', 'cached', 'default'];
-		const keysToTry = commonHashes.map(hash =>
-			`${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`
+		const commonHashes = ["empty", "cached", "default"];
+		const keysToTry = commonHashes.map(
+			(hash) => `${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`,
 		);
 
 		// Also try some generated patterns based on typical data sizes
 		for (let size = 1; size <= 100; size += 10) {
-			const hash = Buffer.from(JSON.stringify({ length: size })).toString("base64").slice(0, 16);
+			const hash = Buffer.from(JSON.stringify({ length: size }))
+				.toString("base64")
+				.slice(0, 16);
 			keysToTry.push(`${TRANSFORMATION_CACHE.KEY_PREFIX}${type}:${hash}`);
 		}
 
@@ -817,7 +966,12 @@ export class RegistryTransformationService {
 	}
 
 	// Cache preloading for frequently accessed data
-	async preloadCache(types: ("plugins" | "applications" | "configs" | "stacks")[] = ["plugins", "applications"]): Promise<void> {
+	async preloadCache(
+		types: ("plugins" | "applications" | "configs" | "stacks")[] = [
+			"plugins",
+			"applications",
+		],
+	): Promise<void> {
 		try {
 			logger.info("Starting cache preloading", { types });
 
@@ -826,11 +980,17 @@ export class RegistryTransformationService {
 
 			// For now, we'll track that preloading was requested
 			const preloadKey = `${TRANSFORMATION_CACHE.STATS_PREFIX}preload:${Date.now()}`;
-			await redis.set(preloadKey, JSON.stringify({ types, timestamp: Date.now() }), TRANSFORMATION_CACHE.SHORT_TTL);
+			await redis.set(
+				preloadKey,
+				JSON.stringify({ types, timestamp: Date.now() }),
+				TRANSFORMATION_CACHE.SHORT_TTL,
+			);
 
 			logger.info("Cache preloading completed", { types });
 		} catch (error) {
-			logger.warn("Cache preloading failed", { error: error instanceof Error ? error.message : String(error) });
+			logger.warn("Cache preloading failed", {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -841,9 +1001,10 @@ export class RegistryTransformationService {
 
 		return {
 			...this.cacheStats,
-			hitRate: this.cacheStats.totalRequests > 0
-				? this.cacheStats.hits / this.cacheStats.totalRequests
-				: 0,
+			hitRate:
+				this.cacheStats.totalRequests > 0
+					? this.cacheStats.hits / this.cacheStats.totalRequests
+					: 0,
 		};
 	}
 

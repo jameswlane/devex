@@ -14,6 +14,13 @@ export interface PlatformInstallInfo {
 	alternatives: InstallAlternative[];
 }
 
+// Binary information for a specific platform
+export interface PlatformBinary {
+	url: string;
+	checksum: string;
+	size: number;
+}
+
 // Plugin response type
 export interface PluginResponse {
 	name: string;
@@ -25,9 +32,16 @@ export interface PluginResponse {
 	platforms: string[];
 	tags: string[];
 	version: string;
-	author: string;
-	repository: string;
+	latestVersion?: string | null;
+	author?: string | null;
+	license?: string | null;
+	homepage?: string | null;
+	repository?: string | null;
 	dependencies: string[];
+	conflicts: string[];
+	binaries: Record<string, PlatformBinary>;
+	sdkVersion?: string | null;
+	apiVersion?: string | null;
 	release_tag: string;
 	githubPath?: string | null;
 	downloadCount: number;
