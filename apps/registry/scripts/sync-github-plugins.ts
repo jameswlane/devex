@@ -373,8 +373,8 @@ async function generateBinaryInfo(
     const filename = asset.name;
 
     // Extract platform and arch from filename
-    // Format: devex-plugin-{fullName}_v{version}_{os}_{arch}.{ext}
-    const match = filename.match(/devex-plugin-.+?_v[\d.]+_(\w+)_(\w+)\.(tar\.gz|zip)$/);
+    // Format: devex-plugin-{fullName}_{version}_{os}_{arch}.{ext}
+    const match = filename.match(/devex-plugin-.+?_[\d.]+_(\w+)_(\w+)\.(tar\.gz|zip)$/);
     if (!match) {
       console.log(`⚠️  Could not parse platform from filename: ${filename}`);
       continue;
