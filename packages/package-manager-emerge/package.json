@@ -1,47 +1,47 @@
 {
-  "name": "@devex/package-manager-emerge",
-  "private": true,
-  "version": "1.8.2",
-  "description": "Emerge plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-package-manager-emerge .",
-    "dev": "go build -race -o devex-plugin-package-manager-emerge main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "emerge",
-    "portage",
-    "gentoo",
-    "linux"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/package-manager-emerge"
-  },
-  "devex": {
-    "plugin": {
-      "type": "package-manager",
-      "platforms": [
-        "linux"
-      ],
-      "dependencies": [
-        "emerge"
-      ],
-      "priority": 10,
-      "supports": {
-        "install": true,
-        "remove": true,
-        "update": true,
-        "search": true,
-        "list": true
-      }
-    }
-  }
+	"name": "@devex/package-manager-emerge",
+	"private": true,
+	"version": "1.8.2",
+	"description": "Emerge plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-emerge .",
+		"dev": "go build -race -o devex-plugin-package-manager-emerge main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"emerge",
+		"portage",
+		"gentoo",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-emerge"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"dependencies": [
+				"emerge"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
 }

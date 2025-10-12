@@ -1,44 +1,44 @@
 {
-  "name": "@devex/tool-stackdetector",
-  "private": true,
-  "version": "1.8.2",
-  "description": "Development stack detection plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-tool-stackdetector .",
-    "dev": "go build -race -o devex-plugin-tool-stackdetector .",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "development",
-    "stack",
-    "detection"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/tool-stackdetector"
-  },
-  "devex": {
-    "plugin": {
-      "type": "tool",
-      "platforms": [
-        "linux",
-        "darwin",
-        "windows"
-      ],
-      "dependencies": [],
-      "priority": 3,
-      "supports": {
-        "detect": true,
-        "analyze": true,
-        "report": true
-      }
-    }
-  }
+	"name": "@devex/tool-stackdetector",
+	"private": true,
+	"version": "1.8.2",
+	"description": "Development stack detection plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-tool-stackdetector .",
+		"dev": "go build -race -o devex-plugin-tool-stackdetector .",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"development",
+		"stack",
+		"detection"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/tool-stackdetector"
+	},
+	"devex": {
+		"plugin": {
+			"type": "tool",
+			"platforms": [
+				"linux",
+				"darwin",
+				"windows"
+			],
+			"dependencies": [],
+			"priority": 3,
+			"supports": {
+				"detect": true,
+				"analyze": true,
+				"report": true
+			}
+		}
+	}
 }

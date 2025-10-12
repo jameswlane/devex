@@ -1,48 +1,48 @@
 {
-  "name": "@devex/package-manager-pip",
-  "private": true,
-  "version": "1.8.2",
-  "description": "Pip plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-package-manager-pip .",
-    "dev": "go build -race -o devex-plugin-package-manager-pip .",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "pip",
-    "python",
-    "packages"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/package-manager-pip"
-  },
-  "devex": {
-    "plugin": {
-      "type": "package-manager",
-      "platforms": [
-        "darwin",
-        "linux",
-        "windows"
-      ],
-      "dependencies": [
-        "pip"
-      ],
-      "priority": 10,
-      "supports": {
-        "install": true,
-        "remove": true,
-        "update": true,
-        "search": true,
-        "list": true
-      }
-    }
-  }
+	"name": "@devex/package-manager-pip",
+	"private": true,
+	"version": "1.8.2",
+	"description": "Pip plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-pip .",
+		"dev": "go build -race -o devex-plugin-package-manager-pip .",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"pip",
+		"python",
+		"packages"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-pip"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"darwin",
+				"linux",
+				"windows"
+			],
+			"dependencies": [
+				"pip"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
 }

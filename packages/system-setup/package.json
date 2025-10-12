@@ -1,48 +1,48 @@
 {
-  "name": "@devex/system-setup",
-  "version": "1.8.2",
-  "description": "System setup and configuration plugin for DevEx CLI",
-  "private": true,
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-system-setup .",
-    "test": "go test ./...",
-    "dev": "go build -race -o devex-plugin-system-setup main.go",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "dependencies": {
-    "@devex/plugin-sdk": "workspace:*"
-  },
-  "keywords": [
-    "system",
-    "setup",
-    "configuration"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/system-setup"
-  },
-  "devex": {
-    "plugin": {
-      "type": "system",
-      "platforms": [
-        "linux",
-        "darwin",
-        "windows"
-      ],
-      "dependencies": [],
-      "priority": 10,
-      "supports": {
-        "configure": true,
-        "apply": true,
-        "validate": true,
-        "backup": true
-      }
-    }
-  }
+	"name": "@devex/system-setup",
+	"version": "1.8.2",
+	"description": "System setup and configuration plugin for DevEx CLI",
+	"private": true,
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-system-setup .",
+		"test": "go test ./...",
+		"dev": "go build -race -o devex-plugin-system-setup main.go",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"dependencies": {
+		"@devex/plugin-sdk": "workspace:*"
+	},
+	"keywords": [
+		"system",
+		"setup",
+		"configuration"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/system-setup"
+	},
+	"devex": {
+		"plugin": {
+			"type": "system",
+			"platforms": [
+				"linux",
+				"darwin",
+				"windows"
+			],
+			"dependencies": [],
+			"priority": 10,
+			"supports": {
+				"configure": true,
+				"apply": true,
+				"validate": true,
+				"backup": true
+			}
+		}
+	}
 }

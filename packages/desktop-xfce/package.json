@@ -1,52 +1,52 @@
 {
-  "name": "@devex/desktop-xfce",
-  "private": true,
-  "version": "1.8.2",
-  "description": "XFCE desktop environment configuration plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-desktop-xfce .",
-    "dev": "go build -race -o devex-plugin-desktop-xfce main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "devex",
-    "plugin",
-    "xfce",
-    "desktop",
-    "linux",
-    "gtk"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/desktop-xfce"
-  },
-  "devex": {
-    "plugin": {
-      "type": "desktop-environment",
-      "platforms": [
-        "linux"
-      ],
-      "desktop": "xfce",
-      "dependencies": [
-        "xfconf-query",
-        "xfce4-panel",
-        "xfwm4"
-      ],
-      "priority": 10,
-      "capabilities": {
-        "themes": true,
-        "wallpapers": true,
-        "panels": true,
-        "settings": true,
-        "backup": true
-      }
-    }
-  }
+	"name": "@devex/desktop-xfce",
+	"private": true,
+	"version": "1.8.2",
+	"description": "XFCE desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-xfce .",
+		"dev": "go build -race -o devex-plugin-desktop-xfce main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"xfce",
+		"desktop",
+		"linux",
+		"gtk"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-xfce"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "xfce",
+			"dependencies": [
+				"xfconf-query",
+				"xfce4-panel",
+				"xfwm4"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"panels": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
 }

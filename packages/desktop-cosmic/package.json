@@ -1,54 +1,54 @@
 {
-  "name": "@devex/desktop-cosmic",
-  "private": true,
-  "version": "1.8.2",
-  "description": "COSMIC desktop environment configuration plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-desktop-cosmic .",
-    "dev": "go build -race -o devex-plugin-desktop-cosmic main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "devex",
-    "plugin",
-    "cosmic",
-    "desktop",
-    "linux",
-    "system76",
-    "rust"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/desktop-cosmic"
-  },
-  "devex": {
-    "plugin": {
-      "type": "desktop-environment",
-      "platforms": [
-        "linux"
-      ],
-      "desktop": "cosmic",
-      "dependencies": [
-        "cosmic-settings",
-        "cosmic-panel",
-        "cosmic-comp"
-      ],
-      "priority": 10,
-      "capabilities": {
-        "themes": true,
-        "wallpapers": true,
-        "panels": true,
-        "workspaces": true,
-        "settings": true,
-        "backup": true
-      }
-    }
-  }
+	"name": "@devex/desktop-cosmic",
+	"private": true,
+	"version": "1.8.2",
+	"description": "COSMIC desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-cosmic .",
+		"dev": "go build -race -o devex-plugin-desktop-cosmic main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"cosmic",
+		"desktop",
+		"linux",
+		"system76",
+		"rust"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-cosmic"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "cosmic",
+			"dependencies": [
+				"cosmic-settings",
+				"cosmic-panel",
+				"cosmic-comp"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"panels": true,
+				"workspaces": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
 }

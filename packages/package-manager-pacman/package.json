@@ -1,46 +1,46 @@
 {
-  "name": "@devex/package-manager-pacman",
-  "private": true,
-  "version": "1.8.2",
-  "description": "Pacman plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-package-manager-pacman .",
-    "dev": "go build -race -o devex-plugin-package-manager-pacman main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "pacman",
-    "arch",
-    "linux"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/package-manager-pacman"
-  },
-  "devex": {
-    "plugin": {
-      "type": "package-manager",
-      "platforms": [
-        "linux"
-      ],
-      "dependencies": [
-        "pacman"
-      ],
-      "priority": 10,
-      "supports": {
-        "install": true,
-        "remove": true,
-        "update": true,
-        "search": true,
-        "list": true
-      }
-    }
-  }
+	"name": "@devex/package-manager-pacman",
+	"private": true,
+	"version": "1.8.2",
+	"description": "Pacman plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-pacman .",
+		"dev": "go build -race -o devex-plugin-package-manager-pacman main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"pacman",
+		"arch",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-pacman"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"dependencies": [
+				"pacman"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
 }

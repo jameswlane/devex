@@ -1,54 +1,54 @@
 {
-  "name": "@devex/desktop-kde",
-  "private": true,
-  "version": "1.8.2",
-  "description": "KDE Plasma desktop environment configuration plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-desktop-kde *.go",
-    "dev": "go build -race -o devex-plugin-desktop-kde *.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "devex",
-    "plugin",
-    "kde",
-    "plasma",
-    "desktop",
-    "linux",
-    "qt"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/desktop-kde"
-  },
-  "devex": {
-    "plugin": {
-      "type": "desktop-environment",
-      "platforms": [
-        "linux"
-      ],
-      "desktop": "kde",
-      "dependencies": [
-        "kwriteconfig5",
-        "kreadconfig5",
-        "qdbus"
-      ],
-      "priority": 10,
-      "capabilities": {
-        "themes": true,
-        "wallpapers": true,
-        "panels": true,
-        "widgets": true,
-        "settings": true,
-        "backup": true
-      }
-    }
-  }
+	"name": "@devex/desktop-kde",
+	"private": true,
+	"version": "1.8.2",
+	"description": "KDE Plasma desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-kde *.go",
+		"dev": "go build -race -o devex-plugin-desktop-kde *.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"kde",
+		"plasma",
+		"desktop",
+		"linux",
+		"qt"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-kde"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "kde",
+			"dependencies": [
+				"kwriteconfig5",
+				"kreadconfig5",
+				"qdbus"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"panels": true,
+				"widgets": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
 }

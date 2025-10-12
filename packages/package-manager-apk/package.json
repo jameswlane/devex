@@ -1,52 +1,52 @@
 {
-  "name": "@devex/package-manager-apk",
-  "private": true,
-  "version": "1.8.2",
-  "description": "APK package manager plugin for Alpine Linux",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-package-manager-apk .",
-    "dev": "go build -race -o devex-plugin-package-manager-apk main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "devex",
-    "plugin",
-    "apk",
-    "package-manager",
-    "alpine",
-    "linux"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/package-manager-apk"
-  },
-  "devex": {
-    "plugin": {
-      "type": "package-manager",
-      "platforms": [
-        "linux"
-      ],
-      "distros": [
-        "alpine"
-      ],
-      "dependencies": [
-        "apk"
-      ],
-      "priority": 10,
-      "supports": {
-        "install": true,
-        "remove": true,
-        "update": true,
-        "search": true,
-        "list": true
-      }
-    }
-  }
+	"name": "@devex/package-manager-apk",
+	"private": true,
+	"version": "1.8.2",
+	"description": "APK package manager plugin for Alpine Linux",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-apk .",
+		"dev": "go build -race -o devex-plugin-package-manager-apk main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"apk",
+		"package-manager",
+		"alpine",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-apk"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"distros": [
+				"alpine"
+			],
+			"dependencies": [
+				"apk"
+			],
+			"priority": 10,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
 }

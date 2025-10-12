@@ -1,53 +1,53 @@
 {
-  "name": "@devex/desktop-pantheon",
-  "private": true,
-  "version": "1.8.2",
-  "description": "Pantheon desktop environment configuration plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-desktop-pantheon .",
-    "dev": "go build -race -o devex-plugin-desktop-pantheon main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "devex",
-    "plugin",
-    "pantheon",
-    "desktop",
-    "linux",
-    "elementary"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/desktop-pantheon"
-  },
-  "devex": {
-    "plugin": {
-      "type": "desktop-environment",
-      "platforms": [
-        "linux"
-      ],
-      "desktop": "pantheon",
-      "dependencies": [
-        "gsettings",
-        "dconf",
-        "switchboard"
-      ],
-      "priority": 10,
-      "capabilities": {
-        "themes": true,
-        "wallpapers": true,
-        "dock": true,
-        "wingpanel": true,
-        "settings": true,
-        "backup": true
-      }
-    }
-  }
+	"name": "@devex/desktop-pantheon",
+	"private": true,
+	"version": "1.8.2",
+	"description": "Pantheon desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-pantheon .",
+		"dev": "go build -race -o devex-plugin-desktop-pantheon main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"pantheon",
+		"desktop",
+		"linux",
+		"elementary"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-pantheon"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "pantheon",
+			"dependencies": [
+				"gsettings",
+				"dconf",
+				"switchboard"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"dock": true,
+				"wingpanel": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
 }

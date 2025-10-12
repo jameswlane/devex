@@ -1,52 +1,52 @@
 {
-  "name": "@devex/desktop-budgie",
-  "private": true,
-  "version": "1.9.2",
-  "description": "Budgie desktop environment configuration plugin for DevEx CLI",
-  "main": "main.go",
-  "scripts": {
-    "build": "go build -o devex-plugin-desktop-budgie .",
-    "dev": "go build -race -o devex-plugin-desktop-budgie main.go",
-    "test": "go test ./...",
-    "lint": "golangci-lint run",
-    "download": "go mod download",
-    "mod": "go mod tidy"
-  },
-  "keywords": [
-    "devex",
-    "plugin",
-    "budgie",
-    "desktop",
-    "linux",
-    "solus"
-  ],
-  "author": "DevEx Team",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jameswlane/devex",
-    "directory": "packages/desktop-budgie"
-  },
-  "devex": {
-    "plugin": {
-      "type": "desktop-environment",
-      "platforms": [
-        "linux"
-      ],
-      "desktop": "budgie",
-      "dependencies": [
-        "gsettings",
-        "dconf",
-        "budgie-panel"
-      ],
-      "priority": 10,
-      "capabilities": {
-        "themes": true,
-        "wallpapers": true,
-        "applets": true,
-        "settings": true,
-        "backup": true
-      }
-    }
-  }
+	"name": "@devex/desktop-budgie",
+	"private": true,
+	"version": "1.9.2",
+	"description": "Budgie desktop environment configuration plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-desktop-budgie .",
+		"dev": "go build -race -o devex-plugin-desktop-budgie main.go",
+		"test": "go test ./...",
+		"lint": "golangci-lint run",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"devex",
+		"plugin",
+		"budgie",
+		"desktop",
+		"linux",
+		"solus"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/desktop-budgie"
+	},
+	"devex": {
+		"plugin": {
+			"type": "desktop-environment",
+			"platforms": [
+				"linux"
+			],
+			"desktop": "budgie",
+			"dependencies": [
+				"gsettings",
+				"dconf",
+				"budgie-panel"
+			],
+			"priority": 10,
+			"capabilities": {
+				"themes": true,
+				"wallpapers": true,
+				"applets": true,
+				"settings": true,
+				"backup": true
+			}
+		}
+	}
 }
