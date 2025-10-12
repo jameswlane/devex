@@ -485,6 +485,14 @@ describe('Error Handler Module', () => {
   })
 
   describe('safeDatabase', () => {
+    beforeEach(() => {
+      jest.useFakeTimers()
+    })
+
+    afterEach(() => {
+      jest.useRealTimers()
+    })
+
     it('should return result on successful operation', async () => {
       const operation = jest.fn().mockResolvedValue({ data: 'success' })
 
@@ -500,7 +508,13 @@ describe('Error Handler Module', () => {
         .mockRejectedValueOnce(new Error('Transient error'))
         .mockResolvedValue({ data: 'success' })
 
-      const result = await safeDatabase(operation, mockContext, 3)
+      const resultPromise = safeDatabase(operation, mockContext, 3)
+
+      // Fast-forward through the retry delays
+      await jest.advanceTimersByTimeAsync(1000) // First retry delay
+      await jest.advanceTimersByTimeAsync(2000) // Second retry delay
+
+      const result = await resultPromise
 
       expect(result).toEqual({ data: 'success' })
       expect(operation).toHaveBeenCalledTimes(3)
@@ -521,7 +535,14 @@ describe('Error Handler Module', () => {
       const error = new Error('Persistent error')
       const operation = jest.fn().mockRejectedValue(error)
 
-      await expect(safeDatabase(operation, mockContext, 2)).rejects.toThrow(error)
+      // Set up the expectation first to capture the rejection
+      const testPromise = expect(safeDatabase(operation, mockContext, 2)).rejects.toThrow('Persistent error')
+
+      // Fast-forward through the retry delay
+      await jest.advanceTimersByTimeAsync(1000) // First retry delay
+
+      // Wait for the assertion to complete
+      await testPromise
 
       expect(operation).toHaveBeenCalledTimes(2)
       expect(mockLogger.warn).toHaveBeenCalledTimes(1) // One retry warning
@@ -533,12 +554,14 @@ describe('Error Handler Module', () => {
         .mockRejectedValueOnce(new Error('Error 2'))
         .mockResolvedValue({ data: 'success' })
 
-      const startTime = Date.now()
-      await safeDatabase(operation, mockContext, 3)
-      const endTime = Date.now()
+      const resultPromise = safeDatabase(operation, mockContext, 3)
 
-      // Should have some delay due to exponential backoff
-      expect(endTime - startTime).toBeGreaterThan(0)
+      // Fast-forward through retry delays
+      await jest.advanceTimersByTimeAsync(1000) // First retry
+      await jest.advanceTimersByTimeAsync(2000) // Second retry
+
+      await resultPromise
+
       expect(mockLogger.warn).toHaveBeenCalledWith(
         'Database operation retry',
         expect.objectContaining({

@@ -358,6 +358,13 @@ if (process.env.NODE_ENV === "production") {
 	});
 }
 
+export function ensurePrisma() {
+    if (!prisma) {
+        throw new Error("Prisma client not available. Check PRISMA_DATABASE_URL configuration.");
+    }
+    return prisma;
+}
+
 // Enhanced database operations with retry logic
 export async function executeWithRetry<T>(
 	operation: () => Promise<T>,
