@@ -117,12 +117,21 @@ function Get-LatestVersion {
     if ($Version) {
         return $Version
     }
-    
+
     Write-DevExInfo "Fetching latest version..."
-    
+
     try {
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/jameswlane/devex/releases/latest" -UseBasicParsing
-        $latestVersion = $response.tag_name
+        # Fetch all releases and filter for CLI versions (exclude plugin releases)
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/jameswlane/devex/releases" -UseBasicParsing
+        $latestVersion = $response |
+            Where-Object { $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$' } |
+            Select-Object -First 1 -ExpandProperty tag_name
+
+        if (-not $latestVersion) {
+            Write-DevExInfo "No CLI release found" -ForegroundColor Red
+            exit 1
+        }
+
         Write-DevExInfo "✓ Latest version: $latestVersion" -ForegroundColor Green
         return $latestVersion
     } catch {

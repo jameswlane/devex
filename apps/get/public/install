@@ -36,9 +36,9 @@ case "$ARCH" in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Fetch the latest release version
+# Fetch the latest CLI release version (exclude plugin releases)
 echo "Fetching latest version..."
-LATEST_VERSION=$($DOWNLOAD_CMD https://api.github.com/repos/jameswlane/devex/releases/latest | grep -Po '"tag_name": "\K.*?(?=")')
+LATEST_VERSION=$($DOWNLOAD_CMD https://api.github.com/repos/jameswlane/devex/releases | grep -Po '"tag_name": "\K.*?(?=")' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
 
 if [ -z "$LATEST_VERSION" ]; then
     echo "Error: Failed to fetch the latest release version."
