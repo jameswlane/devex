@@ -6,21 +6,21 @@ import { invalidateOnDataChange, withCacheInvalidation } from "@/lib/cache-inval
 import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
 import { Prisma } from "@prisma/client";
 
-// GET /api/v1/applications/[id] - Get a specific application
+// GET /api/v1/applications/[id] - Get a specific application by name
 async function handleGetApplication(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
 ): Promise<NextResponse> {
-	const { id } = params;
+	const { id: applicationName } = params;
 
 	const application = await safeDatabase(
 		() => prisma.application.findUnique({
-			where: { id },
+			where: { name: applicationName },
 		}),
 		{
 			operation: "fetch-application",
 			resource: "application",
-			metadata: { id }
+			metadata: { name: applicationName }
 		}
 	);
 
@@ -42,17 +42,16 @@ async function handleGetApplication(
 	return NextResponse.json(response);
 }
 
-// PUT /api/v1/applications/[id] - Update an application
+// PUT /api/v1/applications/[id] - Update an application by name
 async function handleUpdateApplication(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
 ): Promise<NextResponse> {
-	const { id } = params;
+	const { id: applicationName } = params;
 	const body = await request.json();
 
 	// Validate and sanitize input
 	const updateData: Prisma.ApplicationUpdateInput = {
-		...(body.name && { name: body.name }),
 		...(body.description && { description: body.description }),
 		...(body.category && { category: body.category }),
 		...(body.official !== undefined && { official: body.official }),
@@ -64,21 +63,21 @@ async function handleUpdateApplication(
 
 	const application = await safeDatabase(
 		async () => {
-			// Update the application
+			// Update the application by name
 			const updated = await prisma.application.update({
-				where: { id },
+				where: { name: applicationName },
 				data: updateData,
 			});
 
 			// Invalidate caches after successful update
-			await invalidateOnDataChange("update", "application", id);
+			await invalidateOnDataChange("update", "application", updated.id);
 
 			return updated;
 		},
 		{
 			operation: "update-application",
 			resource: "application",
-			metadata: { id }
+			metadata: { name: applicationName }
 		}
 	);
 
@@ -89,29 +88,35 @@ async function handleUpdateApplication(
 	return NextResponse.json(application);
 }
 
-// DELETE /api/v1/applications/[id] - Delete an application
+// DELETE /api/v1/applications/[id] - Delete an application by name
 async function handleDeleteApplication(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
 ): Promise<NextResponse> {
-	const { id } = params;
+	const { id: applicationName } = params;
 
-	await safeDatabase(
+	const result = await safeDatabase(
 		async () => {
-			// Delete the application
-			await prisma.application.delete({
-				where: { id },
+			// Delete the application by name
+			const deleted = await prisma.application.delete({
+				where: { name: applicationName },
 			});
 
 			// Invalidate caches after successful deletion
-			await invalidateOnDataChange("delete", "application", id);
+			await invalidateOnDataChange("delete", "application", deleted.id);
+
+			return deleted;
 		},
 		{
 			operation: "delete-application",
 			resource: "application",
-			metadata: { id }
+			metadata: { name: applicationName }
 		}
 	);
+
+	if (!result) {
+		return createApiError("Application not found", 404);
+	}
 
 	return NextResponse.json({ success: true, message: "Application deleted successfully" });
 }
