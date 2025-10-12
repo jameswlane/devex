@@ -173,8 +173,8 @@ export const GET = withRateLimit(async function handler(request: Request) {
 
 // Helper function to transform a single plugin to metadata format
 async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata> {
-	// Extract version from githubPath or default to latest
-	const version = extractVersionFromGithubPath(plugin.githubPath);
+	// Use version from database, fall back to "latest" if not set
+	const version = plugin.version || "latest";
 
 	// Build platform binaries with proper metadata
 	let platforms: Record<string, PlatformBinary> = {};
@@ -209,8 +209,9 @@ async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata
 		}
 	}
 
-	// Normalize plugin name to match CLI expectations
-	const normalizedName = normalizePluginName(plugin.name, plugin.type, plugin.id);
+	// Extract full plugin name from githubPath (source of truth)
+	// githubPath format: "packages/tool-shell" or "https://...packages/package-manager-apt"
+	const normalizedName = extractPluginNameFromPath(plugin.githubPath) || plugin.name;
 
 	// Extract structured data from plugin supports field
 	const supports = plugin.supports as any || {};
@@ -232,43 +233,14 @@ async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata
 	};
 }
 
-// Helper function to extract version from GitHub path
-function extractVersionFromGithubPath(githubPath: string | null): string {
-	if (!githubPath) return "latest";
+// Helper function to extract full plugin name from githubPath
+// The githubPath is the source of truth from the sync script
+function extractPluginNameFromPath(githubPath: string | null): string | null {
+	if (!githubPath) return null;
 
-	// Match @devex/plugin-name@1.6.0 pattern
-	const versionMatch = githubPath.match(/@devex\/[^@]+@(.+)$/);
-	return versionMatch ? versionMatch[1] : "latest";
-}
-
-// Helper function to normalize plugin names to match CLI expectations
-function normalizePluginName(pluginName: string, pluginType: string, pluginId?: string): string {
-	// Validate inputs to prevent null/undefined issues
-	if (!pluginName || typeof pluginName !== 'string') {
-		const context = pluginId ? ` (plugin ID: ${pluginId})` : '';
-		throw new Error(`Plugin name must be a non-empty string${context}. Received: ${typeof pluginName} "${pluginName}"`);
-	}
-	if (!pluginType || typeof pluginType !== 'string') {
-		const context = pluginId ? ` (plugin ID: ${pluginId})` : '';
-		throw new Error(`Plugin type must be a non-empty string${context}. Received: ${typeof pluginType} "${pluginType}"`);
-	}
-
-	// If plugin name already has the type prefix, return as-is
-	if (pluginName.startsWith(`${pluginType}-`)) {
-		return pluginName;
-	}
-
-	// For certain types, add the type prefix to match CLI expectations
-	if (pluginType === "package-manager" && !pluginName.startsWith("package-manager-")) {
-		return `package-manager-${pluginName}`;
-	}
-
-	if (pluginType === "desktop-environment" && !pluginName.startsWith("desktop-")) {
-		return `desktop-${pluginName}`;
-	}
-
-	// For other types (tool, system, etc.), return the name as-is
-	return pluginName;
+	// Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
+	const match = githubPath.match(/packages\/([^\/]+?)(?:\/|$)/);
+	return match ? match[1] : null;
 }
 
 // Helper function to extract tags from plugin type

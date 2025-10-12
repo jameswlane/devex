@@ -317,6 +317,16 @@ export class RegistryTransformationService {
 		}
 	}
 
+	// Extract full plugin name from githubPath (source of truth)
+	// The githubPath is the source of truth from the sync script
+	private extractPluginNameFromPath(githubPath: string | null): string | null {
+		if (!githubPath) return null;
+
+		// Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
+		const match = githubPath.match(/packages\/([^\/]+?)(?:\/|$)/);
+		return match ? match[1] : null;
+	}
+
 	// Generate improved hash for data to detect changes with more granularity
 	private generateDataHash(data: any[], useContent: boolean = false): string {
 		// Create a hash based on data length and first/last item timestamps
@@ -410,31 +420,37 @@ export class RegistryTransformationService {
 		for (let i = 0; i < plugins.length; i += TRANSFORMATION_CACHE.BATCH_SIZE) {
 			const batch = plugins.slice(i, i + TRANSFORMATION_CACHE.BATCH_SIZE);
 
-			const batchTransformed = batch.map((plugin) => ({
-				name: plugin.name,
-				description: plugin.description,
-				type: plugin.type,
-				priority: plugin.priority,
-				status: plugin.status,
-				supports: plugin.supports as Record<string, boolean>,
-				platforms: plugin.platforms,
-				tags: [],
-				version: plugin.version,
-				latestVersion: plugin.latestVersion,
-				author: plugin.author,
-				license: plugin.license,
-				homepage: plugin.homepage,
-				repository: plugin.repository || plugin.githubUrl,
-				dependencies: plugin.dependencies,
-				conflicts: plugin.conflicts,
-				binaries: plugin.binaries as Record<string, { url: string; checksum: string; size: number }>,
-				sdkVersion: plugin.sdkVersion,
-				apiVersion: plugin.apiVersion,
-				release_tag: `packages/${plugin.name}@${plugin.version}`,
-				githubPath: plugin.githubPath,
-				downloadCount: plugin.downloadCount,
-				lastDownload: plugin.lastDownload?.toISOString(),
-			}));
+			const batchTransformed = batch.map((plugin) => {
+				// Extract full plugin name from githubPath (source of truth)
+				// githubPath format: "packages/tool-shell" or "https://...packages/package-manager-apt"
+				const normalizedName = this.extractPluginNameFromPath(plugin.githubPath) || plugin.name;
+
+				return {
+					name: normalizedName,
+					description: plugin.description,
+					type: plugin.type,
+					priority: plugin.priority,
+					status: plugin.status,
+					supports: plugin.supports as Record<string, boolean>,
+					platforms: plugin.platforms,
+					tags: [],
+					version: plugin.version,
+					latestVersion: plugin.latestVersion,
+					author: plugin.author,
+					license: plugin.license,
+					homepage: plugin.homepage,
+					repository: plugin.repository || plugin.githubUrl,
+					dependencies: plugin.dependencies,
+					conflicts: plugin.conflicts,
+					binaries: plugin.binaries as Record<string, { url: string; checksum: string; size: number }>,
+					sdkVersion: plugin.sdkVersion,
+					apiVersion: plugin.apiVersion,
+					release_tag: `packages/${normalizedName}@${plugin.version}`,
+					githubPath: plugin.githubPath,
+					downloadCount: plugin.downloadCount,
+					lastDownload: plugin.lastDownload?.toISOString(),
+				};
+			});
 
 			transformed.push(...batchTransformed);
 		}

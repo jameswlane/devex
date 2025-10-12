@@ -73,7 +73,7 @@ describe('/api/v1/registry.json', () => {
         type: 'package-manager',
         description: 'APT package manager',
         platforms: ['linux'],
-        githubPath: '@devex/package-manager-apt@1.0.0',
+        githubPath: 'packages/package-manager-apt',
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -114,7 +114,7 @@ describe('/api/v1/registry.json', () => {
         type: 'package-manager',
         description: 'APT package manager',
         platforms: ['linux'],
-        githubPath: '@devex/package-manager-apt@1.0.0',
+        githubPath: 'packages/package-manager-apt',
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -127,7 +127,7 @@ describe('/api/v1/registry.json', () => {
         type: 'desktop-environment',
         description: 'GNOME desktop environment',
         platforms: ['linux'],
-        githubPath: '@devex/desktop-gnome@1.0.0',
+        githubPath: 'packages/desktop-gnome',
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -164,17 +164,24 @@ describe('/api/v1/registry.json', () => {
 });
 
 // Test the helper functions separately
-describe('normalizePluginName', () => {
-  it('should handle invalid plugin data and return 500', async () => {
-    // Mock findMany to throw an error during processing
+describe('extractPluginNameFromPath', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    if (pluginCache && typeof pluginCache.clear === 'function') {
+      pluginCache.clear();
+    }
+  });
+
+  it('should handle null githubPath and fall back to plugin name', async () => {
+    // Test that null githubPath uses the short name as fallback
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue([
       {
         id: 'test-plugin-1',
-        name: null, // This will cause normalizePluginName to throw
+        name: 'apt',
         type: 'package-manager',
         description: 'Test plugin',
         platforms: ['linux'],
-        githubPath: '@devex/test@1.0.0',
+        githubPath: null,
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -186,21 +193,24 @@ describe('normalizePluginName', () => {
 
     const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
     const response = await GET(request);
+    const data = await response.json();
 
-    // Should return 500 due to error in normalization
-    expect(response.status).toBe(500);
+    // Should successfully return with short name when githubPath is null
+    expect(response.status).toBe(200);
+    expect(data.plugins).toHaveProperty('apt');
+    expect(data.plugins['apt'].name).toBe('apt');
   });
 
-  it('should handle missing plugin type and return 500', async () => {
-    // Mock findMany to throw an error during processing
+  it('should extract name from valid githubPath', async () => {
     (prisma.plugin.findMany as jest.Mock).mockResolvedValue([
       {
-        id: 'test-plugin-1',
+        id: 'extract-path-test-plugin',
         name: 'test',
-        type: undefined, // This will cause normalizePluginName to throw
+        type: 'package-manager',
         description: 'Test plugin',
         platforms: ['linux'],
-        githubPath: '@devex/test@1.0.0',
+        version: '1.0.0',
+        githubPath: 'packages/package-manager-test',
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -210,15 +220,18 @@ describe('normalizePluginName', () => {
     ]);
     (prisma.plugin.count as jest.Mock).mockResolvedValue(1);
 
-    const request = new NextRequest('https://registry.devex.sh/api/v1/registry.json');
+    const request = new NextRequest(`https://registry.devex.sh/api/v1/registry.json?test=extract-path&t=${Date.now()}`);
     const response = await GET(request);
+    const data = await response.json();
 
-    // Should return 500 due to error in normalization
-    expect(response.status).toBe(500);
+    // Should extract full name from githubPath
+    expect(response.status).toBe(200);
+    expect(data.plugins).toHaveProperty('package-manager-test');
+    expect(data.plugins['package-manager-test'].name).toBe('package-manager-test');
   });
 });
 
-describe('extractVersionFromGithubPath', () => {
+describe('version handling', () => {
   beforeEach(() => {
     // Ensure clean mocks for each test in this describe block
     jest.clearAllMocks();
@@ -227,7 +240,7 @@ describe('extractVersionFromGithubPath', () => {
     }
   });
 
-  it('should extract version from valid GitHub path', async () => {
+  it('should use version from database field', async () => {
     const mockPlugins = [
       {
         id: 'version-test-plugin-1',
@@ -235,7 +248,8 @@ describe('extractVersionFromGithubPath', () => {
         type: 'package-manager',
         description: 'APT package manager',
         platforms: ['linux'],
-        githubPath: '@devex/package-manager-apt@1.2.3',
+        version: '1.2.3',
+        githubPath: 'packages/package-manager-apt',
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -251,16 +265,13 @@ describe('extractVersionFromGithubPath', () => {
     const response = await GET(request);
     const data = await response.json();
 
-    // The plugin name gets normalized to 'package-manager-apt' by the normalizePluginName function
     expect(response.status).toBe(200);
     expect(data.plugins).toBeDefined();
-    const pluginKeys = Object.keys(data.plugins);
-    expect(pluginKeys.length).toBeGreaterThan(0);
     expect(data.plugins['package-manager-apt']).toBeDefined();
     expect(data.plugins['package-manager-apt'].version).toBe('1.2.3');
   });
 
-  it('should return "latest" for invalid GitHub path', async () => {
+  it('should return "latest" when version is not set', async () => {
     const mockPlugins = [
       {
         id: 'latest-test-plugin-1',
@@ -268,7 +279,8 @@ describe('extractVersionFromGithubPath', () => {
         type: 'package-manager',
         description: 'APT package manager',
         platforms: ['linux'],
-        githubPath: null,
+        version: null,
+        githubPath: 'packages/package-manager-apt',
         githubUrl: 'https://github.com/jameswlane/devex',
         status: 'active',
         priority: 10,
@@ -284,11 +296,8 @@ describe('extractVersionFromGithubPath', () => {
     const response = await GET(request);
     const data = await response.json();
 
-    // The plugin name gets normalized to 'package-manager-apt' by the normalizePluginName function
     expect(response.status).toBe(200);
     expect(data.plugins).toBeDefined();
-    const pluginKeys = Object.keys(data.plugins);
-    expect(pluginKeys.length).toBeGreaterThan(0);
     expect(data.plugins['package-manager-apt']).toBeDefined();
     expect(data.plugins['package-manager-apt'].version).toBe('latest');
   });

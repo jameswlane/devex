@@ -209,7 +209,7 @@ async function getPluginMetadata(
   tag: GitHubTag
 ): Promise<PluginMetadata> {
 
-  // Default metadata
+  // Default metadata - platforms will be extracted from metadata.yaml
   const metadata: PluginMetadata = {
     name: pluginInfo.name,
     type: pluginInfo.type,
@@ -219,10 +219,10 @@ async function getPluginMetadata(
     license: 'MIT',
     repository: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
     homepage: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tree/main/packages/${pluginInfo.fullName}`,
-    platforms: ['linux', 'macos', 'windows'],
-    binaries: await generateBinaryInfo(pluginInfo, tag),
-    sdkVersion: '1.0.0', // Default SDK version, should be extracted from plugin
-    apiVersion: 'v1',    // Default API version for registry compatibility
+    platforms: [], // Will be extracted from metadata.yaml
+    binaries: {}, // Will be generated after we know the platforms
+    sdkVersion: '1.0.0',
+    apiVersion: 'v1',
     dependencies: [],
     conflicts: [],
   };
@@ -265,68 +265,138 @@ async function getPluginMetadata(
       if (apiVersionMatch) {
         metadata.apiVersion = apiVersionMatch[1].trim();
       }
+
+      // Parse platforms section - extract OS keys (linux, macos, windows)
+      // Format: platforms:\n  linux:\n    distros: ...\n  macos:\n    ...
+      const platformsSection = yamlContent.match(/^platforms:\s*\n((?:  \w+:.*\n(?:    .*\n)*)*)/m);
+      if (platformsSection) {
+        const platformLines = platformsSection[1].match(/^  (\w+):/gm);
+        if (platformLines) {
+          metadata.platforms = platformLines.map(line => line.trim().replace(':', ''));
+          console.log(`  📋 Detected platforms: ${metadata.platforms.join(', ')}`);
+        }
+      }
+
+      // If no platforms detected, fall back to default
+      if (metadata.platforms.length === 0) {
+        console.log(`  ⚠️  No platforms found in metadata.yaml, using default: linux`);
+        metadata.platforms = ['linux'];
+      }
     }
   } catch (error) {
     console.log(`⚠️  Could not fetch metadata.yaml for ${pluginInfo.fullName}: ${error instanceof Error ? error.message : String(error)}`);
+    // Fall back to linux-only if metadata.yaml is not available
+    metadata.platforms = ['linux'];
   }
+
+  // Generate binaries after we know the platforms
+  metadata.binaries = await generateBinaryInfo(pluginInfo, tag);
 
   return metadata;
 }
 
 /**
- * Generate binary information for different platforms
+ * Parse checksums.txt file from release
+ */
+async function parseChecksumsFile(assets: any[]): Promise<Map<string, string>> {
+  const checksumMap = new Map<string, string>();
+
+  // Find checksums.txt file
+  const checksumAsset = assets.find((a: any) => a.name === 'checksums.txt');
+  if (!checksumAsset) {
+    console.log('⚠️  No checksums.txt file found in release');
+    return checksumMap;
+  }
+
+  try {
+    // Fetch checksums.txt content
+    const response = await fetch(checksumAsset.browser_download_url);
+    const content = await response.text();
+
+    // Parse format: "checksum  filename" (two spaces between)
+    const lines = content.split('\n');
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      // Split on whitespace (handles both single and multiple spaces)
+      const parts = line.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        const checksum = parts[0];
+        const filename = parts[1];
+        checksumMap.set(filename, checksum);
+      }
+    }
+
+    console.log(`📋 Parsed ${checksumMap.size} checksums from checksums.txt`);
+  } catch (error) {
+    console.log(`⚠️  Could not parse checksums.txt: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  return checksumMap;
+}
+
+/**
+ * Generate binary information from actual release assets
  */
 async function generateBinaryInfo(
   pluginInfo: { name: string; fullName: string; version: string },
   tag: GitHubTag
 ): Promise<Record<string, BinaryInfo>> {
   const binaries: Record<string, BinaryInfo> = {};
-  const platforms = [
-    { os: 'linux', arch: 'amd64' },
-    { os: 'linux', arch: 'arm64' },
-    { os: 'darwin', arch: 'amd64' },
-    { os: 'darwin', arch: 'arm64' },
-    { os: 'windows', arch: 'amd64' },
-    { os: 'windows', arch: 'arm64' },
-  ];
 
-  // Fetch release assets to get checksums and sizes
+  // Fetch release assets
   const releaseData = await getReleaseByTag(tag.name);
   const assets = releaseData?.assets || [];
 
-  for (const platform of platforms) {
-    const platformKey = `${platform.os}-${platform.arch}`;
-    const fileExtension = platform.os === 'windows' ? 'zip' : 'tar.gz';
-    const assetName = `devex-plugin-${pluginInfo.fullName}_v${pluginInfo.version}_${platform.os}_${platform.arch}.${fileExtension}`;
+  if (assets.length === 0) {
+    console.log(`⚠️  No assets found for release ${tag.name}`);
+    return binaries;
+  }
 
-    // Build GitHub download URL
-    const downloadUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${tag.name}/${assetName}`;
+  // Parse checksums from checksums.txt
+  const checksumMap = await parseChecksumsFile(assets);
 
-    // Find matching asset to get real size
-    const asset = assets.find((a: any) => a.name === assetName);
+  // Filter to only plugin binary assets (exclude checksums.txt, source zips)
+  const binaryAssets = assets.filter((asset: any) => {
+    const name = asset.name;
+    return (
+      name.startsWith(`devex-plugin-${pluginInfo.fullName}`) &&
+      (name.endsWith('.tar.gz') || name.endsWith('.zip')) &&
+      !name.includes('checksums')
+    );
+  });
 
-    // Find the checksum file for this asset
-    const checksumAssetName = `${assetName}.sha256`;
-    const checksumAsset = assets.find((a: any) => a.name === checksumAssetName);
+  console.log(`📦 Found ${binaryAssets.length} binary assets for ${pluginInfo.fullName}`);
 
-    let checksum = '';
-    if (checksumAsset) {
-      try {
-        // Fetch the checksum file content
-        const checksumResponse = await fetch(checksumAsset.browser_download_url);
-        const checksumText = await checksumResponse.text();
-        // Checksum files typically contain: "checksum  filename"
-        checksum = checksumText.split(/\s+/)[0];
-      } catch (error) {
-        console.log(`⚠️  Could not fetch checksum for ${assetName}: ${error instanceof Error ? error.message : String(error)}`);
-      }
+  // Process each actual binary asset
+  for (const asset of binaryAssets) {
+    const filename = asset.name;
+
+    // Extract platform and arch from filename
+    // Format: devex-plugin-{fullName}_v{version}_{os}_{arch}.{ext}
+    const match = filename.match(/devex-plugin-.+?_v[\d.]+_(\w+)_(\w+)\.(tar\.gz|zip)$/);
+    if (!match) {
+      console.log(`⚠️  Could not parse platform from filename: ${filename}`);
+      continue;
+    }
+
+    const [, os, arch] = match;
+    const platformKey = `${os}-${arch}`;
+
+    // Get checksum from parsed checksums.txt
+    const checksum = checksumMap.get(filename) || '';
+
+    if (!checksum) {
+      console.log(`⚠️  No checksum found for ${filename}`);
     }
 
     binaries[platformKey] = {
-      url: downloadUrl,
+      url: asset.browser_download_url,
       checksum: checksum,
-      size: asset?.size || 0,
+      size: asset.size,
     };
+
+    console.log(`  ✓ ${platformKey}: ${(asset.size / 1024 / 1024).toFixed(2)} MB, checksum: ${checksum.slice(0, 16)}...`);
   }
 
   return binaries;

@@ -188,8 +188,12 @@ async function transformPluginForStreaming(plugin: any): Promise<PluginMetadata>
     }
   }
 
+  // Extract full plugin name from githubPath (source of truth)
+  // githubPath format: "packages/tool-shell" or "https://...packages/package-manager-apt"
+  const normalizedName = extractPluginNameFromPath(plugin.githubPath) || plugin.name;
+
   return {
-    name: normalizePluginName(plugin.name, plugin.type),
+    name: normalizedName,
     version,
     description: plugin.description,
     author: "DevEx Team",
@@ -291,20 +295,14 @@ function extractVersionFromGithubPath(githubPath: string | null): string {
   return versionMatch ? versionMatch[1] : "latest";
 }
 
-function normalizePluginName(pluginName: string, pluginType: string): string {
-  if (!pluginName || typeof pluginName !== 'string') {
-    throw new Error(`Plugin name must be a non-empty string. Received: ${typeof pluginName} "${pluginName}"`);
-  }
+// Helper function to extract full plugin name from githubPath
+// The githubPath is the source of truth from the sync script
+function extractPluginNameFromPath(githubPath: string | null): string | null {
+  if (!githubPath) return null;
 
-  if (pluginName.startsWith(`${pluginType}-`)) {
-    return pluginName;
-  }
-
-  if (pluginType === "package-manager" && !pluginName.startsWith("package-manager-")) {
-    return `package-manager-${pluginName}`;
-  }
-
-  return pluginName;
+  // Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
+  const match = githubPath.match(/packages\/([^\/]+?)(?:\/|$)/);
+  return match ? match[1] : null;
 }
 
 function extractTagsFromType(type: string): string[] {
