@@ -107,10 +107,10 @@ export function PluginCard({ plugin }: PluginCardProps) {
       )}
 
       {/* GitHub Link */}
-      {plugin.repository && (
+      {plugin.repository && plugin.githubPath && (
         <div className="pt-4 border-t">
           <a
-            href={plugin.repository}
+            href={`${plugin.repository}/tree/main/${plugin.githubPath}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"

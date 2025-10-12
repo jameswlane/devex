@@ -39,7 +39,13 @@ interface PluginConfig {
   priority?: number;
   status?: string;
   supports?: any;
-  platforms?: string[];
+  platforms?: Record<string, any>;
+  repository?: string;
+  directory?: string;
+  version?: string;
+  author?: string;
+  license?: string;
+  tags?: string[];
 }
 
 interface ConfigItem {
@@ -227,40 +233,50 @@ async function syncPlugins() {
       const pluginPath = path.join(packagesPath, entry.name);
 
       try {
-        // Try to read plugin metadata from package.json
-        const packageJsonPath = path.join(pluginPath, "package.json");
-        const packageJson = JSON.parse(await fs.readFile(packageJsonPath, "utf-8"));
+        // Read plugin metadata from metadata.yaml
+        const metadataPath = path.join(pluginPath, "metadata.yaml");
+        const metadata = await loadYamlFile<PluginConfig>(metadataPath);
 
-        // Determine priority based on plugin type
-        let priority = 50;
-        if (pluginType === "package-manager") priority = 100;
-        else if (pluginType === "tool") priority = 80;
-        else if (pluginType === "system") priority = 90;
-        else if (pluginType === "desktop") priority = 60;
+        // Extract platform support from metadata.platforms keys
+        const platforms = Object.keys(metadata.platforms || {});
+
+        // Use priority from metadata, or fallback to type-based priority
+        let priority = metadata.priority;
+        if (priority === undefined) {
+          if (pluginType === "package-manager") priority = 100;
+          else if (pluginType === "tool") priority = 80;
+          else if (pluginType === "system") priority = 90;
+          else if (pluginType === "desktop") priority = 60;
+          else priority = 50;
+        }
+
+        // Get GitHub repository info from metadata
+        const githubUrl = metadata.repository || GITHUB_BASE_URL;
+        const githubPath = metadata.directory || `packages/${entry.name}`;
 
         await prisma.plugin.upsert({
           where: { name: pluginName },
           update: {
-            description: packageJson.description || `${pluginType.charAt(0).toUpperCase() + pluginType.slice(1)} plugin for ${pluginName}`,
+            description: metadata.description || `${pluginType.charAt(0).toUpperCase() + pluginType.slice(1)} plugin for ${pluginName}`,
             type: pluginType,
             priority: priority,
             status: "active",
-            supports: {},
-            platforms: ["linux", "macos", "windows"],
-            githubUrl: GITHUB_BASE_URL,
-            githubPath: `packages/${entry.name}`,
+            supports: metadata.supports || {},
+            platforms: platforms,
+            githubUrl: githubUrl,
+            githubPath: githubPath,
             lastSynced: new Date(),
           },
           create: {
             name: pluginName,
-            description: packageJson.description || `${pluginType.charAt(0).toUpperCase() + pluginType.slice(1)} plugin for ${pluginName}`,
+            description: metadata.description || `${pluginType.charAt(0).toUpperCase() + pluginType.slice(1)} plugin for ${pluginName}`,
             type: pluginType,
             priority: priority,
             status: "active",
-            supports: {},
-            platforms: ["linux", "macos", "windows"],
-            githubUrl: GITHUB_BASE_URL,
-            githubPath: `packages/${entry.name}`,
+            supports: metadata.supports || {},
+            platforms: platforms,
+            githubUrl: githubUrl,
+            githubPath: githubPath,
             lastSynced: new Date(),
           },
         });

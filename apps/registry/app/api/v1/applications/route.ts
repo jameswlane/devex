@@ -98,6 +98,7 @@ async function handleGetApplications(request: NextRequest): Promise<NextResponse
 				default: app.default,
 				tags: app.tags,
 				desktopEnvironments: app.desktopEnvironments,
+				githubUrl: app.githubUrl,
 				githubPath: app.githubPath,
 				// Use new JSON platform structure
 				platforms: {

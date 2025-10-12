@@ -1,0 +1,48 @@
+# Plugin Metadata for COSMIC Desktop Environment
+name: desktop-cosmic
+type: desktop
+description: COSMIC desktop environment support (System76)
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-cosmic
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - pop
+      - ubuntu
+      - debian
+      - arch
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-gnome
+  - desktop-kde
+  - desktop-xfce
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  tiling: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - cosmic
+  - system76
+  - pop-os
+  - linux
+  - ui
+  - modern
+  - rust

@@ -1,0 +1,48 @@
+# Plugin Metadata for Git Tool
+name: tool-git
+type: tool
+description: Git version control system configuration and utilities
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/tool-git
+# Platform Support
+platforms:
+  linux:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  git_configuration: true
+  user_setup: true
+  ssh_keys: true
+  gpg_signing: true
+  aliases: true
+# Priority (lower number = higher priority)
+priority: 80
+# Tags for discovery
+tags:
+  - tool
+  - git
+  - vcs
+  - development
+  - cross-platform

@@ -1,13 +1,13 @@
-# Plugin Metadata for DNF Package Manager
-name: package-manager-dnf
+# Plugin Metadata for RPM Package Manager
+name: package-manager-rpm
 type: package-manager
-description: DNF package manager support for Fedora/RHEL systems
+description: RPM package format installer for RPM-based Linux distributions
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-dnf
+directory: packages/package-manager-rpm
 # Platform Support
 platforms:
   linux:
@@ -17,35 +17,29 @@ platforms:
       - centos
       - rocky
       - almalinux
-      - oracle
+      - opensuse
     architectures:
       - amd64
       - arm64
-    min_version: "8" # Minimum RHEL/CentOS version
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"
 # Dependencies & Conflicts
 dependencies: []
-conflicts:
-  - package-manager-yum # DNF replaces YUM
+conflicts: []
 # Capabilities
 supports:
   install: true
   uninstall: true
-  update: true
-  search: true
-  list: true
-  repository_management: true
-  module_streams: true
+  update: false
+  search: false
+  list: false
 # Priority (lower number = higher priority)
-priority: 10
+priority: 30
 # Tags for discovery
 tags:
   - package-manager
-  - dnf
+  - rpm
+  - redhat
   - fedora
-  - rhel
-  - centos
   - linux
-  - system

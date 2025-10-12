@@ -1,0 +1,50 @@
+# Plugin Metadata for Shell Tool
+name: tool-shell
+type: tool
+description: Shell configuration and management utilities
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/tool-shell
+# Platform Support
+platforms:
+  linux:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  bash_configuration: true
+  zsh_configuration: true
+  fish_configuration: true
+  shell_detection: true
+  profile_setup: true
+  aliases: true
+# Priority (lower number = higher priority)
+priority: 80
+# Tags for discovery
+tags:
+  - tool
+  - shell
+  - bash
+  - zsh
+  - configuration
+  - cross-platform

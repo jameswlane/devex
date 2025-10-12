@@ -1,0 +1,52 @@
+# Plugin Metadata for System Setup
+name: system-setup
+type: system
+description: System configuration and setup utilities
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/system-setup
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - debian
+      - ubuntu
+      - fedora
+      - arch
+      - opensuse
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  system_configuration: true
+  user_setup: true
+  environment_setup: true
+  ssh_config: true
+  git_config: true
+# Priority (lower number = higher priority)
+priority: 90
+# Tags for discovery
+tags:
+  - system
+  - setup
+  - configuration
+  - cross-platform

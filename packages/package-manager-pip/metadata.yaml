@@ -1,34 +1,36 @@
-# Plugin Metadata for DNF Package Manager
-name: package-manager-dnf
+# Plugin Metadata for Pip Package Manager
+name: package-manager-pip
 type: package-manager
-description: DNF package manager support for Fedora/RHEL systems
+description: Pip Python package manager for installing Python packages
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-dnf
+directory: packages/package-manager-pip
 # Platform Support
 platforms:
   linux:
-    distros:
-      - fedora
-      - rhel
-      - centos
-      - rocky
-      - almalinux
-      - oracle
+    distros: []
     architectures:
       - amd64
       - arm64
-    min_version: "8" # Minimum RHEL/CentOS version
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"
 # Dependencies & Conflicts
 dependencies: []
-conflicts:
-  - package-manager-yum # DNF replaces YUM
+conflicts: []
 # Capabilities
 supports:
   install: true
@@ -36,16 +38,13 @@ supports:
   update: true
   search: true
   list: true
-  repository_management: true
-  module_streams: true
+  virtual_environments: true
 # Priority (lower number = higher priority)
-priority: 10
+priority: 25
 # Tags for discovery
 tags:
   - package-manager
-  - dnf
-  - fedora
-  - rhel
-  - centos
-  - linux
-  - system
+  - pip
+  - python
+  - development
+  - cross-platform

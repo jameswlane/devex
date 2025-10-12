@@ -49,6 +49,7 @@ export interface ApplicationResponse {
 	};
 	tags: string[];
 	desktopEnvironments: string[];
+	githubUrl?: string | null;
 	githubPath?: string | null;
 }
 

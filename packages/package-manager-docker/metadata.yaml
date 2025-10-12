@@ -1,31 +1,35 @@
-# Plugin Metadata for Homebrew Package Manager
-name: package-manager-brew
+# Plugin Metadata for Docker Package Manager
+name: package-manager-docker
 type: package-manager
-description: Homebrew package manager support for macOS and Linux
+description: Docker container platform support for application deployment
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-brew
+directory: packages/package-manager-docker
 # Platform Support
 platforms:
-  darwin:
-    distros: [] # macOS doesn't have distros
-    architectures:
-      - amd64
-      - arm64 # M1/M2 Macs
-    min_version: "10.15" # macOS Catalina
   linux:
     distros:
       - debian
       - ubuntu
       - fedora
       - centos
-      - alpine
+      - rhel
+      - arch
     architectures:
       - amd64
       - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"
@@ -39,17 +43,13 @@ supports:
   update: true
   search: true
   list: true
-  cask: true # macOS GUI applications
-  tap: true # Third-party repositories
-  services: true # Service management
+  container_management: true
 # Priority (lower number = higher priority)
-priority: 5 # Higher priority on macOS
+priority: 20
 # Tags for discovery
 tags:
   - package-manager
-  - brew
-  - homebrew
-  - macos
-  - darwin
-  - linux
+  - docker
+  - containers
   - cross-platform
+  - devops

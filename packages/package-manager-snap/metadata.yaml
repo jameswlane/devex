@@ -1,34 +1,32 @@
-# Plugin Metadata for DNF Package Manager
-name: package-manager-dnf
+# Plugin Metadata for Snap Package Manager
+name: package-manager-snap
 type: package-manager
-description: DNF package manager support for Fedora/RHEL systems
+description: Snap universal package manager for Linux
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-dnf
+directory: packages/package-manager-snap
 # Platform Support
 platforms:
   linux:
     distros:
+      - ubuntu
+      - debian
       - fedora
-      - rhel
-      - centos
-      - rocky
-      - almalinux
-      - oracle
+      - opensuse
+      - arch
+      - mint
     architectures:
       - amd64
       - arm64
-    min_version: "8" # Minimum RHEL/CentOS version
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"
 # Dependencies & Conflicts
 dependencies: []
-conflicts:
-  - package-manager-yum # DNF replaces YUM
+conflicts: []
 # Capabilities
 supports:
   install: true
@@ -36,16 +34,15 @@ supports:
   update: true
   search: true
   list: true
-  repository_management: true
-  module_streams: true
+  sandboxing: true
+  auto_updates: true
 # Priority (lower number = higher priority)
-priority: 10
+priority: 30
 # Tags for discovery
 tags:
   - package-manager
-  - dnf
-  - fedora
-  - rhel
-  - centos
+  - snap
+  - snapd
+  - ubuntu
   - linux
-  - system
+  - universal

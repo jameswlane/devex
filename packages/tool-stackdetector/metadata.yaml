@@ -1,0 +1,48 @@
+# Plugin Metadata for Stack Detector Tool
+name: tool-stackdetector
+type: tool
+description: Technology stack detection and analysis utility
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/tool-stackdetector
+# Platform Support
+platforms:
+  linux:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  stack_detection: true
+  language_detection: true
+  framework_detection: true
+  dependency_analysis: true
+  project_analysis: true
+# Priority (lower number = higher priority)
+priority: 80
+# Tags for discovery
+tags:
+  - tool
+  - stack-detector
+  - analysis
+  - development
+  - cross-platform

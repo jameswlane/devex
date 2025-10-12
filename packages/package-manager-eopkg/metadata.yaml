@@ -1,34 +1,26 @@
-# Plugin Metadata for DNF Package Manager
-name: package-manager-dnf
+# Plugin Metadata for Eopkg Package Manager
+name: package-manager-eopkg
 type: package-manager
-description: DNF package manager support for Fedora/RHEL systems
+description: Eopkg package manager support for Solus Linux
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-dnf
+directory: packages/package-manager-eopkg
 # Platform Support
 platforms:
   linux:
     distros:
-      - fedora
-      - rhel
-      - centos
-      - rocky
-      - almalinux
-      - oracle
+      - solus
     architectures:
       - amd64
-      - arm64
-    min_version: "8" # Minimum RHEL/CentOS version
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"
 # Dependencies & Conflicts
 dependencies: []
-conflicts:
-  - package-manager-yum # DNF replaces YUM
+conflicts: []
 # Capabilities
 supports:
   install: true
@@ -37,15 +29,12 @@ supports:
   search: true
   list: true
   repository_management: true
-  module_streams: true
 # Priority (lower number = higher priority)
 priority: 10
 # Tags for discovery
 tags:
   - package-manager
-  - dnf
-  - fedora
-  - rhel
-  - centos
+  - eopkg
+  - solus
   - linux
   - system

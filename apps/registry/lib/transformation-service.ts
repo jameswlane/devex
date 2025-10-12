@@ -66,6 +66,7 @@ type ApplicationWithSupport = {
 	default: boolean;
 	tags: string[];
 	desktopEnvironments: string[];
+	githubUrl: string | null;
 	githubPath: string | null;
 	// Optimized JSON platform support structure
 	platforms: {
@@ -82,6 +83,7 @@ type ApplicationWithSupport = {
 	default: boolean;
 	tags: string[];
 	desktopEnvironments: string[];
+	githubUrl: string | null;
 	githubPath: string | null;
 	linuxSupport: PlatformSupportInfo | null;
 	macosSupport: PlatformSupportInfo | null;
@@ -455,6 +457,7 @@ export class RegistryTransformationService {
 					},
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments,
+					githubUrl: app.githubUrl,
 					githubPath: app.githubPath,
 				};
 			});

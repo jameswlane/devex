@@ -1,28 +1,27 @@
-# Plugin Metadata for Homebrew Package Manager
-name: package-manager-brew
+# Plugin Metadata for Nix Flake Package Manager
+name: package-manager-nixflake
 type: package-manager
-description: Homebrew package manager support for macOS and Linux
+description: Nix Flakes experimental package management for reproducible builds
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-brew
+directory: packages/package-manager-nixflake
 # Platform Support
 platforms:
-  darwin:
-    distros: [] # macOS doesn't have distros
-    architectures:
-      - amd64
-      - arm64 # M1/M2 Macs
-    min_version: "10.15" # macOS Catalina
   linux:
     distros:
+      - nixos
       - debian
       - ubuntu
       - fedora
-      - centos
-      - alpine
+      - arch
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
     architectures:
       - amd64
       - arm64
@@ -39,17 +38,14 @@ supports:
   update: true
   search: true
   list: true
-  cask: true # macOS GUI applications
-  tap: true # Third-party repositories
-  services: true # Service management
+  reproducible_builds: true
+  flake_system: true
 # Priority (lower number = higher priority)
-priority: 5 # Higher priority on macOS
+priority: 20
 # Tags for discovery
 tags:
   - package-manager
-  - brew
-  - homebrew
-  - macos
-  - darwin
-  - linux
-  - cross-platform
+  - nix
+  - flakes
+  - reproducible
+  - declarative

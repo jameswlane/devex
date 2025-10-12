@@ -1,0 +1,48 @@
+# Plugin Metadata for GNOME Desktop Environment
+name: desktop-gnome
+type: desktop
+description: GNOME desktop environment support
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-gnome
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - ubuntu
+      - debian
+      - fedora
+      - arch
+      - opensuse
+      - rhel
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-kde
+  - desktop-xfce
+  - desktop-mate
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  extensions: true
+  wayland: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - gnome
+  - linux
+  - ui
+  - wayland

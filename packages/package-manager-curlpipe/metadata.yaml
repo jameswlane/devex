@@ -1,0 +1,48 @@
+# Plugin Metadata for Curlpipe Installer
+name: package-manager-curlpipe
+type: package-manager
+description: Direct download and installation via curl pipeline
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/package-manager-curlpipe
+# Platform Support
+platforms:
+  linux:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts: []
+# Capabilities
+supports:
+  install: true
+  uninstall: false
+  update: false
+  search: false
+  list: false
+# Priority (lower number = higher priority)
+priority: 90
+# Tags for discovery
+tags:
+  - package-manager
+  - curl
+  - download
+  - cross-platform

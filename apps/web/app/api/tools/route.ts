@@ -64,6 +64,36 @@ async function fetchRegistryData(): Promise<Tool[]> {
 			registryData.plugins ||
 			[]) as any[];
 		for (const plugin of plugins) {
+			// Build platforms object based on actual plugin support
+			const platforms: any = {};
+			const pluginPlatforms = plugin.platforms || [];
+
+			// Map platform names from metadata to expected format
+			if (pluginPlatforms.includes("linux")) {
+				platforms.linux = {
+					installMethod: "devex",
+					installCommand: plugin.name,
+					officialSupport: true,
+				};
+			}
+			if (
+				pluginPlatforms.includes("darwin") ||
+				pluginPlatforms.includes("macos")
+			) {
+				platforms.macos = {
+					installMethod: "devex",
+					installCommand: plugin.name,
+					officialSupport: true,
+				};
+			}
+			if (pluginPlatforms.includes("windows")) {
+				platforms.windows = {
+					installMethod: "devex",
+					installCommand: plugin.name,
+					officialSupport: true,
+				};
+			}
+
 			tools.push({
 				name: plugin.name,
 				description: plugin.description,
@@ -71,23 +101,7 @@ async function fetchRegistryData(): Promise<Tool[]> {
 				type: "plugin",
 				official: true,
 				default: false,
-				platforms: {
-					linux: {
-						installMethod: "devex",
-						installCommand: plugin.name,
-						officialSupport: true,
-					},
-					macos: {
-						installMethod: "devex",
-						installCommand: plugin.name,
-						officialSupport: true,
-					},
-					windows: {
-						installMethod: "devex",
-						installCommand: plugin.name,
-						officialSupport: true,
-					},
-				},
+				platforms: platforms,
 				tags: [...(plugin.tags || []), "plugin"],
 				pluginType: plugin.type,
 				priority: plugin.priority,

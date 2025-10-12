@@ -1,34 +1,36 @@
-# Plugin Metadata for DNF Package Manager
-name: package-manager-dnf
+# Plugin Metadata for Mise Package Manager
+name: package-manager-mise
 type: package-manager
-description: DNF package manager support for Fedora/RHEL systems
+description: Mise development tool version manager (successor to asdf)
 version: 1.0.0
 author: DevEx Team
 license: MIT
 # Repository Information
 repository: https://github.com/jameswlane/devex
-directory: packages/package-manager-dnf
+directory: packages/package-manager-mise
 # Platform Support
 platforms:
   linux:
-    distros:
-      - fedora
-      - rhel
-      - centos
-      - rocky
-      - almalinux
-      - oracle
+    distros: []
     architectures:
       - amd64
       - arm64
-    min_version: "8" # Minimum RHEL/CentOS version
+  darwin:
+    distros: []
+    architectures:
+      - amd64
+      - arm64
+  windows:
+    distros: []
+    architectures:
+      - amd64
 # SDK Compatibility
 sdk_version: "1.0.0"
 api_version: "v1"
 # Dependencies & Conflicts
 dependencies: []
 conflicts:
-  - package-manager-yum # DNF replaces YUM
+  - package-manager-asdf
 # Capabilities
 supports:
   install: true
@@ -36,16 +38,14 @@ supports:
   update: true
   search: true
   list: true
-  repository_management: true
-  module_streams: true
+  version_management: true
+  plugin_system: true
 # Priority (lower number = higher priority)
-priority: 10
+priority: 15
 # Tags for discovery
 tags:
   - package-manager
-  - dnf
-  - fedora
-  - rhel
-  - centos
-  - linux
-  - system
+  - mise
+  - version-manager
+  - development
+  - cross-platform

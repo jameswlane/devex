@@ -1,0 +1,47 @@
+# Plugin Metadata for MATE Desktop Environment
+name: desktop-mate
+type: desktop
+description: MATE desktop environment support (GNOME 2 fork)
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-mate
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - ubuntu
+      - debian
+      - fedora
+      - arch
+      - mint
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-gnome
+  - desktop-kde
+  - desktop-xfce
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  traditional_desktop: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - mate
+  - linux
+  - ui
+  - traditional
+  - gtk

@@ -1,0 +1,47 @@
+# Plugin Metadata for Cinnamon Desktop Environment
+name: desktop-cinnamon
+type: desktop
+description: Cinnamon desktop environment support for Linux Mint
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-cinnamon
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - mint
+      - debian
+      - ubuntu
+      - fedora
+      - arch
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-gnome
+  - desktop-kde
+  - desktop-xfce
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  extensions: true
+  applets: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - cinnamon
+  - mint
+  - linux
+  - ui

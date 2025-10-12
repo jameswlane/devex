@@ -57,10 +57,10 @@ export function ApplicationCard({ app }: ApplicationCardProps) {
       </div>
 
       {/* GitHub Link */}
-      {app.githubPath && (
+      {app.githubUrl && app.githubPath && (
         <div className="pt-4 border-t">
           <a
-            href={`https://github.com/jameswlane/devex/${app.githubPath}`}
+            href={`${app.githubUrl}/tree/main/${app.githubPath}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"

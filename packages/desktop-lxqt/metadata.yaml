@@ -1,0 +1,47 @@
+# Plugin Metadata for LXQt Desktop Environment
+name: desktop-lxqt
+type: desktop
+description: LXQt lightweight desktop environment support
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-lxqt
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - lubuntu
+      - debian
+      - fedora
+      - arch
+      - opensuse
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-gnome
+  - desktop-kde
+  - desktop-xfce
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  lightweight: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - lxqt
+  - lightweight
+  - linux
+  - ui
+  - qt

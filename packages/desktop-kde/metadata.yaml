@@ -1,0 +1,50 @@
+# Plugin Metadata for KDE Plasma Desktop Environment
+name: desktop-kde
+type: desktop
+description: KDE Plasma desktop environment support
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-kde
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - kubuntu
+      - debian
+      - fedora
+      - arch
+      - opensuse
+      - manjaro
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-gnome
+  - desktop-xfce
+  - desktop-mate
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  widgets: true
+  wayland: true
+  activities: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - kde
+  - plasma
+  - linux
+  - ui
+  - qt

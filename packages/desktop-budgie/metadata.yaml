@@ -1,0 +1,46 @@
+# Plugin Metadata for Budgie Desktop Environment
+name: desktop-budgie
+type: desktop
+description: Budgie desktop environment support
+version: 1.0.0
+author: DevEx Team
+license: MIT
+# Repository Information
+repository: https://github.com/jameswlane/devex
+directory: packages/desktop-budgie
+# Platform Support
+platforms:
+  linux:
+    distros:
+      - ubuntu
+      - debian
+      - solus
+      - arch
+      - fedora
+    architectures:
+      - amd64
+      - arm64
+# SDK Compatibility
+sdk_version: "1.0.0"
+api_version: "v1"
+# Dependencies & Conflicts
+dependencies: []
+conflicts:
+  - desktop-gnome
+  - desktop-kde
+  - desktop-xfce
+# Capabilities
+supports:
+  install: true
+  configure: true
+  theming: true
+  extensions: true
+# Priority (lower number = higher priority)
+priority: 60
+# Tags for discovery
+tags:
+  - desktop
+  - budgie
+  - linux
+  - ui
+  - modern
