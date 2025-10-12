@@ -46,8 +46,6 @@ interface BinaryInfo {
 const GITHUB_OWNER = 'jameswlane';
 const GITHUB_REPO = 'devex';
 const PLUGIN_TAG_PREFIX = 'packages/';
-const PLUGIN_TYPES = ['package-manager', 'tool', 'desktop', 'system-setup'];
-
 const prisma = new PrismaClient();
 
 /**
@@ -135,7 +133,7 @@ async function processPluginTag(tag: GitHubTag) {
 
     console.log(`🔧 Processing plugin: ${pluginInfo.name}@${pluginInfo.version}`);
 
-    // Check if plugin already exists
+    // Check if the plugin already exists
     const existingPlugin = await prisma.plugin.findUnique({
       where: { name: pluginInfo.name }
     });
@@ -144,16 +142,16 @@ async function processPluginTag(tag: GitHubTag) {
     const metadata = await getPluginMetadata(pluginInfo, tag);
 
     if (existingPlugin) {
-      // Update existing plugin if version is newer
+      // Update the existing plugin if the version is newer
       if (shouldUpdatePlugin(existingPlugin.version, pluginInfo.version)) {
-        await updatePlugin(existingPlugin.id, metadata, pluginInfo, tag);
+        await updatePlugin(existingPlugin.id, metadata, pluginInfo);
         console.log(`✅ Updated plugin: ${pluginInfo.name}`);
       } else {
         console.log(`ℹ️  Plugin ${pluginInfo.name} is up to date`);
       }
     } else {
       // Create new plugin
-      await createPlugin(metadata, pluginInfo, tag);
+      await createPlugin(metadata, pluginInfo);
       console.log(`✅ Created plugin: ${pluginInfo.name}`);
     }
 
@@ -189,7 +187,7 @@ function parsePluginTag(tagName: string): { name: string; fullName: string; type
   // - packages/system-setup/v{version}
 
   // Try pattern: packages/{type}-{name}/v{version}
-  const matchWithType = tagName.match(/^packages\/(package-manager|tool|desktop)-(.+)\/v(.+)$/);
+  const matchWithType = tagName.match(/^packages\/(package-manager|tool|desktop|system)-(.+)\/v(.+)$/);
   if (matchWithType) {
     const fullName = `${matchWithType[1]}-${matchWithType[2]}`;
     return {
@@ -200,19 +198,6 @@ function parsePluginTag(tagName: string): { name: string; fullName: string; type
       version: matchWithType[3]         // Version without 'v': "0.0.1"
     };
   }
-
-  // Try pattern: packages/system-setup/v{version}
-  const matchSystemSetup = tagName.match(/^packages\/system-setup\/v(.+)$/);
-  if (matchSystemSetup) {
-    return {
-      type: 'system',
-      name: 'system-setup',
-      fullName: 'system-setup',
-      githubPath: 'packages/system-setup', // GitHub path without version
-      version: matchSystemSetup[1]
-    };
-  }
-
   return null;
 }
 
@@ -289,17 +274,6 @@ async function getPluginMetadata(
 }
 
 /**
- * Infer plugin type from name
- */
-function inferPluginType(name: string): string {
-  if (name.startsWith('package-manager-')) return 'package-manager';
-  if (name.startsWith('tool-')) return 'tool';
-  if (name.startsWith('system-')) return 'system';
-  if (name.startsWith('desktop-')) return 'desktop';
-  return 'utility';
-}
-
-/**
  * Generate binary information for different platforms
  */
 async function generateBinaryInfo(
@@ -331,7 +305,7 @@ async function generateBinaryInfo(
     // Find matching asset to get real size
     const asset = assets.find((a: any) => a.name === assetName);
 
-    // Find checksum file for this asset
+    // Find the checksum file for this asset
     const checksumAssetName = `${assetName}.sha256`;
     const checksumAsset = assets.find((a: any) => a.name === checksumAssetName);
 
@@ -371,7 +345,7 @@ async function getReleaseByTag(tagName: string) {
 }
 
 /**
- * Check if plugin should be updated based on version
+ * Check if the plugin should be updated based on its version
  */
 function shouldUpdatePlugin(currentVersion: string, newVersion: string): boolean {
   // Simple version comparison - in production, use semver
@@ -384,8 +358,7 @@ function shouldUpdatePlugin(currentVersion: string, newVersion: string): boolean
 async function updatePlugin(
   pluginId: string,
   metadata: PluginMetadata,
-  pluginInfo: { githubPath: string },
-  tag: GitHubTag
+  pluginInfo: { githubPath: string }
 ) {
   await prisma.plugin.update({
     where: { id: pluginId },
@@ -412,9 +385,9 @@ async function updatePlugin(
 }
 
 /**
- * Create new plugin
+ * Create a new plugin
  */
-async function createPlugin(metadata: PluginMetadata, pluginInfo: { githubPath: string }, tag: GitHubTag) {
+async function createPlugin(metadata: PluginMetadata, pluginInfo: { githubPath: string }) {
   await prisma.plugin.create({
     data: {
       name: metadata.name,
