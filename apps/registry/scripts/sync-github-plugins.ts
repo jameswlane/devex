@@ -146,14 +146,14 @@ async function processPluginTag(tag: GitHubTag) {
     if (existingPlugin) {
       // Update existing plugin if version is newer
       if (shouldUpdatePlugin(existingPlugin.version, pluginInfo.version)) {
-        await updatePlugin(existingPlugin.id, metadata, tag);
+        await updatePlugin(existingPlugin.id, metadata, pluginInfo, tag);
         console.log(`✅ Updated plugin: ${pluginInfo.name}`);
       } else {
         console.log(`ℹ️  Plugin ${pluginInfo.name} is up to date`);
       }
     } else {
       // Create new plugin
-      await createPlugin(metadata, tag);
+      await createPlugin(metadata, pluginInfo, tag);
       console.log(`✅ Created plugin: ${pluginInfo.name}`);
     }
 
@@ -181,7 +181,7 @@ async function processPluginTag(tag: GitHubTag) {
 /**
  * Parse plugin information from tag name
  */
-function parsePluginTag(tagName: string): { name: string; fullName: string; type: string; version: string } | null {
+function parsePluginTag(tagName: string): { name: string; fullName: string; type: string; version: string; githubPath: string } | null {
   // Expected formats:
   // - packages/package-manager-{name}/v{version}
   // - packages/tool-{name}/v{version}
@@ -191,10 +191,12 @@ function parsePluginTag(tagName: string): { name: string; fullName: string; type
   // Try pattern: packages/{type}-{name}/v{version}
   const matchWithType = tagName.match(/^packages\/(package-manager|tool|desktop)-(.+)\/v(.+)$/);
   if (matchWithType) {
+    const fullName = `${matchWithType[1]}-${matchWithType[2]}`;
     return {
       type: matchWithType[1],
       name: matchWithType[2],           // Short name: "curlpipe"
-      fullName: `${matchWithType[1]}-${matchWithType[2]}`, // Full name: "package-manager-curlpipe"
+      fullName: fullName,               // Full name: "package-manager-curlpipe"
+      githubPath: `packages/${fullName}`, // GitHub path without version
       version: matchWithType[3]         // Version without 'v': "0.0.1"
     };
   }
@@ -206,6 +208,7 @@ function parsePluginTag(tagName: string): { name: string; fullName: string; type
       type: 'system',
       name: 'system-setup',
       fullName: 'system-setup',
+      githubPath: 'packages/system-setup', // GitHub path without version
       version: matchSystemSetup[1]
     };
   }
@@ -217,7 +220,7 @@ function parsePluginTag(tagName: string): { name: string; fullName: string; type
  * Get plugin metadata from GitHub release or package files
  */
 async function getPluginMetadata(
-  pluginInfo: { name: string; fullName: string; type: string; version: string },
+  pluginInfo: { name: string; fullName: string; type: string; version: string; githubPath: string },
   tag: GitHubTag
 ): Promise<PluginMetadata> {
 
@@ -239,14 +242,47 @@ async function getPluginMetadata(
     conflicts: [],
   };
 
-  // Try to get more detailed metadata from release or package files
+  // Try to get more detailed metadata from plugin's metadata.yaml file
   try {
-    const releaseData = await getReleaseByTag(tag.name);
-    if (releaseData) {
-      metadata.description = releaseData.body || metadata.description;
+    const metadataUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/packages/${pluginInfo.fullName}/metadata.yaml`;
+    const response = await fetch(metadataUrl);
+
+    if (response.ok) {
+      const yamlContent = await response.text();
+
+      // Parse simple YAML fields (description, author, license, etc.)
+      const descMatch = yamlContent.match(/^description:\s*(.+)$/m);
+      if (descMatch) {
+        metadata.description = descMatch[1].trim();
+      }
+
+      const authorMatch = yamlContent.match(/^author:\s*(.+)$/m);
+      if (authorMatch) {
+        metadata.author = authorMatch[1].trim();
+      }
+
+      const licenseMatch = yamlContent.match(/^license:\s*(.+)$/m);
+      if (licenseMatch) {
+        metadata.license = licenseMatch[1].trim();
+      }
+
+      const homepageMatch = yamlContent.match(/^homepage:\s*(.+)$/m);
+      if (homepageMatch) {
+        metadata.homepage = homepageMatch[1].trim();
+      }
+
+      const sdkVersionMatch = yamlContent.match(/^sdkVersion:\s*(.+)$/m);
+      if (sdkVersionMatch) {
+        metadata.sdkVersion = sdkVersionMatch[1].trim();
+      }
+
+      const apiVersionMatch = yamlContent.match(/^apiVersion:\s*(.+)$/m);
+      if (apiVersionMatch) {
+        metadata.apiVersion = apiVersionMatch[1].trim();
+      }
     }
   } catch (error) {
-    console.log(`⚠️  Could not fetch release data for ${tag.name}`);
+    console.log(`⚠️  Could not fetch metadata.yaml for ${pluginInfo.fullName}: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   return metadata;
@@ -348,6 +384,7 @@ function shouldUpdatePlugin(currentVersion: string, newVersion: string): boolean
 async function updatePlugin(
   pluginId: string,
   metadata: PluginMetadata,
+  pluginInfo: { githubPath: string },
   tag: GitHubTag
 ) {
   await prisma.plugin.update({
@@ -368,7 +405,7 @@ async function updatePlugin(
       sdkVersion: metadata.sdkVersion,
       apiVersion: metadata.apiVersion,
       githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
-      githubPath: tag.name,
+      githubPath: pluginInfo.githubPath,
       lastSynced: new Date(),
     },
   });
@@ -377,7 +414,7 @@ async function updatePlugin(
 /**
  * Create new plugin
  */
-async function createPlugin(metadata: PluginMetadata, tag: GitHubTag) {
+async function createPlugin(metadata: PluginMetadata, pluginInfo: { githubPath: string }, tag: GitHubTag) {
   await prisma.plugin.create({
     data: {
       name: metadata.name,
@@ -397,7 +434,7 @@ async function createPlugin(metadata: PluginMetadata, tag: GitHubTag) {
       sdkVersion: metadata.sdkVersion,
       apiVersion: metadata.apiVersion,
       githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
-      githubPath: tag.name,
+      githubPath: pluginInfo.githubPath,
       lastSynced: new Date(),
     },
   });
