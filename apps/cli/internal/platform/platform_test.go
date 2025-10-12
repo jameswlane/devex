@@ -51,7 +51,7 @@ func (m *mockFileInfo) Sys() interface{}   { return nil }
 var _ = Describe("Platform Detection", func() {
 	Describe("DetectPlatform", func() {
 		DescribeTable("platform detection scenarios",
-			func(mockOS, mockArch string, setupEnv func(), osRelease string, expected Platform) {
+			func(mockOS, mockArch string, setupEnv func(), osRelease string, expected DetectionResult) {
 				// Setup environment
 				setupEnv()
 
@@ -83,7 +83,7 @@ var _ = Describe("Platform Detection", func() {
 					os.Setenv("GNOME_DESKTOP_SESSION_ID", "1")
 				},
 				"",
-				Platform{
+				DetectionResult{
 					OS:           "linux",
 					DesktopEnv:   "gnome",
 					Distribution: "unknown",
@@ -100,7 +100,7 @@ ID=ubuntu
 ID_LIKE=debian
 PRETTY_NAME="Ubuntu 22.04.3 LTS"
 VERSION_ID="22.04"`,
-				Platform{
+				DetectionResult{
 					OS:           "linux",
 					DesktopEnv:   "unknown",
 					Distribution: "ubuntu",
@@ -112,7 +112,7 @@ VERSION_ID="22.04"`,
 				"darwin", "arm64",
 				func() { os.Clearenv() },
 				"",
-				Platform{
+				DetectionResult{
 					OS:           "darwin",
 					DesktopEnv:   "darwin",
 					Distribution: "",
@@ -124,7 +124,7 @@ VERSION_ID="22.04"`,
 				"windows", "amd64",
 				func() { os.Clearenv() },
 				"",
-				Platform{
+				DetectionResult{
 					OS:           "windows",
 					DesktopEnv:   "windows",
 					Distribution: "",

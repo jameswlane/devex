@@ -96,6 +96,7 @@ func NewTemplateManager(homeDir string) *TemplateManager {
 func detectBuiltinTemplatesDir() string {
 	// Try different possible locations for built-in templates
 	possiblePaths := []string{
+		"../../assets/templates",     // Test mode (from internal/templates)
 		"assets/templates",           // Development mode (relative to binary)
 		"./assets/templates",         // Current directory
 		"/usr/share/devex/templates", // System install

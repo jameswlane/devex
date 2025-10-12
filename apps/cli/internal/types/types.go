@@ -17,7 +17,7 @@ type BaseConfig struct {
 
 // AppConfig defines the configuration for an application, including its installation method, dependencies, and optional post-install steps.
 type AppConfig struct {
-	BaseConfig
+	BaseConfig         `yaml:",inline" mapstructure:",squash"`
 	Default            bool               `mapstructure:"default" yaml:"default"`
 	InstallMethod      string             `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand     string             `mapstructure:"install_command" yaml:"install_command"`
