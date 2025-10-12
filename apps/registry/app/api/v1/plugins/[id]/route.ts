@@ -1,17 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
 import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
-import { Prisma } from "@prisma/client";
 
 // GET /api/v1/plugins/[id] - Get a specific plugin by name
 async function handleGetPlugin(
 	request: NextRequest,
-	{ params }: { params: { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: pluginName } = params;
+	const { id: pluginName } = await params;
 
 	const plugin = await safeDatabase(
 		() => prisma.plugin.findUnique({
@@ -43,9 +43,9 @@ async function handleGetPlugin(
 // PUT /api/v1/plugins/[id] - Update a plugin by name
 async function handleUpdatePlugin(
 	request: NextRequest,
-	{ params }: { params: { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: pluginName } = params;
+	const { id: pluginName } = await params;
 	const body = await request.json();
 
 	// Validate and sanitize input
@@ -98,9 +98,9 @@ async function handleUpdatePlugin(
 // DELETE /api/v1/plugins/[id] - Delete a plugin by name
 async function handleDeletePlugin(
 	request: NextRequest,
-	{ params }: { params: { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: pluginName } = params;
+	const { id: pluginName } = await params;
 
 	const result = await safeDatabase(
 		async () => {
@@ -138,7 +138,27 @@ async function handleDeletePlugin(
 	);
 }
 
+// Authentication-required placeholder handlers
+async function requireAuthentication(): Promise<NextResponse> {
+	return createApiError(
+		"Authentication required. PUT and DELETE endpoints are disabled until authentication is implemented.",
+		401,
+	);
+}
+
 // Export wrapped handlers with error handling
 export const GET = withErrorHandling(handleGetPlugin, "fetch-plugin");
+
+// 🚨 DISABLED: Awaiting authentication implementation
+// These endpoints are temporarily disabled to prevent unauthorized database modifications
+// TODO: Enable after implementing authentication/authorization
+export const PUT = requireAuthentication;
+export const DELETE = requireAuthentication;
+
+// ============================================================================
+// PRESERVED CODE: Enable after authentication is implemented
+// ============================================================================
+/*
 export const PUT = withErrorHandling(handleUpdatePlugin, "update-plugin");
 export const DELETE = withErrorHandling(handleDeletePlugin, "delete-plugin");
+*/

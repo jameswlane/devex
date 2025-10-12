@@ -9,9 +9,9 @@ import { Prisma } from "@prisma/client";
 // GET /api/v1/applications/[id] - Get a specific application by name
 async function handleGetApplication(
 	request: NextRequest,
-	{ params }: { params: { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: applicationName } = params;
+	const { id: applicationName } = await params;
 
 	const application = await safeDatabase(
 		() => prisma.application.findUnique({
@@ -45,9 +45,9 @@ async function handleGetApplication(
 // PUT /api/v1/applications/[id] - Update an application by name
 async function handleUpdateApplication(
 	request: NextRequest,
-	{ params }: { params: { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: applicationName } = params;
+	const { id: applicationName } = await params;
 	const body = await request.json();
 
 	// Validate and sanitize input
@@ -91,9 +91,9 @@ async function handleUpdateApplication(
 // DELETE /api/v1/applications/[id] - Delete an application by name
 async function handleDeleteApplication(
 	request: NextRequest,
-	{ params }: { params: { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: applicationName } = params;
+	const { id: applicationName } = await params;
 
 	const result = await safeDatabase(
 		async () => {
