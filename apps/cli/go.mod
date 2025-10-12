@@ -13,7 +13,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
 	github.com/fatih/color v1.18.0
-	github.com/jameswlane/devex/packages/plugin-sdk v0.0.2
+	github.com/jameswlane/devex/packages/plugin-sdk v0.0.3
 	github.com/mattn/go-sqlite3 v1.14.29
 	github.com/muesli/reflow v0.3.0
 	github.com/onsi/ginkgo/v2 v2.25.2
