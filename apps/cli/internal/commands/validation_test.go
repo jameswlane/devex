@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
+	"github.com/jameswlane/devex/apps/cli/internal/installers/utilities"
 )
 
 var _ = Describe("Validation Functions", func() {
@@ -65,31 +66,31 @@ var _ = Describe("Validation Functions", func() {
 
 		It("accepts paths within the base directory", func() {
 			validPath := filepath.Join(tempDir, "subdir", "file.txt")
-			err := commands.ValidatePath(validPath, tempDir)
+			err := utilities.ValidatePath(validPath, tempDir)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("rejects directory traversal attempts", func() {
 			maliciousPath := filepath.Join(tempDir, "..", "..", "etc", "passwd")
-			err := commands.ValidatePath(maliciousPath, tempDir)
+			err := utilities.ValidatePath(maliciousPath, tempDir)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("path traversal detected"))
 		})
 
 		It("rejects paths with .. components", func() {
 			maliciousPath := tempDir + "/../../../etc/passwd"
-			err := commands.ValidatePath(maliciousPath, tempDir)
+			err := utilities.ValidatePath(maliciousPath, tempDir)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("path traversal detected"))
 		})
 
 		It("handles relative paths correctly", func() {
-			err := commands.ValidatePath("subdir/file.txt", tempDir)
+			err := utilities.ValidatePath("subdir/file.txt", tempDir)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("rejects relative paths with traversal", func() {
-			err := commands.ValidatePath("../../../etc/passwd", tempDir)
+			err := utilities.ValidatePath("../../../etc/passwd", tempDir)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("path traversal detected"))
 		})
