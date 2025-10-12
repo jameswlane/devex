@@ -8,16 +8,16 @@ export async function GET(
 	{ params }: { params: Promise<{ id: string; platform: string }> }
 ) {
 	try {
-		const { id, platform } = await params;
+		const { id: pluginName, platform } = await params;
 
 		// Validate platform format
 		if (!isValidPlatform(platform)) {
 			return createApiError("Invalid platform format", 400);
 		}
 
-		// Find the plugin
+		// Find the plugin by name
 		const plugin = await prisma.plugin.findUnique({
-			where: { id },
+			where: { name: pluginName },
 		});
 
 		if (!plugin) {
@@ -38,7 +38,7 @@ export async function GET(
 
 		// Update download count and last download time atomically
 		await prisma.plugin.update({
-			where: { id },
+			where: { name: pluginName },
 			data: {
 				downloadCount: {
 					increment: 1,

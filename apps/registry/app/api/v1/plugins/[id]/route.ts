@@ -6,21 +6,21 @@ import { invalidateOnDataChange } from "@/lib/cache-invalidation";
 import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
 import { Prisma } from "@prisma/client";
 
-// GET /api/v1/plugins/[id] - Get a specific plugin
+// GET /api/v1/plugins/[id] - Get a specific plugin by name
 async function handleGetPlugin(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
 ): Promise<NextResponse> {
-	const { id } = params;
+	const { id: pluginName } = params;
 
 	const plugin = await safeDatabase(
 		() => prisma.plugin.findUnique({
-			where: { id },
+			where: { name: pluginName },
 		}),
 		{
 			operation: "fetch-plugin",
 			resource: "plugin",
-			metadata: { id }
+			metadata: { name: pluginName }
 		}
 	);
 
@@ -32,7 +32,7 @@ async function handleGetPlugin(
 		type: ResponseType.STATIC,
 		headers: {
 			"X-Resource-Type": "plugin",
-			"X-Resource-ID": id,
+			"X-Resource-Name": pluginName,
 		},
 		performance: {
 			source: "database",
@@ -40,17 +40,16 @@ async function handleGetPlugin(
 	});
 }
 
-// PUT /api/v1/plugins/[id] - Update a plugin
+// PUT /api/v1/plugins/[id] - Update a plugin by name
 async function handleUpdatePlugin(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
 ): Promise<NextResponse> {
-	const { id } = params;
+	const { id: pluginName } = params;
 	const body = await request.json();
 
 	// Validate and sanitize input
 	const updateData: Prisma.PluginUpdateInput = {
-		...(body.name && { name: body.name }),
 		...(body.description && { description: body.description }),
 		...(body.type && { type: body.type }),
 		...(body.priority !== undefined && { priority: body.priority }),
@@ -61,21 +60,21 @@ async function handleUpdatePlugin(
 
 	const plugin = await safeDatabase(
 		async () => {
-			// Update the plugin
+			// Update the plugin by name
 			const updated = await prisma.plugin.update({
-				where: { id },
+				where: { name: pluginName },
 				data: updateData,
 			});
 
 			// Invalidate caches after successful update
-			await invalidateOnDataChange("update", "plugin", id);
+			await invalidateOnDataChange("update", "plugin", updated.id);
 
 			return updated;
 		},
 		{
 			operation: "update-plugin",
 			resource: "plugin",
-			metadata: { id }
+			metadata: { name: pluginName }
 		}
 	);
 
@@ -87,7 +86,7 @@ async function handleUpdatePlugin(
 		type: ResponseType.REALTIME,
 		headers: {
 			"X-Resource-Type": "plugin",
-			"X-Resource-ID": id,
+			"X-Resource-Name": pluginName,
 			"X-Operation": "update",
 		},
 		performance: {
@@ -96,29 +95,35 @@ async function handleUpdatePlugin(
 	});
 }
 
-// DELETE /api/v1/plugins/[id] - Delete a plugin
+// DELETE /api/v1/plugins/[id] - Delete a plugin by name
 async function handleDeletePlugin(
 	request: NextRequest,
 	{ params }: { params: { id: string } }
 ): Promise<NextResponse> {
-	const { id } = params;
+	const { id: pluginName } = params;
 
-	await safeDatabase(
+	const result = await safeDatabase(
 		async () => {
-			// Delete the plugin
-			await prisma.plugin.delete({
-				where: { id },
+			// Delete the plugin by name
+			const deleted = await prisma.plugin.delete({
+				where: { name: pluginName },
 			});
 
 			// Invalidate caches after successful deletion
-			await invalidateOnDataChange("delete", "plugin", id);
+			await invalidateOnDataChange("delete", "plugin", deleted.id);
+
+			return deleted;
 		},
 		{
 			operation: "delete-plugin",
 			resource: "plugin",
-			metadata: { id }
+			metadata: { name: pluginName }
 		}
 	);
+
+	if (!result) {
+		return createApiError("Plugin not found", 404);
+	}
 
 	return createOptimizedResponse(
 		{ success: true, message: "Plugin deleted successfully" },
@@ -126,7 +131,7 @@ async function handleDeletePlugin(
 			type: ResponseType.REALTIME,
 			headers: {
 				"X-Resource-Type": "plugin",
-				"X-Resource-ID": id,
+				"X-Resource-Name": pluginName,
 				"X-Operation": "delete",
 			},
 		}
