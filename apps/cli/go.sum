@@ -83,6 +83,8 @@ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/jameswlane/devex/packages/plugin-sdk v0.0.1 h1:842+GZzZBQRViUQMNCH7dS1RkhLz45aB6ZyB+Y9p4ew=
 github.com/jameswlane/devex/packages/plugin-sdk v0.0.1/go.mod h1:9ZXgCc9cg3imqpFZvEC6A8lFnvghQUrU2EZyiI2bxdw=
+github.com/jameswlane/devex/packages/plugin-sdk v0.0.2 h1:JIx5jHuMpKz7ksdoZCFMeT8mDnhhvMpma1OjbKGwn9E=
+github.com/jameswlane/devex/packages/plugin-sdk v0.0.2/go.mod h1:zd7Bx4j6gwBN/SA9kTWbcH7QJnrYoQKJioyFgPCTXso=
 github.com/kr/pretty v0.3.1 h1:flRD4NNwYAUpkphVc1HcthR4KEIFJ65n8Mw5qdRn3LE=
 github.com/kr/pretty v0.3.1/go.mod h1:hoEshYVHaxMs3cyo3Yncou5ZscifuDolrwPKZanG3xk=
 github.com/kr/text v0.2.0 h1:5Nx0Ya0ZqY2ygV366QzturHI13Jq95ApcVaJBhpS+AY=
