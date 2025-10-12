@@ -856,7 +856,7 @@ func (d *Downloader) fetchRegistry() (*PluginRegistry, error) {
 
 	// Fetch fresh registry
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(d.registryURL + "/v1/registry.json")
+	resp, err := client.Get(d.registryURL + "/api/v1/registry")
 	if err != nil {
 		// Return cached registry if available
 		if cachedRegistry != nil {
