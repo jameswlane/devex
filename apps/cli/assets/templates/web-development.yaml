@@ -20,24 +20,21 @@ metadata:
   icon: 🌐
   additive: true
 applications:
-  - baseconfig:
-      name: node
-      description: Node.js JavaScript runtime
-      category: development
+  - name: node
+    description: Node.js JavaScript runtime
+    category: development
     install_method: mise
     install_command: node
     default: true
-  - baseconfig:
-      name: vscode
-      description: Visual Studio Code editor
-      category: development
+  - name: vscode
+    description: Visual Studio Code editor
+    category: development
     install_method: apt
     install_command: code
     default: true
-  - baseconfig:
-      name: chrome
-      description: Google Chrome browser
-      category: browser
+  - name: chrome
+    description: Google Chrome browser
+    category: browser
     install_method: apt
     install_command: google-chrome-stable
     default: true
@@ -50,8 +47,8 @@ environment:
   variables:
     NODE_ENV: development
 system:
-  git_config: true
-  ssh_config: true
+  configure_git: true
+  configure_ssh: true
   global_theme: VS Code Dark+
   directories:
     - ~/Projects

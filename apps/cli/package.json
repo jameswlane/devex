@@ -1,6 +1,22 @@
 {
-  "name": "@devex/cli",
-  "version": "0.0.0",
-  "private": true,
-  "description": "DevEx CLI - Development Environment Setup Tool"
+	"name": "@devex/cli",
+	"version": "0.0.0",
+	"private": true,
+	"description": "DevEx CLI - Development Environment Setup Tool",
+	"scripts": {
+		"build": "go build -o bin/devex ./cmd/main.go",
+		"dev": "go build -race -o bin/devex ./cmd/main.go",
+		"docker:build": "scripts/docker.sh build",
+		"docker:clean": "scripts/docker.sh clean",
+		"docker:logs": "scripts/docker.sh logs",
+		"docker:run": "scripts/docker.sh run",
+		"docker:setup": "scripts/docker.sh setup",
+		"docker:setup-auto": "scripts/docker.sh setup-auto",
+		"docker:setup-verbose": "scripts/docker.sh setup-verbose",
+		"docker:shell": "scripts/docker.sh shell",
+		"download": "go mod download",
+		"lint": "golangci-lint run",
+		"mod": "go mod tidy",
+		"test": "go test ./..."
+	}
 }
