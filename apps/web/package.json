@@ -6,7 +6,6 @@
 		"dev": "next dev",
 		"build": "next build",
 		"start": "next start",
-		"generate": "cd ../.. && node scripts/generate-web-tools-data.js",
 		"biome:format": "biome format --write",
 		"biome:lint": "biome lint --write",
 		"biome:check": "biome check --write",
