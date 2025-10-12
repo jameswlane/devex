@@ -45,7 +45,8 @@ interface BinaryInfo {
 
 const GITHUB_OWNER = 'jameswlane';
 const GITHUB_REPO = 'devex';
-const PLUGIN_TAG_PREFIX = '@devex/';
+const PLUGIN_TAG_PREFIX = 'packages/';
+const PLUGIN_TYPES = ['package-manager', 'tool', 'desktop', 'system-setup'];
 
 const prisma = new PrismaClient();
 
@@ -180,35 +181,56 @@ async function processPluginTag(tag: GitHubTag) {
 /**
  * Parse plugin information from tag name
  */
-function parsePluginTag(tagName: string): { name: string; version: string } | null {
-  // Expected format: @devex/package-manager-apt@1.6.0
-  const match = tagName.match(/^@devex\/(.+)@(.+)$/);
-  if (!match) return null;
+function parsePluginTag(tagName: string): { name: string; fullName: string; type: string; version: string } | null {
+  // Expected formats:
+  // - packages/package-manager-{name}/v{version}
+  // - packages/tool-{name}/v{version}
+  // - packages/desktop-{name}/v{version}
+  // - packages/system-setup/v{version}
 
-  return {
-    name: match[1],
-    version: match[2]
-  };
+  // Try pattern: packages/{type}-{name}/v{version}
+  const matchWithType = tagName.match(/^packages\/(package-manager|tool|desktop)-(.+)\/v(.+)$/);
+  if (matchWithType) {
+    return {
+      type: matchWithType[1],
+      name: matchWithType[2],           // Short name: "curlpipe"
+      fullName: `${matchWithType[1]}-${matchWithType[2]}`, // Full name: "package-manager-curlpipe"
+      version: matchWithType[3]         // Version without 'v': "0.0.1"
+    };
+  }
+
+  // Try pattern: packages/system-setup/v{version}
+  const matchSystemSetup = tagName.match(/^packages\/system-setup\/v(.+)$/);
+  if (matchSystemSetup) {
+    return {
+      type: 'system',
+      name: 'system-setup',
+      fullName: 'system-setup',
+      version: matchSystemSetup[1]
+    };
+  }
+
+  return null;
 }
 
 /**
  * Get plugin metadata from GitHub release or package files
  */
 async function getPluginMetadata(
-  pluginInfo: { name: string; version: string },
+  pluginInfo: { name: string; fullName: string; type: string; version: string },
   tag: GitHubTag
 ): Promise<PluginMetadata> {
 
   // Default metadata
   const metadata: PluginMetadata = {
     name: pluginInfo.name,
-    type: inferPluginType(pluginInfo.name),
+    type: pluginInfo.type,
     version: pluginInfo.version,
     description: `DevEx plugin: ${pluginInfo.name}`,
     author: 'DevEx Team',
     license: 'MIT',
     repository: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
-    homepage: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tree/main/packages/plugins/${pluginInfo.name}`,
+    homepage: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tree/main/packages/${pluginInfo.fullName}`,
     platforms: ['linux', 'macos', 'windows'],
     binaries: await generateBinaryInfo(pluginInfo, tag),
     sdkVersion: '1.0.0', // Default SDK version, should be extracted from plugin
@@ -245,7 +267,7 @@ function inferPluginType(name: string): string {
  * Generate binary information for different platforms
  */
 async function generateBinaryInfo(
-  pluginInfo: { name: string; version: string },
+  pluginInfo: { name: string; fullName: string; version: string },
   tag: GitHubTag
 ): Promise<Record<string, BinaryInfo>> {
   const binaries: Record<string, BinaryInfo> = {};
@@ -265,7 +287,7 @@ async function generateBinaryInfo(
   for (const platform of platforms) {
     const platformKey = `${platform.os}-${platform.arch}`;
     const fileExtension = platform.os === 'windows' ? 'zip' : 'tar.gz';
-    const assetName = `devex-plugin-${pluginInfo.name}_v${pluginInfo.version}_${platform.os}_${platform.arch}.${fileExtension}`;
+    const assetName = `devex-plugin-${pluginInfo.fullName}_v${pluginInfo.version}_${platform.os}_${platform.arch}.${fileExtension}`;
 
     // Build GitHub download URL
     const downloadUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/${tag.name}/${assetName}`;
