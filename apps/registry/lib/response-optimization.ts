@@ -87,7 +87,7 @@ interface ResponseMetadata {
   timestamp: string;
   performance?: {
     responseTime: number;
-    compressed: boolean;
+    compressionEligible: boolean; // Compression handled by CDN/edge
     cacheStrategy: string;
   };
 }
@@ -130,7 +130,7 @@ export function createOptimizedResponse<T>(
     timestamp: new Date().toISOString(),
     performance: {
       responseTime: Math.round(responseTime * 100) / 100, // Round to 2 decimal places
-      compressed: shouldCompress,
+      compressionEligible: shouldCompress, // Compression handled by CDN
       cacheStrategy: options.type,
     },
   });
@@ -221,10 +221,10 @@ function buildResponseHeaders({
     "X-API-Version": "2.1.0",
   };
   
-  // Add compression headers if applicable
+  // Note: Compression is handled by Vercel/CDN layer, not at application level
+  // We track compression eligibility but don't set Content-Encoding header
   if (shouldCompress) {
-    headers["Content-Encoding"] = "gzip";
-    headers["X-Compression-Applied"] = "true";
+    headers["X-Compression-Eligible"] = "true";
   }
   
   // Add pagination headers for paginated responses
@@ -312,10 +312,10 @@ function logResponseMetrics({
   const metrics = {
     responseType: type,
     responseSize: size,
-    compressed,
+    compressionEligible: compressed,
     responseTime: `${responseTime}ms`,
     ...(cacheHit !== undefined && { cacheHit }),
-    compressionRatio: compressed ? "estimated 60-80%" : "none",
+    compressionNote: compressed ? "handled by CDN/edge" : "below threshold",
   };
   
   // Log performance metrics for monitoring
