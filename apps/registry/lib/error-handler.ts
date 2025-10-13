@@ -388,29 +388,68 @@ export async function safeDatabase<T>(
   maxRetries: number = 3
 ): Promise<T> {
   let lastError: unknown;
-  
+
+  // Log the operation start
+  logger.info("Database operation starting", {
+    ...context,
+    timestamp: new Date().toISOString(),
+  });
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await operation();
+      const result = await operation();
+
+      // Log successful operation with result info
+      logger.info("Database operation completed", {
+        ...context,
+        attempt,
+        resultType: result === null ? "null" : typeof result,
+        resultIsArray: Array.isArray(result),
+        resultCount: Array.isArray(result) ? result.length : undefined,
+        hasResult: result !== null && result !== undefined,
+      });
+
+      return result;
     } catch (error) {
       lastError = error;
-      
+
+      // Log the error with details
+      logger.error("Database operation error", {
+        ...context,
+        attempt,
+        maxRetries,
+        errorType: error instanceof Error ? error.constructor.name : typeof error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        errorCode: error instanceof PrismaClientKnownRequestError ? error.code : undefined,
+        errorMeta: error instanceof PrismaClientKnownRequestError ? error.meta : undefined,
+      }, error instanceof Error ? error : undefined);
+
       // Don't retry certain types of errors
       if (error instanceof PrismaClientKnownRequestError) {
         const nonRetryableCodes = ["P2002", "P2025", "P2003"]; // Constraint violations, not found
         if (nonRetryableCodes.includes(error.code)) {
+          logger.warn("Non-retryable database error", {
+            ...context,
+            errorCode: error.code,
+            errorMessage: error.message,
+          });
           throw error;
         }
       }
-      
+
       if (attempt === maxRetries) {
+        logger.error("Database operation failed after all retries", {
+          ...context,
+          maxRetries,
+          finalError: error instanceof Error ? error.message : String(error),
+        });
         throw error;
       }
-      
+
       // Exponential backoff
       const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
       await new Promise(resolve => setTimeout(resolve, delay));
-      
+
       logger.warn("Database operation retry", {
         ...context,
         attempt,
@@ -419,6 +458,6 @@ export async function safeDatabase<T>(
       });
     }
   }
-  
+
   throw lastError;
 }

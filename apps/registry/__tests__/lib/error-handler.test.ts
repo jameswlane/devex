@@ -500,6 +500,23 @@ describe('Error Handler Module', () => {
 
       expect(result).toEqual({ data: 'success' })
       expect(operation).toHaveBeenCalledTimes(1)
+      // Should log operation start and completion
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Database operation starting',
+        expect.objectContaining({
+          ...mockContext,
+          timestamp: expect.any(String),
+        })
+      )
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Database operation completed',
+        expect.objectContaining({
+          ...mockContext,
+          attempt: 1,
+          resultType: 'object',
+          hasResult: true,
+        })
+      )
     })
 
     it('should retry transient errors with exponential backoff', async () => {
@@ -528,7 +545,15 @@ describe('Error Handler Module', () => {
       await expect(safeDatabase(operation, mockContext, 3)).rejects.toThrow(error)
 
       expect(operation).toHaveBeenCalledTimes(1)
-      expect(mockLogger.warn).not.toHaveBeenCalled()
+      // Should log a warning for non-retryable error
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Non-retryable database error',
+        expect.objectContaining({
+          ...mockContext,
+          errorCode: 'P2002',
+          errorMessage: 'Unique constraint',
+        })
+      )
     })
 
     it('should throw after max retries are exhausted', async () => {

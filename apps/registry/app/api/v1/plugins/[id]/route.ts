@@ -1,6 +1,6 @@
 import type { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
-import { createApiError } from "@/lib/logger";
+import { createApiError, logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
@@ -11,18 +11,48 @@ async function handleGetPlugin(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse> {
-	const { id: pluginName } = await params;
+	// Log params before awaiting
+	logger.info("Plugin route params received", {
+		paramsType: typeof params,
+		isPromise: params instanceof Promise,
+	});
+
+	const resolvedParams = await params;
+	const { id: pluginName } = resolvedParams;
+
+	// Log the incoming request
+	logger.info("Plugin route request received", {
+		resolvedParams,
+		pluginName,
+		pluginNameType: typeof pluginName,
+		pluginNameLength: pluginName?.length,
+		url: request.url,
+	});
 
 	const plugin = await safeDatabase(
-		() => prisma.plugin.findUnique({
-			where: { name: pluginName },
-		}),
+		() => {
+			logger.info("Executing Prisma findUnique query", {
+				pluginName,
+				queryType: "findUnique",
+				where: { name: pluginName },
+			});
+			return prisma.plugin.findUnique({
+				where: { name: pluginName },
+			});
+		},
 		{
 			operation: "fetch-plugin",
 			resource: "plugin",
 			metadata: { name: pluginName }
 		}
 	);
+
+	logger.info("Plugin query result", {
+		pluginName,
+		found: !!plugin,
+		pluginId: plugin?.id,
+		pluginNameFromDb: plugin?.name,
+	});
 
 	if (!plugin) {
 		return createApiError("Plugin not found", 404);
