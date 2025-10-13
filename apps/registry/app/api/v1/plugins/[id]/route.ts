@@ -29,9 +29,10 @@ async function handleGetPlugin(
 		url: request.url,
 	});
 
-	const plugin = await safeDatabase(
+	// Try to find plugin by full name first, then by shortName
+	let plugin = await safeDatabase(
 		() => {
-			logger.info("Executing Prisma findUnique query", {
+			logger.info("Executing Prisma findUnique query (by name)", {
 				pluginName,
 				queryType: "findUnique",
 				where: { name: pluginName },
@@ -41,17 +42,43 @@ async function handleGetPlugin(
 			});
 		},
 		{
-			operation: "fetch-plugin",
+			operation: "fetch-plugin-by-name",
 			resource: "plugin",
 			metadata: { name: pluginName }
 		}
 	);
+
+	// If not found by full name, try shortName
+	if (!plugin) {
+		logger.info("Plugin not found by name, trying shortName", {
+			pluginName,
+		});
+
+		plugin = await safeDatabase(
+			() => {
+				logger.info("Executing Prisma findFirst query (by shortName)", {
+					pluginName,
+					queryType: "findFirst",
+					where: { shortName: pluginName },
+				});
+				return prisma.plugin.findFirst({
+					where: { shortName: pluginName },
+				});
+			},
+			{
+				operation: "fetch-plugin-by-shortname",
+				resource: "plugin",
+				metadata: { shortName: pluginName }
+			}
+		);
+	}
 
 	logger.info("Plugin query result", {
 		pluginName,
 		found: !!plugin,
 		pluginId: plugin?.id,
 		pluginNameFromDb: plugin?.name,
+		pluginShortNameFromDb: plugin?.shortName,
 	});
 
 	if (!plugin) {

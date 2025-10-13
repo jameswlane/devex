@@ -85,6 +85,7 @@ model Application {
 model Plugin {
   id          String   @id @default(cuid())
   name        String   @unique @db.VarChar(100)
+  shortName   String?  @db.VarChar(50) // User-friendly short name for search/display (e.g., "apt" for "package-manager-apt")
   description String   @db.Text
   type        String   @db.VarChar(50) // package-manager, installer, utility, etc.
   priority    Int      @default(50)
@@ -131,6 +132,7 @@ model Plugin {
   @@index([priority])
   @@index([status])
   @@index([name])
+  @@index([shortName])
   
   // Composite indexes for query optimization
   @@index([type, status], name: "idx_plugins_type_status")

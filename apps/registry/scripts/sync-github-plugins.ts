@@ -22,6 +22,7 @@ interface GitHubTag {
 
 interface PluginMetadata {
   name: string;
+  shortName: string;
   type: string;
   version: string;
   description: string;
@@ -131,11 +132,11 @@ async function processPluginTag(tag: GitHubTag) {
       return;
     }
 
-    console.log(`🔧 Processing plugin: ${pluginInfo.name}@${pluginInfo.version}`);
+    console.log(`🔧 Processing plugin: ${pluginInfo.fullName}@${pluginInfo.version}`);
 
-    // Check if the plugin already exists
+    // Check if the plugin already exists (using fullName as primary identifier)
     const existingPlugin = await prisma.plugin.findUnique({
-      where: { name: pluginInfo.name }
+      where: { name: pluginInfo.fullName }
     });
 
     // Get plugin metadata from release assets or package.json
@@ -145,18 +146,18 @@ async function processPluginTag(tag: GitHubTag) {
       // Update the existing plugin if the version is newer
       if (shouldUpdatePlugin(existingPlugin.version, pluginInfo.version)) {
         await updatePlugin(existingPlugin.id, metadata, pluginInfo);
-        console.log(`✅ Updated plugin: ${pluginInfo.name}`);
+        console.log(`✅ Updated plugin: ${pluginInfo.fullName}`);
       } else {
-        console.log(`ℹ️  Plugin ${pluginInfo.name} is up to date`);
+        console.log(`ℹ️  Plugin ${pluginInfo.fullName} is up to date`);
       }
     } else {
       // Create new plugin
       await createPlugin(metadata, pluginInfo);
-      console.log(`✅ Created plugin: ${pluginInfo.name}`);
+      console.log(`✅ Created plugin: ${pluginInfo.fullName}`);
     }
 
     // Log sync operation
-    await logSyncOperation('plugin', pluginInfo.name, 'update', true, null, tag);
+    await logSyncOperation('plugin', pluginInfo.fullName, 'update', true, null, tag);
 
   } catch (error) {
     console.error(`❌ Failed to process tag ${tag.name}:`, error);
@@ -166,7 +167,7 @@ async function processPluginTag(tag: GitHubTag) {
     if (pluginInfo) {
       await logSyncOperation(
         'plugin',
-        pluginInfo.name,
+        pluginInfo.fullName,
         'update',
         false,
         error instanceof Error ? error.message : String(error),
@@ -211,7 +212,8 @@ async function getPluginMetadata(
 
   // Default metadata - platforms will be extracted from metadata.yaml
   const metadata: PluginMetadata = {
-    name: pluginInfo.name,
+    name: pluginInfo.fullName,  // Full name: "package-manager-apt"
+    shortName: pluginInfo.name, // Short name: "apt"
     type: pluginInfo.type,
     version: pluginInfo.version,
     description: `DevEx plugin: ${pluginInfo.name}`,
@@ -433,6 +435,7 @@ async function updatePlugin(
   await prisma.plugin.update({
     where: { id: pluginId },
     data: {
+      shortName: metadata.shortName,
       version: metadata.version,
       latestVersion: metadata.version,
       description: metadata.description,
@@ -461,6 +464,7 @@ async function createPlugin(metadata: PluginMetadata, pluginInfo: { githubPath: 
   await prisma.plugin.create({
     data: {
       name: metadata.name,
+      shortName: metadata.shortName,
       version: metadata.version,
       latestVersion: metadata.version,
       description: metadata.description,

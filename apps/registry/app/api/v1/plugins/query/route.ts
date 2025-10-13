@@ -21,12 +21,25 @@ export async function GET(request: Request) {
 		const categories = searchParams.getAll("category");
 		const includeBeta = searchParams.get("include_beta") === "true";
 		const includeConflicts = searchParams.get("include_conflicts") === "true";
+		const searchQuery = searchParams.get("q") || searchParams.get("search") || searchParams.get("name");
 
 		// Build complex where clause
 		const where: Prisma.PluginWhereInput = {
 			// Only include active plugins unless beta is requested
 			status: includeBeta ? undefined : "active",
 		};
+
+		// Name/shortName search - supports partial matching on both fields
+		if (searchQuery) {
+			const andArray = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : []);
+			where.AND = andArray;
+			where.AND.push({
+				OR: [
+					{ name: { contains: searchQuery, mode: "insensitive" } },
+					{ shortName: { contains: searchQuery, mode: "insensitive" } },
+				],
+			});
+		}
 
 		// Platform filtering
 		if (os) {
@@ -153,6 +166,7 @@ export async function GET(request: Request) {
 				return {
 					id: plugin.id,
 					name: plugin.name,
+					shortName: plugin.shortName,
 					type: plugin.type,
 					description: plugin.description,
 					version: plugin.version,
@@ -185,6 +199,7 @@ export async function GET(request: Request) {
 			{
 				plugins: enrichedPlugins,
 				query: {
+					search: searchQuery,
 					os,
 					distribution,
 					desktop,
