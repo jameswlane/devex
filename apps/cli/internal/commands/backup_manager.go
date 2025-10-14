@@ -48,7 +48,7 @@ func NewBackupManager(repo types.Repository) *BackupManager {
 }
 
 // CreateBackup creates a backup of an application before uninstalling
-func (bm *BackupManager) CreateBackup(app *types.AppConfig) (*BackupEntry, error) {
+func (bm *BackupManager) CreateBackup(ctx context.Context, app *types.AppConfig) (*BackupEntry, error) {
 	log.Info("Creating backup for app", "app", app.Name)
 
 	// Create backup directory if it doesn't exist
@@ -74,7 +74,7 @@ func (bm *BackupManager) CreateBackup(app *types.AppConfig) (*BackupEntry, error
 	}
 
 	// Get package information
-	packageInfo, err := bm.getPackageInfo(app)
+	packageInfo, err := bm.getPackageInfo(ctx, app)
 	if err != nil {
 		log.Warn("Failed to get package info for backup", "app", app.Name, "error", err)
 	} else {
@@ -83,7 +83,7 @@ func (bm *BackupManager) CreateBackup(app *types.AppConfig) (*BackupEntry, error
 
 	// Get dependencies
 	dm := NewDependencyManager(bm.repo)
-	deps, err := dm.GetDependents(app.Name)
+	deps, err := dm.GetDependents(ctx, app.Name)
 	if err != nil {
 		log.Warn("Failed to get dependencies for backup", "app", app.Name, "error", err)
 	} else {
@@ -91,12 +91,12 @@ func (bm *BackupManager) CreateBackup(app *types.AppConfig) (*BackupEntry, error
 	}
 
 	// Backup configuration files
-	if err := bm.backupConfigFiles(app, appBackupDir, backup); err != nil {
+	if err := bm.backupConfigFiles(ctx, app, appBackupDir, backup); err != nil {
 		log.Warn("Failed to backup config files", "app", app.Name, "error", err)
 	}
 
 	// Backup data files
-	if err := bm.backupDataFiles(app, appBackupDir, backup); err != nil {
+	if err := bm.backupDataFiles(ctx, app, appBackupDir, backup); err != nil {
 		log.Warn("Failed to backup data files", "app", app.Name, "error", err)
 	}
 
@@ -110,9 +110,7 @@ func (bm *BackupManager) CreateBackup(app *types.AppConfig) (*BackupEntry, error
 }
 
 // getPackageInfo gets package information for backup
-func (bm *BackupManager) getPackageInfo(app *types.AppConfig) (string, error) {
-	ctx := context.Background()
-
+func (bm *BackupManager) getPackageInfo(ctx context.Context, app *types.AppConfig) (string, error) {
 	// Try different package managers to get package info
 	if _, err := exec.LookPath("dpkg"); err == nil {
 		// Debian/Ubuntu
@@ -145,7 +143,7 @@ func (bm *BackupManager) getPackageInfo(app *types.AppConfig) (string, error) {
 }
 
 // backupConfigFiles backs up configuration files
-func (bm *BackupManager) backupConfigFiles(app *types.AppConfig, backupDir string, backup *BackupEntry) error {
+func (bm *BackupManager) backupConfigFiles(ctx context.Context, app *types.AppConfig, backupDir string, backup *BackupEntry) error {
 	configBackupDir := filepath.Join(backupDir, "config")
 	if err := os.MkdirAll(configBackupDir, 0750); err != nil {
 		return fmt.Errorf("failed to create config backup directory: %w", err)
@@ -173,7 +171,7 @@ func (bm *BackupManager) backupConfigFiles(app *types.AppConfig, backupDir strin
 		dstPath := filepath.Join(configBackupDir, fileName)
 
 		// Copy file
-		if err := bm.copyFile(srcPath, dstPath); err != nil {
+		if err := bm.copyFile(ctx, srcPath, dstPath); err != nil {
 			log.Warn("Failed to backup config file", "src", srcPath, "dst", dstPath, "error", err)
 			continue
 		}
@@ -186,7 +184,7 @@ func (bm *BackupManager) backupConfigFiles(app *types.AppConfig, backupDir strin
 }
 
 // backupDataFiles backs up data files
-func (bm *BackupManager) backupDataFiles(app *types.AppConfig, backupDir string, backup *BackupEntry) error {
+func (bm *BackupManager) backupDataFiles(ctx context.Context, app *types.AppConfig, backupDir string, backup *BackupEntry) error {
 	dataBackupDir := filepath.Join(backupDir, "data")
 	if err := os.MkdirAll(dataBackupDir, 0750); err != nil {
 		return fmt.Errorf("failed to create data backup directory: %w", err)
@@ -214,7 +212,7 @@ func (bm *BackupManager) backupDataFiles(app *types.AppConfig, backupDir string,
 		dstPath := filepath.Join(dataBackupDir, fileName)
 
 		// Copy file or directory
-		if err := bm.copyFileOrDir(srcPath, dstPath); err != nil {
+		if err := bm.copyFileOrDir(ctx, srcPath, dstPath); err != nil {
 			log.Warn("Failed to backup data file", "src", srcPath, "dst", dstPath, "error", err)
 			continue
 		}
@@ -227,16 +225,13 @@ func (bm *BackupManager) backupDataFiles(app *types.AppConfig, backupDir string,
 }
 
 // copyFile copies a file from src to dst
-func (bm *BackupManager) copyFile(src, dst string) error {
-	ctx := context.Background()
+func (bm *BackupManager) copyFile(ctx context.Context, src, dst string) error {
 	cmd := exec.CommandContext(ctx, "cp", "-p", src, dst)
 	return cmd.Run()
 }
 
 // copyFileOrDir copies a file or directory from src to dst
-func (bm *BackupManager) copyFileOrDir(src, dst string) error {
-	ctx := context.Background()
-
+func (bm *BackupManager) copyFileOrDir(ctx context.Context, src, dst string) error {
 	// Check if source is a directory
 	info, err := os.Stat(src)
 	if err != nil {
@@ -249,7 +244,7 @@ func (bm *BackupManager) copyFileOrDir(src, dst string) error {
 		return cmd.Run()
 	} else {
 		// Copy file
-		return bm.copyFile(src, dst)
+		return bm.copyFile(ctx, src, dst)
 	}
 }
 

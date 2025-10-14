@@ -113,22 +113,16 @@ func TestAutoExitTiming(t *testing.T) {
 		msg := InstallCompleteMsg{}
 		_, cmd := model.Update(msg)
 
-		// Execute the returned command to get the timing message
-		if cmd != nil {
-			result := cmd()
+		// Measure only command creation time, not execution
+		elapsed := time.Since(startTime)
 
-			// The command should eventually return InstallQuitMsg
-			// We can't directly test the timing without running the actual delay,
-			// but we can verify the structure is correct
-			if result != nil {
-				elapsed := time.Since(startTime)
+		// The command creation should be almost instantaneous
+		// The actual 500ms delay happens when the command executes
+		assert.Less(t, elapsed, time.Millisecond*100,
+			"Command creation should be fast, delay happens during execution")
 
-				// The command creation should be almost instantaneous
-				// The actual 500ms delay happens when the command executes
-				assert.Less(t, elapsed, time.Millisecond*100,
-					"Command creation should be fast, delay happens during execution")
-			}
-		}
+		// Verify command was returned for auto-exit
+		assert.NotNil(t, cmd, "InstallCompleteMsg should return a command for auto-exit timing")
 	})
 
 	t.Run("InstallProgressMsg with 100% should set step to complete", func(t *testing.T) {

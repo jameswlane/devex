@@ -326,16 +326,17 @@ func restartAppServices(appName string) error {
 
 	log.Info("Restarting services for app", "app", appName, "services", services)
 
+	ctx := context.Background()
 	for _, service := range services {
 		// Enable the service
 		cmd := fmt.Sprintf("sudo systemctl enable %s", service)
-		if output, err := runCommand(cmd); err != nil {
+		if output, err := runCommand(ctx, cmd); err != nil {
 			log.Warn("Failed to enable service", "service", service, "error", err, "output", output)
 		}
 
 		// Start the service
 		cmd = fmt.Sprintf("sudo systemctl start %s", service)
-		if output, err := runCommand(cmd); err != nil {
+		if output, err := runCommand(ctx, cmd); err != nil {
 			log.Warn("Failed to start service", "service", service, "error", err, "output", output)
 		} else {
 			log.Info("Started service", "service", service)

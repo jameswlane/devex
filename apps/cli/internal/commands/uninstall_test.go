@@ -1,6 +1,7 @@
 package commands_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -215,7 +216,8 @@ var _ = Describe("BackupManager", func() {
 
 	Describe("CreateBackup", func() {
 		It("should create a backup successfully", func() {
-			backup, err := backupMgr.CreateBackup(&testApp)
+			ctx := context.Background()
+			backup, err := backupMgr.CreateBackup(ctx, &testApp)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(backup).NotTo(BeNil())
 			Expect(backup.AppName).To(Equal("test-backup-app"))
@@ -243,7 +245,8 @@ var _ = Describe("BackupManager", func() {
 				CleanupFiles: []string{"/non/existent/data.txt"},
 			}
 
-			backup, err := backupMgr.CreateBackup(&appWithMissingFiles)
+			ctx := context.Background()
+			backup, err := backupMgr.CreateBackup(ctx, &appWithMissingFiles)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(backup).NotTo(BeNil())
 
@@ -262,7 +265,8 @@ var _ = Describe("BackupManager", func() {
 
 		It("should list existing backups", func() {
 			// Create a backup first
-			_, err := backupMgr.CreateBackup(&testApp)
+			ctx := context.Background()
+			_, err := backupMgr.CreateBackup(ctx, &testApp)
 			Expect(err).NotTo(HaveOccurred())
 
 			backups, err := backupMgr.ListBackups()
@@ -284,7 +288,8 @@ var _ = Describe("BackupManager", func() {
 	Describe("CleanupOldBackups", func() {
 		It("should remove old backups", func() {
 			// Create a backup
-			backup, err := backupMgr.CreateBackup(&testApp)
+			ctx := context.Background()
+			backup, err := backupMgr.CreateBackup(ctx, &testApp)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify backup exists
@@ -375,7 +380,8 @@ var _ = Describe("ConflictDetector", func() {
 
 	Describe("DetectConflicts", func() {
 		It("should detect no conflicts for regular apps", func() {
-			conflicts, err := conflictDetector.DetectConflicts(testApps[:1], false)
+			ctx := context.Background()
+			conflicts, err := conflictDetector.DetectConflicts(ctx, testApps[:1], false)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Should have minimal or no conflicts for regular apps
@@ -389,7 +395,8 @@ var _ = Describe("ConflictDetector", func() {
 		})
 
 		It("should provide conflict summary", func() {
-			conflicts, err := conflictDetector.DetectConflicts(testApps, false)
+			ctx := context.Background()
+			conflicts, err := conflictDetector.DetectConflicts(ctx, testApps, false)
 			Expect(err).NotTo(HaveOccurred())
 
 			summary := conflictDetector.SummarizeConflicts(conflicts)

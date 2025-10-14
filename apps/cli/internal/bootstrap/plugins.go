@@ -245,18 +245,18 @@ func (b *PluginBootstrap) GetManager() *sdk.ExecutableManager {
 }
 
 // GetAvailablePlugins returns available plugins from registry
-func (b *PluginBootstrap) GetAvailablePlugins() (map[string]sdk.PluginMetadata, error) {
-	return b.downloader.GetAvailablePlugins()
+func (b *PluginBootstrap) GetAvailablePlugins(ctx context.Context) (map[string]sdk.PluginMetadata, error) {
+	return b.downloader.GetAvailablePlugins(ctx)
 }
 
 // IsPluginAvailable checks if a plugin is available for installation
-func (b *PluginBootstrap) IsPluginAvailable(pluginName string) bool {
+func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName string) bool {
 	if err := validatePluginName(pluginName); err != nil {
 		log.Warn("Invalid plugin name provided", "name", pluginName, "error", err)
 		return false
 	}
 
-	plugins, err := b.downloader.GetAvailablePlugins()
+	plugins, err := b.downloader.GetAvailablePlugins(ctx)
 	if err != nil {
 		return false
 	}
@@ -387,6 +387,7 @@ func (b *PluginBootstrap) handleListPlugins(cmd *cobra.Command, args []string) e
 
 // handleSearchPlugins searches for available plugins
 func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	query := ""
 	if len(args) > 0 {
 		query = args[0]
@@ -396,9 +397,9 @@ func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string)
 	var err error
 
 	if query == "" {
-		results, err = b.downloader.GetAvailablePlugins()
+		results, err = b.downloader.GetAvailablePlugins(ctx)
 	} else {
-		results, err = b.downloader.SearchPlugins(query)
+		results, err = b.downloader.SearchPlugins(ctx, query)
 	}
 
 	if err != nil {
@@ -423,13 +424,8 @@ func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string)
 		}
 
 		// Check if available for current platform
-		platformSupported := false
-		for platformKey := range metadata.Platforms {
-			if strings.HasPrefix(platformKey, runtime.GOOS) {
-				platformSupported = true
-				break
-			}
-		}
+		platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+		_, platformSupported := metadata.Binaries[platformKey]
 		if platformSupported {
 			fmt.Printf("   ✅ Available for your platform\n")
 		} else {
@@ -443,18 +439,15 @@ func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string)
 
 // handleInstallPlugin installs a specific plugin
 func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	pluginName := args[0]
 
-	if err := b.downloader.UpdateRegistry(); err != nil {
-		return fmt.Errorf("failed to update registry: %w", err)
-	}
-
-	if err := b.downloader.DownloadPlugin(pluginName); err != nil {
+	if err := b.downloader.DownloadPluginWithContext(ctx, pluginName); err != nil {
 		return fmt.Errorf("failed to install plugin: %w", err)
 	}
 
 	// Reload plugins
-	if err := b.manager.DiscoverPlugins(); err != nil {
+	if err := b.manager.DiscoverPluginsWithContext(ctx); err != nil {
 		fmt.Printf("Warning: failed to reload plugins: %v\n", err)
 	}
 
@@ -483,18 +476,15 @@ func (b *PluginBootstrap) handleRemovePlugin(cmd *cobra.Command, args []string) 
 
 // handleUpdatePlugins updates plugins
 func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
 	if len(args) == 0 {
 		// Update all plugins
-		return b.updateAllPlugins()
+		return b.updateAllPlugins(ctx)
 	}
 
 	// Update specific plugin
 	pluginName := args[0]
-	if err := b.downloader.UpdateRegistry(); err != nil {
-		return fmt.Errorf("failed to update registry: %w", err)
-	}
-
-	return b.downloader.DownloadPlugin(pluginName)
+	return b.downloader.DownloadPluginWithContext(ctx, pluginName)
 }
 
 // handlePluginInfo shows information about a specific plugin
@@ -521,12 +511,8 @@ func (b *PluginBootstrap) handlePluginInfo(cmd *cobra.Command, args []string) er
 }
 
 // updateAllPlugins updates all installed plugins
-func (b *PluginBootstrap) updateAllPlugins() error {
-	if err := b.downloader.UpdateRegistry(); err != nil {
-		return fmt.Errorf("failed to update registry: %w", err)
-	}
-
-	plugins := b.manager.ListPlugins()
+func (b *PluginBootstrap) updateAllPlugins(ctx context.Context) error {
+	plugins := b.manager.ListPluginsWithContext(ctx)
 
 	if len(plugins) == 0 {
 		fmt.Println("No plugins installed to update")
@@ -536,7 +522,7 @@ func (b *PluginBootstrap) updateAllPlugins() error {
 	fmt.Printf("Updating %d plugins...\n", len(plugins))
 
 	for name := range plugins {
-		if err := b.downloader.DownloadPlugin(name); err != nil {
+		if err := b.downloader.DownloadPluginWithContext(ctx, name); err != nil {
 			fmt.Printf("Warning: failed to update plugin %s: %v\n", name, err)
 		}
 	}

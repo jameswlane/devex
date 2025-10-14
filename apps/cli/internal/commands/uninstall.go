@@ -74,7 +74,7 @@ Safety features:
 				apps = []string{appName}
 			}
 
-			return runUninstall(apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, repo, settings)
+			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, repo, settings)
 		},
 	}
 
@@ -94,7 +94,7 @@ Safety features:
 	return cmd
 }
 
-func runUninstall(apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings) error {
 	// Update settings with runtime flags
 	settings.Verbose = viper.GetBool("verbose")
 
@@ -190,7 +190,7 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 	// Detect conflicts before proceeding
 	fmt.Printf("%s Checking for conflicts...\n", cyan("🔍"))
 	conflictDetector := NewConflictDetector(repo)
-	conflicts, err := conflictDetector.DetectConflicts(appsToUninstall, cascade)
+	conflicts, err := conflictDetector.DetectConflicts(ctx, appsToUninstall, cascade)
 	if err != nil {
 		log.Warn("Failed to detect conflicts", "error", err)
 	} else if len(conflicts) > 0 {
@@ -228,7 +228,7 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 		fmt.Printf("[%d/%d] %s (%s)\n", i+1, len(appsToUninstall), app.Name, app.InstallMethod)
 
 		// Get the installer
-		installer := installers.GetInstaller(app.InstallMethod)
+		installer := installers.GetInstaller(ctx, app.InstallMethod)
 		if installer == nil {
 			fmt.Printf("  %s Invalid install method: %s\n", red("❌"), app.InstallMethod)
 			failed++
@@ -256,7 +256,7 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 		// Create backup if requested
 		if backup {
 			bm := NewBackupManager(repo)
-			backupEntry, err := bm.CreateBackup(&app)
+			backupEntry, err := bm.CreateBackup(ctx, &app)
 			if err != nil {
 				fmt.Printf("  %s Warning: Failed to create backup: %v\n", yellow("⚠️"), err)
 			} else {
@@ -266,7 +266,7 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 
 		// Stop services if requested
 		if stopServices {
-			if err := stopAppServices(&app); err != nil {
+			if err := stopAppServices(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to stop services: %v\n", yellow("⚠️"), err)
 			}
 		}
@@ -300,7 +300,7 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 
 		// Clean up system files if requested
 		if cleanupSystem {
-			if err := cleanupSystemFiles(&app); err != nil {
+			if err := cleanupSystemFiles(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up system files: %v\n", yellow("⚠️"), err)
 			} else {
 				fmt.Printf("  %s Cleaned up system files\n", green("🧹"))
@@ -321,7 +321,7 @@ func runUninstall(apps []string, category string, all bool, force bool, keepConf
 		fmt.Printf("\n%s Checking for orphaned packages...\n", cyan("🔍"))
 		// Try to remove orphans based on the package manager used
 		// This is a simplified approach - in production you'd want to detect the package manager
-		handleOrphanRemoval()
+		handleOrphanRemoval(ctx)
 	}
 
 	// Summary
@@ -376,7 +376,7 @@ func removeFileIfExists(path string) error {
 }
 
 // stopAppServices stops services associated with an application
-func stopAppServices(app *types.AppConfig) error {
+func stopAppServices(ctx context.Context, app *types.AppConfig) error {
 	services := getAppServicesForUninstall(app)
 	if len(services) == 0 {
 		return nil
@@ -387,7 +387,7 @@ func stopAppServices(app *types.AppConfig) error {
 	for _, service := range services {
 		// Stop the service
 		cmd := fmt.Sprintf("sudo systemctl stop %s", service)
-		if output, err := runCommand(cmd); err != nil {
+		if output, err := runCommand(ctx, cmd); err != nil {
 			log.Warn("Failed to stop service", "service", service, "error", err, "output", output)
 			// Continue with other services
 		} else {
@@ -396,7 +396,7 @@ func stopAppServices(app *types.AppConfig) error {
 
 		// Disable the service to prevent it from starting on boot
 		cmd = fmt.Sprintf("sudo systemctl disable %s", service)
-		if output, err := runCommand(cmd); err != nil {
+		if output, err := runCommand(ctx, cmd); err != nil {
 			log.Warn("Failed to disable service", "service", service, "error", err, "output", output)
 		}
 	}
@@ -426,7 +426,7 @@ func getAppServicesForUninstall(app *types.AppConfig) []string {
 }
 
 // cleanupSystemFiles removes system files like service files, desktop files, icons
-func cleanupSystemFiles(app *types.AppConfig) error {
+func cleanupSystemFiles(ctx context.Context, app *types.AppConfig) error {
 	log.Info("Cleaning up system files for app", "app", app.Name)
 
 	// Clean up systemd service files
@@ -476,7 +476,7 @@ func cleanupSystemFiles(app *types.AppConfig) error {
 
 	// Update icon cache
 	cmd := "gtk-update-icon-cache -f -t /usr/share/icons/hicolor"
-	if _, err := runCommand(cmd); err != nil {
+	if _, err := runCommand(ctx, cmd); err != nil {
 		log.Warn("Failed to update icon cache", "error", err)
 	}
 
@@ -502,14 +502,13 @@ func cleanupSystemFiles(app *types.AppConfig) error {
 }
 
 // runCommand is a helper to run shell commands
-func runCommand(cmd string) (string, error) {
+func runCommand(ctx context.Context, cmd string) (string, error) {
 	// Use exec.CommandContext to run the command
 	parts := strings.Fields(cmd)
 	if len(parts) == 0 {
 		return "", fmt.Errorf("empty command")
 	}
 
-	ctx := context.Background()
 	command := exec.CommandContext(ctx, parts[0], parts[1:]...)
 	output, err := command.CombinedOutput()
 	if err != nil {
@@ -519,13 +518,13 @@ func runCommand(cmd string) (string, error) {
 }
 
 // handleOrphanRemoval attempts to remove orphaned packages based on the detected package manager
-func handleOrphanRemoval() {
+func handleOrphanRemoval(ctx context.Context) {
 	// Try different package managers to remove orphans
 
 	// Try APT (Debian/Ubuntu)
 	if _, err := exec.LookPath("apt"); err == nil {
 		fmt.Println("Removing orphaned packages with APT...")
-		if output, err := runCommand("sudo apt autoremove -y"); err != nil {
+		if output, err := runCommand(ctx, "sudo apt autoremove -y"); err != nil {
 			log.Warn("Failed to remove orphans with APT", "error", err, "output", output)
 		} else {
 			fmt.Println("✅ Removed orphaned APT packages")
@@ -536,7 +535,7 @@ func handleOrphanRemoval() {
 	// Try DNF (Fedora/RHEL)
 	if _, err := exec.LookPath("dnf"); err == nil {
 		fmt.Println("Removing orphaned packages with DNF...")
-		if output, err := runCommand("sudo dnf autoremove -y"); err != nil {
+		if output, err := runCommand(ctx, "sudo dnf autoremove -y"); err != nil {
 			log.Warn("Failed to remove orphans with DNF", "error", err, "output", output)
 		} else {
 			fmt.Println("✅ Removed orphaned DNF packages")
@@ -548,7 +547,7 @@ func handleOrphanRemoval() {
 	if _, err := exec.LookPath("pacman"); err == nil {
 		fmt.Println("Checking for orphaned packages with Pacman...")
 		// First get orphans
-		output, err := runCommand("pacman -Qtdq")
+		output, err := runCommand(ctx, "pacman -Qtdq")
 		if err != nil || strings.TrimSpace(output) == "" {
 			fmt.Println("No orphaned packages found")
 			return
@@ -558,7 +557,7 @@ func handleOrphanRemoval() {
 		orphans := strings.Fields(output)
 		fmt.Printf("Found %d orphaned packages, removing...\n", len(orphans))
 		cmd := fmt.Sprintf("sudo pacman -Rs --noconfirm %s", strings.Join(orphans, " "))
-		if output, err := runCommand(cmd); err != nil {
+		if output, err := runCommand(ctx, cmd); err != nil {
 			log.Warn("Failed to remove orphans with Pacman", "error", err, "output", output)
 		} else {
 			fmt.Println("✅ Removed orphaned Pacman packages")
@@ -569,7 +568,7 @@ func handleOrphanRemoval() {
 	// Try Zypper (openSUSE)
 	if _, err := exec.LookPath("zypper"); err == nil {
 		fmt.Println("Removing orphaned packages with Zypper...")
-		if output, err := runCommand("sudo zypper remove --clean-deps -y"); err != nil {
+		if output, err := runCommand(ctx, "sudo zypper remove --clean-deps -y"); err != nil {
 			log.Warn("Failed to remove orphans with Zypper", "error", err, "output", output)
 		} else {
 			fmt.Println("✅ Removed orphaned Zypper packages")

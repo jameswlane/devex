@@ -160,7 +160,7 @@ func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.C
 	}
 
 	// Check if app is installed
-	installer := installers.GetInstaller(app.InstallMethod)
+	installer := installers.GetInstaller(ctx, app.InstallMethod)
 	if installer == nil {
 		appStatus.Status = "error"
 		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Invalid install method: %s", app.InstallMethod))
@@ -713,7 +713,7 @@ func checkDependencies(ctx context.Context, deps []string, settings config.Cross
 
 		// Try to get the dependency as an app
 		if depApp, err := settings.GetApplicationByName(dep); err == nil {
-			if installer := installers.GetInstaller(depApp.InstallMethod); installer != nil {
+			if installer := installers.GetInstaller(ctx, depApp.InstallMethod); installer != nil {
 				installed, _ := installer.IsInstalled(depApp.InstallCommand)
 				depStatus.Installed = installed
 				if depStatus.Installed {

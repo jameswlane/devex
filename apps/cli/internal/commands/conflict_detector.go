@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -44,11 +45,11 @@ func NewConflictDetector(repo types.Repository) *ConflictDetector {
 }
 
 // DetectConflicts detects all conflicts for uninstalling the given applications
-func (cd *ConflictDetector) DetectConflicts(apps []types.AppConfig, cascade bool) ([]UninstallConflict, error) {
+func (cd *ConflictDetector) DetectConflicts(ctx context.Context, apps []types.AppConfig, cascade bool) ([]UninstallConflict, error) {
 	var conflicts []UninstallConflict
 
 	for _, app := range apps {
-		appConflicts, err := cd.detectAppConflicts(&app, cascade)
+		appConflicts, err := cd.detectAppConflicts(ctx, &app, cascade)
 		if err != nil {
 			log.Warn("Failed to detect conflicts for app", "app", app.Name, "error", err)
 			continue
@@ -60,11 +61,11 @@ func (cd *ConflictDetector) DetectConflicts(apps []types.AppConfig, cascade bool
 }
 
 // detectAppConflicts detects conflicts for a single application
-func (cd *ConflictDetector) detectAppConflicts(app *types.AppConfig, cascade bool) ([]UninstallConflict, error) {
+func (cd *ConflictDetector) detectAppConflicts(ctx context.Context, app *types.AppConfig, cascade bool) ([]UninstallConflict, error) {
 	var conflicts []UninstallConflict
 
 	// Check for dependency conflicts
-	depConflicts, err := cd.checkDependencyConflicts(app, cascade)
+	depConflicts, err := cd.checkDependencyConflicts(ctx, app, cascade)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check dependency conflicts: %w", err)
 	}
@@ -75,7 +76,7 @@ func (cd *ConflictDetector) detectAppConflicts(app *types.AppConfig, cascade boo
 	conflicts = append(conflicts, sysConflicts...)
 
 	// Check for active service conflicts
-	serviceConflicts := cd.checkActiveServiceConflicts(app)
+	serviceConflicts := cd.checkActiveServiceConflicts(ctx, app)
 	conflicts = append(conflicts, serviceConflicts...)
 
 	// Check for file conflicts
@@ -86,11 +87,11 @@ func (cd *ConflictDetector) detectAppConflicts(app *types.AppConfig, cascade boo
 }
 
 // checkDependencyConflicts checks for dependency-related conflicts
-func (cd *ConflictDetector) checkDependencyConflicts(app *types.AppConfig, cascade bool) ([]UninstallConflict, error) {
+func (cd *ConflictDetector) checkDependencyConflicts(ctx context.Context, app *types.AppConfig, cascade bool) ([]UninstallConflict, error) {
 	var conflicts []UninstallConflict
 
 	// Get packages that depend on this app
-	dependents, err := cd.dependencyManager.GetDependents(app.Name)
+	dependents, err := cd.dependencyManager.GetDependents(ctx, app.Name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dependents: %w", err)
 	}
@@ -152,12 +153,12 @@ func (cd *ConflictDetector) checkSystemPackageConflicts(app *types.AppConfig) []
 }
 
 // checkActiveServiceConflicts checks for conflicts with active services
-func (cd *ConflictDetector) checkActiveServiceConflicts(app *types.AppConfig) []UninstallConflict {
+func (cd *ConflictDetector) checkActiveServiceConflicts(ctx context.Context, app *types.AppConfig) []UninstallConflict {
 	var conflicts []UninstallConflict
 
 	services := getAppServicesForUninstall(app)
 	for _, service := range services {
-		if cd.isServiceActive(service) {
+		if cd.isServiceActive(ctx, service) {
 			conflicts = append(conflicts, UninstallConflict{
 				Type:        ConflictTypeActiveService,
 				AppName:     app.Name,
@@ -192,8 +193,8 @@ func (cd *ConflictDetector) checkFileConflicts(app *types.AppConfig) []Uninstall
 }
 
 // isServiceActive checks if a systemd service is currently active
-func (cd *ConflictDetector) isServiceActive(serviceName string) bool {
-	output, err := runCommand(fmt.Sprintf("systemctl is-active %s", serviceName))
+func (cd *ConflictDetector) isServiceActive(ctx context.Context, serviceName string) bool {
+	output, err := runCommand(ctx, fmt.Sprintf("systemctl is-active %s", serviceName))
 	if err != nil {
 		return false
 	}

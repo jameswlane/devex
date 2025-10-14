@@ -70,28 +70,27 @@ func detectPackageManager(p *platform.DetectionResult) string {
 }
 
 // GetDependents returns packages that depend on the given package
-func (dm *DependencyManager) GetDependents(packageName string) ([]string, error) {
+func (dm *DependencyManager) GetDependents(ctx context.Context, packageName string) ([]string, error) {
 	switch dm.packageManager {
 	case "apt":
-		return dm.getAptDependents(packageName)
+		return dm.getAptDependents(ctx, packageName)
 	case "dnf":
-		return dm.getDnfDependents(packageName)
+		return dm.getDnfDependents(ctx, packageName)
 	case "pacman":
-		return dm.getPacmanDependents(packageName)
+		return dm.getPacmanDependents(ctx, packageName)
 	case "zypper":
-		return dm.getZypperDependents(packageName)
+		return dm.getZypperDependents(ctx, packageName)
 	case "apk":
-		return dm.getApkDependents(packageName)
+		return dm.getApkDependents(ctx, packageName)
 	case "emerge":
-		return dm.getEmergeDependents(packageName)
+		return dm.getEmergeDependents(ctx, packageName)
 	default:
 		return nil, fmt.Errorf("unsupported package manager: %s", dm.packageManager)
 	}
 }
 
 // getAptDependents gets dependents for APT
-func (dm *DependencyManager) getAptDependents(packageName string) ([]string, error) {
-	ctx := context.Background()
+func (dm *DependencyManager) getAptDependents(ctx context.Context, packageName string) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "apt-cache", "rdepends", "--installed", packageName)
 	output, err := cmd.Output()
 	if err != nil {
@@ -111,12 +110,12 @@ func (dm *DependencyManager) getAptDependents(packageName string) ([]string, err
 }
 
 // getDnfDependents gets dependents for DNF
-func (dm *DependencyManager) getDnfDependents(packageName string) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "dnf", "repoquery", "--whatrequires", packageName)
+func (dm *DependencyManager) getDnfDependents(ctx context.Context, packageName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "dnf", "repoquery", "--whatrequires", packageName)
 	output, err := cmd.Output()
 	if err != nil {
 		// Try rpm as fallback
-		return dm.getRpmDependents(packageName)
+		return dm.getRpmDependents(ctx, packageName)
 	}
 
 	var dependents []string
@@ -132,8 +131,8 @@ func (dm *DependencyManager) getDnfDependents(packageName string) ([]string, err
 }
 
 // getRpmDependents uses rpm as fallback for RPM-based systems
-func (dm *DependencyManager) getRpmDependents(packageName string) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "rpm", "-q", "--whatrequires", packageName)
+func (dm *DependencyManager) getRpmDependents(ctx context.Context, packageName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "rpm", "-q", "--whatrequires", packageName)
 	output, err := cmd.Output()
 	if err != nil {
 		if strings.Contains(string(output), "no package requires") {
@@ -155,8 +154,8 @@ func (dm *DependencyManager) getRpmDependents(packageName string) ([]string, err
 }
 
 // getPacmanDependents gets dependents for Pacman
-func (dm *DependencyManager) getPacmanDependents(packageName string) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "pacman", "-Qi", packageName)
+func (dm *DependencyManager) getPacmanDependents(ctx context.Context, packageName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "pacman", "-Qi", packageName)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Pacman info: %w", err)
@@ -180,12 +179,12 @@ func (dm *DependencyManager) getPacmanDependents(packageName string) ([]string, 
 }
 
 // getZypperDependents gets dependents for Zypper
-func (dm *DependencyManager) getZypperDependents(packageName string) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "zypper", "search", "--requires", packageName)
+func (dm *DependencyManager) getZypperDependents(ctx context.Context, packageName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "zypper", "search", "--requires", packageName)
 	output, err := cmd.Output()
 	if err != nil {
 		// Try rpm as fallback
-		return dm.getRpmDependents(packageName)
+		return dm.getRpmDependents(ctx, packageName)
 	}
 
 	var dependents []string
@@ -209,8 +208,8 @@ func (dm *DependencyManager) getZypperDependents(packageName string) ([]string, 
 }
 
 // getApkDependents gets dependents for APK (Alpine)
-func (dm *DependencyManager) getApkDependents(packageName string) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "apk", "info", "--rdepends", packageName)
+func (dm *DependencyManager) getApkDependents(ctx context.Context, packageName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "apk", "info", "--rdepends", packageName)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get APK dependents: %w", err)
@@ -229,8 +228,8 @@ func (dm *DependencyManager) getApkDependents(packageName string) ([]string, err
 }
 
 // getEmergeDependents gets dependents for Emerge (Gentoo)
-func (dm *DependencyManager) getEmergeDependents(packageName string) ([]string, error) {
-	cmd := exec.CommandContext(context.Background(), "equery", "depends", packageName)
+func (dm *DependencyManager) getEmergeDependents(ctx context.Context, packageName string) ([]string, error) {
+	cmd := exec.CommandContext(ctx, "equery", "depends", packageName)
 	output, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Emerge dependents: %w", err)

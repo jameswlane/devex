@@ -34,13 +34,13 @@ func DisableTestMode() {
 }
 
 // GetAvailableInstallers returns a list of available installer methods for the current platform
-func GetAvailableInstallers() []string {
+func GetAvailableInstallers(ctx context.Context) []string {
 	if pluginBootstrap == nil {
 		return []string{}
 	}
 
 	// Get available package manager plugins
-	availablePlugins, err := pluginBootstrap.GetAvailablePlugins()
+	availablePlugins, err := pluginBootstrap.GetAvailablePlugins(ctx)
 	if err != nil {
 		// Return empty slice if unable to get plugins
 		return []string{}
@@ -60,7 +60,7 @@ func GetAvailableInstallers() []string {
 }
 
 // IsInstallerSupported checks if an installer method is supported on the current platform
-func IsInstallerSupported(method string) bool {
+func IsInstallerSupported(ctx context.Context, method string) bool {
 	// In test mode, support common package managers for testing
 	if testMode {
 		supportedTestMethods := []string{"apt", "dnf", "pacman", "snap", "brew", "yum", "zypper"}
@@ -78,13 +78,13 @@ func IsInstallerSupported(method string) bool {
 
 	// Check if package manager plugin exists
 	pluginName := "package-manager-" + method
-	return pluginBootstrap.IsPluginAvailable(pluginName)
+	return pluginBootstrap.IsPluginAvailable(ctx, pluginName)
 }
 
 // GetInstaller returns the installer instance for the given method, or nil if not found
 // NOTE: This now uses the plugin system instead of direct installer instances
-func GetInstaller(method string) types.BaseInstaller {
-	if !IsInstallerSupported(method) {
+func GetInstaller(ctx context.Context, method string) types.BaseInstaller {
+	if !IsInstallerSupported(ctx, method) {
 		return nil
 	}
 
@@ -167,8 +167,8 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 	return err == nil, nil
 }
 
-func executeInstallCommand(app types.AppConfig, repo types.Repository) error {
-	installer := GetInstaller(app.InstallMethod)
+func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
+	installer := GetInstaller(ctx, app.InstallMethod)
 	if installer == nil {
 		log.Error("Unsupported install method", fmt.Errorf("method: %s", app.InstallMethod))
 		return fmt.Errorf("install method '%s' is not supported on this platform", app.InstallMethod)
@@ -217,11 +217,11 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 	}
 
 	// Install the app directly
-	return InstallApp(appConfig, settings, repo)
+	return InstallApp(ctx, appConfig, settings, repo)
 }
 
 // InstallApp installs a single application
-func InstallApp(app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
+func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
 	log.Info("Installing app", "app", app.Name)
 
 	// Execute pre-install commands
@@ -230,7 +230,7 @@ func InstallApp(app types.AppConfig, settings config.CrossPlatformSettings, repo
 	}
 
 	// Execute the actual install command
-	if err := executeInstallCommand(app, repo); err != nil {
+	if err := executeInstallCommand(ctx, app, repo); err != nil {
 		return fmt.Errorf("failed to execute install command: %w", err)
 	}
 

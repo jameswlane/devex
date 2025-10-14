@@ -1,6 +1,8 @@
 package installers_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -35,7 +37,7 @@ var _ = Describe("Installers Package", func() {
 				InstallCommand: "some command",
 			}
 
-			err := installers.InstallApp(app, settings, repo)
+			err := installers.InstallApp(context.Background(), app, settings, repo)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("is not supported on this platform"))
 		})
