@@ -37,13 +37,12 @@ type Cache interface {
 
 // RegistryDownloaderInterface defines the interface for registry-aware downloaders
 type RegistryDownloaderInterface interface {
-	// Backward compatible methods (use context.Background() internally)
-	GetAvailablePlugins() (map[string]PluginMetadata, error)
-	SearchPlugins(query string) (map[string]PluginMetadata, error)
-	GetPluginDetails(pluginName string) (*PluginMetadata, error)
-	
-	// Context-aware methods for better control
-	GetAvailablePluginsWithContext(ctx context.Context) (map[string]PluginMetadata, error)
-	SearchPluginsWithContext(ctx context.Context, query string) (map[string]PluginMetadata, error)
-	GetPluginDetailsWithContext(ctx context.Context, pluginName string) (*PluginMetadata, error)
+	// GetAvailablePlugins fetches all available plugins from the registry
+	GetAvailablePlugins(ctx context.Context) (map[string]PluginMetadata, error)
+
+	// SearchPlugins searches for plugins by query string
+	SearchPlugins(ctx context.Context, query string) (map[string]PluginMetadata, error)
+
+	// GetPluginDetails fetches detailed information about a specific plugin
+	GetPluginDetails(ctx context.Context, pluginName string) (*PluginMetadata, error)
 }

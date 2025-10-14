@@ -161,7 +161,7 @@ func (bu *BackgroundUpdater) checkAndUpdatePlugins(ctx context.Context) error {
 	}
 
 	// Get available plugins from registry
-	availablePlugins, err := bu.downloader.GetAvailablePlugins()
+	availablePlugins, err := bu.downloader.GetAvailablePlugins(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to fetch available plugins: %w", err)
 	}

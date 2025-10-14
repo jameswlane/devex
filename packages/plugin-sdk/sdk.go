@@ -553,7 +553,8 @@ func IsRoot() bool {
 type PluginMetadata struct {
 	PluginInfo
 	Path      string                    `json:"path"`
-	Platforms map[string]PlatformBinary `json:"platforms,omitempty"` // Platform-specific binaries
+	Platforms []string                  `json:"platforms,omitempty"` // Supported platforms (OS names)
+	Binaries  map[string]PlatformBinary `json:"binaries,omitempty"`  // Platform-specific binaries (e.g., "linux-amd64")
 	Priority  int                       `json:"priority,omitempty"`  // Installation priority
 	Type      string                    `json:"type,omitempty"`      // Plugin type (package-manager, desktop, etc.)
 }
@@ -649,7 +650,7 @@ func (d *Downloader) SetStrategy(strategy DownloadStrategy) {
 }
 
 // GetAvailablePlugins returns available plugins from registry with caching
-func (d *Downloader) GetAvailablePlugins() (map[string]PluginMetadata, error) {
+func (d *Downloader) GetAvailablePlugins(ctx context.Context) (map[string]PluginMetadata, error) {
 	registry, err := d.fetchRegistry()
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
@@ -658,8 +659,8 @@ func (d *Downloader) GetAvailablePlugins() (map[string]PluginMetadata, error) {
 }
 
 // SearchPlugins searches for plugins by query with caching
-func (d *Downloader) SearchPlugins(query string) (map[string]PluginMetadata, error) {
-	allPlugins, err := d.GetAvailablePlugins()
+func (d *Downloader) SearchPlugins(ctx context.Context, query string) (map[string]PluginMetadata, error) {
+	allPlugins, err := d.GetAvailablePlugins(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -685,27 +686,18 @@ func (d *Downloader) SearchPlugins(query string) (map[string]PluginMetadata, err
 	return results, nil
 }
 
-// DownloadPlugin securely downloads a plugin with checksum and signature verification
-func (d *Downloader) DownloadPlugin(pluginName string) error {
-	ctx := context.Background()
-	return d.DownloadPluginWithContext(ctx, pluginName)
-}
 
 // DownloadPluginWithContext downloads a plugin with context for cancellation
 func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName string) error {
-	registry, err := d.fetchRegistry()
+	// Fetch plugin metadata directly from the API
+	metadata, err := d.fetchPluginDirect(ctx, pluginName)
 	if err != nil {
-		return fmt.Errorf("failed to fetch registry: %w", err)
-	}
-
-	metadata, exists := registry.Plugins[pluginName]
-	if !exists {
-		return fmt.Errorf("plugin %s not found in registry", pluginName)
+		return fmt.Errorf("failed to fetch plugin metadata: %w", err)
 	}
 
 	// Get platform-specific binary
 	platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
-	binary, exists := metadata.Platforms[platformKey]
+	binary, exists := metadata.Binaries[platformKey]
 	if !exists {
 		return fmt.Errorf("plugin %s not available for platform %s", pluginName, platformKey)
 	}
@@ -724,19 +716,40 @@ func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName s
 	return d.downloadAndVerifyPlugin(ctx, pluginName, metadata.Version, binary)
 }
 
-// DownloadRequiredPlugins downloads all required plugins for the platform with verification
-func (d *Downloader) DownloadRequiredPlugins(requiredPlugins []string) error {
-	ctx := context.Background()
-	return d.DownloadRequiredPluginsWithContext(ctx, requiredPlugins)
+// fetchPluginDirect fetches plugin metadata directly from the API endpoint
+func (d *Downloader) fetchPluginDirect(ctx context.Context, pluginName string) (*PluginMetadata, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	pluginURL := fmt.Sprintf("%s/api/v1/plugins/%s", d.registryURL, pluginName)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", pluginURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch plugin: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("plugin %s not found in registry", pluginName)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("registry server returned HTTP %d", resp.StatusCode)
+	}
+
+	// Parse plugin metadata
+	var metadata PluginMetadata
+	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
+		return nil, fmt.Errorf("failed to parse plugin metadata: %w", err)
+	}
+
+	return &metadata, nil
 }
 
-// DownloadRequiredPluginsWithOptions downloads plugins with custom options
-func (d *Downloader) DownloadRequiredPluginsWithOptions(requiredPlugins []string, criticalPlugins []string) error {
-	ctx := context.Background()
-	return d.DownloadRequiredPluginsWithContextAndOptions(ctx, requiredPlugins, criticalPlugins)
-}
-
-// DownloadRequiredPluginsWithContext downloads plugins with context support
+// DownloadRequiredPluginsWithContext downloads all required plugins with context support
 func (d *Downloader) DownloadRequiredPluginsWithContext(ctx context.Context, requiredPlugins []string) error {
 	return d.DownloadRequiredPluginsWithContextAndOptions(ctx, requiredPlugins, nil)
 }
@@ -824,11 +837,6 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 	return nil
 }
 
-// UpdateRegistry updates the plugin registry with caching
-func (d *Downloader) UpdateRegistry() error {
-	_, err := d.fetchRegistry()
-	return err
-}
 
 // getCacheDuration returns cache duration based on environment
 func (d *Downloader) getCacheDuration() time.Duration {
@@ -1156,11 +1164,82 @@ func (em *ExecutableManager) ListPlugins() map[string]PluginMetadata {
 	return plugins
 }
 
+// ListPluginsWithContext returns installed plugins with caching and context support
+func (em *ExecutableManager) ListPluginsWithContext(ctx context.Context) map[string]PluginMetadata {
+	// Check cached plugins with read lock
+	em.mu.RLock()
+	if time.Since(em.cacheTime) < 30*time.Second {
+		// Return a copy to prevent external mutations
+		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
+		for k, v := range em.cachedPlugins {
+			result[k] = v
+		}
+		em.mu.RUnlock()
+		return result
+	}
+	em.mu.RUnlock()
+
+	// Acquire write lock for cache refresh
+	em.mu.Lock()
+	defer em.mu.Unlock()
+
+	// Double-check cache after acquiring write lock
+	if time.Since(em.cacheTime) < 30*time.Second {
+		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
+		for k, v := range em.cachedPlugins {
+			result[k] = v
+		}
+		return result
+	}
+
+	plugins := make(map[string]PluginMetadata)
+
+	// Scan plugin directory for executables
+	entries, err := os.ReadDir(em.pluginDir)
+	if err != nil {
+		return plugins // Return empty map on error
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if strings.HasPrefix(name, "devex-plugin-") &&
+			(runtime.GOOS != "windows" || strings.HasSuffix(name, ".exe")) {
+
+			pluginName := strings.TrimPrefix(name, "devex-plugin-")
+			if runtime.GOOS == "windows" {
+				pluginName = strings.TrimSuffix(pluginName, ".exe")
+			}
+
+			pluginPath := filepath.Join(em.pluginDir, name)
+			metadata := em.getPluginMetadataWithContext(ctx, pluginName, pluginPath)
+			if metadata != nil {
+				plugins[pluginName] = *metadata
+			}
+		}
+	}
+
+	// Cache results
+	em.cachedPlugins = plugins
+	em.cacheTime = time.Now()
+
+	return plugins
+}
+
 // getPluginMetadata gets metadata from a plugin executable with timeout
 func (em *ExecutableManager) getPluginMetadata(pluginName, pluginPath string) *PluginMetadata {
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), em.loadTimeout)
 	defer cancel()
+
+	return em.getPluginMetadataWithContext(ctx, pluginName, pluginPath)
+}
+
+// getPluginMetadataWithContext gets metadata from a plugin executable with context
+func (em *ExecutableManager) getPluginMetadataWithContext(ctx context.Context, pluginName, pluginPath string) *PluginMetadata {
 
 	// Execute plugin with --plugin-info flag
 	cmd := exec.CommandContext(ctx, pluginPath, "--plugin-info")

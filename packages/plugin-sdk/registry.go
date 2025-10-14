@@ -551,39 +551,19 @@ func NewRegistryDownloader(config DownloaderConfig, registryConfig RegistryConfi
 	}, nil
 }
 
-// GetAvailablePlugins fetches plugins using registry API (backward compatible)
-func (rd *RegistryDownloader) GetAvailablePlugins() (map[string]PluginMetadata, error) {
-	ctx := context.Background()
-	return rd.GetAvailablePluginsWithContext(ctx)
-}
-
-// GetAvailablePluginsWithContext fetches plugins using registry API with context
-func (rd *RegistryDownloader) GetAvailablePluginsWithContext(ctx context.Context) (map[string]PluginMetadata, error) {
+// GetAvailablePlugins fetches all available plugins from the registry
+func (rd *RegistryDownloader) GetAvailablePlugins(ctx context.Context) (map[string]PluginMetadata, error) {
 	registry, err := rd.registryClient.GetRegistry(ctx)
 	if err != nil {
-		// Fallback to local method if available
-		if rd.Downloader != nil {
-			return rd.Downloader.GetAvailablePlugins()
-		}
 		return nil, err
 	}
 	return registry.Plugins, nil
 }
 
-// SearchPlugins searches using registry API (backward compatible)
-func (rd *RegistryDownloader) SearchPlugins(query string) (map[string]PluginMetadata, error) {
-	ctx := context.Background()
-	return rd.SearchPluginsWithContext(ctx, query)
-}
-
-// SearchPluginsWithContext searches using registry API with context
-func (rd *RegistryDownloader) SearchPluginsWithContext(ctx context.Context, query string) (map[string]PluginMetadata, error) {
+// SearchPlugins searches for plugins using the registry API
+func (rd *RegistryDownloader) SearchPlugins(ctx context.Context, query string) (map[string]PluginMetadata, error) {
 	plugins, err := rd.registryClient.SearchPlugins(ctx, query, nil, DefaultSearchLimit)
 	if err != nil {
-		// Fallback to local method if we have a Downloader
-		if rd.Downloader != nil {
-			return rd.Downloader.SearchPlugins(query)
-		}
 		return nil, err
 	}
 
@@ -595,13 +575,7 @@ func (rd *RegistryDownloader) SearchPluginsWithContext(ctx context.Context, quer
 	return results, nil
 }
 
-// GetPluginDetails returns detailed plugin information from registry API (backward compatible)
-func (rd *RegistryDownloader) GetPluginDetails(pluginName string) (*PluginMetadata, error) {
-	ctx := context.Background()
-	return rd.GetPluginDetailsWithContext(ctx, pluginName)
-}
-
-// GetPluginDetailsWithContext returns detailed plugin information from registry API with context
-func (rd *RegistryDownloader) GetPluginDetailsWithContext(ctx context.Context, pluginName string) (*PluginMetadata, error) {
+// GetPluginDetails returns detailed plugin information from the registry API
+func (rd *RegistryDownloader) GetPluginDetails(ctx context.Context, pluginName string) (*PluginMetadata, error) {
 	return rd.registryClient.GetPlugin(ctx, pluginName)
 }
