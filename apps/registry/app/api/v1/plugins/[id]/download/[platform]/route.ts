@@ -30,11 +30,16 @@ export async function GET(
 			return createApiError(`Plugin ${plugin.name} does not support platform ${platform}`, 404);
 		}
 
-		// Extract version from githubPath or use latest
-		const version = extractVersionFromGithubPath(plugin.githubPath) || "latest";
+		// Get the binary URL from the stored binaries object
+		const binaries = plugin.binaries as Record<string, { url: string; checksum: string; size: number }>;
+		const binary = binaries?.[platform];
 
-		// Build GitHub download URL
-		const githubDownloadUrl = buildGithubDownloadUrl(plugin.name, version, platform);
+		if (!binary || !binary.url) {
+			return createApiError(`Binary not available for ${plugin.name} on ${platform}`, 404);
+		}
+
+		const githubDownloadUrl = binary.url;
+		const version = plugin.version || "unknown";
 
 		// Update download count and last download time atomically
 		await prisma.plugin.update({
