@@ -6,7 +6,7 @@
 	"scripts": {
 		"build": "go build ./...",
 		"test": "ginkgo run .",
-		"lint": "golangci-lint run",
+		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
 		"mod": "go mod tidy"
 	},

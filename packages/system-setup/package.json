@@ -8,7 +8,7 @@
 		"build": "go build -o devex-plugin-system-setup .",
 		"test": "go test ./...",
 		"dev": "go build -race -o devex-plugin-system-setup main.go",
-		"lint": "golangci-lint run",
+		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
 		"mod": "go mod tidy"
 	},

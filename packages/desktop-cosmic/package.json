@@ -8,7 +8,7 @@
 		"build": "go build -o devex-plugin-desktop-cosmic .",
 		"dev": "go build -race -o devex-plugin-desktop-cosmic main.go",
 		"test": "go test ./...",
-		"lint": "golangci-lint run",
+		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
 		"mod": "go mod tidy"
 	},

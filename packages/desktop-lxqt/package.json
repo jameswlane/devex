@@ -8,7 +8,7 @@
 		"build": "go build -o devex-plugin-desktop-lxqt .",
 		"dev": "go build -race -o devex-plugin-desktop-lxqt main.go",
 		"test": "go test ./...",
-		"lint": "golangci-lint run",
+		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
 		"mod": "go mod tidy"
 	},

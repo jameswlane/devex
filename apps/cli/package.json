@@ -15,7 +15,7 @@
 		"docker:setup-verbose": "scripts/docker.sh setup-verbose",
 		"docker:shell": "scripts/docker.sh shell",
 		"download": "go mod download",
-		"lint": "golangci-lint run",
+		"lint": "golangci-lint run --allow-parallel-runners",
 		"mod": "go mod tidy",
 		"test": "go test ./..."
 	}
