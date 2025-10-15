@@ -1,6 +1,8 @@
 package bootstrap
 
 import (
+	"fmt"
+
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -38,12 +40,26 @@ func (l *SDKLoggerAdapter) Println(msg string, args ...any) {
 
 // Success implements sdk.Logger interface
 func (l *SDKLoggerAdapter) Success(msg string, args ...any) {
-	log.Info(msg, args...)
+	// SDK uses Printf-style formatting, but our log package expects structured logging
+	// Convert format string to structured log message
+	if len(args) > 0 {
+		formattedMsg := fmt.Sprintf(msg, args...)
+		log.Info(formattedMsg)
+	} else {
+		log.Info(msg)
+	}
 }
 
 // Warning implements sdk.Logger interface
 func (l *SDKLoggerAdapter) Warning(msg string, args ...any) {
-	log.Warning(msg, args...)
+	// SDK uses Printf-style formatting, but our log package expects structured logging
+	// Convert format string to structured log message
+	if len(args) > 0 {
+		formattedMsg := fmt.Sprintf(msg, args...)
+		log.Warning(formattedMsg)
+	} else {
+		log.Warning(msg)
+	}
 }
 
 // ErrorMsg implements sdk.Logger interface
