@@ -21,6 +21,7 @@
 				"src/**",
 				"cmd/**",
 				"pkg/**",
+				"internal/**",
 				"*.go",
 				"go.mod",
 				"go.sum",
@@ -32,7 +33,8 @@
 				".env.production.local",
 				".env.local",
 				".env.production",
-				".env"
+				".env",
+				"../../packages/plugin-sdk/**/*.go"
 			],
 			"env": [
 				"CGO_ENABLED",
@@ -93,7 +95,15 @@
 		"build:go": {
 			"dependsOn": ["^build:go"],
 			"outputs": ["bin/**"],
-			"inputs": ["cmd/**", "pkg/**", "*.go", "go.mod", "go.sum"],
+			"inputs": [
+				"cmd/**",
+				"pkg/**",
+				"internal/**",
+				"*.go",
+				"go.mod",
+				"go.sum",
+				"../../packages/plugin-sdk/**/*.go"
+			],
 			"cache": true
 		},
 		"build:local": {
@@ -113,13 +123,18 @@
 				"**/*.ts",
 				"**/*.tsx",
 				".golangci.yml",
-				"biome.json"
+				"biome.json",
+				"../../packages/plugin-sdk/**/*.go"
 			],
 			"cache": true
 		},
 		"lint:go": {
 			"dependsOn": [],
-			"inputs": ["**/*.go", ".golangci.yml"],
+			"inputs": [
+				"**/*.go",
+				".golangci.yml",
+				"../../packages/plugin-sdk/**/*.go"
+			],
 			"cache": true
 		},
 		"lint:fix": {
@@ -148,13 +163,25 @@
 		},
 		"test:go": {
 			"dependsOn": ["build:go"],
-			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
+			"inputs": [
+				"**/*.go",
+				"go.mod",
+				"go.sum",
+				"**/*_test.go",
+				"../../packages/plugin-sdk/**/*.go"
+			],
 			"outputs": [],
 			"cache": true
 		},
 		"test:ginkgo": {
 			"dependsOn": ["build:go"],
-			"inputs": ["**/*.go", "go.mod", "go.sum", "**/*_test.go"],
+			"inputs": [
+				"**/*.go",
+				"go.mod",
+				"go.sum",
+				"**/*_test.go",
+				"../../packages/plugin-sdk/**/*.go"
+			],
 			"cache": true
 		},
 		"vulncheck": {
