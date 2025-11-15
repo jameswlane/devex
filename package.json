@@ -61,7 +61,7 @@
 		"auto": "^11.3.0",
 		"commitlint": "^19.8.0",
 		"glob": "^11.0.3",
-		"js-yaml": "^4.1.0",
+		"js-yaml": "^4.1.1",
 		"turbo": "latest"
 	}
 }
