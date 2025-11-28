@@ -39,6 +39,11 @@ func NewGitPlugin() *GitPlugin {
 				Description: "Show Git configuration status",
 				Usage:       "Display current Git configuration and version information",
 			},
+			{
+				Name:        "setup",
+				Description: "Configure Git via setup protocol",
+				Usage:       "Called by DevEx CLI during setup workflow to configure Git with user information",
+			},
 		},
 	}
 

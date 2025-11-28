@@ -1,0 +1,354 @@
+# DevEx Setup Workflow Configuration
+# This file defines the interactive setup experience
+# Users can customize this or create their own setup configurations
+metadata:
+  name: "DevEx Default Setup"
+  description: "Interactive guided setup for development environments"
+  version: "1.0.0"
+  author: "DevEx Team"
+# Timeout configurations for various operations
+timeouts:
+  plugin_install: 300s # 5 minutes for plugin installation
+  plugin_verify: 30s # 30 seconds for checksum verification
+  plugin_download: 120s # 2 minutes for plugin downloads
+  network_operation: 30s # 30 seconds for network operations
+# Setup workflow steps
+steps:
+  # Step 1: System Overview
+  - id: system_overview
+    title: "Welcome to DevEx Setup"
+    type: info
+    info:
+      message: |
+        Welcome to DevEx! This wizard will help you set up your development environment.
+
+        We'll guide you through:
+        • Installing required plugins for your platform
+        • Selecting programming languages and tools
+        • Configuring databases
+        • Customizing your shell and theme
+        • Setting up Git configuration
+
+        Press Enter to continue or 'q' to quit.
+      style: info
+    navigation:
+      allow_back: false
+      auto_advance: false
+  # Step 2: Plugin Installation
+  - id: plugin_install
+    title: "Installing Required Plugins"
+    type: action
+    description: "Installing platform-specific plugins for your system"
+    action:
+      type: plugin
+      progress_message: "Installing plugins..."
+      success_message: "Plugins installed successfully"
+      on_error: stop
+      params:
+        detect_platform: true
+        install_required: true
+    navigation:
+      allow_back: true
+      auto_advance: true
+  # Step 3: Desktop Applications (conditional)
+  - id: desktop_apps
+    title: "Desktop Applications"
+    type: question
+    description: "Select desktop applications to install"
+    show_if:
+      system:
+        has_desktop: true
+    question:
+      type: multiselect
+      variable: selected_desktop_apps
+      prompt: "Select desktop applications to install (Space to select, Enter to continue):"
+      options_source:
+        type: config
+        path: "config/applications"
+        key: "desktop_apps"
+        transform: "filter_by_platform"
+      validation:
+        required: false
+    navigation:
+      allow_back: true
+  # Step 4: Programming Languages
+  - id: languages
+    title: "Programming Languages"
+    type: question
+    description: "Choose the programming languages you want to work with"
+    question:
+      type: multiselect
+      variable: selected_languages
+      prompt: "Select programming languages (Space to select, Enter to continue):"
+      options_source:
+        type: config
+        path: "config/environments/programming-languages"
+        transform: "load_directory"
+      validation:
+        required: false
+        min: 0
+        max: 10
+        message: "You can select up to 10 programming languages"
+    navigation:
+      allow_back: true
+  # Step 5: Databases
+  - id: databases
+    title: "Databases"
+    type: question
+    description: "Select databases you want to install"
+    question:
+      type: multiselect
+      variable: selected_databases
+      prompt: "Select databases (Space to select, Enter to continue):"
+      options:
+        - label: "PostgreSQL"
+          value: "postgresql"
+          description: "Popular open-source relational database"
+        - label: "MySQL"
+          value: "mysql"
+          description: "World's most popular open-source database"
+        - label: "Redis"
+          value: "redis"
+          description: "In-memory data structure store"
+        - label: "MongoDB"
+          value: "mongodb"
+          description: "NoSQL document database"
+      validation:
+        required: false
+    navigation:
+      allow_back: true
+  # Step 6: Shell Selection (Linux/macOS only)
+  - id: shell_selection
+    title: "Shell Configuration"
+    type: question
+    description: "Choose your preferred shell"
+    show_if:
+      system:
+        os: linux
+      or:
+        - system:
+            os: darwin
+    question:
+      type: select
+      variable: selected_shell
+      prompt: "Select your preferred shell:"
+      options:
+        - label: "zsh (recommended)"
+          value: "zsh"
+          description: "Modern shell with powerful features"
+          default: true
+        - label: "bash"
+          value: "bash"
+          description: "Bourne Again Shell - widely compatible"
+        - label: "fish"
+          value: "fish"
+          description: "Friendly interactive shell"
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  # Step 7: Theme Selection
+  - id: theme_selection
+    title: "Theme Customization"
+    type: question
+    description: "Choose a visual theme for your development environment"
+    question:
+      type: select
+      variable: selected_theme
+      prompt: "Select a theme:"
+      options_source:
+        type: config
+        path: "config/desktop"
+        key: "themes"
+        transform: "get_theme_names"
+      default: 0
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  # Step 8: Git Configuration
+  - id: git_config_name
+    title: "Git Configuration - Full Name"
+    type: question
+    description: "Configure Git with your personal information"
+    question:
+      type: text
+      variable: git_full_name
+      prompt: "Enter your full name for Git commits:"
+      placeholder: "John Doe"
+      validation:
+        required: true
+        min: 2
+        message: "Please enter your full name (at least 2 characters)"
+    navigation:
+      allow_back: true
+  - id: git_config_email
+    title: "Git Configuration - Email"
+    type: question
+    description: "Your email will be used for Git commits"
+    question:
+      type: text
+      variable: git_email
+      prompt: "Enter your email address for Git commits:"
+      placeholder: "john.doe@example.com"
+      validation:
+        required: true
+        pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        message: "Please enter a valid email address"
+    navigation:
+      allow_back: true
+  # Step 9: Confirmation
+  - id: confirmation
+    title: "Confirm Your Selections"
+    type: info
+    info:
+      message: |
+        Please review your selections:
+
+        {{if .selected_languages}}
+        Languages: {{join .selected_languages ", "}}
+        {{end}}
+        {{if .selected_databases}}
+        Databases: {{join .selected_databases ", "}}
+        {{end}}
+        {{if .selected_shell}}
+        Shell: {{.selected_shell}}
+        {{end}}
+        {{if .selected_theme}}
+        Theme: {{.selected_theme}}
+        {{end}}
+        {{if .git_full_name}}
+        Git Name: {{.git_full_name}}
+        {{end}}
+        {{if .git_email}}
+        Git Email: {{.git_email}}
+        {{end}}
+
+        Press Enter to begin installation or 'b' to go back and make changes.
+      style: info
+    navigation:
+      allow_back: true
+  # Step 10: Install Desktop Applications
+  - id: install_desktop_apps
+    title: "Installing Desktop Applications"
+    type: action
+    description: "Installing selected desktop applications"
+    show_if:
+      has_value: selected_desktop_apps
+    action:
+      type: install
+      progress_message: "Installing desktop applications..."
+      success_message: "Desktop applications installed successfully"
+      on_error: continue
+      params:
+        install_desktop_apps: "{{.selected_desktop_apps}}"
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Step 11: Install Programming Languages
+  - id: install_languages
+    title: "Installing Programming Languages"
+    type: action
+    description: "Installing selected programming languages via mise plugin"
+    show_if:
+      has_value: selected_languages
+    action:
+      type: install
+      progress_message: "Installing programming languages..."
+      success_message: "Programming languages installed successfully"
+      on_error: continue
+      params:
+        install_languages: "{{.selected_languages}}"
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Step 12: Install Databases
+  - id: install_databases
+    title: "Installing Databases"
+    type: action
+    description: "Installing selected databases via docker plugin"
+    show_if:
+      has_value: selected_databases
+    action:
+      type: install
+      progress_message: "Installing databases..."
+      success_message: "Databases installed successfully"
+      on_error: continue
+      params:
+        install_databases: "{{.selected_databases}}"
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Step 13: Configure Shell
+  - id: configure_shell
+    title: "Configuring Shell"
+    type: action
+    description: "Configuring shell via tool-shell plugin"
+    show_if:
+      has_value: selected_shell
+    action:
+      type: configure
+      progress_message: "Configuring shell..."
+      success_message: "Shell configured successfully"
+      on_error: continue
+      params:
+        configure_shell: "{{.selected_shell}}"
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Step 14: Configure Git
+  - id: configure_git
+    title: "Configuring Git"
+    type: action
+    description: "Configuring Git with your personal information via tool-git plugin"
+    show_if:
+      has_value: git_full_name
+    action:
+      type: configure
+      progress_message: "Configuring Git..."
+      success_message: "Git configured successfully"
+      on_error: continue
+      params:
+        configure_git: true
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Step 15: Complete
+  - id: complete
+    title: "Setup Complete!"
+    type: info
+    info:
+      message: |
+        🎉 Congratulations! Your development environment is ready.
+
+        {{if .has_errors}}
+        ⚠️  Some installations encountered errors. Check the logs above for details.
+        {{else}}
+        ✅ All installations completed successfully.
+        {{end}}
+
+        Next steps:
+        • Restart your shell to apply changes
+        • Run 'devex doctor' to verify your installation
+        • Check out the documentation at https://docs.devex.sh
+
+        Press 'q' to exit.
+      style: success
+    navigation:
+      allow_back: false
+# Reusable action definitions (optional)
+actions:
+  install_mise:
+    name: "Install mise"
+    description: "Install mise version manager"
+    type: install
+    params:
+      app: "mise"
+      method: "auto"
+  configure_shell_plugin:
+    name: "Configure Shell"
+    description: "Configure shell with plugins"
+    type: configure
+    params:
+      plugin: "tool-shell"
+      reload: true

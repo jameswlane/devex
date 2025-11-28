@@ -1,0 +1,138 @@
+# Minimal DevEx Setup Configuration
+# This is a streamlined setup for developers who want just the essentials
+metadata:
+  name: "DevEx Minimal Setup"
+  description: "Quick setup with essential tools only"
+  version: "1.0.0"
+  author: "DevEx Team"
+timeouts:
+  plugin_install: 300s
+  plugin_verify: 30s
+  plugin_download: 120s
+  network_operation: 30s
+steps:
+  # Welcome
+  - id: welcome
+    title: "Welcome to DevEx Minimal Setup"
+    type: info
+    info:
+      message: |
+        This is a streamlined setup that will install only essential tools.
+
+        This setup includes:
+        • Core plugins for your platform
+        • One programming language (your choice)
+        • Git configuration
+
+        Press Enter to continue.
+      style: info
+    navigation:
+      allow_back: false
+  # Plugin Installation
+  - id: plugin_install
+    title: "Installing Required Plugins"
+    type: action
+    action:
+      type: plugin
+      progress_message: "Installing plugins..."
+      success_message: "Plugins installed successfully"
+      on_error: stop
+      params:
+        detect_platform: true
+        install_required: true
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Single Language Selection
+  - id: language
+    title: "Choose Your Primary Language"
+    type: question
+    description: "Select your primary programming language"
+    question:
+      type: select
+      variable: primary_language
+      prompt: "Select your primary programming language:"
+      options:
+        - label: "Node.js (JavaScript/TypeScript)"
+          value: "nodejs"
+          description: "Web development and backend"
+          default: true
+        - label: "Python"
+          value: "python"
+          description: "Data science and scripting"
+        - label: "Go"
+          value: "go"
+          description: "Cloud and system programming"
+        - label: "Rust"
+          value: "rust"
+          description: "Systems programming"
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  # Git Name
+  - id: git_name
+    title: "Git Configuration"
+    type: question
+    question:
+      type: text
+      variable: git_name
+      prompt: "Enter your name for Git commits:"
+      placeholder: "John Doe"
+      validation:
+        required: true
+        min: 2
+    navigation:
+      allow_back: true
+  # Git Email
+  - id: git_email
+    title: "Git Email"
+    type: question
+    question:
+      type: text
+      variable: git_email
+      prompt: "Enter your email for Git commits:"
+      placeholder: "john@example.com"
+      validation:
+        required: true
+        pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        message: "Please enter a valid email address"
+    navigation:
+      allow_back: true
+  # Installation
+  - id: install
+    title: "Installing"
+    type: action
+    action:
+      type: install
+      progress_message: "Installing your development environment..."
+      success_message: "Installation complete!"
+      on_error: continue
+      params:
+        language: "{{.primary_language}}"
+        git_name: "{{.git_name}}"
+        git_email: "{{.git_email}}"
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Complete
+  - id: complete
+    title: "Setup Complete!"
+    type: info
+    info:
+      message: |
+        ✅ Your minimal development environment is ready!
+
+        Installed:
+        • {{.primary_language}}
+        • Git (configured)
+        • Platform plugins
+
+        Next steps:
+        • Restart your terminal
+        • Run 'devex doctor' to verify
+
+        Press 'q' to exit.
+      style: success
+    navigation:
+      allow_back: false

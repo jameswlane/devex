@@ -6,10 +6,96 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // handleSetup initializes shell configuration with sensible defaults
+// This method supports both the legacy flag-based approach and the new SDK setup protocol
 func (p *ShellPlugin) handleSetup(ctx context.Context, args []string) error {
+	// Check if we're being called via the setup protocol (stdin has data)
+	// This is determined by attempting to read setup input
+	input, err := sdk.ReadSetupInput()
+
+	// If we successfully read setup input, use the protocol-based approach
+	if err == nil {
+		return p.handleSetupProtocol(ctx, input)
+	}
+
+	// Otherwise, fall back to the legacy approach for backwards compatibility
+	return p.handleSetupLegacy(ctx, args)
+}
+
+// handleSetupProtocol handles setup using the SDK protocol
+func (p *ShellPlugin) handleSetupProtocol(ctx context.Context, input *sdk.PluginSetupInput) error {
+	// Send initial progress
+	if err := sdk.SendProgress(10, "Configuring shell..."); err != nil {
+		return err
+	}
+
+	// Get shell selection from parameters or config
+	targetShell, _ := input.GetParameterString("selected_shell")
+	if targetShell == "" {
+		targetShell, _ = input.GetConfigString("shell")
+	}
+
+	// If no shell specified, detect current shell
+	if targetShell == "" {
+		targetShell = p.DetectCurrentShell()
+		if targetShell == "unknown" {
+			return sdk.SendError("could not detect current shell and no shell specified", nil)
+		}
+	}
+
+	// Send progress update
+	if err := sdk.SendProgress(30, fmt.Sprintf("Setting up %s configuration...", targetShell)); err != nil {
+		return err
+	}
+
+	// Get home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return sdk.SendError("failed to get home directory", err)
+	}
+
+	// Get shell configuration file path
+	rcFile := p.GetShellConfigFile(targetShell, homeDir)
+	if rcFile == "" {
+		return sdk.SendError(fmt.Sprintf("unsupported shell: %s", targetShell), nil)
+	}
+
+	// Send progress update
+	if err := sdk.SendProgress(50, "Creating configuration file..."); err != nil {
+		return err
+	}
+
+	// Create an RC file if it doesn't exist
+	if err := p.createShellConfigFile(targetShell, rcFile); err != nil {
+		return sdk.SendError("failed to create shell config", err)
+	}
+
+	// Send progress update
+	if err := sdk.SendProgress(70, "Adding shell configurations..."); err != nil {
+		return err
+	}
+
+	// Add DevEx configurations
+	if err := p.addShellConfigurations(targetShell, rcFile); err != nil {
+		return sdk.SendError("failed to add configurations", err)
+	}
+
+	// Send success response
+	data := map[string]interface{}{
+		"shell":       targetShell,
+		"config_file": rcFile,
+		"configured":  true,
+	}
+
+	return sdk.SendSuccess(fmt.Sprintf("Shell %s configured successfully", targetShell), data)
+}
+
+// handleSetupLegacy handles setup using the legacy flag-based approach
+func (p *ShellPlugin) handleSetupLegacy(ctx context.Context, args []string) error {
 	fmt.Println("Setting up shell configuration...")
 
 	// Detect current shell

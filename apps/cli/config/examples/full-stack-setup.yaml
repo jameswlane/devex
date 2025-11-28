@@ -1,0 +1,287 @@
+# Full-Stack DevEx Setup Configuration
+# Comprehensive setup for full-stack web developers
+metadata:
+  name: "DevEx Full-Stack Setup"
+  description: "Complete setup for full-stack web development"
+  version: "1.0.0"
+  author: "DevEx Team"
+timeouts:
+  plugin_install: 300s
+  plugin_verify: 30s
+  plugin_download: 120s
+  network_operation: 30s
+steps:
+  # Welcome
+  - id: welcome
+    title: "Welcome to Full-Stack Setup"
+    type: info
+    info:
+      message: |
+        Welcome to the DevEx Full-Stack Setup!
+
+        This comprehensive setup will configure:
+        • Multiple programming languages
+        • Database systems
+        • Development tools
+        • Shell and theme customization
+        • Git configuration
+
+        Estimated time: 10-20 minutes
+
+        Press Enter to continue.
+      style: info
+    navigation:
+      allow_back: false
+  # Plugins
+  - id: plugins
+    title: "Installing Plugins"
+    type: action
+    action:
+      type: plugin
+      progress_message: "Installing platform plugins..."
+      success_message: "Plugins ready"
+      on_error: stop
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Frontend Framework
+  - id: frontend
+    title: "Frontend Framework"
+    type: question
+    question:
+      type: select
+      variable: frontend_framework
+      prompt: "Choose your frontend framework:"
+      options:
+        - label: "React"
+          value: "react"
+          description: "Most popular UI library"
+          default: true
+        - label: "Vue.js"
+          value: "vue"
+          description: "Progressive framework"
+        - label: "Svelte"
+          value: "svelte"
+          description: "Compile-time framework"
+        - label: "Angular"
+          value: "angular"
+          description: "Full-featured framework"
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  # Backend Languages
+  - id: backend
+    title: "Backend Languages"
+    type: question
+    question:
+      type: multiselect
+      variable: backend_languages
+      prompt: "Select backend languages (Space to select, Enter to continue):"
+      options:
+        - label: "Node.js"
+          value: "nodejs"
+          description: "JavaScript/TypeScript backend"
+          default: true
+        - label: "Python"
+          value: "python"
+          description: "Flask, Django, FastAPI"
+        - label: "Go"
+          value: "go"
+          description: "Fast compiled language"
+        - label: "Rust"
+          value: "rust"
+          description: "Memory-safe systems programming"
+        - label: "Ruby"
+          value: "ruby"
+          description: "Ruby on Rails"
+      validation:
+        required: true
+        min: 1
+        max: 3
+        message: "Select 1-3 backend languages"
+    navigation:
+      allow_back: true
+  # Databases
+  - id: databases
+    title: "Databases"
+    type: question
+    question:
+      type: multiselect
+      variable: databases
+      prompt: "Select databases:"
+      options:
+        - label: "PostgreSQL"
+          value: "postgresql"
+          description: "Relational database"
+          default: true
+        - label: "Redis"
+          value: "redis"
+          description: "In-memory cache"
+          default: true
+        - label: "MongoDB"
+          value: "mongodb"
+          description: "NoSQL document store"
+        - label: "MySQL"
+          value: "mysql"
+          description: "Popular relational DB"
+      validation:
+        required: false
+    navigation:
+      allow_back: true
+  # DevOps Tools
+  - id: devops
+    title: "DevOps Tools"
+    type: question
+    question:
+      type: multiselect
+      variable: devops_tools
+      prompt: "Select DevOps tools:"
+      options:
+        - label: "Docker"
+          value: "docker"
+          description: "Containerization"
+          default: true
+        - label: "Kubernetes (k3s)"
+          value: "kubernetes"
+          description: "Container orchestration"
+        - label: "Terraform"
+          value: "terraform"
+          description: "Infrastructure as code"
+      validation:
+        required: false
+    navigation:
+      allow_back: true
+  # Shell
+  - id: shell
+    title: "Shell Selection"
+    type: question
+    show_if:
+      or:
+        - system:
+            os: linux
+        - system:
+            os: darwin
+    question:
+      type: select
+      variable: shell
+      prompt: "Choose your shell:"
+      options:
+        - label: "zsh"
+          value: "zsh"
+          default: true
+        - label: "bash"
+          value: "bash"
+        - label: "fish"
+          value: "fish"
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  # Theme
+  - id: theme
+    title: "Theme"
+    type: question
+    question:
+      type: select
+      variable: theme
+      prompt: "Select a theme:"
+      options_source:
+        type: config
+        path: "config/desktop"
+        key: "themes"
+        transform: "get_theme_names"
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  # Git Config
+  - id: git_name
+    title: "Git Configuration"
+    type: question
+    question:
+      type: text
+      variable: git_name
+      prompt: "Your full name:"
+      placeholder: "John Doe"
+      validation:
+        required: true
+    navigation:
+      allow_back: true
+  - id: git_email
+    title: "Git Email"
+    type: question
+    question:
+      type: text
+      variable: git_email
+      prompt: "Your email:"
+      placeholder: "john@example.com"
+      validation:
+        required: true
+        pattern: '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    navigation:
+      allow_back: true
+  # Confirmation
+  - id: confirm
+    title: "Review Your Selections"
+    type: info
+    info:
+      message: |
+        Please review:
+
+        Frontend: {{.frontend_framework}}
+        Backend: {{join .backend_languages ", "}}
+        {{if .databases}}Databases: {{join .databases ", "}}{{end}}
+        {{if .devops_tools}}DevOps: {{join .devops_tools ", "}}{{end}}
+        {{if .shell}}Shell: {{.shell}}{{end}}
+        Theme: {{.theme}}
+        Git: {{.git_name}} <{{.git_email}}>
+
+        Press Enter to install or 'b' to go back.
+      style: info
+    navigation:
+      allow_back: true
+  # Installation
+  - id: install
+    title: "Installing"
+    type: action
+    action:
+      type: install
+      progress_message: "Installing full-stack environment..."
+      success_message: "Installation complete!"
+      on_error: continue
+      params:
+        frontend: "{{.frontend_framework}}"
+        backend: "{{.backend_languages}}"
+        databases: "{{.databases}}"
+        devops: "{{.devops_tools}}"
+        shell: "{{.shell}}"
+        theme: "{{.theme}}"
+        git_name: "{{.git_name}}"
+        git_email: "{{.git_email}}"
+    navigation:
+      allow_back: false
+      auto_advance: true
+  # Complete
+  - id: complete
+    title: "Setup Complete!"
+    type: info
+    info:
+      message: |
+        🎉 Your full-stack environment is ready!
+
+        {{if .has_errors}}
+        ⚠️  Some installations had errors. Check logs above.
+        {{else}}
+        ✅ All installations successful!
+        {{end}}
+
+        Next steps:
+        • Restart your shell
+        • Run 'devex doctor'
+        • Visit https://docs.devex.sh
+
+        Press 'q' to exit.
+      style: success
+    navigation:
+      allow_back: false

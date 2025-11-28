@@ -52,16 +52,16 @@
 	"license": "Apache-2.0",
 	"packageManager": "pnpm@10.18.2",
 	"devDependencies": {
-		"@auto-it/conventional-commits": "^11.2.1",
-		"@auto-it/core": "^11.2.1",
+		"@auto-it/conventional-commits": "^11.3.6",
+		"@auto-it/core": "^11.3.6",
 		"@biomejs/biome": "2.2.4",
 		"@commitlint/config-conventional": "^19.8.1",
 		"@commitlint/format": "^19.8.1",
-		"@octokit/rest": "^22.0.0",
-		"auto": "^11.3.0",
-		"commitlint": "^19.8.0",
-		"glob": "^11.0.3",
-		"js-yaml": "^4.1.0",
+		"@octokit/rest": "^22.0.1",
+		"auto": "^11.3.6",
+		"commitlint": "^19.8.1",
+		"glob": "^11.1.0",
+		"js-yaml": "^4.1.1",
 		"turbo": "latest"
 	}
 }

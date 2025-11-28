@@ -155,7 +155,7 @@ func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstr
 
 	// Check if tool-shell plugin is available
 	manager := pluginBootstrap.GetManager()
-	installedPlugins := manager.ListPlugins()
+	installedPlugins := manager.ListPluginsWithContext(ctx)
 
 	if _, exists := installedPlugins["tool-shell"]; !exists {
 		log.Warn("tool-shell plugin not available, skipping shell configuration")
@@ -194,7 +194,7 @@ func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBoots
 
 	// Check if desktop plugin is available
 	manager := pluginBootstrap.GetManager()
-	installedPlugins := manager.ListPlugins()
+	installedPlugins := manager.ListPluginsWithContext(ctx)
 
 	if _, exists := installedPlugins[pluginName]; !exists {
 		log.Warn("Desktop plugin not available, skipping desktop configuration", "plugin", pluginName)
@@ -232,7 +232,7 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 
 	// Check if tool-git plugin is available
 	manager := pluginBootstrap.GetManager()
-	installedPlugins := manager.ListPlugins()
+	installedPlugins := manager.ListPluginsWithContext(ctx)
 
 	if _, exists := installedPlugins["tool-git"]; !exists {
 		log.Warn("tool-git plugin not available, skipping git configuration")

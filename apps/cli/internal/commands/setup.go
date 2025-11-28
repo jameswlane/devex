@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/setup"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -44,7 +45,14 @@ Run 'devex setup' to begin the guided installation process.`,
   DEVEX_NONINTERACTIVE=1 devex setup
 
   # Setup with verbose logging
-  devex setup --verbose`,
+  devex setup --verbose
+
+  # Use a custom setup configuration
+  devex setup --config=~/documents/my-setup.yaml
+
+  # Use a predefined setup template
+  devex setup --config=minimal
+  devex setup --config=full-stack`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if ctx == nil {
@@ -52,6 +60,8 @@ Run 'devex setup' to begin the guided installation process.`,
 			}
 
 			verbose := viper.GetBool("verbose")
+			configPath := viper.GetString("config")
+
 			if verbose {
 				log.Info("Starting DevEx setup in verbose mode")
 			}
@@ -65,15 +75,53 @@ Run 'devex setup' to begin the guided installation process.`,
 				"desktop", detectedPlatform.DesktopEnv,
 			)
 
+			// Load setup configuration (local or remote)
+			var setupConfig *types.SetupConfig
+			var err error
+			if configPath != "" {
+				log.Info("Loading setup configuration", "path", configPath)
+				setupConfig, err = config.LoadSetupConfig(configPath)
+				if err != nil {
+					return fmt.Errorf("failed to load setup config: %w", err)
+				}
+
+				if verbose {
+					log.Info("Loaded setup configuration",
+						"name", setupConfig.Metadata.Name,
+						"version", setupConfig.Metadata.Version,
+						"steps", len(setupConfig.Steps),
+					)
+				}
+			}
+
 			// Check if running in non-interactive mode
 			if !setup.IsInteractiveMode() {
 				log.Info("Running in non-interactive automated mode")
 				return setup.RunAutomatedSetup(ctx, repo, settings)
 			}
 
-			// Run interactive setup using Bubble Tea
+			// Initialize plugin bootstrap for setup
+			pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+			if err != nil {
+				return fmt.Errorf("failed to initialize plugin bootstrap: %w", err)
+			}
+
+			// Initialize plugins
+			if err := pluginBootstrap.Initialize(ctx); err != nil {
+				log.Warn("Failed to initialize some plugins", "error", err)
+				// Continue anyway - plugins might be installed during setup
+			}
+
+			// Run interactive setup using dynamic model
 			log.Info("Starting interactive setup")
-			model := setup.NewSetupModel(repo, settings, detectedPlatform)
+			var model tea.Model
+			if setupConfig != nil {
+				// Use dynamic model with custom config
+				model = setup.NewDynamicSetupModel(setupConfig, repo, settings, detectedPlatform, pluginBootstrap)
+			} else {
+				// Use default setup model (fallback to old behavior for now)
+				model = setup.NewSetupModel(repo, settings, detectedPlatform)
+			}
 
 			p := tea.NewProgram(model, tea.WithAltScreen())
 			finalModel, err := p.Run()
@@ -96,9 +144,11 @@ Run 'devex setup' to begin the guided installation process.`,
 
 	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	cmd.Flags().Bool("non-interactive", false, "Run in non-interactive mode (automated)")
+	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
 
 	_ = viper.BindPFlag("verbose", cmd.Flags().Lookup("verbose"))
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
+	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
 
 	return cmd
 }

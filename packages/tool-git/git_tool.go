@@ -35,6 +35,8 @@ func (p *GitPlugin) Execute(command string, args []string) error {
 		return p.HandleAliases(ctx, args)
 	case "status":
 		return p.HandleStatus(ctx, args)
+	case "setup":
+		return p.HandleSetup(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
