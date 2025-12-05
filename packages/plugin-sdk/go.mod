@@ -1,6 +1,6 @@
 module github.com/jameswlane/devex/packages/plugin-sdk
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/onsi/ginkgo/v2 v2.25.2
@@ -15,14 +15,14 @@ require (
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.41.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
-	golang.org/x/tools v0.36.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 )
 
 require (
 	github.com/ProtonMail/go-crypto v1.3.0
 	github.com/cloudflare/circl v1.6.1 // indirect
-	golang.org/x/sys v0.35.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 )
