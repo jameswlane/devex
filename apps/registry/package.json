@@ -52,7 +52,7 @@
 		"tailwindcss": "^4.1.13",
 		"ts-jest": "^29.4.5",
 		"tsx": "^4.20.6",
-		"typescript": "^5.0.0",
+		"typescript": "^5.9.3",
 		"vercel": "^48.2.1"
 	}
 }
