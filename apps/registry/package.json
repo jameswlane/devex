@@ -19,7 +19,7 @@
 		"update-binaries": "tsx scripts/update-binary-metadata.ts"
 	},
 	"dependencies": {
-		"@octokit/rest": "^22.0.0",
+		"@octokit/rest": "^22.0.1",
 		"@prisma/client": "^6.16.2",
 		"@prisma/extension-accelerate": "^2.0.2",
 		"@tailwindcss/postcss": "^4.1.13",
