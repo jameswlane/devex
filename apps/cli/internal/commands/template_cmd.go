@@ -13,14 +13,17 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
+type pluginBootstrapProvider func() *bootstrap.PluginBootstrap
+
 // NewTemplateCmd creates a new template command with versioning support
-func NewTemplateCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+func NewTemplateCmd(repo types.Repository, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "template",
 		Short: "Manage DevEx templates and their versions",
@@ -67,7 +70,7 @@ Examples:
 	cmd.AddCommand(newTemplateStatusCmd(settings))
 	cmd.AddCommand(newTemplateInitCmd(settings))
 	cmd.AddCommand(newTemplateValidateCmd(settings))
-	cmd.AddCommand(newTemplatePlanCmd(settings))
+	cmd.AddCommand(newTemplatePlanCmd(settings, getPluginBootstrap))
 	cmd.AddCommand(NewTemplateCustomCmd(repo, settings))
 
 	return cmd
@@ -126,7 +129,7 @@ func newTemplateValidateCmd(settings config.CrossPlatformSettings) *cobra.Comman
 	return cmd
 }
 
-func newTemplatePlanCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) *cobra.Command {
 	var (
 		format         string
 		action         string
@@ -148,8 +151,11 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings) *cobra.Command {
 				Manager:     templates.NewTemplateManager(homeDir),
 				AppResolver: templates.NewAppResolver(settings.GetApplicationByName),
 			}
-			if bootstrap := GetPluginBootstrap(); bootstrap != nil {
-				planner.PluginAvailable = bootstrap.IsPluginAvailable
+			if getPluginBootstrap != nil {
+				bootstrap := getPluginBootstrap()
+				if bootstrap != nil {
+					planner.PluginAvailable = bootstrap.IsPluginAvailable
+				}
 			}
 
 			plan, err := planner.Plan(cmd.Context(), args[0], templates.PlanOptions{
