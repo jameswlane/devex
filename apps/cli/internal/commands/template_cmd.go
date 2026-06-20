@@ -66,8 +66,113 @@ Examples:
 	cmd.AddCommand(newTemplateInfoCmd(settings))
 	cmd.AddCommand(newTemplateStatusCmd(settings))
 	cmd.AddCommand(newTemplateInitCmd(settings))
+	cmd.AddCommand(newTemplateValidateCmd(settings))
+	cmd.AddCommand(newTemplatePlanCmd(settings))
 	cmd.AddCommand(NewTemplateCustomCmd(repo, settings))
 
+	return cmd
+}
+
+func newTemplateValidateCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var format string
+
+	cmd := &cobra.Command{
+		Use:   "validate <id-or-path>",
+		Short: "Validate a template schema",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to determine user home directory: %w", err)
+			}
+			manager := templates.NewTemplateManager(homeDir)
+			spec, err := manager.GetTemplateSpecByIDOrPath(args[0])
+			if err != nil {
+				return err
+			}
+			if err := manager.ValidateTemplateSpec(*spec); err != nil {
+				return err
+			}
+
+			result := map[string]any{
+				"valid":    true,
+				"id":       spec.ID,
+				"name":     spec.Name,
+				"version":  spec.Version,
+				"template": args[0],
+			}
+			switch format {
+			case "json":
+				data, err := json.MarshalIndent(result, "", "  ")
+				if err != nil {
+					return fmt.Errorf("failed to marshal JSON: %w", err)
+				}
+				fmt.Println(string(data))
+			case "yaml":
+				data, err := yaml.Marshal(result)
+				if err != nil {
+					return fmt.Errorf("failed to marshal YAML: %w", err)
+				}
+				fmt.Println(string(data))
+			default:
+				green := color.New(color.FgGreen).SprintFunc()
+				fmt.Printf("%s Template %s is valid\n", green("✓"), spec.ID)
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, yaml)")
+	return cmd
+}
+
+func newTemplatePlanCmd(settings config.CrossPlatformSettings) *cobra.Command {
+	var (
+		format         string
+		action         string
+		answers        []string
+		answerFiles    []string
+		nonInteractive bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "plan <id-or-path>",
+		Short: "Build and display a template execution plan",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			homeDir, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("failed to determine user home directory: %w", err)
+			}
+			planner := templates.TemplatePlanner{
+				Manager:     templates.NewTemplateManager(homeDir),
+				AppResolver: templates.NewAppResolver(settings.GetApplicationByName),
+			}
+			if bootstrap := GetPluginBootstrap(); bootstrap != nil {
+				planner.PluginAvailable = bootstrap.IsPluginAvailable
+			}
+
+			plan, err := planner.Plan(cmd.Context(), args[0], templates.PlanOptions{
+				Action: templates.LifecycleAction(action),
+				InputOptions: templates.InputResolverOptions{
+					Answers:        answers,
+					AnswerFiles:    answerFiles,
+					NonInteractive: nonInteractive,
+				},
+				ValidatePlugins: planner.PluginAvailable != nil,
+			})
+			if err != nil {
+				return err
+			}
+			return displayExecutionPlan(plan, format)
+		},
+	}
+
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, yaml)")
+	cmd.Flags().StringVar(&action, "action", string(templates.LifecycleInstall), "Lifecycle action to plan (install, maintain, status, remove)")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
+	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing required inputs")
 	return cmd
 }
 
@@ -87,7 +192,10 @@ func newTemplateListCmd(settings config.CrossPlatformSettings) *cobra.Command {
 Shows version information, update status, and template metadata for easy overview
 of your template ecosystem.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir, err := templateVersionBaseDir()
+			if err != nil {
+				return err
+			}
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
 			// Initialize and scan templates
@@ -142,7 +250,10 @@ func newTemplateCheckUpdatesCmd(settings config.CrossPlatformSettings) *cobra.Co
 This command scans all registered templates and compares their current versions
 with the latest available versions to identify update opportunities.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir, err := templateVersionBaseDir()
+			if err != nil {
+				return err
+			}
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
 			// Initialize template versioning
@@ -198,7 +309,10 @@ rollback capabilities.`,
 			}
 
 			// Fallback to original implementation
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir, err := templateVersionBaseDir()
+			if err != nil {
+				return err
+			}
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
 			// Initialize template versioning
@@ -253,7 +367,10 @@ version details, manifest data, and update status.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			templateID := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir, err := templateVersionBaseDir()
+			if err != nil {
+				return err
+			}
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
 			// Initialize template versioning
@@ -288,7 +405,10 @@ func newTemplateStatusCmd(settings config.CrossPlatformSettings) *cobra.Command 
 		Long: `Display a summary of the template system including counts of templates,
 update availability, and system health.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir, err := templateVersionBaseDir()
+			if err != nil {
+				return err
+			}
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
 			// Initialize template versioning
@@ -323,7 +443,10 @@ func newTemplateInitCmd(settings config.CrossPlatformSettings) *cobra.Command {
 This command sets up the template versioning infrastructure and registers
 all discovered templates in the version tracking system.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir, err := templateVersionBaseDir()
+			if err != nil {
+				return err
+			}
 			tvm := templates.NewTemplateVersionManager(baseDir)
 
 			fmt.Println("Initializing template versioning system...")
@@ -361,18 +484,26 @@ all discovered templates in the version tracking system.`,
 	return cmd
 }
 
+func templateVersionBaseDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to determine user home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".devex"), nil
+}
+
 // Display functions
 
-func displayTemplateList(templates map[string]*templates.TemplateVersion, format string) error {
+func displayTemplateList(templateVersions map[string]*templates.TemplateVersion, format string) error {
 	switch format {
 	case "json":
-		data, err := json.MarshalIndent(templates, "", "  ")
+		data, err := json.MarshalIndent(templateVersions, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal JSON: %w", err)
 		}
 		fmt.Println(string(data))
 	case "yaml":
-		data, err := yaml.Marshal(templates)
+		data, err := yaml.Marshal(templateVersions)
 		if err != nil {
 			return fmt.Errorf("failed to marshal YAML: %w", err)
 		}
@@ -388,7 +519,7 @@ func displayTemplateList(templates map[string]*templates.TemplateVersion, format
 		fmt.Fprintln(w, "ID\tNAME\tVERSION\tSOURCE\tUPDATE\tDESCRIPTION")
 		fmt.Fprintln(w, "---\t----\t-------\t------\t------\t-----------")
 
-		for id, template := range templates {
+		for id, template := range templateVersions {
 			updateStatus := gray("-")
 			if template.UpdateAvailable {
 				updateStatus = yellow(fmt.Sprintf("v%s", template.LatestVersion))
@@ -463,6 +594,50 @@ func displayUpdateCheck(updates []string, format string, tvm *templates.Template
 		fmt.Printf("\nRun 'devex template update --all' to update all templates\n")
 	}
 
+	return nil
+}
+
+func displayExecutionPlan(plan *templates.ExecutionPlan, format string) error {
+	switch format {
+	case "json":
+		data, err := json.MarshalIndent(plan, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal JSON: %w", err)
+		}
+		fmt.Println(string(data))
+	case "yaml":
+		data, err := yaml.Marshal(plan)
+		if err != nil {
+			return fmt.Errorf("failed to marshal YAML: %w", err)
+		}
+		fmt.Println(string(data))
+	default:
+		blue := color.New(color.FgBlue).SprintFunc()
+		gray := color.New(color.FgHiBlack).SprintFunc()
+
+		fmt.Printf("%s Template Plan\n\n", blue("●"))
+		fmt.Printf("Template: %s@%s\n", plan.TemplateID, plan.TemplateVersion)
+		fmt.Printf("Action: %s\n", plan.Action)
+		fmt.Printf("Steps: %d\n\n", len(plan.Steps))
+
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+		fmt.Fprintln(w, "ORDER\tID\tTYPE\tREQUEST")
+		fmt.Fprintln(w, "-----\t--\t----\t-------")
+		for _, step := range plan.Steps {
+			request := step.Request.Command
+			if step.Request.Plugin != "" {
+				request = fmt.Sprintf("%s %s", step.Request.Plugin, step.Request.Command)
+			}
+			if len(step.Request.Args) > 0 {
+				request = fmt.Sprintf("%s %s", request, strings.Join(step.Request.Args, " "))
+			}
+			if request == "" {
+				request = gray("-")
+			}
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", step.Order, step.ID, step.Type, request)
+		}
+		_ = w.Flush()
+	}
 	return nil
 }
 
