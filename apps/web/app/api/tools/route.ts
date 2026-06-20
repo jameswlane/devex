@@ -24,7 +24,7 @@ async function fetchRegistryData(): Promise<Tool[]> {
 	try {
 		// Create AbortController for timeout
 		const controller = new AbortController();
-		const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+		const timeoutId = setTimeout(() => controller.abort(), 10000); // 10-second timeout
 
 		const response = await fetch("https://registry.devex.sh/api/v1/registry", {
 			next: { revalidate: 300 }, // Next.js cache for 5 minutes
