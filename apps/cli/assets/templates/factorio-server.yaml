@@ -1,0 +1,92 @@
+schema_version: devex.template/v1
+id: factorio-server
+name: Factorio Server
+version: 1.0.0
+description: Dedicated Factorio game server container with persistent saves
+author: DevEx Team
+tags:
+  - gaming
+  - server
+  - docker
+categories:
+  - gaming
+inputs:
+  container_name:
+    type: text
+    prompt: Factorio container name
+    default: devex-factorio
+    validation:
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      message: Container names may contain only letters, numbers, dots, underscores, and hyphens.
+  server_port:
+    type: text
+    prompt: Factorio UDP port
+    default: "34197"
+    validation:
+      pattern: ^[0-9]{2,5}$
+      message: Ports must be numeric.
+lifecycle:
+  install:
+    - id: docker-engine
+      order: 10
+      plugin:
+        name: package-manager-docker
+        command: ensure-installed
+        args:
+          - --add-user
+    - id: factorio
+      order: 20
+      depends_on:
+        - docker-engine
+      app:
+        name: Factorio Server
+        category: gaming
+        installer: docker
+        command: install
+        args:
+          - factoriotools/factorio:stable
+          - --name={{ inputs.container_name }}
+          - --port={{ inputs.server_port }}:34197/udp
+          - --volume=devex-factorio-data:/factorio
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.container_name }}"
+          external_id: "{{ inputs.container_name }}"
+  maintain:
+    - id: factorio-pull
+      order: 10
+      if: has_resource("factorio")
+      plugin:
+        name: package-manager-docker
+        command: pull
+        args:
+          - factoriotools/factorio:stable
+    - id: factorio-restart
+      order: 20
+      if: has_resource("factorio")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.factorio.external_id }}"
+  status:
+    - id: factorio-status
+      order: 10
+      if: has_resource("factorio")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.factorio.external_id }}"
+  remove:
+    - id: factorio-remove
+      order: 10
+      if: has_resource("factorio")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.factorio.external_id }}"
+          - --volumes

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -70,6 +71,16 @@ func (d *DockerInstaller) ValidateContainerName(containerName string) error {
 	return nil
 }
 
+// ValidateContainerArgs validates one or more container names.
+func (d *DockerInstaller) ValidateContainerArgs(containers []string) error {
+	for _, container := range containers {
+		if err := d.ValidateContainerName(container); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ValidateCommand validates command arguments to prevent injection
 func (d *DockerInstaller) ValidateCommand(args []string) error {
 	for _, arg := range args {
@@ -120,6 +131,95 @@ func (d *DockerInstaller) ValidatePortMapping(portMapping string) error {
 		return fmt.Errorf("invalid port mapping format")
 	}
 
+	return nil
+}
+
+// ValidateEnvVar validates Docker environment assignment flags.
+func (d *DockerInstaller) ValidateEnvVar(env string) error {
+	if env == "" {
+		return fmt.Errorf("environment variable cannot be empty")
+	}
+	if len(env) > MaxCommandLength {
+		return fmt.Errorf("environment variable too long (max %d characters)", MaxCommandLength)
+	}
+	if strings.ContainsRune(env, 0) {
+		return fmt.Errorf("environment variable contains null bytes")
+	}
+	key, _, hasValue := strings.Cut(env, "=")
+	if !hasValue || key == "" {
+		return fmt.Errorf("environment variable must use KEY=value format")
+	}
+	validEnvKeyRegex := regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	if !validEnvKeyRegex.MatchString(key) {
+		return fmt.Errorf("invalid environment variable name")
+	}
+	return nil
+}
+
+// ValidateVolumeMount validates Docker volume mount flags.
+func (d *DockerInstaller) ValidateVolumeMount(volume string) error {
+	if volume == "" {
+		return fmt.Errorf("volume mount cannot be empty")
+	}
+	if len(volume) > MaxCommandLength {
+		return fmt.Errorf("volume mount too long (max %d characters)", MaxCommandLength)
+	}
+	if strings.ContainsRune(volume, 0) {
+		return fmt.Errorf("volume mount contains null bytes")
+	}
+	if strings.Count(volume, ":") < 1 {
+		return fmt.Errorf("volume mount must use source:target format")
+	}
+	dangerousChars := []string{";", "&", "|", "`", "$", "<", ">"}
+	for _, char := range dangerousChars {
+		if strings.Contains(volume, char) {
+			return fmt.Errorf("volume mount contains potentially dangerous character: %s", char)
+		}
+	}
+	return nil
+}
+
+// ValidateRestartPolicy validates Docker restart policy values.
+func (d *DockerInstaller) ValidateRestartPolicy(policy string) error {
+	if policy == "" {
+		return fmt.Errorf("restart policy cannot be empty")
+	}
+	validRestartRegex := regexp.MustCompile(`^(no|always|unless-stopped|on-failure(?::[1-9][0-9]*)?)$`)
+	if !validRestartRegex.MatchString(policy) {
+		return fmt.Errorf("invalid restart policy")
+	}
+	return nil
+}
+
+// ValidateComposeFilePath validates Docker Compose file paths used by templates.
+func (d *DockerInstaller) ValidateComposeFilePath(path string) error {
+	if path == "" {
+		return fmt.Errorf("invalid compose file path: path cannot be empty")
+	}
+	if len(path) > MaxCommandLength {
+		return fmt.Errorf("invalid compose file path: path too long (max %d characters)", MaxCommandLength)
+	}
+	if filepath.IsAbs(path) {
+		return fmt.Errorf("invalid compose file path: absolute paths are not allowed")
+	}
+	if strings.ContainsRune(path, 0) {
+		return fmt.Errorf("invalid compose file path: path contains null bytes")
+	}
+	dangerousChars := []string{";", "&", "|", "`", "$", "<", ">", "\n", "\r"}
+	for _, char := range dangerousChars {
+		if strings.Contains(path, char) {
+			return fmt.Errorf("invalid compose file path: path contains potentially dangerous character")
+		}
+	}
+	cleaned := filepath.Clean(path)
+	if cleaned == "." || cleaned == ".." {
+		return fmt.Errorf("invalid compose file path")
+	}
+	for _, part := range strings.Split(cleaned, string(filepath.Separator)) {
+		if part == ".." {
+			return fmt.Errorf("invalid compose file path: path traversal is not allowed")
+		}
+	}
 	return nil
 }
 

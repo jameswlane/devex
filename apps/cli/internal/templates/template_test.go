@@ -143,12 +143,15 @@ var _ = Describe("Template System", func() {
 		It("should load flat and directory templates as canonical specs", func() {
 			specs, err := templateManager.GetAvailableTemplateSpecs()
 			Expect(err).ToNot(HaveOccurred())
-			Expect(len(specs)).To(BeNumerically(">=", 4))
+			Expect(len(specs)).To(BeNumerically(">=", 7))
 
 			Expect(findSpec(specs, "minimal")).ToNot(BeNil())
 			Expect(findSpec(specs, "web-development")).ToNot(BeNil())
 			Expect(findSpec(specs, "backend")).ToNot(BeNil())
 			Expect(findSpec(specs, "full-stack")).ToNot(BeNil())
+			Expect(findSpec(specs, "databases")).ToNot(BeNil())
+			Expect(findSpec(specs, "server-stack")).ToNot(BeNil())
+			Expect(findSpec(specs, "factorio-server")).ToNot(BeNil())
 		})
 
 		It("should convert legacy flat templates to install lifecycle steps", func() {

@@ -186,6 +186,85 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(plan.Steps[0].Request.Args).To(Equal([]string{"db-local"}))
 	})
 
+	It("interpolates and reuses resource metadata", func() {
+		spec.Inputs["compose_file"] = templates.TemplateInput{
+			Type:    "text",
+			Default: "compose.prod.yaml",
+		}
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID:    "compose-stack",
+				Order: 10,
+				Plugin: &templates.TemplatePluginAction{
+					Name:    "package-manager-docker",
+					Command: "compose",
+					Args:    []string{"up", "--file={{ inputs.compose_file }}"},
+				},
+				Resources: []templates.TemplateResource{
+					{
+						Type:       "compose_project",
+						Name:       "devex-server",
+						ExternalID: "devex-server",
+						Metadata: map[string]any{
+							"compose_file": "{{ inputs.compose_file }}",
+						},
+					},
+				},
+			},
+		}
+		spec.Lifecycle[templates.LifecycleMaintain] = []templates.TemplateStepSpec{
+			{
+				ID:    "compose-pull",
+				Order: 10,
+				If:    `has_resource("compose-stack")`,
+				Plugin: &templates.TemplatePluginAction{
+					Name:    "package-manager-docker",
+					Command: "compose",
+					Args: []string{
+						"pull",
+						"--file={{ resource.compose-stack.metadata.compose_file }}",
+						"--project={{ resource.compose-stack.external_id }}",
+					},
+				},
+			},
+		}
+
+		planner := templates.TemplatePlanner{Manager: manager}
+		installPlan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres", "compose_file=compose.prod.yaml"},
+				NonInteractive: true,
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(installPlan.Steps[0].Resources[0].Metadata["compose_file"]).To(Equal("compose.prod.yaml"))
+
+		maintainPlan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleMaintain,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres"},
+				NonInteractive: true,
+			},
+			KnownResources: map[string]templates.ResourceDeclaration{
+				"compose-stack": {
+					Type:       "compose_project",
+					Name:       "devex-server",
+					ExternalID: "devex-server",
+					Metadata: map[string]any{
+						"compose_file": "compose.prod.yaml",
+					},
+				},
+			},
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(maintainPlan.Steps[0].Request.Args).To(Equal([]string{
+			"pull",
+			"--file=compose.prod.yaml",
+			"--project=devex-server",
+		}))
+	})
+
 	It("resolves app refs through the planner resolver", func() {
 		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
 			{

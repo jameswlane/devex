@@ -21,6 +21,11 @@ func (d *DockerInstaller) handlePull(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no image specified")
 	}
+	for _, image := range args {
+		if err := d.ValidateImageName(image); err != nil {
+			return err
+		}
+	}
 	cmdArgs := append([]string{"pull"}, args...)
 	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
@@ -29,6 +34,11 @@ func (d *DockerInstaller) handlePull(ctx context.Context, args []string) error {
 func (d *DockerInstaller) handlePush(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no image specified")
+	}
+	for _, image := range args {
+		if err := d.ValidateImageName(image); err != nil {
+			return err
+		}
 	}
 	cmdArgs := append([]string{"push"}, args...)
 	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
@@ -43,6 +53,11 @@ func (d *DockerInstaller) handleImages(ctx context.Context, args []string) error
 func (d *DockerInstaller) handleRmi(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no images specified")
+	}
+	for _, image := range args {
+		if err := d.ValidateImageName(image); err != nil {
+			return err
+		}
 	}
 	cmdArgs := append([]string{"rmi"}, args...)
 	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)

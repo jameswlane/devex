@@ -295,8 +295,29 @@ func interpolateResources(values []TemplateResource, ctx EvaluationContext) []Re
 			Type:       interpolateString(value.Type, ctx),
 			Name:       interpolateString(value.Name, ctx),
 			ExternalID: interpolateString(value.ExternalID, ctx),
-			Metadata:   value.Metadata,
+			Metadata:   interpolateAnyMap(value.Metadata, ctx),
 		})
+	}
+	return result
+}
+
+func interpolateAnyMap(values map[string]any, ctx EvaluationContext) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	result := make(map[string]any, len(values))
+	for key, value := range values {
+		interpolatedKey := interpolateString(key, ctx)
+		switch typed := value.(type) {
+		case string:
+			result[interpolatedKey] = interpolateString(typed, ctx)
+		case []string:
+			result[interpolatedKey] = interpolateStringSlice(typed, ctx)
+		case map[string]any:
+			result[interpolatedKey] = interpolateAnyMap(typed, ctx)
+		default:
+			result[interpolatedKey] = value
+		}
 	}
 	return result
 }
@@ -316,7 +337,7 @@ func resolvePath(path string, ctx EvaluationContext) any {
 			return ctx.System[parts[1]]
 		}
 	case "resource":
-		if len(parts) == 3 {
+		if len(parts) >= 3 {
 			resource, ok := ctx.Resources[parts[1]]
 			if !ok {
 				return nil
@@ -328,6 +349,11 @@ func resolvePath(path string, ctx EvaluationContext) any {
 				return resource.Name
 			case "external_id":
 				return resource.ExternalID
+			case "metadata":
+				if len(parts) == 4 {
+					return resource.Metadata[parts[3]]
+				}
+				return resource.Metadata
 			}
 		}
 	default:

@@ -1,0 +1,227 @@
+schema_version: devex.template/v1
+id: databases
+name: Databases
+version: 1.0.0
+description: Local database containers for development and lightweight server automation
+author: DevEx Team
+tags:
+  - databases
+  - docker
+  - development
+categories:
+  - databases
+inputs:
+  databases:
+    type: multiselect
+    prompt: Databases to install
+    default: []
+    options:
+      - label: PostgreSQL
+        value: postgres
+      - label: Redis
+        value: redis
+      - label: MySQL
+        value: mysql
+  postgres_name:
+    type: text
+    prompt: PostgreSQL container name
+    default: devex-postgres
+    validation:
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      message: Container names may contain only letters, numbers, dots, underscores, and hyphens.
+  redis_name:
+    type: text
+    prompt: Redis container name
+    default: devex-redis
+    validation:
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      message: Container names may contain only letters, numbers, dots, underscores, and hyphens.
+  mysql_name:
+    type: text
+    prompt: MySQL container name
+    default: devex-mysql
+    validation:
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      message: Container names may contain only letters, numbers, dots, underscores, and hyphens.
+  mysql_password:
+    type: text
+    prompt: MySQL root password
+    sensitive: true
+    required: true
+lifecycle:
+  install:
+    - id: docker-engine
+      order: 10
+      if: contains(inputs.databases, "postgres") || contains(inputs.databases, "redis") || contains(inputs.databases, "mysql")
+      plugin:
+        name: package-manager-docker
+        command: ensure-installed
+        args:
+          - --add-user
+    - id: postgres
+      order: 20
+      depends_on:
+        - docker-engine
+      if: contains(inputs.databases, "postgres")
+      app:
+        name: PostgreSQL
+        category: databases
+        installer: docker
+        command: install
+        args:
+          - postgres:16
+          - --name={{ inputs.postgres_name }}
+          - --port=127.0.0.1:5432:5432
+          - --env=POSTGRES_HOST_AUTH_METHOD=trust
+          - --volume=devex-postgres-data:/var/lib/postgresql/data
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.postgres_name }}"
+          external_id: "{{ inputs.postgres_name }}"
+    - id: redis
+      order: 30
+      depends_on:
+        - docker-engine
+      if: contains(inputs.databases, "redis")
+      app:
+        name: Redis
+        category: databases
+        installer: docker
+        command: install
+        args:
+          - redis:7
+          - --name={{ inputs.redis_name }}
+          - --port=127.0.0.1:6379:6379
+          - --volume=devex-redis-data:/data
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.redis_name }}"
+          external_id: "{{ inputs.redis_name }}"
+    - id: mysql
+      order: 40
+      depends_on:
+        - docker-engine
+      if: contains(inputs.databases, "mysql")
+      app:
+        name: MySQL
+        category: databases
+        installer: docker
+        command: install
+        args:
+          - mysql:8
+          - --name={{ inputs.mysql_name }}
+          - --port=127.0.0.1:3306:3306
+          - --env=MYSQL_ROOT_PASSWORD={{ inputs.mysql_password }}
+          - --volume=devex-mysql-data:/var/lib/mysql
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.mysql_name }}"
+          external_id: "{{ inputs.mysql_name }}"
+  maintain:
+    - id: postgres-pull
+      order: 10
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: pull
+        args:
+          - postgres:16
+    - id: postgres-restart
+      order: 20
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.postgres.external_id }}"
+    - id: redis-pull
+      order: 30
+      if: has_resource("redis")
+      plugin:
+        name: package-manager-docker
+        command: pull
+        args:
+          - redis:7
+    - id: redis-restart
+      order: 40
+      if: has_resource("redis")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.redis.external_id }}"
+    - id: mysql-pull
+      order: 50
+      if: has_resource("mysql")
+      plugin:
+        name: package-manager-docker
+        command: pull
+        args:
+          - mysql:8
+    - id: mysql-restart
+      order: 60
+      if: has_resource("mysql")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.mysql.external_id }}"
+  status:
+    - id: postgres-status
+      order: 10
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.postgres.external_id }}"
+    - id: redis-status
+      order: 20
+      if: has_resource("redis")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.redis.external_id }}"
+    - id: mysql-status
+      order: 30
+      if: has_resource("mysql")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.mysql.external_id }}"
+  remove:
+    - id: mysql-remove
+      order: 10
+      if: has_resource("mysql")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.mysql.external_id }}"
+          - --volumes
+    - id: redis-remove
+      order: 20
+      if: has_resource("redis")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.redis.external_id }}"
+          - --volumes
+    - id: postgres-remove
+      order: 30
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.postgres.external_id }}"
+          - --volumes

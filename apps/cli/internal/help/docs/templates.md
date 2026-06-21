@@ -20,6 +20,11 @@ Templates can be:
 
 DevEx includes templates for popular development stacks:
 
+### Lifecycle Automation
+- `databases` - PostgreSQL, Redis, and MySQL containers with install, maintain, status, and remove workflows
+- `server-stack` - Docker Compose based server stack lifecycle management
+- `factorio-server` - Dedicated Factorio game server container with persistent storage
+
 ### Web Development
 - `web-fullstack` - Full-stack web development (React, Node.js, databases)
 - `react-frontend` - React frontend with modern tooling
@@ -94,6 +99,27 @@ devex template info react-fullstack
 devex template show react-fullstack
 ```
 
+### Lifecycle Runtime
+Canonical templates use `schema_version: devex.template/v1` and can define `install`, `maintain`, `status`, and `remove` actions. Runtime actions record runs, operations, and managed resources in the local state database so later maintenance and removal use recorded state.
+
+```bash
+# Validate a lifecycle template
+devex template validate ./templates/databases.yaml
+
+# Preview concrete plugin calls without executing them
+devex template plan ./templates/databases.yaml --answer databases=postgres,redis --non-interactive
+
+# Install from a lifecycle template
+devex install --template ./templates/databases.yaml --answer databases=postgres,redis --non-interactive
+
+# Inspect, maintain, and remove the latest successful install run
+devex status --template databases
+devex maintain --template databases
+devex remove --template databases --run latest
+```
+
+Template inputs can be supplied with repeated `--answer key=value` flags, YAML files via `--answers path.yaml`, or environment variables such as `DEVEX_INPUT_DATABASES=postgres,redis`. Use `--non-interactive` for automation so missing required values fail fast.
+
 ## Creating Custom Templates
 
 ### From Current Configuration
@@ -113,54 +139,54 @@ Create a template file in `~/.devex/templates/`:
 
 ```yaml
 # ~/.devex/templates/my-stack.yaml
-metadata:
-  name: "My Development Stack"
-  description: "Custom full-stack development environment"
-  version: "1.0.0"
-  category: "custom"
-  tags: ["web", "api", "docker"]
-  author: "Your Name"
-
-applications:
-  categories:
-    development:
-      - name: code
-        description: Visual Studio Code
-        installer: snap
-      
-      - name: docker
-        description: Container platform
-        installer: apt
-        
-    tools:
-      - name: postman
-        description: API testing
-        installer: flatpak
-
-environment:
-  languages:
-    node:
-      version: "18"
-      installer: mise
-      global_packages:
-        - typescript
-        - @angular/cli
-        - create-react-app
-    
-    python:
-      version: "3.11"
-      installer: mise
-      packages:
-        - fastapi
-        - uvicorn
-
-system:
-  git:
-    user:
-      name: "${GIT_USER_NAME}"
-      email: "${GIT_USER_EMAIL}"
-    core:
-      editor: "code --wait"
+schema_version: devex.template/v1
+id: my-stack
+name: My Stack
+version: 1.0.0
+description: Custom Docker development stack
+inputs:
+  container_name:
+    type: text
+    prompt: Container name
+    default: devex-nginx
+lifecycle:
+  install:
+    - id: nginx
+      order: 10
+      app:
+        name: Nginx
+        category: server
+        installer: docker
+        command: install
+        args:
+          - nginx:alpine
+          - --name={{ inputs.container_name }}
+          - --port=127.0.0.1:8080:80
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.container_name }}"
+          external_id: "{{ inputs.container_name }}"
+  status:
+    - id: nginx-status
+      order: 10
+      if: has_resource("nginx")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.nginx.external_id }}"
+  remove:
+    - id: nginx-remove
+      order: 10
+      if: has_resource("nginx")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.nginx.external_id }}"
+          - --volumes
 ```
 
 ### Template Variables
