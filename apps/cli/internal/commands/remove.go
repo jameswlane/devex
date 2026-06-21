@@ -492,14 +492,12 @@ Examples:
 				if len(args) > 0 || noBackup || cascade {
 					return fmt.Errorf("--template cannot be combined with application removal arguments or config removal flags")
 				}
-				if force {
-					return fmt.Errorf("--force is not supported with --template")
-				}
 				return executeTemplateLifecycle(cmd.Context(), templateID, templates.LifecycleRemove, templateLifecycleOptions{
 					Answers:        answers,
 					AnswerFiles:    answerFiles,
 					NonInteractive: nonInteractive,
 					DryRun:         dryRun,
+					Force:          force,
 					Format:         format,
 					Run:            runRef,
 				}, settings, getPluginBootstrap)

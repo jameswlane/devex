@@ -278,7 +278,7 @@ func (r *ExecutionRuntime) recordResources(ctx context.Context, runID string, te
 			CurrentState: resourceState,
 			Inputs:       cloneMap(step.Request.Metadata),
 			Outputs:      cloneMap(outputs),
-			Metadata:     cloneMap(declaration.Metadata),
+			Metadata:     resourceMetadataWithRemovalHints(step, declaration),
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}); err != nil {
@@ -414,6 +414,43 @@ func cloneMap(source map[string]any) map[string]any {
 		clone[key] = cloneValue(value)
 	}
 	return clone
+}
+
+func resourceMetadataWithRemovalHints(step templates.PlannedStep, declaration templates.ResourceDeclaration) map[string]any {
+	metadata := cloneMap(declaration.Metadata)
+	if metadata == nil {
+		metadata = make(map[string]any)
+	}
+	if _, exists := metadata["removal"]; exists {
+		return metadata
+	}
+	target := declaration.ExternalID
+	if target == "" {
+		target = declaration.Name
+	}
+	args := []string(nil)
+	if target != "" {
+		args = []string{target}
+	}
+	metadata["removal"] = map[string]any{
+		"plugin":      step.Request.Plugin,
+		"command":     defaultRemovalCommand(step),
+		"args":        args,
+		"external_id": declaration.ExternalID,
+		"resource_id": target,
+	}
+	return metadata
+}
+
+func defaultRemovalCommand(step templates.PlannedStep) string {
+	switch step.Request.Command {
+	case "install":
+		return "remove"
+	case "ensure-installed":
+		return "remove"
+	default:
+		return "remove"
+	}
 }
 
 func cloneValue(value any) any {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"text/tabwriter"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -21,6 +22,7 @@ type templateLifecycleOptions struct {
 	AnswerFiles    []string
 	NonInteractive bool
 	DryRun         bool
+	Force          bool
 	Format         string
 	Run            string
 }
@@ -70,15 +72,7 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 		Manager:     manager,
 		AppResolver: templates.NewAppResolver(settings.GetApplicationByName),
 	}
-	plan, err := planner.Plan(ctx, idOrPath, templates.PlanOptions{
-		Action:         action,
-		KnownResources: knownResources,
-		InputOptions: templates.InputResolverOptions{
-			Answers:        opts.Answers,
-			AnswerFiles:    opts.AnswerFiles,
-			NonInteractive: opts.NonInteractive,
-		},
-	})
+	plan, err := planTemplateLifecycle(ctx, planner, idOrPath, action, selectedRun, resources, knownResources, opts)
 	if err != nil {
 		if action == templates.LifecycleStatus && len(resources) > 0 {
 			return displayRecordedTemplateResources(templateLifecycleResult{
@@ -103,10 +97,22 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 	runtime := templateexec.NewExecutionRuntime(store, pluginExecutor)
 	result, err := runtime.Execute(ctx, *plan, templateexec.ExecuteOptions{})
 	if err != nil {
+		if action == templates.LifecycleStatus && len(resources) > 0 {
+			return displayRecordedTemplateResources(templateLifecycleResult{
+				SelectedRunID: selectedRun.ID,
+				TemplateID:    spec.ID,
+				Action:        action,
+				Resources:     resources,
+			}, opts.Format)
+		}
 		return err
 	}
 	if action == templates.LifecycleRemove {
-		removedResourceIDs := removedResourceIDsForPlan(*plan, resources)
+		operations, err := store.ListOperationsByRun(ctx, result.RunID)
+		if err != nil {
+			return err
+		}
+		removedResourceIDs := removedResourceIDsForSuccessfulOperations(operations, resources)
 		for index, resource := range resources {
 			if resource.CurrentState == state.ResourceStateRemoved {
 				continue
@@ -130,6 +136,185 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 		StepsExecuted: result.StepsExecuted,
 		Resources:     resources,
 	}, opts.Format)
+}
+
+func planTemplateLifecycle(ctx context.Context, planner templates.TemplatePlanner, idOrPath string, action templates.LifecycleAction, selectedRun state.TemplateRun, resources []state.ManagedResource, knownResources map[string]templates.ResourceDeclaration, opts templateLifecycleOptions) (*templates.ExecutionPlan, error) {
+	inputOptions := templates.InputResolverOptions{
+		Answers:        opts.Answers,
+		AnswerFiles:    opts.AnswerFiles,
+		NonInteractive: opts.NonInteractive,
+	}
+	if action == templates.LifecycleRemove {
+		if plan, ok := recordedRemovePlan(selectedRun); ok {
+			plan = prepareRecordedLifecyclePlan(plan, action, opts.Force)
+			return &plan, nil
+		}
+	}
+
+	plan, err := planner.Plan(ctx, idOrPath, templates.PlanOptions{
+		Action:         action,
+		KnownResources: knownResources,
+		InputOptions:   inputOptions,
+	})
+	if err == nil {
+		if action == templates.LifecycleRemove {
+			prepared := prepareRecordedLifecyclePlan(*plan, action, opts.Force)
+			if len(resources) > 0 {
+				augmented, augmentErr := augmentRemovePlanWithRecordedResources(prepared, selectedRun, resources, opts.Force)
+				if augmentErr != nil {
+					return nil, augmentErr
+				}
+				prepared = augmented
+			}
+			return &prepared, nil
+		}
+		return plan, nil
+	}
+	if action != templates.LifecycleRemove || len(resources) == 0 {
+		return nil, err
+	}
+	synthesized, synthErr := synthesizeRemovePlanFromResources(selectedRun, resources, opts.Force)
+	if synthErr != nil {
+		return nil, fmt.Errorf("%w; failed to synthesize remove plan from recorded resources: %v", err, synthErr)
+	}
+	return &synthesized, nil
+}
+
+func augmentRemovePlanWithRecordedResources(plan templates.ExecutionPlan, run state.TemplateRun, resources []state.ManagedResource, force bool) (templates.ExecutionPlan, error) {
+	targeted := removedResourceIDsForPlan(plan, resources)
+	var missing []state.ManagedResource
+	for _, resource := range resources {
+		if targeted[resource.ID] {
+			continue
+		}
+		missing = append(missing, resource)
+	}
+	if len(missing) == 0 {
+		return plan, nil
+	}
+	synthesized, err := synthesizeRemovePlanFromResources(run, missing, force)
+	if err != nil {
+		return templates.ExecutionPlan{}, err
+	}
+	nextOrder := len(plan.Steps) + 1
+	for _, step := range synthesized.Steps {
+		step.Order = nextOrder
+		if step.ID != "" {
+			step.ID = "recorded-" + step.ID
+		}
+		plan.Steps = append(plan.Steps, step)
+		nextOrder++
+	}
+	return plan, nil
+}
+
+func recordedRemovePlan(run state.TemplateRun) (templates.ExecutionPlan, bool) {
+	if run.Plan.Action != templates.LifecycleRemove || len(run.Plan.Steps) == 0 {
+		return templates.ExecutionPlan{}, false
+	}
+	return run.Plan, true
+}
+
+func prepareRecordedLifecyclePlan(plan templates.ExecutionPlan, action templates.LifecycleAction, force bool) templates.ExecutionPlan {
+	plan.ID = fmt.Sprintf("%s-%s-%d", plan.TemplateID, action, timeNow().UnixNano())
+	plan.Action = action
+	plan.CreatedAt = timeNow()
+	if action == templates.LifecycleRemove && force {
+		for index := range plan.Steps {
+			plan.Steps[index].OnError = templates.ErrorPolicyContinue
+			if plan.Steps[index].Metadata == nil {
+				plan.Steps[index].Metadata = make(map[string]any)
+			}
+			plan.Steps[index].Metadata["force_remove"] = true
+			plan.Steps[index].Metadata["audit"] = "forced template removal; failed operations are recorded and resource removal is audited"
+		}
+	}
+	return plan
+}
+
+func synthesizeRemovePlanFromResources(run state.TemplateRun, resources []state.ManagedResource, force bool) (templates.ExecutionPlan, error) {
+	if run.ID == "" {
+		return templates.ExecutionPlan{}, fmt.Errorf("selected install run is required")
+	}
+	now := timeNow()
+	steps := make([]templates.PlannedStep, 0, len(resources))
+	for index, resource := range resources {
+		request, ok := removeRequestForResource(resource)
+		if !ok {
+			return templates.ExecutionPlan{}, fmt.Errorf("resource '%s' does not include removal hints", resource.ID)
+		}
+		step := templates.PlannedStep{
+			ID:          fmt.Sprintf("remove-%s", resource.StepID),
+			Order:       index + 1,
+			Type:        templates.StepTypePlugin,
+			DisplayName: resource.Name,
+			Request:     request,
+			Resources: []templates.ResourceDeclaration{{
+				Type:       resource.Type,
+				Name:       resource.Name,
+				ExternalID: resource.ExternalID,
+				Metadata:   resource.Metadata,
+			}},
+			OnError: templates.ErrorPolicyStop,
+			Metadata: map[string]any{
+				"source_run_id": run.ID,
+				"source":        "recorded-resource-removal-hints",
+			},
+		}
+		if force {
+			step.OnError = templates.ErrorPolicyContinue
+			step.Metadata["force_remove"] = true
+			step.Metadata["audit"] = "forced template removal synthesized from recorded resource state"
+		}
+		steps = append(steps, step)
+	}
+	return templates.ExecutionPlan{
+		ID:              fmt.Sprintf("%s-remove-%d", run.TemplateID, now.UnixNano()),
+		TemplateID:      run.TemplateID,
+		TemplateVersion: run.TemplateVersion,
+		Action:          templates.LifecycleRemove,
+		Inputs:          run.Inputs,
+		Steps:           steps,
+		CreatedAt:       now,
+	}, nil
+}
+
+func removeRequestForResource(resource state.ManagedResource) (templates.ExecutionRequest, bool) {
+	removal, ok := mapFromAny(resource.Metadata["removal"])
+	if !ok {
+		return templates.ExecutionRequest{}, false
+	}
+	plugin := stringFromAny(removal["plugin"])
+	command := stringFromAny(removal["command"])
+	args := stringSliceFromAny(removal["args"])
+	if plugin == "" {
+		plugin = resource.Plugin
+	}
+	if command == "" {
+		command = "remove"
+	}
+	if len(args) == 0 {
+		target := resource.ExternalID
+		if target == "" {
+			target = resource.Name
+		}
+		if target != "" {
+			args = []string{target}
+		}
+	}
+	if plugin == "" || command == "" {
+		return templates.ExecutionRequest{}, false
+	}
+	return templates.ExecutionRequest{
+		Plugin:  plugin,
+		Command: command,
+		Args:    args,
+		Metadata: map[string]any{
+			"resource_id":          resource.ID,
+			"resource_external_id": resource.ExternalID,
+			"forced_audit":         removal["forced_audit"],
+		},
+	}, true
 }
 
 func openTemplateStateStore() (state.StateStore, error) {
@@ -161,9 +346,13 @@ func selectTemplateRunResources(ctx context.Context, store state.StateStore, tem
 	if err != nil {
 		return state.TemplateRun{}, nil, err
 	}
-	resources = filterActiveResources(resources)
+	if action == templates.LifecycleStatus {
+		resources = sortTemplateResources(resources)
+	} else {
+		resources = filterActiveResources(resources)
+	}
 	if len(resources) == 0 {
-		return state.TemplateRun{}, nil, fmt.Errorf("run '%s' has no active resources for template '%s'", run.ID, templateID)
+		return state.TemplateRun{}, nil, fmt.Errorf("run '%s' has no recorded resources for template '%s'", run.ID, templateID)
 	}
 	return run, resources, nil
 }
@@ -179,6 +368,9 @@ func selectTemplateInstallRun(ctx context.Context, store state.StateStore, templ
 		}
 		if run.Action != templates.LifecycleInstall {
 			return state.TemplateRun{}, fmt.Errorf("run '%s' is a '%s' run, not an install run", run.ID, run.Action)
+		}
+		if run.Status != state.RunStatusSucceeded {
+			return state.TemplateRun{}, fmt.Errorf("run '%s' has status '%s', not '%s'", run.ID, run.Status, state.RunStatusSucceeded)
 		}
 		return *run, nil
 	}
@@ -208,13 +400,18 @@ func filterActiveResources(resources []state.ManagedResource) []state.ManagedRes
 		}
 		filtered = append(filtered, resource)
 	}
-	sort.SliceStable(filtered, func(i, j int) bool {
-		if filtered[i].StepID == filtered[j].StepID {
-			return filtered[i].ID < filtered[j].ID
+	return sortTemplateResources(filtered)
+}
+
+func sortTemplateResources(resources []state.ManagedResource) []state.ManagedResource {
+	ordered := append([]state.ManagedResource(nil), resources...)
+	sort.SliceStable(ordered, func(i, j int) bool {
+		if ordered[i].StepID == ordered[j].StepID {
+			return ordered[i].ID < ordered[j].ID
 		}
-		return filtered[i].StepID < filtered[j].StepID
+		return ordered[i].StepID < ordered[j].StepID
 	})
-	return filtered
+	return ordered
 }
 
 func knownResourcesByStep(resources []state.ManagedResource) map[string]templates.ResourceDeclaration {
@@ -241,6 +438,28 @@ func removedResourceIDsForPlan(plan templates.ExecutionPlan, resources []state.M
 	for _, step := range plan.Steps {
 		if step.Request.Command != string(templates.LifecycleRemove) && step.Request.Command != "remove" && step.Request.Command != "uninstall" {
 			continue
+		}
+		for _, resource := range resources {
+			if removeStepTargetsResource(step, resource) {
+				removed[resource.ID] = true
+			}
+		}
+	}
+	return removed
+}
+
+func removedResourceIDsForSuccessfulOperations(operations []state.OperationRecord, resources []state.ManagedResource) map[string]bool {
+	removed := make(map[string]bool)
+	for _, operation := range operations {
+		if operation.Status != state.OperationStatusSucceeded {
+			continue
+		}
+		if operation.Request.Command != string(templates.LifecycleRemove) && operation.Request.Command != "remove" && operation.Request.Command != "uninstall" {
+			continue
+		}
+		step := templates.PlannedStep{
+			ID:      operation.StepID,
+			Request: operation.Request,
 		}
 		for _, resource := range resources {
 			if removeStepTargetsResource(step, resource) {
@@ -296,6 +515,43 @@ func splitOnce(value string, separator string) (string, string, bool) {
 		}
 	}
 	return "", "", false
+}
+
+func mapFromAny(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	default:
+		return nil, false
+	}
+}
+
+func stringFromAny(value any) string {
+	if typed, ok := value.(string); ok {
+		return typed
+	}
+	return ""
+}
+
+func stringSliceFromAny(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok {
+				values = append(values, text)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
+func timeNow() time.Time {
+	return time.Now()
 }
 
 func displayRecordedTemplateResources(result templateLifecycleResult, format string) error {

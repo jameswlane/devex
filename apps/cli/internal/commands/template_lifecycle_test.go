@@ -15,16 +15,18 @@ import (
 )
 
 type lifecycleMemoryStore struct {
-	runs      map[string]state.TemplateRun
-	resources map[string]state.ManagedResource
-	locks     map[string]state.LifecycleLock
+	runs       map[string]state.TemplateRun
+	operations map[string]state.OperationRecord
+	resources  map[string]state.ManagedResource
+	locks      map[string]state.LifecycleLock
 }
 
 func newLifecycleMemoryStore() *lifecycleMemoryStore {
 	return &lifecycleMemoryStore{
-		runs:      make(map[string]state.TemplateRun),
-		resources: make(map[string]state.ManagedResource),
-		locks:     make(map[string]state.LifecycleLock),
+		runs:       make(map[string]state.TemplateRun),
+		operations: make(map[string]state.OperationRecord),
+		resources:  make(map[string]state.ManagedResource),
+		locks:      make(map[string]state.LifecycleLock),
 	}
 }
 
@@ -67,10 +69,18 @@ func (s *lifecycleMemoryStore) CompleteRun(_ context.Context, runID string, stat
 }
 
 func (s *lifecycleMemoryStore) RecordOperation(_ context.Context, op state.OperationRecord) error {
+	s.operations[op.ID] = op
 	return nil
 }
 
 func (s *lifecycleMemoryStore) CompleteOperation(_ context.Context, operationID string, status state.OperationStatus, outputs map[string]any, errMsg string) error {
+	op := s.operations[operationID]
+	now := time.Unix(300, 0)
+	op.Status = status
+	op.Outputs = outputs
+	op.Error = errMsg
+	op.CompletedAt = &now
+	s.operations[operationID] = op
 	return nil
 }
 
@@ -157,7 +167,13 @@ func (s *lifecycleMemoryStore) ListResourcesByRun(_ context.Context, runID strin
 }
 
 func (s *lifecycleMemoryStore) ListOperationsByRun(_ context.Context, runID string) ([]state.OperationRecord, error) {
-	return nil, nil
+	var operations []state.OperationRecord
+	for _, operation := range s.operations {
+		if operation.RunID == runID {
+			operations = append(operations, operation)
+		}
+	}
+	return operations, nil
 }
 
 func (s *lifecycleMemoryStore) Close() error {
@@ -220,6 +236,112 @@ func TestSelectTemplateRunResourcesUsesLatestSuccessfulInstallRun(t *testing.T) 
 	}
 }
 
+func TestSelectTemplateRunResourcesUsesExplicitInstallRun(t *testing.T) {
+	store := newLifecycleMemoryStore()
+	store.runs["old"] = state.TemplateRun{
+		ID:         "old",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(100, 0),
+	}
+	store.runs["new"] = state.TemplateRun{
+		ID:         "new",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(200, 0),
+	}
+	store.resources["old-postgres"] = state.ManagedResource{
+		ID:           "old-postgres",
+		RunID:        "old",
+		TemplateID:   "databases",
+		StepID:       "postgres",
+		Type:         "container",
+		Name:         "old-postgres",
+		ExternalID:   "old-postgres",
+		CurrentState: state.ResourceStatePresent,
+	}
+	store.resources["new-postgres"] = state.ManagedResource{
+		ID:           "new-postgres",
+		RunID:        "new",
+		TemplateID:   "databases",
+		StepID:       "postgres",
+		Type:         "container",
+		Name:         "new-postgres",
+		ExternalID:   "new-postgres",
+		CurrentState: state.ResourceStatePresent,
+	}
+
+	run, resources, err := selectTemplateRunResources(context.Background(), store, "databases", templates.LifecycleRemove, "old")
+	if err != nil {
+		t.Fatalf("selectTemplateRunResources() error = %v", err)
+	}
+	if run.ID != "old" {
+		t.Fatalf("selected run = %s, want old", run.ID)
+	}
+	if len(resources) != 1 || resources[0].ID != "old-postgres" {
+		t.Fatalf("resources = %#v, want old-postgres only", resources)
+	}
+}
+
+func TestSelectTemplateRunResourcesRejectsWrongTemplateRunID(t *testing.T) {
+	store := newLifecycleMemoryStore()
+	store.runs["web-install"] = state.TemplateRun{
+		ID:         "web-install",
+		TemplateID: "web",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(100, 0),
+	}
+
+	_, _, err := selectTemplateRunResources(context.Background(), store, "databases", templates.LifecycleStatus, "web-install")
+	if err == nil {
+		t.Fatal("selectTemplateRunResources() error = nil, want wrong-template error")
+	}
+	if !strings.Contains(err.Error(), "belongs to template 'web', not 'databases'") {
+		t.Fatalf("selectTemplateRunResources() error = %v", err)
+	}
+}
+
+func TestSelectTemplateRunResourcesRejectsExplicitFailedInstallRun(t *testing.T) {
+	store := newLifecycleMemoryStore()
+	store.runs["failed-install"] = state.TemplateRun{
+		ID:         "failed-install",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusFailed,
+		StartedAt:  time.Unix(100, 0),
+	}
+
+	_, _, err := selectTemplateRunResources(context.Background(), store, "databases", templates.LifecycleRemove, "failed-install")
+	if err == nil {
+		t.Fatal("selectTemplateRunResources() error = nil, want failed-run status error")
+	}
+	if !strings.Contains(err.Error(), "has status 'failed', not 'succeeded'") {
+		t.Fatalf("selectTemplateRunResources() error = %v", err)
+	}
+}
+
+func TestSelectTemplateRunResourcesRequiresSuccessfulInstallRun(t *testing.T) {
+	store := newLifecycleMemoryStore()
+	store.runs["failed"] = state.TemplateRun{
+		ID:         "failed",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusFailed,
+		StartedAt:  time.Unix(100, 0),
+	}
+
+	_, _, err := selectTemplateRunResources(context.Background(), store, "databases", templates.LifecycleMaintain, "latest")
+	if err == nil {
+		t.Fatal("selectTemplateRunResources() error = nil, want no successful install run error")
+	}
+	if !strings.Contains(err.Error(), "no successful install run found for template 'databases'") {
+		t.Fatalf("selectTemplateRunResources() error = %v", err)
+	}
+}
+
 func TestKnownResourcesByStepIgnoresRemovedResources(t *testing.T) {
 	now := time.Unix(200, 0)
 	resources := filterActiveResources([]state.ManagedResource{
@@ -249,6 +371,65 @@ func TestKnownResourcesByStepIgnoresRemovedResources(t *testing.T) {
 	}
 	if resource.ExternalID != "active-postgres" {
 		t.Fatalf("known postgres external id = %s, want active-postgres", resource.ExternalID)
+	}
+}
+
+func TestStatusRunResourcesIncludesRemovedRecordedResources(t *testing.T) {
+	now := time.Unix(200, 0)
+	store := newLifecycleMemoryStore()
+	store.runs["install-1"] = state.TemplateRun{
+		ID:         "install-1",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(100, 0),
+	}
+	store.resources["removed-postgres"] = state.ManagedResource{
+		ID:           "removed-postgres",
+		RunID:        "install-1",
+		TemplateID:   "databases",
+		StepID:       "postgres",
+		Type:         "container",
+		Name:         "devex-postgres",
+		ExternalID:   "devex-postgres",
+		CurrentState: state.ResourceStateRemoved,
+		RemovedAt:    &now,
+	}
+
+	_, resources, err := selectTemplateRunResources(context.Background(), store, "databases", templates.LifecycleStatus, "latest")
+	if err != nil {
+		t.Fatalf("selectTemplateRunResources() error = %v", err)
+	}
+	if len(resources) != 1 || resources[0].CurrentState != state.ResourceStateRemoved {
+		t.Fatalf("resources = %#v, want removed recorded resource", resources)
+	}
+}
+
+func TestMaintainRunResourcesRequiresActiveResources(t *testing.T) {
+	now := time.Unix(200, 0)
+	store := newLifecycleMemoryStore()
+	store.runs["install-1"] = state.TemplateRun{
+		ID:         "install-1",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     state.RunStatusSucceeded,
+		StartedAt:  time.Unix(100, 0),
+	}
+	store.resources["removed-postgres"] = state.ManagedResource{
+		ID:           "removed-postgres",
+		RunID:        "install-1",
+		TemplateID:   "databases",
+		StepID:       "postgres",
+		Type:         "container",
+		Name:         "devex-postgres",
+		ExternalID:   "devex-postgres",
+		CurrentState: state.ResourceStateRemoved,
+		RemovedAt:    &now,
+	}
+
+	_, _, err := selectTemplateRunResources(context.Background(), store, "databases", templates.LifecycleMaintain, "latest")
+	if err == nil {
+		t.Fatal("selectTemplateRunResources() error = nil, want no recorded resources error for maintain")
 	}
 }
 
@@ -294,6 +475,59 @@ func TestRemovedResourceIDsForPlanOnlyMarksTargetedRemoveResources(t *testing.T)
 	}
 }
 
+func TestRemovedResourceIDsForSuccessfulOperationsIgnoresFailedForcedOperations(t *testing.T) {
+	resources := []state.ManagedResource{
+		{
+			ID:           "postgres-resource",
+			StepID:       "postgres",
+			Type:         "container",
+			Name:         "devex-postgres",
+			ExternalID:   "devex-postgres",
+			CurrentState: state.ResourceStatePresent,
+		},
+		{
+			ID:           "redis-resource",
+			StepID:       "redis",
+			Type:         "container",
+			Name:         "devex-redis",
+			ExternalID:   "devex-redis",
+			CurrentState: state.ResourceStatePresent,
+		},
+	}
+	operations := []state.OperationRecord{
+		{
+			ID:     "remove-1-001-postgres",
+			RunID:  "remove-1",
+			StepID: "postgres",
+			Action: templates.LifecycleRemove,
+			Request: templates.ExecutionRequest{
+				Command: "remove",
+				Args:    []string{"devex-postgres"},
+			},
+			Status: state.OperationStatusFailed,
+		},
+		{
+			ID:     "remove-1-002-redis",
+			RunID:  "remove-1",
+			StepID: "redis",
+			Action: templates.LifecycleRemove,
+			Request: templates.ExecutionRequest{
+				Command: "remove",
+				Args:    []string{"devex-redis"},
+			},
+			Status: state.OperationStatusSucceeded,
+		},
+	}
+
+	removed := removedResourceIDsForSuccessfulOperations(operations, resources)
+	if removed["postgres-resource"] {
+		t.Fatal("failed forced postgres operation was marked removed")
+	}
+	if !removed["redis-resource"] {
+		t.Fatal("succeeded redis operation was not marked removed")
+	}
+}
+
 func TestDisplayRecordedTemplateResourcesDoesNotClaimCompletedRun(t *testing.T) {
 	output := captureStdout(t, func() {
 		err := displayRecordedTemplateResources(templateLifecycleResult{
@@ -323,16 +557,134 @@ func TestDisplayRecordedTemplateResourcesDoesNotClaimCompletedRun(t *testing.T) 
 	}
 }
 
-func TestRemoveTemplateRejectsForce(t *testing.T) {
+func TestRemoveTemplateAcceptsForce(t *testing.T) {
 	cmd := NewRemoveCmd(nil, config.CrossPlatformSettings{})
-	cmd.SetArgs([]string{"--template", "databases", "--force"})
 
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("remove --template --force error = nil, want unsupported force error")
+	if err := cmd.ParseFlags([]string{"--template", "databases", "--force"}); err != nil {
+		t.Fatalf("ParseFlags() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "--force is not supported with --template") {
-		t.Fatalf("remove --template --force error = %v", err)
+	forceFlag := cmd.Flags().Lookup("force")
+	if forceFlag == nil || forceFlag.Value.String() != "true" {
+		t.Fatalf("force flag = %v, want true", forceFlag)
+	}
+}
+
+func TestSynthesizeRemovePlanFromResourcesUsesStoredRemovalHints(t *testing.T) {
+	run := state.TemplateRun{
+		ID:              "databases-install-1",
+		TemplateID:      "databases",
+		TemplateVersion: "1.0.0",
+		Action:          templates.LifecycleInstall,
+		Status:          state.RunStatusSucceeded,
+	}
+	resources := []state.ManagedResource{
+		{
+			ID:           "postgres-resource",
+			RunID:        run.ID,
+			TemplateID:   run.TemplateID,
+			StepID:       "postgres",
+			Type:         "container",
+			Name:         "devex-postgres",
+			ExternalID:   "devex-postgres",
+			Plugin:       "package-manager-docker",
+			CurrentState: state.ResourceStatePresent,
+			Metadata: map[string]any{
+				"removal": map[string]any{
+					"plugin":  "package-manager-docker",
+					"command": "remove",
+					"args":    []any{"devex-postgres", "--volumes"},
+				},
+			},
+		},
+	}
+
+	plan, err := synthesizeRemovePlanFromResources(run, resources, true)
+	if err != nil {
+		t.Fatalf("synthesizeRemovePlanFromResources() error = %v", err)
+	}
+	if plan.Action != templates.LifecycleRemove {
+		t.Fatalf("plan action = %s, want remove", plan.Action)
+	}
+	if len(plan.Steps) != 1 {
+		t.Fatalf("steps = %d, want 1", len(plan.Steps))
+	}
+	step := plan.Steps[0]
+	if step.OnError != templates.ErrorPolicyContinue {
+		t.Fatalf("step on_error = %s, want continue for forced removal", step.OnError)
+	}
+	if step.Request.Plugin != "package-manager-docker" || step.Request.Command != "remove" {
+		t.Fatalf("request = %#v, want docker remove", step.Request)
+	}
+	if strings.Join(step.Request.Args, " ") != "devex-postgres --volumes" {
+		t.Fatalf("request args = %#v", step.Request.Args)
+	}
+}
+
+func TestAugmentRemovePlanWithRecordedResourcesAddsUntargetedResources(t *testing.T) {
+	run := state.TemplateRun{
+		ID:              "databases-install-1",
+		TemplateID:      "databases",
+		TemplateVersion: "1.0.0",
+		Action:          templates.LifecycleInstall,
+		Status:          state.RunStatusSucceeded,
+	}
+	resources := []state.ManagedResource{
+		{
+			ID:           "postgres-resource",
+			RunID:        run.ID,
+			TemplateID:   run.TemplateID,
+			StepID:       "postgres",
+			Type:         "container",
+			Name:         "devex-postgres",
+			ExternalID:   "devex-postgres",
+			Plugin:       "package-manager-docker",
+			CurrentState: state.ResourceStatePresent,
+		},
+		{
+			ID:           "redis-resource",
+			RunID:        run.ID,
+			TemplateID:   run.TemplateID,
+			StepID:       "redis",
+			Type:         "container",
+			Name:         "devex-redis",
+			ExternalID:   "devex-redis",
+			Plugin:       "package-manager-docker",
+			CurrentState: state.ResourceStatePresent,
+			Metadata: map[string]any{
+				"removal": map[string]any{
+					"plugin":  "package-manager-docker",
+					"command": "remove",
+					"args":    []string{"devex-redis"},
+				},
+			},
+		},
+	}
+	plan := templates.ExecutionPlan{
+		ID:         "databases-remove-1",
+		TemplateID: run.TemplateID,
+		Action:     templates.LifecycleRemove,
+		Steps: []templates.PlannedStep{
+			{
+				ID:   "postgres-remove",
+				Type: templates.StepTypePlugin,
+				Request: templates.ExecutionRequest{
+					Plugin:  "package-manager-docker",
+					Command: "remove",
+					Args:    []string{"devex-postgres"},
+				},
+			},
+		},
+	}
+
+	augmented, err := augmentRemovePlanWithRecordedResources(plan, run, resources, false)
+	if err != nil {
+		t.Fatalf("augmentRemovePlanWithRecordedResources() error = %v", err)
+	}
+	if len(augmented.Steps) != 2 {
+		t.Fatalf("steps = %d, want current template step plus synthesized recorded step", len(augmented.Steps))
+	}
+	if augmented.Steps[1].Request.Args[0] != "devex-redis" {
+		t.Fatalf("synthesized args = %#v, want devex-redis", augmented.Steps[1].Request.Args)
 	}
 }
 
