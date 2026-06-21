@@ -76,7 +76,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 
 	// Register other commands
 	cmd.AddCommand(NewSetupCmd(repo, settings))
-	cmd.AddCommand(NewInstallCmd(repo, settings))
+	cmd.AddCommand(NewInstallCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewUninstallCmd(repo, settings))
 	cmd.AddCommand(NewRollbackCmd(repo, settings))
 	cmd.AddCommand(NewStatusCmd(repo, settings))
@@ -198,18 +198,6 @@ func validateViperConfiguration() error {
 	if !contains(validLogLevels, logLevel) {
 		return fmt.Errorf("invalid log-level '%s' - must be one of: %s",
 			logLevel, strings.Join(validLogLevels, ", "))
-	}
-
-	// Validate categories if provided
-	categories := viper.GetStringSlice("categories")
-	if len(categories) > 0 {
-		validCategories := []string{"development", "databases", "desktop", "terminal", "optional"}
-		for _, category := range categories {
-			if !contains(validCategories, category) {
-				return fmt.Errorf("invalid category '%s' - must be one of: %s",
-					category, strings.Join(validCategories, ", "))
-			}
-		}
 	}
 
 	log.Debug("Configuration validation passed")

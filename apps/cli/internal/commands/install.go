@@ -3,7 +3,10 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -12,9 +15,13 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
+	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
@@ -27,6 +34,17 @@ func init() {
 }
 
 func NewInstallCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	return NewInstallCmdWithPluginProvider(repo, settings, nil)
+}
+
+func NewInstallCmdWithPluginProvider(repo types.Repository, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) *cobra.Command {
+	var (
+		templateID     string
+		answers        []string
+		answerFiles    []string
+		nonInteractive bool
+	)
+
 	cmd := &cobra.Command{
 		Use:   "install [apps...]",
 		Short: "Install development applications",
@@ -58,6 +76,9 @@ Configuration files are located in ~/.local/share/devex/config/:
   # Install with categories
   devex install --categories development,databases
 
+  # Install a lifecycle template
+  devex install --template databases --answer databases=postgres,redis --non-interactive
+
   # Dry run to preview changes
   devex install --dry-run
 
@@ -72,6 +93,18 @@ Configuration files are located in ~/.local/share/devex/config/:
 			dryRun := viper.GetBool("dry-run")
 			categories := viper.GetStringSlice("categories")
 
+			if templateID != "" {
+				if len(args) > 0 || len(categories) > 0 {
+					return fmt.Errorf("--template cannot be combined with app arguments or --categories")
+				}
+				return executeTemplateInstall(ctx, templateID, templateInstallOptions{
+					Answers:        answers,
+					AnswerFiles:    answerFiles,
+					NonInteractive: viper.GetBool("non-interactive"),
+					DryRun:         dryRun,
+				}, settings, getPluginBootstrap)
+			}
+
 			return executeInstall(ctx, args, categories, verbose, dryRun, repo, settings)
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
@@ -79,9 +112,14 @@ Configuration files are located in ~/.local/share/devex/config/:
 
 	// Define command-specific flags
 	cmd.Flags().StringSlice("categories", nil, "Install apps from specific categories")
+	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
+	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing template inputs")
 
 	// Bind flags to Viper for hierarchical config
 	_ = viper.BindPFlag("categories", cmd.Flags().Lookup("categories"))
+	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
 
 	// Add contextual help integration
 	AddContextualHelp(cmd, help.ContextCommand, "install")
@@ -121,24 +159,25 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 
-	// Determine what to install
 	var appsToInstall []types.CrossPlatformApp
+	var err error
 	switch {
 	case len(apps) > 0:
-		// Install specific apps requested - for now just use default apps as placeholder
-		// TODO: Implement app lookup by name
 		log.Info("Specific app installation requested", "apps", apps)
-		log.Info("Currently installing default apps - specific app lookup will be implemented")
-		appsToInstall = settings.GetDefaultApps()
+		appsToInstall, err = resolveAppsByName(settings, apps)
 	case len(categories) > 0:
-		// Install apps from specific categories - for now just use default apps as placeholder
-		// TODO: Implement category filtering
 		log.Info("Category-based installation requested", "categories", categories)
-		log.Info("Currently installing default apps - category filtering will be implemented")
-		appsToInstall = settings.GetDefaultApps()
+		appsToInstall, err = resolveAppsByCategory(settings, categories)
 	default:
-		// Install default apps
 		appsToInstall = settings.GetDefaultApps()
+	}
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "App resolution failed")
+		return err
+	}
+	if len(appsToInstall) == 0 {
+		return fmt.Errorf("no applications matched the install request")
 	}
 
 	// Handle dry run
@@ -170,6 +209,174 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 
 	span.SetStatus(codes.Ok, "Installation completed successfully")
 	return nil
+}
+
+type templateInstallOptions struct {
+	Answers        []string
+	AnswerFiles    []string
+	NonInteractive bool
+	DryRun         bool
+}
+
+type pluginBootstrapExecutor struct {
+	bootstrap *bootstrap.PluginBootstrap
+}
+
+func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if e.bootstrap == nil {
+		return fmt.Errorf("plugin bootstrap is required")
+	}
+	return e.bootstrap.ExecutePlugin(pluginName, args)
+}
+
+func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateInstallOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine user home directory: %w", err)
+	}
+
+	planner := templates.TemplatePlanner{
+		Manager:     templates.NewTemplateManager(homeDir),
+		AppResolver: templates.NewAppResolver(settings.GetApplicationByName),
+	}
+	plan, err := planner.Plan(ctx, idOrPath, templates.PlanOptions{
+		Action: templates.LifecycleInstall,
+		InputOptions: templates.InputResolverOptions{
+			Answers:        opts.Answers,
+			AnswerFiles:    opts.AnswerFiles,
+			NonInteractive: opts.NonInteractive,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	var store state.StateStore
+	if !opts.DryRun {
+		dbPath, err := state.ConfiguredDBPath()
+		if err != nil {
+			return err
+		}
+		boltStore, err := state.OpenBoltStore(dbPath, 0o600)
+		if err != nil {
+			return err
+		}
+		defer boltStore.Close()
+		store = boltStore
+	}
+
+	var pluginExecutor templateexec.PluginExecutor
+	if getPluginBootstrap != nil {
+		if pluginBootstrap := getPluginBootstrap(); pluginBootstrap != nil {
+			pluginExecutor = pluginBootstrapExecutor{bootstrap: pluginBootstrap}
+		}
+	}
+	if pluginExecutor == nil && !opts.DryRun {
+		return fmt.Errorf("plugin runtime is unavailable for template install")
+	}
+
+	runtime := templateexec.NewExecutionRuntime(store, pluginExecutor)
+	result, err := runtime.Execute(ctx, *plan, templateexec.ExecuteOptions{DryRun: opts.DryRun})
+	if err != nil {
+		return err
+	}
+	if result.DryRun {
+		fmt.Printf("Template install plan %s contains %d step(s)\n", result.RunID, result.StepsPlanned)
+		return nil
+	}
+	fmt.Printf("Template install run %s completed: %d/%d step(s) executed\n", result.RunID, result.StepsExecuted, result.StepsPlanned)
+	return nil
+}
+
+func resolveAppsByName(settings config.CrossPlatformSettings, requested []string) ([]types.CrossPlatformApp, error) {
+	apps := settings.GetAllApps()
+	byName := make(map[string]types.CrossPlatformApp, len(apps))
+	for _, app := range apps {
+		if !app.IsSupported() {
+			continue
+		}
+		byName[normalizeInstallLookup(app.Name)] = app
+		osConfig := app.GetOSConfig()
+		if osConfig.InstallCommand != "" {
+			byName[normalizeInstallLookup(osConfig.InstallCommand)] = app
+		}
+	}
+
+	resolved := make([]types.CrossPlatformApp, 0, len(requested))
+	for _, name := range requested {
+		app, ok := byName[normalizeInstallLookup(name)]
+		if !ok {
+			return nil, fmt.Errorf("application '%s' not found", name)
+		}
+		resolved = append(resolved, app)
+	}
+	return dedupeApps(resolved), nil
+}
+
+func resolveAppsByCategory(settings config.CrossPlatformSettings, categories []string) ([]types.CrossPlatformApp, error) {
+	requested := make(map[string]bool, len(categories))
+	requestedLabels := make(map[string]string, len(categories))
+	for _, category := range categories {
+		normalized := normalizeInstallLookup(category)
+		requested[normalized] = true
+		requestedLabels[normalized] = category
+	}
+
+	var resolved []types.CrossPlatformApp
+	available := make(map[string]bool)
+	matched := make(map[string]bool, len(requested))
+	for _, app := range settings.GetAllApps() {
+		if app.Category != "" {
+			available[app.Category] = true
+		}
+		normalizedCategory := normalizeInstallLookup(app.Category)
+		if requested[normalizedCategory] {
+			matched[normalizedCategory] = true
+		}
+		if requested[normalizedCategory] && app.IsSupported() {
+			resolved = append(resolved, app)
+		}
+	}
+	if len(matched) != len(requested) {
+		unknown := make([]string, 0, len(requested)-len(matched))
+		for category := range requested {
+			if !matched[category] {
+				unknown = append(unknown, requestedLabels[category])
+			}
+		}
+		sort.Strings(unknown)
+		return nil, fmt.Errorf("unknown categories: %s", strings.Join(unknown, ", "))
+	}
+	if len(resolved) == 0 {
+		categoryNames := make([]string, 0, len(available))
+		for category := range available {
+			categoryNames = append(categoryNames, category)
+		}
+		sort.Strings(categoryNames)
+		return nil, fmt.Errorf("no supported applications found for categories %s; available categories: %s", strings.Join(categories, ","), strings.Join(categoryNames, ", "))
+	}
+	return dedupeApps(resolved), nil
+}
+
+func dedupeApps(apps []types.CrossPlatformApp) []types.CrossPlatformApp {
+	seen := make(map[string]bool, len(apps))
+	deduped := make([]types.CrossPlatformApp, 0, len(apps))
+	for _, app := range apps {
+		key := normalizeInstallLookup(app.Name)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		deduped = append(deduped, app)
+	}
+	return deduped
+}
+
+func normalizeInstallLookup(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 // validateInstallInputs validates the installation inputs
