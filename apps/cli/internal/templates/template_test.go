@@ -9,6 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 func TestTemplates(t *testing.T) {
@@ -348,6 +349,101 @@ lifecycle:
 			Expect(err.Error()).To(ContainSubstring("exactly one primary action"))
 		})
 
+		It("should reject unsupported on_error values", func() {
+			spec := templates.TemplateSpec{
+				SchemaVersion: templates.TemplateSchemaVersion,
+				ID:            "bad-policy",
+				Name:          "Bad Policy",
+				Version:       "1.0.0",
+				Lifecycle: map[templates.LifecycleAction][]templates.TemplateStepSpec{
+					templates.LifecycleInstall: {
+						{
+							ID:      "postgres",
+							OnError: "ignore",
+							Plugin: &templates.TemplatePluginAction{
+								Name:    "package-manager-docker",
+								Command: "install",
+							},
+						},
+					},
+				},
+			}
+
+			err := templateManager.ValidateTemplateSpec(spec)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("unsupported on_error value"))
+		})
+
+		It("should reject unknown depends_on references during schema validation", func() {
+			spec := templates.TemplateSpec{
+				SchemaVersion: templates.TemplateSchemaVersion,
+				ID:            "bad-dep",
+				Name:          "Bad Dependency",
+				Version:       "1.0.0",
+				Lifecycle: map[templates.LifecycleAction][]templates.TemplateStepSpec{
+					templates.LifecycleInstall: {
+						{
+							ID:        "postgres",
+							DependsOn: []string{"docker"},
+							Plugin: &templates.TemplatePluginAction{
+								Name:    "package-manager-docker",
+								Command: "install",
+							},
+						},
+					},
+				},
+			}
+
+			err := templateManager.ValidateTemplateSpec(spec)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("depends on unknown step"))
+		})
+
+		It("should reject dangerous shell, file, service, and docker arguments", func() {
+			base := func(step templates.TemplateStepSpec) templates.TemplateSpec {
+				return templates.TemplateSpec{
+					SchemaVersion: templates.TemplateSchemaVersion,
+					ID:            "bad-inputs",
+					Name:          "Bad Inputs",
+					Version:       "1.0.0",
+					Lifecycle: map[templates.LifecycleAction][]templates.TemplateStepSpec{
+						templates.LifecycleInstall: {step},
+					},
+				}
+			}
+
+			cases := []templates.TemplateStepSpec{
+				{
+					ID:    "bad-shell",
+					Shell: &templates.TemplateShellAction{Command: "../bash"},
+				},
+				{
+					ID: "bad-file",
+					File: &templates.TemplateFileAction{
+						Operation:   "write",
+						Destination: "../profile",
+					},
+				},
+				{
+					ID:      "bad-service",
+					Service: &templates.TemplateServiceAction{Name: "docker;rm", Action: "start"},
+				},
+				{
+					ID: "bad-port",
+					App: &templates.TemplateAppAction{
+						Name:      "PostgreSQL",
+						Installer: "docker",
+						Args:      []string{"postgres:16", "--port=99999:5432"},
+					},
+				},
+			}
+
+			for _, step := range cases {
+				err := templateManager.ValidateTemplateSpec(base(step))
+				Expect(err).To(HaveOccurred())
+			}
+		})
+
 		It("should slugify legacy display names when converting to specs", func() {
 			legacy := templates.Template{
 				Metadata: templates.TemplateMetadata{
@@ -376,6 +472,34 @@ lifecycle:
 
 			spec := templates.ConvertLegacyTemplateToSpec(legacy)
 			Expect(spec.Categories).To(BeEmpty())
+		})
+
+		It("should preserve quoted legacy install command arguments", func() {
+			legacy := templates.Template{
+				Metadata: templates.TemplateMetadata{
+					Name:        "Quoted Args",
+					Version:     "1.0.0",
+					Description: "Template with quoted args",
+					Category:    "development",
+					Platforms:   []string{"linux"},
+				},
+				Applications: []types.AppConfig{
+					{
+						BaseConfig:     types.BaseConfig{Name: "Git Commit", Category: "development"},
+						InstallMethod:  "shell",
+						InstallCommand: `git commit -m "hello world" --author='Jane Doe'`,
+					},
+				},
+			}
+
+			spec := templates.ConvertLegacyTemplateToSpec(legacy)
+			Expect(spec.Lifecycle[templates.LifecycleInstall][0].App.Args).To(Equal([]string{
+				"git",
+				"commit",
+				"-m",
+				"hello world",
+				"--author=Jane Doe",
+			}))
 		})
 	})
 

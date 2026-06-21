@@ -3,7 +3,10 @@ package templateexec
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -49,8 +52,8 @@ func NewExecutionRuntime(store state.StateStore, pluginExecutor PluginExecutor) 
 		templates.StepTypePlugin:  PluginStepExecutor{PluginExecutor: pluginExecutor},
 		templates.StepTypeApp:     PluginStepExecutor{PluginExecutor: pluginExecutor},
 		templates.StepTypeShell:   PluginDispatchStepExecutor{PluginExecutor: pluginExecutor, StepType: templates.StepTypeShell},
-		templates.StepTypeFile:    PluginDispatchStepExecutor{PluginExecutor: pluginExecutor, StepType: templates.StepTypeFile},
-		templates.StepTypeService: PluginDispatchStepExecutor{PluginExecutor: pluginExecutor, StepType: templates.StepTypeService},
+		templates.StepTypeFile:    FileStepExecutor{},
+		templates.StepTypeService: ServiceStepExecutor{},
 		templates.StepTypeGroup:   NoopStepExecutor{},
 	}
 	return &ExecutionRuntime{
@@ -84,7 +87,6 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	if lockStaleTimeout == 0 {
 		lockStaleTimeout = DefaultLockStaleTimeout
 	}
-	lockAcquired := false
 	if shouldLockAction(plan.Action) {
 		if err := r.Store.AcquireLifecycleLock(ctx, state.LifecycleLock{
 			TemplateID: plan.TemplateID,
@@ -100,7 +102,6 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		}); err != nil {
 			return nil, err
 		}
-		lockAcquired = true
 		stopHeartbeat := r.startLockHeartbeat(ctx, plan.TemplateID, plan.ID, heartbeatInterval(lockStaleTimeout, opts.LockHeartbeatInterval))
 		defer func() {
 			stopHeartbeat()
@@ -124,9 +125,6 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		StartedAt: r.now(),
 	}
 	if err := r.Store.CreateRun(ctx, run); err != nil {
-		if lockAcquired {
-			_ = r.Store.ReleaseLifecycleLock(context.Background(), plan.TemplateID, plan.ID)
-		}
 		return nil, err
 	}
 
@@ -345,6 +343,133 @@ func (e PluginDispatchStepExecutor) ExecuteStep(ctx context.Context, step templa
 		return nil, fmt.Errorf("%s step requires a plugin; use type 'plugin' for plugin-dispatched steps", e.StepType)
 	}
 	return PluginStepExecutor{PluginExecutor: e.PluginExecutor}.ExecuteStep(ctx, step)
+}
+
+type FileStepExecutor struct{}
+
+func (FileStepExecutor) ExecuteStep(_ context.Context, step templates.PlannedStep) (map[string]any, error) {
+	source := stringMetadata(step.Request.Metadata, "source")
+	destination := stringMetadata(step.Request.Metadata, "destination")
+	content := stringMetadata(step.Request.Metadata, "content")
+	if source == "" || destination == "" || content == "" {
+		for _, arg := range step.Request.Args {
+			switch {
+			case strings.HasPrefix(arg, "--source="):
+				source = strings.TrimPrefix(arg, "--source=")
+			case strings.HasPrefix(arg, "--destination="):
+				destination = strings.TrimPrefix(arg, "--destination=")
+			case strings.HasPrefix(arg, "--content="):
+				content = strings.TrimPrefix(arg, "--content=")
+			}
+		}
+	}
+
+	switch step.Request.Command {
+	case "write":
+		if destination == "" {
+			return nil, fmt.Errorf("file write requires a destination")
+		}
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+			return nil, err
+		}
+		if err := os.WriteFile(destination, []byte(content), 0o600); err != nil {
+			return nil, err
+		}
+	case "copy":
+		if source == "" || destination == "" {
+			return nil, fmt.Errorf("file copy requires source and destination")
+		}
+		if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+			return nil, err
+		}
+		if err := copyFile(source, destination); err != nil {
+			return nil, err
+		}
+	case "mkdir":
+		if destination == "" {
+			return nil, fmt.Errorf("file mkdir requires a destination")
+		}
+		if err := os.MkdirAll(destination, 0o755); err != nil {
+			return nil, err
+		}
+	case "remove":
+		target := destination
+		if target == "" {
+			target = source
+		}
+		if target == "" {
+			return nil, fmt.Errorf("file remove requires a source or destination")
+		}
+		if err := os.Remove(target); err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported file operation %q", step.Request.Command)
+	}
+	return map[string]any{
+		"operation":   step.Request.Command,
+		"source":      source,
+		"destination": destination,
+	}, nil
+}
+
+func copyFile(source string, destination string) error {
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = input.Close() }()
+
+	output, err := os.OpenFile(destination, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = output.Close() }()
+	_, err = io.Copy(output, input)
+	return err
+}
+
+func stringMetadata(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, _ := metadata[key].(string)
+	return value
+}
+
+type ServiceStepExecutor struct {
+	Run func(ctx context.Context, action string, serviceName string) error
+}
+
+func (e ServiceStepExecutor) ExecuteStep(ctx context.Context, step templates.PlannedStep) (map[string]any, error) {
+	if len(step.Request.Args) != 1 {
+		return nil, fmt.Errorf("service step requires exactly one service name")
+	}
+	action := step.Request.Command
+	serviceName := step.Request.Args[0]
+	run := e.Run
+	if run == nil {
+		run = runSystemServiceCommand
+	}
+	if err := run(ctx, action, serviceName); err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"action":  action,
+		"service": serviceName,
+	}, nil
+}
+
+func runSystemServiceCommand(ctx context.Context, action string, serviceName string) error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("service steps are only supported on linux")
+	}
+	cmd := exec.CommandContext(ctx, "systemctl", action, serviceName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("systemctl %s %s failed: %w: %s", action, serviceName, err, strings.TrimSpace(string(output)))
+	}
+	return nil
 }
 
 type NoopStepExecutor struct{}

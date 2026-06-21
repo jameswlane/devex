@@ -360,6 +360,136 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(plan.Steps[0].Request.Plugin).To(Equal("package-manager-apt"))
 		Expect(plan.Steps[0].Request.Args).To(Equal([]string{"git"}))
 	})
+
+	It("rejects dangerous shell input after interpolation", func() {
+		spec.Inputs["message"] = templates.TemplateInput{Type: "text", Required: true}
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID:    "echo",
+				Shell: &templates.TemplateShellAction{Command: "echo", Args: []string{"{{ inputs.message }}"}},
+			},
+		}
+		planner := templates.TemplatePlanner{Manager: manager}
+
+		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres", "message=; rm -rf /"},
+				NonInteractive: true,
+			},
+		})
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("shell argument must not start with a shell operator"))
+	})
+
+	It("allows shell metacharacters inside typed argument data", func() {
+		spec.Inputs["message"] = templates.TemplateInput{Type: "text", Required: true}
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID:    "echo",
+				Shell: &templates.TemplateShellAction{Command: "echo", Args: []string{"--message={{ inputs.message }}"}},
+			},
+		}
+		planner := templates.TemplatePlanner{Manager: manager}
+
+		plan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres", "message=greeting; farewell"},
+				NonInteractive: true,
+			},
+		})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(plan.Steps[0].Request.Args).To(Equal([]string{"--message=greeting; farewell"}))
+	})
+
+	It("rejects dangerous file and service inputs after interpolation", func() {
+		spec.Inputs["path"] = templates.TemplateInput{Type: "text", Required: true}
+		spec.Inputs["service"] = templates.TemplateInput{Type: "text", Required: true}
+		planner := templates.TemplatePlanner{Manager: manager}
+
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID: "file",
+				File: &templates.TemplateFileAction{
+					Operation:   "write",
+					Destination: "{{ inputs.path }}",
+					Content:     "hello",
+				},
+			},
+		}
+		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres", "path=../profile", "service=docker"},
+				NonInteractive: true,
+			},
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("path traversal"))
+
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID:      "service",
+				Service: &templates.TemplateServiceAction{Name: "{{ inputs.service }}", Action: "restart"},
+			},
+		}
+		_, err = planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres", "path=/tmp/profile", "service=docker;rm"},
+				NonInteractive: true,
+			},
+		})
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("service name"))
+	})
+
+	It("validates generated plugins for app, plugin, and shell steps", func() {
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID: "app",
+				App: &templates.TemplateAppAction{
+					Name:      "PostgreSQL",
+					Category:  "databases",
+					Installer: "docker",
+					Args:      []string{"postgres:16"},
+				},
+			},
+			{
+				ID:     "plugin",
+				Plugin: &templates.TemplatePluginAction{Name: "package-manager-docker", Command: "status"},
+			},
+			{
+				ID:    "shell",
+				Shell: &templates.TemplateShellAction{Command: "echo", Args: []string{"hello"}},
+			},
+		}
+		checked := map[string]bool{}
+		planner := templates.TemplatePlanner{
+			Manager: manager,
+			PluginAvailable: func(_ context.Context, name string) bool {
+				checked[name] = true
+				return name != "tool-shell"
+			},
+		}
+
+		_, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres"},
+				NonInteractive: true,
+			},
+			ValidatePlugins: true,
+		})
+
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("plugin 'tool-shell' is not available"))
+		Expect(checked).To(HaveKey("package-manager-docker"))
+		Expect(checked).To(HaveKey("tool-shell"))
+	})
 })
 
 func writeSpec(tempDir string, spec templates.TemplateSpec) string {

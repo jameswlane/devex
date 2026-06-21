@@ -22,6 +22,8 @@ type pluginCall struct {
 	args []string
 }
 
+type testCtxKey struct{}
+
 type recordingPluginExecutor struct {
 	calls []pluginCall
 	errs  map[string]error
@@ -268,7 +270,7 @@ var _ = Describe("Template Execution Runtime", func() {
 		runtime.Now = func() time.Time { return time.Unix(100, 0) }
 		runtime.Hostname = func() (string, error) { return "test-host", nil }
 
-		ctx := context.WithValue(context.Background(), "test-key", "test-value")
+		ctx := context.WithValue(context.Background(), testCtxKey{}, "test-value")
 		result, err := runtime.Execute(ctx, plan, templateexec.ExecuteOptions{})
 
 		Expect(err).ToNot(HaveOccurred())
@@ -383,6 +385,31 @@ var _ = Describe("Template Execution Runtime", func() {
 		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
 
 		Expect(err).To(MatchError("shell step requires a plugin; use type 'plugin' for plugin-dispatched steps"))
+		Expect(plugin.calls).To(BeEmpty())
+	})
+
+	It("executes service steps through the local typed service executor", func() {
+		var action string
+		var serviceName string
+		plan.Steps[0].Type = templates.StepTypeService
+		plan.Steps[0].Request = templates.ExecutionRequest{
+			Command: "restart",
+			Args:    []string{"docker.service"},
+		}
+		runtime := templateexec.NewExecutionRuntime(store, plugin)
+		runtime.Executors[templates.StepTypeService] = templateexec.ServiceStepExecutor{
+			Run: func(_ context.Context, receivedAction string, receivedServiceName string) error {
+				action = receivedAction
+				serviceName = receivedServiceName
+				return nil
+			},
+		}
+
+		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(action).To(Equal("restart"))
+		Expect(serviceName).To(Equal("docker.service"))
 		Expect(plugin.calls).To(BeEmpty())
 	})
 

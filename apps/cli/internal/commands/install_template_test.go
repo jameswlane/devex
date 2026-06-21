@@ -22,6 +22,23 @@ func TestResolveAppsByNameAndCategory(t *testing.T) {
 						InstallCommand: "git",
 					},
 				},
+				{
+					Name:     "Docker",
+					Category: "development",
+					Linux: types.OSConfig{
+						InstallMethod:  "apt",
+						InstallCommand: "docker",
+					},
+				},
+				{
+					Name:     "zsh",
+					Category: "development",
+					Default:  true,
+					Linux: types.OSConfig{
+						InstallMethod:  "apt",
+						InstallCommand: "zsh",
+					},
+				},
 			},
 			Utilities: []types.CrossPlatformApp{
 				{
@@ -34,22 +51,34 @@ func TestResolveAppsByNameAndCategory(t *testing.T) {
 				},
 			},
 		},
+		Databases: config.DatabasesConfig{
+			Servers: []types.CrossPlatformApp{
+				{
+					Name:     "PostgreSQL",
+					Category: "databases",
+					Linux: types.OSConfig{
+						InstallMethod:  "apt",
+						InstallCommand: "postgresql",
+					},
+				},
+			},
+		},
 	}
 
-	byName, err := resolveAppsByName(settings, []string{"git"})
+	byName, err := resolveAppsByName(settings, []string{"docker", "git"})
 	if err != nil {
 		t.Fatalf("resolveAppsByName() error = %v", err)
 	}
-	if len(byName) != 1 || byName[0].Name != "Git" {
-		t.Fatalf("resolveAppsByName() = %#v, want Git", byName)
+	if len(byName) != 2 || byName[0].Name != "Docker" || byName[1].Name != "Git" {
+		t.Fatalf("resolveAppsByName() = %#v, want Docker and Git only", byName)
 	}
 
-	byCategory, err := resolveAppsByCategory(settings, []string{"utilities"})
+	byCategory, err := resolveAppsByCategory(settings, []string{"databases"})
 	if err != nil {
 		t.Fatalf("resolveAppsByCategory() error = %v", err)
 	}
-	if len(byCategory) != 1 || byCategory[0].Name != "jq" {
-		t.Fatalf("resolveAppsByCategory() = %#v, want jq", byCategory)
+	if len(byCategory) != 1 || byCategory[0].Name != "PostgreSQL" {
+		t.Fatalf("resolveAppsByCategory() = %#v, want PostgreSQL only", byCategory)
 	}
 
 	_, err = resolveAppsByCategory(settings, []string{"development", "typo"})

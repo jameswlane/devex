@@ -202,7 +202,7 @@ func (tm *TemplateManager) GetTemplateSpec(id string) (*TemplateSpec, error) {
 	}
 
 	for _, spec := range specs {
-		if spec.ID == id || spec.Name == id {
+		if spec.ID == id {
 			return &spec, nil
 		}
 	}
@@ -215,6 +215,9 @@ func (tm *TemplateManager) ValidateTemplateSpec(spec TemplateSpec) error {
 	}
 	if spec.ID == "" {
 		return fmt.Errorf("template id is required")
+	}
+	if err := validateTemplateID(spec.ID); err != nil {
+		return err
 	}
 	if spec.Name == "" {
 		return fmt.Errorf("template name is required")
@@ -242,6 +245,9 @@ func (tm *TemplateManager) ValidateTemplateSpec(spec TemplateSpec) error {
 				return fmt.Errorf("invalid %s step '%s': %w", action, step.ID, err)
 			}
 		}
+		if err := validateDependsOnReferences(steps); err != nil {
+			return fmt.Errorf("invalid %s lifecycle dependencies: %w", action, err)
+		}
 	}
 
 	for key, input := range spec.Inputs {
@@ -263,10 +269,19 @@ func validateTemplateStep(step TemplateStepSpec, seen map[string]bool) error {
 	if step.ID == "" {
 		return fmt.Errorf("step id is required")
 	}
+	if err := validateStepID(step.ID); err != nil {
+		return err
+	}
 	if seen[step.ID] {
 		return fmt.Errorf("duplicate step id")
 	}
 	seen[step.ID] = true
+	if err := validateOnError(step.OnError); err != nil {
+		return err
+	}
+	if err := validateResourceDeclarations(step.Resources); err != nil {
+		return err
+	}
 
 	actions := 0
 	if step.App != nil {
@@ -274,14 +289,42 @@ func validateTemplateStep(step TemplateStepSpec, seen map[string]bool) error {
 		if step.App.Ref == "" && step.App.Name == "" && step.App.App == nil {
 			return fmt.Errorf("app step requires ref, name, or definition")
 		}
+		if step.App.Installer != "" {
+			if err := validatePluginName(step.App.Installer); err != nil {
+				return fmt.Errorf("invalid app installer: %w", err)
+			}
+		}
+		if step.App.Command != "" {
+			if err := validateLifecycleCommand(step.App.Command); err != nil {
+				return fmt.Errorf("invalid app command: %w", err)
+			}
+		}
+		if err := validateDockerLikeArgs(step.App.Args); err != nil {
+			return err
+		}
 	}
 	if step.Plugin != nil {
 		actions++
 		if step.Plugin.Name == "" {
 			return fmt.Errorf("plugin name is required")
 		}
+		if err := validatePluginName(step.Plugin.Name); err != nil {
+			return err
+		}
 		if step.Plugin.Command == "" {
 			return fmt.Errorf("plugin command is required")
+		}
+		if err := validateLifecycleCommand(step.Plugin.Command); err != nil {
+			return err
+		}
+		if err := validateEnvironment(step.Plugin.Env); err != nil {
+			return err
+		}
+		if err := validatePathValue("plugin working_dir", step.Plugin.WorkingDir, false); err != nil {
+			return err
+		}
+		if err := validateDockerLikeArgs(step.Plugin.Args); err != nil {
+			return err
 		}
 	}
 	if step.Shell != nil {
@@ -289,11 +332,29 @@ func validateTemplateStep(step TemplateStepSpec, seen map[string]bool) error {
 		if step.Shell.Command == "" {
 			return fmt.Errorf("shell command is required")
 		}
+		if err := validateShellCommandBase(step.Shell.Command); err != nil {
+			return err
+		}
+		if err := validateEnvironment(step.Shell.Env); err != nil {
+			return err
+		}
+		if err := validatePathValue("shell working_dir", step.Shell.WorkingDir, false); err != nil {
+			return err
+		}
 	}
 	if step.File != nil {
 		actions++
 		if step.File.Operation == "" {
 			return fmt.Errorf("file operation is required")
+		}
+		if err := validateLifecycleCommand(step.File.Operation); err != nil {
+			return err
+		}
+		if err := validatePathValue("file source", step.File.Source, false); err != nil {
+			return err
+		}
+		if err := validatePathValue("file destination", step.File.Destination, step.File.Operation != "remove"); err != nil {
+			return err
 		}
 	}
 	if step.Service != nil {
@@ -301,12 +362,38 @@ func validateTemplateStep(step TemplateStepSpec, seen map[string]bool) error {
 		if step.Service.Name == "" || step.Service.Action == "" {
 			return fmt.Errorf("service name and action are required")
 		}
+		if !isTemplated(step.Service.Name) {
+			if err := validateServiceName(step.Service.Name); err != nil {
+				return err
+			}
+		}
+		if err := validateLifecycleCommand(step.Service.Action); err != nil {
+			return err
+		}
 	}
 	if step.Group != nil {
 		actions++
 	}
 	if actions != 1 {
 		return fmt.Errorf("step must define exactly one primary action")
+	}
+	return nil
+}
+
+func validateDependsOnReferences(steps []TemplateStepSpec) error {
+	ids := make(map[string]bool, len(steps))
+	for _, step := range steps {
+		ids[step.ID] = true
+	}
+	for _, step := range steps {
+		for _, dep := range step.DependsOn {
+			if dep == "" {
+				return fmt.Errorf("step '%s' has empty depends_on reference", step.ID)
+			}
+			if !ids[dep] {
+				return fmt.Errorf("step '%s' depends on unknown step '%s'", step.ID, dep)
+			}
+		}
 	}
 	return nil
 }
@@ -505,9 +592,11 @@ func splitInstallCommand(command string) []string {
 	if command == "" {
 		return nil
 	}
-	// TODO(template-runtime): replace this compatibility splitter with a shell-aware
-	// parser or typed legacy migration. strings.Fields does not preserve quoted args.
-	return strings.Fields(command)
+	args, err := splitShellFields(command)
+	if err != nil {
+		return strings.Fields(command)
+	}
+	return args
 }
 
 func slugifyTemplateID(value string) string {

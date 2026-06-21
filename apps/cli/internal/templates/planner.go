@@ -173,6 +173,9 @@ func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opt
 }
 
 func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, evalCtx EvaluationContext, validatePlugins bool) (PlannedStep, error) {
+	if err := validateOnError(step.OnError); err != nil {
+		return PlannedStep{}, err
+	}
 	result := PlannedStep{
 		ID:        step.ID,
 		Order:     step.Order,
@@ -196,6 +199,9 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 			WorkingDir: interpolateString(step.Plugin.WorkingDir, evalCtx),
 			Metadata:   interpolateAnyMap(step.Plugin.Metadata, evalCtx),
 		}
+		if err := validatePlannedPluginRequest(result.Request); err != nil {
+			return result, err
+		}
 	case step.Shell != nil:
 		result.Type = StepTypeShell
 		result.DisplayName = step.Shell.Command
@@ -206,21 +212,33 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 			Env:        interpolateStringMap(step.Shell.Env, evalCtx),
 			WorkingDir: interpolateString(step.Shell.WorkingDir, evalCtx),
 		}
+		if err := validatePlannedShellRequest(result.Request); err != nil {
+			return result, err
+		}
 	case step.File != nil:
 		result.Type = StepTypeFile
 		result.DisplayName = step.File.Operation
 		result.Request = ExecutionRequest{
-			Plugin:  "file",
 			Command: interpolateString(step.File.Operation, evalCtx),
 			Args:    fileStepArgs(step.File, evalCtx),
+			Metadata: map[string]any{
+				"source":      interpolateString(step.File.Source, evalCtx),
+				"destination": interpolateString(step.File.Destination, evalCtx),
+				"content":     interpolateString(step.File.Content, evalCtx),
+			},
+		}
+		if err := validatePlannedFileRequest(result.Request); err != nil {
+			return result, err
 		}
 	case step.Service != nil:
 		result.Type = StepTypeService
 		result.DisplayName = step.Service.Name
 		result.Request = ExecutionRequest{
-			Plugin:  "service",
 			Command: interpolateString(step.Service.Action, evalCtx),
 			Args:    []string{interpolateString(step.Service.Name, evalCtx)},
+		}
+		if err := validatePlannedServiceRequest(result.Request); err != nil {
+			return result, err
 		}
 	case step.Group != nil:
 		result.Type = StepTypeGroup
@@ -235,7 +253,7 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 		return result, fmt.Errorf("step has no action")
 	}
 
-	if validatePlugins && result.Type == StepTypePlugin && result.Request.Plugin != "" && p.PluginAvailable != nil && !p.PluginAvailable(ctx, result.Request.Plugin) {
+	if validatePlugins && stepTypeRequiresPlugin(result.Type) && result.Request.Plugin != "" && p.PluginAvailable != nil && !p.PluginAvailable(ctx, result.Request.Plugin) {
 		return result, fmt.Errorf("plugin '%s' is not available", result.Request.Plugin)
 	}
 	return result, nil
@@ -289,7 +307,10 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 		Metadata: interpolateAnyMap(action.Metadata, evalCtx),
 	}
 	if len(result.Request.Args) == 0 && app.InstallCommand != "" {
-		result.Request.Args = strings.Fields(app.InstallCommand)
+		result.Request.Args = splitInstallCommand(app.InstallCommand)
+	}
+	if err := validatePlannedAppRequest(result.Request); err != nil {
+		return result, err
 	}
 	if validatePlugins && p.PluginAvailable != nil && !p.PluginAvailable(ctx, plugin) {
 		return result, fmt.Errorf("plugin '%s' is not available", plugin)
@@ -355,6 +376,15 @@ func parseErrorPolicy(value string) ErrorPolicy {
 		return ErrorPolicyRollback
 	default:
 		return ErrorPolicyStop
+	}
+}
+
+func stepTypeRequiresPlugin(stepType StepType) bool {
+	switch stepType {
+	case StepTypePlugin, StepTypeShell:
+		return true
+	default:
+		return false
 	}
 }
 
