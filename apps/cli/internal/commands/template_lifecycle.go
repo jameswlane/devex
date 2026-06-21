@@ -573,7 +573,7 @@ func displayRecordedTemplateResources(result templateLifecycleResult, format str
 		if result.SelectedRunID != "" {
 			fmt.Printf("Selected install run: %s\n", result.SelectedRunID)
 		}
-		printTemplateResourceTable(result.Resources)
+		return printTemplateResourceTable(result.Resources)
 	}
 	return nil
 }
@@ -597,14 +597,14 @@ func displayTemplateLifecycleResult(result templateLifecycleResult, format strin
 		if result.SelectedRunID != "" {
 			fmt.Printf("Selected install run: %s\n", result.SelectedRunID)
 		}
-		printTemplateResourceTable(result.Resources)
+		return printTemplateResourceTable(result.Resources)
 	}
 	return nil
 }
 
-func printTemplateResourceTable(resources []state.ManagedResource) {
+func printTemplateResourceTable(resources []state.ManagedResource) error {
 	if len(resources) == 0 {
-		return
+		return nil
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 	fmt.Fprintln(w, "STEP\tTYPE\tNAME\tEXTERNAL ID\tSTATE")
@@ -612,5 +612,5 @@ func printTemplateResourceTable(resources []state.ManagedResource) {
 	for _, resource := range resources {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", resource.StepID, resource.Type, resource.Name, resource.ExternalID, resource.CurrentState)
 	}
-	_ = w.Flush()
+	return w.Flush()
 }

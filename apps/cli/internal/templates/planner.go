@@ -92,8 +92,13 @@ type PlanOptions struct {
 }
 
 func (p *TemplatePlanner) Plan(ctx context.Context, idOrPath string, opts PlanOptions) (*ExecutionPlan, error) {
+	_, plan, err := p.PlanWithSpec(ctx, idOrPath, opts)
+	return plan, err
+}
+
+func (p *TemplatePlanner) PlanWithSpec(ctx context.Context, idOrPath string, opts PlanOptions) (*TemplateSpec, *ExecutionPlan, error) {
 	if p.Manager == nil {
-		return nil, fmt.Errorf("template manager is required")
+		return nil, nil, fmt.Errorf("template manager is required")
 	}
 	if opts.Action == "" {
 		opts.Action = LifecycleInstall
@@ -101,20 +106,20 @@ func (p *TemplatePlanner) Plan(ctx context.Context, idOrPath string, opts PlanOp
 
 	spec, err := p.Manager.GetTemplateSpecByIDOrPath(idOrPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := p.Manager.ValidateTemplateSpec(*spec); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	steps, ok := spec.Lifecycle[opts.Action]
 	if !ok {
-		return nil, fmt.Errorf("template '%s' does not define lifecycle action '%s'", spec.ID, opts.Action)
+		return nil, nil, fmt.Errorf("template '%s' does not define lifecycle action '%s'", spec.ID, opts.Action)
 	}
 
 	inputs, err := ResolveInputs(ctx, *spec, opts.InputOptions)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	now := time.Now
@@ -135,7 +140,7 @@ func (p *TemplatePlanner) Plan(ctx context.Context, idOrPath string, opts PlanOp
 	for _, step := range steps {
 		include, err := EvaluateCondition(step.If, evalCtx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to evaluate condition for step '%s': %w", step.ID, err)
+			return nil, nil, fmt.Errorf("failed to evaluate condition for step '%s': %w", step.ID, err)
 		}
 		if !include {
 			continue
@@ -143,18 +148,18 @@ func (p *TemplatePlanner) Plan(ctx context.Context, idOrPath string, opts PlanOp
 
 		plannedStep, err := p.planStep(ctx, step, evalCtx, opts.ValidatePlugins)
 		if err != nil {
-			return nil, fmt.Errorf("failed to plan step '%s': %w", step.ID, err)
+			return nil, nil, fmt.Errorf("failed to plan step '%s': %w", step.ID, err)
 		}
 		planned = append(planned, plannedStep)
 	}
 
 	planned, err = sortPlannedSteps(planned)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	createdAt := now()
-	return &ExecutionPlan{
+	return spec, &ExecutionPlan{
 		ID:              fmt.Sprintf("%s-%s-%d", spec.ID, opts.Action, createdAt.UnixNano()),
 		TemplateID:      spec.ID,
 		TemplateVersion: spec.Version,

@@ -39,6 +39,11 @@ type TemplateSpec struct {
 	Metadata      map[string]any                         `yaml:"metadata,omitempty"`
 }
 
+type TemplateSpecWithSource struct {
+	Spec   TemplateSpec
+	Source string
+}
+
 type TemplateInput struct {
 	Type        string                   `yaml:"type"`
 	Prompt      string                   `yaml:"prompt"`
@@ -145,7 +150,20 @@ type directoryTemplateManifest struct {
 }
 
 func (tm *TemplateManager) GetAvailableTemplateSpecs() ([]TemplateSpec, error) {
+	specsWithSources, err := tm.GetAvailableTemplateSpecsWithSources()
+	if err != nil {
+		return nil, err
+	}
+	specs := make([]TemplateSpec, 0, len(specsWithSources))
+	for _, item := range specsWithSources {
+		specs = append(specs, item.Spec)
+	}
+	return specs, nil
+}
+
+func (tm *TemplateManager) GetAvailableTemplateSpecsWithSources() ([]TemplateSpecWithSource, error) {
 	specMap := make(map[string]TemplateSpec)
+	sourceMap := make(map[string]string)
 
 	builtinSpecs, err := tm.loadTemplateSpecsFromDir(tm.builtinTemplatesDir)
 	if err != nil {
@@ -153,6 +171,7 @@ func (tm *TemplateManager) GetAvailableTemplateSpecs() ([]TemplateSpec, error) {
 	} else {
 		for _, spec := range builtinSpecs {
 			specMap[spec.ID] = spec
+			sourceMap[spec.ID] = "builtin"
 		}
 	}
 
@@ -162,12 +181,16 @@ func (tm *TemplateManager) GetAvailableTemplateSpecs() ([]TemplateSpec, error) {
 	} else {
 		for _, spec := range userSpecs {
 			specMap[spec.ID] = spec
+			sourceMap[spec.ID] = "user"
 		}
 	}
 
-	specs := make([]TemplateSpec, 0, len(specMap))
+	specs := make([]TemplateSpecWithSource, 0, len(specMap))
 	for _, spec := range specMap {
-		specs = append(specs, spec)
+		specs = append(specs, TemplateSpecWithSource{
+			Spec:   spec,
+			Source: sourceMap[spec.ID],
+		})
 	}
 	return specs, nil
 }
@@ -388,7 +411,6 @@ func ConvertLegacyTemplateToSpec(template Template) TemplateSpec {
 		Author:        template.Metadata.Author,
 		Homepage:      template.Metadata.Homepage,
 		Tags:          template.Metadata.Tags,
-		Categories:    []string{template.Metadata.Category},
 		Lifecycle: map[LifecycleAction][]TemplateStepSpec{
 			LifecycleInstall: legacyAppsToSteps(template.Applications),
 		},
@@ -402,6 +424,9 @@ func ConvertLegacyTemplateToSpec(template Template) TemplateSpec {
 	}
 	if spec.Version == "" {
 		spec.Version = "0.0.0"
+	}
+	if category := strings.TrimSpace(template.Metadata.Category); category != "" {
+		spec.Categories = []string{category}
 	}
 	return spec
 }

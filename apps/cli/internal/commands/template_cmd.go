@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -63,20 +64,20 @@ Examples:
 	}
 
 	// Add subcommands
-	cmd.AddCommand(newTemplateListCmd(settings))
-	cmd.AddCommand(newTemplateCheckUpdatesCmd(settings))
+	cmd.AddCommand(newTemplateListCmd())
+	cmd.AddCommand(newTemplateCheckUpdatesCmd())
 	cmd.AddCommand(newTemplateUpdateCmd(settings))
-	cmd.AddCommand(newTemplateInfoCmd(settings))
-	cmd.AddCommand(newTemplateStatusCmd(settings))
-	cmd.AddCommand(newTemplateInitCmd(settings))
-	cmd.AddCommand(newTemplateValidateCmd(settings))
+	cmd.AddCommand(newTemplateInfoCmd())
+	cmd.AddCommand(newTemplateStatusCmd())
+	cmd.AddCommand(newTemplateInitCmd())
+	cmd.AddCommand(newTemplateValidateCmd())
 	cmd.AddCommand(newTemplatePlanCmd(settings, getPluginBootstrap))
 	cmd.AddCommand(NewTemplateCustomCmd(repo, settings))
 
 	return cmd
 }
 
-func newTemplateValidateCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateValidateCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
@@ -159,7 +160,7 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 				}
 			}
 
-			plan, err := planner.Plan(cmd.Context(), args[0], templates.PlanOptions{
+			spec, plan, err := planner.PlanWithSpec(cmd.Context(), args[0], templates.PlanOptions{
 				Action: templates.LifecycleAction(action),
 				InputOptions: templates.InputResolverOptions{
 					Answers:        answers,
@@ -168,10 +169,6 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 				},
 				ValidatePlugins: planner.PluginAvailable != nil,
 			})
-			if err != nil {
-				return err
-			}
-			spec, err := manager.GetTemplateSpecByIDOrPath(args[0])
 			if err != nil {
 				return err
 			}
@@ -188,7 +185,7 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 	return cmd
 }
 
-func newTemplateListCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateListCmd() *cobra.Command {
 	var (
 		format      string
 		source      string
@@ -223,6 +220,9 @@ of your template ecosystem.`,
 			if err != nil {
 				return fmt.Errorf("failed to get template versions: %w", err)
 			}
+			if err := mergeCanonicalTemplateVersions(templateVersions); err != nil {
+				return err
+			}
 
 			// Filter templates
 			filteredTemplates := make(map[string]*templates.TemplateVersion)
@@ -251,7 +251,7 @@ of your template ecosystem.`,
 	return cmd
 }
 
-func newTemplateCheckUpdatesCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateCheckUpdatesCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
@@ -317,7 +317,7 @@ rollback capabilities.`,
 			}
 
 			if !noTUI {
-				return runTemplateUpdateWithProgress(settings, templateID, all, force, format)
+				return runTemplateUpdateWithProgress(cmd.Context(), settings, templateID, all, force, format)
 			}
 
 			// Fallback to original implementation
@@ -368,7 +368,7 @@ rollback capabilities.`,
 	return cmd
 }
 
-func newTemplateInfoCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateInfoCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
@@ -396,7 +396,11 @@ version details, manifest data, and update status.`,
 
 			templateVersion, manifest, err := tvm.GetTemplateInfo(templateID)
 			if err != nil {
-				return fmt.Errorf("failed to get template info: %w", err)
+				spec, specErr := loadCanonicalTemplateSpecForInfo(templateID)
+				if specErr != nil {
+					return fmt.Errorf("failed to get template info: %w", err)
+				}
+				return displayTemplateSpecInfo(spec, format)
 			}
 
 			return displayTemplateInfo(templateVersion, manifest, format)
@@ -408,7 +412,7 @@ version details, manifest data, and update status.`,
 	return cmd
 }
 
-func newTemplateStatusCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateStatusCmd() *cobra.Command {
 	var format string
 
 	cmd := &cobra.Command{
@@ -446,7 +450,7 @@ update availability, and system health.`,
 	return cmd
 }
 
-func newTemplateInitCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize template versioning system",
@@ -506,6 +510,67 @@ func templateVersionBaseDir() (string, error) {
 
 // Display functions
 
+func mergeCanonicalTemplateVersions(templateVersions map[string]*templates.TemplateVersion) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("failed to determine user home directory: %w", err)
+	}
+	manager := templates.NewTemplateManager(homeDir)
+	specs, err := manager.GetAvailableTemplateSpecsWithSources()
+	if err != nil {
+		return fmt.Errorf("failed to load template specs: %w", err)
+	}
+	for _, spec := range specs {
+		if _, exists := templateVersions[spec.Spec.ID]; exists {
+			continue
+		}
+		templateVersions[spec.Spec.ID] = templateVersionFromSpec(spec.Spec, spec.Source)
+	}
+	return nil
+}
+
+func loadCanonicalTemplateSpecForInfo(idOrPath string) (*templates.TemplateSpec, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine user home directory: %w", err)
+	}
+	manager := templates.NewTemplateManager(homeDir)
+	spec, err := manager.GetTemplateSpecByIDOrPath(idOrPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := manager.ValidateTemplateSpec(*spec); err != nil {
+		return nil, err
+	}
+	return spec, nil
+}
+
+func templateVersionFromSpec(spec templates.TemplateSpec, source string) *templates.TemplateVersion {
+	if source == "" {
+		source = "builtin"
+	}
+	return &templates.TemplateVersion{
+		ID:          spec.ID,
+		Name:        spec.Name,
+		Version:     spec.Version,
+		Description: spec.Description,
+		Source:      source,
+		Metadata: map[string]interface{}{
+			"schema_version": spec.SchemaVersion,
+			"lifecycle":      lifecycleActionNames(spec.Lifecycle),
+		},
+	}
+}
+
+func lifecycleActionNames(lifecycle map[templates.LifecycleAction][]templates.TemplateStepSpec) []string {
+	actions := make([]string, 0, len(lifecycle))
+	for action := range lifecycle {
+		actions = append(actions, string(action))
+	}
+	sort.Strings(actions)
+	return actions
+}
+
 func displayTemplateList(templateVersions map[string]*templates.TemplateVersion, format string) error {
 	switch format {
 	case "json":
@@ -550,7 +615,7 @@ func displayTemplateList(templateVersions map[string]*templates.TemplateVersion,
 				updateStatus,
 				template.Description)
 		}
-		_ = w.Flush()
+		return w.Flush()
 	}
 
 	return nil
@@ -601,7 +666,9 @@ func displayUpdateCheck(updates []string, format string, tvm *templates.Template
 					template.Description)
 			}
 		}
-		_ = w.Flush()
+		if err := w.Flush(); err != nil {
+			return err
+		}
 
 		fmt.Printf("\nRun 'devex template update --all' to update all templates\n")
 	}
@@ -648,14 +715,14 @@ func displayExecutionPlan(plan *templates.ExecutionPlan, format string) error {
 			}
 			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", step.Order, step.ID, step.Type, request)
 		}
-		_ = w.Flush()
+		return w.Flush()
 	}
 	return nil
 }
 
 // runTemplateUpdateWithProgress runs template update with TUI progress tracking
-func runTemplateUpdateWithProgress(settings config.CrossPlatformSettings, templateID string, all, force bool, format string) error {
-	runner := tui.NewProgressRunner(context.Background(), settings)
+func runTemplateUpdateWithProgress(ctx context.Context, settings config.CrossPlatformSettings, templateID string, all, force bool, format string) error {
+	runner := tui.NewProgressRunner(ctx, settings)
 	defer runner.Quit()
 
 	return runner.RunTemplateOperation("update", templateID, all, force, format)
@@ -786,6 +853,40 @@ func displayTemplateInfo(templateVersion *templates.TemplateVersion, manifest *t
 	}
 
 	return nil
+}
+
+func displayTemplateSpecInfo(spec *templates.TemplateSpec, format string) error {
+	switch format {
+	case "json":
+		return printJSON(spec)
+	case "yaml":
+		return printYAML(spec)
+	case "table":
+		blue := color.New(color.FgBlue).SprintFunc()
+		fmt.Printf("%s Template Information\n\n", blue("●"))
+		fmt.Printf("ID: %s\n", spec.ID)
+		fmt.Printf("Name: %s\n", spec.Name)
+		fmt.Printf("Version: %s\n", spec.Version)
+		fmt.Printf("Schema: %s\n", spec.SchemaVersion)
+		fmt.Printf("Description: %s\n", spec.Description)
+		if spec.Author != "" {
+			fmt.Printf("Author: %s\n", spec.Author)
+		}
+		if spec.Homepage != "" {
+			fmt.Printf("Homepage: %s\n", spec.Homepage)
+		}
+		if len(spec.Categories) > 0 {
+			fmt.Printf("Categories: %s\n", strings.Join(spec.Categories, ", "))
+		}
+		if len(spec.Tags) > 0 {
+			fmt.Printf("Tags: %s\n", strings.Join(spec.Tags, ", "))
+		}
+		actions := lifecycleActionNames(spec.Lifecycle)
+		fmt.Printf("Lifecycle: %s\n", strings.Join(actions, ", "))
+		return nil
+	default:
+		return unsupportedFormat(format)
+	}
 }
 
 func displayTemplateSummary(summary *templates.TemplateVersionSummary, format string) error {

@@ -363,6 +363,20 @@ lifecycle:
 			Expect(spec.ID).To(Equal("web-development"))
 			Expect(spec.Name).To(Equal("Web Development"))
 		})
+
+		It("should not add a blank category when converting legacy templates", func() {
+			legacy := templates.Template{
+				Metadata: templates.TemplateMetadata{
+					Name:        "Uncategorized",
+					Version:     "1.0.0",
+					Description: "Template without a category",
+					Platforms:   []string{"linux"},
+				},
+			}
+
+			spec := templates.ConvertLegacyTemplateToSpec(legacy)
+			Expect(spec.Categories).To(BeEmpty())
+		})
 	})
 
 	Describe("Template Categories", func() {

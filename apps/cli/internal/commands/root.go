@@ -88,6 +88,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.AddCommand(NewUndoCmd(repo, settings))
 	cmd.AddCommand(NewRecoveryCmd(repo, settings))
 	cmd.AddCommand(NewTemplateCmd(repo, settings, runtime.getPluginBootstrap))
+	cmd.AddCommand(NewRunsCmd())
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
