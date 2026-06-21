@@ -17,20 +17,30 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 // NewStatusCmd creates a new status command
 func NewStatusCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	return NewStatusCmdWithPluginProvider(repo, settings, nil)
+}
+
+func NewStatusCmdWithPluginProvider(repo types.Repository, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) *cobra.Command {
 	var (
-		apps     []string
-		all      bool
-		category string
-		format   string
-		verbose  bool
-		fix      bool
-		noTUI    bool
+		apps           []string
+		all            bool
+		category       string
+		format         string
+		verbose        bool
+		fix            bool
+		noTUI          bool
+		templateID     string
+		answers        []string
+		answerFiles    []string
+		nonInteractive bool
+		runRef         string
 	)
 
 	cmd := &cobra.Command{
@@ -54,6 +64,20 @@ Examples:
   # Get JSON output for automation
   devex status --app docker --json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if templateID != "" {
+				if len(apps) > 0 || all || category != "" || fix {
+					return fmt.Errorf("--template cannot be combined with app status flags")
+				}
+				return executeTemplateLifecycle(cmd.Context(), templateID, templates.LifecycleStatus, templateLifecycleOptions{
+					Answers:        answers,
+					AnswerFiles:    answerFiles,
+					NonInteractive: nonInteractive,
+					DryRun:         false,
+					Format:         format,
+					Run:            runRef,
+				}, settings, getPluginBootstrap)
+			}
+
 			// Use TUI progress unless explicitly disabled
 			if !noTUI {
 				return runStatusWithProgress(repo, settings, apps, all, category, format, verbose, fix)
@@ -71,6 +95,11 @@ Examples:
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed status information")
 	cmd.Flags().BoolVar(&fix, "fix", false, "Attempt to fix common issues")
 	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable TUI progress display")
+	cmd.Flags().StringVar(&templateID, "template", "", "Check a DevEx lifecycle template by ID or path")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
+	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing template inputs")
+	cmd.Flags().StringVar(&runRef, "run", "latest", "Template install run to inspect (latest or run ID)")
 
 	return cmd
 }
