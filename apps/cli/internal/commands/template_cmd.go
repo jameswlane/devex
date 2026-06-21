@@ -147,8 +147,9 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 			if err != nil {
 				return fmt.Errorf("failed to determine user home directory: %w", err)
 			}
+			manager := templates.NewTemplateManager(homeDir)
 			planner := templates.TemplatePlanner{
-				Manager:     templates.NewTemplateManager(homeDir),
+				Manager:     manager,
 				AppResolver: templates.NewAppResolver(settings.GetApplicationByName),
 			}
 			if getPluginBootstrap != nil {
@@ -170,7 +171,12 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 			if err != nil {
 				return err
 			}
-			return displayExecutionPlan(plan, format)
+			spec, err := manager.GetTemplateSpecByIDOrPath(args[0])
+			if err != nil {
+				return err
+			}
+			redactedPlan := templates.RedactPlan(*spec, *plan)
+			return displayExecutionPlan(&redactedPlan, format)
 		},
 	}
 

@@ -168,6 +168,70 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(plan.Steps[1].Resources[0].ExternalID).To(Equal("db-local"))
 	})
 
+	It("keeps executable sensitive derivatives raw but builds redacted snapshots", func() {
+		spec.Lifecycle[templates.LifecycleInstall] = []templates.TemplateStepSpec{
+			{
+				ID:    "secret-step",
+				Order: 10,
+				Plugin: &templates.TemplatePluginAction{
+					Name:    "package-manager-docker",
+					Command: "run",
+					Args: []string{
+						"--password={{ inputs.postgres_password }}",
+					},
+					Env: map[string]string{
+						"POSTGRES_PASSWORD": "{{ inputs.postgres_password }}",
+					},
+					Metadata: map[string]any{
+						"connection": "postgres://postgres:{{ inputs.postgres_password }}@localhost/postgres",
+					},
+				},
+				Resources: []templates.TemplateResource{
+					{
+						Type:       "container",
+						Name:       "postgres",
+						ExternalID: "postgres",
+						Metadata: map[string]any{
+							"password": "{{ inputs.postgres_password }}",
+						},
+					},
+				},
+			},
+			{
+				ID:    "secret-file",
+				Order: 20,
+				File: &templates.TemplateFileAction{
+					Operation:   "write",
+					Destination: "/tmp/postgres.env",
+					Content:     "POSTGRES_PASSWORD={{ inputs.postgres_password }}",
+				},
+			},
+		}
+		planner := templates.TemplatePlanner{Manager: manager}
+
+		plan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{
+			Action: templates.LifecycleInstall,
+			InputOptions: templates.InputResolverOptions{
+				Answers:        []string{"databases=postgres", "postgres_password=super-secret"},
+				NonInteractive: true,
+			},
+		})
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(plan.Steps[0].Request.Args).To(ContainElement("--password=super-secret"))
+		Expect(plan.Steps[0].Request.Env["POSTGRES_PASSWORD"]).To(Equal("super-secret"))
+		Expect(plan.Steps[0].Request.Metadata["connection"]).To(Equal("postgres://postgres:super-secret@localhost/postgres"))
+		Expect(plan.Steps[1].Request.Args).To(ContainElement("--content=POSTGRES_PASSWORD=super-secret"))
+
+		redacted := templates.RedactPlan(spec, *plan)
+		Expect(redacted.Inputs["postgres_password"]).To(Equal("[REDACTED]"))
+		Expect(redacted.Steps[0].Request.Args).To(ContainElement("--password=[REDACTED]"))
+		Expect(redacted.Steps[0].Request.Env["POSTGRES_PASSWORD"]).To(Equal("[REDACTED]"))
+		Expect(redacted.Steps[0].Request.Metadata["connection"]).To(Equal("postgres://postgres:[REDACTED]@localhost/postgres"))
+		Expect(redacted.Steps[0].Resources[0].Metadata["password"]).To(Equal("[REDACTED]"))
+		Expect(redacted.Steps[1].Request.Args).To(ContainElement("--content=POSTGRES_PASSWORD=[REDACTED]"))
+	})
+
 	It("uses recorded resources for has_resource conditions", func() {
 		planner := templates.TemplatePlanner{Manager: manager}
 		plan, err := planner.Plan(context.Background(), writeSpec(tempDir, spec), templates.PlanOptions{

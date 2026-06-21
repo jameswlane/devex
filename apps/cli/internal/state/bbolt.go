@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"syscall"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -20,6 +21,7 @@ var (
 	runsBucket       = []byte("runs")
 	resourcesBucket  = []byte("resources")
 	operationsBucket = []byte("operations")
+	locksBucket      = []byte("locks")
 
 	indexesBucket             = []byte("indexes")
 	runsByTemplateBucket      = []byte("runs_by_template")
@@ -27,6 +29,8 @@ var (
 	resourcesByRunBucket      = []byte("resources_by_run")
 	operationsByRunBucket     = []byte("operations_by_run")
 )
+
+var ErrLifecycleLockActive = errors.New("template lifecycle lock is active")
 
 type BoltStore struct {
 	db    *bbolt.DB
@@ -60,6 +64,102 @@ func (s *BoltStore) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+func (s *BoltStore) AcquireLifecycleLock(ctx context.Context, lock LifecycleLock, opts LockOptions) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if lock.TemplateID == "" {
+		return fmt.Errorf("lock template id is required")
+	}
+	if lock.RunID == "" {
+		return fmt.Errorf("lock run id is required")
+	}
+	if lock.Action == "" {
+		return fmt.Errorf("lock action is required")
+	}
+	now := s.now()
+	if lock.StartedAt.IsZero() {
+		lock.StartedAt = now
+	}
+	lock.UpdatedAt = now
+	if lock.PID == 0 {
+		lock.PID = os.Getpid()
+	}
+	if lock.Hostname == "" {
+		lock.Hostname, _ = os.Hostname()
+	}
+
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(locksBucket)
+		var existing LifecycleLock
+		if err := getJSON(bucket, lock.TemplateID, &existing); err == nil {
+			if !opts.Force && !s.isStaleLock(existing, opts.StaleTimeout, now) {
+				return fmt.Errorf("%w: template '%s' already has active %s run '%s' on %s (updated %s)",
+					ErrLifecycleLockActive,
+					existing.TemplateID,
+					existing.Action,
+					existing.RunID,
+					existing.Hostname,
+					existing.UpdatedAt.Format(time.RFC3339),
+				)
+			}
+			if err := abandonStaleRun(tx, existing, now); err != nil {
+				return err
+			}
+		} else if !errors.Is(err, ErrNotFound) {
+			return err
+		}
+		return putJSON(bucket, lock.TemplateID, lock)
+	})
+}
+
+func (s *BoltStore) ReleaseLifecycleLock(ctx context.Context, templateID string, runID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if templateID == "" {
+		return fmt.Errorf("lock template id is required")
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(locksBucket)
+		var existing LifecycleLock
+		if err := getJSON(bucket, templateID, &existing); err != nil {
+			if errors.Is(err, ErrNotFound) {
+				return nil
+			}
+			return err
+		}
+		if runID != "" && existing.RunID != runID {
+			return nil
+		}
+		return bucket.Delete([]byte(templateID))
+	})
+}
+
+func (s *BoltStore) UpdateLifecycleLock(ctx context.Context, templateID string, runID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if templateID == "" {
+		return fmt.Errorf("lock template id is required")
+	}
+	if runID == "" {
+		return fmt.Errorf("lock run id is required")
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		bucket := tx.Bucket(locksBucket)
+		var existing LifecycleLock
+		if err := getJSON(bucket, templateID, &existing); err != nil {
+			return err
+		}
+		if existing.RunID != runID {
+			return fmt.Errorf("%w: template '%s' lock is owned by run '%s'", ErrLifecycleLockActive, templateID, existing.RunID)
+		}
+		existing.UpdatedAt = s.now()
+		return putJSON(bucket, templateID, existing)
+	})
 }
 
 func (s *BoltStore) CreateRun(ctx context.Context, run TemplateRun) error {
@@ -258,6 +358,12 @@ func (s *BoltStore) ListRuns(ctx context.Context, filter RunFilter) ([]TemplateR
 			if filter.Status != "" && run.Status != filter.Status {
 				continue
 			}
+			if len(filter.Statuses) > 0 && !statusIn(run.Status, filter.Statuses) {
+				continue
+			}
+			if filter.ActiveOnly && !isActiveRunStatus(run.Status) {
+				continue
+			}
 			runs = append(runs, run)
 		}
 		return nil
@@ -317,7 +423,7 @@ func (s *BoltStore) ListOperationsByRun(ctx context.Context, runID string) ([]Op
 
 func (s *BoltStore) initialize() error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		for _, name := range [][]byte{runsBucket, resourcesBucket, operationsBucket} {
+		for _, name := range [][]byte{runsBucket, resourcesBucket, operationsBucket, locksBucket} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return fmt.Errorf("failed to create bucket %s: %w", name, err)
 			}
@@ -333,6 +439,66 @@ func (s *BoltStore) initialize() error {
 		}
 		return nil
 	})
+}
+
+func (s *BoltStore) isStaleLock(lock LifecycleLock, timeout time.Duration, now time.Time) bool {
+	if timeout > 0 && !lock.UpdatedAt.IsZero() && now.Sub(lock.UpdatedAt) > timeout {
+		return true
+	}
+	hostname, err := os.Hostname()
+	if err == nil && hostname == lock.Hostname && lock.PID > 0 && !pidAlive(lock.PID) {
+		return true
+	}
+	return false
+}
+
+func abandonStaleRun(tx *bbolt.Tx, lock LifecycleLock, now time.Time) error {
+	if lock.RunID == "" {
+		return nil
+	}
+	var run TemplateRun
+	if err := getJSON(tx.Bucket(runsBucket), lock.RunID, &run); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	if !isActiveRunStatus(run.Status) {
+		return nil
+	}
+	run.Status = RunStatusAbandoned
+	run.Error = fmt.Sprintf("run abandoned after stale %s lifecycle lock was recovered", lock.Action)
+	run.CompletedAt = &now
+	return putJSON(tx.Bucket(runsBucket), run.ID, run)
+}
+
+func pidAlive(pid int) bool {
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = process.Signal(syscall.Signal(0))
+	return pidSignalMeansAlive(err)
+}
+
+func pidSignalMeansAlive(err error) bool {
+	if err == nil {
+		return true
+	}
+	return !errors.Is(err, syscall.ESRCH)
+}
+
+func statusIn(status RunStatus, statuses []RunStatus) bool {
+	for _, candidate := range statuses {
+		if status == candidate {
+			return true
+		}
+	}
+	return false
+}
+
+func isActiveRunStatus(status RunStatus) bool {
+	return status == RunStatusPending || status == RunStatusRunning
 }
 
 func (s *BoltStore) listResources(ctx context.Context, indexBucket []byte, indexKey string) ([]ManagedResource, error) {

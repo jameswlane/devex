@@ -17,13 +17,38 @@ import (
 type lifecycleMemoryStore struct {
 	runs      map[string]state.TemplateRun
 	resources map[string]state.ManagedResource
+	locks     map[string]state.LifecycleLock
 }
 
 func newLifecycleMemoryStore() *lifecycleMemoryStore {
 	return &lifecycleMemoryStore{
 		runs:      make(map[string]state.TemplateRun),
 		resources: make(map[string]state.ManagedResource),
+		locks:     make(map[string]state.LifecycleLock),
 	}
+}
+
+func (s *lifecycleMemoryStore) AcquireLifecycleLock(_ context.Context, lock state.LifecycleLock, _ state.LockOptions) error {
+	s.locks[lock.TemplateID] = lock
+	return nil
+}
+
+func (s *lifecycleMemoryStore) ReleaseLifecycleLock(_ context.Context, templateID string, _ string) error {
+	delete(s.locks, templateID)
+	return nil
+}
+
+func (s *lifecycleMemoryStore) UpdateLifecycleLock(_ context.Context, templateID string, runID string) error {
+	lock, ok := s.locks[templateID]
+	if !ok {
+		return fmt.Errorf("lock not found: %s", templateID)
+	}
+	if lock.RunID != runID {
+		return state.ErrLifecycleLockActive
+	}
+	lock.UpdatedAt = time.Unix(300, 0)
+	s.locks[templateID] = lock
+	return nil
 }
 
 func (s *lifecycleMemoryStore) CreateRun(_ context.Context, run state.TemplateRun) error {
@@ -84,6 +109,18 @@ func (s *lifecycleMemoryStore) ListRuns(_ context.Context, filter state.RunFilte
 			continue
 		}
 		if filter.Status != "" && run.Status != filter.Status {
+			continue
+		}
+		if len(filter.Statuses) > 0 {
+			matched := false
+			for _, status := range filter.Statuses {
+				matched = matched || run.Status == status
+			}
+			if !matched {
+				continue
+			}
+		}
+		if filter.ActiveOnly && run.Status != state.RunStatusPending && run.Status != state.RunStatusRunning {
 			continue
 		}
 		runs = append(runs, run)

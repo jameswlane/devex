@@ -3,7 +3,9 @@ package state
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -240,6 +242,155 @@ func TestBoltStoreReturnsErrorForMissingPrimaryBucket(t *testing.T) {
 	_, err := store.ListRuns(context.Background(), RunFilter{})
 	if err == nil {
 		t.Fatal("ListRuns() error = nil, want missing bucket error")
+	}
+}
+
+func TestBoltStoreLifecycleLockAcquireConflictAndRelease(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	lock := LifecycleLock{
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		RunID:      "run-1",
+		PID:        os.Getpid(),
+		Hostname:   "test-host",
+		StartedAt:  time.Unix(100, 0),
+		UpdatedAt:  time.Unix(100, 0),
+	}
+	if err := store.AcquireLifecycleLock(ctx, lock, LockOptions{StaleTimeout: time.Hour}); err != nil {
+		t.Fatalf("AcquireLifecycleLock() error = %v", err)
+	}
+	err := store.AcquireLifecycleLock(ctx, LifecycleLock{
+		TemplateID: "databases",
+		Action:     templates.LifecycleMaintain,
+		RunID:      "run-2",
+	}, LockOptions{StaleTimeout: time.Hour})
+	if !errors.Is(err, ErrLifecycleLockActive) {
+		t.Fatalf("AcquireLifecycleLock() conflict error = %v, want ErrLifecycleLockActive", err)
+	}
+	if err := store.ReleaseLifecycleLock(ctx, "databases", "run-1"); err != nil {
+		t.Fatalf("ReleaseLifecycleLock() error = %v", err)
+	}
+	if err := store.AcquireLifecycleLock(ctx, LifecycleLock{
+		TemplateID: "databases",
+		Action:     templates.LifecycleMaintain,
+		RunID:      "run-2",
+	}, LockOptions{StaleTimeout: time.Hour}); err != nil {
+		t.Fatalf("AcquireLifecycleLock() after release error = %v", err)
+	}
+}
+
+func TestBoltStoreUpdateLifecycleLockRefreshesOwnerOnly(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	now := time.Unix(100, 0)
+	store.nowFn = func() time.Time { return now }
+
+	if err := store.AcquireLifecycleLock(ctx, LifecycleLock{
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		RunID:      "run-1",
+	}, LockOptions{StaleTimeout: time.Hour}); err != nil {
+		t.Fatalf("AcquireLifecycleLock() error = %v", err)
+	}
+	now = time.Unix(200, 0)
+	if err := store.UpdateLifecycleLock(ctx, "databases", "run-1"); err != nil {
+		t.Fatalf("UpdateLifecycleLock() error = %v", err)
+	}
+	if err := store.UpdateLifecycleLock(ctx, "databases", "run-2"); !errors.Is(err, ErrLifecycleLockActive) {
+		t.Fatalf("UpdateLifecycleLock() wrong owner error = %v, want ErrLifecycleLockActive", err)
+	}
+
+	var lock LifecycleLock
+	if err := store.db.View(func(tx *bbolt.Tx) error {
+		return getJSON(tx.Bucket(locksBucket), "databases", &lock)
+	}); err != nil {
+		t.Fatalf("read lock error = %v", err)
+	}
+	if !lock.UpdatedAt.Equal(time.Unix(200, 0)) {
+		t.Fatalf("UpdatedAt = %s, want %s", lock.UpdatedAt, time.Unix(200, 0))
+	}
+}
+
+func TestPIDSignalErrorClassificationIsConservative(t *testing.T) {
+	if pidSignalMeansAlive(syscall.ESRCH) {
+		t.Fatal("ESRCH should be treated as a dead PID")
+	}
+	if !pidSignalMeansAlive(syscall.EPERM) {
+		t.Fatal("EPERM should be treated as an alive PID")
+	}
+	if !pidSignalMeansAlive(errors.New("unexpected signal error")) {
+		t.Fatal("unexpected PID signal errors should be treated as alive")
+	}
+}
+
+func TestBoltStoreLifecycleLockStaleRecoveryAbandonsRunningRun(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	now := time.Unix(100, 0)
+	store.nowFn = func() time.Time { return now }
+
+	if err := store.CreateRun(ctx, TemplateRun{
+		ID:         "run-1",
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		Status:     RunStatusRunning,
+		StartedAt:  time.Unix(100, 0),
+	}); err != nil {
+		t.Fatalf("CreateRun() error = %v", err)
+	}
+	if err := store.AcquireLifecycleLock(ctx, LifecycleLock{
+		TemplateID: "databases",
+		Action:     templates.LifecycleInstall,
+		RunID:      "run-1",
+		PID:        os.Getpid(),
+		Hostname:   "other-host",
+		StartedAt:  time.Unix(100, 0),
+		UpdatedAt:  time.Unix(100, 0),
+	}, LockOptions{StaleTimeout: time.Hour}); err != nil {
+		t.Fatalf("AcquireLifecycleLock() initial error = %v", err)
+	}
+	now = time.Unix(4_000, 0)
+	if err := store.AcquireLifecycleLock(ctx, LifecycleLock{
+		TemplateID: "databases",
+		Action:     templates.LifecycleMaintain,
+		RunID:      "run-2",
+	}, LockOptions{StaleTimeout: time.Hour}); err != nil {
+		t.Fatalf("AcquireLifecycleLock() stale recovery error = %v", err)
+	}
+
+	run, err := store.GetRun(ctx, "run-1")
+	if err != nil {
+		t.Fatalf("GetRun() error = %v", err)
+	}
+	if run.Status != RunStatusAbandoned {
+		t.Fatalf("stale run status = %q, want %q", run.Status, RunStatusAbandoned)
+	}
+	if run.CompletedAt == nil || run.Error == "" {
+		t.Fatalf("stale run was not completed with an error: %#v", run)
+	}
+}
+
+func TestBoltStoreListRunsActiveOnly(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	for _, run := range []TemplateRun{
+		{ID: "pending", TemplateID: "databases", Action: templates.LifecycleInstall, Status: RunStatusPending},
+		{ID: "running", TemplateID: "databases", Action: templates.LifecycleInstall, Status: RunStatusRunning},
+		{ID: "abandoned", TemplateID: "databases", Action: templates.LifecycleInstall, Status: RunStatusAbandoned},
+	} {
+		if err := store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("CreateRun(%s) error = %v", run.ID, err)
+		}
+	}
+
+	runs, err := store.ListRuns(ctx, RunFilter{TemplateID: "databases", ActiveOnly: true})
+	if err != nil {
+		t.Fatalf("ListRuns() error = %v", err)
+	}
+	if len(runs) != 2 {
+		t.Fatalf("active runs = %#v, want pending and running", runs)
 	}
 }
 

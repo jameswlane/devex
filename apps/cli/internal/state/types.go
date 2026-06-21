@@ -17,6 +17,7 @@ const (
 	RunStatusSucceeded RunStatus = "succeeded"
 	RunStatusFailed    RunStatus = "failed"
 	RunStatusCanceled  RunStatus = "canceled"
+	RunStatusAbandoned RunStatus = "abandoned"
 )
 
 type ResourceState string
@@ -92,9 +93,29 @@ type RunFilter struct {
 	TemplateID string
 	Action     LifecycleAction
 	Status     RunStatus
+	Statuses   []RunStatus
+	ActiveOnly bool
+}
+
+type LifecycleLock struct {
+	TemplateID string          `json:"template_id"`
+	Action     LifecycleAction `json:"action"`
+	RunID      string          `json:"run_id"`
+	PID        int             `json:"pid"`
+	Hostname   string          `json:"hostname"`
+	StartedAt  time.Time       `json:"started_at"`
+	UpdatedAt  time.Time       `json:"updated_at"`
+}
+
+type LockOptions struct {
+	StaleTimeout time.Duration
+	Force        bool
 }
 
 type StateStore interface {
+	AcquireLifecycleLock(ctx context.Context, lock LifecycleLock, opts LockOptions) error
+	UpdateLifecycleLock(ctx context.Context, templateID string, runID string) error
+	ReleaseLifecycleLock(ctx context.Context, templateID string, runID string) error
 	CreateRun(ctx context.Context, run TemplateRun) error
 	CompleteRun(ctx context.Context, runID string, status RunStatus, errMsg string) error
 	RecordOperation(ctx context.Context, op OperationRecord) error

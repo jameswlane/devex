@@ -49,6 +49,8 @@ type ExecutionPlan struct {
 	Inputs          map[string]any  `json:"inputs,omitempty" yaml:"inputs,omitempty"`
 	Steps           []PlannedStep   `json:"steps" yaml:"steps"`
 	CreatedAt       time.Time       `json:"created_at" yaml:"created_at"`
+	RawInputs       map[string]any  `json:"-" yaml:"-"`
+	SensitiveValues []string        `json:"-" yaml:"-"`
 }
 
 type PlannedStep struct {
@@ -158,6 +160,8 @@ func (p *TemplatePlanner) Plan(ctx context.Context, idOrPath string, opts PlanOp
 		TemplateVersion: spec.Version,
 		Action:          opts.Action,
 		Inputs:          RedactSensitiveInputs(spec.Inputs, inputs),
+		RawInputs:       cloneAnyMap(inputs),
+		SensitiveValues: sensitiveInputValues(spec.Inputs, inputs),
 		Steps:           planned,
 		CreatedAt:       createdAt,
 	}, nil
@@ -185,7 +189,7 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 			Args:       interpolateStringSlice(step.Plugin.Args, evalCtx),
 			Env:        interpolateStringMap(step.Plugin.Env, evalCtx),
 			WorkingDir: interpolateString(step.Plugin.WorkingDir, evalCtx),
-			Metadata:   step.Plugin.Metadata,
+			Metadata:   interpolateAnyMap(step.Plugin.Metadata, evalCtx),
 		}
 	case step.Shell != nil:
 		result.Type = StepTypeShell
@@ -277,7 +281,7 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 		Plugin:   plugin,
 		Command:  interpolateString(command, evalCtx),
 		Args:     interpolateStringSlice(action.Args, evalCtx),
-		Metadata: action.Metadata,
+		Metadata: interpolateAnyMap(action.Metadata, evalCtx),
 	}
 	if len(result.Request.Args) == 0 && app.InstallCommand != "" {
 		result.Request.Args = strings.Fields(app.InstallCommand)
@@ -359,6 +363,301 @@ func RedactSensitiveInputs(defs map[string]TemplateInput, values map[string]any)
 		redacted[key] = value
 	}
 	return redacted
+}
+
+func RedactPlan(spec TemplateSpec, rawPlan ExecutionPlan) ExecutionPlan {
+	plan := cloneExecutionPlan(rawPlan)
+	plan.Inputs = RedactSensitiveInputs(spec.Inputs, firstNonEmptyMap(rawPlan.RawInputs, rawPlan.Inputs))
+	plan.SensitiveValues = sensitiveInputValues(spec.Inputs, firstNonEmptyMap(rawPlan.RawInputs, rawPlan.Inputs))
+	return RedactPlanWithSensitiveValues(plan)
+}
+
+func RedactPlanWithSensitiveValues(rawPlan ExecutionPlan) ExecutionPlan {
+	plan := cloneExecutionPlan(rawPlan)
+	values := compactSensitiveValues(plan.SensitiveValues)
+	if len(values) == 0 {
+		plan.RawInputs = nil
+		plan.SensitiveValues = nil
+		return plan
+	}
+	plan.TemplateID = redactString(plan.TemplateID, values)
+	plan.TemplateVersion = redactString(plan.TemplateVersion, values)
+	plan.Inputs = redactAnyMap(plan.Inputs, values)
+	for stepIndex := range plan.Steps {
+		step := &plan.Steps[stepIndex]
+		step.ID = redactString(step.ID, values)
+		step.DisplayName = redactString(step.DisplayName, values)
+		step.Request = redactExecutionRequest(step.Request, values)
+		step.Resources = redactResourceDeclarations(step.Resources, values)
+		step.Metadata = redactAnyMap(step.Metadata, values)
+		if step.App != nil {
+			step.App = redactAppConfig(step.App, values)
+		}
+	}
+	plan.RawInputs = nil
+	plan.SensitiveValues = nil
+	return plan
+}
+
+func RedactMapWithSensitiveValues(source map[string]any, values []string) map[string]any {
+	return redactAnyMap(source, compactSensitiveValues(values))
+}
+
+func sensitiveInputValues(defs map[string]TemplateInput, values map[string]any) []string {
+	var sensitive []string
+	for key, input := range defs {
+		if !input.Sensitive {
+			continue
+		}
+		appendSensitiveValue(&sensitive, values[key])
+	}
+	return compactSensitiveValues(sensitive)
+}
+
+func appendSensitiveValue(values *[]string, value any) {
+	switch typed := value.(type) {
+	case nil:
+		return
+	case string:
+		*values = append(*values, typed)
+	case []string:
+		*values = append(*values, typed...)
+	case []any:
+		for _, item := range typed {
+			appendSensitiveValue(values, item)
+		}
+	default:
+		*values = append(*values, fmt.Sprint(typed))
+	}
+}
+
+func compactSensitiveValues(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	compacted := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || value == "[REDACTED]" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		compacted = append(compacted, value)
+	}
+	sort.SliceStable(compacted, func(i, j int) bool {
+		return len(compacted[i]) > len(compacted[j])
+	})
+	return compacted
+}
+
+func redactExecutionRequest(request ExecutionRequest, values []string) ExecutionRequest {
+	return ExecutionRequest{
+		Plugin:     redactString(request.Plugin, values),
+		Command:    redactString(request.Command, values),
+		Args:       redactStringSlice(request.Args, values),
+		Env:        redactStringMap(request.Env, values),
+		WorkingDir: redactString(request.WorkingDir, values),
+		Metadata:   redactAnyMap(request.Metadata, values),
+	}
+}
+
+func redactResourceDeclarations(resources []ResourceDeclaration, values []string) []ResourceDeclaration {
+	if len(resources) == 0 {
+		return nil
+	}
+	redacted := make([]ResourceDeclaration, len(resources))
+	for index, resource := range resources {
+		redacted[index] = ResourceDeclaration{
+			Type:       redactString(resource.Type, values),
+			Name:       redactString(resource.Name, values),
+			ExternalID: redactString(resource.ExternalID, values),
+			Metadata:   redactAnyMap(resource.Metadata, values),
+		}
+	}
+	return redacted
+}
+
+func redactAnyMap(source map[string]any, values []string) map[string]any {
+	if len(source) == 0 {
+		return nil
+	}
+	redacted := make(map[string]any, len(source))
+	for key, value := range source {
+		redacted[redactString(key, values)] = redactAnyValue(value, values)
+	}
+	return redacted
+}
+
+func redactAnyValue(value any, values []string) any {
+	switch typed := value.(type) {
+	case string:
+		return redactString(typed, values)
+	case []string:
+		return redactStringSlice(typed, values)
+	case []any:
+		redacted := make([]any, len(typed))
+		for index, item := range typed {
+			redacted[index] = redactAnyValue(item, values)
+		}
+		return redacted
+	case map[string]any:
+		return redactAnyMap(typed, values)
+	case map[string]string:
+		return redactStringMap(typed, values)
+	default:
+		return value
+	}
+}
+
+func redactStringSlice(source []string, values []string) []string {
+	if len(source) == 0 {
+		return nil
+	}
+	redacted := make([]string, len(source))
+	for index, value := range source {
+		redacted[index] = redactString(value, values)
+	}
+	return redacted
+}
+
+func redactStringMap(source map[string]string, values []string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	redacted := make(map[string]string, len(source))
+	for key, value := range source {
+		redacted[redactString(key, values)] = redactString(value, values)
+	}
+	return redacted
+}
+
+func redactString(value string, values []string) string {
+	for _, sensitive := range values {
+		value = strings.ReplaceAll(value, sensitive, "[REDACTED]")
+	}
+	return value
+}
+
+func firstNonEmptyMap(first map[string]any, second map[string]any) map[string]any {
+	if len(first) > 0 {
+		return first
+	}
+	return second
+}
+
+func redactAppConfig(app *types.AppConfig, values []string) *types.AppConfig {
+	if app == nil {
+		return nil
+	}
+	redacted := *app
+	redacted.Name = redactString(redacted.Name, values)
+	redacted.Description = redactString(redacted.Description, values)
+	redacted.Category = redactString(redacted.Category, values)
+	redacted.InstallMethod = redactString(redacted.InstallMethod, values)
+	redacted.InstallCommand = redactString(redacted.InstallCommand, values)
+	redacted.UninstallCommand = redactString(redacted.UninstallCommand, values)
+	redacted.Dependencies = redactStringSlice(redacted.Dependencies, values)
+	redacted.CleanupFiles = redactStringSlice(redacted.CleanupFiles, values)
+	redacted.DownloadURL = redactString(redacted.DownloadURL, values)
+	redacted.InstallDir = redactString(redacted.InstallDir, values)
+	redacted.Symlink = redactString(redacted.Symlink, values)
+	redacted.ShellUpdates = redactStringSlice(redacted.ShellUpdates, values)
+	redacted.DockerOptions.ContainerName = redactString(redacted.DockerOptions.ContainerName, values)
+	redacted.DockerOptions.Environment = redactStringSlice(redacted.DockerOptions.Environment, values)
+	redacted.DockerOptions.Ports = redactStringSlice(redacted.DockerOptions.Ports, values)
+	redacted.DockerOptions.RestartPolicy = redactString(redacted.DockerOptions.RestartPolicy, values)
+	return &redacted
+}
+
+func cloneExecutionPlan(source ExecutionPlan) ExecutionPlan {
+	clone := source
+	clone.Inputs = cloneAnyMap(source.Inputs)
+	clone.RawInputs = cloneAnyMap(source.RawInputs)
+	clone.SensitiveValues = append([]string(nil), source.SensitiveValues...)
+	clone.Steps = make([]PlannedStep, len(source.Steps))
+	for index, step := range source.Steps {
+		clone.Steps[index] = clonePlannedStep(step)
+	}
+	return clone
+}
+
+func clonePlannedStep(source PlannedStep) PlannedStep {
+	clone := source
+	clone.Request = cloneExecutionRequest(source.Request)
+	clone.Resources = cloneResourceDeclarations(source.Resources)
+	clone.DependsOn = append([]string(nil), source.DependsOn...)
+	clone.Metadata = cloneAnyMap(source.Metadata)
+	if source.App != nil {
+		appCopy := *source.App
+		clone.App = &appCopy
+	}
+	return clone
+}
+
+func cloneExecutionRequest(source ExecutionRequest) ExecutionRequest {
+	return ExecutionRequest{
+		Plugin:     source.Plugin,
+		Command:    source.Command,
+		Args:       append([]string(nil), source.Args...),
+		Env:        cloneStringMap(source.Env),
+		WorkingDir: source.WorkingDir,
+		Metadata:   cloneAnyMap(source.Metadata),
+	}
+}
+
+func cloneResourceDeclarations(source []ResourceDeclaration) []ResourceDeclaration {
+	if len(source) == 0 {
+		return nil
+	}
+	clone := make([]ResourceDeclaration, len(source))
+	for index, resource := range source {
+		clone[index] = ResourceDeclaration{
+			Type:       resource.Type,
+			Name:       resource.Name,
+			ExternalID: resource.ExternalID,
+			Metadata:   cloneAnyMap(resource.Metadata),
+		}
+	}
+	return clone
+}
+
+func cloneAnyMap(source map[string]any) map[string]any {
+	if len(source) == 0 {
+		return nil
+	}
+	clone := make(map[string]any, len(source))
+	for key, value := range source {
+		clone[key] = cloneAnyValue(value)
+	}
+	return clone
+}
+
+func cloneAnyValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneAnyMap(typed)
+	case map[string]string:
+		return cloneStringMap(typed)
+	case []any:
+		clone := make([]any, len(typed))
+		for index, item := range typed {
+			clone[index] = cloneAnyValue(item)
+		}
+		return clone
+	case []string:
+		return append([]string(nil), typed...)
+	default:
+		return value
+	}
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	if len(source) == 0 {
+		return nil
+	}
+	clone := make(map[string]string, len(source))
+	for key, value := range source {
+		clone[key] = value
+	}
+	return clone
 }
 
 func fileStepArgs(action *TemplateFileAction, evalCtx EvaluationContext) []string {

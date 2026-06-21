@@ -28,7 +28,11 @@ type ExecutionRuntime struct {
 }
 
 type ExecuteOptions struct {
-	DryRun bool
+	DryRun                bool
+	RedactedPlan          *templates.ExecutionPlan
+	LockStaleTimeout      time.Duration
+	LockHeartbeatInterval time.Duration
+	ForceLock             bool
 }
 
 type ExecutionResult struct {
@@ -37,6 +41,8 @@ type ExecutionResult struct {
 	StepsPlanned  int
 	StepsExecuted int
 }
+
+const DefaultLockStaleTimeout = 30 * time.Minute
 
 func NewExecutionRuntime(store state.StateStore, pluginExecutor PluginExecutor) *ExecutionRuntime {
 	executors := map[templates.StepType]StepExecutor{
@@ -70,14 +76,45 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	if r.Store == nil {
 		return nil, fmt.Errorf("state store is required")
 	}
+	redactedPlan := templates.RedactPlanWithSensitiveValues(plan)
+	if opts.RedactedPlan != nil {
+		redactedPlan = *opts.RedactedPlan
+	}
+	lockStaleTimeout := opts.LockStaleTimeout
+	if lockStaleTimeout == 0 {
+		lockStaleTimeout = DefaultLockStaleTimeout
+	}
+	lockAcquired := false
+	if shouldLockAction(plan.Action) {
+		if err := r.Store.AcquireLifecycleLock(ctx, state.LifecycleLock{
+			TemplateID: plan.TemplateID,
+			Action:     plan.Action,
+			RunID:      plan.ID,
+			PID:        os.Getpid(),
+			Hostname:   r.hostname(),
+			StartedAt:  r.now(),
+			UpdatedAt:  r.now(),
+		}, state.LockOptions{
+			StaleTimeout: lockStaleTimeout,
+			Force:        opts.ForceLock,
+		}); err != nil {
+			return nil, err
+		}
+		lockAcquired = true
+		stopHeartbeat := r.startLockHeartbeat(ctx, plan.TemplateID, plan.ID, heartbeatInterval(lockStaleTimeout, opts.LockHeartbeatInterval))
+		defer func() {
+			stopHeartbeat()
+			_ = r.Store.ReleaseLifecycleLock(context.Background(), plan.TemplateID, plan.ID)
+		}()
+	}
 
 	run := state.TemplateRun{
 		ID:              plan.ID,
 		TemplateID:      plan.TemplateID,
 		TemplateVersion: plan.TemplateVersion,
 		Action:          plan.Action,
-		Inputs:          cloneMap(plan.Inputs),
-		Plan:            plan,
+		Inputs:          cloneMap(redactedPlan.Inputs),
+		Plan:            redactedPlan,
 		Status:          state.RunStatusRunning,
 		Hostname:        r.hostname(),
 		Platform: map[string]string{
@@ -87,6 +124,9 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		StartedAt: r.now(),
 	}
 	if err := r.Store.CreateRun(ctx, run); err != nil {
+		if lockAcquired {
+			_ = r.Store.ReleaseLifecycleLock(context.Background(), plan.TemplateID, plan.ID)
+		}
 		return nil, err
 	}
 
@@ -102,13 +142,17 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 			return result, err
 		}
 		opID := operationID(run.ID, step.ID, index)
+		persistedStep := step
+		if index < len(redactedPlan.Steps) {
+			persistedStep = redactedPlan.Steps[index]
+		}
 		if err := r.Store.RecordOperation(ctx, state.OperationRecord{
 			ID:         opID,
 			RunID:      run.ID,
 			TemplateID: run.TemplateID,
 			StepID:     step.ID,
 			Action:     run.Action,
-			Request:    step.Request,
+			Request:    persistedStep.Request,
 			Status:     state.OperationStatusRunning,
 			StartedAt:  r.now(),
 		}); err != nil {
@@ -118,7 +162,8 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 
 		outputs, err := r.executeStep(ctx, step)
 		if err != nil {
-			if completeErr := r.Store.CompleteOperation(ctx, opID, state.OperationStatusFailed, outputs, err.Error()); completeErr != nil {
+			persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
+			if completeErr := r.Store.CompleteOperation(ctx, opID, state.OperationStatusFailed, persistedOutputs, err.Error()); completeErr != nil {
 				_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, completeErr.Error())
 				return result, completeErr
 			}
@@ -138,11 +183,12 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 			return result, err
 		}
 
-		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusSucceeded, outputs, ""); err != nil {
+		persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
+		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusSucceeded, persistedOutputs, ""); err != nil {
 			_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, err.Error())
 			return result, err
 		}
-		if err := r.recordResources(ctx, run.ID, plan.TemplateID, step, outputs); err != nil {
+		if err := r.recordResources(ctx, run.ID, plan.TemplateID, persistedStep, persistedOutputs); err != nil {
 			_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, err.Error())
 			return result, err
 		}
@@ -157,6 +203,52 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		return result, err
 	}
 	return result, nil
+}
+
+func shouldLockAction(action templates.LifecycleAction) bool {
+	return action == templates.LifecycleInstall || action == templates.LifecycleMaintain || action == templates.LifecycleRemove
+}
+
+func (r *ExecutionRuntime) startLockHeartbeat(ctx context.Context, templateID string, runID string, interval time.Duration) func() {
+	if interval <= 0 {
+		return func() {}
+	}
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				_ = r.Store.UpdateLifecycleLock(context.Background(), templateID, runID)
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
+func heartbeatInterval(staleTimeout time.Duration, configured time.Duration) time.Duration {
+	if configured > 0 {
+		return configured
+	}
+	if staleTimeout <= 0 {
+		return 0
+	}
+	interval := staleTimeout / 3
+	if interval > time.Minute {
+		return time.Minute
+	}
+	if interval < 5*time.Second {
+		return 5 * time.Second
+	}
+	return interval
 }
 
 func (r *ExecutionRuntime) executeStep(ctx context.Context, step templates.PlannedStep) (map[string]any, error) {

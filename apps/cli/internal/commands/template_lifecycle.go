@@ -92,7 +92,8 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 	}
 
 	if opts.DryRun {
-		return displayExecutionPlan(plan, opts.Format)
+		redactedPlan := templates.RedactPlan(*spec, *plan)
+		return displayExecutionPlan(&redactedPlan, opts.Format)
 	}
 
 	pluginExecutor, err := resolveTemplatePluginExecutor(getPluginBootstrap)
