@@ -720,12 +720,10 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatalf("os.Pipe() error = %v", err)
 	}
 	os.Stdout = writePipe
-	t.Cleanup(func() {
-		os.Stdout = oldStdout
-	})
 
 	fn()
 
+	os.Stdout = oldStdout
 	if err := writePipe.Close(); err != nil {
 		t.Fatalf("stdout pipe close error = %v", err)
 	}

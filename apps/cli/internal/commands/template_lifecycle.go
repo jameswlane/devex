@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -37,6 +38,8 @@ type templateLifecycleResult struct {
 	StepsExecuted int                       `json:"steps_executed" yaml:"steps_executed"`
 	Resources     []state.ManagedResource   `json:"resources,omitempty" yaml:"resources,omitempty"`
 }
+
+var templatePluginExecutorResolver = resolveTemplatePluginExecutor
 
 func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templates.LifecycleAction, opts templateLifecycleOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {
 	if idOrPath == "" {
@@ -90,12 +93,12 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 		return displayExecutionPlan(&redactedPlan, opts.Format)
 	}
 
-	pluginExecutor, err := resolveTemplatePluginExecutor(getPluginBootstrap)
+	pluginExecutor, err := templatePluginExecutorResolver(getPluginBootstrap)
 	if err != nil {
 		return err
 	}
-	runtime := templateexec.NewExecutionRuntime(store, pluginExecutor)
-	result, err := runtime.Execute(ctx, *plan, templateexec.ExecuteOptions{})
+	execRuntime := templateexec.NewExecutionRuntime(store, pluginExecutor)
+	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{})
 	if err != nil {
 		if action == templates.LifecycleStatus && len(resources) > 0 {
 			return displayRecordedTemplateResources(templateLifecycleResult{
@@ -436,7 +439,7 @@ func knownResourcesByStep(resources []state.ManagedResource) map[string]template
 func removedResourceIDsForPlan(plan templates.ExecutionPlan, resources []state.ManagedResource) map[string]bool {
 	removed := make(map[string]bool)
 	for _, step := range plan.Steps {
-		if step.Request.Command != string(templates.LifecycleRemove) && step.Request.Command != "remove" && step.Request.Command != "uninstall" {
+		if step.Request.Command != "remove" && step.Request.Command != "uninstall" {
 			continue
 		}
 		for _, resource := range resources {
@@ -454,7 +457,7 @@ func removedResourceIDsForSuccessfulOperations(operations []state.OperationRecor
 		if operation.Status != state.OperationStatusSucceeded {
 			continue
 		}
-		if operation.Request.Command != string(templates.LifecycleRemove) && operation.Request.Command != "remove" && operation.Request.Command != "uninstall" {
+		if operation.Request.Command != "remove" && operation.Request.Command != "uninstall" {
 			continue
 		}
 		step := templates.PlannedStep{
@@ -500,21 +503,12 @@ func requestTargetValues(request templates.ExecutionRequest) []string {
 	values := append([]string(nil), request.Args...)
 	for _, arg := range request.Args {
 		for _, separator := range []string{"=", ":"} {
-			if before, after, found := splitOnce(arg, separator); found && before != "" && after != "" {
+			if before, after, found := strings.Cut(arg, separator); found && before != "" && after != "" {
 				values = append(values, after)
 			}
 		}
 	}
 	return values
-}
-
-func splitOnce(value string, separator string) (string, string, bool) {
-	for index := 0; index+len(separator) <= len(value); index++ {
-		if value[index:index+len(separator)] == separator {
-			return value[:index], value[index+len(separator):], true
-		}
-	}
-	return "", "", false
 }
 
 func mapFromAny(value any) (map[string]any, bool) {
@@ -550,7 +544,7 @@ func stringSliceFromAny(value any) []string {
 	}
 }
 
-func timeNow() time.Time {
+var timeNow = func() time.Time {
 	return time.Now()
 }
 

@@ -100,7 +100,7 @@ Configuration files are located in ~/.local/share/devex/config/:
 				return executeTemplateInstall(ctx, templateID, templateInstallOptions{
 					Answers:        answers,
 					AnswerFiles:    answerFiles,
-					NonInteractive: viper.GetBool("non-interactive"),
+					NonInteractive: nonInteractive,
 					DryRun:         dryRun,
 				}, settings, getPluginBootstrap)
 			}
@@ -222,6 +222,8 @@ type pluginBootstrapExecutor struct {
 	bootstrap *bootstrap.PluginBootstrap
 }
 
+var templateInstallPluginExecutorResolver = resolveTemplateInstallPluginExecutor
+
 func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName string, args []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -268,18 +270,12 @@ func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateI
 		store = boltStore
 	}
 
-	var pluginExecutor templateexec.PluginExecutor
-	if getPluginBootstrap != nil {
-		if pluginBootstrap := getPluginBootstrap(); pluginBootstrap != nil {
-			pluginExecutor = pluginBootstrapExecutor{bootstrap: pluginBootstrap}
-		}
+	pluginExecutor, err := templateInstallPluginExecutorResolver(getPluginBootstrap, opts.DryRun)
+	if err != nil {
+		return err
 	}
-	if pluginExecutor == nil && !opts.DryRun {
-		return fmt.Errorf("plugin runtime is unavailable for template install")
-	}
-
-	runtime := templateexec.NewExecutionRuntime(store, pluginExecutor)
-	result, err := runtime.Execute(ctx, *plan, templateexec.ExecuteOptions{DryRun: opts.DryRun})
+	execRuntime := templateexec.NewExecutionRuntime(store, pluginExecutor)
+	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{DryRun: opts.DryRun})
 	if err != nil {
 		return err
 	}
@@ -289,6 +285,18 @@ func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateI
 	}
 	fmt.Printf("Template install run %s completed: %d/%d step(s) executed\n", result.RunID, result.StepsExecuted, result.StepsPlanned)
 	return nil
+}
+
+func resolveTemplateInstallPluginExecutor(getPluginBootstrap pluginBootstrapProvider, dryRun bool) (templateexec.PluginExecutor, error) {
+	if getPluginBootstrap != nil {
+		if pluginBootstrap := getPluginBootstrap(); pluginBootstrap != nil {
+			return pluginBootstrapExecutor{bootstrap: pluginBootstrap}, nil
+		}
+	}
+	if dryRun {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("plugin runtime is unavailable for template install")
 }
 
 func resolveAppsByName(settings config.CrossPlatformSettings, requested []string) ([]types.CrossPlatformApp, error) {
