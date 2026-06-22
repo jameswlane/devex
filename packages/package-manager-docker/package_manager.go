@@ -29,8 +29,10 @@ type DockerInstaller struct {
 
 // Execute handles command execution
 func (d *DockerInstaller) Execute(command string, args []string) error {
-	ctx := context.Background()
+	return d.ExecuteContext(context.Background(), command, args)
+}
 
+func (d *DockerInstaller) ExecuteContext(ctx context.Context, command string, args []string) error {
 	switch command {
 	case "ensure-installed":
 		return d.handleEnsureInstalled(ctx, args)
@@ -112,10 +114,10 @@ func (d *DockerInstaller) handleStatus(ctx context.Context, args []string) error
 		d.logger.Success("Docker daemon is running")
 
 		if len(args) > 0 {
-			if err := d.ValidateContainerArgs(args); err != nil {
+			inspectArgs, err := d.BuildDockerStatusArgs(args)
+			if err != nil {
 				return err
 			}
-			inspectArgs := append([]string{"inspect", "--format={{.Name}} {{.State.Status}}"}, args...)
 			if err := sdk.ExecCommandWithContext(ctx, false, "docker", inspectArgs...); err != nil {
 				return fmt.Errorf("failed to inspect containers: %w", err)
 			}

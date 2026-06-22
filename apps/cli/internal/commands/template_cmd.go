@@ -12,6 +12,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
@@ -167,7 +168,7 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 					AnswerFiles:    answerFiles,
 					NonInteractive: nonInteractive,
 				},
-				ValidatePlugins: planner.PluginAvailable != nil,
+				ValidatePlugins: planner.PluginAvailable != nil && !viper.GetBool("skip-plugin-download") && !viper.GetBool("offline"),
 			})
 			if err != nil {
 				return err
@@ -398,7 +399,7 @@ version details, manifest data, and update status.`,
 			if err != nil {
 				spec, specErr := loadCanonicalTemplateSpecForInfo(templateID)
 				if specErr != nil {
-					return fmt.Errorf("failed to get template info: %w", err)
+					return fmt.Errorf("failed to get template info: %w (fallback: %v)", err, specErr)
 				}
 				return displayTemplateSpecInfo(spec, format)
 			}
@@ -596,7 +597,14 @@ func displayTemplateList(templateVersions map[string]*templates.TemplateVersion,
 		fmt.Fprintln(w, "ID\tNAME\tVERSION\tSOURCE\tUPDATE\tDESCRIPTION")
 		fmt.Fprintln(w, "---\t----\t-------\t------\t------\t-----------")
 
-		for id, template := range templateVersions {
+		ids := make([]string, 0, len(templateVersions))
+		for id := range templateVersions {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+
+		for _, id := range ids {
+			template := templateVersions[id]
 			updateStatus := gray("-")
 			if template.UpdateAvailable {
 				updateStatus = yellow(fmt.Sprintf("v%s", template.LatestVersion))
@@ -657,7 +665,9 @@ func displayUpdateCheck(updates []string, format string, tvm *templates.Template
 			return fmt.Errorf("failed to get template versions: %w", err)
 		}
 
-		for _, templateID := range updates {
+		sortedUpdates := append([]string(nil), updates...)
+		sort.Strings(sortedUpdates)
+		for _, templateID := range sortedUpdates {
 			if template, exists := templateVersions[templateID]; exists {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 					blue(templateID),

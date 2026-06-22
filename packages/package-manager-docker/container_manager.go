@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -121,13 +122,10 @@ func (d *DockerInstaller) handleStop(ctx context.Context, args []string) error {
 
 // handleRestart restarts containers
 func (d *DockerInstaller) handleRestart(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no containers specified")
-	}
-	if err := d.ValidateContainerArgs(args); err != nil {
+	cmdArgs, err := d.BuildDockerRestartArgs(args)
+	if err != nil {
 		return err
 	}
-	cmdArgs := append([]string{"restart"}, args...)
 	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
 
@@ -157,13 +155,10 @@ func (d *DockerInstaller) handleLogs(ctx context.Context, args []string) error {
 
 // handleExec executes commands in containers
 func (d *DockerInstaller) handleExec(ctx context.Context, args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("exec requires container and command")
-	}
-	if err := d.ValidateContainerName(args[0]); err != nil {
+	cmdArgs, err := d.BuildDockerExecArgs(args)
+	if err != nil {
 		return err
 	}
-	cmdArgs := append([]string{"exec", "-it"}, args...)
 	return sdk.ExecCommandWithContext(ctx, false, "docker", cmdArgs...)
 }
 
@@ -267,12 +262,19 @@ func (d *DockerInstaller) parseDockerRunOptions(args []string) (DockerRunOptions
 func (d *DockerInstaller) BuildDockerRemoveArgs(args []string) ([]string, []string, error) {
 	removeArgs := []string{"rm"}
 	containers := make([]string, 0, len(args))
+	var forceSeen, volumeSeen bool
 	for _, arg := range args {
 		switch arg {
 		case "--force", "-f":
-			removeArgs = append(removeArgs, "-f")
+			if !forceSeen {
+				removeArgs = append(removeArgs, "-f")
+				forceSeen = true
+			}
 		case "--volumes", "-v":
-			removeArgs = append(removeArgs, "-v")
+			if !volumeSeen {
+				removeArgs = append(removeArgs, "-v")
+				volumeSeen = true
+			}
 		default:
 			if strings.HasPrefix(arg, "-") {
 				return nil, nil, fmt.Errorf("unsupported docker remove flag: %s", arg)
@@ -285,6 +287,52 @@ func (d *DockerInstaller) BuildDockerRemoveArgs(args []string) ([]string, []stri
 	}
 	removeArgs = append(removeArgs, containers...)
 	return removeArgs, containers, nil
+}
+
+func (d *DockerInstaller) BuildDockerRestartArgs(args []string) ([]string, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("no containers specified")
+	}
+	if err := d.ValidateContainerArgs(args); err != nil {
+		return nil, err
+	}
+	return append([]string{"restart"}, args...), nil
+}
+
+func (d *DockerInstaller) BuildDockerStatusArgs(args []string) ([]string, error) {
+	if len(args) == 0 {
+		return nil, fmt.Errorf("no containers specified")
+	}
+	if err := d.ValidateContainerArgs(args); err != nil {
+		return nil, err
+	}
+	return append([]string{"inspect", "--format={{.Name}} {{.State.Status}}"}, args...), nil
+}
+
+func (d *DockerInstaller) BuildDockerExecArgs(args []string) ([]string, error) {
+	if len(args) < 2 {
+		return nil, fmt.Errorf("exec requires container and command")
+	}
+	if err := d.ValidateContainerName(args[0]); err != nil {
+		return nil, err
+	}
+	if err := d.ValidateCommand(args[1:]); err != nil {
+		return nil, err
+	}
+
+	execArgs := []string{"exec", "-i"}
+	if stdoutIsTerminal() {
+		execArgs = append(execArgs, "-t")
+	}
+	return append(execArgs, args...), nil
+}
+
+func stdoutIsTerminal() bool {
+	info, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func splitDockerFlag(arg string) (name string, value string, hasValue bool) {

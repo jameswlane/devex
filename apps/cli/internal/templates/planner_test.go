@@ -490,6 +490,175 @@ var _ = Describe("Template Runtime Planner", func() {
 		Expect(checked).To(HaveKey("package-manager-docker"))
 		Expect(checked).To(HaveKey("tool-shell"))
 	})
+
+	It("plans built-in database lifecycle requests with non-interactive answers", func() {
+		planner := templates.TemplatePlanner{Manager: manager}
+		inputs := templates.InputResolverOptions{
+			Answers: []string{
+				"databases=postgres,redis,mysql",
+				"postgres_name=devex-postgres",
+				"redis_name=devex-redis",
+				"mysql_name=devex-mysql",
+				"mysql_password=devex-secret",
+			},
+			NonInteractive: true,
+		}
+
+		installPlan, err := planner.Plan(context.Background(), "databases", templates.PlanOptions{
+			Action:       templates.LifecycleInstall,
+			InputOptions: inputs,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(installPlan, "postgres").Command).To(Equal("install"))
+		Expect(stepRequest(installPlan, "postgres").Args).To(Equal([]string{
+			"postgres:16",
+			"--name=devex-postgres",
+			"--port=127.0.0.1:5432:5432",
+			"--env=POSTGRES_HOST_AUTH_METHOD=trust",
+			"--volume=devex-postgres-data:/var/lib/postgresql/data",
+			"--restart=unless-stopped",
+			"--detach",
+		}))
+		Expect(stepRequest(installPlan, "redis").Args).To(ContainElements("redis:7", "--name=devex-redis", "--detach"))
+		Expect(stepRequest(installPlan, "mysql").Args).To(ContainElements("mysql:8", "--name=devex-mysql", "--env=MYSQL_ROOT_PASSWORD=devex-secret"))
+
+		resources := map[string]templates.ResourceDeclaration{
+			"postgres": {Type: "container", Name: "devex-postgres", ExternalID: "devex-postgres"},
+			"redis":    {Type: "container", Name: "devex-redis", ExternalID: "devex-redis"},
+			"mysql":    {Type: "container", Name: "devex-mysql", ExternalID: "devex-mysql"},
+		}
+
+		maintainPlan, err := planner.Plan(context.Background(), "databases", templates.PlanOptions{
+			Action:         templates.LifecycleMaintain,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(maintainPlan, "postgres-pull").Args).To(Equal([]string{"postgres:16"}))
+		Expect(stepRequest(maintainPlan, "postgres-restart").Args).To(Equal([]string{"devex-postgres"}))
+
+		statusPlan, err := planner.Plan(context.Background(), "databases", templates.PlanOptions{
+			Action:         templates.LifecycleStatus,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(statusPlan, "redis-status").Command).To(Equal("status"))
+		Expect(stepRequest(statusPlan, "redis-status").Args).To(Equal([]string{"devex-redis"}))
+
+		removePlan, err := planner.Plan(context.Background(), "databases", templates.PlanOptions{
+			Action:         templates.LifecycleRemove,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(removePlan, "mysql-remove").Args).To(Equal([]string{"devex-mysql", "--volumes"}))
+	})
+
+	It("plans built-in factorio server lifecycle requests with non-interactive answers", func() {
+		planner := templates.TemplatePlanner{Manager: manager}
+		inputs := templates.InputResolverOptions{
+			Answers:        []string{"container_name=devex-factorio", "server_port=34197"},
+			NonInteractive: true,
+		}
+
+		installPlan, err := planner.Plan(context.Background(), "factorio-server", templates.PlanOptions{
+			Action:       templates.LifecycleInstall,
+			InputOptions: inputs,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(installPlan, "factorio").Args).To(Equal([]string{
+			"factoriotools/factorio:stable",
+			"--name=devex-factorio",
+			"--port=34197:34197/udp",
+			"--volume=devex-factorio-data:/factorio",
+			"--restart=unless-stopped",
+			"--detach",
+		}))
+
+		resources := map[string]templates.ResourceDeclaration{
+			"factorio": {Type: "container", Name: "devex-factorio", ExternalID: "devex-factorio"},
+		}
+		maintainPlan, err := planner.Plan(context.Background(), "factorio-server", templates.PlanOptions{
+			Action:         templates.LifecycleMaintain,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(maintainPlan, "factorio-pull").Args).To(Equal([]string{"factoriotools/factorio:stable"}))
+		Expect(stepRequest(maintainPlan, "factorio-restart").Args).To(Equal([]string{"devex-factorio"}))
+
+		statusPlan, err := planner.Plan(context.Background(), "factorio-server", templates.PlanOptions{
+			Action:         templates.LifecycleStatus,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(statusPlan, "factorio-status").Args).To(Equal([]string{"devex-factorio"}))
+
+		removePlan, err := planner.Plan(context.Background(), "factorio-server", templates.PlanOptions{
+			Action:         templates.LifecycleRemove,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(removePlan, "factorio-remove").Args).To(Equal([]string{"devex-factorio", "--volumes"}))
+	})
+
+	It("plans built-in server stack compose lifecycle requests with non-interactive answers", func() {
+		planner := templates.TemplatePlanner{Manager: manager}
+		inputs := templates.InputResolverOptions{
+			Answers:        []string{"project_name=devex-server", "compose_file=docker-compose.yml"},
+			NonInteractive: true,
+		}
+
+		installPlan, err := planner.Plan(context.Background(), "server-stack", templates.PlanOptions{
+			Action:       templates.LifecycleInstall,
+			InputOptions: inputs,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(installPlan, "compose-stack").Args).To(Equal([]string{
+			"up",
+			"--file=docker-compose.yml",
+			"--project=devex-server",
+			"--detach",
+		}))
+
+		resources := map[string]templates.ResourceDeclaration{
+			"compose-stack": {
+				Type:       "compose_project",
+				Name:       "devex-server",
+				ExternalID: "devex-server",
+				Metadata: map[string]any{
+					"compose_file": "docker-compose.yml",
+				},
+			},
+		}
+		maintainPlan, err := planner.Plan(context.Background(), "server-stack", templates.PlanOptions{
+			Action:         templates.LifecycleMaintain,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(maintainPlan, "compose-pull").Args).To(Equal([]string{"pull", "--file=docker-compose.yml", "--project=devex-server"}))
+		Expect(stepRequest(maintainPlan, "compose-restart").Args).To(Equal([]string{"up", "--file=docker-compose.yml", "--project=devex-server", "--detach"}))
+
+		statusPlan, err := planner.Plan(context.Background(), "server-stack", templates.PlanOptions{
+			Action:         templates.LifecycleStatus,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(statusPlan, "compose-status").Args).To(Equal([]string{"ps", "--file=docker-compose.yml", "--project=devex-server"}))
+
+		removePlan, err := planner.Plan(context.Background(), "server-stack", templates.PlanOptions{
+			Action:         templates.LifecycleRemove,
+			InputOptions:   inputs,
+			KnownResources: resources,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(stepRequest(removePlan, "compose-remove").Args).To(Equal([]string{"down", "--file=docker-compose.yml", "--project=devex-server", "--volumes"}))
+	})
 })
 
 func writeSpec(tempDir string, spec templates.TemplateSpec) string {
@@ -499,4 +668,15 @@ func writeSpec(tempDir string, spec templates.TemplateSpec) string {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(os.WriteFile(path, data, 0600)).To(Succeed())
 	return path
+}
+
+func stepRequest(plan *templates.ExecutionPlan, stepID string) templates.ExecutionRequest {
+	GinkgoHelper()
+	for _, step := range plan.Steps {
+		if step.ID == stepID {
+			return step.Request
+		}
+	}
+	Fail("missing planned step " + stepID)
+	return templates.ExecutionRequest{}
 }
