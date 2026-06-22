@@ -60,6 +60,34 @@ func TestBoltStoreRunLifecycle(t *testing.T) {
 	}
 }
 
+func TestBoltStoreInitializesDocumentedBucketShapeAndSchemaVersion(t *testing.T) {
+	store := openTestStore(t)
+
+	if err := store.db.View(func(tx *bbolt.Tx) error {
+		for _, name := range [][]byte{runsBucket, resourcesBucket, operationsBucket, metaBucket, locksBucket} {
+			if tx.Bucket(name) == nil {
+				t.Fatalf("bucket %s was not initialized", name)
+			}
+		}
+		indexes := tx.Bucket(indexesBucket)
+		if indexes == nil {
+			t.Fatal("indexes bucket was not initialized")
+		}
+		for _, name := range [][]byte{runsByTemplateBucket, resourcesByTemplateBucket, resourcesByRunBucket, operationsByRunBucket} {
+			if indexes.Bucket(name) == nil {
+				t.Fatalf("index bucket indexes/%s was not initialized", name)
+			}
+		}
+		version := tx.Bucket(metaBucket).Get(schemaVersionKey)
+		if string(version) != "1" {
+			t.Fatalf("schema version marker = %q, want 1", string(version))
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+}
+
 func TestBoltStoreResourcesAndOperations(t *testing.T) {
 	store := openTestStore(t)
 	ctx := context.Background()
@@ -159,6 +187,73 @@ func TestBoltStoreResourcesAndOperations(t *testing.T) {
 	}
 }
 
+func TestBoltStoreListRunsFiltersAndSortsDeterministically(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+	completedAt := time.Unix(500, 0)
+	for _, run := range []TemplateRun{
+		{
+			ID:          "run-c",
+			TemplateID:  "databases",
+			Action:      templates.LifecycleInstall,
+			Status:      RunStatusSucceeded,
+			StartedAt:   time.Unix(300, 0),
+			CompletedAt: &completedAt,
+		},
+		{
+			ID:         "run-a",
+			TemplateID: "databases",
+			Action:     templates.LifecycleInstall,
+			Status:     RunStatusRunning,
+			StartedAt:  time.Unix(100, 0),
+		},
+		{
+			ID:          "run-b",
+			TemplateID:  "databases",
+			Action:      templates.LifecycleMaintain,
+			Status:      RunStatusSucceeded,
+			StartedAt:   time.Unix(200, 0),
+			CompletedAt: &completedAt,
+		},
+		{
+			ID:         "other-template",
+			TemplateID: "backend",
+			Action:     templates.LifecycleInstall,
+			Status:     RunStatusSucceeded,
+			StartedAt:  time.Unix(50, 0),
+		},
+	} {
+		if err := store.CreateRun(ctx, run); err != nil {
+			t.Fatalf("CreateRun(%s) error = %v", run.ID, err)
+		}
+	}
+
+	runs, err := store.ListRuns(ctx, RunFilter{
+		TemplateID:    "databases",
+		Statuses:      []RunStatus{RunStatusRunning, RunStatusSucceeded},
+		StartedAtFrom: time.Unix(100, 0),
+		StartedAtTo:   time.Unix(300, 0),
+	})
+	if err != nil {
+		t.Fatalf("ListRuns() error = %v", err)
+	}
+	if got := runIDs(runs); !sameStrings(got, []string{"run-a", "run-b", "run-c"}) {
+		t.Fatalf("ListRuns() ids = %#v, want sorted run-a/run-b/run-c", got)
+	}
+
+	completedRuns, err := store.ListRuns(ctx, RunFilter{
+		TemplateID:      "databases",
+		CompletedAtFrom: time.Unix(500, 0),
+		CompletedAtTo:   time.Unix(500, 0),
+	})
+	if err != nil {
+		t.Fatalf("ListRuns() completed filter error = %v", err)
+	}
+	if got := runIDs(completedRuns); !sameStrings(got, []string{"run-b", "run-c"}) {
+		t.Fatalf("completed ListRuns() ids = %#v, want run-b/run-c", got)
+	}
+}
+
 func TestBoltStoreSurvivesRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "state.db")
 	ctx := context.Background()
@@ -230,6 +325,21 @@ func TestBoltStoreReturnsErrorForMissingIndexBucket(t *testing.T) {
 	}
 }
 
+func TestBoltStoreReturnsErrorForMissingIndexesBucket(t *testing.T) {
+	store := openTestStore(t)
+
+	if err := store.db.Update(func(tx *bbolt.Tx) error {
+		return tx.DeleteBucket(indexesBucket)
+	}); err != nil {
+		t.Fatalf("DeleteBucket() error = %v", err)
+	}
+
+	_, err := store.ListOperationsByRun(context.Background(), "run-1")
+	if err == nil {
+		t.Fatal("ListOperationsByRun() error = nil, want missing indexes bucket error")
+	}
+}
+
 func TestBoltStoreReturnsErrorForMissingPrimaryBucket(t *testing.T) {
 	store := openTestStore(t)
 
@@ -242,6 +352,21 @@ func TestBoltStoreReturnsErrorForMissingPrimaryBucket(t *testing.T) {
 	_, err := store.ListRuns(context.Background(), RunFilter{})
 	if err == nil {
 		t.Fatal("ListRuns() error = nil, want missing bucket error")
+	}
+}
+
+func TestBoltStoreReturnsErrorForCorruptDocument(t *testing.T) {
+	store := openTestStore(t)
+
+	if err := store.db.Update(func(tx *bbolt.Tx) error {
+		return tx.Bucket(runsBucket).Put([]byte("run-1"), []byte("{not-json"))
+	}); err != nil {
+		t.Fatalf("Put() corrupt document error = %v", err)
+	}
+
+	_, err := store.GetRun(context.Background(), "run-1")
+	if err == nil {
+		t.Fatal("GetRun() error = nil, want corrupt document error")
 	}
 }
 
@@ -408,6 +533,87 @@ func TestConfiguredDBPathUsesViperOverride(t *testing.T) {
 	if got != want {
 		t.Fatalf("ConfiguredDBPath() = %q, want %q", got, want)
 	}
+}
+
+func TestConfiguredDBPathUsesViperConfigFileOverride(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	want := filepath.Join(t.TempDir(), "file-state.db")
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("state:\n  db_path: "+want+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	viper.SetConfigFile(configPath)
+	if err := viper.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig() error = %v", err)
+	}
+
+	got, err := ConfiguredDBPath()
+	if err != nil {
+		t.Fatalf("ConfiguredDBPath() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("ConfiguredDBPath() = %q, want %q", got, want)
+	}
+}
+
+func TestConfiguredDBPathUsesEnvOverride(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	want := filepath.Join(t.TempDir(), "env-state.db")
+	t.Setenv(DBPathEnvVar, want)
+	if err := viper.BindEnv(DBPathConfigKey, DBPathEnvVar); err != nil {
+		t.Fatalf("BindEnv() error = %v", err)
+	}
+
+	got, err := ConfiguredDBPath()
+	if err != nil {
+		t.Fatalf("ConfiguredDBPath() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("ConfiguredDBPath() = %q, want %q", got, want)
+	}
+}
+
+func TestConfiguredDBPathUsesConventionalViperEnvOverride(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	want := filepath.Join(t.TempDir(), "env-state-path.db")
+	t.Setenv(DBPathAutoEnvVar, want)
+	if err := viper.BindEnv(DBPathConfigKey, DBPathEnvVar, DBPathAutoEnvVar); err != nil {
+		t.Fatalf("BindEnv() error = %v", err)
+	}
+
+	got, err := ConfiguredDBPath()
+	if err != nil {
+		t.Fatalf("ConfiguredDBPath() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("ConfiguredDBPath() = %q, want %q", got, want)
+	}
+}
+
+func runIDs(runs []TemplateRun) []string {
+	ids := make([]string, 0, len(runs))
+	for _, run := range runs {
+		ids = append(ids, run.ID)
+	}
+	return ids
+}
+
+func sameStrings(got []string, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func openTestStore(t *testing.T) *BoltStore {

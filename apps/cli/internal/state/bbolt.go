@@ -15,12 +15,15 @@ import (
 	"go.etcd.io/bbolt"
 )
 
+const currentSchemaVersion = 1
+
 var (
 	ErrNotFound = errors.New("state document not found")
 
 	runsBucket       = []byte("runs")
 	resourcesBucket  = []byte("resources")
 	operationsBucket = []byte("operations")
+	metaBucket       = []byte("meta")
 	locksBucket      = []byte("locks")
 
 	indexesBucket             = []byte("indexes")
@@ -28,6 +31,9 @@ var (
 	resourcesByTemplateBucket = []byte("resources_by_template")
 	resourcesByRunBucket      = []byte("resources_by_run")
 	operationsByRunBucket     = []byte("operations_by_run")
+
+	// meta stores schema-level markers used by future migrations.
+	schemaVersionKey = []byte("schema_version")
 )
 
 var ErrLifecycleLockActive = errors.New("template lifecycle lock is active")
@@ -364,8 +370,25 @@ func (s *BoltStore) ListRuns(ctx context.Context, filter RunFilter) ([]TemplateR
 			if filter.ActiveOnly && !isActiveRunStatus(run.Status) {
 				continue
 			}
+			if !filter.StartedAtFrom.IsZero() && run.StartedAt.Before(filter.StartedAtFrom) {
+				continue
+			}
+			if !filter.StartedAtTo.IsZero() && run.StartedAt.After(filter.StartedAtTo) {
+				continue
+			}
+			if !filter.CompletedAtFrom.IsZero() {
+				if run.CompletedAt == nil || run.CompletedAt.Before(filter.CompletedAtFrom) {
+					continue
+				}
+			}
+			if !filter.CompletedAtTo.IsZero() {
+				if run.CompletedAt == nil || run.CompletedAt.After(filter.CompletedAtTo) {
+					continue
+				}
+			}
 			runs = append(runs, run)
 		}
+		sortRuns(runs)
 		return nil
 	})
 	return runs, err
@@ -416,6 +439,7 @@ func (s *BoltStore) ListOperationsByRun(ctx context.Context, runID string) ([]Op
 			}
 			operations = append(operations, op)
 		}
+		sortOperations(operations)
 		return nil
 	})
 	return operations, err
@@ -423,7 +447,7 @@ func (s *BoltStore) ListOperationsByRun(ctx context.Context, runID string) ([]Op
 
 func (s *BoltStore) initialize() error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
-		for _, name := range [][]byte{runsBucket, resourcesBucket, operationsBucket, locksBucket} {
+		for _, name := range [][]byte{runsBucket, resourcesBucket, operationsBucket, metaBucket, locksBucket} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return fmt.Errorf("failed to create bucket %s: %w", name, err)
 			}
@@ -437,7 +461,7 @@ func (s *BoltStore) initialize() error {
 				return fmt.Errorf("failed to create index bucket %s: %w", name, err)
 			}
 		}
-		return nil
+		return putSchemaVersion(tx.Bucket(metaBucket), currentSchemaVersion)
 	})
 }
 
@@ -518,6 +542,7 @@ func (s *BoltStore) listResources(ctx context.Context, indexBucket []byte, index
 			}
 			resources = append(resources, resource)
 		}
+		sortResources(resources)
 		return nil
 	})
 	return resources, err
@@ -539,6 +564,17 @@ func putJSON(bucket *bbolt.Bucket, key string, value any) error {
 		return fmt.Errorf("failed to marshal state document: %w", err)
 	}
 	return bucket.Put([]byte(key), data)
+}
+
+func putSchemaVersion(bucket *bbolt.Bucket, version int) error {
+	if bucket == nil {
+		return fmt.Errorf("state bucket not found")
+	}
+	data, err := json.Marshal(version)
+	if err != nil {
+		return fmt.Errorf("failed to marshal schema version: %w", err)
+	}
+	return bucket.Put(schemaVersionKey, data)
 }
 
 func getJSON(bucket *bbolt.Bucket, key string, value any) error {
@@ -620,4 +656,31 @@ func listIDs(tx *bbolt.Tx, primaryBucket []byte, indexBucket []byte, indexKey st
 	}
 	sort.Strings(ids)
 	return ids, nil
+}
+
+func sortRuns(runs []TemplateRun) {
+	sort.SliceStable(runs, func(i, j int) bool {
+		if !runs[i].StartedAt.Equal(runs[j].StartedAt) {
+			return runs[i].StartedAt.Before(runs[j].StartedAt)
+		}
+		return runs[i].ID < runs[j].ID
+	})
+}
+
+func sortResources(resources []ManagedResource) {
+	sort.SliceStable(resources, func(i, j int) bool {
+		if !resources[i].CreatedAt.Equal(resources[j].CreatedAt) {
+			return resources[i].CreatedAt.Before(resources[j].CreatedAt)
+		}
+		return resources[i].ID < resources[j].ID
+	})
+}
+
+func sortOperations(operations []OperationRecord) {
+	sort.SliceStable(operations, func(i, j int) bool {
+		if !operations[i].StartedAt.Equal(operations[j].StartedAt) {
+			return operations[i].StartedAt.Before(operations[j].StartedAt)
+		}
+		return operations[i].ID < operations[j].ID
+	})
 }

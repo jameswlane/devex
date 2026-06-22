@@ -90,11 +90,15 @@ type OperationRecord struct {
 }
 
 type RunFilter struct {
-	TemplateID string
-	Action     LifecycleAction
-	Status     RunStatus
-	Statuses   []RunStatus
-	ActiveOnly bool
+	TemplateID      string
+	Action          LifecycleAction
+	Status          RunStatus
+	Statuses        []RunStatus
+	ActiveOnly      bool
+	StartedAtFrom   time.Time
+	StartedAtTo     time.Time
+	CompletedAtFrom time.Time
+	CompletedAtTo   time.Time
 }
 
 type LifecycleLock struct {
@@ -107,6 +111,10 @@ type LifecycleLock struct {
 	UpdatedAt  time.Time       `json:"updated_at"`
 }
 
+// LockOptions controls lifecycle lock recovery. StaleTimeout should be nonzero
+// for normal executions and longer than the heartbeat interval used by the
+// lock owner; PID liveness checks are only a fallback and can be fooled by PID
+// reuse on the same host.
 type LockOptions struct {
 	StaleTimeout time.Duration
 	Force        bool

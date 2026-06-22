@@ -14,6 +14,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -58,18 +59,20 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 			return runtime.initializePluginSystem(cmd.Context())
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-
 			// Don't auto-run setup during tests
 			if isRunningInTest() {
 				return cmd.Usage()
 			}
 
 			// If no subcommand is provided, run the guided setup
-			setupCmd := NewSetupCmd(repo, settings)
-			setupCmd.SetArgs(args)
-			setupCmd.SetContext(ctx)
-			return setupCmd.Execute()
+			for _, sub := range cmd.Commands() {
+				if sub.Name() == "setup" {
+					sub.SetArgs(args)
+					sub.SetContext(cmd.Context())
+					return sub.Execute()
+				}
+			}
+			return cmd.Usage()
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
@@ -129,7 +132,7 @@ func initializeConfig(cmd *cobra.Command) error {
 	viper.SetEnvPrefix("DEVEX")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
-	_ = viper.BindEnv("state.db_path", "DEVEX_STATE_DB")
+	_ = viper.BindEnv(state.DBPathConfigKey, state.DBPathEnvVar, state.DBPathAutoEnvVar)
 
 	// 3. Configuration file paths (in order of precedence)
 	cfgFile := viper.GetString("config")
@@ -181,7 +184,7 @@ func setConfigurationDefaults() {
 
 	// Configuration file defaults
 	viper.SetDefault("config", "")
-	viper.SetDefault("state.db_path", "")
+	viper.SetDefault(state.DBPathConfigKey, "")
 
 	// Command-specific defaults
 	viper.SetDefault("categories", []string{})
@@ -218,8 +221,8 @@ func contains(slice []string, item string) bool {
 
 // isRunningInTest detects standard Go test binaries and explicit test env markers.
 func isRunningInTest() bool {
-	for _, arg := range os.Args {
-		base := filepath.Base(arg)
+	if len(os.Args) > 0 {
+		base := filepath.Base(os.Args[0])
 		if strings.HasSuffix(base, ".test") || base == "ginkgo" {
 			return true
 		}

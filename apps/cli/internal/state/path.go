@@ -8,7 +8,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-const DBPathConfigKey = "state.db_path"
+const (
+	DBPathConfigKey  = "state.db_path"
+	DBPathEnvVar     = "DEVEX_STATE_DB"
+	DBPathAutoEnvVar = "DEVEX_STATE_DB_PATH"
+)
 
 func DefaultDBPath(homeDir string) string {
 	return filepath.Join(homeDir, ".devex", "state.db")

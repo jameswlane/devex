@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -133,8 +134,30 @@ func (s *lifecycleMemoryStore) ListRuns(_ context.Context, filter state.RunFilte
 		if filter.ActiveOnly && run.Status != state.RunStatusPending && run.Status != state.RunStatusRunning {
 			continue
 		}
+		if !filter.StartedAtFrom.IsZero() && run.StartedAt.Before(filter.StartedAtFrom) {
+			continue
+		}
+		if !filter.StartedAtTo.IsZero() && run.StartedAt.After(filter.StartedAtTo) {
+			continue
+		}
+		if !filter.CompletedAtFrom.IsZero() {
+			if run.CompletedAt == nil || run.CompletedAt.Before(filter.CompletedAtFrom) {
+				continue
+			}
+		}
+		if !filter.CompletedAtTo.IsZero() {
+			if run.CompletedAt == nil || run.CompletedAt.After(filter.CompletedAtTo) {
+				continue
+			}
+		}
 		runs = append(runs, run)
 	}
+	sort.Slice(runs, func(i, j int) bool {
+		if !runs[i].StartedAt.Equal(runs[j].StartedAt) {
+			return runs[i].StartedAt.Before(runs[j].StartedAt)
+		}
+		return runs[i].ID < runs[j].ID
+	})
 	return runs, nil
 }
 
