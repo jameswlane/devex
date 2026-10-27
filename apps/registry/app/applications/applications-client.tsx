@@ -6,7 +6,6 @@ import { ApplicationCard } from "@/components/application-card";
 import { APIErrorBoundary } from "@/components/error-boundary";
 import { FilterPanel } from "@/components/filter-panel";
 import { Pagination } from "@/components/pagination";
-import { useDebounce } from "@/hooks/use-debounce";
 import {
 	APPLICATION_CATEGORIES,
 	MAX_PAGE_SIZE,
@@ -45,11 +44,12 @@ export function ApplicationsClient({
 	);
 	const [pageSize, setPageSize] = useState(parseInt(initialParams.limit, 10));
 
-	// Debounced search query for URL updates
-	const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
-
 	// Last search value synced with the URL, so navigation alone never pushes
 	const syncedSearchRef = useRef(initialParams.search);
+	// Pending debounced search update, if any
+	const searchTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
 
 	const updateURL = useCallback(
 		(updates: Record<string, string>) => {
@@ -86,28 +86,37 @@ export function ApplicationsClient({
 	// Back/forward navigation changes the URL's search: restore it in the input
 	useEffect(() => {
 		if (initialParams.search !== syncedSearchRef.current) {
+			clearTimeout(searchTimerRef.current);
 			syncedSearchRef.current = initialParams.search;
 			setSearchQuery(initialParams.search);
 		}
 	}, [initialParams.search]);
 
-	// Push a URL update only when the debounced input itself changes; this
-	// effect also reruns on navigation (updateURL changes), which must not push
-	const prevDebouncedRef = useRef(debouncedSearchQuery);
+	// The search timer calls the latest updateURL, not the one from when it was set
+	const updateURLRef = useRef(updateURL);
 	useEffect(() => {
-		if (debouncedSearchQuery === prevDebouncedRef.current) {
-			return;
-		}
-		prevDebouncedRef.current = debouncedSearchQuery;
-		if (debouncedSearchQuery !== syncedSearchRef.current) {
-			syncedSearchRef.current = debouncedSearchQuery;
-			updateURL({ search: debouncedSearchQuery });
-		}
-	}, [debouncedSearchQuery, updateURL]);
+		updateURLRef.current = updateURL;
+	}, [updateURL]);
+
+	// Debounce each input change into a URL update. Driving this from input
+	// events, not from effects, means navigation alone never pushes, and
+	// clearing then retyping the same search still updates the URL.
+	useEffect(() => () => clearTimeout(searchTimerRef.current), []);
+
+	const handleSearchChange = (value: string) => {
+		setSearchQuery(value);
+		clearTimeout(searchTimerRef.current);
+		searchTimerRef.current = setTimeout(() => {
+			if (value !== syncedSearchRef.current) {
+				syncedSearchRef.current = value;
+				updateURLRef.current({ search: value });
+			}
+		}, SEARCH_DEBOUNCE_MS);
+	};
 
 	const handleSearchSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
-		// Search is handled by debounced effect
+		// Search is handled by the debounced input handler
 	};
 
 	const handleCategoryChange = (category: string) => {
@@ -136,6 +145,7 @@ export function ApplicationsClient({
 	};
 
 	const clearFilters = () => {
+		clearTimeout(searchTimerRef.current);
 		syncedSearchRef.current = "";
 		setSearchQuery("");
 		setSelectedCategory("");
@@ -222,7 +232,7 @@ export function ApplicationsClient({
 			<FilterPanel
 				searchQuery={searchQuery}
 				searchPlaceholder="Search applications..."
-				onSearchChange={setSearchQuery}
+				onSearchChange={handleSearchChange}
 				onSearchSubmit={handleSearchSubmit}
 				filters={filters}
 				pageSize={pageSize}

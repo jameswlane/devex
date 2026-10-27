@@ -200,4 +200,32 @@ describe.each(cases)("$name search URL sync", (testCase) => {
 
 		expect(searchOf(push.mock.calls[push.mock.calls.length - 1][0])).toBeNull();
 	});
+
+	it("pushes a search retyped within the debounce interval after clearing filters", () => {
+		const { rerender } = renderClient();
+		type("abc");
+		navigate(rerender, "abc");
+
+		act(() => panel.current?.onClearFilters());
+		navigate(rerender, "");
+		type("abc");
+
+		const lastUrl = push.mock.calls[push.mock.calls.length - 1][0];
+		expect(searchOf(lastUrl)).toBe("abc");
+	});
+
+	it("drops a pending search when history navigation happens first", () => {
+		const { rerender } = renderClient();
+		type("abc");
+		navigate(rerender, "abc");
+
+		act(() => panel.current?.onSearchChange("abcd"));
+		navigate(rerender, "");
+		act(() => {
+			jest.advanceTimersByTime(SEARCH_DEBOUNCE_MS);
+		});
+
+		expect(push).toHaveBeenCalledTimes(1);
+		expect(panel.current?.searchQuery).toBe("");
+	});
 });
