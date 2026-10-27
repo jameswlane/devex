@@ -29,25 +29,27 @@ jest.mock("@/lib/logger", () => ({
 // Mock error handler
 jest.mock("@/lib/error-handler", () => ({
 	withErrorHandling: jest.fn((handler) => handler),
-	safeDatabase: jest.fn((fn) => fn()),
+	safeDatabase: jest.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
 // Mock response optimization
 jest.mock("@/lib/response-optimization", () => ({
-	createOptimizedResponse: jest.fn((data, options) => {
-		return new Response(JSON.stringify(data), {
-			status: 200,
-			headers: {
-				"Content-Type": "application/json",
-				"Cache-Control": options.headers["Cache-Control"] || "",
-				ETag: options.headers["ETag"] || "",
-				"X-Registry-Source": options.headers["X-Registry-Source"] || "",
-				"X-Total-Items": options.headers["X-Total-Items"] || "",
-				"X-Stats-Cached": options.headers["X-Stats-Cached"] || "",
-				Vary: options.headers["Vary"] || "",
-			},
-		});
-	}),
+	createOptimizedResponse: jest.fn(
+		(data: unknown, options: { headers: Record<string, string> }) => {
+			return new Response(JSON.stringify(data), {
+				status: 200,
+				headers: {
+					"Content-Type": "application/json",
+					"Cache-Control": options.headers["Cache-Control"] || "",
+					ETag: options.headers["ETag"] || "",
+					"X-Registry-Source": options.headers["X-Registry-Source"] || "",
+					"X-Total-Items": options.headers["X-Total-Items"] || "",
+					"X-Stats-Cached": options.headers["X-Stats-Cached"] || "",
+					Vary: options.headers["Vary"] || "",
+				},
+			});
+		},
+	),
 	ResponseType: {
 		DYNAMIC: "dynamic",
 		STATIC: "static",
@@ -89,41 +91,57 @@ describe("/api/v1/stats", () => {
 			// Mock individual Prisma queries (new implementation)
 			application: {
 				count: jest
-					.fn()
+					.fn<() => Promise<number>>()
 					.mockResolvedValueOnce(50) // Total apps
 					.mockResolvedValueOnce(30) // Linux apps
 					.mockResolvedValueOnce(25) // macOS apps
 					.mockResolvedValueOnce(20), // Windows apps
-				groupBy: jest.fn().mockResolvedValue([
-					{ category: "Development Tools", _count: { category: 30 } },
-					{ category: "Utilities", _count: { category: 20 } },
-				]),
+				groupBy: jest
+					.fn<
+						() => Promise<{ category: string; _count: { category: number } }[]>
+					>()
+					.mockResolvedValue([
+						{ category: "Development Tools", _count: { category: 30 } },
+						{ category: "Utilities", _count: { category: 20 } },
+					]),
 			},
 			plugin: {
-				count: jest.fn().mockResolvedValue(25),
-				aggregate: jest.fn().mockResolvedValue({
-					_sum: { downloadCount: 1000 },
-				}),
-				groupBy: jest.fn().mockResolvedValue([
-					{ type: "package-manager", _count: { type: 15 } },
-					{ type: "tool", _count: { type: 10 } },
-				]),
+				count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
+				aggregate: jest
+					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+					.mockResolvedValue({
+						_sum: { downloadCount: 1000 },
+					}),
+				groupBy: jest
+					.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
+					.mockResolvedValue([
+						{ type: "package-manager", _count: { type: 15 } },
+						{ type: "tool", _count: { type: 10 } },
+					]),
 			},
 			config: {
-				count: jest.fn().mockResolvedValue(15),
-				aggregate: jest.fn().mockResolvedValue({
-					_sum: { downloadCount: 500 },
-				}),
-				groupBy: jest.fn().mockResolvedValue([
-					{ category: "system", _count: { category: 8 } },
-					{ category: "development", _count: { category: 7 } },
-				]),
+				count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
+				aggregate: jest
+					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+					.mockResolvedValue({
+						_sum: { downloadCount: 500 },
+					}),
+				groupBy: jest
+					.fn<
+						() => Promise<{ category: string; _count: { category: number } }[]>
+					>()
+					.mockResolvedValue([
+						{ category: "system", _count: { category: 8 } },
+						{ category: "development", _count: { category: 7 } },
+					]),
 			},
 			stack: {
-				count: jest.fn().mockResolvedValue(10),
-				aggregate: jest.fn().mockResolvedValue({
-					_sum: { downloadCount: 300 },
-				}),
+				count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
+				aggregate: jest
+					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+					.mockResolvedValue({
+						_sum: { downloadCount: 300 },
+					}),
 			},
 		};
 
@@ -307,44 +325,58 @@ describe("/api/v1/stats", () => {
 			mockPrismaClient = {
 				application: {
 					count: jest
-						.fn()
+						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
 					groupBy: jest
-						.fn()
+						.fn<
+							() => Promise<
+								{ category: string; _count: { category: number } }[]
+							>
+						>()
 						.mockResolvedValue([
 							{ category: "Development Tools", _count: { category: 30 } },
 						]),
 				},
 				plugin: {
-					count: jest.fn().mockResolvedValue(25),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 0 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 0 },
+						}),
 					groupBy: jest
-						.fn()
+						.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 						.mockResolvedValue([
 							{ type: "package-manager", _count: { type: 15 } },
 						]),
 				},
 				config: {
-					count: jest.fn().mockResolvedValue(15),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 0 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 0 },
+						}),
 					groupBy: jest
-						.fn()
+						.fn<
+							() => Promise<
+								{ category: string; _count: { category: number } }[]
+							>
+						>()
 						.mockResolvedValue([
 							{ category: "system", _count: { category: 8 } },
 						]),
 				},
 				stack: {
-					count: jest.fn().mockResolvedValue(10),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 0 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 0 },
+						}),
 				},
 			};
 			(
@@ -363,44 +395,58 @@ describe("/api/v1/stats", () => {
 			mockPrismaClient = {
 				application: {
 					count: jest
-						.fn()
+						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
 					groupBy: jest
-						.fn()
+						.fn<
+							() => Promise<
+								{ category: string; _count: { category: number } }[]
+							>
+						>()
 						.mockResolvedValue([
 							{ category: "Development Tools", _count: { category: 30 } },
 						]),
 				},
 				plugin: {
-					count: jest.fn().mockResolvedValue(25),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: null },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: null } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: null },
+						}),
 					groupBy: jest
-						.fn()
+						.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 						.mockResolvedValue([
 							{ type: "package-manager", _count: { type: 15 } },
 						]),
 				},
 				config: {
-					count: jest.fn().mockResolvedValue(15),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: null },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: null } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: null },
+						}),
 					groupBy: jest
-						.fn()
+						.fn<
+							() => Promise<
+								{ category: string; _count: { category: number } }[]
+							>
+						>()
 						.mockResolvedValue([
 							{ category: "system", _count: { category: 8 } },
 						]),
 				},
 				stack: {
-					count: jest.fn().mockResolvedValue(10),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: null },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: null } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: null },
+						}),
 				},
 			};
 			(
@@ -434,32 +480,38 @@ describe("/api/v1/stats", () => {
 			mockPrismaClient = {
 				application: {
 					count: jest
-						.fn()
+						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
-					groupBy: jest.fn().mockResolvedValue([]),
+					groupBy: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
 				},
 				plugin: {
-					count: jest.fn().mockResolvedValue(25),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 1000 },
-					}),
-					groupBy: jest.fn().mockResolvedValue([]),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 1000 },
+						}),
+					groupBy: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
 				},
 				config: {
-					count: jest.fn().mockResolvedValue(15),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 500 },
-					}),
-					groupBy: jest.fn().mockResolvedValue([]),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 500 },
+						}),
+					groupBy: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
 				},
 				stack: {
-					count: jest.fn().mockResolvedValue(10),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 300 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 300 },
+						}),
 				},
 			};
 			(
@@ -480,44 +532,63 @@ describe("/api/v1/stats", () => {
 			mockPrismaClient = {
 				application: {
 					count: jest
-						.fn()
+						.fn<() => Promise<number>>()
 						.mockResolvedValueOnce(50)
 						.mockResolvedValueOnce(30)
 						.mockResolvedValueOnce(25)
 						.mockResolvedValueOnce(20),
-					groupBy: jest.fn().mockResolvedValue([
-						{ category: "valid", _count: { category: 10 } },
-						{ category: null, _count: { category: 5 } },
-						{ category: "", _count: { category: 3 } },
-					]),
+					groupBy: jest
+						.fn<
+							() => Promise<
+								(
+									| { category: string; _count: { category: number } }
+									| { category: null; _count: { category: number } }
+								)[]
+							>
+						>()
+						.mockResolvedValue([
+							{ category: "valid", _count: { category: 10 } },
+							{ category: null, _count: { category: 5 } },
+							{ category: "", _count: { category: 3 } },
+						]),
 				},
 				plugin: {
-					count: jest.fn().mockResolvedValue(25),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 1000 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 1000 },
+						}),
 					groupBy: jest
-						.fn()
+						.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
 						.mockResolvedValue([
 							{ type: "package-manager", _count: { type: 15 } },
 						]),
 				},
 				config: {
-					count: jest.fn().mockResolvedValue(15),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 500 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 500 },
+						}),
 					groupBy: jest
-						.fn()
+						.fn<
+							() => Promise<
+								{ category: string; _count: { category: number } }[]
+							>
+						>()
 						.mockResolvedValue([
 							{ category: "system", _count: { category: 8 } },
 						]),
 				},
 				stack: {
-					count: jest.fn().mockResolvedValue(10),
-					aggregate: jest.fn().mockResolvedValue({
-						_sum: { downloadCount: 300 },
-					}),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(10),
+					aggregate: jest
+						.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+						.mockResolvedValue({
+							_sum: { downloadCount: 300 },
+						}),
 				},
 			};
 			(
@@ -553,7 +624,9 @@ describe("/api/v1/stats", () => {
 		});
 
 		it("should log performance metrics", async () => {
-			const { logPerformance } = jest.requireMock("@/lib/logger") as any;
+			const { logPerformance } = jest.requireMock<
+				typeof import("@/lib/logger")
+			>("@/lib/logger") as any;
 
 			// Force refresh to ensure fetchStatsFromDB executes and calls logPerformance
 			const req = createMockRequest({ refresh: "true" });

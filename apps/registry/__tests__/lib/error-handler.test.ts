@@ -418,7 +418,7 @@ describe("Error Handler Module", () => {
 	describe("withErrorHandling", () => {
 		it("should wrap handlers and catch errors", async () => {
 			const mockHandler = jest
-				.fn()
+				.fn<(request: NextRequest) => Promise<never>>()
 				.mockRejectedValue(new Error("Handler failed"));
 			const wrappedHandler = withErrorHandling(
 				mockHandler,
@@ -430,7 +430,7 @@ describe("Error Handler Module", () => {
 				method: "GET",
 				url: "https://example.com/api/test",
 				headers: {
-					get: jest.fn().mockReturnValue(null),
+					get: jest.fn<Headers["get"]>().mockReturnValue(null),
 				},
 			} as unknown as NextRequest;
 
@@ -446,7 +446,9 @@ describe("Error Handler Module", () => {
 				{ success: true },
 				{ status: 200 },
 			);
-			const mockHandler = jest.fn().mockResolvedValue(mockResponse);
+			const mockHandler = jest
+				.fn<() => Promise<NextResponse<{ success: boolean }>>>()
+				.mockResolvedValue(mockResponse);
 			const wrappedHandler = withErrorHandling(
 				mockHandler,
 				"test-operation",
@@ -457,7 +459,7 @@ describe("Error Handler Module", () => {
 				method: "GET",
 				url: "https://example.com/api/test",
 				headers: {
-					get: jest.fn().mockReturnValue(null),
+					get: jest.fn<Headers["get"]>().mockReturnValue(null),
 				},
 			} as unknown as NextRequest;
 
@@ -477,7 +479,9 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should include request ID in error context when available", async () => {
-			const mockHandler = jest.fn().mockRejectedValue(new Error("Test error"));
+			const mockHandler = jest
+				.fn<() => Promise<never>>()
+				.mockRejectedValue(new Error("Test error"));
 			const wrappedHandler = withErrorHandling(
 				mockHandler,
 				"test-operation",
@@ -489,7 +493,7 @@ describe("Error Handler Module", () => {
 				url: "https://example.com/api/test",
 				headers: {
 					get: jest
-						.fn()
+						.fn<Headers["get"]>()
 						.mockImplementation((header: string) =>
 							header === "x-request-id" ? "req-123" : null,
 						),
@@ -505,7 +509,9 @@ describe("Error Handler Module", () => {
 
 	describe("safeAsync", () => {
 		it("should return success result for successful operations", async () => {
-			const operation = jest.fn().mockResolvedValue({ data: "success" });
+			const operation = jest
+				.fn<() => Promise<{ data: string }>>()
+				.mockResolvedValue({ data: "success" });
 
 			const result = await safeAsync(operation, mockContext);
 
@@ -517,7 +523,7 @@ describe("Error Handler Module", () => {
 
 		it("should return error result for failed operations", async () => {
 			const operation = jest
-				.fn()
+				.fn<() => Promise<never>>()
 				.mockRejectedValue(new Error("Operation failed"));
 
 			const result = await safeAsync(operation, mockContext);
@@ -531,7 +537,9 @@ describe("Error Handler Module", () => {
 
 	describe("safeCache", () => {
 		it("should return operation result when successful", async () => {
-			const operation = jest.fn().mockResolvedValue({ cached: true });
+			const operation = jest
+				.fn<() => Promise<{ cached: boolean }>>()
+				.mockResolvedValue({ cached: true });
 			const fallback = { cached: false };
 
 			const result = await safeCache(operation, fallback, mockContext);
@@ -541,7 +549,9 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should return fallback when operation fails", async () => {
-			const operation = jest.fn().mockRejectedValue(new Error("Cache failed"));
+			const operation = jest
+				.fn<() => Promise<never>>()
+				.mockRejectedValue(new Error("Cache failed"));
 			const fallback = { cached: false };
 
 			const result = await safeCache(operation, fallback, mockContext);
@@ -561,7 +571,9 @@ describe("Error Handler Module", () => {
 		});
 
 		it("should return result on successful operation", async () => {
-			const operation = jest.fn().mockResolvedValue({ data: "success" });
+			const operation = jest
+				.fn<() => Promise<{ data: string }>>()
+				.mockResolvedValue({ data: "success" });
 
 			const result = await safeDatabase(operation, mockContext);
 
@@ -588,7 +600,7 @@ describe("Error Handler Module", () => {
 
 		it("should retry transient errors with exponential backoff", async () => {
 			const operation = jest
-				.fn()
+				.fn<() => Promise<{ data: string }>>()
 				.mockRejectedValueOnce(new Error("Transient error"))
 				.mockRejectedValueOnce(new Error("Transient error"))
 				.mockResolvedValue({ data: "success" });
@@ -611,7 +623,9 @@ describe("Error Handler Module", () => {
 				"Unique constraint",
 				"P2002",
 			);
-			const operation = jest.fn().mockRejectedValue(error);
+			const operation = jest
+				.fn<() => Promise<never>>()
+				.mockRejectedValue(error);
 
 			await expect(safeDatabase(operation, mockContext, 3)).rejects.toThrow(
 				error,
@@ -631,7 +645,9 @@ describe("Error Handler Module", () => {
 
 		it("should throw after max retries are exhausted", async () => {
 			const error = new Error("Persistent error");
-			const operation = jest.fn().mockRejectedValue(error);
+			const operation = jest
+				.fn<() => Promise<never>>()
+				.mockRejectedValue(error);
 
 			// Set up the expectation first to capture the rejection
 			const testPromise = expect(
@@ -650,7 +666,7 @@ describe("Error Handler Module", () => {
 
 		it("should implement exponential backoff with max delay", async () => {
 			const operation = jest
-				.fn()
+				.fn<() => Promise<{ data: string }>>()
 				.mockRejectedValueOnce(new Error("Error 1"))
 				.mockRejectedValueOnce(new Error("Error 2"))
 				.mockResolvedValue({ data: "success" });

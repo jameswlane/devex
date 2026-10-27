@@ -67,99 +67,112 @@ jest.mock("@/lib/logger", () => ({
 
 jest.mock("@/lib/error-handler", () => ({
 	withErrorHandling: jest.fn((handler) => handler),
-	safeDatabase: jest.fn((fn) => fn()),
+	safeDatabase: jest.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
 jest.mock("@/lib/response-optimization", () => ({
-	createOptimizedResponse: jest.fn((data, options) => {
-		// Simulate addResponseMetadata behavior
-		const responseData =
-			typeof data === "object" && data !== null && !Array.isArray(data)
-				? {
-						...data,
-						meta: {
-							source: options?.performance?.source || "database",
-							version: "2.1.0",
-							timestamp: new Date().toISOString(),
-							performance: {
-								responseTime: 0,
-								compressed: false,
-								cacheStrategy: options?.type || "dynamic",
+	createOptimizedResponse: jest.fn(
+		(
+			data: unknown,
+			options?: Parameters<
+				typeof import("@/lib/response-optimization").createOptimizedResponse
+			>[1],
+		) => {
+			// Simulate addResponseMetadata behavior
+			const responseData =
+				typeof data === "object" && data !== null && !Array.isArray(data)
+					? {
+							...data,
+							meta: {
+								source: options?.performance?.source || "database",
+								version: "2.1.0",
+								timestamp: new Date().toISOString(),
+								performance: {
+									responseTime: 0,
+									compressed: false,
+									cacheStrategy: options?.type || "dynamic",
+								},
 							},
-						},
-					}
-				: {
-						data,
-						meta: {
-							source: options?.performance?.source || "database",
-							version: "2.1.0",
-							timestamp: new Date().toISOString(),
-							performance: {
-								responseTime: 0,
-								compressed: false,
-								cacheStrategy: options?.type || "dynamic",
+						}
+					: {
+							data,
+							meta: {
+								source: options?.performance?.source || "database",
+								version: "2.1.0",
+								timestamp: new Date().toISOString(),
+								performance: {
+									responseTime: 0,
+									compressed: false,
+									cacheStrategy: options?.type || "dynamic",
+								},
 							},
-						},
-					};
+						};
 
-		return new Response(JSON.stringify(responseData), {
-			status: 200,
-			headers: {
-				"Content-Type": "application/json",
-				"Cache-Control": options?.headers?.["Cache-Control"] || "public",
-				"X-Registry-Source":
-					options?.headers?.["X-Registry-Source"] ||
-					options?.performance?.source ||
-					"database",
-				ETag: options?.headers?.["ETag"] || "",
-				Vary: options?.headers?.["Vary"] || "",
-				"X-Total-Items": options?.headers?.["X-Total-Items"] || "",
-				"X-Stats-Cached": options?.headers?.["X-Stats-Cached"] || "",
-			},
-		});
-	}),
-	createPaginatedResponse: jest.fn((items, pagination, additionalData) => {
-		const { total, page, limit } = pagination;
-		const offset = (page - 1) * limit;
-		const count = items.length;
-		const hasNext = offset + limit < total;
-		const hasPrevious = offset > 0;
-
-		return new Response(
-			JSON.stringify({
-				items,
-				pagination: {
-					total,
-					count,
-					limit,
-					offset,
-					page,
-					totalPages: Math.ceil(total / limit),
-					hasNext,
-					hasPrevious,
-				},
-				...additionalData,
-				meta: {
-					source: additionalData?.meta?.source || "database",
-					version: "2.1.0",
-					timestamp: new Date().toISOString(),
-					performance: {
-						responseTime: 0,
-						compressed: false,
-						cacheStrategy: "paginated",
-					},
-				},
-			}),
-			{
+			return new Response(JSON.stringify(responseData), {
 				status: 200,
 				headers: {
 					"Content-Type": "application/json",
-					"Cache-Control": "public",
-					"X-Registry-Source": additionalData?.meta?.source || "database",
+					"Cache-Control": options?.headers?.["Cache-Control"] || "public",
+					"X-Registry-Source":
+						options?.headers?.["X-Registry-Source"] ||
+						options?.performance?.source ||
+						"database",
+					ETag: options?.headers?.["ETag"] || "",
+					Vary: options?.headers?.["Vary"] || "",
+					"X-Total-Items": options?.headers?.["X-Total-Items"] || "",
+					"X-Stats-Cached": options?.headers?.["X-Stats-Cached"] || "",
 				},
-			},
-		);
-	}),
+			});
+		},
+	),
+	createPaginatedResponse: jest.fn(
+		(
+			items: unknown[],
+			pagination: { total: number; page: number; limit: number },
+			additionalData?: { meta?: { source?: string } },
+		) => {
+			const { total, page, limit } = pagination;
+			const offset = (page - 1) * limit;
+			const count = items.length;
+			const hasNext = offset + limit < total;
+			const hasPrevious = offset > 0;
+
+			return new Response(
+				JSON.stringify({
+					items,
+					pagination: {
+						total,
+						count,
+						limit,
+						offset,
+						page,
+						totalPages: Math.ceil(total / limit),
+						hasNext,
+						hasPrevious,
+					},
+					...additionalData,
+					meta: {
+						source: additionalData?.meta?.source || "database",
+						version: "2.1.0",
+						timestamp: new Date().toISOString(),
+						performance: {
+							responseTime: 0,
+							compressed: false,
+							cacheStrategy: "paginated",
+						},
+					},
+				}),
+				{
+					status: 200,
+					headers: {
+						"Content-Type": "application/json",
+						"Cache-Control": "public",
+						"X-Registry-Source": additionalData?.meta?.source || "database",
+					},
+				},
+			);
+		},
+	),
 	ResponseType: {
 		DYNAMIC: "dynamic",
 		STATIC: "static",
@@ -309,41 +322,57 @@ describe("API Integration Flow", () => {
 		const statsClient = {
 			application: {
 				count: jest
-					.fn()
+					.fn<() => Promise<number>>()
 					.mockResolvedValueOnce(100) // Total apps
 					.mockResolvedValueOnce(80) // Linux apps
 					.mockResolvedValueOnce(60) // macOS apps
 					.mockResolvedValueOnce(40), // Windows apps
-				groupBy: jest.fn().mockResolvedValue([
-					{ category: "development", _count: { category: 60 } },
-					{ category: "productivity", _count: { category: 40 } },
-				]),
+				groupBy: jest
+					.fn<
+						() => Promise<{ category: string; _count: { category: number } }[]>
+					>()
+					.mockResolvedValue([
+						{ category: "development", _count: { category: 60 } },
+						{ category: "productivity", _count: { category: 40 } },
+					]),
 			},
 			plugin: {
-				count: jest.fn().mockResolvedValue(50),
-				aggregate: jest.fn().mockResolvedValue({
-					_sum: { downloadCount: 3000 },
-				}),
-				groupBy: jest.fn().mockResolvedValue([
-					{ type: "package-manager", _count: { type: 30 } },
-					{ type: "tool", _count: { type: 20 } },
-				]),
+				count: jest.fn<() => Promise<number>>().mockResolvedValue(50),
+				aggregate: jest
+					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+					.mockResolvedValue({
+						_sum: { downloadCount: 3000 },
+					}),
+				groupBy: jest
+					.fn<() => Promise<{ type: string; _count: { type: number } }[]>>()
+					.mockResolvedValue([
+						{ type: "package-manager", _count: { type: 30 } },
+						{ type: "tool", _count: { type: 20 } },
+					]),
 			},
 			config: {
-				count: jest.fn().mockResolvedValue(25),
-				aggregate: jest.fn().mockResolvedValue({
-					_sum: { downloadCount: 1000 },
-				}),
-				groupBy: jest.fn().mockResolvedValue([
-					{ category: "system", _count: { category: 15 } },
-					{ category: "development", _count: { category: 10 } },
-				]),
+				count: jest.fn<() => Promise<number>>().mockResolvedValue(25),
+				aggregate: jest
+					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+					.mockResolvedValue({
+						_sum: { downloadCount: 1000 },
+					}),
+				groupBy: jest
+					.fn<
+						() => Promise<{ category: string; _count: { category: number } }[]>
+					>()
+					.mockResolvedValue([
+						{ category: "system", _count: { category: 15 } },
+						{ category: "development", _count: { category: 10 } },
+					]),
 			},
 			stack: {
-				count: jest.fn().mockResolvedValue(15),
-				aggregate: jest.fn().mockResolvedValue({
-					_sum: { downloadCount: 500 },
-				}),
+				count: jest.fn<() => Promise<number>>().mockResolvedValue(15),
+				aggregate: jest
+					.fn<() => Promise<{ _sum: { downloadCount: number } }>>()
+					.mockResolvedValue({
+						_sum: { downloadCount: 500 },
+					}),
 			},
 		};
 
@@ -353,20 +382,28 @@ describe("API Integration Flow", () => {
 		mockPrisma.$transaction.mockImplementation(async (callback: any) => {
 			const tx = {
 				plugin: {
-					findMany: jest.fn().mockResolvedValue([mockData.plugin]),
-					count: jest.fn().mockResolvedValue(1),
+					findMany: jest
+						.fn<() => Promise<(typeof mockData.plugin)[]>>()
+						.mockResolvedValue([mockData.plugin]),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 				application: {
-					findMany: jest.fn().mockResolvedValue([mockData.application]),
-					count: jest.fn().mockResolvedValue(1),
+					findMany: jest
+						.fn<() => Promise<(typeof mockData.application)[]>>()
+						.mockResolvedValue([mockData.application]),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 				config: {
-					findMany: jest.fn().mockResolvedValue([mockData.config]),
-					count: jest.fn().mockResolvedValue(1),
+					findMany: jest
+						.fn<() => Promise<(typeof mockData.config)[]>>()
+						.mockResolvedValue([mockData.config]),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 				stack: {
-					findMany: jest.fn().mockResolvedValue([mockData.stack]),
-					count: jest.fn().mockResolvedValue(1),
+					findMany: jest
+						.fn<() => Promise<(typeof mockData.stack)[]>>()
+						.mockResolvedValue([mockData.stack]),
+					count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
 				},
 			};
 			return await callback(tx);

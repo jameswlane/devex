@@ -11,6 +11,8 @@ describe("validation", () => {
 			const result = validatePaginationParams({ page: "1", limit: "50" });
 			expect(result.success).toBe(true);
 			if (result.success) {
+				if (!result.data)
+					throw new Error("Expected validation data on success");
 				expect(result.data.page).toBe(1);
 				expect(result.data.limit).toBe(50);
 			}
@@ -20,6 +22,8 @@ describe("validation", () => {
 			const result = validatePaginationParams({ page: "0", limit: "50" });
 			expect(result.success).toBe(false);
 			if (!result.success) {
+				if (!result.error)
+					throw new Error("Expected validation error on failure");
 				expect(result.error.issues).toContainEqual(
 					expect.objectContaining({
 						path: ["page"],
@@ -33,6 +37,8 @@ describe("validation", () => {
 			const result = validatePaginationParams({ page: "1", limit: "200" });
 			expect(result.success).toBe(false);
 			if (!result.success) {
+				if (!result.error)
+					throw new Error("Expected validation error on failure");
 				expect(result.error.issues).toContainEqual(
 					expect.objectContaining({
 						path: ["limit"],
@@ -46,6 +52,8 @@ describe("validation", () => {
 			const result = validatePaginationParams({});
 			expect(result.success).toBe(true);
 			if (result.success) {
+				if (!result.data)
+					throw new Error("Expected validation data on success");
 				expect(result.data.page).toBe(1);
 				expect(result.data.limit).toBe(50);
 			}

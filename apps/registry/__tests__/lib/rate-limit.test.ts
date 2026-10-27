@@ -6,7 +6,7 @@ import {
 	it,
 	jest,
 } from "@jest/globals";
-import type { NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import {
 	checkRateLimitHealth,
 	RATE_LIMIT_CONFIGS,
@@ -16,17 +16,19 @@ import {
 // Mock Redis to simulate healthy Redis in tests
 jest.mock("@/lib/redis", () => ({
 	redis: {
-		get: jest.fn().mockResolvedValue(null),
-		set: jest.fn().mockResolvedValue("OK"),
+		get: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+		set: jest.fn<() => Promise<string>>().mockResolvedValue("OK"),
 		incr: jest.fn(),
-		expire: jest.fn().mockResolvedValue(1),
-		del: jest.fn().mockResolvedValue(1),
-		exists: jest.fn().mockResolvedValue(0),
-		ping: jest.fn().mockResolvedValue("PONG"),
+		expire: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+		del: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+		exists: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+		ping: jest.fn<() => Promise<string>>().mockResolvedValue("PONG"),
 	},
-	checkRedisHealth: jest.fn().mockResolvedValue({
-		status: "healthy",
-	}),
+	checkRedisHealth: jest
+		.fn<() => Promise<{ status: string }>>()
+		.mockResolvedValue({
+			status: "healthy",
+		}),
 }));
 
 // Mock NextRequest
@@ -45,11 +47,9 @@ const createMockRequest = (ip = "127.0.0.1", pathname = "/test") => {
 };
 
 const createMockHandler = (status = 200) => {
-	return jest.fn().mockResolvedValue({
-		status,
-		headers: new Headers(),
-		body: JSON.stringify({ success: true }),
-	});
+	return jest
+		.fn<() => Promise<NextResponse>>()
+		.mockResolvedValue(NextResponse.json({ success: true }, { status }));
 };
 
 describe("rate-limit", () => {

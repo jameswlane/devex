@@ -24,7 +24,9 @@ Object.assign(console, mockConsole);
 describe("Logger Module", () => {
 	beforeEach(() => {
 		// Clear all mocks before each test
-		Object.values(mockConsole).forEach((mock) => mock.mockClear());
+		Object.values(mockConsole).forEach((mock) => {
+			mock.mockClear();
+		});
 	});
 
 	describe("StructuredLogger", () => {
@@ -226,14 +228,12 @@ describe("Logger Module", () => {
 		});
 
 		describe("debug logging", () => {
-			const originalEnv = process.env.NODE_ENV;
-
 			afterEach(() => {
-				process.env.NODE_ENV = originalEnv;
+				jest.restoreAllMocks();
 			});
 
 			it("should log debug messages in development", () => {
-				process.env.NODE_ENV = "development";
+				jest.replaceProperty(process.env, "NODE_ENV", "development");
 				const devLogger = new StructuredLogger();
 
 				devLogger.debug("Debug message", { debugInfo: "test" });
@@ -245,7 +245,7 @@ describe("Logger Module", () => {
 			});
 
 			it("should not log debug messages in production", () => {
-				process.env.NODE_ENV = "production";
+				jest.replaceProperty(process.env, "NODE_ENV", "production");
 				const prodLogger = new StructuredLogger();
 
 				prodLogger.debug("Debug message", { debugInfo: "test" });

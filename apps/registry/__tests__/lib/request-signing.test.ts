@@ -21,11 +21,11 @@ jest.mock("@/lib/logger", () => ({
 
 // Mock Redis
 const mockRedis = {
-	exists: jest.fn(),
-	set: jest.fn(),
-	get: jest.fn(),
-	incr: jest.fn(),
-	expire: jest.fn(),
+	exists: jest.fn<() => Promise<number>>(),
+	set: jest.fn<(key: string, value: string, ttl?: number) => Promise<string>>(),
+	get: jest.fn<() => Promise<string | null>>(),
+	incr: jest.fn<(key: string) => Promise<number>>(),
+	expire: jest.fn<() => Promise<number>>(),
 };
 jest.mock("@/lib/redis", () => ({
 	redis: mockRedis,
@@ -382,7 +382,9 @@ describe("Request Signing Module", () => {
 				headers: {
 					get: (name: string) => headers[name.toLowerCase()] || null,
 				},
-				text: jest.fn().mockResolvedValue(body ? JSON.stringify(body) : ""),
+				text: jest
+					.fn<() => Promise<string>>()
+					.mockResolvedValue(body ? JSON.stringify(body) : ""),
 			} as unknown as Request;
 
 			return request;
@@ -496,7 +498,9 @@ describe("Request Signing Module", () => {
 				headers: {
 					get: () => "valid-value",
 				},
-				text: jest.fn().mockResolvedValue("{ invalid json }"),
+				text: jest
+					.fn<() => Promise<string>>()
+					.mockResolvedValue("{ invalid json }"),
 			} as unknown as Request;
 
 			const result = await requireSignedRequest(
@@ -512,7 +516,7 @@ describe("Request Signing Module", () => {
 			const request = {
 				method: "POST",
 				headers: {
-					get: jest.fn().mockImplementation(() => {
+					get: jest.fn<() => never>().mockImplementation(() => {
 						throw new Error("Header access failed");
 					}),
 				},
@@ -666,9 +670,11 @@ describe("Request Signing Module", () => {
 		it("should handle signature comparison errors gracefully", () => {
 			// Mock crypto.timingSafeEqual to throw an error
 			const originalTimingSafeEqual = crypto.timingSafeEqual;
-			crypto.timingSafeEqual = jest.fn().mockImplementation(() => {
-				throw new Error("Comparison failed");
-			});
+			crypto.timingSafeEqual = jest
+				.fn<typeof crypto.timingSafeEqual>()
+				.mockImplementation(() => {
+					throw new Error("Comparison failed");
+				});
 
 			const payload = { event: "test" };
 			const secret = "webhook-secret";

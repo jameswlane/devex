@@ -50,7 +50,7 @@ jest.mock("@/lib/redis", () => ({
 // Mock db-health
 jest.mock("@/lib/db-health", () => ({
 	dbCircuitBreaker: {
-		execute: jest.fn((fn) => fn()),
+		execute: jest.fn((fn: () => Promise<unknown>) => fn()),
 	},
 	dbHealthMonitor: {
 		checkHealth: jest.fn(),
@@ -93,27 +93,31 @@ describe("/api/v1/registry", () => {
 		jest.clearAllMocks();
 
 		// Setup default mock responses
-		mockPrisma.$transaction.mockImplementation(async (callback) => {
-			return await callback({
-				plugin: {
-					findMany: jest.fn().mockResolvedValue([]),
-					count: jest.fn().mockResolvedValue(0),
-				},
-				application: {
-					findMany: jest.fn().mockResolvedValue([]),
-					count: jest.fn().mockResolvedValue(0),
-				},
-				config: {
-					findMany: jest.fn().mockResolvedValue([]),
-					count: jest.fn().mockResolvedValue(0),
-				},
-				stack: {
-					findMany: jest.fn().mockResolvedValue([]),
-					count: jest.fn().mockResolvedValue(0),
-				},
-				registryStats: { findFirst: jest.fn().mockResolvedValue(null) },
-			});
-		});
+		mockPrisma.$transaction.mockImplementation(
+			async (callback: (tx: unknown) => Promise<unknown>) => {
+				return await callback({
+					plugin: {
+						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+					},
+					application: {
+						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+					},
+					config: {
+						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+					},
+					stack: {
+						findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+						count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+					},
+					registryStats: {
+						findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+					},
+				});
+			},
+		);
 	});
 
 	describe("GET", () => {
@@ -121,28 +125,42 @@ describe("/api/v1/registry", () => {
 			const req = createMockRequest();
 
 			// Mock transaction callback
-			mockPrisma.$transaction.mockImplementation(async (callback) => {
-				const tx = {
-					plugin: {
-						findMany: jest.fn().mockResolvedValue([mockPlugin]),
-						count: jest.fn().mockResolvedValue(1),
-					},
-					application: {
-						findMany: jest.fn().mockResolvedValue([mockApplication]),
-						count: jest.fn().mockResolvedValue(1),
-					},
-					config: {
-						findMany: jest.fn().mockResolvedValue([mockConfig]),
-						count: jest.fn().mockResolvedValue(1),
-					},
-					stack: {
-						findMany: jest.fn().mockResolvedValue([mockStack]),
-						count: jest.fn().mockResolvedValue(1),
-					},
-					registryStats: { findFirst: jest.fn().mockResolvedValue(mockStats) },
-				};
-				return await callback(tx);
-			});
+			mockPrisma.$transaction.mockImplementation(
+				async (callback: (tx: unknown) => Promise<unknown>) => {
+					const tx = {
+						plugin: {
+							findMany: jest
+								.fn<() => Promise<(typeof mockPlugin)[]>>()
+								.mockResolvedValue([mockPlugin]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+						},
+						application: {
+							findMany: jest
+								.fn<() => Promise<(typeof mockApplication)[]>>()
+								.mockResolvedValue([mockApplication]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+						},
+						config: {
+							findMany: jest
+								.fn<() => Promise<(typeof mockConfig)[]>>()
+								.mockResolvedValue([mockConfig]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+						},
+						stack: {
+							findMany: jest
+								.fn<() => Promise<(typeof mockStack)[]>>()
+								.mockResolvedValue([mockStack]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+						},
+						registryStats: {
+							findFirst: jest
+								.fn<() => Promise<typeof mockStats>>()
+								.mockResolvedValue(mockStats),
+						},
+					};
+					return await callback(tx);
+				},
+			);
 
 			const response = await GET(req);
 			const data = await response.json();
@@ -158,32 +176,34 @@ describe("/api/v1/registry", () => {
 		it("should handle custom pagination parameters", async () => {
 			const req = createMockRequest({ page: "2", limit: "25" });
 
-			mockPrisma.$transaction.mockImplementation(async (callback) => {
-				const tx = {
-					plugin: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					application: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					config: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					stack: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					registryStats: {
-						findFirst: jest.fn().mockResolvedValue(null),
-					},
-				};
+			mockPrisma.$transaction.mockImplementation(
+				async (callback: (tx: unknown) => Promise<unknown>) => {
+					const tx = {
+						plugin: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						application: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						config: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						stack: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						registryStats: {
+							findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+						},
+					};
 
-				// Call the callback and return its result
-				return await callback(tx);
-			});
+					// Call the callback and return its result
+					return await callback(tx);
+				},
+			);
 
 			const response = await GET(req);
 			const data = await response.json();
@@ -195,32 +215,38 @@ describe("/api/v1/registry", () => {
 		it("should filter by resource type", async () => {
 			const req = createMockRequest({ resource: "plugins" });
 
-			mockPrisma.$transaction.mockImplementation(async (callback) => {
-				const tx = {
-					plugin: {
-						findMany: jest.fn().mockResolvedValue([mockPlugin]),
-						count: jest.fn().mockResolvedValue(1),
-					},
-					application: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					config: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					stack: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					registryStats: {
-						findFirst: jest.fn().mockResolvedValue(mockStats),
-					},
-				};
+			mockPrisma.$transaction.mockImplementation(
+				async (callback: (tx: unknown) => Promise<unknown>) => {
+					const tx = {
+						plugin: {
+							findMany: jest
+								.fn<() => Promise<(typeof mockPlugin)[]>>()
+								.mockResolvedValue([mockPlugin]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(1),
+						},
+						application: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						config: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						stack: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						registryStats: {
+							findFirst: jest
+								.fn<() => Promise<typeof mockStats>>()
+								.mockResolvedValue(mockStats),
+						},
+					};
 
-				// Call the callback and return its result
-				return await callback(tx);
-			});
+					// Call the callback and return its result
+					return await callback(tx);
+				},
+			);
 
 			const response = await GET(req);
 			expect(response.status).toBe(200);
@@ -229,32 +255,34 @@ describe("/api/v1/registry", () => {
 		it("should enforce pagination limits", async () => {
 			const req = createMockRequest({ limit: "200" });
 
-			mockPrisma.$transaction.mockImplementation(async (callback) => {
-				const tx = {
-					plugin: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					application: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					config: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					stack: {
-						findMany: jest.fn().mockResolvedValue([]),
-						count: jest.fn().mockResolvedValue(0),
-					},
-					registryStats: {
-						findFirst: jest.fn().mockResolvedValue(null),
-					},
-				};
+			mockPrisma.$transaction.mockImplementation(
+				async (callback: (tx: unknown) => Promise<unknown>) => {
+					const tx = {
+						plugin: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						application: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						config: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						stack: {
+							findMany: jest.fn<() => Promise<never[]>>().mockResolvedValue([]),
+							count: jest.fn<() => Promise<number>>().mockResolvedValue(0),
+						},
+						registryStats: {
+							findFirst: jest.fn<() => Promise<null>>().mockResolvedValue(null),
+						},
+					};
 
-				// Call the callback and return its result
-				return await callback(tx);
-			});
+					// Call the callback and return its result
+					return await callback(tx);
+				},
+			);
 
 			const response = await GET(req);
 			const data = await response.json();

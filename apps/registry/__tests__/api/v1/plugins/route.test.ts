@@ -276,7 +276,14 @@ describe("/api/v1/plugins", () => {
 				error: mockError,
 			});
 
-			const { createApiError } = jest.requireMock("@/lib/logger");
+			const { createApiError } = jest.requireMock<{
+				createApiError: jest.Mock<
+					(
+						...args: Parameters<typeof import("@/lib/logger").createApiError>
+					) => Response
+				>;
+				logDatabaseError: jest.Mock;
+			}>("@/lib/logger");
 			createApiError.mockReturnValue(
 				new Response("Validation Error", { status: 400 }),
 			);
@@ -343,8 +350,14 @@ describe("/api/v1/plugins", () => {
 			const dbError = new Error("Database connection failed");
 			mockPrisma.plugin.findMany.mockRejectedValue(dbError);
 
-			const { createApiError, logDatabaseError } =
-				jest.requireMock("@/lib/logger");
+			const { createApiError, logDatabaseError } = jest.requireMock<{
+				createApiError: jest.Mock<
+					(
+						...args: Parameters<typeof import("@/lib/logger").createApiError>
+					) => Response
+				>;
+				logDatabaseError: jest.Mock;
+			}>("@/lib/logger");
 			createApiError.mockReturnValue(
 				new Response("Database Error", { status: 500 }),
 			);

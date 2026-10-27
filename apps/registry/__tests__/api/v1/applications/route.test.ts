@@ -33,7 +33,7 @@ jest.mock("@/lib/logger", () => ({
 
 jest.mock("@/lib/error-handler", () => ({
 	withErrorHandling: jest.fn((handler) => handler),
-	safeDatabase: jest.fn((fn) => fn()),
+	safeDatabase: jest.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
 // Import route handler after all mocks are set up
@@ -322,7 +322,14 @@ describe("/api/v1/applications", () => {
 				error: mockError,
 			});
 
-			const { createApiError } = jest.requireMock("@/lib/logger");
+			const { createApiError } = jest.requireMock<{
+				createApiError: jest.Mock<
+					(
+						...args: Parameters<typeof import("@/lib/logger").createApiError>
+					) => Response
+				>;
+				logDatabaseError: jest.Mock;
+			}>("@/lib/logger");
 			createApiError.mockReturnValue(
 				new Response("Validation Error", { status: 400 }),
 			);
