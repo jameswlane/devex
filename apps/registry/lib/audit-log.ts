@@ -286,6 +286,9 @@ export class AuditLogger {
         }, err instanceof Error ? err : undefined);
       });
     }, 30000); // Flush every 30 seconds
+
+    // Don't keep the process (or a serverless invocation) alive just for flushing
+    this.flushInterval.unref?.();
   }
 
   /**

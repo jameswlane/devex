@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -133,4 +134,7 @@ async function handleCreatePlugin(request: Request) {
 
 // Export handlers
 export const GET = handleGetPlugins;
-export const POST = handleCreatePlugin;
+export const POST = withApiKey(ADMIN_API_KEY_ENV, handleCreatePlugin, {
+	action: "create-plugin",
+	resourceType: "plugin",
+});

@@ -8,6 +8,7 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/error-handler";
+import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import {
   revalidateCacheTag,
   revalidateCacheTags,
@@ -19,22 +20,15 @@ import {
 import { logger } from "@/lib/logger";
 
 async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
-  // Verify authentication
-  const authHeader = request.headers.get("authorization");
-  const apiKey = process.env.REVALIDATE_API_KEY;
-
-  if (!apiKey || authHeader !== `Bearer ${apiKey}`) {
-    logger.warn("Unauthorized revalidation attempt", {
-      ip: request.headers.get("x-forwarded-for") || "unknown",
-    });
-
+  // Authentication is enforced by withApiKey before this handler runs
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object") {
     return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
+      { error: "Request body must be a valid JSON object" },
+      { status: 400 }
     );
   }
 
-  const body = await request.json();
   const { type, tags, path, entity } = body;
 
   try {
@@ -121,5 +115,9 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-// Only allow POST requests
-export const POST = withErrorHandling(handleRevalidate, "revalidate-cache");
+// Only allow POST requests, authenticated with REVALIDATE_API_KEY
+export const POST = withApiKey(
+  REVALIDATE_API_KEY_ENV,
+  withErrorHandling(handleRevalidate, "revalidate-cache"),
+  { action: "revalidate-cache", resourceType: "cache" },
+);

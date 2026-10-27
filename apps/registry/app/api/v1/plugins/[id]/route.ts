@@ -1,5 +1,6 @@
 import type { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { createApiError, logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
@@ -195,27 +196,15 @@ async function handleDeletePlugin(
 	);
 }
 
-// Authentication-required placeholder handlers
-async function requireAuthentication(): Promise<NextResponse> {
-	return createApiError(
-		"Authentication required. PUT and DELETE endpoints are disabled until authentication is implemented.",
-		401,
-	);
-}
-
 // Export wrapped handlers with error handling
 export const GET = withErrorHandling(handleGetPlugin, "fetch-plugin");
-
-// 🚨 DISABLED: Awaiting authentication implementation
-// These endpoints are temporarily disabled to prevent unauthorized database modifications
-// TODO: Enable after implementing authentication/authorization
-export const PUT = requireAuthentication;
-export const DELETE = requireAuthentication;
-
-// ============================================================================
-// PRESERVED CODE: Enable after authentication is implemented
-// ============================================================================
-/*
-export const PUT = withErrorHandling(handleUpdatePlugin, "update-plugin");
-export const DELETE = withErrorHandling(handleDeletePlugin, "delete-plugin");
-*/
+export const PUT = withApiKey(
+	ADMIN_API_KEY_ENV,
+	withErrorHandling(handleUpdatePlugin, "update-plugin"),
+	{ action: "update-plugin", resourceType: "plugin" },
+);
+export const DELETE = withApiKey(
+	ADMIN_API_KEY_ENV,
+	withErrorHandling(handleDeletePlugin, "delete-plugin"),
+	{ action: "delete-plugin", resourceType: "plugin" },
+);
