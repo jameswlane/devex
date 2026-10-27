@@ -162,6 +162,9 @@ importers:
       '@types/bcrypt':
         specifier: ^6.0.0
         version: 6.0.0
+      '@types/jest':
+        specifier: ^30.0.0
+        version: 30.0.0
       '@types/node':
         specifier: 22.18.4
         version: 22.18.4
@@ -10129,7 +10132,7 @@ snapshots:
   '@types/jest@30.0.0':
     dependencies:
       expect: 30.1.2
-      pretty-format: 30.0.5
+      pretty-format: 30.2.0
 
   '@types/js-yaml@4.0.9': {}
 
