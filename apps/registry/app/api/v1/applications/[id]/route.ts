@@ -1,28 +1,35 @@
-import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { type NextRequest, NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
+import {
+	invalidateOnDataChange,
+	withCacheInvalidation,
+} from "@/lib/cache-invalidation";
+import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
 import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
-import { invalidateOnDataChange, withCacheInvalidation } from "@/lib/cache-invalidation";
-import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
-import { Prisma } from "@prisma/client";
+import {
+	createOptimizedResponse,
+	ResponseType,
+} from "@/lib/response-optimization";
 
 // GET /api/v1/applications/[id] - Get a specific application by name
 async function handleGetApplication(
 	request: NextRequest,
-	{ params }: { params: Promise<{ id: string }> }
+	{ params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
 	const { id: applicationName } = await params;
 
 	const application = await safeDatabase(
-		() => prisma.application.findUnique({
-			where: { name: applicationName },
-		}),
+		() =>
+			prisma.application.findUnique({
+				where: { name: applicationName },
+			}),
 		{
 			operation: "fetch-application",
 			resource: "application",
-			metadata: { name: applicationName }
-		}
+			metadata: { name: applicationName },
+		},
 	);
 
 	if (!application) {
@@ -37,7 +44,7 @@ async function handleGetApplication(
 			linux: platforms?.linux || null,
 			macos: platforms?.macos || null,
 			windows: platforms?.windows || null,
-		}
+		},
 	};
 
 	return NextResponse.json(response);
@@ -46,7 +53,7 @@ async function handleGetApplication(
 // PUT /api/v1/applications/[id] - Update an application by name
 async function handleUpdateApplication(
 	request: NextRequest,
-	{ params }: { params: Promise<{ id: string }> }
+	{ params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
 	const { id: applicationName } = await params;
 	const body = await request.json();
@@ -58,7 +65,9 @@ async function handleUpdateApplication(
 		...(body.official !== undefined && { official: body.official }),
 		...(body.default !== undefined && { default: body.default }),
 		...(body.tags && { tags: body.tags }),
-		...(body.desktopEnvironments && { desktopEnvironments: body.desktopEnvironments }),
+		...(body.desktopEnvironments && {
+			desktopEnvironments: body.desktopEnvironments,
+		}),
 		...(body.platforms && { platforms: body.platforms }),
 	};
 
@@ -78,8 +87,8 @@ async function handleUpdateApplication(
 		{
 			operation: "update-application",
 			resource: "application",
-			metadata: { name: applicationName }
-		}
+			metadata: { name: applicationName },
+		},
 	);
 
 	if (!application) {
@@ -92,7 +101,7 @@ async function handleUpdateApplication(
 // DELETE /api/v1/applications/[id] - Delete an application by name
 async function handleDeleteApplication(
 	request: NextRequest,
-	{ params }: { params: Promise<{ id: string }> }
+	{ params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
 	const { id: applicationName } = await params;
 
@@ -111,15 +120,18 @@ async function handleDeleteApplication(
 		{
 			operation: "delete-application",
 			resource: "application",
-			metadata: { name: applicationName }
-		}
+			metadata: { name: applicationName },
+		},
 	);
 
 	if (!result) {
 		return createApiError("Application not found", 404);
 	}
 
-	return NextResponse.json({ success: true, message: "Application deleted successfully" });
+	return NextResponse.json({
+		success: true,
+		message: "Application deleted successfully",
+	});
 }
 
 // Export wrapped handlers with error handling

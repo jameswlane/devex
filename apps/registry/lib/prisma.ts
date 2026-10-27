@@ -55,9 +55,9 @@ async function withRetry<T>(
 					attempt,
 					maxAttempts: config.maxAttempts,
 					delay,
-					error: error instanceof Error ? error.message : String(error)
+					error: error instanceof Error ? error.message : String(error),
 				});
-				await new Promise(resolve => setTimeout(resolve, delay));
+				await new Promise((resolve) => setTimeout(resolve, delay));
 			}
 		}
 	}
@@ -79,13 +79,13 @@ function isNonRetryableError(error: unknown): boolean {
 		/foreign key/i,
 	];
 
-	return nonRetryablePatterns.some(pattern => pattern.test(error.message));
+	return nonRetryablePatterns.some((pattern) => pattern.test(error.message));
 }
 
 // Database connection pool configuration
 interface DatabasePoolConfig {
 	connectionLimit?: number;
-	transactionMode?: 'readwrite' | 'readonly';
+	transactionMode?: "readwrite" | "readonly";
 	queryTimeout?: number;
 	poolTimeout?: number;
 }
@@ -105,7 +105,9 @@ const createPrismaClient = () => {
 	// Only add datasources if PRISMA_DATABASE_URL is available (avoid build-time errors)
 	if (process.env.PRISMA_DATABASE_URL) {
 		// Parse and enhance the database URL with connection pooling parameters
-		const enhancedUrl = enhanceDatabaseUrlWithPooling(process.env.PRISMA_DATABASE_URL);
+		const enhancedUrl = enhanceDatabaseUrlWithPooling(
+			process.env.PRISMA_DATABASE_URL,
+		);
 
 		config.datasources = {
 			db: {
@@ -129,34 +131,34 @@ function enhanceDatabaseUrlWithPooling(originalUrl: string): string {
 		const params = url.searchParams;
 
 		// Set connection pool size (adjust based on your needs)
-		if (!params.has('connection_limit')) {
-			params.set('connection_limit', '20');
+		if (!params.has("connection_limit")) {
+			params.set("connection_limit", "20");
 		}
 
 		// Set pool timeout (time to wait for available connection)
-		if (!params.has('pool_timeout')) {
-			params.set('pool_timeout', '10');
+		if (!params.has("pool_timeout")) {
+			params.set("pool_timeout", "10");
 		}
 
 		// Set statement timeout (reduced for faster failure detection)
-		if (!params.has('statement_timeout')) {
-			params.set('statement_timeout', '10000'); // 10 seconds
+		if (!params.has("statement_timeout")) {
+			params.set("statement_timeout", "10000"); // 10 seconds
 		}
 
 		// Enable connection pooling mode for better performance
-		if (!params.has('pgbouncer') && url.hostname.includes('pooler')) {
-			params.set('pgbouncer', 'true');
+		if (!params.has("pgbouncer") && url.hostname.includes("pooler")) {
+			params.set("pgbouncer", "true");
 		}
 
 		// Set schema for multi-tenant environments
-		if (!params.has('schema')) {
-			params.set('schema', 'public');
+		if (!params.has("schema")) {
+			params.set("schema", "public");
 		}
 
 		return url.toString();
 	} catch (error) {
 		logger.warn("Failed to enhance database URL with pooling parameters", {
-			error: error instanceof Error ? error.message : String(error)
+			error: error instanceof Error ? error.message : String(error),
 		});
 		// Return original URL if parsing fails
 		return originalUrl;
@@ -183,7 +185,7 @@ class ConnectionPoolManager {
 	private async performHealthCheck(): Promise<void> {
 		try {
 			const health = await checkDatabaseHealth();
-			this.isHealthy = health.status === 'healthy';
+			this.isHealthy = health.status === "healthy";
 			this.lastHealthCheck = new Date();
 
 			if (!this.isHealthy) {
@@ -192,7 +194,7 @@ class ConnectionPoolManager {
 		} catch (error) {
 			this.isHealthy = false;
 			logger.error("Database health check error", {
-				error: error instanceof Error ? error.message : String(error)
+				error: error instanceof Error ? error.message : String(error),
 			});
 		}
 	}
@@ -256,14 +258,20 @@ export async function connectPrisma(): Promise<void> {
 	try {
 		await withRetry(async () => {
 			connectionAttempts++;
-			logger.info("Attempting to connect to database", { attempt: connectionAttempts });
+			logger.info("Attempting to connect to database", {
+				attempt: connectionAttempts,
+			});
 			await prismaInstance.$connect();
 			logger.info("Database connected successfully");
 			isConnected = true;
 			connectionAttempts = 0; // Reset on success
 		});
 	} catch (error) {
-		logger.error("Failed to connect to database after retries", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+		logger.error(
+			"Failed to connect to database after retries",
+			{ error: error instanceof Error ? error.message : String(error) },
+			error instanceof Error ? error : undefined,
+		);
 		throw error;
 	}
 }
@@ -276,7 +284,9 @@ export async function warmupPrisma(): Promise<void> {
 		await prismaInstance.$queryRaw`SELECT 1 as health_check`;
 		logger.info("Database connection pre-warmed successfully");
 	} catch (error) {
-		logger.warn("Database pre-warming failed", { error: error instanceof Error ? error.message : String(error) });
+		logger.warn("Database pre-warming failed", {
+			error: error instanceof Error ? error.message : String(error),
+		});
 		// Don't throw - this is optional optimization
 	}
 }
@@ -290,7 +300,11 @@ export async function disconnectPrisma(): Promise<void> {
 		isConnected = false;
 		logger.info("Database disconnected successfully");
 	} catch (error) {
-		logger.error("Error disconnecting from database", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+		logger.error(
+			"Error disconnecting from database",
+			{ error: error instanceof Error ? error.message : String(error) },
+			error instanceof Error ? error : undefined,
+		);
 	}
 }
 
@@ -346,8 +360,9 @@ if (process.env.NODE_ENV === "production") {
 	process.on("SIGINT", async () => {
 		// During build, Next.js sends SIGINT to child processes
 		// Only log if actually running in production, not during build
-		const isBuildPhase = process.env.NEXT_PHASE === 'phase-production-build' ||
-		                    process.argv.some(arg => arg.includes('next') && arg.includes('build'));
+		const isBuildPhase =
+			process.env.NEXT_PHASE === "phase-production-build" ||
+			process.argv.some((arg) => arg.includes("next") && arg.includes("build"));
 
 		if (!isBuildPhase) {
 			logger.info("Received SIGINT, shutting down gracefully");
@@ -359,10 +374,12 @@ if (process.env.NODE_ENV === "production") {
 }
 
 export function ensurePrisma() {
-    if (!prisma) {
-        throw new Error("Prisma client not available. Check PRISMA_DATABASE_URL configuration.");
-    }
-    return prisma;
+	if (!prisma) {
+		throw new Error(
+			"Prisma client not available. Check PRISMA_DATABASE_URL configuration.",
+		);
+	}
+	return prisma;
 }
 
 // Enhanced database operations with retry logic
@@ -390,11 +407,14 @@ export async function executeTransactionWithRetry<T>(
 			await connectPrisma();
 		}
 
-		return await prismaInstance.$transaction(async (tx) => {
-			return await transaction(tx as typeof prismaInstance);
-		}, {
-			timeout: options?.timeout || 10000,
-		});
+		return await prismaInstance.$transaction(
+			async (tx) => {
+				return await transaction(tx as typeof prismaInstance);
+			},
+			{
+				timeout: options?.timeout || 10000,
+			},
+		);
 	});
 }
 
@@ -405,4 +425,3 @@ export async function executeTransactionWithRetry<T>(
 // 	const metrics = await prisma.$metrics.json();
 // 	return metrics;
 // }
-

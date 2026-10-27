@@ -1,12 +1,15 @@
+import type { Plugin } from "@prisma/client";
 import { NextResponse } from "next/server";
+import {
+	binaryMetadataService,
+	type PlatformBinaries,
+} from "@/lib/binary-metadata";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
+import { CACHE_DURATION, pluginCache } from "@/lib/plugin-cache";
 import { prisma } from "@/lib/prisma";
-import { transformationService } from "@/lib/transformation-service";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
-import { binaryMetadataService, type PlatformBinaries } from "@/lib/binary-metadata";
-import { pluginCache, CACHE_DURATION } from "@/lib/plugin-cache";
-import type { Plugin } from "@prisma/client";
+import { transformationService } from "@/lib/transformation-service";
 
 interface PluginMetadata {
 	name: string;
@@ -42,7 +45,10 @@ interface RegistryResponse {
 const PLUGIN_BATCH_SIZE = 50;
 
 // Helper function to fetch plugins in batches for better performance
-async function fetchPluginsInBatches(totalLimit: number, offset: number): Promise<Plugin[]> {
+async function fetchPluginsInBatches(
+	totalLimit: number,
+	offset: number,
+): Promise<Plugin[]> {
 	const cacheKey = `plugins_${totalLimit}_${offset}`;
 	const cached = pluginCache.get(cacheKey);
 
@@ -64,10 +70,7 @@ async function fetchPluginsInBatches(totalLimit: number, offset: number): Promis
 				where: {
 					status: "active",
 				},
-				orderBy: [
-					{ priority: "asc" },
-					{ name: "asc" }
-				],
+				orderBy: [{ priority: "asc" }, { name: "asc" }],
 				take: batchSize,
 				skip: currentOffset,
 			});
@@ -80,14 +83,14 @@ async function fetchPluginsInBatches(totalLimit: number, offset: number): Promis
 
 			// Add small delay between batches to prevent overwhelming the database
 			if (processed < totalLimit && batch.length === batchSize) {
-				await new Promise(resolve => setTimeout(resolve, 10));
+				await new Promise((resolve) => setTimeout(resolve, 10));
 			}
 		}
 
 		// Cache the result
 		pluginCache.set(cacheKey, {
 			data: plugins,
-			expiry: Date.now() + CACHE_DURATION
+			expiry: Date.now() + CACHE_DURATION,
 		});
 
 		return plugins;
@@ -102,12 +105,12 @@ export const GET = withRateLimit(async function handler(request: Request) {
 	try {
 		// Parse query parameters for pagination
 		const { searchParams } = new URL(request.url);
-		const limit = Math.min(parseInt(searchParams.get('limit') || '500'), 1000); // Max 1000 plugins
-		const offset = parseInt(searchParams.get('offset') || '0');
+		const limit = Math.min(parseInt(searchParams.get("limit") || "500"), 1000); // Max 1000 plugins
+		const offset = parseInt(searchParams.get("offset") || "0");
 
 		// Get total count for metadata
 		const totalCount = await prisma.plugin.count({
-			where: { status: "active" }
+			where: { status: "active" },
 		});
 
 		// Fetch active plugins with batched processing for better performance
@@ -117,11 +120,15 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		const registryPlugins: Record<string, PluginMetadata> = {};
 
 		// Process plugins in parallel batches for better performance
-		const transformBatch = async (batch: Plugin[]): Promise<[string, PluginMetadata][]> => {
-			return Promise.all(batch.map(async (plugin) => {
-				const transformedPlugin = await transformPluginToMetadata(plugin);
-				return [transformedPlugin.name, transformedPlugin];
-			}));
+		const transformBatch = async (
+			batch: Plugin[],
+		): Promise<[string, PluginMetadata][]> => {
+			return Promise.all(
+				batch.map(async (plugin) => {
+					const transformedPlugin = await transformPluginToMetadata(plugin);
+					return [transformedPlugin.name, transformedPlugin];
+				}),
+			);
 		};
 
 		// Split plugins into batches for parallel processing
@@ -143,7 +150,7 @@ export const GET = withRateLimit(async function handler(request: Request) {
 		const response: RegistryResponse = {
 			base_url: `${REGISTRY_CONFIG.BASE_URL}/api/v1/plugins`,
 			plugins: registryPlugins,
-			last_updated: new Date().toISOString()
+			last_updated: new Date().toISOString(),
 		};
 
 		return NextResponse.json(response, {
@@ -165,14 +172,16 @@ export const GET = withRateLimit(async function handler(request: Request) {
 			JSON.stringify({ error: "Failed to load plugin registry" }),
 			{
 				status: 500,
-				headers: { "Content-Type": "application/json" }
-			}
+				headers: { "Content-Type": "application/json" },
+			},
 		);
 	}
 }, RATE_LIMIT_CONFIGS.registry);
 
 // Helper function to transform a single plugin to metadata format
-async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata> {
+async function transformPluginToMetadata(
+	plugin: Plugin,
+): Promise<PluginMetadata> {
 	// Use version from database, fall back to "latest" if not set
 	const version = plugin.version || "latest";
 
@@ -181,16 +190,22 @@ async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata
 
 	// Try to get existing binary metadata from database
 	const existingBinaries = plugin.binaries as any;
-	if (existingBinaries && typeof existingBinaries === 'object' && Object.keys(existingBinaries).length > 0) {
+	if (
+		existingBinaries &&
+		typeof existingBinaries === "object" &&
+		Object.keys(existingBinaries).length > 0
+	) {
 		// Use existing metadata from database
-		platforms = binaryMetadataService.formatForRegistry(existingBinaries as PlatformBinaries);
+		platforms = binaryMetadataService.formatForRegistry(
+			existingBinaries as PlatformBinaries,
+		);
 	} else {
 		// Generate new metadata for supported platforms based on database data
 		const supportedArchitectures = ["amd64", "arm64"];
 		const platformMap: Record<string, string> = {
-			"linux": "linux",
-			"macos": "darwin",
-			"windows": "windows"
+			linux: "linux",
+			macos: "darwin",
+			windows: "windows",
 		};
 
 		// Use actual platform data from database instead of hard-coded strings
@@ -203,7 +218,7 @@ async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata
 					// Registry download URL that will track and redirect
 					url: `https://registry.devex.sh/api/v1/plugins/${plugin.id}/download/${platformKey}`,
 					checksum: "", // Will be populated by background job or GitHub Actions
-					size: 0 // Will be populated by background job or GitHub Actions
+					size: 0, // Will be populated by background job or GitHub Actions
 				};
 			}
 		}
@@ -211,10 +226,11 @@ async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata
 
 	// Extract full plugin name from githubPath (source of truth)
 	// githubPath format: "packages/tool-shell" or "https://...packages/package-manager-apt"
-	const normalizedName = extractPluginNameFromPath(plugin.githubPath) || plugin.name;
+	const normalizedName =
+		extractPluginNameFromPath(plugin.githubPath) || plugin.name;
 
 	// Extract structured data from plugin supports field
-	const supports = plugin.supports as any || {};
+	const supports = (plugin.supports as any) || {};
 	const requirements = extractRequirements(supports);
 	const dependencies = extractDependencies(supports);
 	const conflicts = extractConflicts(supports);
@@ -229,7 +245,7 @@ async function transformPluginToMetadata(plugin: Plugin): Promise<PluginMetadata
 		dependencies: dependencies,
 		conflicts: conflicts,
 		tags: extractTagsFromType(plugin.type),
-		requirements: requirements
+		requirements: requirements,
 	};
 }
 
@@ -239,7 +255,7 @@ function extractPluginNameFromPath(githubPath: string | null): string | null {
 	if (!githubPath) return null;
 
 	// Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
-	const match = githubPath.match(/packages\/([^\/]+?)(?:\/|$)/);
+	const match = githubPath.match(/packages\/([^/]+?)(?:\/|$)/);
 	return match ? match[1] : null;
 }
 
@@ -262,13 +278,15 @@ function extractTagsFromType(type: string): string[] {
 }
 
 // Helper function to extract requirements from plugin supports data
-function extractRequirements(supports: any): {
-	os_version?: string;
-	arch?: string[];
-	memory_mb?: number;
-	disk_mb?: number;
-} | undefined {
-	if (!supports || typeof supports !== 'object') {
+function extractRequirements(supports: any):
+	| {
+			os_version?: string;
+			arch?: string[];
+			memory_mb?: number;
+			disk_mb?: number;
+	  }
+	| undefined {
+	if (!supports || typeof supports !== "object") {
 		return undefined;
 	}
 
@@ -282,11 +300,11 @@ function extractRequirements(supports: any): {
 		requirements.arch = supports.architectures;
 	}
 
-	if (typeof supports.memory_mb === 'number') {
+	if (typeof supports.memory_mb === "number") {
 		requirements.memory_mb = supports.memory_mb;
 	}
 
-	if (typeof supports.disk_mb === 'number') {
+	if (typeof supports.disk_mb === "number") {
 		requirements.disk_mb = supports.disk_mb;
 	}
 
@@ -295,12 +313,12 @@ function extractRequirements(supports: any): {
 
 // Helper function to extract dependencies from plugin supports data
 function extractDependencies(supports: any): string[] {
-	if (!supports || typeof supports !== 'object') {
+	if (!supports || typeof supports !== "object") {
 		return [];
 	}
 
 	if (supports.dependencies && Array.isArray(supports.dependencies)) {
-		return supports.dependencies.filter((dep: any) => typeof dep === 'string');
+		return supports.dependencies.filter((dep: any) => typeof dep === "string");
 	}
 
 	return [];
@@ -308,12 +326,14 @@ function extractDependencies(supports: any): string[] {
 
 // Helper function to extract conflicts from plugin supports data
 function extractConflicts(supports: any): string[] {
-	if (!supports || typeof supports !== 'object') {
+	if (!supports || typeof supports !== "object") {
 		return [];
 	}
 
 	if (supports.conflicts && Array.isArray(supports.conflicts)) {
-		return supports.conflicts.filter((conflict: any) => typeof conflict === 'string');
+		return supports.conflicts.filter(
+			(conflict: any) => typeof conflict === "string",
+		);
 	}
 
 	return [];

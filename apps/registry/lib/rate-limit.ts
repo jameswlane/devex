@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createApiError, logger } from "./logger";
-import { redis, checkRedisHealth } from "./redis";
+import { checkRedisHealth, redis } from "./redis";
 
 // Rate limiting configuration
 interface RateLimitConfig {
@@ -14,7 +14,10 @@ interface RateLimitConfig {
 
 // Rate limiting store interface
 interface RateLimitStore {
-	increment(key: string, windowMs: number): Promise<{ count: number; resetTime: number }>;
+	increment(
+		key: string,
+		windowMs: number,
+	): Promise<{ count: number; resetTime: number }>;
 	get(key: string): Promise<{ count: number; resetTime: number } | undefined>;
 	reset(key: string): Promise<void>;
 	destroy(): Promise<void>;
@@ -25,12 +28,18 @@ class RedisRateLimitStore implements RateLimitStore {
 	private keyPrefix = "rate_limit:";
 	private slidingWindowPrefix = "rate_limit_sliding:";
 
-	async increment(key: string, windowMs: number): Promise<{ count: number; resetTime: number }> {
+	async increment(
+		key: string,
+		windowMs: number,
+	): Promise<{ count: number; resetTime: number }> {
 		return this.slidingWindowIncrement(key, windowMs);
 	}
 
 	// Simplified sliding window rate limiting implementation
-	private async slidingWindowIncrement(key: string, windowMs: number): Promise<{ count: number; resetTime: number }> {
+	private async slidingWindowIncrement(
+		key: string,
+		windowMs: number,
+	): Promise<{ count: number; resetTime: number }> {
 		const redisKey = this.slidingWindowPrefix + key;
 		const now = Date.now();
 		const resetTime = now + windowMs;
@@ -40,10 +49,10 @@ class RedisRateLimitStore implements RateLimitStore {
 			// Use minute-based buckets for approximate sliding window
 			const currentMinute = Math.floor(now / 60000);
 			const minuteKey = `${redisKey}:${currentMinute}`;
-			
+
 			// Increment current minute bucket
 			const count = await redis.incr(minuteKey);
-			
+
 			// Set expiration for cleanup (2 minutes to cover window)
 			const ttlSeconds = 120;
 			await redis.expire(minuteKey, ttlSeconds);
@@ -53,15 +62,21 @@ class RedisRateLimitStore implements RateLimitStore {
 			return { count, resetTime };
 		} catch (error) {
 			// Fallback to simple increment if sliding window fails
-			logger.warn("Sliding window rate limit failed, falling back to simple rate limit", { 
-				error: error instanceof Error ? error.message : String(error) 
-			});
+			logger.warn(
+				"Sliding window rate limit failed, falling back to simple rate limit",
+				{
+					error: error instanceof Error ? error.message : String(error),
+				},
+			);
 			return this.simpleIncrement(key, windowMs);
 		}
 	}
 
 	// Fallback simple rate limiting
-	private async simpleIncrement(key: string, windowMs: number): Promise<{ count: number; resetTime: number }> {
+	private async simpleIncrement(
+		key: string,
+		windowMs: number,
+	): Promise<{ count: number; resetTime: number }> {
 		const redisKey = this.keyPrefix + key;
 		const now = Date.now();
 		const resetTime = now + windowMs;
@@ -70,7 +85,7 @@ class RedisRateLimitStore implements RateLimitStore {
 		try {
 			// Use Redis INCR for atomic increment
 			const count = await redis.incr(redisKey);
-			
+
 			// Set expiration only for new keys (count === 1)
 			if (count === 1) {
 				await redis.expire(redisKey, ttlSeconds);
@@ -79,21 +94,27 @@ class RedisRateLimitStore implements RateLimitStore {
 			return { count, resetTime };
 		} catch (error) {
 			// Fallback to allowing request if Redis is down
-			logger.error("Redis rate limit error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+			logger.error(
+				"Redis rate limit error",
+				{ error: error instanceof Error ? error.message : String(error) },
+				error instanceof Error ? error : undefined,
+			);
 			return { count: 1, resetTime };
 		}
 	}
 
-	async get(key: string): Promise<{ count: number; resetTime: number } | undefined> {
+	async get(
+		key: string,
+	): Promise<{ count: number; resetTime: number } | undefined> {
 		const slidingKey = this.slidingWindowPrefix + key;
 		const simpleKey = this.keyPrefix + key;
-		
+
 		try {
 			// Try sliding window first (minute-based buckets)
 			const now = Date.now();
 			const currentMinute = Math.floor(now / 60000);
 			const minuteKey = `${slidingKey}:${currentMinute}`;
-			
+
 			const slidingExists = await redis.exists(minuteKey);
 			if (slidingExists) {
 				const countStr = await redis.get(minuteKey);
@@ -101,7 +122,7 @@ class RedisRateLimitStore implements RateLimitStore {
 				const resetTime = Date.now() + 60000; // Approximate
 				return { count, resetTime };
 			}
-			
+
 			// Fallback to simple counter
 			const exists = await redis.exists(simpleKey);
 			if (!exists) {
@@ -110,13 +131,17 @@ class RedisRateLimitStore implements RateLimitStore {
 
 			const countStr = await redis.get(simpleKey);
 			const count = countStr ? parseInt(countStr, 10) : 0;
-			
+
 			// Estimate reset time (we don't store it, but can approximate)
 			const resetTime = Date.now() + 60000; // Approximate based on default window
-			
+
 			return { count, resetTime };
 		} catch (error) {
-			logger.error("Redis rate limit get error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+			logger.error(
+				"Redis rate limit get error",
+				{ error: error instanceof Error ? error.message : String(error) },
+				error instanceof Error ? error : undefined,
+			);
 			return undefined;
 		}
 	}
@@ -124,15 +149,16 @@ class RedisRateLimitStore implements RateLimitStore {
 	async reset(key: string): Promise<void> {
 		const slidingKey = this.slidingWindowPrefix + key;
 		const simpleKey = this.keyPrefix + key;
-		
+
 		try {
 			// Reset both sliding window and simple counter
-			await Promise.all([
-				redis.del(slidingKey),
-				redis.del(simpleKey)
-			]);
+			await Promise.all([redis.del(slidingKey), redis.del(simpleKey)]);
 		} catch (error) {
-			logger.error("Redis rate limit reset error", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+			logger.error(
+				"Redis rate limit reset error",
+				{ error: error instanceof Error ? error.message : String(error) },
+				error instanceof Error ? error : undefined,
+			);
 		}
 	}
 
@@ -156,15 +182,20 @@ class MemoryRateLimitStore implements RateLimitStore {
 					this.store.delete(key);
 				}
 			}
-			
+
 			// Memory usage monitoring
 			if (this.store.size > 10000) {
-				logger.warn("Rate limit store size warning", { storeSize: this.store.size });
+				logger.warn("Rate limit store size warning", {
+					storeSize: this.store.size,
+				});
 			}
 		}, 30000);
 	}
 
-	async increment(key: string, windowMs: number): Promise<{ count: number; resetTime: number }> {
+	async increment(
+		key: string,
+		windowMs: number,
+	): Promise<{ count: number; resetTime: number }> {
 		const now = Date.now();
 		const existing = this.store.get(key);
 
@@ -179,7 +210,9 @@ class MemoryRateLimitStore implements RateLimitStore {
 		return existing;
 	}
 
-	async get(key: string): Promise<{ count: number; resetTime: number } | undefined> {
+	async get(
+		key: string,
+	): Promise<{ count: number; resetTime: number } | undefined> {
 		const now = Date.now();
 		const existing = this.store.get(key);
 
@@ -207,7 +240,9 @@ async function createRateLimitStore(): Promise<RateLimitStore> {
 		logger.info("Using Redis for rate limiting");
 		return new RedisRateLimitStore();
 	} else {
-		logger.warn("Redis unavailable, using memory store for rate limiting", { error: redisHealth.error });
+		logger.warn("Redis unavailable, using memory store for rate limiting", {
+			error: redisHealth.error,
+		});
 		return new MemoryRateLimitStore();
 	}
 }
@@ -342,15 +377,20 @@ export function rateLimit(config: Partial<RateLimitConfig> = {}) {
 			try {
 				// Track the adjustment so we can subtract from the main counter
 				await store.increment(adjustmentKey, finalConfig.windowMs);
-				
+
 				// Store metadata about the skipped request for analytics
-				const metadataKey = `${key}:skip:${isSuccess ? 'success' : 'failed'}`;
+				const metadataKey = `${key}:skip:${isSuccess ? "success" : "failed"}`;
 				await redis.incr(metadataKey);
 				await redis.expire(metadataKey, adjustmentTtl);
-				
-				logger.debug("Sophisticated skip tracking", { success: isSuccess, key });
+
+				logger.debug("Sophisticated skip tracking", {
+					success: isSuccess,
+					key,
+				});
 			} catch (error) {
-				logger.warn("Failed to track request adjustment", { error: error instanceof Error ? error.message : String(error) });
+				logger.warn("Failed to track request adjustment", {
+					error: error instanceof Error ? error.message : String(error),
+				});
 			}
 		}
 
@@ -390,15 +430,15 @@ export async function checkRateLimitHealth(): Promise<{
 		const start = Date.now();
 		const store = await getRateLimitStore();
 		const testKey = "health_check";
-		
+
 		// Test basic operations
 		await store.increment(testKey, 60000);
 		await store.get(testKey);
 		await store.reset(testKey);
-		
+
 		const latency = Date.now() - start;
 		const redisHealth = await checkRedisHealth();
-		
+
 		return {
 			status: redisHealth.status === "healthy" ? "healthy" : "degraded",
 			storeType: redisHealth.status === "healthy" ? "redis" : "memory",

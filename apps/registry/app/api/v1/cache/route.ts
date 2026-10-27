@@ -1,16 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createApiError } from "@/lib/logger";
-import { withErrorHandling } from "@/lib/error-handler";
+import { type NextRequest, NextResponse } from "next/server";
 import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
-import { 
-	cacheInvalidation, 
-	invalidateRegistryCache,
+import {
+	CACHE_PATTERNS,
 	CACHE_TAGS,
-	CACHE_PATTERNS 
+	cacheInvalidation,
+	invalidateRegistryCache,
 } from "@/lib/cache-invalidation";
+import { withErrorHandling } from "@/lib/error-handler";
+import { createApiError } from "@/lib/logger";
 
 // GET /api/v1/cache - Get cache statistics and status
-async function handleGetCacheStatus(request: NextRequest): Promise<NextResponse> {
+async function handleGetCacheStatus(
+	request: NextRequest,
+): Promise<NextResponse> {
 	const stats = cacheInvalidation.getStats();
 	const inProgress = cacheInvalidation.isInvalidationInProgress();
 
@@ -21,12 +23,14 @@ async function handleGetCacheStatus(request: NextRequest): Promise<NextResponse>
 		cacheTags: CACHE_TAGS,
 		meta: {
 			timestamp: new Date().toISOString(),
-		}
+		},
 	});
 }
 
 // POST /api/v1/cache/invalidate - Manually invalidate caches
-async function handleInvalidateCache(request: NextRequest): Promise<NextResponse> {
+async function handleInvalidateCache(
+	request: NextRequest,
+): Promise<NextResponse> {
 	const body = await request.json().catch(() => null);
 	if (!body || typeof body !== "object") {
 		return createApiError("Request body must be a valid JSON object", 400);
@@ -44,7 +48,14 @@ async function handleInvalidateCache(request: NextRequest): Promise<NextResponse
 	} = body;
 
 	// Validate resource type if provided
-	const validResources = ["application", "plugin", "config", "stack", "stats", "all"];
+	const validResources = [
+		"application",
+		"plugin",
+		"config",
+		"stack",
+		"stats",
+		"all",
+	];
 	if (resource && !validResources.includes(resource)) {
 		return createApiError(`Invalid resource type: ${resource}`, 400);
 	}
@@ -77,19 +88,21 @@ async function handleInvalidateCache(request: NextRequest): Promise<NextResponse
 	} catch (error) {
 		return createApiError(
 			`Cache invalidation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-			500
+			500,
 		);
 	}
 }
 
 // DELETE /api/v1/cache - Clear all caches (dangerous operation)
-async function handleClearAllCaches(request: NextRequest): Promise<NextResponse> {
+async function handleClearAllCaches(
+	request: NextRequest,
+): Promise<NextResponse> {
 	// Additional confirmation check
 	const confirmHeader = request.headers.get("x-confirm-clear-cache");
 	if (confirmHeader !== "yes-clear-all-caches") {
 		return createApiError(
 			"Missing confirmation header - set 'x-confirm-clear-cache: yes-clear-all-caches' to proceed",
-			400
+			400,
 		);
 	}
 
@@ -105,7 +118,7 @@ async function handleClearAllCaches(request: NextRequest): Promise<NextResponse>
 	} catch (error) {
 		return createApiError(
 			`Failed to clear all caches: ${error instanceof Error ? error.message : "Unknown error"}`,
-			500
+			500,
 		);
 	}
 }

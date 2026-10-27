@@ -1,17 +1,17 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient, Prisma } from "@prisma/client";
-import fs from "fs/promises";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { existsSync, readFileSync } from "fs";
+import fs from "fs/promises";
 import path from "path";
 import { binaryMetadataService } from "../lib/binary-metadata";
 
 // Path traversal protection utilities
 function sanitizePath(inputPath: string): string {
 	// Remove any directory traversal sequences
-	const sanitized = inputPath.replace(/\.\./g, '').replace(/[\/\\]+/g, path.sep);
+	const sanitized = inputPath.replace(/\.\./g, "").replace(/[/\\]+/g, path.sep);
 	// Ensure path doesn't start with path separator
-	return sanitized.replace(/^[\/\\]+/, '');
+	return sanitized.replace(/^[/\\]+/, "");
 }
 
 function validatePath(inputPath: string, allowedBasePath: string): string {
@@ -20,7 +20,9 @@ function validatePath(inputPath: string, allowedBasePath: string): string {
 
 	// Ensure the resolved path is within the allowed base path
 	if (!resolvedInput.startsWith(resolvedBase)) {
-		throw new Error(`Path traversal detected: ${inputPath} is outside allowed directory ${allowedBasePath}`);
+		throw new Error(
+			`Path traversal detected: ${inputPath} is outside allowed directory ${allowedBasePath}`,
+		);
 	}
 
 	return resolvedInput;
@@ -30,12 +32,14 @@ function isValidDirectoryName(dirName: string): boolean {
 	// Allow only alphanumeric characters, hyphens, underscores, and dots
 	// Prevent directory traversal patterns
 	const validPattern = /^[a-zA-Z0-9._-]+$/;
-	return validPattern.test(dirName) &&
-		   !dirName.includes('..') &&
-		   !dirName.includes('/') &&
-		   !dirName.includes('\\') &&
-		   dirName.length > 0 &&
-		   dirName.length < 256;
+	return (
+		validPattern.test(dirName) &&
+		!dirName.includes("..") &&
+		!dirName.includes("/") &&
+		!dirName.includes("\\") &&
+		dirName.length > 0 &&
+		dirName.length < 256
+	);
 }
 
 const prisma = new PrismaClient();
@@ -158,7 +162,7 @@ async function seedApplications() {
 		const webRelativePath = "../web/app/generated/tools.json";
 		const webToolsPath = validatePath(
 			path.join(currentWorkingDir, webRelativePath),
-			path.resolve(currentWorkingDir, "../web")
+			path.resolve(currentWorkingDir, "../web"),
 		);
 
 		// Safe JSON parsing with error handling
@@ -258,7 +262,7 @@ async function seedPlugins() {
 		const packagesRelativePath = "../../packages";
 		const packagesDir = validatePath(
 			path.join(currentWorkingDir, packagesRelativePath),
-			path.resolve(currentWorkingDir, "../../")
+			path.resolve(currentWorkingDir, "../../"),
 		);
 
 		// Add timeout and retry logic for directory reading
@@ -271,18 +275,25 @@ async function seedPlugins() {
 				packageDirs = await fs.readdir(packagesDir);
 				break;
 			} catch (error) {
-				console.warn(`Attempt ${attempt}/${maxRetries} to read packages directory failed:`, error instanceof Error ? error.message : String(error));
+				console.warn(
+					`Attempt ${attempt}/${maxRetries} to read packages directory failed:`,
+					error instanceof Error ? error.message : String(error),
+				);
 				if (attempt === maxRetries) {
-					throw new Error(`Failed to read packages directory after ${maxRetries} attempts: ${error instanceof Error ? error.message : String(error)}`);
+					throw new Error(
+						`Failed to read packages directory after ${maxRetries} attempts: ${error instanceof Error ? error.message : String(error)}`,
+					);
 				}
 				// Wait before retrying
-				await new Promise(resolve => setTimeout(resolve, retryDelay));
+				await new Promise((resolve) => setTimeout(resolve, retryDelay));
 			}
 		}
 
 		const plugins = [];
-		const concurrencyLimit = parseInt(process.env.SEED_CONCURRENCY || '3', 10); // Configurable via env var
-		console.log(`📦 Processing packages with concurrency limit of ${concurrencyLimit}...`);
+		const concurrencyLimit = parseInt(process.env.SEED_CONCURRENCY || "3", 10); // Configurable via env var
+		console.log(
+			`📦 Processing packages with concurrency limit of ${concurrencyLimit}...`,
+		);
 
 		// Process packages in batches to prevent race conditions
 		for (let i = 0; i < packageDirs.length; i += concurrencyLimit) {
@@ -296,7 +307,7 @@ async function seedPlugins() {
 
 				const packageJsonPath = validatePath(
 					path.join(packagesDir, sanitizePath(dir), "package.json"),
-					packagesDir
+					packagesDir,
 				);
 
 				try {
@@ -310,10 +321,16 @@ async function seedPlugins() {
 					// Add timeout to file reading to prevent hanging
 					const readPromise = fs.readFile(packageJsonPath, "utf-8");
 					const timeoutPromise = new Promise<never>((_, reject) =>
-						setTimeout(() => reject(new Error(`Timeout reading ${packageJsonPath}`)), 5000)
+						setTimeout(
+							() => reject(new Error(`Timeout reading ${packageJsonPath}`)),
+							5000,
+						),
 					);
 
-					const packageContent = await Promise.race([readPromise, timeoutPromise]);
+					const packageContent = await Promise.race([
+						readPromise,
+						timeoutPromise,
+					]);
 
 					if (!packageContent.trim()) {
 						console.warn(`Skipping ${dir}: package.json is empty`);
@@ -325,7 +342,10 @@ async function seedPlugins() {
 					// Only process DevEx plugins
 					// Note: Using package.json devex.plugin section as canonical metadata source
 					// This standardizes on a single source of truth for plugin metadata
-					if (packageData.name?.startsWith("@devex/") && packageData.devex?.plugin) {
+					if (
+						packageData.name?.startsWith("@devex/") &&
+						packageData.devex?.plugin
+					) {
 						const pluginConfig = packageData.devex.plugin;
 						const pluginName = packageData.name.replace("@devex/", "");
 
@@ -334,7 +354,9 @@ async function seedPlugins() {
 							version: packageData.version,
 							description: packageData.description,
 							author: packageData.author || "DevEx Team",
-							repository: packageData.repository?.url || "https://github.com/jameswlane/devex",
+							repository:
+								packageData.repository?.url ||
+								"https://github.com/jameswlane/devex",
 							platforms: pluginConfig.platforms || [],
 							dependencies: pluginConfig.dependencies || [],
 							tags: packageData.keywords || [],
@@ -342,7 +364,7 @@ async function seedPlugins() {
 							priority: pluginConfig.priority || 10,
 							supports: pluginConfig.supports || {},
 							release_tag: `${packageData.name}@${packageData.version}`,
-							status: "active"
+							status: "active",
 						};
 					}
 
@@ -351,11 +373,18 @@ async function seedPlugins() {
 				} catch (error) {
 					// More specific error handling
 					if (error instanceof SyntaxError) {
-						console.warn(`Skipping ${dir}: invalid JSON in package.json - ${error.message}`);
-					} else if (error instanceof Error && error.message.includes('Timeout')) {
+						console.warn(
+							`Skipping ${dir}: invalid JSON in package.json - ${error.message}`,
+						);
+					} else if (
+						error instanceof Error &&
+						error.message.includes("Timeout")
+					) {
 						console.warn(`Skipping ${dir}: timeout reading package.json`);
 					} else {
-						console.warn(`Skipping ${dir}: ${error instanceof Error ? error.message : String(error)}`);
+						console.warn(
+							`Skipping ${dir}: ${error instanceof Error ? error.message : String(error)}`,
+						);
 					}
 					return null;
 				}
@@ -366,26 +395,28 @@ async function seedPlugins() {
 
 			// Collect successful results
 			for (const result of batchResults) {
-				if (result.status === 'fulfilled' && result.value !== null) {
+				if (result.status === "fulfilled" && result.value !== null) {
 					plugins.push(result.value);
 				}
 			}
 
 			// Small delay between batches to prevent filesystem overload
 			if (i + concurrencyLimit < packageDirs.length) {
-				await new Promise(resolve => setTimeout(resolve, 100));
+				await new Promise((resolve) => setTimeout(resolve, 100));
 			}
 		}
 
 		console.log(`Found ${plugins.length} plugins to seed`);
 
 		// Process database operations in batches to prevent connection exhaustion
-		const dbBatchSize = parseInt(process.env.SEED_DB_BATCH_SIZE || '5', 10);
+		const dbBatchSize = parseInt(process.env.SEED_DB_BATCH_SIZE || "5", 10);
 		const batchTimeout = 30000; // 30 seconds per batch
 
 		for (let i = 0; i < plugins.length; i += dbBatchSize) {
 			const batch = plugins.slice(i, i + dbBatchSize);
-			console.log(`Processing plugin batch ${Math.floor(i/dbBatchSize) + 1}/${Math.ceil(plugins.length/dbBatchSize)}`);
+			console.log(
+				`Processing plugin batch ${Math.floor(i / dbBatchSize) + 1}/${Math.ceil(plugins.length / dbBatchSize)}`,
+			);
 
 			const batchPromises = batch.map(async (plugin) => {
 				console.log(`  Seeding plugin: ${plugin.name}`);
@@ -393,22 +424,38 @@ async function seedPlugins() {
 				const githubPath = await getGitHubPath("plugin", plugin.name);
 
 				// Determine supported platforms based on structured plugin data
-				let platforms = plugin.platforms && plugin.platforms.length > 0
-					? plugin.platforms
-					: ["linux", "macos", "windows"]; // Default fallback
+				let platforms =
+					plugin.platforms && plugin.platforms.length > 0
+						? plugin.platforms
+						: ["linux", "macos", "windows"]; // Default fallback
 
 				// Override with type-specific logic if no explicit platforms specified
-				if (plugin.platforms.length === 0 && plugin.type === "package-manager") {
+				if (
+					plugin.platforms.length === 0 &&
+					plugin.type === "package-manager"
+				) {
 					// Package managers are typically platform-specific
 					if (plugin.name.includes("apt") || plugin.name.includes("deb")) {
 						platforms = ["linux"];
-					} else if (plugin.name.includes("brew") || plugin.name.includes("mas")) {
+					} else if (
+						plugin.name.includes("brew") ||
+						plugin.name.includes("mas")
+					) {
 						platforms = ["macos"];
-					} else if (plugin.name.includes("winget") || plugin.name.includes("choco")) {
+					} else if (
+						plugin.name.includes("winget") ||
+						plugin.name.includes("choco")
+					) {
 						platforms = ["windows"];
-					} else if (plugin.name.includes("dnf") || plugin.name.includes("rpm")) {
+					} else if (
+						plugin.name.includes("dnf") ||
+						plugin.name.includes("rpm")
+					) {
 						platforms = ["linux"];
-					} else if (plugin.name.includes("pacman") || plugin.name.includes("yay")) {
+					} else if (
+						plugin.name.includes("pacman") ||
+						plugin.name.includes("yay")
+					) {
 						platforms = ["linux"];
 					}
 				}
@@ -416,16 +463,22 @@ async function seedPlugins() {
 				// Generate binary metadata for the plugin
 				let binariesMetadata = {};
 				try {
-					if (plugin.repository && plugin.repository.includes('github.com')) {
-						binariesMetadata = await binaryMetadataService.generatePluginBinaryMetadata(
-							plugin.name,
-							plugin.repository,
-							plugin.version
+					if (plugin.repository && plugin.repository.includes("github.com")) {
+						binariesMetadata =
+							await binaryMetadataService.generatePluginBinaryMetadata(
+								plugin.name,
+								plugin.repository,
+								plugin.version,
+							);
+						console.log(
+							`    Generated binary metadata for ${plugin.name}: ${Object.keys(binariesMetadata).length} platforms`,
 						);
-						console.log(`    Generated binary metadata for ${plugin.name}: ${Object.keys(binariesMetadata).length} platforms`);
 					}
 				} catch (error) {
-					console.warn(`    Could not generate binary metadata for ${plugin.name}:`, error instanceof Error ? error.message : String(error));
+					console.warn(
+						`    Could not generate binary metadata for ${plugin.name}:`,
+						error instanceof Error ? error.message : String(error),
+					);
 				}
 
 				// Add timeout to database operations
@@ -460,7 +513,15 @@ async function seedPlugins() {
 				});
 
 				const timeoutPromise = new Promise<never>((_, reject) =>
-					setTimeout(() => reject(new Error(`Database operation timeout for plugin ${plugin.name}`)), batchTimeout)
+					setTimeout(
+						() =>
+							reject(
+								new Error(
+									`Database operation timeout for plugin ${plugin.name}`,
+								),
+							),
+						batchTimeout,
+					),
 				);
 
 				return Promise.race([upsertPromise, timeoutPromise]);
@@ -474,8 +535,11 @@ async function seedPlugins() {
 				const result = batchResults[j];
 				const plugin = batch[j];
 
-				if (result.status === 'rejected') {
-					console.error(`  ❌ Failed to seed plugin ${plugin.name}:`, result.reason);
+				if (result.status === "rejected") {
+					console.error(
+						`  ❌ Failed to seed plugin ${plugin.name}:`,
+						result.reason,
+					);
 				} else {
 					console.log(`  ✅ Successfully seeded plugin ${plugin.name}`);
 				}
@@ -483,7 +547,7 @@ async function seedPlugins() {
 
 			// Small delay between database batches to prevent overwhelming the connection pool
 			if (i + dbBatchSize < plugins.length) {
-				await new Promise(resolve => setTimeout(resolve, 200));
+				await new Promise((resolve) => setTimeout(resolve, 200));
 			}
 		}
 
@@ -669,11 +733,11 @@ async function updateRegistryStats() {
 					OR: [
 						{
 							platforms: {
-								path: ['linux'],
-								not: Prisma.JsonNull
-							}
+								path: ["linux"],
+								not: Prisma.JsonNull,
+							},
 						},
-						{ tags: { has: "linux" } }
+						{ tags: { has: "linux" } },
 					],
 				},
 			}),
@@ -682,11 +746,11 @@ async function updateRegistryStats() {
 					OR: [
 						{
 							platforms: {
-								path: ['macos'],
-								not: Prisma.JsonNull
-							}
+								path: ["macos"],
+								not: Prisma.JsonNull,
+							},
 						},
-						{ tags: { has: "macos" } }
+						{ tags: { has: "macos" } },
 					],
 				},
 			}),
@@ -695,9 +759,9 @@ async function updateRegistryStats() {
 					OR: [
 						{
 							platforms: {
-								path: ['windows'],
-								not: Prisma.JsonNull
-							}
+								path: ["windows"],
+								not: Prisma.JsonNull,
+							},
 						},
 						{ tags: { has: "windows" } },
 					],
@@ -761,14 +825,19 @@ async function main() {
 			console.log("✅ Database connection established");
 			break;
 		} catch (error) {
-			console.warn(`Database connection attempt ${attempt}/${maxConnectionRetries} failed:`, error instanceof Error ? error.message : String(error));
+			console.warn(
+				`Database connection attempt ${attempt}/${maxConnectionRetries} failed:`,
+				error instanceof Error ? error.message : String(error),
+			);
 
 			if (attempt === maxConnectionRetries) {
-				throw new Error(`Failed to connect to database after ${maxConnectionRetries} attempts`);
+				throw new Error(
+					`Failed to connect to database after ${maxConnectionRetries} attempts`,
+				);
 			}
 
 			// Wait before retrying
-			await new Promise(resolve => setTimeout(resolve, connectionRetryDelay));
+			await new Promise((resolve) => setTimeout(resolve, connectionRetryDelay));
 		}
 	}
 
@@ -799,12 +868,27 @@ async function main() {
 
 		// Provide more specific error guidance
 		if (error instanceof Error) {
-			if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-				console.error("💡 This appears to be a timing issue. Try running the seed script again or check system resources.");
-			} else if (error.message.includes('connection') || error.message.includes('ECONNREFUSED')) {
-				console.error("💡 Database connection issue. Ensure the database is running and accessible.");
-			} else if (error.message.includes('permission') || error.message.includes('EACCES')) {
-				console.error("💡 File permission issue. Check that the script has permission to read package files.");
+			if (
+				error.message.includes("timeout") ||
+				error.message.includes("Timeout")
+			) {
+				console.error(
+					"💡 This appears to be a timing issue. Try running the seed script again or check system resources.",
+				);
+			} else if (
+				error.message.includes("connection") ||
+				error.message.includes("ECONNREFUSED")
+			) {
+				console.error(
+					"💡 Database connection issue. Ensure the database is running and accessible.",
+				);
+			} else if (
+				error.message.includes("permission") ||
+				error.message.includes("EACCES")
+			) {
+				console.error(
+					"💡 File permission issue. Check that the script has permission to read package files.",
+				);
 			}
 		}
 
@@ -814,7 +898,12 @@ async function main() {
 			await prisma.$disconnect();
 			console.log("✅ Database connection closed cleanly");
 		} catch (disconnectError) {
-			console.warn("⚠️ Error while disconnecting from database:", disconnectError instanceof Error ? disconnectError.message : String(disconnectError));
+			console.warn(
+				"⚠️ Error while disconnecting from database:",
+				disconnectError instanceof Error
+					? disconnectError.message
+					: String(disconnectError),
+			);
 		}
 	}
 }

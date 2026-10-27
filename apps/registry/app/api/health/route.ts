@@ -1,142 +1,167 @@
-import { NextRequest } from "next/server";
-import { handleHealthCheck, dbHealthMonitor, DatabaseRecovery } from "@/lib/db-health";
+import type { NextRequest } from "next/server";
 import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
+import {
+	DatabaseRecovery,
+	dbHealthMonitor,
+	handleHealthCheck,
+} from "@/lib/db-health";
 import { createApiError, logger } from "@/lib/logger";
 import { getStartupHealth } from "@/lib/startup";
 
 // GET /api/health - Basic health check
 export async function GET(request: NextRequest) {
-  const startTime = Date.now();
+	const startTime = Date.now();
 
-  try {
-    // Add request-level timeout to prevent hanging (10 seconds max)
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Health check timed out after 10 seconds")), 10000);
-    });
+	try {
+		// Add request-level timeout to prevent hanging (10 seconds max)
+		const timeoutPromise = new Promise<never>((_, reject) => {
+			setTimeout(
+				() => reject(new Error("Health check timed out after 10 seconds")),
+				10000,
+			);
+		});
 
-    const healthCheckPromise = (async (): Promise<{ startupHealth: any; dbHealth: any; detailed: boolean } | null> => {
-      // Check if this is a detailed health check (for internal monitoring)
-      const url = new URL(request.url);
-      const detailed = url.searchParams.get("detailed") === "true";
-      const recovery = url.searchParams.get("recovery") === "true";
+		const healthCheckPromise = (async (): Promise<{
+			startupHealth: any;
+			dbHealth: any;
+			detailed: boolean;
+		} | null> => {
+			// Check if this is a detailed health check (for internal monitoring)
+			const url = new URL(request.url);
+			const detailed = url.searchParams.get("detailed") === "true";
+			const recovery = url.searchParams.get("recovery") === "true";
 
-      // Attempt recovery if requested and needed
-      if (recovery) {
-        const needsRecovery = await DatabaseRecovery.isRecoveryNeeded();
-        if (needsRecovery) {
-          const recovered = await DatabaseRecovery.attemptRecovery();
-          if (!recovered) {
-            // Return null to signal failure
-            return null;
-          }
-        }
-      }
+			// Attempt recovery if requested and needed
+			if (recovery) {
+				const needsRecovery = await DatabaseRecovery.isRecoveryNeeded();
+				if (needsRecovery) {
+					const recovered = await DatabaseRecovery.attemptRecovery();
+					if (!recovered) {
+						// Return null to signal failure
+						return null;
+					}
+				}
+			}
 
-      // Get startup health information
-      let startupHealth;
-      try {
-        startupHealth = await getStartupHealth();
-      } catch (error) {
-        logger.warn("Failed to get startup health information", {
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
-        startupHealth = {
-          status: "failed" as const,
-          uptime: process.uptime() * 1000,
-        };
-      }
+			// Get startup health information
+			let startupHealth;
+			try {
+				startupHealth = await getStartupHealth();
+			} catch (error) {
+				logger.warn("Failed to get startup health information", {
+					error: error instanceof Error ? error.message : "Unknown error",
+				});
+				startupHealth = {
+					status: "failed" as const,
+					uptime: process.uptime() * 1000,
+				};
+			}
 
-      // Get database and Redis health
-      const dbHealth = await dbHealthMonitor.checkHealth();
+			// Get database and Redis health
+			const dbHealth = await dbHealthMonitor.checkHealth();
 
-      return { startupHealth, dbHealth, detailed };
-    })();
+			return { startupHealth, dbHealth, detailed };
+		})();
 
-    const result = await Promise.race([timeoutPromise, healthCheckPromise]);
+		const result = await Promise.race([timeoutPromise, healthCheckPromise]);
 
-    // Handle recovery failure
-    if (result === null) {
-      return createApiError("Database recovery failed", 503);
-    }
+		// Handle recovery failure
+		if (result === null) {
+			return createApiError("Database recovery failed", 503);
+		}
 
-    const { startupHealth, dbHealth, detailed } = result;
-    
-    // Return enhanced health check response with startup information
-    const responseTime = Date.now() - startTime;
-    
-    const response = {
-      status: dbHealth.status,
-      timestamp: dbHealth.timestamp,
-      uptime: process.uptime() * 1000,
-      responseTime,
-      version: process.env.APP_VERSION || "1.0.0",
-      environment: process.env.NODE_ENV || "development",
-      startup: startupHealth,
-      database: {
-        status: dbHealth.status,
-        latency: dbHealth.latency,
-        connections: detailed ? dbHealth.connections : undefined,
-      },
-      redis: dbHealth.redis,
-      ...(detailed && {
-        errors: dbHealth.errors,
-        connectionPool: await dbHealthMonitor.getPoolStatus(),
-      }),
-    };
+		const { startupHealth, dbHealth, detailed } = result;
 
-    // Log health check for monitoring
-    logger.info("Health check completed", {
-      status: dbHealth.status,
-      responseTime,
-      startupStatus: startupHealth.status,
-      detailed,
-    });
+		// Return enhanced health check response with startup information
+		const responseTime = Date.now() - startTime;
 
-    const httpStatus = dbHealth.status === "healthy" ? 200 : 
-                      dbHealth.status === "degraded" ? 200 : 503;
+		const response = {
+			status: dbHealth.status,
+			timestamp: dbHealth.timestamp,
+			uptime: process.uptime() * 1000,
+			responseTime,
+			version: process.env.APP_VERSION || "1.0.0",
+			environment: process.env.NODE_ENV || "development",
+			startup: startupHealth,
+			database: {
+				status: dbHealth.status,
+				latency: dbHealth.latency,
+				connections: detailed ? dbHealth.connections : undefined,
+			},
+			redis: dbHealth.redis,
+			...(detailed && {
+				errors: dbHealth.errors,
+				connectionPool: await dbHealthMonitor.getPoolStatus(),
+			}),
+		};
 
-    return Response.json(response, {
-      status: httpStatus,
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "X-Health-Status": dbHealth.status,
-        "X-Startup-Status": startupHealth.status,
-        "X-Response-Time": responseTime.toString(),
-      },
-    });
-  } catch (error) {
-    const responseTime = Date.now() - startTime;
-    
-    logger.error("Health check failed", {
-      responseTime,
-      error: error instanceof Error ? error.message : "Unknown error",
-    }, error instanceof Error ? error : undefined);
-    
-    return createApiError("Health check failed", 500, undefined, {
-      responseTime,
-    }, "/api/health");
-  }
+		// Log health check for monitoring
+		logger.info("Health check completed", {
+			status: dbHealth.status,
+			responseTime,
+			startupStatus: startupHealth.status,
+			detailed,
+		});
+
+		const httpStatus =
+			dbHealth.status === "healthy"
+				? 200
+				: dbHealth.status === "degraded"
+					? 200
+					: 503;
+
+		return Response.json(response, {
+			status: httpStatus,
+			headers: {
+				"Content-Type": "application/json",
+				"Cache-Control": "no-cache, no-store, must-revalidate",
+				"X-Health-Status": dbHealth.status,
+				"X-Startup-Status": startupHealth.status,
+				"X-Response-Time": responseTime.toString(),
+			},
+		});
+	} catch (error) {
+		const responseTime = Date.now() - startTime;
+
+		logger.error(
+			"Health check failed",
+			{
+				responseTime,
+				error: error instanceof Error ? error.message : "Unknown error",
+			},
+			error instanceof Error ? error : undefined,
+		);
+
+		return createApiError(
+			"Health check failed",
+			500,
+			undefined,
+			{
+				responseTime,
+			},
+			"/api/health",
+		);
+	}
 }
 
 // POST /api/health - Force refresh health cache (requires REVALIDATE_API_KEY)
 async function handleRefreshHealth() {
-  try {
-    // Clear cache and force fresh health check
-    dbHealthMonitor.clearCache();
-    const health = await dbHealthMonitor.checkHealth(true);
-    
-    return Response.json({
-      message: "Health cache refreshed",
-      status: health.status,
-      timestamp: health.timestamp,
-    });
-  } catch (error) {
-    return createApiError("Failed to refresh health cache", 500);
-  }
+	try {
+		// Clear cache and force fresh health check
+		dbHealthMonitor.clearCache();
+		const health = await dbHealthMonitor.checkHealth(true);
+
+		return Response.json({
+			message: "Health cache refreshed",
+			status: health.status,
+			timestamp: health.timestamp,
+		});
+	} catch (error) {
+		return createApiError("Failed to refresh health cache", 500);
+	}
 }
 
 export const POST = withApiKey(REVALIDATE_API_KEY_ENV, handleRefreshHealth, {
-  action: "refresh-health-cache",
-  resourceType: "health",
+	action: "refresh-health-cache",
+	resourceType: "health",
 });

@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { initializeApplication } from "@/lib/startup";
-import { logger } from "@/lib/logger";
-import StatsDashboard from "@/components/stats-dashboard";
 import { StatsErrorBoundary } from "@/components/error-boundary";
+import StatsDashboard from "@/components/stats-dashboard";
+import { logger } from "@/lib/logger";
+import { initializeApplication } from "@/lib/startup";
 
 // Force dynamic rendering since we have client-side data fetching
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export default async function RegistryHomepage() {
 			timeoutMs: 5000, // Shorter timeout for page loads
 			retries: 1, // Single retry for page loads
 		});
-		
+
 		if (!startupResult.success) {
 			logger.warn("Application startup completed with warnings", {
 				database: startupResult.database,
@@ -23,7 +23,11 @@ export default async function RegistryHomepage() {
 			});
 		}
 	} catch (error) {
-		logger.error("Application startup failed", { error: error instanceof Error ? error.message : String(error) }, error instanceof Error ? error : undefined);
+		logger.error(
+			"Application startup failed",
+			{ error: error instanceof Error ? error.message : String(error) },
+			error instanceof Error ? error : undefined,
+		);
 		// Continue anyway - page should still render with cached/fallback data
 	}
 
@@ -90,30 +94,60 @@ export default async function RegistryHomepage() {
 						>
 							<div className="flex items-center">
 								<div className="flex-shrink-0">
-									<svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+									<svg
+										className="w-8 h-8 text-blue-600"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
+										/>
 									</svg>
 								</div>
 								<div className="ml-4">
-									<h3 className="text-lg font-semibold text-gray-900">Applications</h3>
-									<p className="text-gray-600">Browse cross-platform development applications with advanced filtering and search</p>
+									<h3 className="text-lg font-semibold text-gray-900">
+										Applications
+									</h3>
+									<p className="text-gray-600">
+										Browse cross-platform development applications with advanced
+										filtering and search
+									</p>
 								</div>
 							</div>
 						</Link>
-						
+
 						<Link
 							href="/plugins"
 							className="block bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow"
 						>
 							<div className="flex items-center">
 								<div className="flex-shrink-0">
-									<svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+									<svg
+										className="w-8 h-8 text-purple-600"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											strokeWidth={2}
+											d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+										/>
 									</svg>
 								</div>
 								<div className="ml-4">
-									<h3 className="text-lg font-semibold text-gray-900">Plugins</h3>
-									<p className="text-gray-600">Explore DevEx CLI plugins and extensions with type-based filtering</p>
+									<h3 className="text-lg font-semibold text-gray-900">
+										Plugins
+									</h3>
+									<p className="text-gray-600">
+										Explore DevEx CLI plugins and extensions with type-based
+										filtering
+									</p>
 								</div>
 							</div>
 						</Link>

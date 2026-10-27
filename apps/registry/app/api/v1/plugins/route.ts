@@ -1,24 +1,27 @@
+import type { Plugin, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+	createOptimizedResponse,
+	createPaginatedResponse,
+	ResponseType,
+} from "@/lib/response-optimization";
 import { transformationService } from "@/lib/transformation-service";
-import { createPaginatedResponse, ResponseType, createOptimizedResponse } from "@/lib/response-optimization";
-import type { Plugin, Prisma } from "@prisma/client";
 import {
 	validatePaginationParams,
 	validatePluginType,
 	validateSearchQuery,
 } from "@/lib/validation";
 
-
 async function handleGetPlugins(request: Request) {
 	try {
 		const { searchParams } = new URL(request.url);
 		const type = validatePluginType(searchParams.get("type"));
 		const search = validateSearchQuery(searchParams.get("search"));
-		
+
 		// Handle the new validation format
 		const paginationResult = validatePaginationParams(searchParams);
 		if (!paginationResult.success) {
@@ -56,12 +59,12 @@ async function handleGetPlugins(request: Request) {
 		// Use optimized transformation service with caching
 		const transformStart = performance.now();
 		const pluginsFormatted = await transformationService.transformPlugins(
-			plugins.map(plugin => ({
+			plugins.map((plugin) => ({
 				...plugin,
 				downloadCount: plugin.downloadCount || 0,
 				lastDownload: plugin.lastDownload,
 				supports: plugin.supports as Record<string, boolean>,
-			}))
+			})),
 		);
 		const transformTime = performance.now() - transformStart;
 
@@ -84,7 +87,7 @@ async function handleGetPlugins(request: Request) {
 					transformationCache: "enabled",
 					queryOptimization: "composite-indexes",
 				},
-			}
+			},
 		);
 	} catch (error) {
 		logDatabaseError(error, "plugins_fetch");
@@ -99,7 +102,10 @@ async function handleCreatePlugin(request: Request) {
 
 	// Validate required fields
 	if (!body.name || !body.description || !body.type) {
-		return createApiError("Missing required fields: name, description, type", 400);
+		return createApiError(
+			"Missing required fields: name, description, type",
+			400,
+		);
 	}
 
 	// Create the plugin
@@ -125,10 +131,10 @@ async function handleCreatePlugin(request: Request) {
 		{
 			type: ResponseType.REALTIME,
 			headers: {
-				"Location": `/api/v1/plugins/${plugin.id}`,
+				Location: `/api/v1/plugins/${plugin.id}`,
 				"X-Created-Resource": "plugin",
 			},
-		}
+		},
 	);
 }
 

@@ -29,7 +29,9 @@ const VALID_PLUGIN_TYPES = [
 	"tool",
 ] as const;
 
-export function validatePaginationParams(params: Record<string, string> | URLSearchParams) {
+export function validatePaginationParams(
+	params: Record<string, string> | URLSearchParams,
+) {
 	// Handle both URLSearchParams and plain objects
 	const getParam = (key: string): string | null => {
 		if (params instanceof URLSearchParams) {
@@ -49,12 +51,14 @@ export function validatePaginationParams(params: Record<string, string> | URLSea
 		return {
 			success: false,
 			error: {
-				issues: [{
-					path: ['page'],
-					code: 'too_small',
-					message: 'Page must be at least 1'
-				}]
-			}
+				issues: [
+					{
+						path: ["page"],
+						code: "too_small",
+						message: "Page must be at least 1",
+					},
+				],
+			},
 		};
 	}
 
@@ -63,12 +67,14 @@ export function validatePaginationParams(params: Record<string, string> | URLSea
 		return {
 			success: false,
 			error: {
-				issues: [{
-					path: ['limit'],
-					code: 'too_small',
-					message: 'Limit must be at least 1'
-				}]
-			}
+				issues: [
+					{
+						path: ["limit"],
+						code: "too_small",
+						message: "Limit must be at least 1",
+					},
+				],
+			},
 		};
 	}
 
@@ -76,18 +82,20 @@ export function validatePaginationParams(params: Record<string, string> | URLSea
 		return {
 			success: false,
 			error: {
-				issues: [{
-					path: ['limit'],
-					code: 'too_big',
-					message: 'Limit cannot exceed 100'
-				}]
-			}
+				issues: [
+					{
+						path: ["limit"],
+						code: "too_big",
+						message: "Limit cannot exceed 100",
+					},
+				],
+			},
 		};
 	}
 
 	return {
 		success: true,
-		data: { page, limit }
+		data: { page, limit },
 	};
 }
 
@@ -134,30 +142,30 @@ export function validatePluginType(type?: string | null): string | undefined {
 
 // Sanitize search query to prevent injection attacks
 export function sanitizeSearchQuery(query: string): string {
-	if (!query) return '';
+	if (!query) return "";
 
 	// Remove SQL injection patterns and dangerous characters
 	return query
-		.replace(/['";]/g, '') // Remove quotes and semicolons
-		.replace(/--/g, '') // Remove SQL comments
-		.replace(/\x00/g, '') // Remove null bytes
-		.replace(/[&|]/g, ' ') // Replace special characters with spaces
-		.replace(/\s+/g, ' ') // Normalize multiple spaces to single space
+		.replace(/['";]/g, "") // Remove quotes and semicolons
+		.replace(/--/g, "") // Remove SQL comments
+		.replace(/\x00/g, "") // Remove null bytes
+		.replace(/[&|]/g, " ") // Replace special characters with spaces
+		.replace(/\s+/g, " ") // Normalize multiple spaces to single space
 		.trim();
 }
 
 // Validate query parameters based on resource type
 export function validateQueryParams(
 	resource: string,
-	params: Record<string, string>
+	params: Record<string, string>,
 ): { success: boolean; data?: any; error?: any } {
-	if (resource === 'plugins') {
+	if (resource === "plugins") {
 		const validated: any = {};
 
 		if (params.type) {
 			const type = validatePluginType(params.type);
 			if (!type) {
-				return { success: false, error: 'Invalid plugin type' };
+				return { success: false, error: "Invalid plugin type" };
 			}
 			validated.type = type;
 		}
@@ -169,15 +177,16 @@ export function validateQueryParams(
 		return { success: true, data: validated };
 	}
 
-	if (resource === 'applications') {
+	if (resource === "applications") {
 		const validated: any = {};
 
 		if (params.category) {
 			// Accept lowercase 'development' and convert to 'Development'
-			const categoryInput = params.category.charAt(0).toUpperCase() + params.category.slice(1);
+			const categoryInput =
+				params.category.charAt(0).toUpperCase() + params.category.slice(1);
 			const category = validateCategory(categoryInput);
 			if (!category) {
-				return { success: false, error: 'Invalid category' };
+				return { success: false, error: "Invalid category" };
 			}
 			validated.category = params.category; // Use the original case for test compatibility
 		}
@@ -185,17 +194,17 @@ export function validateQueryParams(
 		if (params.platform) {
 			const platform = validatePlatform(params.platform);
 			if (!platform) {
-				return { success: false, error: 'Invalid platform' };
+				return { success: false, error: "Invalid platform" };
 			}
 			validated.platform = platform;
 		}
 
-		if (params.official === 'true') {
+		if (params.official === "true") {
 			validated.official = true;
 		}
 
 		return { success: true, data: validated };
 	}
 
-	return { success: false, error: 'Invalid resource type' };
+	return { success: false, error: "Invalid resource type" };
 }

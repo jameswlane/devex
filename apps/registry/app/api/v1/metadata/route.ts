@@ -1,8 +1,11 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
-import { Prisma } from "@prisma/client";
+import {
+	createOptimizedResponse,
+	ResponseType,
+} from "@/lib/response-optimization";
 
 /**
  * Registry metadata endpoint
@@ -148,12 +151,7 @@ export async function GET(request: Request) {
 			],
 
 			// Architecture support
-			architectures: [
-				"amd64",
-				"arm64",
-				"386",
-				"arm",
-			],
+			architectures: ["amd64", "arm64", "386", "arm"],
 
 			// Linux distributions
 			distributions: [
@@ -172,10 +170,13 @@ export async function GET(request: Request) {
 			desktop_environments: Array.from(desktopEnvironments).sort(),
 
 			// Plugin types and counts
-			plugin_types: pluginsByType.reduce((acc: Record<string, number>, item: any) => {
-				acc[item.type] = item._count;
-				return acc;
-			}, {}),
+			plugin_types: pluginsByType.reduce(
+				(acc: Record<string, number>, item: any) => {
+					acc[item.type] = item._count;
+					return acc;
+				},
+				{},
+			),
 
 			// Platform statistics
 			platform_statistics: pluginsByPlatform as any,
