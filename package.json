@@ -63,6 +63,6 @@
 		"commitlint": "^19.8.1",
 		"glob": "^11.1.0",
 		"js-yaml": "^4.1.1",
-		"turbo": "latest"
+		"turbo": "2.6.3"
 	}
 }
