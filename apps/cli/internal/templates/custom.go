@@ -2,9 +2,9 @@ package templates
 
 import (
 	"archive/zip"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +66,7 @@ type TemplateSource struct {
 	Branch  string `yaml:"branch,omitempty" json:"branch,omitempty"`
 	Tag     string `yaml:"tag,omitempty" json:"tag,omitempty"`
 	Path    string `yaml:"path,omitempty" json:"path,omitempty"`
-	Token   string `yaml:"token,omitempty" json:"token,omitempty"`
+	Token   string `yaml:"-" json:"-"`
 	Private bool   `yaml:"private,omitempty" json:"private,omitempty"`
 }
 
@@ -121,6 +121,11 @@ func (ctm *CustomTemplateManager) CreateTemplate(manifest *CustomTemplateManifes
 		return fmt.Errorf("invalid template ID: %w", err)
 	}
 
+	targetDir, err := ctm.templateDirectory(manifest)
+	if err != nil {
+		return err
+	}
+
 	// Validate version
 	if _, err := semver.NewVersion(manifest.Version); err != nil {
 		return fmt.Errorf("invalid version format: %w", err)
@@ -151,14 +156,6 @@ func (ctm *CustomTemplateManager) CreateTemplate(manifest *CustomTemplateManifes
 	)
 	if err != nil {
 		return fmt.Errorf("failed to record undo operation: %w", err)
-	}
-
-	// Determine target directory based on organization
-	var targetDir string
-	if manifest.Organization != "" {
-		targetDir = filepath.Join(ctm.teamDir, manifest.Organization, manifest.ID)
-	} else {
-		targetDir = filepath.Join(ctm.userDir, manifest.ID)
 	}
 
 	// Create template directory
@@ -222,6 +219,14 @@ func (ctm *CustomTemplateManager) CreateTemplate(manifest *CustomTemplateManifes
 
 // InstallTemplate installs a custom template from various sources
 func (ctm *CustomTemplateManager) InstallTemplate(templateRef string, source *TemplateSource) error {
+	return ctm.InstallTemplateContext(context.Background(), templateRef, source)
+}
+
+// InstallTemplateContext installs a template with cancellation for network and Git operations.
+func (ctm *CustomTemplateManager) InstallTemplateContext(ctx context.Context, templateRef string, source *TemplateSource) error {
+	if source == nil {
+		return fmt.Errorf("template source is required; specify a local path, Git URL, or HTTP URL")
+	}
 	// Create backup before making changes
 	backupMetadata, err := ctm.backupManager.CreateBackup(backup.BackupOptions{
 		Description: fmt.Sprintf("Before installing template %s", templateRef),
@@ -254,13 +259,13 @@ func (ctm *CustomTemplateManager) InstallTemplate(templateRef string, source *Te
 
 	switch source.Type {
 	case "git":
-		manifest, templateDir, err = ctm.installFromGit(templateRef, source)
+		manifest, templateDir, err = ctm.installFromGit(ctx, templateRef, source)
 	case "http":
-		manifest, templateDir, err = ctm.installFromHTTP(templateRef, source)
+		manifest, templateDir, err = ctm.installFromHTTP(ctx, templateRef, source)
 	case "local":
 		manifest, templateDir, err = ctm.installFromLocal(templateRef, source)
 	case "registry":
-		manifest, templateDir, err = ctm.installFromRegistry(templateRef)
+		manifest, templateDir, err = ctm.installFromRegistry(ctx, templateRef)
 	default:
 		return fmt.Errorf("unsupported source type: %s", source.Type)
 	}
@@ -608,6 +613,9 @@ func (ctm *CustomTemplateManager) loadManifest(path string) (*CustomTemplateMani
 		return nil, err
 	}
 
+	if _, err := ctm.templateDirectory(&manifest); err != nil {
+		return nil, err
+	}
 	return &manifest, nil
 }
 
@@ -635,6 +643,25 @@ func (ctm *CustomTemplateManager) loadRegistry() (*CustomTemplateRegistry, error
 		return nil, err
 	}
 
+	var legacy struct {
+		Templates map[string]struct {
+			Source map[string]interface{} `yaml:"source"`
+		} `yaml:"templates"`
+	}
+	if err := yaml.Unmarshal(data, &legacy); err != nil {
+		return nil, err
+	}
+	hasStoredToken := false
+	for _, template := range legacy.Templates {
+		if _, exists := template.Source["token"]; exists {
+			hasStoredToken = true
+		}
+	}
+	if hasStoredToken {
+		if err := ctm.saveRegistry(&registry); err != nil {
+			return nil, fmt.Errorf("failed to scrub legacy template credentials: %w", err)
+		}
+	}
 	return &registry, nil
 }
 
@@ -667,7 +694,10 @@ func (ctm *CustomTemplateManager) validateTemplateStructure(templateDir string, 
 
 	// Check if all declared files exist
 	for _, fileName := range manifest.Files {
-		filePath := filepath.Join(templateDir, fileName)
+		filePath, err := containedTemplatePath(templateDir, fileName)
+		if err != nil {
+			return fmt.Errorf("invalid declared file %q: %w", fileName, err)
+		}
 		if _, err := os.Stat(filePath); os.IsNotExist(err) {
 			return fmt.Errorf("declared file %s not found in template", fileName)
 		}
@@ -677,15 +707,15 @@ func (ctm *CustomTemplateManager) validateTemplateStructure(templateDir string, 
 }
 
 // Git-based template installation implementation
-func (ctm *CustomTemplateManager) installFromGit(templateRef string, source *TemplateSource) (*CustomTemplateManifest, string, error) {
+func (ctm *CustomTemplateManager) installFromGit(ctx context.Context, templateRef string, source *TemplateSource) (*CustomTemplateManifest, string, error) {
 	if source.URL == "" {
 		return nil, "", fmt.Errorf("git URL is required for git-based installation")
 	}
 
 	// Create temporary directory for cloning
-	tempDir := filepath.Join(os.TempDir(), "devex-template-"+templateRef)
-	if err := os.RemoveAll(tempDir); err != nil {
-		return nil, "", fmt.Errorf("failed to clean temp directory: %w", err)
+	tempDir, err := os.MkdirTemp("", "devex-template-*")
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create private staging directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir) // Cleanup temp directory
 
@@ -699,7 +729,7 @@ func (ctm *CustomTemplateManager) installFromGit(templateRef string, source *Tem
 	}
 
 	// Execute git clone
-	gitCmd := exec.Command("git", cloneArgs...)
+	gitCmd := exec.CommandContext(ctx, "git", cloneArgs...)
 	if source.Private && source.Token != "" {
 		// Set git credentials for private repositories
 		gitCmd.Env = append(os.Environ(), fmt.Sprintf("GIT_ASKPASS=echo %s", source.Token))
@@ -712,7 +742,10 @@ func (ctm *CustomTemplateManager) installFromGit(templateRef string, source *Tem
 	// Navigate to subdirectory if specified
 	sourceDir := tempDir
 	if source.Path != "" {
-		sourceDir = filepath.Join(tempDir, source.Path)
+		sourceDir, err = containedTemplatePath(tempDir, source.Path)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid source subdirectory: %w", err)
+		}
 		if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
 			return nil, "", fmt.Errorf("specified path %s not found in git repository", source.Path)
 		}
@@ -725,17 +758,10 @@ func (ctm *CustomTemplateManager) installFromGit(templateRef string, source *Tem
 		return nil, "", fmt.Errorf("failed to load manifest from git repository: %w", err)
 	}
 
-	// Determine target directory
-	var targetDir string
-	if manifest.Organization != "" {
-		targetDir = filepath.Join(ctm.teamDir, manifest.Organization, manifest.ID)
-	} else {
-		targetDir = filepath.Join(ctm.userDir, manifest.ID)
-	}
-
-	// Copy template directory from git clone to final location
-	if err := ctm.copyDirectory(sourceDir, targetDir); err != nil {
-		return nil, "", fmt.Errorf("failed to copy template from git: %w", err)
+	manifest.Source = *source
+	targetDir, err := ctm.stageTemplate(sourceDir, manifest)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Update source information
@@ -745,7 +771,7 @@ func (ctm *CustomTemplateManager) installFromGit(templateRef string, source *Tem
 	return manifest, targetDir, nil
 }
 
-func (ctm *CustomTemplateManager) installFromHTTP(templateRef string, source *TemplateSource) (*CustomTemplateManifest, string, error) {
+func (ctm *CustomTemplateManager) installFromHTTP(ctx context.Context, templateRef string, source *TemplateSource) (*CustomTemplateManifest, string, error) {
 	if source.URL == "" {
 		return nil, "", fmt.Errorf("HTTP URL is required for http-based installation")
 	}
@@ -756,14 +782,14 @@ func (ctm *CustomTemplateManager) installFromHTTP(templateRef string, source *Te
 	}
 
 	// Create temporary directory for download
-	tempDir := filepath.Join(os.TempDir(), "devex-template-"+templateRef)
-	if err := os.RemoveAll(tempDir); err != nil {
-		return nil, "", fmt.Errorf("failed to clean temp directory: %w", err)
+	tempDir, err := os.MkdirTemp("", "devex-template-*")
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create private staging directory: %w", err)
 	}
 	defer os.RemoveAll(tempDir) // Cleanup temp directory
 
 	// Create request
-	req, err := http.NewRequest("GET", source.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", source.URL, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -785,15 +811,15 @@ func (ctm *CustomTemplateManager) installFromHTTP(templateRef string, source *Te
 	}
 
 	// Create temporary zip file
-	zipPath := filepath.Join(os.TempDir(), "template-"+templateRef+".zip")
-	zipFile, err := os.Create(zipPath)
+	zipFile, err := os.CreateTemp(tempDir, "download-*.zip")
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create temporary zip file: %w", err)
 	}
+	zipPath := zipFile.Name()
 	defer os.Remove(zipPath) // Cleanup zip file
 
 	// Copy response body to file
-	if _, err := io.Copy(zipFile, resp.Body); err != nil {
+	if _, err := copyTemplateArchive(zipFile, resp.Body); err != nil {
 		_ = zipFile.Close() // #nosec G104 - error already handled above
 		return nil, "", fmt.Errorf("failed to save downloaded template: %w", err)
 	}
@@ -803,11 +829,17 @@ func (ctm *CustomTemplateManager) installFromHTTP(templateRef string, source *Te
 	if err := ctm.extractZip(zipPath, tempDir); err != nil {
 		return nil, "", fmt.Errorf("failed to extract template archive: %w", err)
 	}
+	if err := os.Remove(zipPath); err != nil {
+		return nil, "", err
+	}
 
 	// Navigate to subdirectory if specified
 	sourceDir := tempDir
 	if source.Path != "" {
-		sourceDir = filepath.Join(tempDir, source.Path)
+		sourceDir, err = containedTemplatePath(tempDir, source.Path)
+		if err != nil {
+			return nil, "", fmt.Errorf("invalid source subdirectory: %w", err)
+		}
 		if _, err := os.Stat(sourceDir); os.IsNotExist(err) {
 			return nil, "", fmt.Errorf("specified path %s not found in downloaded template", source.Path)
 		}
@@ -820,17 +852,10 @@ func (ctm *CustomTemplateManager) installFromHTTP(templateRef string, source *Te
 		return nil, "", fmt.Errorf("failed to load manifest from downloaded template: %w", err)
 	}
 
-	// Determine target directory
-	var targetDir string
-	if manifest.Organization != "" {
-		targetDir = filepath.Join(ctm.teamDir, manifest.Organization, manifest.ID)
-	} else {
-		targetDir = filepath.Join(ctm.userDir, manifest.ID)
-	}
-
-	// Copy template directory to final location
-	if err := ctm.copyDirectory(sourceDir, targetDir); err != nil {
-		return nil, "", fmt.Errorf("failed to copy template from download: %w", err)
+	manifest.Source = *source
+	targetDir, err := ctm.stageTemplate(sourceDir, manifest)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Update source information
@@ -853,17 +878,9 @@ func (ctm *CustomTemplateManager) installFromLocal(templateRef string, source *T
 		return nil, "", fmt.Errorf("failed to load manifest: %w", err)
 	}
 
-	// Determine target directory
-	var targetDir string
-	if manifest.Organization != "" {
-		targetDir = filepath.Join(ctm.teamDir, manifest.Organization, manifest.ID)
-	} else {
-		targetDir = filepath.Join(ctm.userDir, manifest.ID)
-	}
-
-	// Copy template directory
-	if err := ctm.copyDirectory(sourcePath, targetDir); err != nil {
-		return nil, "", fmt.Errorf("failed to copy template: %w", err)
+	targetDir, err := ctm.stageTemplate(sourcePath, manifest)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Update source path
@@ -872,7 +889,7 @@ func (ctm *CustomTemplateManager) installFromLocal(templateRef string, source *T
 	return manifest, targetDir, nil
 }
 
-func (ctm *CustomTemplateManager) installFromRegistry(templateRef string) (*CustomTemplateManifest, string, error) {
+func (ctm *CustomTemplateManager) installFromRegistry(ctx context.Context, templateRef string) (*CustomTemplateManifest, string, error) {
 	// For now, this implements a simple registry system using HTTP
 	// In the future, this could be enhanced with a dedicated registry service
 
@@ -885,7 +902,11 @@ func (ctm *CustomTemplateManager) installFromRegistry(templateRef string) (*Cust
 	}
 
 	// Fetch template metadata from registry
-	resp, err := client.Get(registryURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, registryURL, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to create registry request: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to fetch template from registry: %w", err)
 	}
@@ -915,33 +936,21 @@ func (ctm *CustomTemplateManager) installFromRegistry(templateRef string) (*Cust
 	// Install template based on source type from registry
 	switch registryInfo.Source.Type {
 	case "git":
-		return ctm.installFromGit(templateRef, &registryInfo.Source)
+		return ctm.installFromGit(ctx, templateRef, &registryInfo.Source)
 	case "http":
-		return ctm.installFromHTTP(templateRef, &registryInfo.Source)
+		return ctm.installFromHTTP(ctx, templateRef, &registryInfo.Source)
 	default:
 		return nil, "", fmt.Errorf("unsupported source type from registry: %s", registryInfo.Source.Type)
 	}
 }
 
 func (ctm *CustomTemplateManager) copyDirectory(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-
-		targetPath := filepath.Join(dst, relPath)
-
-		if info.IsDir() {
-			return os.MkdirAll(targetPath, info.Mode())
-		}
-
-		return ctm.copyFile(path, targetPath)
-	})
+	root, err := os.OpenRoot(dst)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return copyTemplateToRoot(src, root, ".")
 }
 
 func (ctm *CustomTemplateManager) extractZip(zipPath, destDir string) error {
@@ -988,19 +997,15 @@ func (ctm *CustomTemplateManager) extractZip(zipPath, destDir string) error {
 			return err
 		}
 
-		// Copy with size limit to prevent decompression bombs
-		_, err = io.CopyN(targetFile, fileReader, 100*1024*1024) // #nosec G110 - 100MB limit prevents decompression bombs
-		if err != nil && !errors.Is(err, io.EOF) {
+		// Copy with a sentinel byte so oversized entries cannot be silently truncated.
+		_, err = copyTemplateArchive(targetFile, fileReader)
+		if err != nil {
 			_ = fileReader.Close() // #nosec G104 - error already handled above
 			_ = targetFile.Close() // #nosec G104 - error already handled above
 			return err
 		}
 		_ = fileReader.Close() // #nosec G104 - file close error not critical here
 		_ = targetFile.Close() // #nosec G104 - file close error not critical here
-
-		if err != nil {
-			return err
-		}
 
 		// Set file permissions
 		if err := os.Chmod(destPath, file.FileInfo().Mode()); err != nil {
@@ -1009,4 +1014,145 @@ func (ctm *CustomTemplateManager) extractZip(zipPath, destDir string) error {
 	}
 
 	return nil
+}
+
+const maxTemplateArchiveSize int64 = 100 * 1024 * 1024
+
+func copyTemplateArchive(dst io.Writer, src io.Reader) (int64, error) {
+	n, err := io.Copy(dst, io.LimitReader(src, maxTemplateArchiveSize+1))
+	if err != nil {
+		return n, err
+	}
+	if n > maxTemplateArchiveSize {
+		return n, fmt.Errorf("template archive exceeds the 100 MiB size limit; reduce the template size")
+	}
+	return n, nil
+}
+
+func validateTemplateComponent(value, field string) error {
+	if value == "" || value == "." || value == ".." || strings.ContainsAny(value, "/\\:\x00") || !filepath.IsLocal(value) {
+		return fmt.Errorf("invalid template %s %q: use a single safe path component", field, value)
+	}
+	return nil
+}
+
+func containedTemplatePath(root, name string) (string, error) {
+	if !filepath.IsLocal(name) || strings.ContainsAny(name, "\\\x00") {
+		return "", fmt.Errorf("path %q must stay inside the template directory", name)
+	}
+	path := filepath.Join(root, name)
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", err
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(resolvedRoot, resolved)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("path %q escapes the template directory", name)
+	}
+	return path, nil
+}
+
+func (ctm *CustomTemplateManager) templateDirectory(manifest *CustomTemplateManifest) (string, error) {
+	if err := validateTemplateComponent(manifest.ID, "ID"); err != nil {
+		return "", err
+	}
+	if manifest.Organization != "" {
+		if err := validateTemplateComponent(manifest.Organization, "organization"); err != nil {
+			return "", err
+		}
+		return filepath.Join(ctm.teamDir, manifest.Organization, manifest.ID), nil
+	}
+	return filepath.Join(ctm.userDir, manifest.ID), nil
+}
+
+// stageTemplate validates a private snapshot before publishing through a confined root.
+func (ctm *CustomTemplateManager) stageTemplate(src string, manifest *CustomTemplateManifest) (string, error) {
+	target, err := ctm.templateDirectory(manifest)
+	if err != nil {
+		return "", err
+	}
+	stage, err := os.MkdirTemp("", "devex-template-stage-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create template staging directory: %w", err)
+	}
+	defer os.RemoveAll(stage)
+	if err := ctm.copyDirectory(src, stage); err != nil {
+		return "", fmt.Errorf("failed to stage template: %w", err)
+	}
+	if err := ctm.validateTemplateStructure(stage, manifest); err != nil {
+		return "", err
+	}
+	manifest.Source.Path = target
+	if err := ctm.saveManifest(manifest, filepath.Join(stage, "manifest.yaml")); err != nil {
+		return "", err
+	}
+	root, err := os.OpenRoot(ctm.customDir)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	rel, err := filepath.Rel(ctm.customDir, target)
+	if err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("template target must stay inside %s", ctm.customDir)
+	}
+	if err := copyTemplateToRoot(stage, root, rel); err != nil {
+		return "", fmt.Errorf("failed to publish template: %w", err)
+	}
+	return target, nil
+}
+
+func mkdirTemplateRoot(root *os.Root, path string) error {
+	if path == "." {
+		return nil
+	}
+	if err := mkdirTemplateRoot(root, filepath.Dir(path)); err != nil {
+		return err
+	}
+	if err := root.Mkdir(path, 0750); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return nil
+}
+
+func copyTemplateToRoot(src string, root *os.Root, prefix string) error {
+	sourceRoot, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer sourceRoot.Close()
+	return filepath.Walk(src, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(prefix, rel)
+		if info.IsDir() {
+			return mkdirTemplateRoot(root, target)
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("template file %s must be a regular file; remove symlinks and special files", rel)
+		}
+		input, err := sourceRoot.Open(rel)
+		if err != nil {
+			return err
+		}
+		defer input.Close()
+		output, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(output, input)
+		closeErr := output.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
 }
