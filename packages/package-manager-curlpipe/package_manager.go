@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -79,14 +80,27 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 
 	for _, scriptURL := range scriptURLs {
 		if dryRun {
-			p.logger.Printf("[DRY RUN] Would execute: curl -fsSL %s | sh\n", scriptURL)
+			p.logger.Printf("[DRY RUN] Would execute script from: %s\n", scriptURL)
 			continue
 		}
 
-		// Execute the installation script
+		// Execute the installation script securely without shell interpolation
 		p.logger.Printf("Executing script from: %s\n", scriptURL)
-		curlCmd := fmt.Sprintf("curl -fsSL %s | sh", scriptURL)
-		if err := sdk.ExecCommandWithContext(ctx, true, "bash", "-c", curlCmd); err != nil {
+
+		tempFile, err := os.CreateTemp("", "curlpipe-install-*.sh")
+		if err != nil {
+			return fmt.Errorf("failed to create temp file for script: %w", err)
+		}
+		defer func() { _ = os.Remove(tempFile.Name()) }()
+		_ = tempFile.Close()
+
+		// Download to temp file with curl ... -- <url> as separate argv
+		if err := sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", "-o", tempFile.Name(), "--", scriptURL); err != nil {
+			return fmt.Errorf("failed to download script from '%s': %w", scriptURL, err)
+		}
+
+		// Run the file with bash as a separate argv
+		if err := sdk.ExecCommandWithContext(ctx, true, "bash", tempFile.Name()); err != nil {
 			return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)
 		}
 

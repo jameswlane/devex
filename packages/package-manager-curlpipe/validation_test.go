@@ -23,9 +23,35 @@ var _ = Describe("Curlpipe Validation", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should accept HTTP URLs", func() {
+			It("should reject HTTP URLs (HTTPS only)", func() {
 				err := plugin.ValidateURL("http://example.com/script.sh")
-				Expect(err).ToNot(HaveOccurred())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("only HTTPS URLs are allowed"))
+			})
+
+			It("should reject flag and option injection attempts", func() {
+				err := plugin.ValidateURL("-o/etc/x")
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("dash or flag"))
+
+				err = plugin.ValidateURL("--output=/etc/shadow")
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should reject URLs with shell metacharacters", func() {
+				badURLs := []string{
+					"https://example.com/script.sh;rm -rf /",
+					"https://example.com/script.sh|bash",
+					"https://example.com/script.sh&background",
+					"https://example.com/`id`",
+					"https://example.com/$(whoami)",
+					"https://example.com/script.sh'injection",
+					"https://example.com/script.sh\"injection",
+				}
+				for _, u := range badURLs {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 
 			It("should accept URLs with paths and query parameters", func() {
@@ -203,15 +229,15 @@ var _ = Describe("Curlpipe Validation", func() {
 		})
 
 		Context("protocol restriction", func() {
-			It("should only allow HTTP and HTTPS protocols", func() {
-				allowedProtocols := []string{"http", "https"}
+			It("should only allow HTTPS protocol", func() {
+				allowedProtocols := []string{"https"}
 				for _, protocol := range allowedProtocols {
 					url := protocol + "://example.com/script.sh"
 					err := plugin.ValidateURL(url)
 					Expect(err).ToNot(HaveOccurred())
 				}
 
-				disallowedProtocols := []string{"ftp", "file", "gopher", "telnet", "ssh"}
+				disallowedProtocols := []string{"http", "ftp", "file", "gopher", "telnet", "ssh"}
 				for _, protocol := range disallowedProtocols {
 					url := protocol + "://example.com/script.sh"
 					err := plugin.ValidateURL(url)
@@ -257,7 +283,7 @@ var _ = Describe("Curlpipe Validation", func() {
 
 		Context("boundary conditions", func() {
 			It("should handle minimum valid URL", func() {
-				minURL := "http://a.b"
+				minURL := "https://a.b"
 				err := plugin.ValidateURL(minURL)
 				Expect(err).ToNot(HaveOccurred())
 			})

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -44,13 +45,13 @@ func (p *CurlpipePlugin) handlePreview(ctx context.Context, args []string) error
 
 // downloadScript downloads a script from the given URL
 func (p *CurlpipePlugin) downloadScript(ctx context.Context, scriptURL string) error {
-	// Use curl to download the script content
-	return sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", scriptURL)
+	// Use curl to download the script content safely
+	return sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", "--", scriptURL)
 }
 
 // DownloadScriptToString downloads a script and returns its content as a string
 func (p *CurlpipePlugin) DownloadScriptToString(ctx context.Context, scriptURL string) (string, error) {
-	output, err := sdk.ExecCommandOutputWithContext(ctx, "curl", "-fsSL", scriptURL)
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "curl", "-fsSL", "--", scriptURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to download script: %w", err)
 	}
@@ -106,13 +107,28 @@ func (p *CurlpipePlugin) ValidateScriptContent(content string) error {
 func (p *CurlpipePlugin) ExecuteScriptFromURL(ctx context.Context, scriptURL string) error {
 	p.logger.Printf("Executing script from: %s\n", scriptURL)
 
-	// First download and validate the script content
-	scriptContent, err := p.DownloadScriptToString(ctx, scriptURL)
+	// Validate URL first
+	if err := p.ValidateScriptURL(scriptURL); err != nil {
+		return fmt.Errorf("invalid URL '%s': %w", scriptURL, err)
+	}
+
+	tempFile, err := os.CreateTemp("", "curlpipe-exec-*.sh")
 	if err != nil {
-		return fmt.Errorf("failed to download script for validation: %w", err)
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() { _ = os.Remove(tempFile.Name()) }()
+	_ = tempFile.Close()
+
+	if err := sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", "-o", tempFile.Name(), "--", scriptURL); err != nil {
+		return fmt.Errorf("failed to download script from '%s': %w", scriptURL, err)
 	}
 
 	// Validate script content before execution
+	contentBytes, err := os.ReadFile(tempFile.Name())
+	if err != nil {
+		return fmt.Errorf("failed to read downloaded script: %w", err)
+	}
+	scriptContent := string(contentBytes)
 	if err := p.ValidateScriptContent(scriptContent); err != nil {
 		return fmt.Errorf("script validation failed: %w", err)
 	}
@@ -124,8 +140,8 @@ func (p *CurlpipePlugin) ExecuteScriptFromURL(ctx context.Context, scriptURL str
 
 	p.logger.Printf("Script content validated successfully, proceeding with execution\n")
 
-	// Execute the validated script using bash with the script content
-	if err := sdk.ExecCommandWithContext(ctx, true, "bash", "-c", scriptContent); err != nil {
+	// Execute the validated script using bash with the file path
+	if err := sdk.ExecCommandWithContext(ctx, true, "bash", tempFile.Name()); err != nil {
 		return fmt.Errorf("failed to execute script: %w", err)
 	}
 

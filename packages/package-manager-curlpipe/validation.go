@@ -24,6 +24,10 @@ func (p *CurlpipePlugin) ValidateURL(inputURL string) error {
 		return fmt.Errorf("URL cannot be empty")
 	}
 
+	if strings.HasPrefix(inputURL, "-") {
+		return fmt.Errorf("URL cannot start with a dash or flag: %s", inputURL)
+	}
+
 	if len(inputURL) > MaxURLLength {
 		return fmt.Errorf("URL too long (max %d characters)", MaxURLLength)
 	}
@@ -35,28 +39,28 @@ func (p *CurlpipePlugin) ValidateURL(inputURL string) error {
 		}
 	}
 
+	// Check for shell metacharacters that could be dangerous
+	dangerousChars := []string{";", "&", "|", "`", "$", "(", ")", "<", ">", "\\", "'", "\"", "\n", "\r", " "}
+	for _, char := range dangerousChars {
+		if strings.Contains(inputURL, char) {
+			return fmt.Errorf("URL contains potentially dangerous character: %s", char)
+		}
+	}
+
 	// Parse URL
 	parsedURL, err := url.Parse(inputURL)
 	if err != nil {
 		return fmt.Errorf("invalid URL format: %w", err)
 	}
 
-	// Validate scheme
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("only HTTP and HTTPS URLs are allowed")
+	// Validate scheme - HTTPS only
+	if parsedURL.Scheme != "https" {
+		return fmt.Errorf("only HTTPS URLs are allowed")
 	}
 
 	// Validate hostname
 	if parsedURL.Host == "" {
 		return fmt.Errorf("URL must have a valid hostname")
-	}
-
-	// Check for shell metacharacters that could be dangerous
-	dangerousChars := []string{";", "&", "|", "`", "$", "(", ")", "<", ">", "\\"}
-	for _, char := range dangerousChars {
-		if strings.Contains(inputURL, char) {
-			return fmt.Errorf("URL contains potentially dangerous character: %s", char)
-		}
 	}
 
 	return nil

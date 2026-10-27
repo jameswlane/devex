@@ -39,9 +39,9 @@ func (p *CurlpipePlugin) ValidateScriptURL(scriptURL string) error {
 		return fmt.Errorf("invalid URL format: %w", err)
 	}
 
-	// Additional validation for script URLs
-	if parsedURL.Scheme != "https" && parsedURL.Scheme != "http" {
-		return fmt.Errorf("URL must use HTTP or HTTPS protocol")
+	// Additional validation for script URLs - HTTPS only
+	if parsedURL.Scheme != "https" {
+		return fmt.Errorf("URL must use HTTPS protocol")
 	}
 
 	if parsedURL.Host == "" {
