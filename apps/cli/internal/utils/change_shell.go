@@ -42,7 +42,7 @@ func ChangeUserShell(shell string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "chsh", "-s", shell, currentUser)
+	cmd := exec.CommandContext(ctx, "chsh", "-s", shell, currentUser) // #nosec G702 -- shell checked with LookPath and /etc/shells above
 
 	// Run the command
 	output, err := cmd.CombinedOutput()

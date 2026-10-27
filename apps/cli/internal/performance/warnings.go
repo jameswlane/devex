@@ -685,7 +685,7 @@ func FormatWarning(warning PerformanceWarning) string {
 	if len(warning.Details) > 0 {
 		builder.WriteString("\n📋 Details:\n")
 		for _, detail := range warning.Details {
-			builder.WriteString(fmt.Sprintf("   • %s\n", detail))
+			fmt.Fprintf(&builder, "   • %s\n", detail)
 		}
 	}
 
@@ -693,7 +693,7 @@ func FormatWarning(warning PerformanceWarning) string {
 	if len(warning.Suggestions) > 0 {
 		builder.WriteString("\n💡 Suggestions:\n")
 		for _, suggestion := range warning.Suggestions {
-			builder.WriteString(fmt.Sprintf("   • %s\n", suggestion))
+			fmt.Fprintf(&builder, "   • %s\n", suggestion)
 		}
 	}
 

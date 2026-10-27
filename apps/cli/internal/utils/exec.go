@@ -21,7 +21,7 @@ func (OSCommandExecutor) RunShellCommand(command string) (string, error) {
 }
 
 func (OSCommandExecutor) RunCommand(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G702 -- argv executor without a shell; callers own validation
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }

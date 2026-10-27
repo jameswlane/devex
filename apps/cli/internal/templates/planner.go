@@ -264,7 +264,8 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 	action := step.App
 
 	var app *types.AppConfig
-	if action.Ref != "" {
+	switch {
+	case action.Ref != "":
 		if p.AppResolver == nil {
 			return result, fmt.Errorf("app resolver is required for app ref '%s'", action.Ref)
 		}
@@ -276,10 +277,10 @@ func (p *TemplatePlanner) planAppStep(ctx context.Context, result PlannedStep, s
 			return result, fmt.Errorf("app ref '%s' resolved to nil", action.Ref)
 		}
 		app = resolved
-	} else if action.App != nil {
+	case action.App != nil:
 		appCopy := *action.App
 		app = &appCopy
-	} else {
+	default:
 		app = &types.AppConfig{
 			BaseConfig: types.BaseConfig{
 				Name:     interpolateString(action.Name, evalCtx),

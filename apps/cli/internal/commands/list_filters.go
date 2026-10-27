@@ -142,7 +142,7 @@ func getCategoryInfo(settings config.CrossPlatformSettings) []CategoryInfo {
 		}
 
 		// Convert platform set to sorted slice
-		var platforms []string
+		platforms := make([]string, 0, len(platformSet))
 		for platform := range platformSet {
 			platforms = append(platforms, platform)
 		}

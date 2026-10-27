@@ -178,7 +178,7 @@ func planTemplateLifecycle(ctx context.Context, planner templates.TemplatePlanne
 	}
 	synthesized, synthErr := synthesizeRemovePlanFromResources(selectedRun, resources, opts.Force)
 	if synthErr != nil {
-		return nil, fmt.Errorf("%w; failed to synthesize remove plan from recorded resources: %v", err, synthErr)
+		return nil, fmt.Errorf("%w; failed to synthesize remove plan from recorded resources: %w", err, synthErr)
 	}
 	return &synthesized, nil
 }
@@ -544,9 +544,7 @@ func stringSliceFromAny(value any) []string {
 	}
 }
 
-var timeNow = func() time.Time {
-	return time.Now()
-}
+var timeNow = time.Now
 
 func displayRecordedTemplateResources(result templateLifecycleResult, format string) error {
 	switch format {

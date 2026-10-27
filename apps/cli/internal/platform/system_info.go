@@ -158,39 +158,39 @@ func (info *SystemInfo) GetDetailedSystemInfoString() string {
 	var sb strings.Builder
 
 	sb.WriteString("=== DEVEX SYSTEM INFORMATION ===\n")
-	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", info.Timestamp.Format(time.RFC3339)))
-	sb.WriteString(fmt.Sprintf("DevEx Version: %s\n", info.DevExVersion))
+	fmt.Fprintf(&sb, "Timestamp: %s\n", info.Timestamp.Format(time.RFC3339))
+	fmt.Fprintf(&sb, "DevEx Version: %s\n", info.DevExVersion)
 
 	sb.WriteString("=== PLATFORM ===\n")
-	sb.WriteString(fmt.Sprintf("Operating System: %s\n", info.OS))
+	fmt.Fprintf(&sb, "Operating System: %s\n", info.OS)
 	if info.Distribution != "" {
-		sb.WriteString(fmt.Sprintf("Distribution: %s\n", info.Distribution))
+		fmt.Fprintf(&sb, "Distribution: %s\n", info.Distribution)
 	}
 	if info.Version != "" {
-		sb.WriteString(fmt.Sprintf("OS Version: %s\n", info.Version))
+		fmt.Fprintf(&sb, "OS Version: %s\n", info.Version)
 	}
-	sb.WriteString(fmt.Sprintf("Architecture: %s\n", info.Architecture))
+	fmt.Fprintf(&sb, "Architecture: %s\n", info.Architecture)
 	if info.DesktopEnv != "" && info.DesktopEnv != "unknown" {
-		sb.WriteString(fmt.Sprintf("Desktop Environment: %s\n", info.DesktopEnv))
+		fmt.Fprintf(&sb, "Desktop Environment: %s\n", info.DesktopEnv)
 	}
 	if info.KernelVersion != "" {
-		sb.WriteString(fmt.Sprintf("Kernel Version: %s\n", info.KernelVersion))
+		fmt.Fprintf(&sb, "Kernel Version: %s\n", info.KernelVersion)
 	}
 
 	sb.WriteString("=== RUNTIME ===\n")
-	sb.WriteString(fmt.Sprintf("Go Version: %s\n", info.GoVersion))
-	sb.WriteString(fmt.Sprintf("CPU Count: %d\n", info.CPUCount))
+	fmt.Fprintf(&sb, "Go Version: %s\n", info.GoVersion)
+	fmt.Fprintf(&sb, "CPU Count: %d\n", info.CPUCount)
 	if info.Username != "" {
-		sb.WriteString(fmt.Sprintf("Username: %s\n", info.Username))
+		fmt.Fprintf(&sb, "Username: %s\n", info.Username)
 	}
 	if info.Shell != "" {
-		sb.WriteString(fmt.Sprintf("Shell: %s\n", info.Shell))
+		fmt.Fprintf(&sb, "Shell: %s\n", info.Shell)
 	}
 	if info.HomeDir != "" {
-		sb.WriteString(fmt.Sprintf("Home Directory: %s\n", info.HomeDir))
+		fmt.Fprintf(&sb, "Home Directory: %s\n", info.HomeDir)
 	}
 	if info.CurrentDir != "" {
-		sb.WriteString(fmt.Sprintf("Working Directory: %s\n", info.CurrentDir))
+		fmt.Fprintf(&sb, "Working Directory: %s\n", info.CurrentDir)
 	}
 
 	sb.WriteString("=== PACKAGE MANAGERS ===\n")
@@ -209,10 +209,10 @@ func (info *SystemInfo) GetDetailedSystemInfoString() string {
 			for _, pm := range managers {
 				if version, exists := info.PackageManagers[pm]; exists {
 					if !found {
-						sb.WriteString(fmt.Sprintf("=== %s ===\n", category))
+						fmt.Fprintf(&sb, "=== %s ===\n", category)
 						found = true
 					}
-					sb.WriteString(fmt.Sprintf("%s: %s\n", pm, version))
+					fmt.Fprintf(&sb, "%s: %s\n", pm, version)
 				}
 			}
 		}
@@ -231,7 +231,7 @@ func (info *SystemInfo) GetDetailedSystemInfoString() string {
 		if len(path) > 500 {
 			path = path[:500] + "... [truncated]"
 		}
-		sb.WriteString(fmt.Sprintf("PATH: %s\n", path))
+		fmt.Fprintf(&sb, "PATH: %s\n", path)
 	}
 
 	sb.WriteString("=== END SYSTEM INFORMATION ===\n")
@@ -243,38 +243,38 @@ func (info *SystemInfo) GetSystemInfoString() string {
 	var sb strings.Builder
 
 	sb.WriteString("=== DEVEX SYSTEM INFORMATION ===\n")
-	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", info.Timestamp.Format(time.RFC3339)))
-	sb.WriteString(fmt.Sprintf("DevEx Version: %s\n", info.DevExVersion))
-	sb.WriteString(fmt.Sprintf("OS: %s", info.OS))
+	fmt.Fprintf(&sb, "Timestamp: %s\n", info.Timestamp.Format(time.RFC3339))
+	fmt.Fprintf(&sb, "DevEx Version: %s\n", info.DevExVersion)
+	fmt.Fprintf(&sb, "OS: %s", info.OS)
 
 	if info.Distribution != "" {
-		sb.WriteString(fmt.Sprintf(" (%s)", info.Distribution))
+		fmt.Fprintf(&sb, " (%s)", info.Distribution)
 	}
 	if info.Version != "" {
-		sb.WriteString(fmt.Sprintf(" %s", info.Version))
+		fmt.Fprintf(&sb, " %s", info.Version)
 	}
-	sb.WriteString(fmt.Sprintf(" %s\n", info.Architecture))
+	fmt.Fprintf(&sb, " %s\n", info.Architecture)
 
 	if info.DesktopEnv != "" && info.DesktopEnv != "unknown" {
-		sb.WriteString(fmt.Sprintf("Desktop: %s\n", info.DesktopEnv))
+		fmt.Fprintf(&sb, "Desktop: %s\n", info.DesktopEnv)
 	}
 	if info.KernelVersion != "" {
-		sb.WriteString(fmt.Sprintf("Kernel: %s\n", info.KernelVersion))
+		fmt.Fprintf(&sb, "Kernel: %s\n", info.KernelVersion)
 	}
 
-	sb.WriteString(fmt.Sprintf("Go: %s | CPUs: %d\n", info.GoVersion, info.CPUCount))
+	fmt.Fprintf(&sb, "Go: %s | CPUs: %d\n", info.GoVersion, info.CPUCount)
 
 	if info.Username != "" {
-		sb.WriteString(fmt.Sprintf("User: %s", info.Username))
+		fmt.Fprintf(&sb, "User: %s", info.Username)
 		if info.Shell != "" {
-			sb.WriteString(fmt.Sprintf(" | Shell: %s", info.Shell))
+			fmt.Fprintf(&sb, " | Shell: %s", info.Shell)
 		}
 		sb.WriteString("\n")
 	}
 
 	if len(info.PackageManagers) > 0 {
 		sb.WriteString("Package Managers: ")
-		var pms []string
+		pms := make([]string, 0, len(info.PackageManagers))
 		for pm, version := range info.PackageManagers {
 			// Show just name and major version for brevity
 			versionShort := strings.Fields(version)[0]

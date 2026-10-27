@@ -151,95 +151,80 @@ func (s *SecurePackageInstaller) CheckPackageInstalled(ctx context.Context, pm S
 }
 
 func (s *SecurePackageInstaller) buildInstallCommand(pm SecurePackageManagerType, packageNames ...string) ([]string, error) {
+	var base []string
 	switch pm {
 	case APT:
-		cmd := []string{"sudo", "apt-get", "install", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "apt-get", "install", "-y"}
 	case DNF:
-		cmd := []string{"sudo", "dnf", "install", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "dnf", "install", "-y"}
 	case YUM:
-		cmd := []string{"sudo", "yum", "install", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "yum", "install", "-y"}
 	case Pacman:
-		cmd := []string{"sudo", "pacman", "-S", "--noconfirm"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "pacman", "-S", "--noconfirm"}
 	case Zypper:
-		cmd := []string{"sudo", "zypper", "install", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "zypper", "install", "-y"}
 	case Flatpak:
-		cmd := []string{"flatpak", "install", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"flatpak", "install", "-y"}
 	case Snap:
-		cmd := []string{"sudo", "snap", "install"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "snap", "install"}
 	case Brew:
-		cmd := []string{"brew", "install"}
-		return append(cmd, packageNames...), nil
+		base = []string{"brew", "install"}
 	case APK:
-		cmd := []string{"sudo", "apk", "add"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "apk", "add"}
 	case Emerge:
-		cmd := []string{"sudo", "emerge"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "emerge"}
 	case XBPS:
-		cmd := []string{"sudo", "xbps-install", "-S"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "xbps-install", "-S"}
 	case EOPKG:
-		cmd := []string{"sudo", "eopkg", "install"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "eopkg", "install"}
 	case YAY:
-		cmd := []string{"yay", "-S", "--noconfirm"}
-		return append(cmd, packageNames...), nil
+		base = []string{"yay", "-S", "--noconfirm"}
 	default:
 		return nil, fmt.Errorf("unsupported package manager: %s", pm)
 	}
+	return commandWithArgs(base, packageNames), nil
 }
 
 func (s *SecurePackageInstaller) buildUninstallCommand(pm SecurePackageManagerType, packageNames ...string) ([]string, error) {
+	var base []string
 	switch pm {
 	case APT:
-		cmd := []string{"sudo", "apt-get", "remove", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "apt-get", "remove", "-y"}
 	case DNF:
-		cmd := []string{"sudo", "dnf", "remove", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "dnf", "remove", "-y"}
 	case YUM:
-		cmd := []string{"sudo", "yum", "remove", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "yum", "remove", "-y"}
 	case Pacman:
-		cmd := []string{"sudo", "pacman", "-R", "--noconfirm"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "pacman", "-R", "--noconfirm"}
 	case Zypper:
-		cmd := []string{"sudo", "zypper", "remove", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "zypper", "remove", "-y"}
 	case Flatpak:
-		cmd := []string{"flatpak", "uninstall", "-y"}
-		return append(cmd, packageNames...), nil
+		base = []string{"flatpak", "uninstall", "-y"}
 	case Snap:
-		cmd := []string{"sudo", "snap", "remove"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "snap", "remove"}
 	case Brew:
-		cmd := []string{"brew", "uninstall"}
-		return append(cmd, packageNames...), nil
+		base = []string{"brew", "uninstall"}
 	case APK:
-		cmd := []string{"sudo", "apk", "del"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "apk", "del"}
 	case Emerge:
-		cmd := []string{"sudo", "emerge", "--unmerge"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "emerge", "--unmerge"}
 	case XBPS:
-		cmd := []string{"sudo", "xbps-remove", "-R"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "xbps-remove", "-R"}
 	case EOPKG:
-		cmd := []string{"sudo", "eopkg", "remove"}
-		return append(cmd, packageNames...), nil
+		base = []string{"sudo", "eopkg", "remove"}
 	case YAY:
-		cmd := []string{"yay", "-R", "--noconfirm"}
-		return append(cmd, packageNames...), nil
+		base = []string{"yay", "-R", "--noconfirm"}
 	default:
 		return nil, fmt.Errorf("unsupported package manager: %s", pm)
 	}
+	return commandWithArgs(base, packageNames), nil
+}
+
+// commandWithArgs returns base followed by args in a newly allocated slice
+func commandWithArgs(base, args []string) []string {
+	cmd := make([]string, 0, len(base)+len(args))
+	cmd = append(cmd, base...)
+	return append(cmd, args...)
 }
 
 func (s *SecurePackageInstaller) UpdatePackageCache(ctx context.Context, pm SecurePackageManagerType) error {

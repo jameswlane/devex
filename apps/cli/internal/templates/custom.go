@@ -490,13 +490,21 @@ func (ctm *CustomTemplateManager) ExportTemplate(templateID string, outputPath s
 		return fmt.Errorf("template has no local path")
 	}
 
+	// Files are opened through os.Root so a symlink cannot pull content from outside the template
+	root, err := os.OpenRoot(templateDir)
+	if err != nil {
+		return fmt.Errorf("failed to open template directory: %w", err)
+	}
+	defer root.Close()
+
 	// Add all template files to zip
 	err = filepath.Walk(templateDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() {
+		// Skip directories, symlinks and other non-regular files
+		if !info.Mode().IsRegular() {
 			return nil
 		}
 
@@ -510,7 +518,7 @@ func (ctm *CustomTemplateManager) ExportTemplate(templateID string, outputPath s
 			return err
 		}
 
-		file, err := os.Open(path)
+		file, err := root.Open(relPath)
 		if err != nil {
 			return err
 		}

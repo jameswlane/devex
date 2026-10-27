@@ -105,7 +105,8 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		stopHeartbeat := r.startLockHeartbeat(ctx, plan.TemplateID, plan.ID, heartbeatInterval(lockStaleTimeout, opts.LockHeartbeatInterval))
 		defer func() {
 			stopHeartbeat()
-			_ = r.Store.ReleaseLifecycleLock(context.Background(), plan.TemplateID, plan.ID)
+			// Release even if ctx was canceled, keeping its values for tracing
+			_ = r.Store.ReleaseLifecycleLock(context.WithoutCancel(ctx), plan.TemplateID, plan.ID)
 		}()
 	}
 
@@ -136,7 +137,7 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	runError := ""
 	for index, step := range plan.Steps {
 		if err := ctx.Err(); err != nil {
-			_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusCanceled, err.Error())
+			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusCanceled, err.Error())
 			return result, err
 		}
 		opID := operationID(run.ID, step.ID, index)
@@ -154,7 +155,7 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 			Status:     state.OperationStatusRunning,
 			StartedAt:  r.now(),
 		}); err != nil {
-			_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, err.Error())
+			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, err.Error())
 			return result, err
 		}
 
@@ -162,7 +163,7 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		if err != nil {
 			persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
 			if completeErr := r.Store.CompleteOperation(ctx, opID, state.OperationStatusFailed, persistedOutputs, err.Error()); completeErr != nil {
-				_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, completeErr.Error())
+				_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, completeErr.Error())
 				return result, completeErr
 			}
 			switch step.OnError {
@@ -183,11 +184,11 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 
 		persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
 		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusSucceeded, persistedOutputs, ""); err != nil {
-			_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, err.Error())
+			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, err.Error())
 			return result, err
 		}
 		if err := r.recordResources(ctx, run.ID, plan.TemplateID, persistedStep, persistedOutputs); err != nil {
-			_ = r.Store.CompleteRun(context.Background(), run.ID, state.RunStatusFailed, err.Error())
+			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, err.Error())
 			return result, err
 		}
 		result.StepsExecuted++
@@ -222,7 +223,7 @@ func (r *ExecutionRuntime) startLockHeartbeat(ctx context.Context, templateID st
 			case <-heartbeatCtx.Done():
 				return
 			case <-ticker.C:
-				_ = r.Store.UpdateLifecycleLock(context.Background(), templateID, runID)
+				_ = r.Store.UpdateLifecycleLock(heartbeatCtx, templateID, runID)
 			}
 		}
 	}()

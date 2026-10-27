@@ -95,7 +95,7 @@ func (ts *ThemeSelector) View() string {
 			themeInfo = colorStyle.Render(themeInfo)
 		}
 
-		s.WriteString(fmt.Sprintf("%s %s %s\n", cursor, selected, themeInfo))
+		fmt.Fprintf(&s, "%s %s %s\n", cursor, selected, themeInfo)
 	}
 
 	// Instructions

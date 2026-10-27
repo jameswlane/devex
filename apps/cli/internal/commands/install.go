@@ -231,7 +231,8 @@ func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName s
 	if e.bootstrap == nil {
 		return fmt.Errorf("plugin bootstrap is required")
 	}
-	return e.bootstrap.ExecutePlugin(pluginName, args)
+	// The SDK has no context-aware ExecutePlugin yet; ctx is checked above.
+	return e.bootstrap.ExecutePlugin(pluginName, args) //nolint:contextcheck
 }
 
 func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateInstallOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {

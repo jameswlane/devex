@@ -371,8 +371,8 @@ func (vm *VersionManager) calculateConfigHash() (string, error) {
 			return nil
 		}
 
-		if !info.IsDir() && strings.HasSuffix(path, ".yaml") {
-			data, err := os.ReadFile(path)
+		if info.Mode().IsRegular() && strings.HasSuffix(path, ".yaml") {
+			data, err := os.ReadFile(path) // #nosec G122 -- regular files under DevEx's own config dir, read-only
 			if err != nil {
 				return err
 			}
@@ -454,8 +454,8 @@ func (vm *VersionManager) loadMigrations() ([]*Migration, error) {
 			return err
 		}
 
-		if !info.IsDir() && strings.HasSuffix(path, ".json") {
-			data, err := os.ReadFile(path)
+		if info.Mode().IsRegular() && strings.HasSuffix(path, ".json") {
+			data, err := os.ReadFile(path) // #nosec G122 -- regular files under DevEx's own migrations dir, read-only
 			if err != nil {
 				return err
 			}

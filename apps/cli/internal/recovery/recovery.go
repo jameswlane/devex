@@ -448,8 +448,6 @@ func (rm *RecoveryManager) generateCacheRecoveryOptions(ctx RecoveryContext, err
 
 // generateManualRecoveryOptions generates manual recovery options as last resort
 func (rm *RecoveryManager) generateManualRecoveryOptions(ctx RecoveryContext, errorLower, operation string) []RecoveryOption {
-	var options []RecoveryOption
-
 	// Generic manual recovery
 	option := RecoveryOption{
 		ID:          "manual-recovery",
@@ -481,9 +479,8 @@ func (rm *RecoveryManager) generateManualRecoveryOptions(ctx RecoveryContext, er
 			},
 		},
 	}
-	options = append(options, option)
 
-	return options
+	return []RecoveryOption{option}
 }
 
 // sortRecoveryOptions sorts recovery options by priority

@@ -625,7 +625,7 @@ func (bm *BackupManager) loadMetadata(backupDir string) (*BackupMetadata, error)
 func (bm *BackupManager) updateGlobalMetadata(metadata *BackupMetadata) error {
 	metadataPath := filepath.Join(bm.backupsDir, MetadataFile)
 
-	var allBackups []*BackupMetadata
+	var allBackups []*BackupMetadata //nolint:prealloc // filled by json.Unmarshal below
 
 	if data, err := os.ReadFile(metadataPath); err == nil {
 		if err := json.Unmarshal(data, &allBackups); err != nil {

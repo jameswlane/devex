@@ -948,7 +948,7 @@ func attemptFixes(ctx context.Context, app *types.AppConfig, appStatus *status.A
 			}
 		case strings.Contains(issue, "User not in docker group"):
 			fmt.Printf("  Attempting to add user to docker group...\n")
-			cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", os.Getenv("USER"))
+			cmd := exec.CommandContext(ctx, "sudo", "usermod", "-aG", "docker", os.Getenv("USER")) // #nosec G702 -- fixed command; $USER is one argv element, no shell
 			if err := cmd.Run(); err == nil {
 				fmt.Printf("  ✓ Added user to docker group (logout and login to apply)\n")
 			} else {
