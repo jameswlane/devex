@@ -929,7 +929,7 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	}
 
 	// Check if the plugin already exists and is up to date
-	if d.isPluginUpToDate(pluginPath, binary.Checksum) {
+	if d.isPluginUpToDate(pluginName, pluginPath, binary.Checksum) {
 		if d.logger != nil {
 			d.logger.Printf("Plugin %s is already up to date\n", pluginName)
 		}
@@ -988,45 +988,77 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 		return fmt.Errorf("download failed: HTTP %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
-	// Create temporary file for download
-	tempPath := pluginPath + ".tmp"
-	tempFile, err := os.Create(tempPath)
+	// Download into a unique temp file owned by this invocation
+	payloadFile, err := os.CreateTemp(d.pluginDir, ".devex-plugin-"+pluginName+"-*.download")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer func() { _ = tempFile.Close() }()
-	defer func() { _ = os.Remove(tempPath) }()
+	payloadPath := payloadFile.Name()
+	defer func() { _ = os.Remove(payloadPath) }()
 
-	// Download with checksum verification
 	hasher := sha256.New()
-	multiWriter := io.MultiWriter(tempFile, hasher)
-
-	if _, err := io.Copy(multiWriter, resp.Body); err != nil {
-		return fmt.Errorf("failed to download plugin: %w", err)
+	_, copyErr := io.Copy(io.MultiWriter(payloadFile, hasher), resp.Body)
+	closeErr := payloadFile.Close()
+	if copyErr != nil {
+		return fmt.Errorf("failed to download plugin: %w", copyErr)
 	}
+	if closeErr != nil {
+		return fmt.Errorf("failed to write downloaded plugin: %w", closeErr)
+	}
+	payloadChecksum := hex.EncodeToString(hasher.Sum(nil))
 
-	// Verify checksum if enabled
+	// Verify checksum of the downloaded payload (archive or raw binary) if enabled
 	if d.verifyChecksums && binary.Checksum != "" {
-		actualChecksum := hex.EncodeToString(hasher.Sum(nil))
-		if actualChecksum != binary.Checksum {
-			return fmt.Errorf("checksum verification failed: expected %s, got %s", binary.Checksum, actualChecksum)
+		if payloadChecksum != normalizeChecksum(binary.Checksum) {
+			return fmt.Errorf("checksum verification failed: expected %s, got %s", binary.Checksum, payloadChecksum)
 		}
 	}
 
 	// Verify signature if enabled
 	if d.verifySignatures {
-		if err := d.verifyPluginSignature(tempPath, binary.URL); err != nil {
+		if err := d.verifyPluginSignature(payloadPath, binary.URL); err != nil {
 			return fmt.Errorf("signature verification failed: %w", err)
 		}
 	}
 
+	// Release assets may be tar.gz/zip archives or raw binaries; extract the executable
+	binaryFile, err := os.CreateTemp(d.pluginDir, ".devex-plugin-"+pluginName+"-*.bin")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	binaryPath := binaryFile.Name()
+	_ = binaryFile.Close()
+	defer func() { _ = os.Remove(binaryPath) }()
+
+	format, err := ExtractPluginExecutable(payloadPath, binaryPath, pluginName, runtime.GOOS)
+	if err != nil {
+		return fmt.Errorf("failed to unpack plugin %s: %w", pluginName, err)
+	}
+
+	binaryChecksum, err := fileSHA256(binaryPath)
+	if err != nil {
+		return fmt.Errorf("failed to hash plugin executable: %w", err)
+	}
+
 	// Make executable and move to final location
-	if err := os.Chmod(tempPath, 0755); err != nil {
+	if err := os.Chmod(binaryPath, 0755); err != nil { // #nosec G302 - plugin must be executable
 		return fmt.Errorf("failed to make plugin executable: %w", err)
 	}
 
-	if err := os.Rename(tempPath, pluginPath); err != nil {
+	if err := os.Rename(binaryPath, pluginPath); err != nil {
 		return fmt.Errorf("failed to move plugin to final location: %w", err)
+	}
+
+	record := InstallRecord{
+		Plugin:          pluginName,
+		Version:         version,
+		PayloadChecksum: payloadChecksum,
+		PayloadFormat:   format,
+		BinaryChecksum:  binaryChecksum,
+		InstalledAt:     time.Now().UTC(),
+	}
+	if err := writeInstallRecord(d.pluginDir, record); err != nil && d.logger != nil {
+		d.logger.Warning("Failed to record install of plugin %s: %v", pluginName, err)
 	}
 
 	if d.logger != nil {
@@ -1055,24 +1087,31 @@ func (d *Downloader) validatePluginBinary(pluginName string, binary PlatformBina
 	return nil
 }
 
-// isPluginUpToDate checks if a plugin is up to date by comparing checksums
-func (d *Downloader) isPluginUpToDate(pluginPath, expectedChecksum string) bool {
+// isPluginUpToDate checks if an installed plugin matches the registry's payload checksum.
+// The registry checksum describes the downloaded payload (often an archive), so the install
+// record is used to map it to the extracted executable. Installed files that are archives
+// (written by older SDK versions that skipped extraction) are never considered up to date.
+func (d *Downloader) isPluginUpToDate(pluginName, pluginPath, expectedChecksum string) bool {
 	if !d.verifyChecksums || expectedChecksum == "" {
 		return false // Always redownload if checksums are disabled or checksum is empty
 	}
+	expectedChecksum = normalizeChecksum(expectedChecksum)
 
-	file, err := os.Open(pluginPath)
+	format, err := DetectPayloadFormat(pluginPath)
+	if err != nil || format != PayloadFormatBinary {
+		return false
+	}
+
+	actualChecksum, err := fileSHA256(pluginPath)
 	if err != nil {
 		return false
 	}
-	defer func() { _ = file.Close() }()
 
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return false
+	if record, err := readInstallRecord(d.pluginDir, pluginName); err == nil {
+		return record.PayloadChecksum == expectedChecksum && record.BinaryChecksum == actualChecksum
 	}
 
-	actualChecksum := hex.EncodeToString(hasher.Sum(nil))
+	// No install record: only a raw-binary release can be matched directly
 	return actualChecksum == expectedChecksum
 }
 
