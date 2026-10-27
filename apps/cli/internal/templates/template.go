@@ -295,7 +295,21 @@ func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) 
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+		if entry.IsDir() {
+			template, err := tm.loadLegacyTemplateFromDirectory(filepath.Join(dir, entry.Name()))
+			if err != nil {
+				fmt.Printf("Warning: failed to load directory template %s: %v\n", entry.Name(), err)
+				continue
+			}
+			if err := tm.ValidateTemplate(template); err != nil {
+				fmt.Printf("Warning: invalid directory template %s: %v\n", entry.Name(), err)
+				continue
+			}
+			templates = append(templates, template)
+			continue
+		}
+
+		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
 			continue
 		}
 
@@ -303,6 +317,9 @@ func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) 
 		data, err := os.ReadFile(path)
 		if err != nil {
 			fmt.Printf("Warning: failed to read template %s: %v\n", entry.Name(), err)
+			continue
+		}
+		if isCanonicalTemplateData(data) {
 			continue
 		}
 
@@ -322,4 +339,62 @@ func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) 
 	}
 
 	return templates, nil
+}
+
+func (tm *TemplateManager) loadLegacyTemplateFromDirectory(dir string) (Template, error) {
+	manifestPath := filepath.Join(dir, "manifest.yaml")
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return Template{}, fmt.Errorf("failed to read manifest: %w", err)
+	}
+
+	var manifest directoryTemplateManifest
+	if err := yaml.Unmarshal(manifestData, &manifest); err != nil {
+		return Template{}, fmt.Errorf("failed to parse manifest: %w", err)
+	}
+
+	apps, err := loadDirectoryTemplateApplications(filepath.Join(dir, "applications.yaml"))
+	if err != nil {
+		return Template{}, err
+	}
+
+	template := Template{
+		Metadata: TemplateMetadata{
+			Name:        manifest.ID,
+			Version:     manifest.Version,
+			Description: manifest.Description,
+			Category:    firstTemplateCategory(manifest.Categories),
+			Tags:        manifest.Tags,
+			Author:      manifest.Author,
+			Homepage:    manifest.Homepage,
+			Platforms:   []string{"linux", "macos", "windows"},
+			Difficulty:  "intermediate",
+			Additive:    true,
+		},
+		Applications: apps,
+		Environment: EnvironmentTemplate{
+			Shell:  "zsh",
+			Editor: "vim",
+		},
+		System: SystemTemplate{
+			GitConfig: true,
+			SSHConfig: true,
+		},
+	}
+	return template, nil
+}
+
+func firstTemplateCategory(categories []string) string {
+	if len(categories) == 0 {
+		return "development"
+	}
+	return categories[0]
+}
+
+func isCanonicalTemplateData(data []byte) bool {
+	var spec TemplateSpec
+	if err := yaml.Unmarshal(data, &spec); err != nil {
+		return false
+	}
+	return spec.SchemaVersion == TemplateSchemaVersion
 }

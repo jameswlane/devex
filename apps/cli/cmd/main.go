@@ -32,14 +32,23 @@ func main() {
 	if err := log.InitFileLogger(debugMode); err != nil {
 		// Fallback to stderr logging if file logging fails
 		log.InitDefaultLogger(os.Stderr)
-		fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
-		fmt.Fprintf(os.Stderr, "Continuing with stderr logging...\n")
+		_, err := fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
+		if err != nil {
+			return
+		}
+		_, err = fmt.Fprintf(os.Stderr, "Continuing with stderr logging...\n")
+		if err != nil {
+			return
+		}
 	}
 
 	// Set the CLI version for logging and display build info in debug mode
 	log.SetCLIVersion(version)
 	if debugMode {
-		fmt.Fprintf(os.Stderr, "DevEx CLI v%s starting in debug mode\n", version)
+		_, err := fmt.Fprintf(os.Stderr, "DevEx CLI v%s starting in debug mode\n", version)
+		if err != nil {
+			return
+		}
 	}
 
 	// Detect platform information
@@ -84,7 +93,10 @@ func main() {
 
 	// Close the log file if it was opened
 	if err := log.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", err)
+		_, err := fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", err)
+		if err != nil {
+			return
+		}
 	}
 }
 
@@ -111,7 +123,10 @@ func isDebugMode() bool {
 func handleError(context string, err error) {
 	if err != nil {
 		log.Error("Error occurred", err, "context", context)
-		fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
+		_, err := fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
+		if err != nil {
+			return
+		}
 		Exit(1)
 	}
 }

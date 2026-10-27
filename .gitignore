@@ -50,9 +50,14 @@ node_modules
 
 .turbo
 
-# Plugin binaries
+# Plugin binaries (devex-plugin-* from package.json builds; <dir> from plain `go build`)
 packages/*/devex-plugin-*
 !packages/*/devex-plugin-*.go
+packages/desktop-*/desktop-*
+packages/package-manager-*/package-manager-*
+packages/tool-*/tool-*
+packages/system-setup/system-setup
+!packages/**/*.go
 
 # Environment files
 .env
@@ -64,3 +69,6 @@ packages/*/devex-plugin-*
 
 # Cache files
 .cache/
+
+# Compiled test binaries (go test -c)
+*.test

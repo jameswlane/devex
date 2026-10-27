@@ -1,13 +1,13 @@
 name: Sync Registry Database
 on:
-  # Run after successful goreleaser workflow
-  workflow_run:
-    workflows: ["goreleaser"]
-    types:
-      - completed
-  # Allow manual trigger
+  # Dispatched by goreleaser.yml after each plugin release, with the released tag.
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'Plugin tag to sync, e.g. packages/package-manager-apt/v0.0.2 (empty = all plugin tags)'
+        required: false
+        type: string
+        default: ''
       force:
         description: 'Force sync even if no changes detected'
         required: false
@@ -16,8 +16,14 @@ on:
       force_reseed:
         description: 'Force complete database reseed'
         required: false
-        default: 'false'
+        default: false
         type: boolean
+  # Nightly repair: re-scan every plugin tag and correct anything a missed dispatch left behind.
+  schedule:
+    - cron: '17 4 * * *'
+concurrency:
+  group: sync-registry-database
+  cancel-in-progress: false
 permissions:
   contents: read
 env:
@@ -26,8 +32,6 @@ jobs:
   sync-database:
     name: Sync Registry Database
     runs-on: ubuntu-latest
-    # Only run if triggered manually or if goreleaser was successful
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     environment: production
     steps:
       - name: Checkout repository
@@ -72,12 +76,13 @@ jobs:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pnpm tsx scripts/seed-test-data.ts
+          pnpm tsx scripts/seed.ts
       - name: Sync GitHub plugins
         working-directory: apps/registry
         env:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_TAG: ${{ inputs.tag }}
         run: |
           # Run GitHub plugin sync (tsx already in dependencies)
           pnpm tsx scripts/sync-github-plugins.ts

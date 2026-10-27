@@ -33,12 +33,13 @@
 		"web:dev": "turbo dev --filter=@devex/web",
 		"docs:build": "turbo build --filter=@devex/docs",
 		"docs:dev": "turbo dev --filter=@devex/docs",
-		"goreleaser:generate": "node scripts/generate-goreleaser.js",
-		"prerelease": "npm run goreleaser:generate",
+		"release:generate": "node scripts/release/generate-goreleaser.mjs",
+		"release:check": "node scripts/release/generate-goreleaser.mjs --check",
+		"release:plan": "node scripts/release/release-plan.mjs",
 		"act:lint": "actionlint .github/workflows/*.yml",
 		"act:validate": "action-validator .github/workflows/*.yml",
 		"act:test": "act push -W .github/workflows/ci.yml -n",
-		"act:test:release": "act push -W .github/workflows/release.yml -n",
+		"act:test:release": "act workflow_dispatch -W .github/workflows/release-components.yml -n",
 		"act:check": "npm run act:lint && npm run act:validate",
 		"docker:build": "apps/cli/scripts/docker.sh build",
 		"docker:run": "apps/cli/scripts/docker.sh run",
@@ -62,6 +63,6 @@
 		"commitlint": "^19.8.1",
 		"glob": "^11.1.0",
 		"js-yaml": "^4.1.1",
-		"turbo": "latest"
+		"turbo": "2.6.3"
 	}
 }

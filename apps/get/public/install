@@ -1,182 +1,185 @@
 #!/bin/bash
+# DevEx installer: wget -qO- https://devex.sh/install | bash
+#
+# Everything runs inside main(), called on the last line, so a truncated download
+# never executes a partial script.
 
-set -e
+set -euo pipefail
 
-echo "🚀 DevEx Installer"
-echo "=================="
-echo ""
-
-# Check for curl or wget
-if command -v curl >/dev/null 2>&1; then
-    DOWNLOAD_CMD="curl -fsSL"
-    DOWNLOAD_FILE_CMD="curl -fsSL -O"
-elif command -v wget >/dev/null 2>&1; then
-    DOWNLOAD_CMD="wget -qO-"
-    DOWNLOAD_FILE_CMD="wget -q"
-else
-    echo "Error: Neither curl nor wget found."
-    echo "Please install curl or wget and try again:"
-    echo ""
-    echo "  Ubuntu/Debian: sudo apt-get install curl"
-    echo "  Fedora/RHEL:   sudo dnf install curl"
-    echo "  Arch:          sudo pacman -S curl"
-    echo "  macOS:         brew install curl"
-    echo ""
-    exit 1
-fi
-
-# Determine OS and architecture
-OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m)
-
-case "$ARCH" in
-    x86_64) ARCH="amd64" ;;
-    armv8*|aarch64) ARCH="arm64" ;;
-    arm*) ARCH="arm" ;;
-    *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-# Fetch the latest CLI release version (exclude plugin releases)
-echo "Fetching latest version..."
-LATEST_VERSION=$($DOWNLOAD_CMD https://api.github.com/repos/jameswlane/devex/releases | grep -Po '"tag_name": "\K.*?(?=")' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
-
-if [ -z "$LATEST_VERSION" ]; then
-    echo "Error: Failed to fetch the latest release version."
-    echo "Please check your internet connection and try again."
-    exit 1
-fi
-
-echo "✓ Latest version: $LATEST_VERSION"
-
-# Construct file name and URL
-FILENAME="devex_${LATEST_VERSION}_${OS}_${ARCH}.tar.gz"
-BASE_URL="https://github.com/jameswlane/devex/releases/download/${LATEST_VERSION}"
-CHECKSUM_FILE="devex_checksums.txt"
-
-echo "Downloading $FILENAME..."
-
-# Create a temporary directory for download
-TEMP_DIR=$(mktemp -d)
-cd "$TEMP_DIR"
-
-# Download the tarball and checksum file
-echo "Downloading from $BASE_URL..."
-if [[ "$DOWNLOAD_FILE_CMD" == "curl -fsSL -O" ]]; then
-    curl -fsSL -O "$BASE_URL/$FILENAME" || { echo "Error: Download failed"; exit 1; }
-    curl -fsSL -O "$BASE_URL/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
-else
-    $DOWNLOAD_FILE_CMD "$BASE_URL/$FILENAME" || { echo "Error: Download failed"; exit 1; }
-    $DOWNLOAD_FILE_CMD "$BASE_URL/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
-fi
-
-# Enhanced checksum verification with detailed error reporting
-echo "Verifying checksum..."
-
-# Check if checksum file exists and is readable
-if [ ! -f "$CHECKSUM_FILE" ]; then
-    echo "Error: Checksum file not found."
-    rm -f "$FILENAME"
-    exit 1
-fi
-
-# Verify checksum file format and content
-if ! grep -q "$FILENAME" "$CHECKSUM_FILE"; then
-    echo "Error: File '$FILENAME' not found in checksum file."
-    echo "Available files in checksum:"
-    cat "$CHECKSUM_FILE" | cut -d' ' -f3- || echo "Failed to read checksum file"
-    rm -f "$FILENAME" "$CHECKSUM_FILE"
-    exit 1
-fi
-
-# Perform checksum verification with explicit error handling
-CHECKSUM_RESULT=$(grep "$FILENAME" "$CHECKSUM_FILE" | sha256sum --check 2>&1)
-CHECKSUM_EXIT_CODE=$?
-
-if [ $CHECKSUM_EXIT_CODE -ne 0 ]; then
-    echo "Error: Checksum verification failed."
-    echo "Details: $CHECKSUM_RESULT"
-    echo "This could indicate:"
-    echo "  - Corrupted download"
-    echo "  - Network tampering"
-    echo "  - Server-side issue"
-    echo "Please try downloading again or contact support."
-    rm -f "$FILENAME" "$CHECKSUM_FILE"
-    exit 1
-fi
-
-echo "✓ Checksum verification successful"
-
-# Install to target directory
+REPO="jameswlane/devex"
 INSTALL_DIR="$HOME/.local/share/devex"
-mkdir -p "$INSTALL_DIR"
+CHECKSUM_FILE="devex_checksums.txt"
+TEMP_DIR=""
 
-echo "Installing DevEx..."
-tar -xzf "$FILENAME" -C "$INSTALL_DIR"
-
-# Ensure binary is executable
-chmod +x "$INSTALL_DIR/bin/devex"
-
-# Cleanup
-cd ~
-rm -rf "$TEMP_DIR"
-
-# Add to PATH for various shells
-echo ""
-echo "Adding DevEx to PATH..."
-
-# Function to add path to shell config if not already present
-add_to_path() {
-    local shell_config="$1"
-    local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
-    
-    if [ -f "$shell_config" ]; then
-        if ! grep -q "$INSTALL_DIR/bin" "$shell_config"; then
-            echo "  ✓ Adding to $shell_config"
-            echo "" >> "$shell_config"
-            echo "# DevEx CLI" >> "$shell_config"
-            echo "$path_line" >> "$shell_config"
-        fi
+cleanup() {
+    if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+        rm -rf "$TEMP_DIR"
     fi
 }
 
-# Add to common shell configurations
-add_to_path "$HOME/.bashrc"
-add_to_path "$HOME/.zshrc"
-
-# For fish shell
-if [ -f "$HOME/.config/fish/config.fish" ]; then
-    if ! grep -q "$INSTALL_DIR/bin" "$HOME/.config/fish/config.fish"; then
-        echo "  ✓ Adding to ~/.config/fish/config.fish"
-        echo "" >> "$HOME/.config/fish/config.fish"
-        echo "# DevEx CLI" >> "$HOME/.config/fish/config.fish"
-        echo "set -gx PATH \$PATH $INSTALL_DIR/bin" >> "$HOME/.config/fish/config.fish"
+# fetch URL [OUTPUT_FILE]: prints to stdout, or saves to OUTPUT_FILE
+fetch() {
+    if command -v curl >/dev/null 2>&1; then
+        if [ $# -eq 2 ]; then curl -fsSL -o "$2" "$1"; else curl -fsSL "$1"; fi
+    else
+        if [ $# -eq 2 ]; then wget -qO "$2" "$1"; else wget -qO- "$1"; fi
     fi
-fi
+}
 
-# Export for current session
-export PATH="$PATH:$INSTALL_DIR/bin"
+sha256_check() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum -c -
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 -c -
+    else
+        echo "Error: Neither sha256sum nor shasum found; cannot verify the download." >&2
+        return 1
+    fi
+}
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ DevEx installed successfully!"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
-echo "To get started, run:"
-echo ""
-echo "  devex setup"
-echo ""
-echo "This will guide you through setting up your"
-echo "development environment with your preferred tools."
-echo ""
+# Newest vX.Y.Z tag. Plugin and SDK releases use packages/<name>/vX.Y.Z tags and
+# are skipped. One page of 100 keeps this working even after a burst of plugin releases.
+latest_cli_version() {
+    fetch "https://api.github.com/repos/${REPO}/releases?per_page=100" |
+        sed -n 's/.*"tag_name": *"\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' |
+        head -n 1
+}
 
-# Try to run setup if devex is in PATH
-if command -v devex >/dev/null 2>&1; then
-    echo "Press Enter to start the setup, or Ctrl+C to exit..."
-    read -r
-    devex setup
-else
-    echo "Note: You may need to restart your shell or run:"
-    echo "  source ~/.bashrc  (or ~/.zshrc for zsh)"
+add_to_path() {
+    local shell_config="$1"
+    local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
+
+    if [ -f "$shell_config" ] && ! grep -q "$INSTALL_DIR/bin" "$shell_config"; then
+        echo "  ✓ Adding to $shell_config"
+        {
+            echo ""
+            echo "# DevEx CLI"
+            echo "$path_line"
+        } >> "$shell_config"
+    fi
+}
+
+main() {
+    echo "🚀 DevEx Installer"
+    echo "=================="
     echo ""
-    echo "Then run: devex setup"
-fi
+
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        echo "Error: Neither curl nor wget found."
+        echo "Please install curl or wget and try again:"
+        echo ""
+        echo "  Ubuntu/Debian: sudo apt-get install curl"
+        echo "  Fedora/RHEL:   sudo dnf install curl"
+        echo "  Arch:          sudo pacman -S curl"
+        echo "  macOS:         brew install curl"
+        echo ""
+        exit 1
+    fi
+
+    # Determine OS and architecture
+    local os arch
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    arch=$(uname -m)
+
+    case "$os" in
+        linux|darwin) ;;
+        *) echo "Unsupported operating system: $os"; exit 1 ;;
+    esac
+
+    case "$arch" in
+        x86_64|amd64) arch="amd64" ;;
+        armv8*|aarch64|arm64) arch="arm64" ;;
+        *) echo "Unsupported architecture: $arch"; exit 1 ;;
+    esac
+
+    echo "Fetching latest version..."
+    local tag
+    tag=$(latest_cli_version || true)
+    if [ -z "$tag" ]; then
+        echo "Error: Failed to fetch the latest release version."
+        echo "Please check your internet connection and try again."
+        exit 1
+    fi
+    echo "✓ Latest version: $tag"
+
+    # Release assets are named without the leading "v": devex_1.2.3_linux_amd64.tar.gz
+    local version="${tag#v}"
+    local filename="devex_${version}_${os}_${arch}.tar.gz"
+    local base_url="https://github.com/${REPO}/releases/download/${tag}"
+
+    TEMP_DIR=$(mktemp -d)
+    trap cleanup EXIT
+
+    echo "Downloading $filename..."
+    fetch "$base_url/$filename" "$TEMP_DIR/$filename" || { echo "Error: Download failed"; exit 1; }
+    fetch "$base_url/$CHECKSUM_FILE" "$TEMP_DIR/$CHECKSUM_FILE" || { echo "Error: Checksum download failed"; exit 1; }
+
+    echo "Verifying checksum..."
+    local expected
+    expected=$(awk -v f="$filename" '$2 == f || $2 == "*"f { print; exit }' "$TEMP_DIR/$CHECKSUM_FILE")
+    if [ -z "$expected" ]; then
+        echo "Error: File '$filename' not found in checksum file."
+        echo "Available files in checksum:"
+        awk '{ print "  " $2 }' "$TEMP_DIR/$CHECKSUM_FILE"
+        exit 1
+    fi
+
+    local checksum_result
+    if ! checksum_result=$(cd "$TEMP_DIR" && echo "$expected" | sha256_check 2>&1); then
+        echo "Error: Checksum verification failed."
+        echo "Details: $checksum_result"
+        echo "This could indicate:"
+        echo "  - Corrupted download"
+        echo "  - Network tampering"
+        echo "  - Server-side issue"
+        echo "Please try downloading again or contact support."
+        exit 1
+    fi
+    echo "✓ Checksum verification successful"
+
+    echo "Installing DevEx..."
+    mkdir -p "$INSTALL_DIR"
+    tar -xzf "$TEMP_DIR/$filename" -C "$INSTALL_DIR"
+    chmod +x "$INSTALL_DIR/bin/devex"
+
+    echo ""
+    echo "Adding DevEx to PATH..."
+    add_to_path "$HOME/.bashrc"
+    add_to_path "$HOME/.zshrc"
+
+    if [ -f "$HOME/.config/fish/config.fish" ] && ! grep -q "$INSTALL_DIR/bin" "$HOME/.config/fish/config.fish"; then
+        echo "  ✓ Adding to ~/.config/fish/config.fish"
+        {
+            echo ""
+            echo "# DevEx CLI"
+            echo "set -gx PATH \$PATH $INSTALL_DIR/bin"
+        } >> "$HOME/.config/fish/config.fish"
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "✅ DevEx installed successfully!"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "To get started, run:"
+    echo ""
+    echo "  devex setup"
+    echo ""
+    echo "This will guide you through setting up your"
+    echo "development environment with your preferred tools."
+    echo ""
+
+    # stdin is this script when piped into bash, so prompt on the terminal instead
+    if { : < /dev/tty; } 2>/dev/null; then
+        printf "Press Enter to start the setup, or Ctrl+C to exit..." > /dev/tty
+        read -r _ < /dev/tty
+        "$INSTALL_DIR/bin/devex" setup < /dev/tty
+    else
+        echo "Note: You may need to restart your shell or run:"
+        echo "  source ~/.bashrc  (or ~/.zshrc for zsh)"
+        echo ""
+        echo "Then run: devex setup"
+    fi
+}
+
+main "$@"

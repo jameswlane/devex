@@ -14,16 +14,16 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
-var (
-	pluginBootstrap    *bootstrap.PluginBootstrap
-	skipPluginDownload bool
-	offlineMode        bool
-)
+type rootRuntime struct {
+	pluginBootstrap *bootstrap.PluginBootstrap
+}
 
 func NewRootCmd(version string, repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	runtime := &rootRuntime{}
 	cmd := &cobra.Command{
 		Use:   "devex",
 		Short: "DevEx CLI for setting up your development environment",
@@ -56,38 +56,42 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 				return nil
 			}
 
-			return initializePluginSystem(cmd.Context())
+			return runtime.initializePluginSystem(cmd.Context())
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-
 			// Don't auto-run setup during tests
 			if isRunningInTest() {
 				return cmd.Usage()
 			}
 
 			// If no subcommand is provided, run the guided setup
-			setupCmd := NewSetupCmd(repo, settings)
-			setupCmd.SetArgs(args)
-			setupCmd.SetContext(ctx)
-			return setupCmd.Execute()
+			for _, sub := range cmd.Commands() {
+				if sub.Name() == "setup" {
+					sub.SetArgs(args)
+					sub.SetContext(cmd.Context())
+					return sub.Execute()
+				}
+			}
+			return cmd.Usage()
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 
 	// Register other commands
 	cmd.AddCommand(NewSetupCmd(repo, settings))
-	cmd.AddCommand(NewInstallCmd(repo, settings))
+	cmd.AddCommand(NewInstallCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewUninstallCmd(repo, settings))
 	cmd.AddCommand(NewRollbackCmd(repo, settings))
-	cmd.AddCommand(NewStatusCmd(repo, settings))
+	cmd.AddCommand(NewStatusCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
+	cmd.AddCommand(NewMaintainCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewInitCmd(repo, settings))
 	cmd.AddCommand(NewAddCmd(repo, settings))
-	cmd.AddCommand(NewRemoveCmd(repo, settings))
+	cmd.AddCommand(NewRemoveCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewConfigCmd(repo, settings))
 	cmd.AddCommand(NewUndoCmd(repo, settings))
 	cmd.AddCommand(NewRecoveryCmd(repo, settings))
-	cmd.AddCommand(NewTemplateCmd(repo, settings))
+	cmd.AddCommand(NewTemplateCmd(repo, settings, runtime.getPluginBootstrap))
+	cmd.AddCommand(NewRunsCmd())
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
@@ -101,14 +105,16 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.PersistentFlags().Bool("dry-run", false, "Show what would be done without executing")
 	cmd.PersistentFlags().String("config", "", "Config file (default: ~/.devex/config.yaml)")
 	cmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
-	cmd.PersistentFlags().BoolVar(&skipPluginDownload, "skip-plugin-download", false, "Skip automatic plugin downloads")
-	cmd.PersistentFlags().BoolVar(&offlineMode, "offline", false, "Run in offline mode (no plugin downloads)")
+	cmd.PersistentFlags().Bool("skip-plugin-download", false, "Skip automatic plugin downloads")
+	cmd.PersistentFlags().Bool("offline", false, "Run in offline mode (no plugin downloads)")
 
 	// Bind persistent flags to viper for global access
 	_ = viper.BindPFlag("verbose", cmd.PersistentFlags().Lookup("verbose"))
 	_ = viper.BindPFlag("dry-run", cmd.PersistentFlags().Lookup("dry-run"))
 	_ = viper.BindPFlag("config", cmd.PersistentFlags().Lookup("config"))
 	_ = viper.BindPFlag("log-level", cmd.PersistentFlags().Lookup("log-level"))
+	_ = viper.BindPFlag("skip-plugin-download", cmd.PersistentFlags().Lookup("skip-plugin-download"))
+	_ = viper.BindPFlag("offline", cmd.PersistentFlags().Lookup("offline"))
 
 	return cmd
 }
@@ -126,6 +132,7 @@ func initializeConfig(cmd *cobra.Command) error {
 	viper.SetEnvPrefix("DEVEX")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
+	_ = viper.BindEnv(state.DBPathConfigKey, state.DBPathEnvVar, state.DBPathAutoEnvVar)
 
 	// 3. Configuration file paths (in order of precedence)
 	cfgFile := viper.GetString("config")
@@ -177,10 +184,13 @@ func setConfigurationDefaults() {
 
 	// Configuration file defaults
 	viper.SetDefault("config", "")
+	viper.SetDefault(state.DBPathConfigKey, "")
 
 	// Command-specific defaults
 	viper.SetDefault("categories", []string{})
 	viper.SetDefault("non-interactive", false)
+	viper.SetDefault("skip-plugin-download", false)
+	viper.SetDefault("offline", false)
 
 	log.Debug("Configuration defaults set")
 }
@@ -193,18 +203,6 @@ func validateViperConfiguration() error {
 	if !contains(validLogLevels, logLevel) {
 		return fmt.Errorf("invalid log-level '%s' - must be one of: %s",
 			logLevel, strings.Join(validLogLevels, ", "))
-	}
-
-	// Validate categories if provided
-	categories := viper.GetStringSlice("categories")
-	if len(categories) > 0 {
-		validCategories := []string{"development", "databases", "desktop", "terminal", "optional"}
-		for _, category := range categories {
-			if !contains(validCategories, category) {
-				return fmt.Errorf("invalid category '%s' - must be one of: %s",
-					category, strings.Join(validCategories, ", "))
-			}
-		}
 	}
 
 	log.Debug("Configuration validation passed")
@@ -221,48 +219,35 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// isRunningInTest detects if the code is running within a test environment
+// isRunningInTest detects standard Go test binaries and explicit test env markers.
 func isRunningInTest() bool {
-	// Debug: Print args to understand what's happening during tests
-	// fmt.Printf("DEBUG: os.Args = %v\n", os.Args)
-
-	// Check for test-related command line arguments
-	for _, arg := range os.Args {
-		if strings.Contains(arg, "test") || strings.Contains(arg, ".test") || strings.Contains(arg, "ginkgo") {
+	if len(os.Args) > 0 {
+		base := filepath.Base(os.Args[0])
+		if strings.HasSuffix(base, ".test") || base == "ginkgo" {
 			return true
 		}
 	}
 
-	// Check for testing environment variables
 	if os.Getenv("GO_TEST") == "1" || os.Getenv("TESTING") == "1" {
 		return true
-	}
-
-	// More comprehensive test detection
-	if len(os.Args) > 0 {
-		executable := os.Args[0]
-		if strings.HasSuffix(executable, ".test") || strings.Contains(executable, "test") {
-			return true
-		}
 	}
 
 	return false
 }
 
-// initializePluginSystem initializes the plugin system
-func initializePluginSystem(ctx context.Context) error {
+func (r *rootRuntime) initializePluginSystem(ctx context.Context) error {
 	var err error
 
 	// Skip plugin system in offline mode or when explicitly disabled
-	shouldSkipDownload := skipPluginDownload || offlineMode
+	shouldSkipDownload := viper.GetBool("skip-plugin-download") || viper.GetBool("offline")
 
-	pluginBootstrap, err = bootstrap.NewPluginBootstrap(shouldSkipDownload)
+	r.pluginBootstrap, err = bootstrap.NewPluginBootstrap(shouldSkipDownload)
 	if err != nil {
 		log.Warn("Failed to initialize plugin system", "error", err)
 		return nil // Don't fail the entire CLI
 	}
 
-	if err := pluginBootstrap.Initialize(ctx); err != nil {
+	if err := r.pluginBootstrap.Initialize(ctx); err != nil {
 		log.Warn("Failed to bootstrap plugins", "error", err)
 		return nil // Don't fail the entire CLI
 	}
@@ -273,7 +258,7 @@ func initializePluginSystem(ctx context.Context) error {
 
 	// Show platform info in verbose mode
 	if viper.GetBool("verbose") {
-		platform := pluginBootstrap.GetPlatform()
+		platform := r.pluginBootstrap.GetPlatform()
 		log.Info("Platform detected", "platform", platform.String())
 		log.Info("Available package managers", "managers", platform.PackageManagers)
 	}
@@ -281,7 +266,6 @@ func initializePluginSystem(ctx context.Context) error {
 	return nil
 }
 
-// GetPluginBootstrap returns the plugin bootstrap instance
-func GetPluginBootstrap() *bootstrap.PluginBootstrap {
-	return pluginBootstrap
+func (r *rootRuntime) getPluginBootstrap() *bootstrap.PluginBootstrap {
+	return r.pluginBootstrap
 }

@@ -29,8 +29,10 @@ type DockerInstaller struct {
 
 // Execute handles command execution
 func (d *DockerInstaller) Execute(command string, args []string) error {
-	ctx := context.Background()
+	return d.ExecuteContext(context.Background(), command, args)
+}
 
+func (d *DockerInstaller) ExecuteContext(ctx context.Context, command string, args []string) error {
 	switch command {
 	case "ensure-installed":
 		return d.handleEnsureInstalled(ctx, args)
@@ -38,8 +40,14 @@ func (d *DockerInstaller) Execute(command string, args []string) error {
 		return d.handleStatus(ctx, args)
 	}
 
+	if !isDockerPluginCommand(command) {
+		return fmt.Errorf("unknown command: '%s'", command)
+	}
+
 	// For all other commands, ensure Docker is available
-	d.EnsureAvailable()
+	if !d.isDockerAvailable() {
+		return fmt.Errorf("docker is not installed on this system")
+	}
 
 	switch command {
 	case "install":
@@ -75,6 +83,15 @@ func (d *DockerInstaller) Execute(command string, args []string) error {
 	}
 }
 
+func isDockerPluginCommand(command string) bool {
+	switch command {
+	case "install", "remove", "start", "stop", "restart", "list", "logs", "exec", "build", "pull", "push", "images", "rmi", "compose":
+		return true
+	default:
+		return false
+	}
+}
+
 // isDockerAvailable checks if Docker is available
 func (d *DockerInstaller) isDockerAvailable() bool {
 	return sdk.CommandExists("docker")
@@ -95,6 +112,17 @@ func (d *DockerInstaller) handleStatus(ctx context.Context, args []string) error
 
 	if d.isDockerDaemonRunning() {
 		d.logger.Success("Docker daemon is running")
+
+		if len(args) > 0 {
+			inspectArgs, err := d.BuildDockerStatusArgs(args)
+			if err != nil {
+				return err
+			}
+			if err := sdk.ExecCommandWithContext(ctx, false, "docker", inspectArgs...); err != nil {
+				return fmt.Errorf("failed to inspect containers: %w", err)
+			}
+			return nil
+		}
 
 		// Show Docker version
 		if err := d.ExecManagerCommand("search", false, "version"); err != nil {

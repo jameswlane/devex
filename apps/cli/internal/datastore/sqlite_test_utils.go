@@ -6,12 +6,12 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // NewInMemorySQLite creates and initializes an in-memory SQLite database with the given schema.
 func NewInMemorySQLite() types.Database {
-	conn, err := sql.Open("sqlite3", ":memory:")
+	conn, err := sql.Open("sqlite", ":memory:")
 	if err != nil {
 		log.Fatalf("Failed to open SQLite in-memory database: %v", err)
 	}

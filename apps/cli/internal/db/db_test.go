@@ -6,9 +6,9 @@ import (
 	"os"
 	"path/filepath"
 
-	_ "github.com/mattn/go-sqlite3"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	_ "modernc.org/sqlite"
 
 	"github.com/jameswlane/devex/apps/cli/internal/db"
 	"github.com/jameswlane/devex/apps/cli/internal/fs"
@@ -34,7 +34,7 @@ var _ = Describe("Db", func() {
 		log.InitDefaultLogger(logFile)
 
 		tempDB = filepath.Join(os.TempDir(), "test.db")
-		conn, err = sql.Open("sqlite3", tempDB)
+		conn, err = sql.Open("sqlite", tempDB)
 		Expect(err).ToNot(HaveOccurred())
 
 		database = &db.DB{DB: conn}

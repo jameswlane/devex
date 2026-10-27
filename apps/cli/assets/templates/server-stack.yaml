@@ -1,0 +1,96 @@
+schema_version: devex.template/v1
+id: server-stack
+name: Server Stack
+version: 1.0.0
+description: Docker Compose based reverse proxy and application stack for small servers
+author: DevEx Team
+tags:
+  - server
+  - docker
+  - compose
+categories:
+  - server
+inputs:
+  project_name:
+    type: text
+    prompt: Compose project name
+    default: devex-server
+    validation:
+      pattern: ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$
+      message: Project names may contain only letters, numbers, dots, underscores, and hyphens.
+  compose_file:
+    type: text
+    prompt: Compose file path
+    default: docker-compose.yml
+lifecycle:
+  install:
+    - id: docker-engine
+      order: 10
+      plugin:
+        name: package-manager-docker
+        command: ensure-installed
+        args:
+          - --add-user
+    - id: compose-stack
+      order: 20
+      depends_on:
+        - docker-engine
+      plugin:
+        name: package-manager-docker
+        command: compose
+        args:
+          - up
+          - --file={{ inputs.compose_file }}
+          - --project={{ inputs.project_name }}
+          - --detach
+      resources:
+        - type: compose_project
+          name: "{{ inputs.project_name }}"
+          external_id: "{{ inputs.project_name }}"
+          metadata:
+            compose_file: "{{ inputs.compose_file }}"
+  maintain:
+    - id: compose-pull
+      order: 10
+      if: has_resource("compose-stack")
+      plugin:
+        name: package-manager-docker
+        command: compose
+        args:
+          - pull
+          - --file={{ resource.compose-stack.metadata.compose_file }}
+          - --project={{ resource.compose-stack.external_id }}
+    - id: compose-restart
+      order: 20
+      if: has_resource("compose-stack")
+      plugin:
+        name: package-manager-docker
+        command: compose
+        args:
+          - up
+          - --file={{ resource.compose-stack.metadata.compose_file }}
+          - --project={{ resource.compose-stack.external_id }}
+          - --detach
+  status:
+    - id: compose-status
+      order: 10
+      if: has_resource("compose-stack")
+      plugin:
+        name: package-manager-docker
+        command: compose
+        args:
+          - ps
+          - --file={{ resource.compose-stack.metadata.compose_file }}
+          - --project={{ resource.compose-stack.external_id }}
+  remove:
+    - id: compose-remove
+      order: 10
+      if: has_resource("compose-stack")
+      plugin:
+        name: package-manager-docker
+        command: compose
+        args:
+          - down
+          - --file={{ resource.compose-stack.metadata.compose_file }}
+          - --project={{ resource.compose-stack.external_id }}
+          - --volumes

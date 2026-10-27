@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
 	"github.com/jameswlane/devex/apps/cli/internal/version"
@@ -442,11 +443,21 @@ func getAppNames(apps []types.AppConfig) []string {
 
 // NewRemoveCmd creates a new remove command
 func NewRemoveCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	return NewRemoveCmdWithPluginProvider(repo, settings, nil)
+}
+
+func NewRemoveCmdWithPluginProvider(repo types.Repository, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) *cobra.Command {
 	var (
-		force    bool
-		noBackup bool
-		cascade  bool
-		dryRun   bool
+		force          bool
+		noBackup       bool
+		cascade        bool
+		dryRun         bool
+		templateID     string
+		answers        []string
+		answerFiles    []string
+		nonInteractive bool
+		format         string
+		runRef         string
 	)
 
 	cmd := &cobra.Command{
@@ -477,6 +488,21 @@ Examples:
   # Remove with cascade (remove dependents too)
   devex remove docker --cascade`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if templateID != "" {
+				if len(args) > 0 || noBackup || cascade {
+					return fmt.Errorf("--template cannot be combined with application removal arguments or config removal flags")
+				}
+				return executeTemplateLifecycle(cmd.Context(), templateID, templates.LifecycleRemove, templateLifecycleOptions{
+					Answers:        answers,
+					AnswerFiles:    answerFiles,
+					NonInteractive: nonInteractive,
+					DryRun:         dryRun,
+					Force:          force,
+					Format:         format,
+					Run:            runRef,
+				}, settings, getPluginBootstrap)
+			}
+
 			// If specific app name provided, remove it directly
 			if len(args) > 0 {
 				return removeSpecificApp(args[0], settings, force, noBackup, cascade, dryRun)
@@ -504,6 +530,12 @@ Examples:
 	cmd.Flags().BoolVar(&noBackup, "no-backup", false, "Don't create backup before removal")
 	cmd.Flags().BoolVar(&cascade, "cascade", false, "Remove dependent applications as well")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be removed without making changes")
+	cmd.Flags().StringVar(&templateID, "template", "", "Remove resources created by a DevEx lifecycle template")
+	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
+	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing template inputs")
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, yaml)")
+	cmd.Flags().StringVar(&runRef, "run", "latest", "Template install run to remove (latest or run ID)")
 
 	return cmd
 }

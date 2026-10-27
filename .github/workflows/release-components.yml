@@ -1,0 +1,73 @@
+name: release components
+# Tags changed components (CLI, plugin SDK, plugins) and releases each one.
+# Tags pushed with GITHUB_TOKEN do not start other workflows, so this workflow
+# calls goreleaser.yml directly for every tag it creates.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated components to release (e.g. cli,package-manager-apt). Empty = every changed component.'
+        required: false
+        type: string
+        default: ''
+      dry_run:
+        description: 'Only print the release plan'
+        required: false
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: release-components
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # push tags
+    outputs:
+      tags: ${{ steps.plan.outputs.tags }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Compute release plan
+        id: plan
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          args=()
+          if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
+          node scripts/release/release-plan.mjs "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
+          tags=$(node scripts/release/release-plan.mjs "${args[@]}" --json | jq -c '[.[].tag]')
+          echo "tags=$tags" >> "$GITHUB_OUTPUT"
+      - name: Create and push tags
+        if: ${{ !inputs.dry_run && steps.plan.outputs.tags != '[]' }}
+        env:
+          ONLY: ${{ inputs.only }}
+          TAGS: ${{ steps.plan.outputs.tags }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          args=()
+          if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
+          node scripts/release/release-plan.mjs "${args[@]}" --tag
+          jq -r '.[]' <<< "$TAGS" | xargs git push origin
+  release:
+    needs: plan
+    if: ${{ !inputs.dry_run && needs.plan.outputs.tags != '[]' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        tag: ${{ fromJSON(needs.plan.outputs.tags) }}
+    permissions:
+      contents: write
+      id-token: write
+      actions: write
+    uses: ./.github/workflows/goreleaser.yml
+    with:
+      tag: ${{ matrix.tag }}
+    secrets:
+      GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}

@@ -312,7 +312,7 @@ func (g *AdvancedPatternGenerator) GenerateObfuscatedCommands() []string {
 func (g *AdvancedPatternGenerator) hexEncode(cmd string) string {
 	var hex strings.Builder
 	for _, r := range cmd {
-		hex.WriteString(fmt.Sprintf("\\x%02x", r))
+		fmt.Fprintf(&hex, "\\x%02x", r)
 	}
 	return fmt.Sprintf("echo -e '%s' | sh", hex.String())
 }
@@ -483,15 +483,15 @@ func PrintSecurityTestReport(summary TestResultSummary) string {
 	
 	report.WriteString("Security Test Summary\n")
 	report.WriteString("====================\n")
-	report.WriteString(fmt.Sprintf("Total Tests: %d\n", summary.TotalTests))
-	report.WriteString(fmt.Sprintf("Passed: %d\n", summary.PassedTests))
-	report.WriteString(fmt.Sprintf("Failed: %d\n", summary.FailedTests))
-	report.WriteString(fmt.Sprintf("Pass Rate: %.2f%%\n", summary.PassRate))
+	fmt.Fprintf(&report, "Total Tests: %d\n", summary.TotalTests)
+	fmt.Fprintf(&report, "Passed: %d\n", summary.PassedTests)
+	fmt.Fprintf(&report, "Failed: %d\n", summary.FailedTests)
+	fmt.Fprintf(&report, "Pass Rate: %.2f%%\n", summary.PassRate)
 	
 	if summary.FailedTests > 0 {
 		report.WriteString("\nFailed Patterns:\n")
 		for _, pattern := range summary.FailedPatterns {
-			report.WriteString(fmt.Sprintf("- %s\n", pattern))
+			fmt.Fprintf(&report, "- %s\n", pattern)
 		}
 	}
 	

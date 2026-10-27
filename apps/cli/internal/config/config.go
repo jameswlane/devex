@@ -676,24 +676,18 @@ func mergeConfigFileIntoViper(v *viper.Viper, path string) error {
 		return nil
 	}
 
-	_, err := fs.ReadFile(path)
+	// Parse and merge into the specified Viper instance
+	subViper, err := loadYamlFileToViper(path)
 	if err != nil {
-		exists, err := fs.Exists(path)
-		if err != nil {
-			log.Warn("Failed to check if file exists", "path", path, "error", err)
-			return err
+		exists, existsErr := fs.Exists(path)
+		if existsErr != nil {
+			log.Warn("Failed to check if file exists", "path", path, "error", existsErr)
+			return existsErr
 		}
 		if !exists {
 			log.Warn("Config file not found", "path", path)
 			return nil
 		}
-		log.Error("Failed to read YAML file", err, "path", path)
-		return fmt.Errorf("failed to read YAML file %s: %w", path, err)
-	}
-
-	// Parse and merge into the specified Viper instance
-	subViper, err := loadYamlFileToViper(path)
-	if err != nil {
 		return err
 	}
 
@@ -778,11 +772,15 @@ func (s *CrossPlatformSettings) GetConfigDirsWithEnvironment() (defaultDir, team
 
 // GetApplicationByName returns an application configuration by name
 func (s *CrossPlatformSettings) GetApplicationByName(name string) (*types.AppConfig, error) {
-	// Search through all application categories
+	normalizedName := strings.ToLower(strings.TrimSpace(name))
 	allApps := s.GetAllApps()
 	for _, app := range allApps {
 		legacyApp := app.ToLegacyAppConfig()
-		if legacyApp.Name == name {
+		if strings.ToLower(strings.TrimSpace(legacyApp.Name)) == normalizedName {
+			return &legacyApp, nil
+		}
+		osConfig := app.GetOSConfig()
+		if strings.ToLower(strings.TrimSpace(osConfig.InstallCommand)) == normalizedName {
 			return &legacyApp, nil
 		}
 	}
@@ -1121,8 +1119,7 @@ func (c *configCache) shouldReloadFile(filePath string) (bool, error) {
 	// Check if file has been modified or size changed
 	// Use >= for time comparison to handle low-resolution timestamps
 	if fileInfo.ModTime().After(cachedInfo.modTime) ||
-		fileInfo.Size() != cachedInfo.size ||
-		fileInfo.ModTime().Equal(cachedInfo.modTime) && fileInfo.Size() != cachedInfo.size {
+		fileInfo.Size() != cachedInfo.size {
 		c.updateFileInfo(filePath, fileInfo)
 		return true, nil
 	}

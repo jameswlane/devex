@@ -1,478 +1,360 @@
-# Template System
+# Template Runtime
 
-DevEx templates provide pre-configured setups for common development scenarios, enabling rapid environment initialization and team standardization.
+DevEx lifecycle templates are YAML automation bundles for installing, inspecting, maintaining, and removing resources. They are used with `devex install --template`, `devex status --template`, `devex maintain --template`, `devex remove --template`, and `devex template plan`.
 
-## What are Templates?
+The older configuration-template workflow is managed through `devex template custom ...` and template version commands. Do not use `devex template apply` in lifecycle examples; lifecycle templates execute through the top-level lifecycle commands.
 
-Templates are YAML configurations that define:
-- **Applications** to install for specific tech stacks
-- **Programming languages** and their versions
-- **Development tools** and utilities
-- **System configurations** (git, SSH, terminal)
-- **Desktop customizations** (optional)
+## Supported Commands
 
-Templates can be:
-- **Built-in** - Maintained by DevEx team
-- **Custom** - Created by users or teams
-- **Remote** - Shared via URLs or repositories
-
-## Built-in Templates
-
-DevEx includes templates for popular development stacks:
-
-### Web Development
-- `web-fullstack` - Full-stack web development (React, Node.js, databases)
-- `react-frontend` - React frontend with modern tooling
-- `vue-frontend` - Vue.js frontend development
-- `nextjs-app` - Next.js application stack
-- `backend-api` - Backend API development (Node.js, Python, Go)
-
-### Mobile Development
-- `react-native` - React Native development environment
-- `flutter` - Flutter development with Android/iOS tools
-- `ios-native` - iOS native development (macOS only)
-- `android-native` - Android native development
-
-### Data & Analytics
-- `data-science` - Python data science stack (pandas, jupyter, etc.)
-- `machine-learning` - ML/AI development environment
-- `data-engineering` - Big data and pipeline tools
-
-### DevOps & Infrastructure
-- `devops-tools` - Infrastructure management and automation
-- `kubernetes-dev` - Kubernetes development environment
-- `terraform-stack` - Infrastructure as Code with Terraform
-- `monitoring-stack` - Observability and monitoring tools
-
-### Language-Specific
-- `python-dev` - Python development environment
-- `go-dev` - Go development stack
-- `rust-dev` - Rust development environment
-- `java-enterprise` - Java enterprise development
-
-## Using Templates
-
-### List Available Templates
 ```bash
-# Show all templates
+# List lifecycle and versioned templates
 devex template list
+devex template list --include-user
+devex template list --source builtin --format json
 
-# Show templates by category
-devex template list --category web
+# Show template metadata
+devex template info databases
 
-# Include remote templates
-devex template list --remote
+# Validate and plan lifecycle templates
+devex template validate ./templates/databases.yaml
+devex template plan ./templates/databases.yaml --action install --answer databases=postgres,redis --non-interactive
+devex template plan databases --action remove --format yaml
+
+# Execute lifecycle actions
+devex install --template databases --answer databases=postgres,redis --non-interactive
+devex status --template databases --run latest --format json
+devex maintain --template databases --run latest --dry-run
+devex remove --template databases --run latest --force
+
+# Inspect recorded runs
+devex runs list
+devex runs show <run-id>
+devex runs resources <run-id>
+devex runs operations <run-id>
 ```
 
-### Apply Template During Init
-```bash
-# Initialize with template
-devex init --template react-fullstack
+## Template Schema Reference
 
-# Non-interactive template application
-devex init --template python-dev --non-interactive
-```
+Canonical lifecycle templates use `schema_version: devex.template/v1`.
 
-### Apply Template to Existing Config
-```bash
-# Apply template (replaces current config)
-devex template apply web-fullstack
+Required top-level fields:
 
-# Merge template with current config
-devex template apply backend-api --merge
+- `schema_version`: must be `devex.template/v1`
+- `id`: stable template identifier
+- `name`: display name
+- `version`: template version
+- `lifecycle`: map of lifecycle actions to ordered steps
 
-# Apply with backup
-devex template apply react-native --backup
-```
+Optional top-level fields:
 
-### Template Information
-```bash
-# Show template details
-devex template info react-fullstack
+- `description`, `author`, `homepage`, `license`
+- `tags`, `categories`
+- `inputs`
+- `metadata`
 
-# Show template content
-devex template show react-fullstack
-```
+Supported lifecycle actions:
 
-## Creating Custom Templates
+- `install`: create or configure resources
+- `maintain`: update, repair, restart, or reconcile recorded resources
+- `status`: inspect recorded resources
+- `remove`: remove resources created by a previous install
 
-### From Current Configuration
-```bash
-# Create template from current setup
-devex template create my-stack
+Supported step types:
 
-# Create with metadata
-devex template create my-stack \
-  --description "My custom development stack" \
-  --category "custom" \
-  --tags "web,api,docker"
-```
+- `app`: install or manage an application by reference, inline fields, or `definition`
+- `plugin`: call a plugin command directly
+- `shell`: run a validated executable with explicit arguments
+- `file`: run a file operation such as write, copy, template, or remove
+- `service`: run a service action such as start, stop, restart, enable, or disable
+- `group`: logical dependency boundary; currently a no-op at execution time
 
-### Manual Template Creation
-Create a template file in `~/.devex/templates/`:
+Each lifecycle step must define exactly one primary action. Steps support `id`, `order`, `if`, `depends_on`, `on_error`, `description`, and `resources`.
+
+## Inputs
+
+Supported input types are `text`, `select`, `multiselect`, and `bool`.
+
+Input fields:
+
+- `type`: input type
+- `prompt`: interactive prompt text
+- `required`: fail when missing in non-interactive mode
+- `sensitive`: redact from persisted state and displayed plans
+- `default`: fallback value
+- `options`: allowed values for `select` and `multiselect`
+- `validation`: `pattern`, `message`, `min`, and `max`
+- `description`: additional documentation
+
+Input precedence, from lowest to highest:
+
+1. Template defaults
+2. Environment variables named `DEVEX_INPUT_<KEY>`, for example `DEVEX_INPUT_DATABASES`
+3. YAML files passed with `--answers path.yaml`
+4. CLI flags passed with `--answer key=value`
+
+Interactive prompts are used only for missing required inputs when `--non-interactive` is not set. With `--non-interactive`, missing required inputs fail fast.
 
 ```yaml
-# ~/.devex/templates/my-stack.yaml
-metadata:
-  name: "My Development Stack"
-  description: "Custom full-stack development environment"
-  version: "1.0.0"
-  category: "custom"
-  tags: ["web", "api", "docker"]
-  author: "Your Name"
-
-applications:
-  categories:
-    development:
-      - name: code
-        description: Visual Studio Code
-        installer: snap
-      
-      - name: docker
-        description: Container platform
-        installer: apt
-        
-    tools:
-      - name: postman
-        description: API testing
-        installer: flatpak
-
-environment:
-  languages:
-    node:
-      version: "18"
-      installer: mise
-      global_packages:
-        - typescript
-        - @angular/cli
-        - create-react-app
-    
-    python:
-      version: "3.11"
-      installer: mise
-      packages:
-        - fastapi
-        - uvicorn
-
-system:
-  git:
-    user:
-      name: "${GIT_USER_NAME}"
-      email: "${GIT_USER_EMAIL}"
-    core:
-      editor: "code --wait"
+# prod.answers.yaml
+databases:
+  - postgres
+  - redis
+postgres_name: devex-postgres
+postgres_password: change-me
 ```
 
-### Template Variables
+```bash
+DEVEX_INPUT_POSTGRES_NAME=ci-postgres \
+  devex install --template databases \
+  --answers prod.answers.yaml \
+  --answer databases=postgres,redis \
+  --non-interactive
+```
 
-Templates support variable substitution:
+## Conditions And Interpolation
+
+Supported condition helpers:
+
+- `equals(value, expected)`
+- `contains(list, value)`
+- `exists(value)`
+- `platform(os)`
+- `has_resource(step_id)`
+- boolean operators: `&&`, `||`, `!`
+
+Interpolation supports:
+
+- `{{ inputs.key }}`
+- `{{ resource.step_id.external_id }}`
+- `{{ system.os }}`
+- `{{ system.arch }}`
+
+Use `if: has_resource("step-id")` for `maintain`, `status`, and `remove` steps that operate on resources from a previous install.
+
+## bbolt State Store
+
+Lifecycle runs are recorded in a local bbolt database. The default path is `~/.devex/state.db`.
+
+State path precedence follows normal DevEx configuration:
+
+- config key: `state.db_path`
+- environment variable: `DEVEX_STATE_DB`
+- compatibility environment variable: `DEVEX_STATE_DB_PATH`
+- default: `~/.devex/state.db`
+
+The state store records:
+
+- `TemplateRun`: lifecycle action, resolved inputs, redacted plan, status, host, platform, timestamps, and error
+- `OperationRecord`: each planned step, execution request, status, outputs, timestamps, and error
+- `ManagedResource`: resources created by a run, external IDs, installer/plugin metadata, state, timestamps, and removal metadata
+
+Removal uses recorded resources and removal hints from the state store. If the template file changes after install, `devex remove --template <id> --run <run-id>` still targets resources recorded by the selected install run. When current remove steps are incomplete, DevEx augments or synthesizes remove operations from recorded resources where removal hints exist.
+
+## Plugin Argument Conventions
+
+Template runtime plugin calls are structured as:
 
 ```yaml
-# In template
-system:
-  git:
-    user:
-      name: "${GIT_USER_NAME}"
-      email: "${GIT_USER_EMAIL}"
-
-# Variable file (vars.yaml)
-GIT_USER_NAME: "John Doe"
-GIT_USER_EMAIL: "john@example.com"
-
-# Apply with variables
-devex template apply my-stack --variables vars.yaml
+plugin:
+  name: package-manager-docker
+  command: remove
+  args:
+    - "{{ resource.postgres.external_id }}"
+    - --volumes
+  env:
+    EXAMPLE: value
+  working_dir: /tmp
 ```
 
-### Template Inheritance
+At execution time the command is passed as the first plugin argument, followed by `args`. Prefer one argument per list item. Do not encode shell pipelines or multiple commands inside one string.
 
-Templates can extend other templates:
+For Docker-style templates, use explicit flags such as `--name`, `--port`, `--env`, `--volume`, `--restart`, and `--detach`.
+
+## Sensitive Input Redaction
+
+Set `sensitive: true` for passwords, tokens, private keys, API keys, and secret-like values.
+
+Sensitive values may be held in memory long enough to build and execute a plan. Persisted runs, resources, operation requests, plan snapshots, logs, and metadata redact sensitive values with `[REDACTED]`. This applies whether the value came from `--answer`, `--answers`, environment variables, defaults, or interactive prompts.
+
+## Database Template Example
 
 ```yaml
-# child-template.yaml
-extends: "web-fullstack"
-
-# Additional applications
-applications:
-  categories:
-    development:
-      - name: figma
-        description: Design tool
-        installer: flatpak
-
-# Override environment settings
-environment:
-  languages:
-    node:
-      version: "20"  # Override parent version
+schema_version: devex.template/v1
+id: databases
+name: Databases
+version: 1.0.0
+description: Local PostgreSQL and Redis containers
+inputs:
+  databases:
+    type: multiselect
+    prompt: Databases to install
+    required: true
+    options:
+      - label: PostgreSQL
+        value: postgres
+      - label: Redis
+        value: redis
+  postgres_name:
+    type: text
+    prompt: PostgreSQL container name
+    default: devex-postgres
+  postgres_password:
+    type: text
+    prompt: PostgreSQL password
+    sensitive: true
+    required: true
+lifecycle:
+  install:
+    - id: docker-engine
+      order: 10
+      plugin:
+        name: package-manager-docker
+        command: ensure-installed
+        args:
+          - --add-user
+    - id: postgres
+      order: 20
+      if: contains(inputs.databases, "postgres")
+      app:
+        name: PostgreSQL
+        category: databases
+        installer: docker
+        command: install
+        args:
+          - postgres:16
+          - --name={{ inputs.postgres_name }}
+          - --port=127.0.0.1:5432:5432
+          - --env=POSTGRES_PASSWORD={{ inputs.postgres_password }}
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.postgres_name }}"
+          external_id: "{{ inputs.postgres_name }}"
+  status:
+    - id: postgres-status
+      order: 10
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.postgres.external_id }}"
+  maintain:
+    - id: postgres-restart
+      order: 10
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: restart
+        args:
+          - "{{ resource.postgres.external_id }}"
+  remove:
+    - id: postgres-remove
+      order: 10
+      if: has_resource("postgres")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.postgres.external_id }}"
+          - --volumes
 ```
 
-## Team Templates
+## Gaming Server Template Example
 
-### Creating Team Templates
-```bash
-# Create team template with shared config
-devex template create company-stack \
-  --description "Company standard development stack" \
-  --public \
-  --category "team"
-
-# Export for distribution
-devex config export --template --output company-stack.yaml
-```
-
-### Sharing Templates
-
-#### Via File System
-```bash
-# Export template bundle
-devex template export company-stack --output company-template.zip
-
-# Import template bundle
-devex template import company-template.zip
-```
-
-#### Via URLs
-```bash
-# Import from URL
-devex template import https://company.com/templates/devex-stack.yaml
-
-# Add remote template repository
-devex template repo add company https://company.com/devex-templates/
-```
-
-#### Version Control Integration
-```bash
-# Templates can be stored in git repositories
-git clone https://github.com/company/devex-templates ~/.devex/remote-templates/company
-
-# Update remote templates
-devex template update --remote
-```
-
-## Template Management
-
-### Update Templates
-```bash
-# Update all built-in templates
-devex template update
-
-# Update specific template
-devex template update web-fullstack
-
-# Update remote templates
-devex template update --remote
-```
-
-### Template Validation
-```bash
-# Validate template syntax
-devex template validate my-stack
-
-# Test template application
-devex template apply my-stack --dry-run
-
-# Validate all templates
-devex template validate --all
-```
-
-### Remove Templates
-```bash
-# Remove custom template
-devex template remove my-old-stack
-
-# Remove remote template
-devex template remove company/legacy-stack
-```
-
-## Advanced Template Features
-
-### Conditional Logic
 ```yaml
-# Platform-specific configurations
-applications:
-  categories:
-    development:
-      - name: code
-        condition: "${OS} != 'windows'"
-        installer: snap
-      
-      - name: code
-        condition: "${OS} == 'windows'"
-        installer: winget
+schema_version: devex.template/v1
+id: factorio-server
+name: Factorio Server
+version: 1.0.0
+description: Dedicated Factorio server in Docker
+inputs:
+  server_name:
+    type: text
+    prompt: Server container name
+    default: factorio
+  save_dir:
+    type: text
+    prompt: Host save directory
+    default: ~/.devex/factorio
+lifecycle:
+  install:
+    - id: factorio
+      order: 10
+      app:
+        name: Factorio Server
+        category: gaming
+        installer: docker
+        command: install
+        args:
+          - factoriotools/factorio:stable
+          - --name={{ inputs.server_name }}
+          - --port=34197:34197/udp
+          - --volume={{ inputs.save_dir }}:/factorio
+          - --restart=unless-stopped
+          - --detach
+      resources:
+        - type: container
+          name: "{{ inputs.server_name }}"
+          external_id: "{{ inputs.server_name }}"
+  status:
+    - id: factorio-status
+      order: 10
+      if: has_resource("factorio")
+      plugin:
+        name: package-manager-docker
+        command: status
+        args:
+          - "{{ resource.factorio.external_id }}"
+  remove:
+    - id: factorio-remove
+      order: 10
+      if: has_resource("factorio")
+      plugin:
+        name: package-manager-docker
+        command: remove
+        args:
+          - "{{ resource.factorio.external_id }}"
 ```
 
-### Template Hooks
-```yaml
-# Pre/post application hooks
-hooks:
-  pre_apply:
-    - command: "echo 'Setting up development environment...'"
-  
-  post_apply:
-    - command: "code --install-extension ms-python.python"
-    - command: "git config --global init.defaultBranch main"
+## Automation Examples
+
+```bash
+# Validate and plan in CI
+devex template validate ./templates/databases.yaml --format json
+devex template plan ./templates/databases.yaml \
+  --action install \
+  --answers ./ci.answers.yaml \
+  --non-interactive \
+  --format json
+
+# Use an isolated state database for ephemeral automation
+DEVEX_STATE_DB=/tmp/devex-state.db \
+  devex install --template ./templates/databases.yaml \
+  --answers ./ci.answers.yaml \
+  --non-interactive
+
+# Remove the latest recorded run in automation
+DEVEX_STATE_DB=/tmp/devex-state.db \
+  devex remove --template ./templates/databases.yaml \
+  --run latest \
+  --force \
+  --non-interactive
 ```
-
-### Template Dependencies
-```yaml
-# Template dependencies
-dependencies:
-  - name: "base-dev"
-    version: ">=1.0.0"
-  
-  - name: "docker-tools"
-    optional: true
-```
-
-## Template Examples
-
-### React Full-Stack Template
-```yaml
-metadata:
-  name: "React Full-Stack"
-  description: "Complete React development environment with backend tools"
-  category: "web"
-  tags: ["react", "node", "fullstack"]
-
-applications:
-  categories:
-    development:
-      - name: code
-        description: Visual Studio Code
-        installer: snap
-        extensions:
-          - ms-vscode.vscode-typescript-next
-          - bradlc.vscode-tailwindcss
-      
-      - name: docker
-        description: Container platform
-        installer: apt
-
-environment:
-  languages:
-    node:
-      version: "18"
-      installer: mise
-      global_packages:
-        - create-react-app
-        - typescript
-        - tailwindcss
-    
-    python:
-      version: "3.11"
-      installer: mise
-      packages:
-        - fastapi
-        - uvicorn
-
-system:
-  git:
-    core:
-      editor: "code --wait"
-    init:
-      defaultBranch: "main"
-```
-
-### Data Science Template
-```yaml
-metadata:
-  name: "Data Science"
-  description: "Python data science and machine learning environment"
-  category: "data"
-  tags: ["python", "datascience", "ml"]
-
-applications:
-  categories:
-    development:
-      - name: code
-        installer: snap
-        extensions:
-          - ms-python.python
-          - ms-toolsai.jupyter
-      
-    tools:
-      - name: dbeaver
-        description: Database tool
-        installer: flatpak
-
-environment:
-  languages:
-    python:
-      version: "3.11"
-      installer: mise
-      packages:
-        - jupyter
-        - pandas
-        - numpy
-        - matplotlib
-        - scikit-learn
-        - tensorflow
-    
-    r:
-      version: "4.3"
-      installer: mise
-      packages:
-        - tidyverse
-        - ggplot2
-```
-
-## Best Practices
-
-### Template Organization
-- Use clear, descriptive names
-- Include comprehensive metadata
-- Group related applications logically
-- Version your templates
-
-### Team Adoption
-- Start with built-in templates as base
-- Customize gradually based on team needs
-- Document template usage and customizations
-- Regular template reviews and updates
-
-### Template Maintenance
-- Keep templates updated with latest versions
-- Test templates regularly
-- Use semantic versioning
-- Maintain backward compatibility when possible
 
 ## Troubleshooting
 
-### Template Not Found
 ```bash
-# Update template list
-devex template update
+# Missing input in automation
+devex template plan databases --non-interactive
 
-# Check template name spelling
-devex template list | grep "template-name"
+# Inspect what was recorded
+devex runs list --format table
+devex runs show <run-id> --format yaml
+devex runs operations <run-id> --format json
+
+# Preview removal from recorded state
+devex remove --template databases --run latest --dry-run --format yaml
 ```
 
-### Application Conflicts
-```bash
-# Review template content
-devex template show template-name
-
-# Apply with merge to resolve conflicts
-devex template apply template-name --merge
-```
-
-### Variable Substitution Issues
-```bash
-# Validate variable file
-devex template apply template-name --variables vars.yaml --dry-run
-
-# Use default values in template
-name: "${GIT_USER_NAME:-Default User}"
-```
-
-## Related Commands
-
-- `devex init` - Initialize with templates
-- `devex config` - Manage configuration
-- `devex install` - Install template applications
-
-## See Also
-
-- [Configuration Guide](config) - Understanding configuration files
-- [Team Collaboration](team) - Sharing configurations
-- [Command Reference](commands) - All DevEx commands
+If removal fails after a template changed, inspect `devex runs resources <run-id>`. Resources without removal hints may require a template remove step or manual cleanup.

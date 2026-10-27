@@ -9,6 +9,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { githubApi } from '../lib/github-api';
+import { compareVersions } from '../lib/version-compare';
 
 interface GitHubTag {
   name: string;
@@ -42,6 +43,8 @@ interface BinaryInfo {
   url: string;
   checksum: string;
   size: number;
+  // How the asset is packaged: SDK v0.0.6+ handles all three, older SDKs only "binary".
+  format: 'binary' | 'tar.gz' | 'zip';
 }
 
 const GITHUB_OWNER = 'jameswlane';
@@ -56,17 +59,28 @@ async function syncPlugins() {
   try {
     console.log('🔄 Starting GitHub plugin sync...');
 
-    // Get all DevEx plugin tags from GitHub
-    const pluginTags = await getPluginTags();
-    console.log(`📋 Found ${pluginTags.length} plugin tags`);
+    // Get all DevEx plugin tags from GitHub, oldest version first so the newest wins
+    const allTags = sortTagsByVersion(await getPluginTags());
+    console.log(`📋 Found ${allTags.length} plugin tags`);
 
-    // Process each plugin tag
+    // SYNC_TAG limits the run to the release that was just published
+    const onlyTag = process.env.SYNC_TAG?.trim();
+    const pluginTags = onlyTag ? allTags.filter((tag) => tag.name === onlyTag) : allTags;
+    if (onlyTag && pluginTags.length === 0) {
+      throw new Error(`Tag ${onlyTag} was not found among plugin tags`);
+    }
+
+    const failed: string[] = [];
     for (const tag of pluginTags) {
-      await processPluginTag(tag);
+      if (!(await processPluginTag(tag))) failed.push(tag.name);
     }
 
     // Update registry stats
     await updateRegistryStats();
+
+    if (failed.length > 0) {
+      throw new Error(`Failed to sync ${failed.length} tag(s): ${failed.join(', ')}`);
+    }
 
     console.log('✅ Plugin sync completed successfully');
   } catch (error) {
@@ -124,12 +138,12 @@ async function getPluginTags(): Promise<GitHubTag[]> {
 /**
  * Process a single plugin tag
  */
-async function processPluginTag(tag: GitHubTag) {
+async function processPluginTag(tag: GitHubTag): Promise<boolean> {
   try {
     const pluginInfo = parsePluginTag(tag.name);
     if (!pluginInfo) {
       console.log(`⚠️  Skipping invalid tag: ${tag.name}`);
-      return;
+      return true;
     }
 
     console.log(`🔧 Processing plugin: ${pluginInfo.fullName}@${pluginInfo.version}`);
@@ -141,6 +155,11 @@ async function processPluginTag(tag: GitHubTag) {
 
     // Get plugin metadata from release assets or package.json
     const metadata = await getPluginMetadata(pluginInfo, tag);
+
+    // Never replace working download links with an empty set (e.g. release still uploading)
+    if (Object.keys(metadata.binaries).length === 0) {
+      throw new Error(`Release ${tag.name} has no downloadable plugin binaries`);
+    }
 
     if (existingPlugin) {
       // Update the existing plugin if the version is newer
@@ -158,6 +177,7 @@ async function processPluginTag(tag: GitHubTag) {
 
     // Log sync operation
     await logSyncOperation('plugin', pluginInfo.fullName, 'update', true, null, tag);
+    return true;
 
   } catch (error) {
     console.error(`❌ Failed to process tag ${tag.name}:`, error);
@@ -174,7 +194,13 @@ async function processPluginTag(tag: GitHubTag) {
         tag
       );
     }
+    return false;
   }
+}
+
+function sortTagsByVersion(tags: GitHubTag[]): GitHubTag[] {
+  const version = (tag: GitHubTag) => tag.name.slice(tag.name.lastIndexOf('/v') + 2);
+  return [...tags].sort((a, b) => compareVersions(version(a), version(b)));
 }
 
 /**
@@ -358,32 +384,28 @@ async function generateBinaryInfo(
   // Parse checksums from checksums.txt
   const checksumMap = await parseChecksumsFile(assets);
 
-  // Filter to only plugin binary assets (exclude checksums.txt, source zips)
-  const binaryAssets = assets.filter((asset: any) => {
-    const name = asset.name;
-    return (
-      name.startsWith(`devex-plugin-${pluginInfo.fullName}`) &&
-      (name.endsWith('.tar.gz') || name.endsWith('.zip')) &&
-      !name.includes('checksums')
-    );
-  });
+  // Asset names: devex-plugin-{fullName}_{version}_{os}_{arch}[.tar.gz|.zip|.exe]
+  // A raw binary (no archive extension, or .exe) is preferred because every SDK
+  // version can install it; archives are the fallback for older releases.
+  const assetPattern = new RegExp(
+    `^devex-plugin-${escapeRegExp(pluginInfo.fullName)}_` +
+      `(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)_(linux|darwin|windows)_(amd64|arm64)(\\.tar\\.gz|\\.zip|\\.exe)?$`
+  );
+  const formatRank = { binary: 0, 'tar.gz': 1, zip: 2 } as const;
 
+  const binaryAssets = assets.filter((asset: any) => assetPattern.test(asset.name));
   console.log(`📦 Found ${binaryAssets.length} binary assets for ${pluginInfo.fullName}`);
 
-  // Process each actual binary asset
   for (const asset of binaryAssets) {
     const filename = asset.name;
+    const [, , os, arch, ext] = filename.match(assetPattern)!;
+    const format: BinaryInfo['format'] = ext === '.tar.gz' ? 'tar.gz' : ext === '.zip' ? 'zip' : 'binary';
+    const platformKey = `${os}-${arch}`;
 
-    // Extract platform and arch from filename
-    // Format: devex-plugin-{fullName}_{version}_{os}_{arch}.{ext}
-    const match = filename.match(/devex-plugin-.+?_[\d.]+_(\w+)_(\w+)\.(tar\.gz|zip)$/);
-    if (!match) {
-      console.log(`⚠️  Could not parse platform from filename: ${filename}`);
+    const existing = binaries[platformKey];
+    if (existing && formatRank[existing.format] <= formatRank[format]) {
       continue;
     }
-
-    const [, os, arch] = match;
-    const platformKey = `${os}-${arch}`;
 
     // Get checksum from parsed checksums.txt
     const checksum = checksumMap.get(filename) || '';
@@ -396,6 +418,7 @@ async function generateBinaryInfo(
       url: asset.browser_download_url,
       checksum: checksum,
       size: asset.size,
+      format,
     };
 
     console.log(`  ✓ ${platformKey}: ${(asset.size / 1024 / 1024).toFixed(2)} MB, checksum: ${checksum.slice(0, 16)}...`);
@@ -420,8 +443,13 @@ async function getReleaseByTag(tagName: string) {
  * Check if the plugin should be updated based on its version
  */
 function shouldUpdatePlugin(currentVersion: string, newVersion: string): boolean {
-  // Simple version comparison - in production, use semver
-  return newVersion !== currentVersion;
+  // Equal versions are re-synced so a re-run release refreshes its download links;
+  // older versions never replace newer ones.
+  return compareVersions(newVersion, currentVersion) >= 0;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
