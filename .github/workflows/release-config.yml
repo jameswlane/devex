@@ -1,0 +1,77 @@
+name: release config
+# Catches broken release configuration in pull requests instead of at tag time.
+on:
+  pull_request:
+    paths:
+      - '**/.goreleaser.yml'
+      - 'packages/*/metadata.yaml'
+      - 'scripts/release/**'
+      - 'apps/cli/go.mod'
+      - '.github/workflows/goreleaser.yml'
+      - '.github/workflows/release-*.yml'
+  push:
+    branches: [main]
+    paths:
+      - '**/.goreleaser.yml'
+      - 'packages/*/metadata.yaml'
+      - 'scripts/release/**'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install js-yaml for the generator
+        # Installed next to the script so the pnpm workspace is not installed.
+        run: npm install --prefix scripts/release --no-save --no-package-lock --ignore-scripts js-yaml@4.1.1
+      - name: Generated plugin configs are up to date
+        run: node scripts/release/generate-goreleaser.mjs --check
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de  # v7.3.0
+        with:
+          distribution: goreleaser-pro
+          version: v2.19.0
+          install-only: true
+      - name: Validate every GoReleaser config
+        run: |
+          status=0
+          for config in apps/cli/.goreleaser.yml packages/*/.goreleaser.yml; do
+            goreleaser check -q -f "$config" || { echo "::error file=$config::goreleaser check failed"; status=1; }
+          done
+          exit $status
+      - name: Print release plan
+        run: node scripts/release/release-plan.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+  snapshot:
+    # Builds the CLI and one plugin end to end (no publishing) to catch build and archive errors.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: '**/go.sum'
+      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de  # v7.3.0
+        with:
+          distribution: goreleaser-pro
+          version: v2.19.0
+          install-only: true
+      - name: Snapshot CLI
+        run: goreleaser release --snapshot --clean --skip=sign,verify -f apps/cli/.goreleaser.yml
+      - name: CLI archive has config, assets and help
+        run: |
+          archive=$(ls dist/devex_*_linux_amd64.tar.gz)
+          for path in bin/devex config/ assets/ help/; do
+            tar -tzf "$archive" | grep -q "^$path" || { echo "::error::$archive is missing $path"; exit 1; }
+          done
+      - name: Snapshot a plugin
+        run: goreleaser release --snapshot --clean --skip=sign,verify -f packages/package-manager-apt/.goreleaser.yml
+      - name: Plugin has archive and raw binary
+        run: |
+          # The raw binary is uploaded under its artifact name; it stays at the build path in dist/.
+          grep -Eq ' devex-plugin-package-manager-apt_[^ ]+_linux_amd64\.tar\.gz$' dist/checksums.txt
+          grep -Eq ' devex-plugin-package-manager-apt_[^ ]+_linux_amd64$' dist/checksums.txt
+          jq -e '[.[] | select(.type == "Binary" and .extra.ID == "binary")] | length > 0' dist/artifacts.json
