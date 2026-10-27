@@ -172,11 +172,13 @@ export class ToolsService {
 
 		// Apply search filter
 		if (validatedSearch) {
+			// Case-insensitive match: the tool fields are lowercased, so the term must be too
+			const term = validatedSearch.toLowerCase();
 			filteredTools = filteredTools.filter(
 				(tool) =>
-					tool.name.toLowerCase().includes(validatedSearch) ||
-					tool.description.toLowerCase().includes(validatedSearch) ||
-					tool.tags.some((tag) => tag.toLowerCase().includes(validatedSearch)),
+					tool.name.toLowerCase().includes(term) ||
+					tool.description.toLowerCase().includes(term) ||
+					tool.tags.some((tag) => tag.toLowerCase().includes(term)),
 			);
 		}
 
