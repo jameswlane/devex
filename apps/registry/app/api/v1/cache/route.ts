@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createApiError } from "@/lib/logger";
 import { withErrorHandling } from "@/lib/error-handler";
+import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { 
 	cacheInvalidation, 
 	invalidateRegistryCache,
@@ -26,12 +27,9 @@ async function handleGetCacheStatus(request: NextRequest): Promise<NextResponse>
 
 // POST /api/v1/cache/invalidate - Manually invalidate caches
 async function handleInvalidateCache(request: NextRequest): Promise<NextResponse> {
-	const body = await request.json();
-
-	// Validate authorization (you may want to add proper auth here)
-	const authHeader = request.headers.get("authorization");
-	if (!authHeader || !authHeader.includes("Bearer")) {
-		return createApiError("Unauthorized - cache invalidation requires authentication", 401);
+	const body = await request.json().catch(() => null);
+	if (!body || typeof body !== "object") {
+		return createApiError("Request body must be a valid JSON object", 400);
 	}
 
 	// Extract invalidation options from request
@@ -86,12 +84,6 @@ async function handleInvalidateCache(request: NextRequest): Promise<NextResponse
 
 // DELETE /api/v1/cache - Clear all caches (dangerous operation)
 async function handleClearAllCaches(request: NextRequest): Promise<NextResponse> {
-	// Validate authorization - this is a dangerous operation
-	const authHeader = request.headers.get("authorization");
-	if (!authHeader || !authHeader.includes("Bearer")) {
-		return createApiError("Unauthorized - clearing all caches requires authentication", 401);
-	}
-
 	// Additional confirmation check
 	const confirmHeader = request.headers.get("x-confirm-clear-cache");
 	if (confirmHeader !== "yes-clear-all-caches") {
@@ -118,7 +110,15 @@ async function handleClearAllCaches(request: NextRequest): Promise<NextResponse>
 	}
 }
 
-// Export wrapped handlers with error handling
+// Export wrapped handlers with error handling; cache administration requires REVALIDATE_API_KEY
 export const GET = withErrorHandling(handleGetCacheStatus, "get-cache-status");
-export const POST = withErrorHandling(handleInvalidateCache, "invalidate-cache");
-export const DELETE = withErrorHandling(handleClearAllCaches, "clear-all-caches");
+export const POST = withApiKey(
+	REVALIDATE_API_KEY_ENV,
+	withErrorHandling(handleInvalidateCache, "invalidate-cache"),
+	{ action: "invalidate-cache", resourceType: "cache" },
+);
+export const DELETE = withApiKey(
+	REVALIDATE_API_KEY_ENV,
+	withErrorHandling(handleClearAllCaches, "clear-all-caches"),
+	{ action: "clear-all-caches", resourceType: "cache" },
+);
