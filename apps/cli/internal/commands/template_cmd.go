@@ -399,7 +399,7 @@ version details, manifest data, and update status.`,
 			if err != nil {
 				spec, specErr := loadCanonicalTemplateSpecForInfo(templateID)
 				if specErr != nil {
-					return fmt.Errorf("failed to get template info: %w (fallback: %v)", err, specErr)
+					return fmt.Errorf("failed to get template info: %w (fallback: %w)", err, specErr)
 				}
 				return displayTemplateSpecInfo(spec, format)
 			}

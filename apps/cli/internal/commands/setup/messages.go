@@ -90,6 +90,7 @@ func (c *BoundedErrorCollector) IsTruncated() bool {
 }
 
 // addErrorSafe safely adds an error to the slice with bounds checking to prevent unbounded memory growth
+//
 // Deprecated: Use BoundedErrorCollector instead for thread-safe error collection
 func addErrorSafe(errors []error, newError error) []error {
 	if len(errors) >= MaxErrorMessages {
@@ -101,6 +102,7 @@ func addErrorSafe(errors []error, newError error) []error {
 }
 
 // addErrorStringSafe safely adds an error string to the slice with bounds checking
+//
 // Deprecated: Use BoundedErrorCollector instead for thread-safe error collection
 func addErrorStringSafe(errors []string, newError string) []string {
 	if len(errors) >= MaxErrorMessages {
