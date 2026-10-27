@@ -31,8 +31,9 @@ pre-commit:
     go-lint:
       root: 'apps/cli/'
       glob: '*.go'
-      run: golangci-lint run --fix
-      stage_fixed: true
+      run: |
+        pkgs=$(echo {staged_files} | xargs -n1 dirname | sort -u | awk '{print ($1 == "." ? "." : "./" $1)}')
+        golangci-lint run --fix $pkgs
     plugin-go-fmt:
       root: 'packages/'
       glob: '**/*.go'
@@ -121,11 +122,10 @@ pre-push:
     turborepo-build:
       run: |
         echo "🏗️ Building changed packages only for faster pre-push..."
-        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+        if echo {push_files} | tr ' ' '\n' | grep -qE '^(packages|apps)/'; then
           pnpm build --filter="...[HEAD~1]" || {
             echo "❌ Build failed - see details above"
             echo "💡 Fix the build issues and try again"
-            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
             exit 1
           }
         else
@@ -134,11 +134,10 @@ pre-push:
     turborepo-lint:
       run: |
         echo "🧹 Linting changed packages only for faster pre-push..."
-        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+        if echo {push_files} | tr ' ' '\n' | grep -qE '^(packages|apps)/'; then
           pnpm lint --filter="...[HEAD~1]" --concurrency=1 || {
             echo "❌ Lint failed - see details above"
             echo "💡 Fix lint issues with: pnpm lint --filter=\"...[HEAD~1]\" --fix --concurrency=1"
-            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
             exit 1
           }
         else
@@ -147,74 +146,21 @@ pre-push:
     turborepo-test:
       run: |
         echo "🧪 Testing changed packages only for faster pre-push..."
-        if git diff --name-only HEAD~1 HEAD | grep -q "^packages/\|^apps/"; then
+        if echo {push_files} | tr ' ' '\n' | grep -qE '^(packages|apps)/'; then
           pnpm test --filter="...[HEAD~1]" || {
             echo "❌ Tests failed - see details above"
             echo "💡 Fix the failing tests and try again"
-            echo "🚀 Or run 'git push --no-verify' to bypass (not recommended)"
             exit 1
           }
         else
           echo "✅ No package changes detected, skipping tests"
         fi
     go-vulncheck:
-      skip: no matching push files
       root: 'apps/cli/'
       glob: '*.go'
       run: |
         echo "🔐 Checking for security vulnerabilities..."
         govulncheck ./... || {
           echo "⚠️ Security vulnerabilities found - consider fixing"
-          echo "🚀 Run 'git push --no-verify' to bypass if needed"
           exit 1
         }
-commands: &commands
-  turborepo-lint-cli:
-    run: pnpm lint --filter=@devex/cli
-  turborepo-test-cli:
-    run: pnpm test --filter=@devex/cli
-  format-all:
-    run: pnpm exec biome check --write .
-  lint-web:
-    root: 'apps/web/'
-    run: pnpm exec biome check --write .
-  lint-docs:
-    root: 'apps/docs/'
-    run: pnpm exec biome check --write .
-  format-yaml:
-    run: yamlfmt .
-  lint-yaml:
-    run: yamllint .
-  # Turborepo Development Commands
-  # ==============================
-  turborepo-build-all:
-    run: pnpm build
-  turborepo-build-changed:
-    run: pnpm build --filter="...[HEAD~1]"
-  turborepo-lint-all:
-    run: pnpm lint
-  turborepo-lint-changed:
-    run: pnpm lint --filter="...[HEAD~1]"
-  turborepo-test-all:
-    run: pnpm test
-  turborepo-test-changed:
-    run: pnpm test --filter="...[HEAD~1]"
-  package-status:
-    run: |
-      echo "📦 Package Status:"
-      echo "Build all: pnpm build"
-      echo "Build changed: pnpm build --filter=\"...[HEAD~1]\""
-      echo "Test all: pnpm test"
-      echo "Lint all: pnpm lint"
-  package-tidy-all:
-    run: |
-      echo "🧹 Running go mod tidy on all packages..."
-      find packages -name go.mod -not -path "*/node_modules/*" -execdir go mod tidy \;
-  package-format-all:
-    run: |
-      echo "🎨 Formatting all package Go files..."
-      find packages -name "*.go" -not -path "*/node_modules/*" -exec gofmt -w {} \;
-      find packages -name "*.go" -not -path "*/node_modules/*" -exec goimports -w {} \;
-scripts:
-  'commands/*':
-    runner: bash
