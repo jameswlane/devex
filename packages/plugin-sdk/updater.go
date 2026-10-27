@@ -14,6 +14,7 @@ type BackgroundUpdater struct {
 	updateInterval  time.Duration
 	running         bool
 	stopChan        chan struct{}
+	doneChan        chan struct{}
 	mu              sync.RWMutex
 	lastUpdateTime  time.Time
 	updateCallbacks []UpdateCallback
@@ -21,12 +22,12 @@ type BackgroundUpdater struct {
 
 // UpdateStatus represents the status of a plugin update
 type UpdateStatus struct {
-	PluginName    string
-	Success       bool
-	Error         error
-	OldVersion    string
-	NewVersion    string
-	UpdatedAt     time.Time
+	PluginName string
+	Success    bool
+	Error      error
+	OldVersion string
+	NewVersion string
+	UpdatedAt  time.Time
 }
 
 // UpdateCallback is called when plugin updates occur
@@ -38,7 +39,6 @@ func NewBackgroundUpdater(downloader *Downloader, manager *ExecutableManager) *B
 		downloader:      downloader,
 		manager:         manager,
 		updateInterval:  24 * time.Hour, // Daily updates by default
-		stopChan:        make(chan struct{}),
 		updateCallbacks: make([]UpdateCallback, 0),
 	}
 }
@@ -64,26 +64,33 @@ func (bu *BackgroundUpdater) Start(ctx context.Context) error {
 		bu.mu.Unlock()
 		return fmt.Errorf("background updater is already running")
 	}
+	stopChan := make(chan struct{})
+	doneChan := make(chan struct{})
+	bu.stopChan = stopChan
+	bu.doneChan = doneChan
 	bu.running = true
 	bu.mu.Unlock()
 
-	go bu.updateLoop(ctx)
+	go bu.updateLoop(ctx, stopChan, doneChan)
 	return nil
 }
 
-// Stop stops the background updater
+// Stop stops the background updater and waits for its loop to exit
 func (bu *BackgroundUpdater) Stop() {
 	bu.mu.Lock()
-	defer bu.mu.Unlock()
-	
-	if !bu.running {
-		return
+	if bu.running {
+		select {
+		case <-bu.stopChan:
+		default:
+			close(bu.stopChan)
+		}
 	}
-	
-	bu.running = false
-	close(bu.stopChan)
-	// Recreate stopChan for subsequent starts
-	bu.stopChan = make(chan struct{})
+	doneChan := bu.doneChan
+	bu.mu.Unlock()
+
+	if doneChan != nil {
+		<-doneChan
+	}
 }
 
 // IsRunning returns whether the updater is currently running
@@ -106,13 +113,17 @@ func (bu *BackgroundUpdater) CheckForUpdatesNow(ctx context.Context) error {
 }
 
 // updateLoop runs the background update check loop
-func (bu *BackgroundUpdater) updateLoop(ctx context.Context) {
-	ticker := time.NewTicker(bu.updateInterval)
+func (bu *BackgroundUpdater) updateLoop(ctx context.Context, stopChan, doneChan chan struct{}) {
+	bu.mu.RLock()
+	interval := bu.updateInterval
+	bu.mu.RUnlock()
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	defer func() {
 		bu.mu.Lock()
 		bu.running = false
 		bu.mu.Unlock()
+		close(doneChan)
 	}()
 
 	// Do initial update check
@@ -128,13 +139,13 @@ func (bu *BackgroundUpdater) updateLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-bu.stopChan:
+		case <-stopChan:
 			return
 		case <-ticker.C:
 			bu.mu.RLock()
-			interval := bu.updateInterval
+			interval = bu.updateInterval
 			bu.mu.RUnlock()
-			
+
 			// Update ticker if interval changed
 			ticker.Reset(interval)
 			if err := bu.checkAndUpdatePlugins(ctx); err != nil {
@@ -155,7 +166,10 @@ func (bu *BackgroundUpdater) checkAndUpdatePlugins(ctx context.Context) error {
 	bu.mu.Unlock()
 
 	// Get currently installed plugins
-	installedPlugins := bu.manager.ListPlugins()
+	if err := bu.manager.DiscoverPluginsWithContext(ctx); err != nil {
+		return fmt.Errorf("failed to discover installed plugins: %w", err)
+	}
+	installedPlugins := bu.manager.ListPluginsWithContext(ctx)
 	if len(installedPlugins) == 0 {
 		return nil // No plugins to update
 	}
@@ -200,7 +214,9 @@ func (bu *BackgroundUpdater) checkAndUpdatePlugins(ctx context.Context) error {
 
 	if updatedCount > 0 {
 		// Refresh plugin cache after updates
-		_ = bu.manager.DiscoverPlugins()
+		if err := bu.manager.DiscoverPluginsWithContext(ctx); err != nil {
+			return fmt.Errorf("failed to refresh plugins after update: %w", err)
+		}
 	}
 
 	return nil
@@ -209,7 +225,7 @@ func (bu *BackgroundUpdater) checkAndUpdatePlugins(ctx context.Context) error {
 // updatePlugin updates a specific plugin
 func (bu *BackgroundUpdater) updatePlugin(ctx context.Context, pluginName, oldVersion, newVersion string) error {
 	fmt.Printf("Updating plugin %s from %s to %s...\n", pluginName, oldVersion, newVersion)
-	
+
 	// Download the new version
 	if err := bu.downloader.DownloadPluginWithContext(ctx, pluginName); err != nil {
 		return fmt.Errorf("failed to download plugin update: %w", err)
@@ -232,11 +248,11 @@ func (bu *BackgroundUpdater) notifyCallbacks(status UpdateStatus) {
 
 // UpdaterConfig represents configuration for the background updater
 type UpdaterConfig struct {
-	Enabled          bool          `json:"enabled"`
-	UpdateInterval   string        `json:"update_interval"`   // e.g., "24h", "12h"
-	AutoApplyUpdates bool          `json:"auto_apply_updates"`
-	NotifyOnUpdates  bool          `json:"notify_on_updates"`
-	QuietMode        bool          `json:"quiet_mode"`
+	Enabled          bool   `json:"enabled"`
+	UpdateInterval   string `json:"update_interval"` // e.g., "24h", "12h"
+	AutoApplyUpdates bool   `json:"auto_apply_updates"`
+	NotifyOnUpdates  bool   `json:"notify_on_updates"`
+	QuietMode        bool   `json:"quiet_mode"`
 }
 
 // ParseUpdateInterval parses a duration string for update intervals
@@ -245,24 +261,24 @@ func ParseUpdateInterval(interval string) (time.Duration, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid update interval '%s': %w", interval, err)
 	}
-	
+
 	// Ensure minimum interval of 1 hour
 	if duration < time.Hour {
 		return time.Hour, nil
 	}
-	
+
 	// Maximum interval of 7 days
 	if duration > 7*24*time.Hour {
-		return 7*24*time.Hour, nil
+		return 7 * 24 * time.Hour, nil
 	}
-	
+
 	return duration, nil
 }
 
 // DefaultUpdateCallback provides a simple console output callback
 func DefaultUpdateCallback(status UpdateStatus) {
 	if status.Success {
-		fmt.Printf("✅ Updated plugin %s from %s to %s\n", 
+		fmt.Printf("✅ Updated plugin %s from %s to %s\n",
 			status.PluginName, status.OldVersion, status.NewVersion)
 	} else if status.Error != nil {
 		if status.PluginName != "" {

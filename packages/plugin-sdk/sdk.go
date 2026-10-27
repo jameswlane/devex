@@ -4,8 +4,6 @@ package sdk
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +15,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -686,7 +685,6 @@ func (d *Downloader) SearchPlugins(ctx context.Context, query string) (map[strin
 	return results, nil
 }
 
-
 // DownloadPluginWithContext downloads a plugin with context for cancellation
 func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName string) error {
 	// Fetch plugin metadata directly from the API
@@ -837,7 +835,6 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 	return nil
 }
 
-
 // getCacheDuration returns cache duration based on environment
 func (d *Downloader) getCacheDuration() time.Duration {
 	// Check for development environment with validation
@@ -921,12 +918,20 @@ func (d *Downloader) cacheRegistry(registry *PluginRegistry) {
 	_ = os.WriteFile(cachePath, data, 0644) // Ignore cache write errors
 }
 
+// Cross-process locking is omitted because the standard library has no portable flock API.
+var pluginInstallLocks sync.Map
+
 // downloadAndVerifyPlugin downloads and verifies a plugin binary
 func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName string, version string, binary PlatformBinary) error {
 	pluginPath := filepath.Join(d.pluginDir, fmt.Sprintf("devex-plugin-%s", pluginName))
 	if runtime.GOOS == "windows" {
 		pluginPath += ".exe"
 	}
+
+	lockValue, _ := pluginInstallLocks.LoadOrStore(pluginPath, &sync.Mutex{})
+	installLock := lockValue.(*sync.Mutex)
+	installLock.Lock()
+	defer installLock.Unlock()
 
 	// Check if the plugin already exists and is up to date
 	if d.isPluginUpToDate(pluginName, pluginPath, binary.Checksum) {
@@ -996,8 +1001,7 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	payloadPath := payloadFile.Name()
 	defer func() { _ = os.Remove(payloadPath) }()
 
-	hasher := sha256.New()
-	_, copyErr := io.Copy(io.MultiWriter(payloadFile, hasher), resp.Body)
+	_, copyErr := io.Copy(payloadFile, resp.Body)
 	closeErr := payloadFile.Close()
 	if copyErr != nil {
 		return fmt.Errorf("failed to download plugin: %w", copyErr)
@@ -1005,7 +1009,10 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	if closeErr != nil {
 		return fmt.Errorf("failed to write downloaded plugin: %w", closeErr)
 	}
-	payloadChecksum := hex.EncodeToString(hasher.Sum(nil))
+	payloadChecksum, err := fileSHA256(payloadPath)
+	if err != nil {
+		return fmt.Errorf("failed to hash downloaded plugin: %w", err)
+	}
 
 	// Verify checksum of the downloaded payload (archive or raw binary) if enabled
 	if d.verifyChecksums && binary.Checksum != "" {
@@ -1120,16 +1127,24 @@ type ExecutableManager struct {
 	pluginDir     string
 	cachedPlugins map[string]PluginMetadata
 	cacheTime     time.Time
-	loadTimeout   time.Duration
+	loadTimeout   atomic.Int64
 	mu            sync.RWMutex
 }
 
 // NewExecutableManager creates a new executable manager with caching
 func NewExecutableManager(pluginDir string) *ExecutableManager {
-	return &ExecutableManager{
+	em := &ExecutableManager{
 		pluginDir:     pluginDir,
 		cachedPlugins: make(map[string]PluginMetadata),
-		loadTimeout:   10 * time.Second, // Reduced from 30s for better CLI responsiveness
+	}
+	em.loadTimeout.Store(int64(10 * time.Second))
+	return em
+}
+
+// SetMetadataTimeout sets the timeout used only for plugin metadata requests
+func (em *ExecutableManager) SetMetadataTimeout(timeout time.Duration) {
+	if timeout > 0 {
+		em.loadTimeout.Store(int64(timeout))
 	}
 }
 
@@ -1140,105 +1155,37 @@ func (em *ExecutableManager) GetPluginDir() string {
 
 // ListPlugins returns installed plugins with caching
 func (em *ExecutableManager) ListPlugins() map[string]PluginMetadata {
-	// Check cached plugins with read lock
-	em.mu.RLock()
-	if time.Since(em.cacheTime) < 30*time.Second {
-		// Return a copy to prevent external mutations
-		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
-		for k, v := range em.cachedPlugins {
-			result[k] = v
-		}
-		em.mu.RUnlock()
-		return result
-	}
-	em.mu.RUnlock()
-
-	// Acquire write lock for cache refresh
-	em.mu.Lock()
-	defer em.mu.Unlock()
-
-	// Double-check cache after acquiring write lock
-	if time.Since(em.cacheTime) < 30*time.Second {
-		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
-		for k, v := range em.cachedPlugins {
-			result[k] = v
-		}
-		return result
-	}
-
-	plugins := make(map[string]PluginMetadata)
-
-	// Scan plugin directory for executables
-	entries, err := os.ReadDir(em.pluginDir)
-	if err != nil {
-		return plugins // Return empty map on error
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		if strings.HasPrefix(name, "devex-plugin-") &&
-			(runtime.GOOS != "windows" || strings.HasSuffix(name, ".exe")) {
-
-			pluginName := strings.TrimPrefix(name, "devex-plugin-")
-			if runtime.GOOS == "windows" {
-				pluginName = strings.TrimSuffix(pluginName, ".exe")
-			}
-
-			pluginPath := filepath.Join(em.pluginDir, name)
-			metadata := em.getPluginMetadata(pluginName, pluginPath)
-			if metadata != nil {
-				plugins[pluginName] = *metadata
-			}
-		}
-	}
-
-	// Cache results
-	em.cachedPlugins = plugins
-	em.cacheTime = time.Now()
-
+	plugins, _ := em.listPlugins(context.Background(), false)
 	return plugins
 }
 
 // ListPluginsWithContext returns installed plugins with caching and context support
 func (em *ExecutableManager) ListPluginsWithContext(ctx context.Context) map[string]PluginMetadata {
-	// Check cached plugins with read lock
+	plugins, _ := em.listPlugins(ctx, false)
+	return plugins
+}
+
+func (em *ExecutableManager) listPlugins(ctx context.Context, force bool) (map[string]PluginMetadata, error) {
 	em.mu.RLock()
-	if time.Since(em.cacheTime) < 30*time.Second {
-		// Return a copy to prevent external mutations
-		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
-		for k, v := range em.cachedPlugins {
-			result[k] = v
-		}
+	if !force && time.Since(em.cacheTime) < 30*time.Second {
+		plugins := clonePluginMetadata(em.cachedPlugins)
 		em.mu.RUnlock()
-		return result
+		return plugins, nil
 	}
 	em.mu.RUnlock()
 
-	// Acquire write lock for cache refresh
 	em.mu.Lock()
 	defer em.mu.Unlock()
+	if !force && time.Since(em.cacheTime) < 30*time.Second {
+		return clonePluginMetadata(em.cachedPlugins), nil
+	}
 
-	// Double-check cache after acquiring write lock
-	if time.Since(em.cacheTime) < 30*time.Second {
-		result := make(map[string]PluginMetadata, len(em.cachedPlugins))
-		for k, v := range em.cachedPlugins {
-			result[k] = v
-		}
-		return result
+	entries, err := os.ReadDir(em.pluginDir)
+	if err != nil {
+		return make(map[string]PluginMetadata), fmt.Errorf("failed to read plugin directory: %w", err)
 	}
 
 	plugins := make(map[string]PluginMetadata)
-
-	// Scan plugin directory for executables
-	entries, err := os.ReadDir(em.pluginDir)
-	if err != nil {
-		return plugins // Return empty map on error
-	}
-
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -1247,7 +1194,6 @@ func (em *ExecutableManager) ListPluginsWithContext(ctx context.Context) map[str
 		name := entry.Name()
 		if strings.HasPrefix(name, "devex-plugin-") &&
 			(runtime.GOOS != "windows" || strings.HasSuffix(name, ".exe")) {
-
 			pluginName := strings.TrimPrefix(name, "devex-plugin-")
 			if runtime.GOOS == "windows" {
 				pluginName = strings.TrimSuffix(pluginName, ".exe")
@@ -1261,27 +1207,26 @@ func (em *ExecutableManager) ListPluginsWithContext(ctx context.Context) map[str
 		}
 	}
 
-	// Cache results
 	em.cachedPlugins = plugins
 	em.cacheTime = time.Now()
-
-	return plugins
+	return clonePluginMetadata(plugins), nil
 }
 
-// getPluginMetadata gets metadata from a plugin executable with timeout
-func (em *ExecutableManager) getPluginMetadata(pluginName, pluginPath string) *PluginMetadata {
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), em.loadTimeout)
-	defer cancel()
-
-	return em.getPluginMetadataWithContext(ctx, pluginName, pluginPath)
+func clonePluginMetadata(plugins map[string]PluginMetadata) map[string]PluginMetadata {
+	result := make(map[string]PluginMetadata, len(plugins))
+	for name, metadata := range plugins {
+		result[name] = metadata
+	}
+	return result
 }
 
 // getPluginMetadataWithContext gets metadata from a plugin executable with context
 func (em *ExecutableManager) getPluginMetadataWithContext(ctx context.Context, pluginName, pluginPath string) *PluginMetadata {
+	metadataCtx, cancel := context.WithTimeout(ctx, time.Duration(em.loadTimeout.Load()))
+	defer cancel()
 
 	// Execute plugin with --plugin-info flag
-	cmd := exec.CommandContext(ctx, pluginPath, "--plugin-info")
+	cmd := exec.CommandContext(metadataCtx, pluginPath, "--plugin-info")
 	output, err := cmd.Output()
 	if err != nil {
 		// Return basic metadata if plugin doesn't respond
@@ -1314,19 +1259,19 @@ func (em *ExecutableManager) getPluginMetadataWithContext(ctx context.Context, p
 	}
 }
 
-// ExecutePlugin executes a plugin with given arguments and timeout
+// ExecutePlugin executes a plugin with given arguments
 func (em *ExecutableManager) ExecutePlugin(pluginName string, args []string) error {
-	plugins := em.ListPlugins()
+	return em.ExecutePluginWithContext(context.Background(), pluginName, args)
+}
+
+// ExecutePluginWithContext executes a plugin using the caller's context for cancellation
+func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, pluginName string, args []string) error {
+	plugins := em.ListPluginsWithContext(ctx)
 	pluginInfo, exists := plugins[pluginName]
 	if !exists {
 		return fmt.Errorf("plugin %s is not installed", pluginName)
 	}
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), em.loadTimeout)
-	defer cancel()
-
-	// Execute plugin
 	cmd := exec.CommandContext(ctx, pluginInfo.Path, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1335,11 +1280,10 @@ func (em *ExecutableManager) ExecutePlugin(pluginName string, args []string) err
 	return cmd.Run()
 }
 
-// DiscoverPlugins discovers and caches plugins in the plugin directory
+// DiscoverPlugins refreshes the plugin cache and returns directory errors
 func (em *ExecutableManager) DiscoverPlugins() error {
-	// Just refresh the cache by calling ListPlugins
-	em.ListPlugins()
-	return nil
+	_, err := em.listPlugins(context.Background(), true)
+	return err
 }
 
 // RemovePlugin removes a plugin executable
@@ -1357,6 +1301,7 @@ func (em *ExecutableManager) RemovePlugin(pluginName string) error {
 	// Clear cache to force refresh
 	em.mu.Lock()
 	em.cachedPlugins = make(map[string]PluginMetadata)
+	em.cacheTime = time.Time{}
 	em.mu.Unlock()
 	return nil
 }
@@ -1398,15 +1343,16 @@ func (em *ExecutableManager) InstallPlugin(sourcePath, pluginName string) error 
 	// Clear cache to force refresh
 	em.mu.Lock()
 	em.cachedPlugins = make(map[string]PluginMetadata)
+	em.cacheTime = time.Time{}
 	em.mu.Unlock()
 	// Note: ExecutableManager doesn't have a logger, this would be handled by the calling code
 	return nil
 }
 
-// DiscoverPluginsWithContext discovers plugins with context support
+// DiscoverPluginsWithContext refreshes the plugin cache with context support
 func (em *ExecutableManager) DiscoverPluginsWithContext(ctx context.Context) error {
-	// Context-aware version of DiscoverPlugins
-	return em.DiscoverPlugins()
+	_, err := em.listPlugins(ctx, true)
+	return err
 }
 
 // RegisterCommands registers plugin commands (placeholder)
