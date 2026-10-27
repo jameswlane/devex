@@ -148,7 +148,7 @@ export function sanitizeSearchQuery(query: string): string {
 	return query
 		.replace(/['";]/g, "") // Remove quotes and semicolons
 		.replace(/--/g, "") // Remove SQL comments
-		.replace(/\x00/g, "") // Remove null bytes
+		.replaceAll("\0", "") // Remove null bytes
 		.replace(/[&|]/g, " ") // Replace special characters with spaces
 		.replace(/\s+/g, " ") // Normalize multiple spaces to single space
 		.trim();

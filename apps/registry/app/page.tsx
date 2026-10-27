@@ -52,6 +52,7 @@ export default async function RegistryHomepage() {
 								className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-xs text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
 							>
 								<svg
+									aria-hidden="true"
 									className="w-5 h-5 mr-2"
 									fill="currentColor"
 									viewBox="0 0 20 20"
@@ -95,6 +96,7 @@ export default async function RegistryHomepage() {
 							<div className="flex items-center">
 								<div className="flex-shrink-0">
 									<svg
+										aria-hidden="true"
 										className="w-8 h-8 text-blue-600"
 										fill="none"
 										stroke="currentColor"
@@ -127,6 +129,7 @@ export default async function RegistryHomepage() {
 							<div className="flex items-center">
 								<div className="flex-shrink-0">
 									<svg
+										aria-hidden="true"
 										className="w-8 h-8 text-purple-600"
 										fill="none"
 										stroke="currentColor"

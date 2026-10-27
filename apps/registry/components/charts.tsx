@@ -107,8 +107,8 @@ export function PlatformDistributionChart({
 						fill="#8884d8"
 						dataKey="value"
 					>
-						{chartData.map((entry, index) => (
-							<Cell key={`cell-${index}`} fill={entry.color} />
+						{chartData.map((entry) => (
+							<Cell key={entry.name} fill={entry.color} />
 						))}
 					</Pie>
 					<Tooltip formatter={(value) => [`${value} applications`, "Count"]} />
@@ -145,8 +145,11 @@ export function CategoryComparisonChart({
 							<div className="h-4 bg-gray-200 rounded"></div>
 						</div>
 						<div className="space-y-2">
-							{Array.from({ length: 6 }).map((_, i) => (
-								<div key={i} className="h-8 bg-gray-200 rounded"></div>
+							{Array.from(
+								{ length: 6 },
+								(_, index) => `category-skeleton-${index}`,
+							).map((key) => (
+								<div key={key} className="h-8 bg-gray-200 rounded"></div>
 							))}
 						</div>
 					</div>
@@ -290,8 +293,8 @@ export function RegistryOverviewChart({
 						fill="#8884d8"
 						dataKey="value"
 					>
-						{chartData.map((entry, index) => (
-							<Cell key={`cell-${index}`} fill={entry.color} />
+						{chartData.map((entry) => (
+							<Cell key={entry.name} fill={entry.color} />
 						))}
 					</Pie>
 					<Tooltip formatter={(value, name) => [`${value}`, name]} />
@@ -319,8 +322,11 @@ export function GrowthTrendChart({
 				</h3>
 				<div className="h-64 flex items-center justify-center">
 					<div className="animate-pulse space-y-2 w-full">
-						{Array.from({ length: 5 }).map((_, i) => (
-							<div key={i} className="h-6 bg-gray-200 rounded"></div>
+						{Array.from(
+							{ length: 5 },
+							(_, index) => `growth-skeleton-${index}`,
+						).map((key) => (
+							<div key={key} className="h-6 bg-gray-200 rounded"></div>
 						))}
 					</div>
 				</div>
@@ -337,6 +343,7 @@ export function GrowthTrendChart({
 				<div className="h-64 flex items-center justify-center">
 					<div className="text-center">
 						<svg
+							aria-hidden="true"
 							className="mx-auto h-12 w-12 text-gray-400"
 							fill="none"
 							stroke="currentColor"

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
 	CategoryComparisonChart,
 	PlatformDistributionChart,
@@ -103,9 +103,12 @@ function CategoryBreakdown({
 			<div className="space-y-2">
 				{isLoading ? (
 					// Loading skeleton for category breakdown
-					Array.from({ length: 3 }).map((_, index) => (
+					Array.from(
+						{ length: 3 },
+						(_, index) => `category-skeleton-${index}`,
+					).map((key) => (
 						<div
-							key={index}
+							key={key}
 							className="flex justify-between items-center animate-pulse"
 						>
 							<div className="h-4 bg-gray-200 rounded w-24"></div>
@@ -168,6 +171,7 @@ function ErrorState({ error, onRetry }: ErrorStateProps) {
 		<div className="flex flex-col items-center justify-center py-12">
 			<div className="text-red-500 mb-4">
 				<svg
+					aria-hidden="true"
 					className="w-12 h-12"
 					fill="none"
 					stroke="currentColor"
@@ -186,10 +190,12 @@ function ErrorState({ error, onRetry }: ErrorStateProps) {
 			</h3>
 			<p className="text-gray-600 text-center mb-4">{error}</p>
 			<button
+				type="button"
 				onClick={onRetry}
 				className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-xs text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
 			>
 				<svg
+					aria-hidden="true"
 					className="w-4 h-4 mr-2"
 					fill="none"
 					stroke="currentColor"
@@ -214,7 +220,7 @@ export default function StatsDashboard() {
 	const [error, setError] = useState<string | null>(null);
 	const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-	const fetchStats = async (forceRefresh = false) => {
+	const fetchStats = useCallback(async (forceRefresh = false) => {
 		try {
 			setIsLoading(true);
 			setError(null);
@@ -259,11 +265,11 @@ export default function StatsDashboard() {
 		} finally {
 			setIsLoading(false);
 		}
-	};
+	}, []);
 
 	useEffect(() => {
 		fetchStats();
-	}, []);
+	}, [fetchStats]);
 
 	const handleRefresh = () => {
 		fetchStats(true);
@@ -299,11 +305,13 @@ export default function StatsDashboard() {
 					</div>
 				</div>
 				<button
+					type="button"
 					onClick={handleRefresh}
 					disabled={isLoading}
 					className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-xs text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-hidden focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					<svg
+						aria-hidden="true"
 						className={`w-4 h-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
 						fill="none"
 						stroke="currentColor"
@@ -326,6 +334,7 @@ export default function StatsDashboard() {
 					<div className="flex">
 						<div className="flex-shrink-0">
 							<svg
+								aria-hidden="true"
 								className="h-5 w-5 text-yellow-400"
 								fill="none"
 								stroke="currentColor"
@@ -394,8 +403,11 @@ export default function StatsDashboard() {
 				<div className="bg-white rounded-lg shadow-md p-6">
 					{isLoading ? (
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-							{Array.from({ length: 4 }).map((_, index) => (
-								<div key={index} className="text-center animate-pulse">
+							{Array.from(
+								{ length: 4 },
+								(_, index) => `summary-skeleton-${index}`,
+							).map((key) => (
+								<div key={key} className="text-center animate-pulse">
 									<div className="h-8 bg-gray-200 rounded w-16 mx-auto mb-2"></div>
 									<div className="h-4 bg-gray-200 rounded w-20 mx-auto"></div>
 								</div>

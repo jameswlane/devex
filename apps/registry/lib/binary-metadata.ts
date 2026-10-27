@@ -391,6 +391,7 @@ export class BinaryMetadataService {
 	private isValidTag(tag: string): boolean {
 		if (!tag || typeof tag !== "string") return false;
 		// Git tags: no null bytes, control characters, or path separators
+		// biome-ignore lint/suspicious/noControlCharactersInRegex: Control characters are intentionally rejected during tag validation.
 		const invalidChars = /[\x00-\x1f\x7f/\\:*?"<>|]/;
 		return !invalidChars.test(tag) && tag.length <= 250;
 	}

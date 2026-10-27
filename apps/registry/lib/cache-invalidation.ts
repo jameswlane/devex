@@ -271,7 +271,9 @@ export class CacheInvalidationService {
 
 		// Add custom patterns if provided
 		if (options.patterns) {
-			options.patterns.forEach((pattern) => patterns.add(pattern));
+			options.patterns.forEach((pattern) => {
+				patterns.add(pattern);
+			});
 		}
 
 		// Add resource-specific patterns
@@ -280,14 +282,18 @@ export class CacheInvalidationService {
 				options.resource,
 				options.id,
 			);
-			resourcePatterns.forEach((pattern) => patterns.add(pattern));
+			resourcePatterns.forEach((pattern) => {
+				patterns.add(pattern);
+			});
 		}
 
 		// Add tag-based patterns
 		if (options.tags) {
 			options.tags.forEach((tag) => {
 				const tagPatterns = CACHE_DEPENDENCIES[tag] || [];
-				tagPatterns.forEach((pattern) => patterns.add(pattern));
+				tagPatterns.forEach((pattern) => {
+					patterns.add(pattern);
+				});
 			});
 		}
 

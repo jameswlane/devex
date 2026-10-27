@@ -67,6 +67,7 @@ export function ApplicationCard({ app }: ApplicationCardProps) {
 						className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
 					>
 						<svg
+							aria-hidden="true"
 							className="w-4 h-4 mr-1"
 							fill="currentColor"
 							viewBox="0 0 20 20"

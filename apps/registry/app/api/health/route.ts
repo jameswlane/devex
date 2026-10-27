@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 			}
 
 			// Get startup health information
-			let startupHealth;
+			let startupHealth: Awaited<ReturnType<typeof getStartupHealth>>;
 			try {
 				startupHealth = await getStartupHealth();
 			} catch (error) {

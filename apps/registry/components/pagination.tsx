@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 interface PaginationInfo {
 	total: number;
@@ -43,7 +43,7 @@ export function Pagination({
 		}
 
 		if (currentPage - delta > 2) {
-			rangeWithDots.push(1, "...");
+			rangeWithDots.push(1, "ellipsis-start");
 		} else {
 			rangeWithDots.push(1);
 		}
@@ -51,7 +51,7 @@ export function Pagination({
 		rangeWithDots.push(...range);
 
 		if (currentPage + delta < totalPages - 1) {
-			rangeWithDots.push("...", totalPages);
+			rangeWithDots.push("ellipsis-end", totalPages);
 		} else if (totalPages > 1) {
 			rangeWithDots.push(totalPages);
 		}
@@ -100,6 +100,7 @@ export function Pagination({
 			<div className="flex items-center space-x-1">
 				{/* Previous button */}
 				<button
+					type="button"
 					onClick={handlePrevious}
 					disabled={!pagination.hasPrevious || isLoading}
 					className={`
@@ -111,7 +112,12 @@ export function Pagination({
 						}
           `}
 				>
-					<svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+					<svg
+						aria-hidden="true"
+						className="w-4 h-4 mr-1"
+						fill="currentColor"
+						viewBox="0 0 20 20"
+					>
 						<path
 							fillRule="evenodd"
 							d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
@@ -123,9 +129,10 @@ export function Pagination({
 
 				{/* Page numbers */}
 				<div className="flex items-center space-x-1">
-					{pageNumbers.map((page, index) => (
+					{pageNumbers.map((page) => (
 						<button
-							key={index}
+							type="button"
+							key={page}
 							onClick={() => handlePageClick(page)}
 							disabled={isLoading}
 							className={`
@@ -133,20 +140,21 @@ export function Pagination({
                 ${
 									page === currentPage
 										? "text-white bg-blue-600 border border-blue-600"
-										: page === "..."
+										: typeof page === "string"
 											? "text-gray-500 bg-white border border-gray-300 cursor-default"
 											: "text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700"
 								}
                 ${isLoading ? "opacity-50 cursor-not-allowed" : ""}
               `}
 						>
-							{page}
+							{typeof page === "string" ? "..." : page}
 						</button>
 					))}
 				</div>
 
 				{/* Next button */}
 				<button
+					type="button"
 					onClick={handleNext}
 					disabled={!pagination.hasNext || isLoading}
 					className={`
@@ -159,7 +167,12 @@ export function Pagination({
           `}
 				>
 					Next
-					<svg className="w-4 h-4 ml-1" fill="currentColor" viewBox="0 0 20 20">
+					<svg
+						aria-hidden="true"
+						className="w-4 h-4 ml-1"
+						fill="currentColor"
+						viewBox="0 0 20 20"
+					>
 						<path
 							fillRule="evenodd"
 							d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
@@ -221,6 +234,7 @@ export function CompactPagination({
 
 			<div className="flex items-center space-x-2">
 				<button
+					type="button"
 					onClick={handlePrevious}
 					disabled={!pagination.hasPrevious || isLoading}
 					className={`
@@ -232,7 +246,12 @@ export function CompactPagination({
 						}
           `}
 				>
-					<svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+					<svg
+						aria-hidden="true"
+						className="w-4 h-4"
+						fill="currentColor"
+						viewBox="0 0 20 20"
+					>
 						<path
 							fillRule="evenodd"
 							d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
@@ -242,6 +261,7 @@ export function CompactPagination({
 				</button>
 
 				<button
+					type="button"
 					onClick={handleNext}
 					disabled={!pagination.hasNext || isLoading}
 					className={`
@@ -253,7 +273,12 @@ export function CompactPagination({
 						}
           `}
 				>
-					<svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+					<svg
+						aria-hidden="true"
+						className="w-4 h-4"
+						fill="currentColor"
+						viewBox="0 0 20 20"
+					>
 						<path
 							fillRule="evenodd"
 							d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
@@ -282,13 +307,15 @@ export function PageSizeSelector({
 	isLoading = false,
 	className = "",
 }: PageSizeSelectorProps) {
+	const pageSizeId = useId();
+
 	return (
 		<div className={`flex items-center space-x-2 ${className}`}>
-			<label htmlFor="page-size" className="text-sm text-gray-700">
+			<label htmlFor={pageSizeId} className="text-sm text-gray-700">
 				Show:
 			</label>
 			<select
-				id="page-size"
+				id={pageSizeId}
 				value={currentPageSize}
 				onChange={(e) => onPageSizeChange(Number(e.target.value))}
 				disabled={isLoading}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { APIErrorBoundary } from "@/components/error-boundary";
 import { FilterPanel } from "@/components/filter-panel";
 import { Pagination } from "@/components/pagination";
@@ -44,31 +44,36 @@ export function PluginsClient({
 	// Debounced search query for URL updates
 	const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
 
+	const updateURL = useCallback(
+		(updates: Record<string, string>) => {
+			const params = new URLSearchParams(searchParams.toString());
+
+			Object.entries(updates).forEach(([key, value]) => {
+				if (value) {
+					params.set(key, value);
+				} else {
+					params.delete(key);
+				}
+			});
+
+			// Always reset to page 1 when changing filters
+			if (
+				Object.keys(updates).some((key) => key !== "page" && key !== "limit")
+			) {
+				params.set("page", "1");
+			}
+
+			router.push(`/plugins?${params.toString()}`);
+		},
+		[router, searchParams],
+	);
+
 	// Update URL when debounced search query changes
 	useEffect(() => {
 		if (debouncedSearchQuery !== initialParams.search) {
 			updateURL({ search: debouncedSearchQuery });
 		}
-	}, [debouncedSearchQuery]);
-
-	const updateURL = (updates: Record<string, string>) => {
-		const params = new URLSearchParams(searchParams.toString());
-
-		Object.entries(updates).forEach(([key, value]) => {
-			if (value) {
-				params.set(key, value);
-			} else {
-				params.delete(key);
-			}
-		});
-
-		// Always reset to page 1 when changing filters
-		if (Object.keys(updates).some((key) => key !== "page" && key !== "limit")) {
-			params.set("page", "1");
-		}
-
-		router.push(`/plugins?${params.toString()}`);
-	};
+	}, [debouncedSearchQuery, initialParams.search, updateURL]);
 
 	const handleSearchSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -112,6 +117,7 @@ export function PluginsClient({
 			<div className="text-center py-12">
 				<div className="text-red-500 mb-4">
 					<svg
+						aria-hidden="true"
 						className="w-12 h-12 mx-auto"
 						fill="none"
 						stroke="currentColor"
@@ -213,6 +219,7 @@ export function PluginsClient({
 			) : (
 				<div className="text-center py-12">
 					<svg
+						aria-hidden="true"
 						className="mx-auto h-12 w-12 text-gray-400"
 						fill="none"
 						stroke="currentColor"
@@ -235,6 +242,7 @@ export function PluginsClient({
 					</p>
 					{(selectedType || selectedStatus || searchQuery) && (
 						<button
+							type="button"
 							onClick={clearFilters}
 							className="mt-3 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
 						>

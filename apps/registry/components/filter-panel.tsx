@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { PageSizeSelector } from "@/components/pagination";
 
 interface FilterOption {
@@ -44,6 +45,7 @@ export function FilterPanel({
 	activeFilters,
 	onClearFilters,
 }: FilterPanelProps) {
+	const id = useId();
 	const hasActiveFilters = activeFilters.length > 0 || searchQuery;
 
 	return (
@@ -52,14 +54,14 @@ export function FilterPanel({
 				{/* Search */}
 				<form onSubmit={onSearchSubmit}>
 					<label
-						htmlFor="search"
+						htmlFor={`${id}-search`}
 						className="block text-sm font-medium text-gray-700 mb-1"
 					>
 						Search
 					</label>
 					<input
 						type="text"
-						id="search"
+						id={`${id}-search`}
 						value={searchQuery}
 						onChange={(e) => onSearchChange(e.target.value)}
 						placeholder={searchPlaceholder}
@@ -71,13 +73,13 @@ export function FilterPanel({
 				{filters.map((filter) => (
 					<div key={filter.id}>
 						<label
-							htmlFor={filter.id}
+							htmlFor={`${id}-${filter.id}`}
 							className="block text-sm font-medium text-gray-700 mb-1"
 						>
 							{filter.label}
 						</label>
 						<select
-							id={filter.id}
+							id={`${id}-${filter.id}`}
 							value={filter.value}
 							onChange={(e) => filter.onChange(e.target.value)}
 							className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -94,9 +96,9 @@ export function FilterPanel({
 
 				{/* Page Size */}
 				<div>
-					<label className="block text-sm font-medium text-gray-700 mb-1">
+					<span className="block text-sm font-medium text-gray-700 mb-1">
 						Results per page
-					</label>
+					</span>
 					<PageSizeSelector
 						currentPageSize={pageSize}
 						onPageSizeChange={onPageSizeChange}
@@ -126,6 +128,7 @@ export function FilterPanel({
 						))}
 					</div>
 					<button
+						type="button"
 						onClick={onClearFilters}
 						className="text-sm text-gray-500 hover:text-gray-700"
 					>

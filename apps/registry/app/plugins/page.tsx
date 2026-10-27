@@ -192,6 +192,7 @@ export default async function PluginsPage({
 					<div className="text-center py-12">
 						<div className="text-red-500 mb-4">
 							<svg
+								aria-hidden="true"
 								className="w-12 h-12 mx-auto"
 								fill="none"
 								stroke="currentColor"
@@ -248,8 +249,11 @@ export default async function PluginsPage({
 				<Suspense
 					fallback={
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-							{Array.from({ length: 20 }).map((_, index) => (
-								<CardSkeleton key={index} />
+							{Array.from(
+								{ length: 20 },
+								(_, index) => `plugin-skeleton-${index}`,
+							).map((key) => (
+								<CardSkeleton key={key} />
 							))}
 						</div>
 					}

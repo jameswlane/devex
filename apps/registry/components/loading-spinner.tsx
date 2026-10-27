@@ -66,12 +66,14 @@ export function Skeleton({
 }: SkeletonProps) {
 	return (
 		<>
-			{Array.from({ length: count }).map((_, index) => (
-				<div
-					key={index}
-					className={`animate-pulse bg-gray-200 rounded ${className}`}
-				/>
-			))}
+			{Array.from({ length: count }, (_, index) => `skeleton-${index}`).map(
+				(key) => (
+					<div
+						key={key}
+						className={`animate-pulse bg-gray-200 rounded ${className}`}
+					/>
+				),
+			)}
 		</>
 	);
 }

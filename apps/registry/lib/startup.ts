@@ -348,7 +348,11 @@ export async function getStartupHealth(): Promise<{
 	};
 	lastInitialization?: StartupResults;
 }> {
-	let cacheStats;
+	let cacheStats: {
+		status: string;
+		hitRate: number;
+		totalKeys: number;
+	};
 
 	try {
 		const { redis } = await import("./redis");

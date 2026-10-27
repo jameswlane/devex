@@ -477,7 +477,7 @@ export function sanitizeSearchQuery(query: any, request?: NextRequest): string {
 		.replace(/[;'"`]/g, "") // Remove quote and semicolon
 		.replace(/--/g, "") // Remove SQL comment syntax
 		.replace(/\/\*|\*\//g, "") // Remove SQL block comments
-		.replace(/\x00/g, "") // Remove null bytes
+		.replaceAll("\0", "") // Remove null bytes
 		.replace(/\r\n|\r|\n/g, " ") // Replace line breaks with spaces
 		.replace(/\s+/g, " ") // Normalize multiple spaces
 		.replace(/\$\{|#\{/g, "") // Remove template injection attempts

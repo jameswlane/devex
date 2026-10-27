@@ -89,6 +89,7 @@ export function PluginCard({ plugin }: PluginCardProps) {
 				<div className="mb-4 text-sm text-gray-600">
 					<div className="flex items-center">
 						<svg
+							aria-hidden="true"
 							className="w-4 h-4 mr-1"
 							fill="currentColor"
 							viewBox="0 0 20 20"
@@ -144,6 +145,7 @@ export function PluginCard({ plugin }: PluginCardProps) {
 						className="inline-flex items-center text-sm text-blue-600 hover:text-blue-800"
 					>
 						<svg
+							aria-hidden="true"
 							className="w-4 h-4 mr-1"
 							fill="currentColor"
 							viewBox="0 0 20 20"
