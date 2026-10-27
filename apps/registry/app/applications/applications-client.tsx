@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApplicationCard } from "@/components/application-card";
 import { APIErrorBoundary } from "@/components/error-boundary";
 import { FilterPanel } from "@/components/filter-panel";
@@ -48,9 +48,20 @@ export function ApplicationsClient({
 	// Debounced search query for URL updates
 	const debouncedSearchQuery = useDebounce(searchQuery, SEARCH_DEBOUNCE_MS);
 
+	// Last search value synced with the URL, so navigation alone never pushes
+	const syncedSearchRef = useRef(initialParams.search);
+
 	const updateURL = useCallback(
 		(updates: Record<string, string>) => {
 			const params = new URLSearchParams(searchParams.toString());
+
+			// searchParams lags behind a pending search navigation, so carry the
+			// intended search into every URL instead of the possibly stale one
+			if (syncedSearchRef.current) {
+				params.set("search", syncedSearchRef.current);
+			} else {
+				params.delete("search");
+			}
 
 			Object.entries(updates).forEach(([key, value]) => {
 				if (value) {
@@ -72,12 +83,27 @@ export function ApplicationsClient({
 		[router, searchParams],
 	);
 
-	// Update URL when debounced search query changes
+	// Back/forward navigation changes the URL's search: restore it in the input
 	useEffect(() => {
-		if (debouncedSearchQuery !== initialParams.search) {
+		if (initialParams.search !== syncedSearchRef.current) {
+			syncedSearchRef.current = initialParams.search;
+			setSearchQuery(initialParams.search);
+		}
+	}, [initialParams.search]);
+
+	// Push a URL update only when the debounced input itself changes; this
+	// effect also reruns on navigation (updateURL changes), which must not push
+	const prevDebouncedRef = useRef(debouncedSearchQuery);
+	useEffect(() => {
+		if (debouncedSearchQuery === prevDebouncedRef.current) {
+			return;
+		}
+		prevDebouncedRef.current = debouncedSearchQuery;
+		if (debouncedSearchQuery !== syncedSearchRef.current) {
+			syncedSearchRef.current = debouncedSearchQuery;
 			updateURL({ search: debouncedSearchQuery });
 		}
-	}, [debouncedSearchQuery, initialParams.search, updateURL]);
+	}, [debouncedSearchQuery, updateURL]);
 
 	const handleSearchSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
@@ -110,6 +136,7 @@ export function ApplicationsClient({
 	};
 
 	const clearFilters = () => {
+		syncedSearchRef.current = "";
 		setSearchQuery("");
 		setSelectedCategory("");
 		setSelectedPlatform("");
