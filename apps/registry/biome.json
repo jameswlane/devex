@@ -1,0 +1,16 @@
+{
+	"root": false,
+	"extends": "//",
+	"overrides": [
+		{
+			"includes": ["app/globals.css"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noUnknownAtRules": "off"
+					}
+				}
+			}
+		}
+	]
+}

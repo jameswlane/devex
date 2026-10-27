@@ -1,16 +1,19 @@
-import type { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
+import type { NextRequest, NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
+import { invalidateOnDataChange } from "@/lib/cache-invalidation";
+import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
 import { createApiError, logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
-import { invalidateOnDataChange } from "@/lib/cache-invalidation";
-import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
+import {
+	createOptimizedResponse,
+	ResponseType,
+} from "@/lib/response-optimization";
 
 // GET /api/v1/plugins/[id] - Get a specific plugin by name
 async function handleGetPlugin(
 	request: NextRequest,
-	{ params }: { params: Promise<{ id: string }> }
+	{ params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
 	// Log params before awaiting
 	logger.info("Plugin route params received", {
@@ -45,8 +48,8 @@ async function handleGetPlugin(
 		{
 			operation: "fetch-plugin-by-name",
 			resource: "plugin",
-			metadata: { name: pluginName }
-		}
+			metadata: { name: pluginName },
+		},
 	);
 
 	// If not found by full name, try shortName
@@ -69,8 +72,8 @@ async function handleGetPlugin(
 			{
 				operation: "fetch-plugin-by-shortname",
 				resource: "plugin",
-				metadata: { shortName: pluginName }
-			}
+				metadata: { shortName: pluginName },
+			},
 		);
 	}
 
@@ -101,7 +104,7 @@ async function handleGetPlugin(
 // PUT /api/v1/plugins/[id] - Update a plugin by name
 async function handleUpdatePlugin(
 	request: NextRequest,
-	{ params }: { params: Promise<{ id: string }> }
+	{ params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
 	const { id: pluginName } = await params;
 	const body = await request.json();
@@ -132,8 +135,8 @@ async function handleUpdatePlugin(
 		{
 			operation: "update-plugin",
 			resource: "plugin",
-			metadata: { name: pluginName }
-		}
+			metadata: { name: pluginName },
+		},
 	);
 
 	if (!plugin) {
@@ -156,7 +159,7 @@ async function handleUpdatePlugin(
 // DELETE /api/v1/plugins/[id] - Delete a plugin by name
 async function handleDeletePlugin(
 	request: NextRequest,
-	{ params }: { params: Promise<{ id: string }> }
+	{ params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
 	const { id: pluginName } = await params;
 
@@ -175,8 +178,8 @@ async function handleDeletePlugin(
 		{
 			operation: "delete-plugin",
 			resource: "plugin",
-			metadata: { name: pluginName }
-		}
+			metadata: { name: pluginName },
+		},
 	);
 
 	if (!result) {
@@ -192,7 +195,7 @@ async function handleDeletePlugin(
 				"X-Resource-Name": pluginName,
 				"X-Operation": "delete",
 			},
-		}
+		},
 	);
 }
 

@@ -1,9 +1,12 @@
+import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+	createOptimizedResponse,
+	ResponseType,
+} from "@/lib/response-optimization";
 import { transformationService } from "@/lib/transformation-service";
-import { createOptimizedResponse, ResponseType } from "@/lib/response-optimization";
-import { Prisma } from "@prisma/client";
 
 /**
  * Advanced plugin query endpoint for smart plugin selection
@@ -21,7 +24,10 @@ export async function GET(request: Request) {
 		const categories = searchParams.getAll("category");
 		const includeBeta = searchParams.get("include_beta") === "true";
 		const includeConflicts = searchParams.get("include_conflicts") === "true";
-		const searchQuery = searchParams.get("q") || searchParams.get("search") || searchParams.get("name");
+		const searchQuery =
+			searchParams.get("q") ||
+			searchParams.get("search") ||
+			searchParams.get("name");
 
 		// Build complex where clause
 		const where: Prisma.PluginWhereInput = {
@@ -31,7 +37,11 @@ export async function GET(request: Request) {
 
 		// Name/shortName search - supports partial matching on both fields
 		if (searchQuery) {
-			const andArray = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : []);
+			const andArray = Array.isArray(where.AND)
+				? where.AND
+				: where.AND
+					? [where.AND]
+					: [];
 			where.AND = andArray;
 			where.AND.push({
 				OR: [
@@ -44,7 +54,11 @@ export async function GET(request: Request) {
 		// Platform filtering
 		if (os) {
 			// Check if plugin supports the specified OS
-			const andArray = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : []);
+			const andArray = Array.isArray(where.AND)
+				? where.AND
+				: where.AND
+					? [where.AND]
+					: [];
 			where.AND = andArray;
 			where.AND.push({
 				OR: [
@@ -63,7 +77,11 @@ export async function GET(request: Request) {
 
 		// Distribution-specific filtering (for Linux)
 		if (distribution && os === "linux") {
-			const andArray = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : []);
+			const andArray = Array.isArray(where.AND)
+				? where.AND
+				: where.AND
+					? [where.AND]
+					: [];
 			where.AND = andArray;
 			where.AND.push({
 				OR: [
@@ -84,7 +102,11 @@ export async function GET(request: Request) {
 
 		// Desktop environment filtering
 		if (desktop) {
-			const andArray = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : []);
+			const andArray = Array.isArray(where.AND)
+				? where.AND
+				: where.AND
+					? [where.AND]
+					: [];
 			where.AND = andArray;
 			where.AND.push({
 				OR: [
@@ -110,7 +132,11 @@ export async function GET(request: Request) {
 
 		// Category filtering
 		if (categories.length > 0) {
-			const andArray = Array.isArray(where.AND) ? where.AND : (where.AND ? [where.AND] : []);
+			const andArray = Array.isArray(where.AND)
+				? where.AND
+				: where.AND
+					? [where.AND]
+					: [];
 			where.AND = andArray;
 			where.AND.push({
 				OR: categories.map((cat) => ({
@@ -156,12 +182,14 @@ export async function GET(request: Request) {
 
 				// Parse binaries JSON field
 				const binariesData = (plugin.binaries as any) || {};
-				const binariesArray = Object.entries(binariesData).map(([platform, data]: [string, any]) => ({
-					platform,
-					url: data.url || "",
-					checksum: data.checksum || "",
-					size: data.size || 0,
-				}));
+				const binariesArray = Object.entries(binariesData).map(
+					([platform, data]: [string, any]) => ({
+						platform,
+						url: data.url || "",
+						checksum: data.checksum || "",
+						size: data.size || 0,
+					}),
+				);
 
 				return {
 					id: plugin.id,
@@ -186,12 +214,14 @@ export async function GET(request: Request) {
 						distributions: (plugin.supports as any)?.distributions || [],
 					},
 				};
-			})
+			}),
 		);
 
 		// Sort by compatibility score if platform was specified
 		if (os) {
-			enrichedPlugins.sort((a, b) => b.compatibilityScore - a.compatibilityScore);
+			enrichedPlugins.sort(
+				(a, b) => b.compatibilityScore - a.compatibilityScore,
+			);
 		}
 
 		// Return optimized response
@@ -215,7 +245,7 @@ export async function GET(request: Request) {
 					"X-Plugin-Count": String(enrichedPlugins.length),
 					"X-Query-Complexity": "advanced",
 				},
-			}
+			},
 		);
 	} catch (error) {
 		logDatabaseError(error, "plugins_query_advanced");

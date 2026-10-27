@@ -1,20 +1,20 @@
-import { redis } from "./redis";
+import type {
+	Application,
+	Config,
+	Plugin,
+	RegistryStats,
+	Stack,
+} from "@prisma/client";
 import { REGISTRY_CONFIG } from "./config";
 import { logger } from "./logger";
+import { redis } from "./redis";
 import type {
 	ApplicationResponse,
 	ConfigResponse,
+	PaginatedResponse,
 	PluginResponse,
 	StackResponse,
-	PaginatedResponse,
 } from "./types/registry";
-import type {
-	Plugin,
-	Application,
-	Config,
-	Stack,
-	RegistryStats,
-} from "@prisma/client";
 
 // Cache configuration for transformations
 const TRANSFORMATION_CACHE = {
@@ -323,7 +323,7 @@ export class RegistryTransformationService {
 		if (!githubPath) return null;
 
 		// Extract from: "packages/tool-shell" or "https://github.com/.../packages/package-manager-apt"
-		const match = githubPath.match(/packages\/([^\/]+?)(?:\/|$)/);
+		const match = githubPath.match(/packages\/([^/]+?)(?:\/|$)/);
 		return match ? match[1] : null;
 	}
 
@@ -335,7 +335,7 @@ export class RegistryTransformationService {
 		const firstItem = data[0];
 		const lastItem = data[data.length - 1];
 
-		let hashData: any = {
+		const hashData: any = {
 			length: data.length,
 			first: firstItem?.updatedAt || firstItem?.createdAt,
 			last: lastItem?.updatedAt || lastItem?.createdAt,
@@ -423,7 +423,8 @@ export class RegistryTransformationService {
 			const batchTransformed = batch.map((plugin) => {
 				// Extract full plugin name from githubPath (source of truth)
 				// githubPath format: "packages/tool-shell" or "https://...packages/package-manager-apt"
-				const normalizedName = this.extractPluginNameFromPath(plugin.githubPath) || plugin.name;
+				const normalizedName =
+					this.extractPluginNameFromPath(plugin.githubPath) || plugin.name;
 
 				return {
 					name: normalizedName,
@@ -442,7 +443,10 @@ export class RegistryTransformationService {
 					repository: plugin.repository || plugin.githubUrl,
 					dependencies: plugin.dependencies,
 					conflicts: plugin.conflicts,
-					binaries: plugin.binaries as Record<string, { url: string; checksum: string; size: number }>,
+					binaries: plugin.binaries as Record<
+						string,
+						{ url: string; checksum: string; size: number }
+					>,
 					sdkVersion: plugin.sdkVersion,
 					apiVersion: plugin.apiVersion,
 					release_tag: `packages/${normalizedName}@${plugin.version}`,

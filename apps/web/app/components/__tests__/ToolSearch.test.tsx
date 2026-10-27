@@ -2,7 +2,13 @@
  * @jest-environment jsdom
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import { ToolSearch } from "../ToolSearch";
@@ -18,21 +24,33 @@ jest.mock("../../utils/error-handling", () => ({
 	}),
 }));
 
-// Mock fetch
-const mockFetch = jest.fn();
-global.fetch = mockFetch;
+// fetch is replaced with a jest.fn() in jest.setup.js
+const mockFetch = jest.mocked(fetch);
+
+function jsonResponse(body: unknown): Response {
+	// Only the members ToolSearch reads are needed
+	return {
+		ok: true,
+		status: 200,
+		statusText: "OK",
+		json: async () => body,
+	} as Response;
+}
 
 const mockMetadata = {
 	categories: ["Development", "Database", "Plugin"],
 	stats: {
-		total: 10,
-		applications: 7,
-		plugins: 3,
+		total: {
+			applications: 7,
+			plugins: 3,
+			configs: 0,
+			stacks: 0,
+			all: 10,
+		},
 		platforms: {
 			linux: 8,
 			macos: 6,
 			windows: 4,
-			total: 10,
 		},
 	},
 };
@@ -101,20 +119,27 @@ const mockToolsResponse = {
 	},
 };
 
+// Route mocked fetch calls by URL so the metadata and tools requests can be
+// controlled independently of the order the component issues them in.
+const metadataHandler = jest.fn(
+	async (): Promise<Response> => jsonResponse(mockMetadata),
+);
+const toolsHandler = jest.fn(
+	async (_url: string): Promise<Response> => jsonResponse(mockToolsResponse),
+);
+
 describe("ToolSearch", () => {
 	beforeEach(() => {
-		mockFetch.mockClear();
-
-		// Default successful responses
-		mockFetch
-			.mockResolvedValueOnce({
-				ok: true,
-				json: async () => mockMetadata,
-			})
-			.mockResolvedValueOnce({
-				ok: true,
-				json: async () => mockToolsResponse,
-			});
+		metadataHandler.mockImplementation(async () => jsonResponse(mockMetadata));
+		toolsHandler.mockImplementation(async () =>
+			jsonResponse(mockToolsResponse),
+		);
+		mockFetch.mockImplementation(async (input) => {
+			const url = String(input);
+			return url === "/api/tools/metadata"
+				? metadataHandler()
+				: toolsHandler(url);
+		});
 	});
 
 	afterEach(() => {
@@ -126,9 +151,10 @@ describe("ToolSearch", () => {
 			render(<ToolSearch />);
 
 			expect(screen.getByText("Loading tools...")).toBeInTheDocument();
-			expect(
-				screen.getByRole("progressbar", { name: /loading/i }),
-			).toBeInTheDocument();
+			expect(screen.getByText("Loading...")).toBeInTheDocument();
+
+			// Let the pending fetches settle inside act()
+			expect(await screen.findByText("Test App 1")).toBeInTheDocument();
 		});
 
 		it("should render tools after loading", async () => {
@@ -156,12 +182,7 @@ describe("ToolSearch", () => {
 
 	describe("Error Handling", () => {
 		it("should display error when metadata fetch fails", async () => {
-			mockFetch
-				.mockRejectedValueOnce(new Error("Metadata failed"))
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockToolsResponse,
-				});
+			metadataHandler.mockRejectedValueOnce(new Error("Metadata failed"));
 
 			render(<ToolSearch />);
 
@@ -175,12 +196,7 @@ describe("ToolSearch", () => {
 		});
 
 		it("should display error when tools fetch fails", async () => {
-			mockFetch
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockMetadata,
-				})
-				.mockRejectedValueOnce(new Error("Tools failed"));
+			toolsHandler.mockRejectedValueOnce(new Error("Tools failed"));
 
 			render(<ToolSearch />);
 
@@ -191,16 +207,7 @@ describe("ToolSearch", () => {
 		});
 
 		it("should handle retry functionality", async () => {
-			mockFetch
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockMetadata,
-				})
-				.mockRejectedValueOnce(new Error("First attempt failed"))
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockToolsResponse,
-				});
+			toolsHandler.mockRejectedValueOnce(new Error("First attempt failed"));
 
 			render(<ToolSearch />);
 
@@ -228,13 +235,6 @@ describe("ToolSearch", () => {
 
 			// Clear previous fetch calls
 			mockFetch.mockClear();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					...mockToolsResponse,
-					tools: [mockToolsResponse.tools[0]],
-				}),
-			});
 
 			const searchInput = screen.getByPlaceholderText(
 				"Search tools, descriptions, or tags...",
@@ -257,10 +257,6 @@ describe("ToolSearch", () => {
 			});
 
 			mockFetch.mockClear();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => mockToolsResponse,
-			});
 
 			const searchInput = screen.getByPlaceholderText(
 				"Search tools, descriptions, or tags...",
@@ -286,13 +282,6 @@ describe("ToolSearch", () => {
 
 		it("should filter by category", async () => {
 			const user = userEvent.setup();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					...mockToolsResponse,
-					tools: [mockToolsResponse.tools[0]],
-				}),
-			});
 
 			const categorySelect = screen.getByLabelText("Category");
 			await user.selectOptions(categorySelect, "Development");
@@ -306,10 +295,6 @@ describe("ToolSearch", () => {
 
 		it("should filter by platform", async () => {
 			const user = userEvent.setup();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => mockToolsResponse,
-			});
 
 			const platformSelect = screen.getByLabelText("Platform");
 			await user.selectOptions(platformSelect, "linux");
@@ -323,13 +308,6 @@ describe("ToolSearch", () => {
 
 		it("should filter by type", async () => {
 			const user = userEvent.setup();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
-					...mockToolsResponse,
-					tools: [mockToolsResponse.tools[1]],
-				}),
-			});
 
 			const typeSelect = screen.getByLabelText("Type");
 			await user.selectOptions(typeSelect, "plugin");
@@ -343,10 +321,6 @@ describe("ToolSearch", () => {
 
 		it("should combine multiple filters", async () => {
 			const user = userEvent.setup();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => mockToolsResponse,
-			});
 
 			const searchInput = screen.getByPlaceholderText(
 				"Search tools, descriptions, or tags...",
@@ -380,15 +354,9 @@ describe("ToolSearch", () => {
 				},
 			};
 
-			mockFetch
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockMetadata,
-				})
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => multiPageResponse,
-				});
+			toolsHandler.mockImplementation(async () =>
+				jsonResponse(multiPageResponse),
+			);
 
 			render(<ToolSearch />);
 
@@ -414,15 +382,9 @@ describe("ToolSearch", () => {
 				},
 			};
 
-			mockFetch
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockMetadata,
-				})
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => multiPageResponse,
-				});
+			toolsHandler.mockImplementation(async () =>
+				jsonResponse(multiPageResponse),
+			);
 
 			render(<ToolSearch />);
 
@@ -431,9 +393,8 @@ describe("ToolSearch", () => {
 			});
 
 			mockFetch.mockClear();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
+			toolsHandler.mockImplementation(async () =>
+				jsonResponse({
 					...multiPageResponse,
 					pagination: {
 						...multiPageResponse.pagination,
@@ -441,7 +402,7 @@ describe("ToolSearch", () => {
 						hasPrev: true,
 					},
 				}),
-			});
+			);
 
 			fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
@@ -459,38 +420,56 @@ describe("ToolSearch", () => {
 			});
 		});
 
+		// Both mock tools are official, support Linux and show an install hint,
+		// so scope assertions to a single tool card.
+		function getToolCard(name: string): HTMLElement {
+			const card = screen
+				.getByRole("heading", { name })
+				.closest<HTMLElement>(".shadow-md");
+			if (!card) throw new Error(`No card found for ${name}`);
+			return card;
+		}
+
 		it("should display tool information correctly", () => {
-			expect(screen.getByText("Test App 1")).toBeInTheDocument();
+			const card = within(getToolCard("Test App 1"));
 			expect(
-				screen.getByText("First test application for development"),
+				card.getByText("First test application for development"),
 			).toBeInTheDocument();
-			expect(screen.getByText("Development")).toBeInTheDocument();
-			expect(screen.getByText("Official")).toBeInTheDocument();
-			expect(screen.getByText("application")).toBeInTheDocument();
+			expect(card.getByText("Development")).toBeInTheDocument();
+			expect(card.getByText("Official")).toBeInTheDocument();
+			expect(card.getByText("application")).toBeInTheDocument();
 		});
 
 		it("should display platform badges", () => {
-			expect(screen.getByText("Linux")).toBeInTheDocument();
+			const appCard = within(getToolCard("Test App 1"));
+			expect(appCard.getByText("Linux")).toBeInTheDocument();
+			expect(appCard.queryByText("macOS")).not.toBeInTheDocument();
+
+			const pluginCard = within(getToolCard("Test Plugin 1"));
+			expect(pluginCard.getByText("Linux")).toBeInTheDocument();
+			expect(pluginCard.getByText("macOS")).toBeInTheDocument();
+			expect(pluginCard.getByText("Windows")).toBeInTheDocument();
 		});
 
 		it("should display install commands", () => {
-			expect(screen.getByText("Install via:")).toBeInTheDocument();
-			expect(screen.getByText("apt")).toBeInTheDocument();
+			const appCard = within(getToolCard("Test App 1"));
+			expect(appCard.getByText("Install via:")).toBeInTheDocument();
+			expect(appCard.getByText("apt")).toBeInTheDocument();
 			expect(
-				screen.getByText("devex plugin install test-plugin-1"),
+				within(getToolCard("Test Plugin 1")).getByText(
+					"devex plugin install Test Plugin 1",
+				),
 			).toBeInTheDocument();
 		});
 
 		it("should show no results message when no tools match", async () => {
-			mockFetch.mockClear();
-			mockFetch.mockResolvedValue({
-				ok: true,
-				json: async () => ({
+			toolsHandler.mockImplementation(async () =>
+				jsonResponse({
 					...mockToolsResponse,
 					tools: [],
 					pagination: { ...mockToolsResponse.pagination, total: 0 },
 				}),
-			});
+			);
 
 			const user = userEvent.setup();
 			const searchInput = screen.getByPlaceholderText(
@@ -523,12 +502,7 @@ describe("ToolSearch", () => {
 		});
 
 		it("should disable form controls during loading", () => {
-			mockFetch
-				.mockResolvedValueOnce({
-					ok: true,
-					json: async () => mockMetadata,
-				})
-				.mockImplementation(() => new Promise(() => {})); // Never resolves
+			toolsHandler.mockImplementation(() => new Promise(() => {})); // Never resolves
 
 			render(<ToolSearch />);
 

@@ -2,12 +2,10 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { getCorsOrigins, REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
+import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { registryService } from "@/lib/registry-service";
 import { transformationService } from "@/lib/transformation-service";
-import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
-import type {
-	PaginatedResponse,
-} from "@/lib/types/registry";
+import type { PaginatedResponse } from "@/lib/types/registry";
 
 type RegistryServiceResult = {
 	plugins: any[];
@@ -37,7 +35,12 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 			100,
 			Math.max(1, parseInt(searchParams.get("limit") || "50", 10)),
 		);
-		const resource = (searchParams.get("resource") || "all") as "all" | "plugins" | "applications" | "configs" | "stacks";
+		const resource = (searchParams.get("resource") || "all") as
+			| "all"
+			| "plugins"
+			| "applications"
+			| "configs"
+			| "stacks";
 
 		// Use the optimized registry service with circuit breaker and caching
 		const result = await registryService.getPaginatedRegistry({
@@ -86,4 +89,3 @@ export async function OPTIONS() {
 		},
 	});
 }
-

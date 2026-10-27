@@ -4,92 +4,102 @@
 import { NextRequest } from "next/server";
 import { GET } from "../route";
 
-// Mock the tools data
-const mockToolsData = {
-	tools: [
-		{
-			name: "Test App 1",
-			description: "First test application",
-			category: "Development",
-			type: "application",
-			official: true,
-			default: false,
-			platforms: {
-				linux: {
-					installMethod: "apt",
-					installCommand: "apt install test1",
-					officialSupport: true,
+// Raw registry payload as returned by https://registry.devex.sh/api/v1/registry
+const mockRegistryResponse = {
+	data: {
+		applications: [
+			{
+				name: "Test App 1",
+				description: "First test application",
+				category: "Development",
+				official: true,
+				default: false,
+				platforms: {
+					linux: {
+						installMethod: "apt",
+						installCommand: "apt install test1",
+						officialSupport: true,
+					},
+					macos: null,
+					windows: null,
 				},
-				macos: null,
-				windows: null,
+				tags: ["Development", "test"],
 			},
-			tags: ["Development", "test"],
-		},
-		{
-			name: "Test App 2",
-			description: "Second test application",
-			category: "Database",
-			type: "application",
-			official: true,
-			default: true,
-			platforms: {
-				linux: {
-					installMethod: "apt",
-					installCommand: "apt install test2",
-					officialSupport: true,
+			{
+				name: "Test App 2",
+				description: "Second test application",
+				category: "Database",
+				official: true,
+				default: true,
+				platforms: {
+					linux: {
+						installMethod: "apt",
+						installCommand: "apt install test2",
+						officialSupport: true,
+					},
+					macos: {
+						installMethod: "brew",
+						installCommand: "brew install test2",
+						officialSupport: true,
+					},
+					windows: null,
 				},
-				macos: {
-					installMethod: "brew",
-					installCommand: "brew install test2",
-					officialSupport: true,
-				},
-				windows: null,
+				tags: ["Database", "test"],
 			},
-			tags: ["Database", "test"],
-		},
-		{
-			name: "Test Plugin 1",
-			description: "First test plugin",
-			category: "Plugin",
-			type: "plugin",
-			official: true,
-			default: false,
-			platforms: {
-				linux: {
-					installMethod: "devex",
-					installCommand: "test-plugin-1",
-					officialSupport: true,
-				},
-				macos: {
-					installMethod: "devex",
-					installCommand: "test-plugin-1",
-					officialSupport: true,
-				},
-				windows: {
-					installMethod: "devex",
-					installCommand: "test-plugin-1",
-					officialSupport: true,
-				},
+		],
+		plugins: [
+			{
+				name: "test-plugin-1",
+				description: "First test plugin",
+				type: "utility",
+				platforms: ["linux", "darwin", "windows"],
+				tags: ["test"],
 			},
-			tags: ["Plugin", "test"],
-			pluginType: "utility",
-		},
-	],
-	categories: ["Development", "Database", "Plugin"],
-	stats: {
-		total: 3,
-		applications: 2,
-		plugins: 1,
-		platforms: {
-			linux: 3,
-			macos: 2,
-			windows: 1,
-			total: 3,
-		},
+		],
 	},
 };
 
-jest.mock("../../generated/tools.json", () => mockToolsData, { virtual: true });
+const devexInstall = {
+	installMethod: "devex",
+	installCommand: "test-plugin-1",
+	officialSupport: true,
+};
+
+// Tools as the route transforms them from the registry payload
+const expectedTools = [
+	{
+		...mockRegistryResponse.data.applications[0],
+		type: "application",
+		desktopEnvironments: [],
+	},
+	{
+		...mockRegistryResponse.data.applications[1],
+		type: "application",
+		desktopEnvironments: [],
+	},
+	{
+		name: "test-plugin-1",
+		description: "First test plugin",
+		category: "Plugin",
+		type: "plugin",
+		official: true,
+		default: false,
+		platforms: {
+			linux: devexInstall,
+			macos: devexInstall,
+			windows: devexInstall,
+		},
+		tags: ["test", "plugin"],
+		pluginType: "utility",
+		supports: {},
+	},
+];
+
+beforeEach(() => {
+	jest
+		.mocked(fetch)
+		.mockImplementation(async () => Response.json(mockRegistryResponse));
+});
 
 // Mock console.error to avoid noise in tests
 const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -120,7 +130,7 @@ describe("/api/tools", () => {
 
 			expect(response.status).toBe(200);
 			expect(data).toEqual({
-				tools: mockToolsData.tools,
+				tools: expectedTools,
 				pagination: {
 					page: 1,
 					limit: 24,
@@ -146,7 +156,7 @@ describe("/api/tools", () => {
 			expect(response.status).toBe(200);
 			expect(data.tools).toHaveLength(2);
 			expect(data.tools[0].name).toBe("Test App 1");
-			expect(data.tools[1].name).toBe("Test Plugin 1");
+			expect(data.tools[1].name).toBe("test-plugin-1");
 			expect(data.pagination.total).toBe(2);
 		});
 
@@ -170,7 +180,7 @@ describe("/api/tools", () => {
 			expect(data.tools).toHaveLength(2);
 			expect(data.tools.map((t) => t.name)).toEqual([
 				"Test App 2",
-				"Test Plugin 1",
+				"test-plugin-1",
 			]);
 			expect(data.pagination.total).toBe(2);
 		});
@@ -182,7 +192,7 @@ describe("/api/tools", () => {
 
 			expect(response.status).toBe(200);
 			expect(data.tools).toHaveLength(1);
-			expect(data.tools[0].name).toBe("Test Plugin 1");
+			expect(data.tools[0].name).toBe("test-plugin-1");
 			expect(data.pagination.total).toBe(1);
 		});
 
