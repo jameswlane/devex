@@ -16,6 +16,6 @@ func main() {
 			log.Fatal(err)
 		}
 	default:
-		log.Fatalf("unknown task: %s", os.Args[1])
+		log.Fatalf("unknown task: %q", os.Args[1]) // #nosec G706 -- dev-only tool; argument is quoted
 	}
 }

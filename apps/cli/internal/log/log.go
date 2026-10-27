@@ -125,7 +125,7 @@ func InitFileLogger(debugMode bool) error {
 	}
 
 	logsDir := filepath.Join(homeDir, ".local", "share", "devex", "logs")
-	if err := os.MkdirAll(logsDir, 0750); err != nil {
+	if err := os.MkdirAll(logsDir, 0750); err != nil { // #nosec G703 -- fixed path under the user home directory
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
@@ -136,7 +136,7 @@ func InitFileLogger(debugMode bool) error {
 		timestamp := time.Now().Format("20060102-150405")
 		logFile := filepath.Join(logsDir, fmt.Sprintf("devex-%s.log", timestamp))
 
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G703 -- timestamped name in the fixed logs dir
 		if err != nil {
 			return fmt.Errorf("failed to create log file: %w", err)
 		}
@@ -164,7 +164,7 @@ func InitFileLogger(debugMode bool) error {
 		timestamp := time.Now().Format("20060102-150405")
 		logFile := filepath.Join(logsDir, fmt.Sprintf("devex-%s.log", timestamp))
 
-		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+		file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600) // #nosec G703 -- timestamped name in the fixed logs dir
 		if err != nil {
 			return fmt.Errorf("failed to create log file: %w", err)
 		}
@@ -363,46 +363,46 @@ func gatherBasicSystemInfo() string {
 	var sb strings.Builder
 
 	sb.WriteString("=== DEVEX SYSTEM INFORMATION ===\n")
-	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", time.Now().Format(time.RFC3339)))
-	sb.WriteString(fmt.Sprintf("CLI Version: %s\n", cliVersion))
+	fmt.Fprintf(&sb, "Timestamp: %s\n", time.Now().Format(time.RFC3339))
+	fmt.Fprintf(&sb, "CLI Version: %s\n", cliVersion)
 
 	// Basic platform info
 	sb.WriteString("=== PLATFORM ===\n")
-	sb.WriteString(fmt.Sprintf("Operating System: %s\n", runtime.GOOS))
-	sb.WriteString(fmt.Sprintf("Architecture: %s\n", runtime.GOARCH))
+	fmt.Fprintf(&sb, "Operating System: %s\n", runtime.GOOS)
+	fmt.Fprintf(&sb, "Architecture: %s\n", runtime.GOARCH)
 
 	// Detect Linux distribution
 	if runtime.GOOS == "linux" {
 		if distro := detectLinuxDistribution(); distro != "" {
-			sb.WriteString(fmt.Sprintf("Distribution: %s\n", distro))
+			fmt.Fprintf(&sb, "Distribution: %s\n", distro)
 		}
 		if version := getOSVersion(); version != "" {
-			sb.WriteString(fmt.Sprintf("OS Version: %s\n", version))
+			fmt.Fprintf(&sb, "OS Version: %s\n", version)
 		}
 		if kernel := getKernelVersion(); kernel != "" {
-			sb.WriteString(fmt.Sprintf("Kernel Version: %s\n", kernel))
+			fmt.Fprintf(&sb, "Kernel Version: %s\n", kernel)
 		}
 		if desktop := getDesktopEnvironment(); desktop != "" && desktop != "unknown" {
-			sb.WriteString(fmt.Sprintf("Desktop Environment: %s\n", desktop))
+			fmt.Fprintf(&sb, "Desktop Environment: %s\n", desktop)
 		}
 	}
 
 	// Runtime info
 	sb.WriteString("=== RUNTIME ===\n")
-	sb.WriteString(fmt.Sprintf("Go Version: %s\n", runtime.Version()))
-	sb.WriteString(fmt.Sprintf("CPU Count: %d\n", runtime.NumCPU()))
+	fmt.Fprintf(&sb, "Go Version: %s\n", runtime.Version())
+	fmt.Fprintf(&sb, "CPU Count: %d\n", runtime.NumCPU())
 
 	if username := os.Getenv("USER"); username != "" {
-		sb.WriteString(fmt.Sprintf("Username: %s\n", username))
+		fmt.Fprintf(&sb, "Username: %s\n", username)
 	}
 	if shell := os.Getenv("SHELL"); shell != "" {
-		sb.WriteString(fmt.Sprintf("Shell: %s\n", shell))
+		fmt.Fprintf(&sb, "Shell: %s\n", shell)
 	}
 	if home := os.Getenv("HOME"); home != "" {
-		sb.WriteString(fmt.Sprintf("Home Directory: %s\n", home))
+		fmt.Fprintf(&sb, "Home Directory: %s\n", home)
 	}
 	if pwd, err := os.Getwd(); err == nil {
-		sb.WriteString(fmt.Sprintf("Working Directory: %s\n", pwd))
+		fmt.Fprintf(&sb, "Working Directory: %s\n", pwd)
 	}
 
 	// Package managers
@@ -412,7 +412,7 @@ func gatherBasicSystemInfo() string {
 		sb.WriteString("No package managers detected\n")
 	} else {
 		for pm, version := range packageManagers {
-			sb.WriteString(fmt.Sprintf("%s: %s\n", pm, version))
+			fmt.Fprintf(&sb, "%s: %s\n", pm, version)
 		}
 	}
 
@@ -422,7 +422,7 @@ func gatherBasicSystemInfo() string {
 		if len(path) > 500 {
 			path = path[:500] + "... [truncated]"
 		}
-		sb.WriteString(fmt.Sprintf("PATH: %s\n", path))
+		fmt.Fprintf(&sb, "PATH: %s\n", path)
 	}
 
 	sb.WriteString("=== END SYSTEM INFORMATION ===\n")

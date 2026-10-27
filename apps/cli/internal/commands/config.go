@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -488,7 +489,7 @@ func editConfiguration(settings config.CrossPlatformSettings, configType, editor
 	// Open editor
 	args := append([]string{}, files...)
 	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, editor, args...)
+	cmd := exec.CommandContext(ctx, editor, args...) // #nosec G702 -- opens the user's own $EDITOR by design
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -1002,7 +1003,7 @@ func initTeamConfig(settings config.CrossPlatformSettings, fromUser, force bool)
 				header := fmt.Sprintf("# DevEx Team Configuration - %s\n# Generated from user config\n# Share this with your team/organization\n\n", configFile)
 				content := header + string(data)
 
-				if err := os.WriteFile(teamPath, []byte(content), 0600); err != nil {
+				if err := os.WriteFile(teamPath, []byte(content), 0600); err != nil { // #nosec G703 -- fixed file names inside the configured team directory
 					fmt.Printf("Warning: failed to copy %s: %v\n", configFile, err)
 				} else {
 					fmt.Printf("  ✓ Copied %s\n", configFile)
@@ -1306,6 +1307,16 @@ func showEnvironmentStatus(settings config.CrossPlatformSettings) error {
 	return nil
 }
 
+var environmentNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+// validateEnvironmentName ensures an environment name is a single, safe path component
+func validateEnvironmentName(name string) error {
+	if !environmentNamePattern.MatchString(name) || strings.Contains(name, "..") {
+		return fmt.Errorf("invalid environment name %q: use letters, digits, '.', '_' or '-'", name)
+	}
+	return nil
+}
+
 // initEnvironmentConfig initializes environment-specific configuration
 func initEnvironmentConfig(settings config.CrossPlatformSettings, env, tier, copyFrom string, force bool) error {
 	green := color.New(color.FgGreen).SprintFunc()
@@ -1321,6 +1332,15 @@ func initEnvironmentConfig(settings config.CrossPlatformSettings, env, tier, cop
 		baseDir = settings.GetTeamConfigDir()
 	default:
 		return fmt.Errorf("invalid tier '%s'. Use 'user' or 'team'", tier)
+	}
+
+	if err := validateEnvironmentName(env); err != nil {
+		return err
+	}
+	if copyFrom != "" {
+		if err := validateEnvironmentName(copyFrom); err != nil {
+			return fmt.Errorf("invalid --copy-from: %w", err)
+		}
 	}
 
 	envDir := filepath.Join(baseDir, "environments", env)
@@ -1357,7 +1377,7 @@ func initEnvironmentConfig(settings config.CrossPlatformSettings, env, tier, cop
 				header := fmt.Sprintf("# DevEx %s Environment Configuration - %s\n# Copied from %s environment\n# Environment-specific overrides\n\n", env, configFile, copyFrom)
 				content := header + string(data)
 
-				if err := os.WriteFile(destPath, []byte(content), 0600); err != nil {
+				if err := os.WriteFile(destPath, []byte(content), 0600); err != nil { // #nosec G703 -- env names are validated by validateEnvironmentName
 					fmt.Printf("Warning: failed to copy %s: %v\n", configFile, err)
 				} else {
 					fmt.Printf("  ✓ Copied %s\n", configFile)

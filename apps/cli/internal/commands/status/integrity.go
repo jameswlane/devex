@@ -219,7 +219,7 @@ func CheckFileIntegrity(ctx context.Context, app *types.AppConfig) []string {
 			goPath = filepath.Join(homeDir, "go")
 		}
 
-		if _, err := os.Stat(goPath); err != nil {
+		if _, err := os.Stat(goPath); err != nil { // #nosec G703 -- read-only existence check
 			issues = append(issues, "Go workspace directory missing")
 		}
 	}

@@ -357,22 +357,60 @@ func cleanupDataFiles(app *types.AppConfig) error {
 	return nil
 }
 
+// protectedCleanupPaths are never removed by uninstall cleanup, whatever an app config lists
+var protectedCleanupPaths = []string{
+	"/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib", "/lib64", "/opt", "/proc",
+	"/root", "/run", "/sbin", "/srv", "/sys", "/tmp", "/usr", "/var",
+	"/Applications", "/Library", "/System", "/Users",
+}
+
 func removeFileIfExists(path string) error {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
 	// Expand home directory if needed
 	if strings.HasPrefix(path, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
 		path = filepath.Join(homeDir, path[2:])
 	}
 
+	path, err = validateCleanupPath(path, homeDir)
+	if err != nil {
+		return err
+	}
+
 	// Check if file exists before trying to remove
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	if _, err := os.Lstat(path); os.IsNotExist(err) { // #nosec G703 -- path checked by validateCleanupPath
 		return nil // File doesn't exist, nothing to do
 	}
 
-	return os.RemoveAll(path)
+	return os.RemoveAll(path) // #nosec G703 -- path checked by validateCleanupPath
+}
+
+// validateCleanupPath rejects paths whose recursive removal would destroy unrelated data:
+// relative paths, filesystem and system roots, the home directory and any of its parents.
+func validateCleanupPath(path, homeDir string) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("refusing to remove an empty path")
+	}
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("refusing to remove relative path %q: cleanup paths must be absolute or start with ~/", path)
+	}
+
+	cleaned := filepath.Clean(path)
+	for _, protected := range protectedCleanupPaths {
+		if cleaned == protected {
+			return "", fmt.Errorf("refusing to remove protected path %q", cleaned)
+		}
+	}
+
+	home := filepath.Clean(homeDir)
+	if cleaned == home || strings.HasPrefix(home+string(filepath.Separator), cleaned+string(filepath.Separator)) {
+		return "", fmt.Errorf("refusing to remove %q: it is the home directory or one of its parents", cleaned)
+	}
+
+	return cleaned, nil
 }
 
 // stopAppServices stops services associated with an application
