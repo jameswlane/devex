@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { withErrorHandling, safeDatabase } from "@/lib/error-handler";
@@ -123,5 +124,13 @@ async function handleDeleteApplication(
 
 // Export wrapped handlers with error handling
 export const GET = withErrorHandling(handleGetApplication, "fetch-application");
-export const PUT = withErrorHandling(handleUpdateApplication, "update-application");
-export const DELETE = withErrorHandling(handleDeleteApplication, "delete-application");
+export const PUT = withApiKey(
+	ADMIN_API_KEY_ENV,
+	withErrorHandling(handleUpdateApplication, "update-application"),
+	{ action: "update-application", resourceType: "application" },
+);
+export const DELETE = withApiKey(
+	ADMIN_API_KEY_ENV,
+	withErrorHandling(handleDeleteApplication, "delete-application"),
+	{ action: "delete-application", resourceType: "application" },
+);

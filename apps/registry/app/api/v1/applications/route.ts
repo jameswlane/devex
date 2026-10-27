@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { createApiError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
@@ -210,4 +211,8 @@ async function handleCreateApplication(request: NextRequest): Promise<NextRespon
 
 // Export wrapped handlers with standardized error handling
 export const GET = withErrorHandling(handleGetApplications, "fetch-applications");
-export const POST = withErrorHandling(handleCreateApplication, "create-application");
+export const POST = withApiKey(
+	ADMIN_API_KEY_ENV,
+	withErrorHandling(handleCreateApplication, "create-application"),
+	{ action: "create-application", resourceType: "application" },
+);

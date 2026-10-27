@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { handleHealthCheck, dbHealthMonitor, DatabaseRecovery } from "@/lib/db-health";
+import { REVALIDATE_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { createApiError, logger } from "@/lib/logger";
 import { getStartupHealth } from "@/lib/startup";
 
@@ -118,8 +119,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/health/refresh - Force refresh health cache
-export async function POST() {
+// POST /api/health - Force refresh health cache (requires REVALIDATE_API_KEY)
+async function handleRefreshHealth() {
   try {
     // Clear cache and force fresh health check
     dbHealthMonitor.clearCache();
@@ -134,3 +135,8 @@ export async function POST() {
     return createApiError("Failed to refresh health cache", 500);
   }
 }
+
+export const POST = withApiKey(REVALIDATE_API_KEY_ENV, handleRefreshHealth, {
+  action: "refresh-health-cache",
+  resourceType: "health",
+});
