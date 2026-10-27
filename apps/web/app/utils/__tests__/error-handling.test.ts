@@ -185,7 +185,13 @@ describe("safeAsync", () => {
 		expect(consoleSpy.error).toHaveBeenCalledWith("Application Error:", {
 			message: "Operation failed",
 			stack: expect.any(String),
-			context,
+			context: {
+				...context,
+				attempts: 1,
+				timeout: 30000,
+				retries: 0,
+				circuitBreakerState: undefined,
+			},
 			timestamp: expect.any(String),
 		});
 	});
@@ -203,7 +209,10 @@ describe("withRetry", () => {
 	it("should succeed on first attempt", async () => {
 		const operation = jest.fn().mockResolvedValue("success");
 
-		const result = await withRetry(operation, 3, 1000);
+		const result = await withRetry(operation, {
+			maxAttempts: 3,
+			initialDelay: 1000,
+		});
 
 		expect(result).toBe("success");
 		expect(operation).toHaveBeenCalledTimes(1);
@@ -216,7 +225,10 @@ describe("withRetry", () => {
 			.mockRejectedValueOnce(new Error("Fail 2"))
 			.mockResolvedValue("success");
 
-		const promise = withRetry(operation, 3, 1000);
+		const promise = withRetry(operation, {
+			maxAttempts: 3,
+			initialDelay: 1000,
+		});
 
 		// Fast-forward through retries
 		await jest.runAllTimersAsync();
@@ -230,32 +242,43 @@ describe("withRetry", () => {
 		const error = new Error("Persistent failure");
 		const operation = jest.fn().mockRejectedValue(error);
 
-		const promise = withRetry(operation, 2, 100);
+		const promise = withRetry(operation, { maxAttempts: 2, initialDelay: 100 });
+		// Attach the rejection handler before flushing timers so the
+		// rejection is never reported as unhandled.
+		const assertion = expect(promise).rejects.toThrow("Persistent failure");
 		await jest.runAllTimersAsync();
 
-		await expect(promise).rejects.toThrow("Persistent failure");
+		await assertion;
 		expect(operation).toHaveBeenCalledTimes(2);
 		expect(consoleSpy.error).toHaveBeenCalled();
 	});
 
 	it("should use exponential backoff", async () => {
+		const setTimeoutSpy = jest.spyOn(global, "setTimeout");
 		const operation = jest
 			.fn()
 			.mockRejectedValueOnce(new Error("Fail 1"))
 			.mockRejectedValueOnce(new Error("Fail 2"))
 			.mockResolvedValue("success");
 
-		const promise = withRetry(operation, 3, 1000);
+		const promise = withRetry(operation, {
+			maxAttempts: 3,
+			initialDelay: 1000,
+			jitter: false,
+		});
 
 		// Verify timing of retries
-		expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 1000);
-		jest.advanceTimersByTime(1000);
+		await jest.advanceTimersByTimeAsync(0);
+		expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 1000);
+		await jest.advanceTimersByTimeAsync(1000);
 
-		expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 2000);
-		jest.advanceTimersByTime(2000);
+		expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 2000);
+		await jest.advanceTimersByTimeAsync(2000);
 
 		const result = await promise;
 		expect(result).toBe("success");
+		expect(operation).toHaveBeenCalledTimes(3);
+		setTimeoutSpy.mockRestore();
 	});
 });
 

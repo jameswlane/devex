@@ -165,6 +165,12 @@ describe("ToolsService", () => {
 			expect(result[0].name).toBe("Docker");
 		});
 
+		it("should match search terms case-insensitively", () => {
+			const result = service.filterTools({}, "DoCkEr");
+			expect(result).toHaveLength(1);
+			expect(result[0].name).toBe("Docker");
+		});
+
 		it("should filter by search term in description", () => {
 			const result = service.filterTools({}, "container");
 			expect(result).toHaveLength(1);

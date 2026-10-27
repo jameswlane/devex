@@ -25,6 +25,7 @@ export function Resources() {
 	];
 
 	return (
+		// biome-ignore lint/correctness/useUniqueElementIds: stable in-page anchor targeted by the Header's "#resources" link; this section renders once per page
 		<section id="resources" className="py-12">
 			<h2 className="text-3xl font-bold text-gray-800 mb-6">Resources</h2>
 			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

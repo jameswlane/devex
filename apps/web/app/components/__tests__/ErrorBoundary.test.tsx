@@ -2,7 +2,7 @@
  * @jest-environment jsdom
  */
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type React from "react";
 import "@testing-library/jest-dom";
 import { ErrorBoundary } from "../ErrorBoundary";
@@ -75,10 +75,12 @@ describe("ErrorBoundary", () => {
 				</ErrorBoundary>,
 			);
 
-			expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+			expect(
+				screen.getByText("Oops! Something went wrong"),
+			).toBeInTheDocument();
 			expect(screen.getByText("Test error")).toBeInTheDocument();
 			expect(
-				screen.getByRole("button", { name: "Try Again" }),
+				screen.getByRole("button", { name: "🔄 Try Again" }),
 			).toBeInTheDocument();
 		});
 
@@ -111,9 +113,9 @@ describe("ErrorBoundary", () => {
 
 		it("should show generic error message when no error message available", () => {
 			// Mock handleComponentError to return error without message
-			(handleComponentError as jest.Mock).mockReturnValue({
+			jest.mocked(handleComponentError).mockReturnValueOnce({
 				hasError: true,
-				error: null,
+				error: undefined,
 				errorInfo: {},
 			});
 
@@ -124,13 +126,11 @@ describe("ErrorBoundary", () => {
 			);
 
 			expect(
-				screen.getByText(
-					"An unexpected error occurred while loading this component.",
-				),
+				screen.getByText(/We encountered an unexpected error/),
 			).toBeInTheDocument();
 		});
 
-		it("should allow retry functionality", () => {
+		it("should allow retry functionality", async () => {
 			let shouldThrow = true;
 			const TestComponent = () => (
 				<ThrowingComponent shouldThrow={shouldThrow} />
@@ -143,13 +143,15 @@ describe("ErrorBoundary", () => {
 			);
 
 			// Error should be shown
-			expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+			expect(
+				screen.getByText("Oops! Something went wrong"),
+			).toBeInTheDocument();
 
 			// Change the throwing condition
 			shouldThrow = false;
 
 			// Click retry button
-			fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+			fireEvent.click(screen.getByRole("button", { name: "🔄 Try Again" }));
 
 			// Rerender with new state
 			rerender(
@@ -158,19 +160,19 @@ describe("ErrorBoundary", () => {
 				</ErrorBoundary>,
 			);
 
-			// Should show the non-error content
-			expect(screen.getByText("No error")).toBeInTheDocument();
+			// Should show the non-error content once the retry delay elapses
+			expect(await screen.findByText("No error")).toBeInTheDocument();
 		});
 
 		describe("in development mode", () => {
-			const originalEnv = process.env.NODE_ENV;
+			let nodeEnv: jest.ReplaceProperty<string | undefined>;
 
 			beforeAll(() => {
-				process.env.NODE_ENV = "development";
+				nodeEnv = jest.replaceProperty(process.env, "NODE_ENV", "development");
 			});
 
 			afterAll(() => {
-				process.env.NODE_ENV = originalEnv;
+				nodeEnv.restore();
 			});
 
 			it("should show technical details in development", () => {
@@ -178,7 +180,7 @@ describe("ErrorBoundary", () => {
 				testError.stack = "Error: Test error\\n    at test.js:1:1";
 
 				// Mock handleComponentError to return error with stack
-				(handleComponentError as jest.Mock).mockReturnValue({
+				jest.mocked(handleComponentError).mockReturnValueOnce({
 					hasError: true,
 					error: testError,
 					errorInfo: {},
@@ -190,10 +192,12 @@ describe("ErrorBoundary", () => {
 					</ErrorBoundary>,
 				);
 
-				expect(screen.getByText("Technical Details")).toBeInTheDocument();
+				expect(
+					screen.getByText("🔧 Technical Details (Development)"),
+				).toBeInTheDocument();
 
 				// Click to expand details
-				fireEvent.click(screen.getByText("Technical Details"));
+				fireEvent.click(screen.getByText("🔧 Technical Details (Development)"));
 
 				// Check that the error message is present (stack trace will vary)
 				expect(screen.getByText(/Error: Test error/)).toBeInTheDocument();
@@ -201,21 +205,21 @@ describe("ErrorBoundary", () => {
 		});
 
 		describe("in production mode", () => {
-			const originalEnv = process.env.NODE_ENV;
+			let nodeEnv: jest.ReplaceProperty<string | undefined>;
 
 			beforeAll(() => {
-				process.env.NODE_ENV = "production";
+				nodeEnv = jest.replaceProperty(process.env, "NODE_ENV", "production");
 			});
 
 			afterAll(() => {
-				process.env.NODE_ENV = originalEnv;
+				nodeEnv.restore();
 			});
 
 			it("should not show technical details in production", () => {
 				const testError = new Error("Test error");
 				testError.stack = "Error: Test error\\n    at test.js:1:1";
 
-				(handleComponentError as jest.Mock).mockReturnValue({
+				jest.mocked(handleComponentError).mockReturnValueOnce({
 					hasError: true,
 					error: testError,
 					errorInfo: {},
@@ -227,7 +231,7 @@ describe("ErrorBoundary", () => {
 					</ErrorBoundary>,
 				);
 
-				expect(screen.queryByText("Technical Details")).not.toBeInTheDocument();
+				expect(screen.queryByText(/Technical Details/)).not.toBeInTheDocument();
 			});
 		});
 
@@ -249,10 +253,12 @@ describe("ErrorBoundary", () => {
 			);
 
 			// Error should be shown
-			expect(screen.getByText("Something went wrong")).toBeInTheDocument();
+			expect(
+				screen.getByText("Oops! Something went wrong"),
+			).toBeInTheDocument();
 
 			// Click retry - this resets the error boundary state
-			fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
+			fireEvent.click(screen.getByRole("button", { name: "🔄 Try Again" }));
 
 			// Rerender with version that doesn't throw
 			rerender(
