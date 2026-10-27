@@ -23,6 +23,9 @@ jobs:
       cli: ${{ steps.changes.outputs.cli }}
       sdk: ${{ steps.changes.outputs.sdk }}
       plugins: ${{ steps.changes.outputs.plugins }}
+      web: ${{ steps.changes.outputs.web }}
+      registry: ${{ steps.changes.outputs.registry }}
+      docs: ${{ steps.changes.outputs.docs }}
       plugin-matrix: ${{ steps.plugins.outputs.matrix }}
       has-changes: ${{ steps.changes.outputs.cli == 'true' || steps.changes.outputs.sdk == 'true' || steps.changes.outputs.plugins == 'true' }}
     steps:
@@ -43,6 +46,12 @@ jobs:
             plugins:
               - 'packages/**'
               - '!packages/plugin-sdk/**'
+            web:
+              - 'apps/web/**'
+            registry:
+              - 'apps/registry/**'
+            docs:
+              - 'apps/docs/**'
 
       - name: Detect changed plugins
         if: steps.changes.outputs.plugins == 'true'
@@ -110,6 +119,13 @@ jobs:
       - name: Lint CLI
         run: pnpm turbo lint --filter=@devex/cli --concurrency=1
 
+      - name: Vulnerability check (CLI)
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f  # v1.1.0
+        with:
+          go-version-file: apps/cli/go.mod
+          go-package: ./...
+          work-dir: apps/cli
+
       - name: Build CLI
         run: pnpm turbo build --filter=@devex/cli
 
@@ -141,6 +157,13 @@ jobs:
 
       - name: Lint SDK
         run: golangci-lint run
+
+      - name: Vulnerability check (Plugin SDK)
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f  # v1.1.0
+        with:
+          go-version-file: packages/plugin-sdk/go.mod
+          go-package: ./...
+          work-dir: packages/plugin-sdk
 
       - name: Build SDK
         run: go build ./...
@@ -232,3 +255,78 @@ jobs:
           fi
           echo "::endgroup::"
 
+  test-js:
+    name: Test JS
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.web == 'true' || needs.detect-changes.outputs.registry == 'true' || needs.detect-changes.outputs.docs == 'true'
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/devex
+      PRISMA_DATABASE_URL: postgresql://ci:ci@localhost:5432/devex
+      KV_REST_API_URL: http://localhost:8080
+      KV_REST_API_TOKEN: ci-dummy-token
+      KV_URL: redis://localhost:6379
+      REDIS_URL: redis://localhost:6379
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Biome check (web)
+        if: needs.detect-changes.outputs.web == 'true'
+        run: pnpm exec biome check apps/web
+
+      - name: Biome check (docs)
+        if: needs.detect-changes.outputs.docs == 'true'
+        run: pnpm exec biome check apps/docs
+
+      - name: Biome check (registry)
+        if: needs.detect-changes.outputs.registry == 'true'
+        run: pnpm exec biome check apps/registry
+
+      - name: Generate Prisma client (registry)
+        if: needs.detect-changes.outputs.registry == 'true'
+        run: pnpm --filter @devex/registry run db:generate
+
+      - name: Typecheck web
+        if: needs.detect-changes.outputs.web == 'true'
+        run: pnpm --filter @devex/web exec tsc --noEmit
+
+      - name: Typecheck docs
+        if: needs.detect-changes.outputs.docs == 'true'
+        run: pnpm --filter @devex/docs exec tsc --noEmit
+
+      - name: Typecheck registry
+        if: needs.detect-changes.outputs.registry == 'true'
+        run: pnpm --filter @devex/registry exec tsc --noEmit
+
+      - name: Test web
+        if: needs.detect-changes.outputs.web == 'true'
+        run: pnpm --filter @devex/web test
+
+      - name: Test registry
+        if: needs.detect-changes.outputs.registry == 'true'
+        run: pnpm --filter @devex/registry test
+
+      - name: Build web
+        if: needs.detect-changes.outputs.web == 'true'
+        run: pnpm --filter @devex/web build
+
+      - name: Build docs
+        if: needs.detect-changes.outputs.docs == 'true'
+        run: pnpm --filter @devex/docs build
+
+      - name: Build registry
+        if: needs.detect-changes.outputs.registry == 'true'
+        run: pnpm --filter @devex/registry build
