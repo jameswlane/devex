@@ -122,7 +122,8 @@ function Get-LatestVersion {
 
     try {
         # Fetch all releases and filter for CLI versions (exclude plugin releases)
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/jameswlane/devex/releases" -UseBasicParsing
+        # One page of 100 keeps this working even after a burst of plugin releases
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/jameswlane/devex/releases?per_page=100" -UseBasicParsing
         $latestVersion = $response |
             Where-Object { $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$' } |
             Select-Object -First 1 -ExpandProperty tag_name
@@ -152,7 +153,8 @@ function Get-DevExDownload {
         [string]$TempDir
     )
     
-    $fileName = "devex_${Version}_windows_${Architecture}.tar.gz"
+    # Release assets are named without the leading "v": devex_1.2.3_windows_amd64.tar.gz
+    $fileName = "devex_$($Version.TrimStart('v'))_windows_${Architecture}.tar.gz"
     $checksumFile = "devex_checksums.txt"
     $baseUrl = "https://github.com/jameswlane/devex/releases/download/$Version"
     
