@@ -132,6 +132,28 @@ DATABASE_URL="postgresql://prod-db/devex_registry"
 NEXT_PUBLIC_REGISTRY_URL="https://registry.devex.sh"
 ```
 
+### API Authentication
+
+All `GET` endpoints (including `/api/v1/registry.json` used by the CLI) are public.
+Every write and admin endpoint requires an `Authorization: Bearer <token>` header,
+checked in constant time by `lib/auth/require-api-key.ts`:
+
+| Secret | Protects |
+| --- | --- |
+| `REGISTRY_ADMIN_API_KEY` | `POST /api/v1/applications`, `PUT`/`DELETE /api/v1/applications/:id`, `POST /api/v1/plugins`, `PUT`/`DELETE /api/v1/plugins/:id` |
+| `REVALIDATE_API_KEY` | `POST /api/v1/revalidate`, `POST`/`DELETE /api/v1/cache`, `POST /api/health` |
+
+Missing or wrong tokens get `401`. If the secret is not set, the endpoint fails
+closed with `503`. Successful authenticated writes are recorded through the audit
+logger (application log + Redis). See `.env.example`.
+
+```bash
+curl -X POST https://registry.devex.sh/api/v1/revalidate \
+  -H "Authorization: Bearer $REVALIDATE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"all"}'
+```
+
 ## 📦 Plugin Management
 
 ### Plugin Registration
