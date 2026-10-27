@@ -6,12 +6,11 @@ monorepo:
   dir: packages/plugin-sdk
 before:
   hooks:
-    - cmd: go mod tidy
-      dir: packages/plugin-sdk
+    # No `go mod tidy` here: it can dirty the tree mid-release. CI checks tidiness.
     - cmd: go test ./...
       dir: packages/plugin-sdk
 builds:
-  - skip: true # This is a library, not an executable
+  - skip: true  # This is a library, not an executable
 archives:
   - id: plugin-sdk
     # this name template makes the OS and Arch compatible with the results of uname.
@@ -65,6 +64,10 @@ release:
   draft: false
   prerelease: auto
   mode: append
+  # Only CLI releases may become GitHub's "Latest" release.
+  make_latest: false
+  preflight:
+    fail_on_error: true
   header: |
     ## DevEx Plugin SDK {{ .Tag }}
 
@@ -75,7 +78,7 @@ release:
     go get github.com/jameswlane/devex/packages/plugin-sdk@{{ .Tag }}
     ```
   footer: |
-    **Full Changelog**: https://github.com/jameswlane/devex/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/jameswlane/devex/compare/{{ .PrefixedPreviousTag }}...{{ .PrefixedTag }}
 
     ---
     _Built with ❤️ by the DevEx team_

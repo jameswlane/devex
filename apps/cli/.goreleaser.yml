@@ -1,12 +1,22 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
 version: 2
+project_name: devex
+# CLI tags are plain vX.Y.Z; the prefix keeps previous-tag and changelog detection
+# from crossing into packages/*/vX.Y.Z plugin tags. Paths below are relative to dir.
+monorepo:
+  tag_prefix: v
+  dir: apps/cli
+metadata:
+  mod_timestamp: "{{ .CommitTimestamp }}"
 builds:
   - id: devex
     main: ./cmd/main.go
     binary: bin/devex
-    dir: apps/cli
-    ldflags:
-      - -X main.version={{.Version}}
+    # Pure-Go SQLite (modernc.org/sqlite): every target is a static, CGO-free build.
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
     goos:
       - linux
       - darwin
@@ -14,68 +24,80 @@ builds:
     goarch:
       - amd64
       - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
 archives:
   - id: devex
-    name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
-    # Sets the given file info to all the binaries included from the `builds`.
-    #
-    # Default: copied from the source binary.
-    # builds_info:
-    # group: root
-    # owner: root
-    # mode: 0644
-    # format is `time.RFC3339Nano`
-    # mtime: 2008-01-02T15:04:05Z
-    # Additional files/globs you want to add to the archive.
-    #
-    # Default: [ 'LICENSE*', 'README*', 'CHANGELOG', 'license*', 'readme*', 'changelog'].
-    # Templates: allowed.
+    ids: [devex]
+    # apps/get/public/install and install.ps1 expect tar.gz on every OS.
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - assets/**/*
-      - config/*
+      - config/**/*
       - help/*
-# Whether to enable the size reporting or not.
 report_sizes: true
+checksum:
+  name_template: devex_checksums.txt
+  algorithm: sha256
+signs:
+  - id: cosign
+    cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
 release:
   github:
     owner: jameswlane
     name: devex
-  draft: false
-  replace_existing_draft: true
-  target_commitish: '{{ .Commit }}'
-  replace_existing_artifacts: true
-  discussion_category_name: General
+  name_template: "devex v{{ .Version }}"
+  target_commitish: "{{ .Commit }}"
   prerelease: auto
+  # The CLI is the only component that may become GitHub's "Latest" release.
   make_latest: true
-  mode: append
-  header: |
-    ## DevEx Release ({{ .Date }})
-    Welcome to this new release!
-  footer: |
-    ## Thanks
-    Those were the changes on {{ .Tag }}!
-  name_template: '{{.ProjectName}}-v{{.Version}}'
   include_meta: true
-snapshot:
-  version_template: '{{.Version}}'
-checksum:
-  name_template: 'devex_checksums.txt'
+  preflight:
+    fail_on_error: true
+  header: |
+    ## DevEx {{ .Tag }} ({{ .Date }})
 changelog:
   use: github
-  format: '{{.SHA}}: {{.Message}} (@{{.AuthorUsername}})'
+  sort: asc
+  format: "{{ .SHA }}: {{ .Message }}{{ with .AuthorUsername }} (@{{ . }}){{ end }}"
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "(?i)typo"
   groups:
     - title: Features
-      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      regexp: '^.*?feat(\([[:word:]-]+\))??!?:.+$'
       order: 0
-    - title: 'Bug fixes'
-      regexp: '^.*?bug(\([[:word:]]+\))??!?:.+$'
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]-]+\))??!?:.+$'
       order: 1
     - title: Others
       order: 999
-  filters:
-    exclude:
-      - '^docs:'
-      - typo
-      - (?i)foo
-    include:
-      - '^feat:'
+verify:
+  commands:
+    - cmd: sha256sum
+      args: ["--ignore-missing", "-c", "devex_checksums.txt"]
+    - cmd: cosign
+      args:
+        - verify-blob
+        - --bundle=devex_checksums.txt.sigstore.json
+        - --certificate-identity-regexp=^https://github\.com/jameswlane/devex/\.github/workflows/
+        - --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+        - devex_checksums.txt
+  retry:
+    attempts: 5
+    delay: 10s

@@ -1,241 +1,108 @@
 # DevEx Release Process
 
-This document describes how to release different components of the DevEx monorepo using GoReleaser.
+Every component of the monorepo is released on its own with GoReleaser Pro, routed by tag prefix:
 
-## Architecture
+| Component | Tag | Config |
+| --- | --- | --- |
+| CLI | `vX.Y.Z` | `apps/cli/.goreleaser.yml` |
+| Plugin SDK | `packages/plugin-sdk/vX.Y.Z` | `packages/plugin-sdk/.goreleaser.yml` |
+| Plugin | `packages/<name>/vX.Y.Z` | `packages/<name>/.goreleaser.yml` (generated) |
 
-DevEx uses the official [GoReleaser monorepo pattern](https://goreleaser.com/customization/monorepo/) with tag-based routing:
+Only CLI releases become GitHub's "Latest" release; plugin and SDK configs set `make_latest: false`.
 
-- **CLI**: `v*` → `apps/cli/.goreleaser.yml`
-- **SDK**: `packages/plugin-sdk/v*` → `packages/plugin-sdk/.goreleaser.yml`
-- **Plugins**: `packages/[name]/v*` → `packages/[name]/.goreleaser.yml`
+## How a release flows
 
-## Quick Start
+1. **Tag**: `release components` (`.github/workflows/release-components.yml`) runs
+   `scripts/release/release-plan.mjs`. For each component it finds the last tag, looks at
+   conventional commits touching that component's directory since then, and picks the next version
+   (`feat` = minor, `fix` and others = patch, `!` or `BREAKING CHANGE` = major, or minor while on 0.x).
+2. **Build and publish**: `goreleaser` (`.github/workflows/goreleaser.yml`) checks out the tag and runs
+   GoReleaser Pro with the component's config. It signs the checksum file with keyless cosign, publishes
+   the GitHub release, then runs GoReleaser's `verify` step against the published assets.
+3. **Registry**: for plugin tags, the workflow dispatches `Sync Registry Database` with the tag. The sync
+   records the release's binaries and checksums in the registry, never moving a plugin to an older
+   version. A nightly run re-scans every plugin tag to repair anything missed.
+4. **CLI download**: the CLI asks the registry for the plugin, downloads the asset, verifies its checksum,
+   and installs the executable (extracting it when the asset is an archive).
 
-### CLI Release
+Each plugin release contains, per platform, a `tar.gz` (`zip` on Windows) and a raw executable. The registry
+points at the raw executable, which every CLI version can install.
 
-```bash
-# Tag and push
-git tag -a v0.3.0 -m "Release v0.3.0"
-git push origin v0.3.0
+## Releasing
 
-# GitHub Actions will automatically:
-# 1. Build binaries for all platforms
-# 2. Create archives
-# 3. Generate changelog
-# 4. Create GitHub release
-# 5. Upload assets
-```
+### From GitHub (recommended)
 
-### SDK Release
+Run **Actions → release components → Run workflow**:
 
-```bash
-# Tag and push
-git tag -a packages/plugin-sdk/v0.1.0 -m "SDK Release v0.1.0"
-git push origin packages/plugin-sdk/v0.1.0
+- `dry_run` (default on) only prints the plan.
+- `only` limits the run to some components, e.g. `cli,package-manager-apt`.
 
-# GitHub Actions will create the release
-# (SDK is a Go module, no binaries built)
-```
+With `dry_run` off, it tags `main` and releases each tag, up to 4 at a time.
 
-### Plugin Release
-
-```bash
-# Tag and push
-git tag -a packages/desktop-gnome/v0.1.0 -m "GNOME plugin v0.1.0"
-git push origin packages/desktop-gnome/v0.1.0
-
-# GitHub Actions will build plugin binaries and create release
-```
-
-## Local Testing
-
-Before pushing tags, test locally:
-
-### Test Build (No Publishing)
+### By hand
 
 ```bash
-# CLI
-cd apps/cli
-goreleaser release --snapshot --clean
-
-# SDK
-cd packages/plugin-sdk
-goreleaser release --snapshot --clean
-
-# Plugin
-cd packages/desktop-gnome
-goreleaser release --snapshot --clean
+pnpm release:plan                                # what would be released
+node scripts/release/release-plan.mjs --only package-manager-apt --tag
+git push origin packages/package-manager-apt/v0.0.2
 ```
 
-### Test Single-Target Build
+A pushed tag starts `goreleaser` on its own.
+
+### Re-running a failed release
+
+Run **Actions → goreleaser → Run workflow** with the existing tag (e.g. `v0.0.4`). The plugin's registry
+entry is refreshed when the run succeeds.
+
+## Plugin GoReleaser configs are generated
+
+Do not edit `packages/<name>/.goreleaser.yml`. They are written by
+`scripts/release/generate-goreleaser.mjs` from each plugin's `metadata.yaml`, whose `platforms` decide the
+build targets:
+
+```yaml
+platforms:
+  linux:
+    architectures: [amd64, arm64]
+  darwin:
+    architectures: [amd64, arm64]
+```
+
+After changing `metadata.yaml` or the generator:
 
 ```bash
-# Build for your current platform only (fast)
-goreleaser build --snapshot --clean --single-target
-
-# Build for specific platform
-GOOS=linux GOARCH=amd64 goreleaser build --single-target
+pnpm release:generate   # rewrite configs
+pnpm release:check      # what CI runs: fails if any config is stale
 ```
 
-### Validate Config
+A new plugin needs a `metadata.yaml` with `name` equal to its directory name; then run `pnpm release:generate`.
+
+## Local testing
+
+GoReleaser must run from the **repository root**, with `-f` pointing at the component's config. Snapshot
+builds need no Pro key.
 
 ```bash
-# Check configuration is valid
-goreleaser check
+goreleaser check -f apps/cli/.goreleaser.yml
+goreleaser release --snapshot --clean --skip=sign,verify -f apps/cli/.goreleaser.yml
+goreleaser release --snapshot --clean --skip=sign,verify -f packages/package-manager-apt/.goreleaser.yml
 ```
 
-## Automation
-
-### Lefthook Pre-Push Hook
-
-When you push a tag, lefthook will detect it and show a reminder:
-
-```
-🏷️  Tag push detected: v0.3.0
-📦 GitHub Actions will run goreleaser automatically
-💡 Or run locally: goreleaser release --clean
-```
-
-### GitHub Actions Workflow
-
-The `.github/workflows/goreleaser.yml` workflow:
-
-1. Triggers on tag push matching patterns
-2. Routes to appropriate `.goreleaser.yml` config
-3. Runs GoReleaser with GitHub token and Pro license
-4. Creates release and uploads assets
-
-## Version Strategy
-
-Follow [Semantic Versioning](https://semver.org/):
-
-- **MAJOR**: Breaking changes
-- **MINOR**: New features (backward compatible)
-- **PATCH**: Bug fixes (backward compatible)
-
-### CLI Versioning
-
-```bash
-v1.0.0  # Major release
-v1.1.0  # Minor update
-v1.1.1  # Patch/bugfix
-```
-
-### SDK Versioning
-
-```bash
-packages/plugin-sdk/v0.1.0  # Initial release
-packages/plugin-sdk/v0.2.0  # New features
-packages/plugin-sdk/v0.2.1  # Bug fixes
-```
-
-### Plugin Versioning
-
-```bash
-packages/desktop-gnome/v0.1.0  # Plugin initial release
-packages/desktop-gnome/v0.2.0  # New features
-```
-
-## Creating a New Plugin
-
-1. Copy the template:
-
-```bash
-cp packages/.goreleaser.template.yml packages/my-plugin/.goreleaser.yml
-```
-
-2. Replace `PLUGIN_NAME` with your plugin name throughout the file
-
-3. Customize build settings if needed
-
-4. Validate:
-
-```bash
-cd packages/my-plugin
-goreleaser check
-```
+The `release config` workflow runs the same checks on pull requests.
 
 ## Troubleshooting
 
-### Build Fails Locally
-
-```bash
-# Check Go version matches CI
-go version
-
-# Ensure dependencies are up to date
-go mod tidy
-
-# Check for uncommitted changes
-git status
-```
-
-### Wrong Config Used
-
-The workflow routes based on tag prefix. Ensure:
-
-- CLI tags: `v*` (no prefix)
-- SDK tags: `packages/plugin-sdk/v*`
-- Plugin tags: `packages/[name]/v*`
-
-### Release Already Exists
-
-GoReleaser uses `mode: append` for CLI and SDK, `mode: replace` for plugins.
-
-To force replace:
-
-```bash
-# Delete the release first
-gh release delete v0.3.0
-
-# Then re-run
-goreleaser release --clean
-```
-
-### Schema Validation Errors
-
-All configs include:
-
-```yaml
-# yaml-language-server: $schema=https://goreleaser.com/static/schema-pro.json
-```
-
-This enables IDE validation. Run:
-
-```bash
-goreleaser check
-```
-
-## Manual Release Process
-
-If CI is unavailable:
-
-```bash
-# 1. Set GitHub token
-export GITHUB_TOKEN="your_token_here"
-export GORELEASER_KEY="your_pro_key_here"
-
-# 2. Create tag
-git tag -a v0.3.0 -m "Release v0.3.0"
-
-# 3. Run GoReleaser
-goreleaser release --clean
-
-# 4. Push tag (if successful)
-git push origin v0.3.0
-```
+- **Wrong previous tag or changelog**: every config needs a `monorepo.tag_prefix`, so GoReleaser only
+  compares tags of the same component.
+- **Missing files in the CLI archive**: with `monorepo.dir` set, archive `files` are relative to that
+  directory (`apps/cli`).
+- **Plugin missing in the registry**: check the `Sync Registry Database` run for the tag. Re-run it with the
+  tag as input.
+- **CGO**: every build uses `CGO_ENABLED=0`. The CLI uses pure-Go SQLite (`modernc.org/sqlite`); keep new
+  dependencies CGO-free.
 
 ## Resources
 
-- [GoReleaser Docs](https://goreleaser.com/)
-- [GoReleaser Pro Monorepo Docs](https://goreleaser.com/customization/monorepo/)
+- [GoReleaser Pro monorepo](https://goreleaser.com/customization/monorepo/)
+- [GoReleaser verify](https://goreleaser.com/customization/verify/)
 - [Semantic Versioning](https://semver.org/)
-- [DevEx Contributing Guide](CONTRIBUTING.md)
-
-## Support
-
-Questions? Issues?
-
-- Open an issue: https://github.com/jameswlane/devex/issues
-- Discussion: https://github.com/jameswlane/devex/discussions
