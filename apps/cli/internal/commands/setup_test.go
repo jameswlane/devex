@@ -634,7 +634,7 @@ var _ = Describe("Setup Command", func() {
 	Describe("Error Handling", func() {
 		It("handles installation errors gracefully", func() {
 			// Test error accumulation
-			errors := []string{}
+			errors := make([]string, 0, 3)
 
 			// Simulate installation errors
 			_ = repo.AddApp("nonexistent") // May error if app exists, which is fine for this test

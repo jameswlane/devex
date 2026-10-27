@@ -404,10 +404,10 @@ func (m ViewerModel) renderSearchResults() string {
 	}
 
 	var content strings.Builder
-	content.WriteString(fmt.Sprintf("Found %d result(s) for '%s':\n\n", len(results), m.searchQuery))
+	fmt.Fprintf(&content, "Found %d result(s) for '%s':\n\n", len(results), m.searchQuery)
 
 	for i, topic := range results {
-		content.WriteString(fmt.Sprintf("%d. %s\n   %s\n\n", i+1, topic.Title, topic.Description))
+		fmt.Fprintf(&content, "%d. %s\n   %s\n\n", i+1, topic.Title, topic.Description)
 	}
 
 	return content.String()

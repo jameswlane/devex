@@ -157,40 +157,49 @@ type SecurityOverrideField struct {
 
 // GetAllApps returns all applications from the cross-platform configuration
 func (s *CrossPlatformSettings) GetAllApps() []types.CrossPlatformApp {
-	var apps []types.CrossPlatformApp
+	groups := [][]types.CrossPlatformApp{
+		// Terminal applications
+		s.Terminal.Development,
+		s.Terminal.Utilities,
+		s.Terminal.Dependencies,
 
-	// Terminal applications
-	apps = append(apps, s.Terminal.Development...)
-	apps = append(apps, s.Terminal.Utilities...)
-	apps = append(apps, s.Terminal.Dependencies...)
+		// Terminal optional applications
+		s.TerminalOptional.Development,
+		s.TerminalOptional.Utilities,
+		s.TerminalOptional.SystemMonitoring,
+		s.TerminalOptional.TerminalEmulators,
 
-	// Terminal optional applications
-	apps = append(apps, s.TerminalOptional.Development...)
-	apps = append(apps, s.TerminalOptional.Utilities...)
-	apps = append(apps, s.TerminalOptional.SystemMonitoring...)
-	apps = append(apps, s.TerminalOptional.TerminalEmulators...)
+		// Desktop applications
+		s.Desktop.Productivity,
 
-	// Desktop applications
-	apps = append(apps, s.Desktop.Productivity...)
+		// Desktop optional applications
+		s.DesktopOptional.Communication,
+		s.DesktopOptional.Productivity,
+		s.DesktopOptional.System,
+		s.DesktopOptional.Browsers,
+		s.DesktopOptional.Utilities,
 
-	// Desktop optional applications
-	apps = append(apps, s.DesktopOptional.Communication...)
-	apps = append(apps, s.DesktopOptional.Productivity...)
-	apps = append(apps, s.DesktopOptional.System...)
-	apps = append(apps, s.DesktopOptional.Browsers...)
-	apps = append(apps, s.DesktopOptional.Utilities...)
+		// Database applications
+		s.Databases.Servers,
+		s.Databases.Tools,
+		s.Databases.Libraries,
 
-	// Database applications
-	apps = append(apps, s.Databases.Servers...)
-	apps = append(apps, s.Databases.Tools...)
-	apps = append(apps, s.Databases.Libraries...)
+		// Programming languages
+		s.ProgrammingLanguages,
 
-	// Programming languages
-	apps = append(apps, s.ProgrammingLanguages...)
+		// Shell applications
+		s.Shell,
+	}
 
-	// Shell applications
-	apps = append(apps, s.Shell...)
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
 
+	apps := make([]types.CrossPlatformApp, 0, total)
+	for _, group := range groups {
+		apps = append(apps, group...)
+	}
 	return apps
 }
 

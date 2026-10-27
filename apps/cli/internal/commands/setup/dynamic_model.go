@@ -407,7 +407,7 @@ func (m *DynamicSetupModel) renderQuestionStep(step *types.SetupStep) string {
 			if m.cursor == i {
 				cursor = ">"
 			}
-			s.WriteString(fmt.Sprintf("%s %s\n", cursor, opt.Label))
+			fmt.Fprintf(&s, "%s %s\n", cursor, opt.Label)
 			if opt.Description != "" {
 				descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
 				s.WriteString("  " + descStyle.Render(opt.Description) + "\n")
@@ -424,7 +424,7 @@ func (m *DynamicSetupModel) renderQuestionStep(step *types.SetupStep) string {
 			if m.selected[i] {
 				checkbox = "☑"
 			}
-			s.WriteString(fmt.Sprintf("%s %s %s\n", cursor, checkbox, opt.Label))
+			fmt.Fprintf(&s, "%s %s %s\n", cursor, checkbox, opt.Label)
 			if opt.Description != "" {
 				descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241")).Italic(true)
 				s.WriteString("  " + descStyle.Render(opt.Description) + "\n")

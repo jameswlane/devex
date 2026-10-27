@@ -469,26 +469,26 @@ func (m *ProgressModel) renderOperationDetail(op *progresspkg.Operation) string 
 	if hasBar {
 		content.WriteString(bar.ViewAs(state.Progress))
 	} else {
-		content.WriteString(fmt.Sprintf("Progress: %.1f%%", state.Progress*100))
+		fmt.Fprintf(&content, "Progress: %.1f%%", state.Progress*100)
 	}
 	content.WriteString("\n")
 
 	// Status and timing
-	content.WriteString(fmt.Sprintf("Status: %s %s", statusIcon, state.Status))
+	fmt.Fprintf(&content, "Status: %s %s", statusIcon, state.Status)
 	content.WriteString("\n")
-	content.WriteString(fmt.Sprintf("Duration: %s", progresspkg.FormatDuration(op.GetDuration())))
+	fmt.Fprintf(&content, "Duration: %s", progresspkg.FormatDuration(op.GetDuration()))
 	content.WriteString("\n")
-	content.WriteString(fmt.Sprintf("Started: %s", state.StartTime.Format("15:04:05")))
+	fmt.Fprintf(&content, "Started: %s", state.StartTime.Format("15:04:05"))
 	content.WriteString("\n")
 
 	if state.EndTime != nil {
-		content.WriteString(fmt.Sprintf("Ended: %s", state.EndTime.Format("15:04:05")))
+		fmt.Fprintf(&content, "Ended: %s", state.EndTime.Format("15:04:05"))
 		content.WriteString("\n")
 	}
 
 	// Current details
 	if state.Details != "" {
-		content.WriteString(fmt.Sprintf("Details: %s", state.Details))
+		fmt.Fprintf(&content, "Details: %s", state.Details)
 		content.WriteString("\n")
 	}
 
@@ -504,19 +504,19 @@ func (m *ProgressModel) renderOperationDetail(op *progresspkg.Operation) string 
 	if m.showDetails && len(state.Metadata) > 0 {
 		content.WriteString("\nMetadata:\n")
 		for key, value := range state.Metadata {
-			content.WriteString(fmt.Sprintf("  %s: %v\n", key, value))
+			fmt.Fprintf(&content, "  %s: %v\n", key, value)
 		}
 	}
 
 	// Child operations
 	children := op.GetChildren()
 	if len(children) > 0 {
-		content.WriteString(fmt.Sprintf("\nChild Operations (%d):\n", len(children)))
+		fmt.Fprintf(&content, "\nChild Operations (%d):\n", len(children))
 		for _, child := range children {
 			childState := child.GetState()
 			childIcon := progresspkg.GetStatusIcon(childState.Status)
-			content.WriteString(fmt.Sprintf("  %s %s (%.1f%%)\n",
-				childIcon, childState.Name, childState.Progress*100))
+			fmt.Fprintf(&content, "  %s %s (%.1f%%)\n",
+				childIcon, childState.Name, childState.Progress*100)
 		}
 	}
 

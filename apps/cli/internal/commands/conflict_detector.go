@@ -62,25 +62,21 @@ func (cd *ConflictDetector) DetectConflicts(ctx context.Context, apps []types.Ap
 
 // detectAppConflicts detects conflicts for a single application
 func (cd *ConflictDetector) detectAppConflicts(ctx context.Context, app *types.AppConfig, cascade bool) ([]UninstallConflict, error) {
-	var conflicts []UninstallConflict
-
 	// Check for dependency conflicts
 	depConflicts, err := cd.checkDependencyConflicts(ctx, app, cascade)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check dependency conflicts: %w", err)
 	}
-	conflicts = append(conflicts, depConflicts...)
 
-	// Check for system package conflicts
+	// Check for system package, active service and file conflicts
 	sysConflicts := cd.checkSystemPackageConflicts(app)
-	conflicts = append(conflicts, sysConflicts...)
-
-	// Check for active service conflicts
 	serviceConflicts := cd.checkActiveServiceConflicts(ctx, app)
-	conflicts = append(conflicts, serviceConflicts...)
-
-	// Check for file conflicts
 	fileConflicts := cd.checkFileConflicts(app)
+
+	conflicts := make([]UninstallConflict, 0, len(depConflicts)+len(sysConflicts)+len(serviceConflicts)+len(fileConflicts))
+	conflicts = append(conflicts, depConflicts...)
+	conflicts = append(conflicts, sysConflicts...)
+	conflicts = append(conflicts, serviceConflicts...)
 	conflicts = append(conflicts, fileConflicts...)
 
 	return conflicts, nil
