@@ -274,7 +274,7 @@ This command supports multiple installation sources:
 			}
 
 			// Install template
-			if err := customTemplateManager.InstallTemplate(templateRef, source); err != nil {
+			if err := customTemplateManager.InstallTemplateContext(cmd.Context(), templateRef, source); err != nil {
 				return fmt.Errorf("failed to install custom template: %w", err)
 			}
 
