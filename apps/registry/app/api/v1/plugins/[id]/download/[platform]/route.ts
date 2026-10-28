@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { normalizePluginVersion } from "@/app/api/v1/plugins/[id]/versions/helpers";
 import { createApiError, logDatabaseError } from "@/lib/logger";
+import { findPluginByNameOrShortName } from "@/lib/plugins/find-plugin";
 import { prisma } from "@/lib/prisma";
 
 // Apply rate limiting to the GET handler (downloads)
@@ -16,10 +17,8 @@ export async function GET(
 			return createApiError("Invalid platform format", 400);
 		}
 
-		// Find the plugin by name
-		const plugin = await prisma.plugin.findUnique({
-			where: { name: pluginName },
-		});
+		// Accepts the full name or the short name ("apt")
+		const plugin = await findPluginByNameOrShortName(pluginName);
 
 		if (!plugin) {
 			return createApiError("Plugin not found", 404);
