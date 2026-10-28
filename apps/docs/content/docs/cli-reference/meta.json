@@ -4,6 +4,7 @@
 		"index",
 		"setup",
 		"install",
+		"non-interactive",
 		"config",
 		"template",
 		"add-remove",
