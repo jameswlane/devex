@@ -29,23 +29,27 @@ Podman is supported for local runs. Install Podman and, on macOS or Windows, sta
 
 ### Test a released CLI
 
-Set `DEVEX_E2E_BINARY` to the absolute path of a Linux AMD64 `devex` binary from a GitHub release:
+Set `E2E_DEVEX_BINARY` to the absolute path of a Linux `devex` binary from a GitHub release (same architecture as the host):
 
 ```bash
-DEVEX_E2E_BINARY=/absolute/path/to/devex task e2e:docker DISTRO=ubuntu-24.04
+E2E_DEVEX_BINARY=/absolute/path/to/devex task e2e:docker DISTRO=ubuntu-24.04
 ```
 
 The runner copies that binary into the container instead of using a source build. The reusable CI workflow automates this path when given `cli_version`: it downloads `devex_<version>_linux_amd64.tar.gz` and `devex_checksums.txt` from that tag's GitHub release, verifies the archive checksum, and tests the extracted binary.
 
 ### Configuration
 
+`scripts/e2e-docker.sh` reads `DISTRO`, `CONTAINER_ENGINE` (`docker` or `podman`), `E2E_DEVEX_BINARY` and `E2E_DRY_RUN=1` (print the engine commands without running them), and passes the `DEVEX_E2E_DESKTOP`, `DEVEX_E2E_DESTRUCTIVE` and `DEVEX_E2E_REGISTRY_URL` settings through to the suite.
+
+The suite itself reads:
+
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DEVEX_E2E_SANDBOX` | none | Must be `1` inside the sandbox; the suite fails fast without it. |
-| `DEVEX_E2E_BINARY` | `devex` on `PATH` | Path to the CLI binary under test. For host-side runner use, provide an absolute path to a Linux AMD64 binary. |
+| `DEVEX_E2E_BINARY` | `devex` on `PATH` | Path to the CLI binary under test inside the sandbox. The container images install it at `/usr/local/bin/devex`. |
 | `DEVEX_E2E_REGISTRY_URL` | `https://registry.devex.sh` | Registry used for plugin downloads and expected latest-version checksums. |
-| `DEVEX_E2E_DESKTOP` | `none` | `gnome`, `kde`, or `none`; controls `XDG_CURRENT_DESKTOP` and expected desktop plugins. |
-| `DEVEX_E2E_DESTRUCTIVE` | disabled | Set to `1` to allow specs that install and uninstall `jq` with apt and sudo. |
+| `DEVEX_E2E_DESKTOP` | `none` | `gnome`, `kde`, or `none`; controls `XDG_CURRENT_DESKTOP` and expected desktop plugins. The CLI also detects running `gnome-session`/`kded` processes, so the suite stops early if a different desktop session is running. |
+| `DEVEX_E2E_DESTRUCTIVE` | disabled | Set to `1` to allow specs that install and uninstall `jq` with apt and sudo. This spec is currently pending: `devex install` always starts the interactive TUI. |
 | `DEVEX_E2E_ARTIFACTS` | `/artifacts` if writable, otherwise a temporary directory | Destination for test logs and copies of `~/.devex` state. |
 
 For example, to enable destructive specs locally:

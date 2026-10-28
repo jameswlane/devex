@@ -12,6 +12,7 @@
 #   DISTRO                  ubuntu-24.04 (default) | debian-12
 #   CONTAINER_ENGINE        docker | podman (default: whichever is found first)
 #   E2E_DRY_RUN=1           print the engine commands instead of running them
+#   E2E_DEVEX_BINARY        prebuilt linux devex binary to test instead of building one
 #   DEVEX_E2E_DESKTOP       passed through to the suite when set
 #   DEVEX_E2E_DESTRUCTIVE   passed through to the suite when set
 #   DEVEX_E2E_REGISTRY_URL  passed through to the suite when set
@@ -104,13 +105,19 @@ build_binaries() {
 	version="${version#v}"
 	goarch="$(cd "$CLI_DIR" && go env GOARCH)"
 
-	log "building devex $version (linux/$goarch)"
-	(
-		cd "$CLI_DIR"
-		CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath \
-			-ldflags "-s -w -X main.version=$version" \
-			-o "$context/devex" ./cmd/main.go
-	)
+	if [[ -n "${E2E_DEVEX_BINARY:-}" ]]; then
+		[[ -f "$E2E_DEVEX_BINARY" ]] || die "E2E_DEVEX_BINARY=$E2E_DEVEX_BINARY is not a file"
+		log "using prebuilt devex $E2E_DEVEX_BINARY"
+		cp "$E2E_DEVEX_BINARY" "$context/devex"
+	else
+		log "building devex $version (linux/$goarch)"
+		(
+			cd "$CLI_DIR"
+			CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath \
+				-ldflags "-s -w -X main.version=$version" \
+				-o "$context/devex" ./cmd/main.go
+		)
+	fi
 
 	log "building e2e suite binary (linux/$goarch)"
 	(
