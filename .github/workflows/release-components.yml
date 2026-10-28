@@ -95,7 +95,11 @@ jobs:
           args=()
           if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
           node scripts/release/release-plan.mjs "${args[@]}" --tag
-          jq -r '.[]' <<< "$TAGS" | xargs git push origin
+          # One push per tag: GitHub creates no push events (so goreleaser.yml
+          # never starts) for tags pushed more than three at a time.
+          jq -r '.[]' <<< "$TAGS" | while read -r tag; do
+            git push origin "refs/tags/$tag"
+          done
       - name: Record release mode in the summary
         if: ${{ !inputs.dry_run }}
         env:
