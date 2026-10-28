@@ -47,9 +47,13 @@ jest.mock("@/lib/logger", () => ({
 				{ status: 400 },
 			),
 	),
+	isProductionEnvironment: jest.fn(() => false),
 	ERROR_CODES: {
 		NOT_FOUND: "NOT_FOUND",
+		CONFLICT: "CONFLICT",
+		VALIDATION_ERROR: "VALIDATION_ERROR",
 		INTERNAL_ERROR: "INTERNAL_ERROR",
+		SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
 		EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
 	},
 }));
@@ -122,7 +126,7 @@ describe("Error Handler Module", () => {
 				expect.objectContaining({
 					...mockContext,
 					errorCode: "P2002",
-					prismaMessage: "Unique constraint failed",
+					errorMessage: "Unique constraint failed",
 				}),
 				error,
 			);
@@ -169,10 +173,11 @@ describe("Error Handler Module", () => {
 
 			expect(response).toBeInstanceOf(NextResponse);
 			expect(mockLogger.error).toHaveBeenCalledWith(
-				"Unknown Prisma error",
+				"Prisma database error",
 				expect.objectContaining({
 					...mockContext,
-					message: "Unknown database error",
+					statusCode: 503,
+					errorMessage: "Unknown database error",
 				}),
 				error,
 			);
@@ -191,7 +196,8 @@ describe("Error Handler Module", () => {
 				"Database operation failed",
 				expect.objectContaining({
 					...mockContext,
-					error: "Generic database error",
+					statusCode: 500,
+					errorMessage: "Generic database error",
 				}),
 				error,
 			);

@@ -1,13 +1,9 @@
-import {
-	PrismaClientKnownRequestError,
-	PrismaClientUnknownRequestError,
-} from "@prisma/client/runtime/library";
 import type { NextRequest, NextResponse } from "next/server";
 import {
 	createApiError,
-	createDatabaseError,
 	createValidationError,
 	ERROR_CODES,
+	isProductionEnvironment,
 	logger,
 } from "./logger";
 
@@ -43,6 +39,247 @@ export interface ErrorHandlerConfig {
 }
 
 /**
+ * Thrown by route code for input the client got wrong. Its message is written
+ * by us, so it is safe to return to the caller as-is.
+ */
+export class RequestValidationError extends Error {
+	constructor(
+		message: string,
+		public readonly details?: Record<string, any>,
+	) {
+		super(message);
+		this.name = "RequestValidationError";
+	}
+}
+
+// Public messages for server-side failures; never derived from the error itself.
+export const SERVICE_UNAVAILABLE_MESSAGE =
+	"Service temporarily unavailable, please retry later";
+export const INTERNAL_ERROR_MESSAGE = "An unexpected error occurred";
+
+/**
+ * Prisma error classes, matched by name rather than instanceof: the bundled
+ * route code and the generated client can load different copies of the Prisma
+ * runtime (library, edge, wasm), so instanceof against one copy misses errors
+ * thrown by another. That miss is what turned a missing table into a 422.
+ */
+const PRISMA_ERROR_NAMES = [
+	"PrismaClientKnownRequestError",
+	"PrismaClientUnknownRequestError",
+	"PrismaClientInitializationError",
+	"PrismaClientRustPanicError",
+	"PrismaClientValidationError",
+] as const;
+
+export type PrismaErrorName = (typeof PRISMA_ERROR_NAMES)[number];
+
+export interface PrismaLikeError extends Error {
+	name: PrismaErrorName;
+	code?: string;
+	errorCode?: string;
+	meta?: Record<string, unknown>;
+}
+
+export function isPrismaError(error: unknown): error is PrismaLikeError {
+	return (
+		error instanceof Error &&
+		(PRISMA_ERROR_NAMES as readonly string[]).includes(error.name)
+	);
+}
+
+/** Prisma error code from a known request error (code) or init error (errorCode). */
+export function getPrismaErrorCode(error: unknown): string | undefined {
+	if (!isPrismaError(error)) return undefined;
+	const code = error.code ?? error.errorCode;
+	return typeof code === "string" ? code : undefined;
+}
+
+// Codes that describe something wrong with the client's request.
+const NOT_FOUND_CODES = new Set(["P2001", "P2015", "P2018", "P2025"]);
+const CONFLICT_CODES = new Set(["P2002", "P2003", "P2014"]);
+const INVALID_INPUT_CODES = new Set([
+	"P2000", // value too long for column
+	"P2005", // invalid value for field type
+	"P2006", // invalid value
+	"P2007", // data validation error
+	"P2011", // null constraint violation
+	"P2012", // missing required value
+	"P2013", // missing required argument
+	"P2019", // input error
+	"P2020", // value out of range
+]);
+
+// Codes where the database is unreachable, overloaded, or not yet migrated.
+// Retrying later (or after a deploy finishes migrating) can succeed.
+const TRANSIENT_CODES = new Set([
+	"P1001", // can't reach database server
+	"P1002", // database server timed out
+	"P1008", // operations timed out
+	"P1017", // server closed the connection
+	"P2021", // table does not exist
+	"P2022", // column does not exist
+	"P2024", // connection pool timeout
+	"P2034", // transaction conflict / deadlock
+]);
+
+// Of the transient codes, the ones worth retrying within the same request.
+const RETRYABLE_CODES = new Set([
+	"P1001",
+	"P1002",
+	"P1008",
+	"P1017",
+	"P2024",
+	"P2034",
+]);
+
+export interface ErrorClassification {
+	status: number;
+	code: string;
+	/** Message that is safe to return to any client. */
+	message: string;
+	/** True when the client caused the error (4xx). */
+	clientError: boolean;
+	prismaCode?: string;
+}
+
+function isTransientPrismaCode(code: string): boolean {
+	// P1xxx: connection/engine, P5xxx: data proxy, P6xxx: Accelerate.
+	return TRANSIENT_CODES.has(code) || /^P[156]\d{3}$/.test(code);
+}
+
+/**
+ * Map an error to an HTTP status, error code and a client-safe message.
+ * Only errors that really are the client's fault come back as 4xx.
+ */
+export function classifyError(
+	error: unknown,
+	context: Pick<ErrorContext, "resource"> = {},
+): ErrorClassification {
+	const resource = context.resource || "Resource";
+
+	if (error instanceof RequestValidationError) {
+		return {
+			status: 422,
+			code: ERROR_CODES.VALIDATION_ERROR,
+			message: error.message,
+			clientError: true,
+		};
+	}
+
+	if (isPrismaError(error)) {
+		const prismaCode = getPrismaErrorCode(error);
+
+		if (error.name === "PrismaClientKnownRequestError" && prismaCode) {
+			if (NOT_FOUND_CODES.has(prismaCode)) {
+				return {
+					status: 404,
+					code: ERROR_CODES.NOT_FOUND,
+					message: `${resource} not found`,
+					clientError: true,
+					prismaCode,
+				};
+			}
+			if (CONFLICT_CODES.has(prismaCode)) {
+				return {
+					status: 409,
+					code: ERROR_CODES.CONFLICT,
+					message:
+						prismaCode === "P2002"
+							? `${resource} already exists`
+							: `${resource} conflicts with related records`,
+					clientError: true,
+					prismaCode,
+				};
+			}
+			if (INVALID_INPUT_CODES.has(prismaCode)) {
+				return {
+					status: 422,
+					code: ERROR_CODES.VALIDATION_ERROR,
+					message: "Request contains invalid data",
+					clientError: true,
+					prismaCode,
+				};
+			}
+		}
+
+		// Initialization and unknown request errors come from the engine or
+		// driver (connectivity, Accelerate, protocol) and are worth retrying.
+		const transient =
+			error.name === "PrismaClientInitializationError" ||
+			error.name === "PrismaClientUnknownRequestError" ||
+			(prismaCode !== undefined && isTransientPrismaCode(prismaCode));
+
+		// Validation errors (malformed query), Rust panics and the remaining
+		// known codes are bugs on our side, not the client's.
+		return transient
+			? {
+					status: 503,
+					code: ERROR_CODES.SERVICE_UNAVAILABLE,
+					message: SERVICE_UNAVAILABLE_MESSAGE,
+					clientError: false,
+					prismaCode,
+				}
+			: {
+					status: 500,
+					code: ERROR_CODES.INTERNAL_ERROR,
+					message: INTERNAL_ERROR_MESSAGE,
+					clientError: false,
+					prismaCode,
+				};
+	}
+
+	return {
+		status: 500,
+		code: ERROR_CODES.INTERNAL_ERROR,
+		message: INTERNAL_ERROR_MESSAGE,
+		clientError: false,
+	};
+}
+
+/** Whether safeDatabase should retry this error within the same request. */
+export function isRetryableDatabaseError(error: unknown): boolean {
+	if (isPrismaError(error)) {
+		if (
+			error.name === "PrismaClientInitializationError" ||
+			error.name === "PrismaClientUnknownRequestError"
+		) {
+			return true;
+		}
+		const code = getPrismaErrorCode(error);
+		return code !== undefined && RETRYABLE_CODES.has(code);
+	}
+	// Non-Prisma errors (network blips in the driver/adapter) keep the
+	// historical retry behaviour.
+	return true;
+}
+
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
+
+/** Use the caller's x-request-id when it is well-formed, otherwise mint one. */
+export function resolveRequestId(candidate?: string | null): string {
+	return candidate && REQUEST_ID_PATTERN.test(candidate)
+		? candidate
+		: crypto.randomUUID();
+}
+
+function withRequestId(context: ErrorContext): ErrorContext & {
+	requestId: string;
+} {
+	return { ...context, requestId: resolveRequestId(context.requestId) };
+}
+
+/** Debug details for non-production responses only. */
+function debugDetails(error: unknown): Record<string, any> | undefined {
+	if (isProductionEnvironment()) return undefined;
+	if (!(error instanceof Error)) return { error: String(error) };
+	return {
+		errorName: error.name,
+		errorMessage: error.message,
+		prismaCode: getPrismaErrorCode(error),
+	};
+}
+
+/**
  * Standardized error handler class for consistent error processing
  */
 export class RegistryErrorHandler {
@@ -54,81 +291,43 @@ export class RegistryErrorHandler {
 		context: ErrorContext,
 		config: ErrorHandlerConfig = {},
 	): NextResponse {
-		const { operation, resource } = context;
+		const ctx = withRequestId(context);
 		const { logError = true, customMessage } = config;
+		const classification = classifyError(error, ctx);
 
-		// Handle Prisma-specific errors
-		if (error instanceof PrismaClientKnownRequestError) {
-			if (logError) {
-				logger.error(
-					"Prisma database error",
-					{
-						...context,
-						errorCode: error.code,
-						prismaMessage: error.message,
-					},
-					error,
-				);
-			}
-
-			// Map Prisma error codes to appropriate responses
-			switch (error.code) {
-				case "P2002": // Unique constraint violation
-					return createValidationError(
-						customMessage || `${resource || "Resource"} already exists`,
-						{ field: error.meta?.target, prismaCode: error.code },
-						context.operation,
-					);
-
-				case "P2025": // Record not found
-					return createApiError(
-						customMessage || `${resource || "Resource"} not found`,
-						404,
-						ERROR_CODES.NOT_FOUND,
-						{ prismaCode: error.code },
-						context.operation,
-					);
-
-				case "P2003": // Foreign key constraint violation
-					return createValidationError(
-						customMessage || "Related resource not found",
-						{ prismaCode: error.code },
-						context.operation,
-					);
-
-				default:
-					return createDatabaseError(operation, context.operation);
-			}
-		}
-
-		// Handle unknown Prisma errors
-		if (error instanceof PrismaClientUnknownRequestError) {
-			if (logError) {
-				logger.error(
-					"Unknown Prisma error",
-					{
-						...context,
-						message: error.message,
-					},
-					error,
-				);
-			}
-			return createDatabaseError(operation, context.operation);
-		}
-
-		// Handle generic database errors
 		if (logError) {
 			logger.error(
-				"Database operation failed",
+				isPrismaError(error)
+					? "Prisma database error"
+					: "Database operation failed",
 				{
-					...context,
-					error: error instanceof Error ? error.message : String(error),
+					...ctx,
+					statusCode: classification.status,
+					errorName: error instanceof Error ? error.name : typeof error,
+					errorCode: classification.prismaCode,
+					errorMeta: isPrismaError(error) ? error.meta : undefined,
+					errorMessage: error instanceof Error ? error.message : String(error),
 				},
 				error instanceof Error ? error : undefined,
 			);
 		}
 
-		return createDatabaseError(operation, context.operation);
+		const meta = isPrismaError(error) ? error.meta : undefined;
+		const details: Record<string, any> = {
+			...(classification.prismaCode === "P2002" && meta?.target !== undefined
+				? { field: meta.target }
+				: {}),
+			...debugDetails(error),
+		};
+
+		return createApiError(
+			customMessage || classification.message,
+			classification.status,
+			classification.code,
+			Object.keys(details).length > 0 ? details : undefined,
+			ctx.operation,
+			{ requestId: ctx.requestId },
+		);
 	}
 
 	/**
@@ -139,15 +338,17 @@ export class RegistryErrorHandler {
 		validationErrors: Record<string, string[]>,
 		context: ErrorContext,
 	): NextResponse {
+		const ctx = withRequestId(context);
 		logger.warn("Validation error", {
-			...context,
+			...ctx,
 			validationErrors,
 		});
 
 		return createValidationError(
 			message,
 			{ fields: validationErrors },
-			context.operation,
+			ctx.operation,
+			{ requestId: ctx.requestId },
 		);
 	}
 
@@ -176,10 +377,11 @@ export class RegistryErrorHandler {
 		error: unknown,
 		context: ErrorContext,
 	): NextResponse {
+		const ctx = withRequestId(context);
 		logger.error(
 			"Data transformation failed",
 			{
-				...context,
+				...ctx,
 				error: error instanceof Error ? error.message : String(error),
 			},
 			error instanceof Error ? error : undefined,
@@ -189,8 +391,9 @@ export class RegistryErrorHandler {
 			"Failed to process data",
 			500,
 			ERROR_CODES.INTERNAL_ERROR,
-			{ operation: context.operation },
-			context.operation,
+			{ operation: ctx.operation, ...debugDetails(error) },
+			ctx.operation,
+			{ requestId: ctx.requestId },
 		);
 	}
 
@@ -203,13 +406,14 @@ export class RegistryErrorHandler {
 		context: ErrorContext,
 		config: ErrorHandlerConfig = {},
 	): NextResponse {
+		const ctx = withRequestId(context);
 		const { logError = true, customMessage } = config;
 
 		if (logError) {
 			logger.error(
 				`External service error: ${serviceName}`,
 				{
-					...context,
+					...ctx,
 					service: serviceName,
 					error: error instanceof Error ? error.message : String(error),
 				},
@@ -221,8 +425,13 @@ export class RegistryErrorHandler {
 			customMessage || `External service temporarily unavailable`,
 			503,
 			ERROR_CODES.EXTERNAL_SERVICE_ERROR,
-			{ service: serviceName, operation: context.operation },
-			context.operation,
+			{
+				service: serviceName,
+				operation: ctx.operation,
+				...debugDetails(error),
+			},
+			ctx.operation,
+			{ requestId: ctx.requestId },
 		);
 	}
 
@@ -233,21 +442,23 @@ export class RegistryErrorHandler {
 		error: unknown,
 		context: ErrorContext,
 	): NextResponse {
+		const ctx = withRequestId(context);
 		logger.error(
 			"Unexpected error occurred",
 			{
-				...context,
+				...ctx,
 				error: error instanceof Error ? error.message : String(error),
 			},
 			error instanceof Error ? error : undefined,
 		);
 
 		return createApiError(
-			"An unexpected error occurred",
+			INTERNAL_ERROR_MESSAGE,
 			500,
 			ERROR_CODES.INTERNAL_ERROR,
-			{ operation: context.operation },
-			context.operation,
+			{ operation: ctx.operation, ...debugDetails(error) },
+			ctx.operation,
+			{ requestId: ctx.requestId },
 		);
 	}
 
@@ -259,12 +470,23 @@ export class RegistryErrorHandler {
 		context: ErrorContext,
 		config: ErrorHandlerConfig = {},
 	): NextResponse {
-		// Prisma errors
-		if (
-			error instanceof PrismaClientKnownRequestError ||
-			error instanceof PrismaClientUnknownRequestError
-		) {
-			return RegistryErrorHandler.handleDatabaseError(error, context, config);
+		const ctx = withRequestId(context);
+
+		if (isPrismaError(error)) {
+			return RegistryErrorHandler.handleDatabaseError(error, ctx, config);
+		}
+
+		if (error instanceof RequestValidationError) {
+			logger.warn("Request validation failed", {
+				...ctx,
+				error: error.message,
+			});
+			return createValidationError(
+				config.customMessage || error.message,
+				error.details,
+				ctx.operation,
+				{ requestId: ctx.requestId },
+			);
 		}
 
 		// Network/external service errors
@@ -275,7 +497,7 @@ export class RegistryErrorHandler {
 				return RegistryErrorHandler.handleExternalServiceError(
 					"Redis",
 					error,
-					context,
+					ctx,
 					config,
 				);
 			}
@@ -289,22 +511,15 @@ export class RegistryErrorHandler {
 				return RegistryErrorHandler.handleExternalServiceError(
 					"External API",
 					error,
-					context,
+					ctx,
 					config,
-				);
-			}
-
-			if (message.includes("validation") || message.includes("invalid")) {
-				return createValidationError(
-					error.message,
-					{ error: error.name },
-					context.operation,
 				);
 			}
 		}
 
-		// Fallback to unknown error handler
-		return RegistryErrorHandler.handleUnknownError(error, context);
+		// Anything else is our bug, not the client's: never guess a 4xx from
+		// the wording of an error message.
+		return RegistryErrorHandler.handleUnknownError(error, ctx);
 	}
 }
 
@@ -361,7 +576,7 @@ export function withErrorHandling<T extends NextRequest>(
 
 						return RegistryErrorHandler.handleError(error, {
 							operation,
-							requestId: req.headers.get("x-request-id") || undefined,
+							requestId: resolveRequestId(req.headers.get("x-request-id")),
 							metadata: {
 								method: req.method,
 								path: url.pathname,
@@ -397,7 +612,7 @@ export function withErrorHandling<T extends NextRequest>(
 
 			return RegistryErrorHandler.handleError(error, {
 				operation,
-				requestId: request.headers.get("x-request-id") || undefined,
+				requestId: resolveRequestId(request.headers.get("x-request-id")),
 				metadata: {
 					method: request.method,
 					path: url.pathname,
@@ -491,29 +706,22 @@ export async function safeDatabase<T>(
 					errorType:
 						error instanceof Error ? error.constructor.name : typeof error,
 					errorMessage: error instanceof Error ? error.message : String(error),
-					errorCode:
-						error instanceof PrismaClientKnownRequestError
-							? error.code
-							: undefined,
-					errorMeta:
-						error instanceof PrismaClientKnownRequestError
-							? error.meta
-							: undefined,
+					errorCode: getPrismaErrorCode(error),
+					errorMeta: isPrismaError(error) ? error.meta : undefined,
 				},
 				error instanceof Error ? error : undefined,
 			);
 
-			// Don't retry certain types of errors
-			if (error instanceof PrismaClientKnownRequestError) {
-				const nonRetryableCodes = ["P2002", "P2025", "P2003"]; // Constraint violations, not found
-				if (nonRetryableCodes.includes(error.code)) {
-					logger.warn("Non-retryable database error", {
-						...context,
-						errorCode: error.code,
-						errorMessage: error.message,
-					});
-					throw error;
-				}
+			// Only retry errors a second attempt can fix (connectivity, pool
+			// timeouts); constraint violations, missing tables and query bugs
+			// fail the same way every time.
+			if (!isRetryableDatabaseError(error)) {
+				logger.warn("Non-retryable database error", {
+					...context,
+					errorCode: getPrismaErrorCode(error),
+					errorMessage: error instanceof Error ? error.message : String(error),
+				});
+				throw error;
 			}
 
 			if (attempt === maxRetries) {

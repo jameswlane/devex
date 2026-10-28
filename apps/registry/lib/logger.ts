@@ -262,6 +262,7 @@ export const ERROR_CODES = {
 	UNAUTHORIZED: "UNAUTHORIZED",
 	FORBIDDEN: "FORBIDDEN",
 	NOT_FOUND: "NOT_FOUND",
+	CONFLICT: "CONFLICT",
 	RATE_LIMITED: "RATE_LIMITED",
 
 	// 5xx Server Errors
@@ -270,7 +271,18 @@ export const ERROR_CODES = {
 	CACHE_ERROR: "CACHE_ERROR",
 	EXTERNAL_SERVICE_ERROR: "EXTERNAL_SERVICE_ERROR",
 	CONFIGURATION_ERROR: "CONFIGURATION_ERROR",
+	SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
 } as const;
+
+export interface ApiErrorOptions {
+	/** Correlates the response with server logs; generated when omitted. */
+	requestId?: string;
+}
+
+// Read at call time (not cached like the logger's) so tests can switch it.
+export function isProductionEnvironment(): boolean {
+	return process.env.NODE_ENV === "production";
+}
 
 export function createApiError(
 	message: string,
@@ -278,8 +290,9 @@ export function createApiError(
 	code?: string,
 	details?: Record<string, any>,
 	path?: string,
+	options: ApiErrorOptions = {},
 ): NextResponse {
-	const requestId = crypto.randomUUID();
+	const requestId = options.requestId || crypto.randomUUID();
 
 	// Determine error code if not provided
 	const errorCode = code || getErrorCodeFromStatus(status);
@@ -293,12 +306,17 @@ export function createApiError(
 		details,
 	});
 
+	// Server-error details are for our logs, not for clients: in production
+	// they could carry driver messages, table names or query text.
+	const publicDetails =
+		status >= 500 && isProductionEnvironment() ? undefined : details;
+
 	const errorResponse: StandardErrorResponse = {
 		success: false,
 		error: {
 			code: errorCode,
 			message,
-			details,
+			details: publicDetails,
 			timestamp: new Date().toISOString(),
 			requestId,
 			path,
@@ -330,10 +348,14 @@ function getErrorCodeFromStatus(status: number): string {
 			return ERROR_CODES.FORBIDDEN;
 		case 404:
 			return ERROR_CODES.NOT_FOUND;
+		case 409:
+			return ERROR_CODES.CONFLICT;
 		case 422:
 			return ERROR_CODES.VALIDATION_ERROR;
 		case 429:
 			return ERROR_CODES.RATE_LIMITED;
+		case 503:
+			return ERROR_CODES.SERVICE_UNAVAILABLE;
 		case 500:
 		default:
 			return ERROR_CODES.INTERNAL_ERROR;
@@ -345,6 +367,7 @@ export function createValidationError(
 	message: string,
 	details?: Record<string, any>,
 	path?: string,
+	options?: ApiErrorOptions,
 ) {
 	return createApiError(
 		message,
@@ -352,6 +375,7 @@ export function createValidationError(
 		ERROR_CODES.VALIDATION_ERROR,
 		details,
 		path,
+		options,
 	);
 }
 

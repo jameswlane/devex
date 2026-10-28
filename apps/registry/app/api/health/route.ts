@@ -5,7 +5,7 @@ import {
 	dbHealthMonitor,
 	handleHealthCheck,
 } from "@/lib/db-health";
-import { createApiError, logger } from "@/lib/logger";
+import { createApiError, isProductionEnvironment, logger } from "@/lib/logger";
 import { getStartupHealth } from "@/lib/startup";
 
 // GET /api/health - Basic health check
@@ -90,7 +90,11 @@ export async function GET(request: NextRequest) {
 			},
 			redis: dbHealth.redis,
 			...(detailed && {
-				errors: dbHealth.errors,
+				// Check failures read "<check> failed: <driver message>"; in
+				// production keep only the check name so internals stay in logs.
+				errors: isProductionEnvironment()
+					? dbHealth.errors.map((e: string) => e.split(":")[0])
+					: dbHealth.errors,
 				connectionPool: await dbHealthMonitor.getPoolStatus(),
 			}),
 		};

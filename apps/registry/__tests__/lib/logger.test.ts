@@ -306,6 +306,30 @@ describe("Logger Module", () => {
 
 			expect(response.headers.get("X-Error-Code")).toBe(ERROR_CODES.NOT_FOUND);
 		});
+
+		it("should map 409 and 503 to CONFLICT and SERVICE_UNAVAILABLE", () => {
+			expect(createApiError("Exists", 409).headers.get("X-Error-Code")).toBe(
+				ERROR_CODES.CONFLICT,
+			);
+			expect(
+				createApiError("Unavailable", 503).headers.get("X-Error-Code"),
+			).toBe(ERROR_CODES.SERVICE_UNAVAILABLE);
+		});
+
+		it("should reuse a provided requestId in body and header", async () => {
+			const response = createApiError(
+				"Unavailable",
+				503,
+				undefined,
+				undefined,
+				"test",
+				{ requestId: "req-789" },
+			);
+			const body = await response.json();
+
+			expect(response.headers.get("X-Request-ID")).toBe("req-789");
+			expect(body.error.requestId).toBe("req-789");
+		});
 	});
 
 	describe("specialized error functions", () => {
@@ -359,6 +383,8 @@ describe("Logger Module", () => {
 			expect(ERROR_CODES.CACHE_ERROR).toBe("CACHE_ERROR");
 			expect(ERROR_CODES.EXTERNAL_SERVICE_ERROR).toBe("EXTERNAL_SERVICE_ERROR");
 			expect(ERROR_CODES.CONFIGURATION_ERROR).toBe("CONFIGURATION_ERROR");
+			expect(ERROR_CODES.CONFLICT).toBe("CONFLICT");
+			expect(ERROR_CODES.SERVICE_UNAVAILABLE).toBe("SERVICE_UNAVAILABLE");
 		});
 	});
 
