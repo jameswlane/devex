@@ -129,7 +129,8 @@ jobs:
           # and a stale GOROOT makes the two toolchains collide.
           GOROOT: ""
         with:
-          go-version: "1.26.10"
+          go-version-input: "1.26.10"
+          repo-checkout: false
           go-package: ./...
           work-dir: apps/cli
 
@@ -172,7 +173,8 @@ jobs:
           # and a stale GOROOT makes the two toolchains collide.
           GOROOT: ""
         with:
-          go-version: "1.26.10"
+          go-version-input: "1.26.10"
+          repo-checkout: false
           go-package: ./...
           work-dir: packages/plugin-sdk
 
