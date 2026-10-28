@@ -60,7 +60,8 @@ The suite itself reads:
 | `DEVEX_E2E_BINARY` | `devex` on `PATH` | Path to the CLI binary under test inside the sandbox. The container images install it at `/usr/local/bin/devex`. |
 | `DEVEX_E2E_REGISTRY_URL` | `https://registry.devex.sh` | Registry used for plugin downloads and expected latest-version checksums. |
 | `DEVEX_E2E_DESKTOP` | `none` | `gnome`, `kde`, or `none`; controls `XDG_CURRENT_DESKTOP` and expected desktop plugins. The CLI also detects running `gnome-session`/`kded` processes, so the suite stops early if a different desktop session is running. |
-| `DEVEX_E2E_DESTRUCTIVE` | disabled | Set to `1` to allow specs that install and uninstall `jq` with apt and sudo. This spec is currently pending: `devex install` always starts the interactive TUI. |
+| `DEVEX_E2E_DESTRUCTIVE` | disabled | Set to `1` to allow specs that install and uninstall packages with sudo. |
+| `DEVEX_E2E_TESTDATA` | `/opt/devex-e2e/testdata` | Root directory for configuration fixtures staged into the container image. |
 | `DEVEX_E2E_ARTIFACTS` | `/artifacts` if writable, otherwise a temporary directory | Destination for test logs and copies of `~/.devex` state. |
 
 For example, to enable destructive specs locally:
@@ -69,9 +70,15 @@ For example, to enable destructive specs locally:
 DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=debian-12
 ```
 
+### Add a package-manager suite
+
+Add one entry to the package-manager table with `method`, `distros`, `fixture`, `package`, `verifyInstalled`, and `verifyRemoved` fields. Put its configuration in `test/e2e/testdata/configs/`; the runner stages that directory in the image at `/opt/devex-e2e/testdata/configs/`, and specs can locate it through `DEVEX_E2E_TESTDATA`.
+
+Label destructive lifecycle specs with `destructive` and `pm:<method>`, and skip them unless `DEVEX_E2E_DESTRUCTIVE=1`. Each lifecycle should use a fresh isolated home, install and remove the real package through the CLI, verify the package-manager plugin and its registry checksum, confirm `devex list installed` records the app, and check that a repeated install does not download the plugin again. Keep distro images minimal: dependencies required by the CLI belong in the Dockerfile, but the package under test must not be pre-installed.
+
 ### Artifacts
 
-Local runs write JUnit XML, logs, and captured CLI state under `artifacts/e2e/` in `apps/cli`. CI uploads that directory for every matrix job, including failed runs, and adds JUnit totals to the job summary.
+Local runs write JUnit XML, logs, and captured CLI state under `artifacts/e2e/` in `apps/cli`. CI runs the full suite in all four pull-request matrix jobs with destructive specs enabled, uploads that directory even after failures, and includes each job's JUnit test, failure, error, skip, and pending counts in the job summary.
 
 ## Roadmap
 

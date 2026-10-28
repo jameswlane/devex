@@ -57,15 +57,3 @@ var _ = Describe("Plugin bootstrap failure modes", func() {
 		Expect(entries).To(BeEmpty(), "failed downloads must leave no plugins or partial downloads")
 	})
 })
-
-var _ = Describe("Destructive apt lifecycle", Label("destructive"), func() {
-	if os.Getenv("DEVEX_E2E_DESTRUCTIVE") != "1" {
-		It("installs and uninstalls jq through the CLI", func() {
-			Skip("requires DEVEX_E2E_DESTRUCTIVE=1 in a disposable apt sandbox")
-		})
-		return
-	}
-	// executeInstall always calls tui.StartInstallation. --non-interactive only
-	// affects template inputs, and arbitrary jq is not resolved without config.
-	PIt("installs and uninstalls jq (blocked: devex install always starts Bubble Tea; no non-interactive single-app path)", func() {})
-})

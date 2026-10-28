@@ -1,9 +1,10 @@
 # DevEx CLI end-to-end sandbox: Ubuntu 24.04.
 #
-# Built by scripts/e2e-docker.sh from a staged build context holding two
-# binaries: `devex` and `e2e.test`. The image is deliberately bare so the
-# suite exercises first-run behaviour: the tester home is empty and no devex
-# directories exist until the CLI creates them.
+# Built by scripts/e2e-docker.sh from a staged build context holding the
+# `devex` and `e2e.test` binaries and the config fixtures in testdata/. The
+# image is deliberately bare so the suite exercises first-run behaviour: the
+# tester home is empty and no devex directories exist until the CLI creates
+# them.
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -36,6 +37,7 @@ RUN userdel --remove ubuntu \
 
 COPY devex /usr/local/bin/devex
 COPY e2e.test /opt/devex-e2e/e2e.test
+COPY testdata /opt/devex-e2e/testdata
 
 ENV DEVEX_E2E_SANDBOX=1 \
     LANG=C.UTF-8

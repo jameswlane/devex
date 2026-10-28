@@ -1,9 +1,10 @@
 # DevEx CLI end-to-end sandbox: Debian 12.
 #
-# Built by scripts/e2e-docker.sh from a staged build context holding two
-# binaries: `devex` and `e2e.test`. The image is deliberately bare so the
-# suite exercises first-run behaviour: the tester home is empty and no devex
-# directories exist until the CLI creates them.
+# Built by scripts/e2e-docker.sh from a staged build context holding the
+# `devex` and `e2e.test` binaries and the config fixtures in testdata/. The
+# image is deliberately bare so the suite exercises first-run behaviour: the
+# tester home is empty and no devex directories exist until the CLI creates
+# them.
 FROM debian:12
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -33,6 +34,7 @@ RUN useradd --no-create-home --home-dir /home/tester --shell /bin/bash --uid 100
 
 COPY devex /usr/local/bin/devex
 COPY e2e.test /opt/devex-e2e/e2e.test
+COPY testdata /opt/devex-e2e/testdata
 
 ENV DEVEX_E2E_SANDBOX=1 \
     LANG=C.UTF-8
