@@ -1,0 +1,58 @@
+name: release smoke
+# Post-release smoke test for a plugin version. Waits for the registry to
+# serve the version record (GET /api/v1/plugins/<plugin>/versions/<version>),
+# downloads the linux-amd64 binary from the recorded URL, verifies its
+# SHA-256 against the recorded checksum, extracts it if archived, and checks
+# that `<binary> --plugin-info` reports the released name and version.
+# Called by goreleaser.yml after a plugin release; also runnable manually.
+on:
+  workflow_call:
+    inputs:
+      plugin:
+        description: 'Plugin name, e.g. package-manager-apt'
+        required: true
+        type: string
+      version:
+        description: 'Released version, e.g. 1.2.3 (a leading v is stripped)'
+        required: true
+        type: string
+      registry_url:
+        description: 'Registry base URL'
+        required: false
+        type: string
+        default: 'https://registry.devex.sh'
+  workflow_dispatch:
+    inputs:
+      plugin:
+        description: 'Plugin name, e.g. package-manager-apt'
+        required: true
+        type: string
+      version:
+        description: 'Released version, e.g. 1.2.3 (a leading v is stripped)'
+        required: true
+        type: string
+      registry_url:
+        description: 'Registry base URL'
+        required: false
+        type: string
+        default: 'https://registry.devex.sh'
+permissions:
+  contents: read
+concurrency:
+  group: release-smoke-${{ inputs.plugin }}-${{ inputs.version }}
+  cancel-in-progress: false
+jobs:
+  smoke:
+    name: Smoke ${{ inputs.plugin }} ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+      - name: Smoke test plugin release
+        env:
+          PLUGIN: ${{ inputs.plugin }}
+          VERSION: ${{ inputs.version }}
+          REGISTRY_URL: ${{ inputs.registry_url }}
+        run: scripts/release/smoke-plugin.sh "$PLUGIN" "$VERSION" "$REGISTRY_URL"
