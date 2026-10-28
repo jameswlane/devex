@@ -113,6 +113,20 @@ describe("GET /api/v1/plugins/[id]", () => {
 		);
 	});
 
+	it("still returns the plugin when the version summary query fails", async () => {
+		// e.g. the plugin_versions migration has not been applied yet
+		mockPrisma.pluginVersion.findMany.mockRejectedValue(
+			new Error('relation "plugin_versions" does not exist'),
+		);
+
+		const response = await GET(request(), params());
+		const body = await response.json();
+
+		expect(response.status).toBe(200);
+		expect(body.name).toBe(plugin.name);
+		expect(body.versions).toEqual([]);
+	});
+
 	it("caps the version summary at 50 after semver sorting", async () => {
 		mockPrisma.pluginVersion.findMany.mockResolvedValue(
 			Array.from({ length: 55 }, (_, index) => ({

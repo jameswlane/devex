@@ -90,18 +90,29 @@ async function handleGetPlugin(
 		return createApiError("Plugin not found", 404);
 	}
 
-	const versions = await safeDatabase(
-		() =>
-			prisma.pluginVersion.findMany({
-				where: { pluginId: plugin.id, prerelease: false },
-				select: { version: true, prerelease: true, publishedAt: true },
-			}),
-		{
-			operation: "fetch-plugin-version-summary",
-			resource: "pluginVersion",
-			metadata: { pluginId: plugin.id },
-		},
-	);
+	// Best effort: the summary is extra detail, so a failure here (for example
+	// before the plugin_versions migration is applied) must not fail the lookup.
+	let versions: { version: string; prerelease: boolean; publishedAt: Date }[] =
+		[];
+	try {
+		versions = await safeDatabase(
+			() =>
+				prisma.pluginVersion.findMany({
+					where: { pluginId: plugin.id, prerelease: false },
+					select: { version: true, prerelease: true, publishedAt: true },
+				}),
+			{
+				operation: "fetch-plugin-version-summary",
+				resource: "pluginVersion",
+				metadata: { pluginId: plugin.id },
+			},
+		);
+	} catch (error) {
+		logger.warn("Could not load plugin version summary", {
+			pluginName,
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
 	const versionSummary = versions
 		.sort((a, b) => compareVersions(b.version, a.version))
 		.slice(0, 50);
