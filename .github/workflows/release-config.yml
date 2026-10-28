@@ -27,6 +27,8 @@ jobs:
       - name: Install js-yaml for the generator
         # Installed next to the script so the pnpm workspace is not installed.
         run: npm install --prefix scripts/release --no-save --no-package-lock --ignore-scripts js-yaml@4.1.1
+      - name: Release script tests
+        run: node --test scripts/release/*.test.mjs
       - name: Generated plugin configs are up to date
         run: node scripts/release/generate-goreleaser.mjs --check
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de  # v7.3.0

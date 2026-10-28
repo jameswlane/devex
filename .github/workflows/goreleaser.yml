@@ -19,6 +19,9 @@ on:
     secrets:
       GORELEASER_KEY:
         required: true
+      # Signs the release webhook; without it the registry sync workflow is dispatched instead.
+      REGISTRY_RELEASE_WEBHOOK_SECRET:
+        required: false
 permissions:
   contents: read
 concurrency:
@@ -31,9 +34,13 @@ jobs:
     permissions:
       contents: write  # create the GitHub release and upload assets
       id-token: write  # keyless cosign signing
-      actions: write  # dispatch the registry sync
+      actions: write  # dispatch the registry sync fallback
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      name: ${{ steps.component.outputs.name }}
+      version: ${{ steps.component.outputs.version }}
+      plugin: ${{ steps.component.outputs.plugin }}
     steps:
       - name: Resolve component
         id: component
@@ -43,10 +50,13 @@ jobs:
               name="${TAG#packages/}"
               name="${name%%/v*}"
               config="packages/${name}/.goreleaser.yml"
+              plugin=true
+              [ "$name" = "plugin-sdk" ] && plugin=false
               ;;
             v[0-9]*)
               name="cli"
               config="apps/cli/.goreleaser.yml"
+              plugin=false
               ;;
             *)
               echo "::error::Unrecognised tag '$TAG'; expected vX.Y.Z or packages/<name>/vX.Y.Z"
@@ -55,6 +65,8 @@ jobs:
           esac
           echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "config=$config" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG##*/v}" >> "$GITHUB_OUTPUT"
+          echo "plugin=$plugin" >> "$GITHUB_OUTPUT"
           echo "Releasing $name from $config"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -75,9 +87,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+      # Pushes the release straight into the registry. A failure here never fails the
+      # release: the next step falls back to the registry sync workflow.
+      - name: Notify the plugin registry
+        id: notify
+        if: steps.component.outputs.plugin == 'true'
+        continue-on-error: true
+        env:
+          REGISTRY_RELEASE_WEBHOOK_SECRET: ${{ secrets.REGISTRY_RELEASE_WEBHOOK_SECRET }}
+          REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+        run: |
+          # Installed next to the script so the pnpm workspace is not installed.
+          npm install --prefix scripts/release --no-save --no-package-lock --ignore-scripts js-yaml@4.1.1
+          node scripts/release/notify-registry.mjs --dist dist --tag "$TAG"
       # workflow_dispatch is one of the few events GITHUB_TOKEN is allowed to trigger.
-      - name: Sync release into the plugin registry
-        if: startsWith(env.TAG, 'packages/') && steps.component.outputs.name != 'plugin-sdk'
+      - name: Fall back to the registry sync workflow
+        if: steps.component.outputs.plugin == 'true' && steps.notify.outcome == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh workflow run sync-registry-database.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+        run: |
+          echo "::warning::Release webhook to the registry failed for $TAG; dispatching sync-registry-database.yml instead"
+          gh workflow run sync-registry-database.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+  smoke:
+    # Smoke-tests the published plugin release (release-smoke.yml).
+    needs: release
+    if: needs.release.outputs.plugin == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      plugin: ${{ needs.release.outputs.name }}
+      version: ${{ needs.release.outputs.version }}

@@ -1,0 +1,12 @@
+{
+	"project_name": "devex-plugin-package-manager-apt",
+	"tag": "0.0.1",
+	"previous_tag": "",
+	"version": "0.0.2-next",
+	"commit": "e4b080e81501ec61c8400df004bc55cb10eee34d",
+	"date": "2026-10-27T19:38:25.157581127-05:00",
+	"runtime": {
+		"goos": "linux",
+		"goarch": "amd64"
+	}
+}

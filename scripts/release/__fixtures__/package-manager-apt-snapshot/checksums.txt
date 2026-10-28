@@ -1,0 +1,4 @@
+b0579891143fcb53837c56e6958432eb99f127ea827069fc6930b09427808ed0  devex-plugin-package-manager-apt_0.0.2-next_linux_amd64
+0d004412e55c2319a0a0ed0c3731a101e76f2ec765edaad28522146f9f46a089  devex-plugin-package-manager-apt_0.0.2-next_linux_amd64.tar.gz
+98a9bed165757f29dac0c60dfca763c0e9b497c49c5ef356d11995161b0c6b47  devex-plugin-package-manager-apt_0.0.2-next_linux_arm64
+39deb959ea41439c1314775357510f33ca7558441ad9328efcb37eba0177b265  devex-plugin-package-manager-apt_0.0.2-next_linux_arm64.tar.gz
