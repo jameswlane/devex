@@ -24,6 +24,7 @@ type VersionDetail = Pick<
 	| "publishedAt"
 	| "releaseUrl"
 	| "checksumsUrl"
+	| "commitSha"
 	| "sdkVersion"
 	| "apiVersion"
 	| "binaries"
@@ -65,6 +66,7 @@ const versionDetail: VersionDetail = {
 	publishedAt: new Date("2026-10-27T00:00:00.000Z"),
 	releaseUrl: "https://github.com/jameswlane/devex/releases/tag/v1.10.0",
 	checksumsUrl: "https://example.com/checksums.txt",
+	commitSha: "e4b080e81501ec61c8400df004bc55cb10eee34d",
 	sdkVersion: "1.0.0",
 	apiVersion: "1.0.0",
 	binaries: {
@@ -113,6 +115,11 @@ describe("GET /api/v1/plugins/[id]/versions/[version]", () => {
 			publishedAt: versionDetail.publishedAt.toISOString(),
 			meta: expect.any(Object),
 		});
+		expect(mockPrisma.pluginVersion.findUnique).toHaveBeenCalledWith(
+			expect.objectContaining({
+				select: expect.objectContaining({ commitSha: true }),
+			}),
+		);
 	});
 
 	it("resolves latest through Plugin.latestVersion", async () => {
