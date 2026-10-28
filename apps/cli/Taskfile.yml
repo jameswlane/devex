@@ -121,10 +121,9 @@ tasks:
     desc: Run the e2e suite in a container sandbox (DISTRO=ubuntu-24.04|debian-12)
     vars:
       DISTRO: '{{.DISTRO | default "ubuntu-24.04"}}'
-    env:
-      DISTRO: '{{.DISTRO}}'
     cmds:
-      - ./scripts/e2e-docker.sh {{.CLI_ARGS}}
+      # Set DISTRO on the command: an exported DISTRO would take precedence over env.
+      - DISTRO="{{.DISTRO}}" ./scripts/e2e-docker.sh {{.CLI_ARGS}}
   e2e:docker:all:
     desc: Run the e2e suite in every container sandbox distro
     cmds:

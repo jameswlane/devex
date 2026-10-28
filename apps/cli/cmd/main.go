@@ -62,7 +62,7 @@ func main() {
 	// Validate dependencies quietly; report failures on stderr since logs go to a file
 	ctx := context.Background()
 	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
-		handleError("validating required dependencies", fmt.Errorf("%w; install curl, git and unzip with your package manager (for example: sudo apt-get install curl git unzip)", err))
+		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
 	}
 
 	homeDir, err := utils.GetHomeDir()

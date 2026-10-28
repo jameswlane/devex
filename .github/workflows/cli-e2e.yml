@@ -151,6 +151,8 @@ jobs:
                   failures = sum(int(suite.attrib.get('failures', 0)) for suite in suites)
                   errors = sum(int(suite.attrib.get('errors', 0)) for suite in suites)
                   skipped = sum(int(suite.attrib.get('skipped', 0)) for suite in suites)
+                  # Ginkgo reports pending specs as disabled, not skipped.
+                  pending = sum(int(suite.attrib.get('disabled', 0)) for suite in suites)
                   summary.write(f'### {report}\n\n')
-                  summary.write(f'- Tests: {tests}\n- Failures: {failures}\n- Errors: {errors}\n- Skipped: {skipped}\n\n')
+                  summary.write(f'- Tests: {tests}\n- Failures: {failures}\n- Errors: {errors}\n- Skipped: {skipped}\n- Pending: {pending}\n\n')
           PY

@@ -1,6 +1,11 @@
 # DevEx CLI Testing Guide
 
-Run tests from `apps/cli` with the Go, Ginkgo, and Task versions managed by mise.
+Run tests from `apps/cli`. mise (`.mise.toml` at the repository root) provides Go. Install Task and the Ginkgo CLI separately, using the Ginkgo version in `go.mod`:
+
+```bash
+go install github.com/go-task/task/v3/cmd/task@latest
+go install github.com/onsi/ginkgo/v2/ginkgo@v2.33.1
+```
 
 ## Unit tests
 
@@ -25,7 +30,13 @@ The runner builds the CLI and test binary, creates the sandbox, and executes the
 
 ### Run with Podman
 
-Podman is supported for local runs. Install Podman and, on macOS or Windows, start its virtual machine before using the same `task e2e:docker DISTRO=...` commands. CI uses Docker on `ubuntu-latest`.
+Podman is supported for local runs. Install Podman and, on macOS or Windows, start its virtual machine. The runner prefers Docker when both are installed, so select Podman explicitly:
+
+```bash
+CONTAINER_ENGINE=podman task e2e:docker DISTRO=ubuntu-24.04
+```
+
+CI uses Docker on `ubuntu-latest`.
 
 ### Test a released CLI
 
