@@ -7,7 +7,7 @@ import {
 	invalidateRegistryCache,
 } from "@/lib/cache-invalidation";
 import { withErrorHandling } from "@/lib/error-handler";
-import { createApiError } from "@/lib/logger";
+import { createApiError, logger } from "@/lib/logger";
 
 // GET /api/v1/cache - Get cache statistics and status
 async function handleGetCacheStatus(
@@ -86,10 +86,12 @@ async function handleInvalidateCache(
 			timestamp: new Date().toISOString(),
 		});
 	} catch (error) {
-		return createApiError(
-			`Cache invalidation failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-			500,
+		logger.error(
+			"Cache invalidation failed",
+			{ error: error instanceof Error ? error.message : String(error) },
+			error instanceof Error ? error : undefined,
 		);
+		return createApiError("Cache invalidation failed", 500);
 	}
 }
 
@@ -116,10 +118,12 @@ async function handleClearAllCaches(
 			timestamp: new Date().toISOString(),
 		});
 	} catch (error) {
-		return createApiError(
-			`Failed to clear all caches: ${error instanceof Error ? error.message : "Unknown error"}`,
-			500,
+		logger.error(
+			"Failed to clear all caches",
+			{ error: error instanceof Error ? error.message : String(error) },
+			error instanceof Error ? error : undefined,
 		);
+		return createApiError("Failed to clear all caches", 500);
 	}
 }
 

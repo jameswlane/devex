@@ -116,10 +116,7 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
 		);
 
 		return NextResponse.json(
-			{
-				error: "Cache revalidation failed",
-				message: error instanceof Error ? error.message : String(error),
-			},
+			{ error: "Cache revalidation failed" },
 			{ status: 500 },
 		);
 	}
