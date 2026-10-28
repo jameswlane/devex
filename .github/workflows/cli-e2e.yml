@@ -1,0 +1,157 @@
+name: CLI end-to-end
+
+on:
+  pull_request:
+    paths:
+      - 'apps/cli/**'
+      - 'packages/**'
+      - '.github/workflows/cli-e2e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/cli/**'
+      - 'packages/**'
+      - '.github/workflows/cli-e2e.yml'
+  workflow_dispatch:
+    inputs:
+      distro:
+        description: 'Distribution to test'
+        required: false
+        type: choice
+        options:
+          - all
+          - ubuntu-24.04
+          - debian-12
+        default: all
+      desktop:
+        description: 'Desktop environment to test'
+        required: false
+        type: choice
+        options:
+          - none
+          - gnome
+          - kde
+        default: none
+      destructive:
+        description: 'Run specs that install and uninstall packages'
+        required: false
+        type: boolean
+        default: true
+  workflow_call:
+    inputs:
+      distro:
+        description: 'Distribution to test: all, ubuntu-24.04, or debian-12'
+        required: false
+        type: string
+        default: all
+      desktop:
+        description: 'Desktop environment to test: none, gnome, or kde'
+        required: false
+        type: string
+        default: none
+      destructive:
+        description: 'Run specs that install and uninstall packages'
+        required: false
+        type: boolean
+        default: true
+      cli_version:
+        description: 'Released CLI tag to test instead of building from source'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-e2e-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  e2e:
+    name: ${{ matrix.distro }} / ${{ matrix.desktop }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: ${{ fromJSON(inputs.distro == 'ubuntu-24.04' && '["ubuntu-24.04"]' || inputs.distro == 'debian-12' && '["debian-12"]' || '["ubuntu-24.04", "debian-12"]') }}
+        desktop: ${{ fromJSON(inputs.desktop == 'gnome' && '["gnome"]' || inputs.desktop == 'kde' && '["kde"]' || inputs.desktop == 'none' && '["none"]' || '["gnome", "none"]') }}
+    env:
+      DEVEX_E2E_DESKTOP: ${{ matrix.desktop }}
+      DEVEX_E2E_DESTRUCTIVE: ${{ inputs.destructive == false && '0' || '1' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up development tools
+        uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build CLI from source
+        if: inputs.cli_version == ''
+        working-directory: apps/cli
+        run: |
+          go build -o "$RUNNER_TEMP/devex" ./cmd/main.go
+          echo "DEVEX_E2E_BINARY=$RUNNER_TEMP/devex" >> "$GITHUB_ENV"
+
+      - name: Download and verify released CLI
+        if: inputs.cli_version != ''
+        env:
+          CLI_VERSION: ${{ inputs.cli_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${CLI_VERSION##*/v}"
+          archive="devex_${version}_linux_amd64.tar.gz"
+          release_dir="$RUNNER_TEMP/devex-release"
+          mkdir -p "$release_dir"
+          gh release download "$CLI_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$archive" \
+            --pattern devex_checksums.txt \
+            --dir "$release_dir"
+          cd "$release_dir"
+          sha256sum --check --ignore-missing devex_checksums.txt
+          tar -xzf "$archive" bin/devex
+          install -m 0755 bin/devex "$RUNNER_TEMP/devex"
+          echo "DEVEX_E2E_BINARY=$RUNNER_TEMP/devex" >> "$GITHUB_ENV"
+
+      - name: Run end-to-end suite
+        working-directory: apps/cli
+        run: task e2e:docker DISTRO=${{ matrix.distro }}
+
+      - name: Upload end-to-end artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-e2e-${{ matrix.distro }}-${{ matrix.desktop }}
+          path: ./apps/cli/artifacts/e2e/**
+          if-no-files-found: warn
+
+      - name: Publish JUnit summary
+        if: always()
+        working-directory: apps/cli
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          reports = sorted(Path('artifacts/e2e').rglob('junit.xml'))
+          with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+              summary.write('## End-to-end JUnit report\n\n')
+              if not reports:
+                  summary.write('No JUnit report was generated.\n')
+              for report in reports:
+                  root = ET.parse(report).getroot()
+                  suites = [root] if root.tag == 'testsuite' else list(root.iter('testsuite'))
+                  tests = sum(int(suite.attrib.get('tests', 0)) for suite in suites)
+                  failures = sum(int(suite.attrib.get('failures', 0)) for suite in suites)
+                  errors = sum(int(suite.attrib.get('errors', 0)) for suite in suites)
+                  skipped = sum(int(suite.attrib.get('skipped', 0)) for suite in suites)
+                  summary.write(f'### {report}\n\n')
+                  summary.write(f'- Tests: {tests}\n- Failures: {failures}\n- Errors: {errors}\n- Skipped: {skipped}\n\n')
+          PY

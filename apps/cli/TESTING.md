@@ -1,152 +1,63 @@
 # DevEx CLI Testing Guide
 
-This guide provides step-by-step testing approaches while leveraging Docker environments and volume mappings for rapid and flexible testing.
+Run tests from `apps/cli` with the Go, Ginkgo, and Task versions managed by mise.
 
----
+## Unit tests
 
-## Quick Local Testing (Fastest - 5 Seconds)
+```bash
+task test
 ```
-bash
-# Build and test the CLI locally
-./cli-docker-test.sh build --distro debian
-./cli-docker-test.sh run --distro debian setup --verbose
 
-# Test specific features
-./cli-docker-test.sh run --distro debian setup --non-interactive  # Test automated mode
-./cli-docker-test.sh run --distro debian --help                   # Test help command
+This runs the Ginkgo unit test suites recursively. Use `task test:short` to skip tests labeled `slow`, or `task test:coverage` to generate `coverage.out` and `coverage.html`.
+
+## End-to-end tests
+
+The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu or Debian container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
+
+### Run with Docker
+
+```bash
+task e2e:docker DISTRO=ubuntu-24.04
+task e2e:docker DISTRO=debian-12
 ```
----
 
-## Comprehensive Docker Environment Testing
+The runner builds the CLI and test binary, creates the sandbox, and executes the suite with verbose Ginkgo output and a JUnit report. CI enables destructive specs because every container is throwaway; local runs skip them unless explicitly enabled.
 
-### Pre-Setup
-Configure the following volume mappings for dynamic testing:
-- **Host Directories**:
-  - `apps/cli/assets` (for assets like static files)
-  - `apps/cli/bin` (for the CLI binary)
-  - `apps/cli/config` (for configurations)
-  - `apps/cli/help` (for help documents)
-- **Mapped Paths Inside Container**:
-  - `~/.local/share/devex/assets`
-  - `~/.local/share/devex/bin`
-  - `~/.local/share/devex/config`
-  - `~/.local/share/devex/help`
+### Run with Podman
 
-The `cli-docker-test.sh` script automatically handles these mappings during runtime.
+Podman is supported for local runs. Install Podman and, on macOS or Windows, start its virtual machine before using the same `task e2e:docker DISTRO=...` commands. CI uses Docker on `ubuntu-latest`.
 
----
+### Test a released CLI
 
-### Building Docker Images for Testing
+Set `DEVEX_E2E_BINARY` to the absolute path of a Linux AMD64 `devex` binary from a GitHub release:
+
+```bash
+DEVEX_E2E_BINARY=/absolute/path/to/devex task e2e:docker DISTRO=ubuntu-24.04
 ```
-bash
-# Build Docker image for a specific distribution
-./cli-docker-test.sh build --distro debian
-./cli-docker-test.sh build --distro ubuntu
-./cli-docker-test.sh build --distro suse
+
+The runner copies that binary into the container instead of using a source build. The reusable CI workflow automates this path when given `cli_version`: it downloads `devex_<version>_linux_amd64.tar.gz` and `devex_checksums.txt` from that tag's GitHub release, verifies the archive checksum, and tests the extracted binary.
+
+### Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DEVEX_E2E_SANDBOX` | none | Must be `1` inside the sandbox; the suite fails fast without it. |
+| `DEVEX_E2E_BINARY` | `devex` on `PATH` | Path to the CLI binary under test. For host-side runner use, provide an absolute path to a Linux AMD64 binary. |
+| `DEVEX_E2E_REGISTRY_URL` | `https://registry.devex.sh` | Registry used for plugin downloads and expected latest-version checksums. |
+| `DEVEX_E2E_DESKTOP` | `none` | `gnome`, `kde`, or `none`; controls `XDG_CURRENT_DESKTOP` and expected desktop plugins. |
+| `DEVEX_E2E_DESTRUCTIVE` | disabled | Set to `1` to allow specs that install and uninstall `jq` with apt and sudo. |
+| `DEVEX_E2E_ARTIFACTS` | `/artifacts` if writable, otherwise a temporary directory | Destination for test logs and copies of `~/.devex` state. |
+
+For example, to enable destructive specs locally:
+
+```bash
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=debian-12
 ```
----
 
-### Testing Commands
-```
-bash
-# Interactive setup with verbose logging
-./cli-docker-test.sh run --distro debian setup --verbose
+### Artifacts
 
-# Test automated mode
-./cli-docker-test.sh run --distro debian setup --non-interactive
+Local runs write JUnit XML, logs, and captured CLI state under `artifacts/e2e/` in `apps/cli`. CI uploads that directory for every matrix job, including failed runs, and adds JUnit totals to the job summary.
 
-# Run specific commands (e.g., help)
-./cli-docker-test.sh run --distro debian --help
+## Roadmap
 
-# Start a debug shell for manual testing
-./cli-docker-test.sh shell --distro ubuntu
-```
----
-
-### Manual Testing in Docker Environment
-```
-bash
-# Start debug environment
-./cli-docker-test.sh shell --distro debian
-
-# Inside the Docker container:
-devex setup --verbose                   # Run setup interactively
-devex setup --non-interactive           # Test non-interactive mode
-devex --help                            # Test help command
-
-# Verify host and container mappings
-ls -la ~/.local/share/devex
-
-# Check logs inside container
-find ~/.local/share/devex/logs -name '*.log' -exec cat {} \;
-```
----
-
-## Volume Mapping Details
-
-The `cli-docker-test.sh` script takes care of dynamically mounting the following directories:
-
-| Host Path                    | Container Path                        |
-|------------------------------|---------------------------------------|
-| `apps/cli/assets`            | `~/.local/share/devex/assets`        |
-| `apps/cli/bin`               | `~/.local/share/devex/bin`           |
-| `apps/cli/config`            | `~/.local/share/devex/config`        |
-| `apps/cli/help`              | `~/.local/share/devex/help`          |
-
-When making changes to these directories, they are reflected in the container immediately, without rebuilding the Docker image.
-
----
-
-## Contributing Tests
-
-When adding new features or fixing bugs:
-1. **Update Testing Scenarios**:
-   - Ensure the feature is testable in both **interactive** and **automated modes**.
-2. **Test Volume Mappings**:
-   - Modify the source files in directories like `apps/cli/assets` or `apps/cli/config`, and test immediate availability inside containers.
-3. **Verify Logs**:
-   - Ensure logs are created in `~/.local/share/devex/logs/` and validate errors and expected output.
-4. **Edge Case Handling**:
-   - Test interactive behavior (e.g., inputs during `setup`) and failure conditions (e.g., missing files, invalid configurations).
-
----
-
-## Troubleshooting and Common Issues
-
-### Log Analysis
-- **Locations**:
-  - Local: `~/.local/share/devex/logs/`
-  - Docker: `~/.local/share/devex/logs/`
-- **Search Patterns**:
-  ```bash
-  # Success
-  grep "Installation completed successfully" ~/.local/share/devex/logs/*
-
-  # Errors
-  grep "ERROR" ~/.local/share/devex/logs/*
-  grep "panic" ~/.local/share/devex/logs/*
-  grep "failed" ~/.local/share/devex/logs/*
-  ```
-
-### Debugging Docker Issues
-```
-bash
-# Test mappings manually
-./cli-docker-test.sh shell --distro ubuntu
-# Inside container, verify paths:
-ls -la ~/.local/share/devex
-
-# Check Docker daemon
-sudo systemctl status docker
-```
-### Build or Permission Issues
-```
-bash
-# Fix file permissions for test scripts
-chmod +x ./cli-docker-test.sh
-
-# Rebuild Docker image if out of sync
-./cli-docker-test.sh build --distro ubuntu
-```
-By following this updated guide, you'll ensure consistent and flexible testing with minimal setup overhead. Let me know if you'd like further assistance!
-
+Later end-to-end testing phases will add a local registry mode, headless GNOME and KDE containers, QEMU/Packer virtual machines, and Fedora and Arch coverage.

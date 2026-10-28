@@ -63,10 +63,12 @@ jobs:
               exit 1
               ;;
           esac
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "config=$config" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG##*/v}" >> "$GITHUB_OUTPUT"
-          echo "plugin=$plugin" >> "$GITHUB_OUTPUT"
+          {
+            echo "name=$name"
+            echo "config=$config"
+            echo "version=${TAG##*/v}"
+            echo "plugin=$plugin"
+          } >> "$GITHUB_OUTPUT"
           echo "Releasing $name from $config"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -120,3 +122,12 @@ jobs:
       version: ${{ needs.release.outputs.version }}
       # Same registry the release was sent to.
       registry_url: ${{ vars.REGISTRY_URL || 'https://registry.devex.sh' }}
+  e2e:
+    # Tests the published CLI archive after a CLI tag is released.
+    needs: release
+    if: needs.release.outputs.name == 'cli'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/cli-e2e.yml
+    with:
+      cli_version: ${{ inputs.tag || github.ref_name }}
