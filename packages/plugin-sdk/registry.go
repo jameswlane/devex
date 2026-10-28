@@ -149,6 +149,22 @@ type RegistryResponse struct {
 	Version      string                      `json:"version"`
 	LastUpdated  string                      `json:"last_updated"`
 	Plugins      map[string]PluginMetadata   `json:"plugins"`
+	// Data holds the plugin list in the registry API's current response shape.
+	Data struct {
+		Plugins []PluginMetadata `json:"plugins"`
+	} `json:"data"`
+}
+
+// pluginMap returns the response's plugins keyed by name, whichever shape the API used.
+func (r *RegistryResponse) pluginMap() map[string]PluginMetadata {
+	if len(r.Plugins) > 0 || len(r.Data.Plugins) == 0 {
+		return r.Plugins
+	}
+	plugins := make(map[string]PluginMetadata, len(r.Data.Plugins))
+	for _, plugin := range r.Data.Plugins {
+		plugins[plugin.Name] = plugin
+	}
+	return plugins
 }
 
 // Note: Upload functionality and advanced plugin info not available in simple API
@@ -226,7 +242,7 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 		BaseURL:     registryResp.BaseURL,
 		Version:     registryResp.Version,
 		LastUpdated: lastUpdated,
-		Plugins:     registryResp.Plugins,
+		Plugins:     registryResp.pluginMap(),
 	}
 
 	// Cache the result
