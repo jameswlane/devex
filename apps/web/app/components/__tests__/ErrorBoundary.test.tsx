@@ -19,6 +19,14 @@ jest.mock("../../utils/error-handling", () => ({
 import { handleComponentError } from "../../utils/error-handling";
 
 // Component that throws an error
+// Throws on version 1, so tests can recover by rerendering with another version
+const ControllableComponent: React.FC<{ version: number }> = ({ version }) => {
+	if (version === 1) {
+		throw new Error("Version 1 error");
+	}
+	return <div>Version {version} loaded</div>;
+};
+
 const ThrowingComponent: React.FC<{ shouldThrow?: boolean }> = ({
 	shouldThrow = true,
 }) => {
@@ -131,14 +139,9 @@ describe("ErrorBoundary", () => {
 		});
 
 		it("should allow retry functionality", async () => {
-			let shouldThrow = true;
-			const TestComponent = () => (
-				<ThrowingComponent shouldThrow={shouldThrow} />
-			);
-
 			const { rerender } = render(
 				<ErrorBoundary>
-					<TestComponent />
+					<ThrowingComponent shouldThrow />
 				</ErrorBoundary>,
 			);
 
@@ -146,9 +149,6 @@ describe("ErrorBoundary", () => {
 			expect(
 				screen.getByText("Oops! Something went wrong"),
 			).toBeInTheDocument();
-
-			// Change the throwing condition
-			shouldThrow = false;
 
 			// Click retry button
 			fireEvent.click(screen.getByRole("button", { name: "🔄 Try Again" }));
@@ -236,16 +236,6 @@ describe("ErrorBoundary", () => {
 		});
 
 		it("should reset error state when retry is clicked", async () => {
-			// Create a component that can toggle error state
-			const ControllableComponent: React.FC<{ version: number }> = ({
-				version,
-			}) => {
-				if (version === 1) {
-					throw new Error("Version 1 error");
-				}
-				return <div>Version {version} loaded</div>;
-			};
-
 			const { rerender } = render(
 				<ErrorBoundary>
 					<ControllableComponent version={1} />

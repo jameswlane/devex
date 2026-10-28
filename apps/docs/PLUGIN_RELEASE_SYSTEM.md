@@ -15,6 +15,7 @@ The system has evolved through multiple iterations to achieve the current stream
 ## How It Works
 
 ### Automated Release Trigger
+
 1. **Conventional Commit**: Developer makes commit with conventional format (`feat:`, `fix:`, `BREAKING CHANGE:`)
 2. **Change Detection**: GitHub Actions detects which packages changed based on file paths
 3. **Version Calculation**: Determines version bump type (major/minor/patch) from commit types
@@ -22,12 +23,14 @@ The system has evolved through multiple iterations to achieve the current stream
 5. **GoReleaser Trigger**: Individual GoReleaser workflows build and release changed packages
 
 ### Supported Commit Types
+
 - `feat:` → **minor** version bump (new features)
-- `fix:` → **patch** version bump (bug fixes) 
+- `fix:` → **patch** version bump (bug fixes)
 - `BREAKING CHANGE:` or `!:` → **major** version bump (breaking changes)
 - `chore:`, `docs:`, `style:`, `refactor:` → No release triggered
 
 ### Package Detection
+
 The system automatically detects changes in:
 - **CLI**: `apps/cli/` → `@devex/cli`
 - **Plugin SDK**: `packages/plugin-sdk/` → `@devex/plugin-sdk`
@@ -63,6 +66,7 @@ devex/
 ### Automated Release Process
 
 #### 1. Commit Analysis
+
 ```bash
 # Get commits since last tag
 COMMITS=$(git log $LAST_TAG..HEAD --pretty=format:"%s" --no-merges | grep -E "^(feat|fix|perf|refactor)(\([^)]+\))?: ")
@@ -78,6 +82,7 @@ fi
 ```
 
 #### 2. Package Change Detection
+
 ```bash
 # Check file changes since last tag
 CHANGED_FILES=$(git diff --name-only $LAST_TAG..HEAD)
@@ -101,6 +106,7 @@ done
 ```
 
 #### 3. Version Calculation & Tagging
+
 ```bash
 # Calculate new version from current version + bump type
 NEW_VERSION="$major.$((minor + 1)).0"  # Example for minor bump
@@ -118,29 +124,34 @@ mv apps/cli/package.json.tmp apps/cli/package.json
 ## Package Types & GoReleaser Configuration
 
 ### DevEx CLI (`apps/cli/`)
+
 - **Platforms**: Windows, macOS, Linux (multiple architectures)
 - **Output**: Single `devex` binary per platform
 - **Tag Pattern**: `@devex/cli@*`
 - **Release Naming**: `DevEx CLI v{version}`
 
 ### Plugin SDK (`packages/plugin-sdk/`)
+
 - **Type**: Go library (no binaries)
 - **Tag Pattern**: `@devex/plugin-sdk@*`
 - **Purpose**: Shared code for plugin development
 
 ### Desktop Environment Plugins
+
 - **Platforms**: Linux only
 - **Examples**: `desktop-gnome`, `desktop-kde`, `desktop-xfce`
 - **Output**: `devex-plugin-{name}` binary
 - **Tag Pattern**: `@devex/desktop-{name}@*`
 
 ### Package Manager Plugins
+
 - **Platform Specific**: `package-manager-apt` (Linux), `package-manager-brew` (macOS/Linux)
 - **Universal**: `package-manager-docker`, `package-manager-curlpipe`, `package-manager-mise`
 - **Output**: `devex-plugin-package-manager-{name}` binary
 - **Tag Pattern**: `@devex/package-manager-{name}@*`
 
 ### Tool Plugins
+
 - **Platforms**: Cross-platform (Windows, macOS, Linux)
 - **Examples**: `tool-git`, `tool-shell`, `tool-stackdetector`
 - **Output**: `devex-plugin-tool-{name}` binary
@@ -149,6 +160,7 @@ mv apps/cli/package.json.tmp apps/cli/package.json
 ## Adding New Plugins
 
 ### 1. Create Plugin Structure
+
 ```bash
 # Create plugin directory
 mkdir packages/my-new-plugin
@@ -184,12 +196,14 @@ EOF
 ```
 
 ### 2. Generate GoReleaser Config
+
 ```bash
 # Generate .goreleaser.yml automatically
 node scripts/generate-goreleaser.js
 ```
 
 ### 3. Test Plugin
+
 ```bash
 # Test build
 cd packages/my-new-plugin
@@ -201,6 +215,7 @@ goreleaser build --snapshot --clean --single-target
 ```
 
 ### 4. Commit and Release
+
 ```bash
 # Commit with conventional commit message
 git add .
@@ -216,6 +231,7 @@ git push
 ## Testing the Release System
 
 ### Test Conventional Commit Parsing
+
 ```bash
 # Test different commit types
 git commit --allow-empty -m "feat: test feature commit"  # Should trigger minor bump
@@ -225,6 +241,7 @@ git commit --allow-empty -m "docs: update readme"       # Should not trigger rel
 ```
 
 ### Test Package Change Detection
+
 ```bash
 # Test CLI changes
 echo "# Test change" >> apps/cli/README.md
@@ -238,6 +255,7 @@ git commit -am "fix: test plugin change detection"
 ```
 
 ### Test GoReleaser Configurations
+
 ```bash
 # Test individual plugin builds
 cd packages/package-manager-apt
@@ -250,6 +268,7 @@ goreleaser build --snapshot --clean --single-target
 ```
 
 ### Monitor Release Workflow
+
 ```bash
 # Check workflow status
 gh run list --workflow=release.yml
@@ -266,6 +285,7 @@ git tag --sort=-creatordate | head -10
 While the system is designed to be fully automated, you can manually trigger releases if needed:
 
 ### Method 1: Conventional Commit (Recommended)
+
 ```bash
 # Make changes to a package
 echo "# Manual change" >> packages/package-manager-apt/README.md
@@ -279,6 +299,7 @@ git push
 ```
 
 ### Method 2: Direct Tag Creation (Not Recommended)
+
 ```bash
 # Create tag manually (bypasses conventional commit parsing)
 git tag @devex/package-manager-apt@1.2.3
@@ -288,6 +309,7 @@ git push origin @devex/package-manager-apt@1.2.3
 ```
 
 ### Emergency Release Process
+
 ```bash
 # For urgent releases, you can manually run GoReleaser
 cd packages/package-manager-apt
@@ -297,24 +319,28 @@ GITHUB_TOKEN=$YOUR_TOKEN goreleaser release --clean
 ## Benefits of Current System
 
 ### Automated & Efficient
+
 - ✅ **Zero Manual Work**: Releases trigger automatically from conventional commits
 - ✅ **Smart Change Detection**: Only releases packages that actually changed
 - ✅ **Proper Version Bumping**: Semantic versioning based on commit types
 - ✅ **Monorepo Aware**: Handles 35+ packages intelligently
 
 ### Developer Experience
+
 - ✅ **Simple Workflow**: Just use conventional commits
 - ✅ **Fast Feedback**: Releases happen within minutes of commit
 - ✅ **No Configuration**: Adding new packages requires no release setup
 - ✅ **Clear History**: Each release linked to specific commits
 
 ### Scalability & Maintenance
+
 - ✅ **Self-Maintaining**: System scales automatically with new packages
 - ✅ **Failure Isolation**: One package failure doesn't block others
 - ✅ **Parallel Execution**: Multiple packages can release simultaneously
 - ✅ **Resource Efficient**: Only builds what changed
 
 ### User Experience
+
 - ✅ **Frequent Updates**: Packages update as soon as fixes/features are ready
 - ✅ **Semantic Versioning**: Clear understanding of change impact
 - ✅ **Individual Releases**: Download only needed components
@@ -323,22 +349,24 @@ GITHUB_TOKEN=$YOUR_TOKEN goreleaser release --clean
 ## Configuration Files
 
 ### Auto Configuration (`.autorc`)
+
 ```json
 {
-  "plugins": ["conventional-commits"],
-  "owner": "jameswlane",
-  "repo": "devex",
-  "labels": {
-    "patch": {"releaseType": "patch"},
-    "minor": {"releaseType": "minor"},
-    "major": {"releaseType": "major"}
-  }
+	"plugins": ["conventional-commits"],
+	"owner": "jameswlane",
+	"repo": "devex",
+	"labels": {
+		"patch": { "releaseType": "patch" },
+		"minor": { "releaseType": "minor" },
+		"major": { "releaseType": "major" }
+	}
 }
 ```
 
 ### Release Workflow (`.github/workflows/release.yml`)
+
 - **Trigger**: Push to main branch
-- **Steps**: 
+- **Steps**:
   1. Analyze conventional commits
   2. Detect changed packages
   3. Calculate version bumps
@@ -349,17 +377,20 @@ GITHUB_TOKEN=$YOUR_TOKEN goreleaser release --clean
 ## Troubleshooting
 
 ### Release Not Triggered
+
 1. **Check Commit Format**: Must use conventional commits (`feat:`, `fix:`, etc.)
 2. **Check File Changes**: Must have actual changes in `apps/` or `packages/` directories
 3. **Check Workflow Logs**: Look for parsing errors in GitHub Actions
 
 ### Wrong Version Bump
+
 1. **feat:** commits create minor releases
-2. **fix:** commits create patch releases  
+2. **fix:** commits create patch releases
 3. **BREAKING CHANGE:** or **!:** creates major releases
 4. Other commit types don't trigger releases
 
 ### Package Not Released
+
 1. **Check Package Detection**: File changes must be in correct directory structure
 2. **Check package.json**: Each package needs package.json for version tracking
 3. **Check GoReleaser Config**: Each package needs `.goreleaser.yml`

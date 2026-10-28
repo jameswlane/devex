@@ -19,6 +19,7 @@ Centralized plugin registry and distribution platform for DevEx plugins. Manages
 ## 🏗️ Architecture
 
 ### Registry Structure
+
 ```
 apps/registry/
 ├── src/
@@ -47,6 +48,7 @@ apps/registry/
 ```
 
 ### Technology Stack
+
 - **Next.js 15**: React framework with App Router
 - **TypeScript**: Type-safe development
 - **Tailwind CSS**: Utility-first styling
@@ -59,6 +61,7 @@ apps/registry/
 ### Plugin Categories
 
 #### Package Manager Plugins (23)
+
 - **Linux**: apt, dnf, pacman, yay, zypper, emerge, eopkg, xbps, apk, rpm, deb
 - **Universal**: flatpak, snap, appimage, docker, pip, mise
 - **Cross-platform**: brew
@@ -66,48 +69,52 @@ apps/registry/
 - **Nix**: nixpkgs, nixflake
 
 #### Desktop Environment Plugins (9)
+
 - **GNOME**, **KDE Plasma**, **XFCE**, **MATE**, **Cinnamon**
 - **LXQt**, **Budgie**, **Pantheon**, **COSMIC**
 
 #### System Tool Plugins (4)
+
 - **tool-git**: Git configuration and credential management
 - **tool-shell**: Shell setup and configuration
 - **tool-stackdetector**: Automatic project stack detection
 - **system-setup**: Core system optimization and setup
 
 ### Plugin Metadata Schema
+
 ```typescript
 interface Plugin {
-  id: string
-  name: string
-  description: string
-  category: 'package-manager' | 'desktop' | 'system-tool'
-  type: string
-  version: string
-  platforms: Platform[]
-  maintainer: string
-  repository: string
-  documentation: string
-  downloads: number
-  rating: number
-  tags: string[]
-  createdAt: Date
-  updatedAt: Date
+	id: string;
+	name: string;
+	description: string;
+	category: "package-manager" | "desktop" | "system-tool";
+	type: string;
+	version: string;
+	platforms: Platform[];
+	maintainer: string;
+	repository: string;
+	documentation: string;
+	downloads: number;
+	rating: number;
+	tags: string[];
+	createdAt: Date;
+	updatedAt: Date;
 }
 
 interface PluginVersion {
-  version: string
-  changelog: string
-  compatibility: string[]
-  releaseDate: Date
-  downloadUrl: string
-  checksum: string
+	version: string;
+	changelog: string;
+	compatibility: string[];
+	releaseDate: Date;
+	downloadUrl: string;
+	checksum: string;
 }
 ```
 
 ## 🚀 Quick Start
 
 ### Development Setup
+
 ```bash
 # Install dependencies
 pnpm install
@@ -122,6 +129,7 @@ pnpm dev
 ```
 
 ### Environment Configuration
+
 ```bash
 # Development
 DATABASE_URL="postgresql://localhost:5432/devex_registry_dev"
@@ -138,10 +146,10 @@ All `GET` endpoints (including `/api/v1/registry.json` used by the CLI) are publ
 Data write and admin endpoints require an `Authorization: Bearer <token>` header,
 checked in constant time by `lib/auth/require-api-key.ts`:
 
-| Secret | Protects |
-| --- | --- |
+| Secret                   | Protects                                                                                                                         |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
 | `REGISTRY_ADMIN_API_KEY` | `POST /api/v1/applications`, `PUT`/`DELETE /api/v1/applications/:id`, `POST /api/v1/plugins`, `PUT`/`DELETE /api/v1/plugins/:id` |
-| `REVALIDATE_API_KEY` | `POST /api/v1/revalidate`, `POST`/`DELETE /api/v1/cache`, `POST /api/health` |
+| `REVALIDATE_API_KEY`     | `POST /api/v1/revalidate`, `POST`/`DELETE /api/v1/cache`, `POST /api/health`                                                     |
 
 Missing or wrong tokens get `401`. If the secret is not set, the endpoint fails
 closed with `503`. Successful authenticated writes are recorded through the audit
@@ -178,54 +186,59 @@ no-store`, and successful writes are audited as `release-webhook`.
 ## 📦 Plugin Management
 
 ### Plugin Registration
+
 ```typescript
 // Register a new plugin
 const plugin = await registerPlugin({
-  name: 'package-manager-apt',
-  description: 'Advanced Package Tool for Debian/Ubuntu',
-  category: 'package-manager',
-  type: 'apt',
-  platforms: ['linux'],
-  repository: 'https://github.com/jameswlane/devex',
-  maintainer: 'James Lane'
-})
+	name: "package-manager-apt",
+	description: "Advanced Package Tool for Debian/Ubuntu",
+	category: "package-manager",
+	type: "apt",
+	platforms: ["linux"],
+	repository: "https://github.com/jameswlane/devex",
+	maintainer: "James Lane",
+});
 ```
 
 ### Version Management
+
 ```typescript
 // Release new plugin version
 const version = await releaseVersion({
-  pluginId: 'package-manager-apt',
-  version: '1.2.0',
-  changelog: 'Added support for Ubuntu 24.04',
-  compatibility: ['ubuntu-24.04', 'debian-12'],
-  binary: './dist/devex-plugin-package-manager-apt'
-})
+	pluginId: "package-manager-apt",
+	version: "1.2.0",
+	changelog: "Added support for Ubuntu 24.04",
+	compatibility: ["ubuntu-24.04", "debian-12"],
+	binary: "./dist/devex-plugin-package-manager-apt",
+});
 ```
 
 ### Plugin Discovery
+
 ```typescript
 // Search plugins
 const plugins = await searchPlugins({
-  category: 'package-manager',
-  platforms: ['linux'],
-  query: 'ubuntu'
-})
+	category: "package-manager",
+	platforms: ["linux"],
+	query: "ubuntu",
+});
 
 // Get plugin details
-const plugin = await getPlugin('package-manager-apt')
-const versions = await getPluginVersions('package-manager-apt')
+const plugin = await getPlugin("package-manager-apt");
+const versions = await getPluginVersions("package-manager-apt");
 ```
 
 ## 🎨 User Interface
 
 ### Plugin Discovery Page
+
 - **Grid/List View**: Toggle between card grid and detailed list
 - **Advanced Filtering**: Filter by category, platform, rating, and tags
 - **Search**: Real-time search across plugin names and descriptions
 - **Sorting**: Sort by popularity, rating, recent updates, or alphabetical
 
 ### Plugin Detail Page
+
 - **Overview**: Description, screenshots, and key features
 - **Installation**: Copy-paste installation commands
 - **Documentation**: Links to plugin-specific documentation
@@ -234,6 +247,7 @@ const versions = await getPluginVersions('package-manager-apt')
 - **Community**: Ratings, reviews, and issue tracking
 
 ### Analytics Dashboard
+
 - **Registry Metrics**: Total plugins, downloads, and active users
 - **Popular Plugins**: Most downloaded and highest rated
 - **Platform Distribution**: Usage across different platforms
@@ -242,37 +256,40 @@ const versions = await getPluginVersions('package-manager-apt')
 ## 📊 Analytics and Monitoring
 
 ### Plugin Analytics
+
 ```typescript
 interface PluginAnalytics {
-  pluginId: string
-  downloads: {
-    total: number
-    daily: number[]
-    weekly: number[]
-    monthly: number[]
-  }
-  platforms: {
-    [platform: string]: number
-  }
-  versions: {
-    [version: string]: number
-  }
-  userRating: {
-    average: number
-    distribution: number[]
-  }
+	pluginId: string;
+	downloads: {
+		total: number;
+		daily: number[];
+		weekly: number[];
+		monthly: number[];
+	};
+	platforms: {
+		[platform: string]: number;
+	};
+	versions: {
+		[version: string]: number;
+	};
+	userRating: {
+		average: number;
+		distribution: number[];
+	};
 }
 ```
 
 ### Usage Tracking
+
 - **Download Metrics**: Track plugin downloads by version and platform
-- **User Analytics**: Anonymous usage statistics and patterns  
+- **User Analytics**: Anonymous usage statistics and patterns
 - **Performance Monitoring**: Plugin load times and success rates
 - **Error Tracking**: Monitor plugin installation failures
 
 ## 🔄 Automated Updates
 
 ### CI/CD Integration
+
 ```yaml
 # .github/workflows/registry-update.yml
 name: Update Plugin Registry
@@ -293,6 +310,7 @@ jobs:
 ```
 
 ### Plugin Lifecycle
+
 1. **Development**: Plugin development in individual repositories
 2. **Build**: Automated builds via GitHub Actions
 3. **Registry Update**: Automatic metadata and version updates
@@ -302,26 +320,28 @@ jobs:
 ## 🛡️ Security and Validation
 
 ### Plugin Validation
+
 ```typescript
 interface ValidationRules {
-  binarySignature: boolean
-  checksumVerification: boolean
-  securityScan: boolean
-  compatibilityTest: boolean
-  performanceTest: boolean
+	binarySignature: boolean;
+	checksumVerification: boolean;
+	securityScan: boolean;
+	compatibilityTest: boolean;
+	performanceTest: boolean;
 }
 
 // Validate plugin before registry acceptance
 const validation = await validatePlugin(plugin, {
-  binarySignature: true,
-  checksumVerification: true,
-  securityScan: true,
-  compatibilityTest: true,
-  performanceTest: false
-})
+	binarySignature: true,
+	checksumVerification: true,
+	securityScan: true,
+	compatibilityTest: true,
+	performanceTest: false,
+});
 ```
 
 ### Security Measures
+
 - **Binary Signing**: All plugin binaries are cryptographically signed
 - **Checksum Verification**: SHA-256 checksums for integrity verification
 - **Security Scanning**: Automated vulnerability scanning
@@ -331,29 +351,30 @@ const validation = await validatePlugin(plugin, {
 ## 🔍 API Reference
 
 ### Registry API
+
 ```typescript
 // GET /api/plugins - List all plugins
 interface PluginsResponse {
-  plugins: Plugin[]
-  pagination: {
-    page: number
-    limit: number
-    total: number
-  }
+	plugins: Plugin[];
+	pagination: {
+		page: number;
+		limit: number;
+		total: number;
+	};
 }
 
 // GET /api/plugins/:id - Get plugin details
 interface PluginResponse {
-  plugin: Plugin
-  versions: PluginVersion[]
-  analytics: PluginAnalytics
+	plugin: Plugin;
+	versions: PluginVersion[];
+	analytics: PluginAnalytics;
 }
 
 // POST /api/plugins/:id/download - Track download
 interface DownloadResponse {
-  downloadUrl: string
-  checksum: string
-  expires: Date
+	downloadUrl: string;
+	checksum: string;
+	expires: Date;
 }
 ```
 
@@ -367,16 +388,17 @@ interface DownloadResponse {
 For the version list and detail endpoints, `:id` accepts a plugin's full name or short name. Unknown plugins and versions return `404`; malformed versions return `400`.
 
 ### Search API
+
 ```typescript
 // GET /api/search - Search plugins
 interface SearchRequest {
-  query?: string
-  category?: string[]
-  platforms?: string[]
-  tags?: string[]
-  sort?: 'popularity' | 'rating' | 'updated' | 'name'
-  page?: number
-  limit?: number
+	query?: string;
+	category?: string[];
+	platforms?: string[];
+	tags?: string[];
+	sort?: "popularity" | "rating" | "updated" | "name";
+	page?: number;
+	limit?: number;
 }
 ```
 
@@ -387,25 +409,27 @@ interface SearchRequest {
 ## 🚀 Deployment
 
 ### Vercel Configuration
+
 ```json
 {
-  "buildCommand": "pnpm build",
-  "outputDirectory": ".next",
-  "framework": "nextjs",
-  "functions": {
-    "src/app/api/**": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 30
-    }
-  },
-  "env": {
-    "DATABASE_URL": "@database-url",
-    "REGISTRY_SECRET": "@registry-secret"
-  }
+	"buildCommand": "pnpm build",
+	"outputDirectory": ".next",
+	"framework": "nextjs",
+	"functions": {
+		"src/app/api/**": {
+			"runtime": "nodejs18.x",
+			"maxDuration": 30
+		}
+	},
+	"env": {
+		"DATABASE_URL": "@database-url",
+		"REGISTRY_SECRET": "@registry-secret"
+	}
 }
 ```
 
 ### Database Migration
+
 ```bash
 # Run database migrations
 pnpm db:migrate
@@ -420,12 +444,14 @@ pnpm db:generate
 ## 📱 Mobile Experience
 
 ### Progressive Web App
+
 - **Offline Support**: Cache plugin metadata for offline browsing
 - **App-like Experience**: Native app feel with PWA capabilities
 - **Push Notifications**: Updates about new plugins and versions
 - **Quick Actions**: Direct access to frequently used plugins
 
 ### Mobile Optimization
+
 - **Touch-Friendly**: Large touch targets and gesture support
 - **Fast Loading**: Optimized for mobile networks
 - **Responsive Design**: Adapts to all screen sizes
@@ -434,6 +460,7 @@ pnpm db:generate
 ## 🤝 Contributing
 
 ### Registry Development
+
 1. Fork the repository
 2. Set up local development environment
 3. Create feature branch: `git checkout -b feat/registry-feature`
@@ -442,6 +469,7 @@ pnpm db:generate
 6. Submit Pull Request with clear description
 
 ### Plugin Submission
+
 1. Develop plugin following DevEx plugin standards
 2. Create comprehensive documentation
 3. Submit plugin metadata via API or GitHub issue
