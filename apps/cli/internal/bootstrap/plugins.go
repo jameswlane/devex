@@ -256,6 +256,11 @@ func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName stri
 		return false
 	}
 
+	// An installed plugin is usable without asking the registry, including offline.
+	if info, err := os.Stat(filepath.Join(b.manager.GetPluginDir(), "devex-plugin-"+pluginName)); err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+		return true
+	}
+
 	plugins, err := b.downloader.GetAvailablePlugins(ctx)
 	if err != nil {
 		return false

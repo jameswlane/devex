@@ -37,6 +37,39 @@ var _ = Describe("PluginBootstrap", func() {
 		ctx = context.Background()
 	})
 
+	Describe("IsPluginAvailable", func() {
+		BeforeEach(func() {
+			// Unreachable, so only the local plugin directory can answer.
+			originalURL, present := os.LookupEnv("DEVEX_PLUGIN_REGISTRY_URL")
+			os.Setenv("DEVEX_PLUGIN_REGISTRY_URL", "http://127.0.0.1:1")
+			DeferCleanup(func() {
+				if present {
+					os.Setenv("DEVEX_PLUGIN_REGISTRY_URL", originalURL)
+				} else {
+					os.Unsetenv("DEVEX_PLUGIN_REGISTRY_URL")
+				}
+			})
+		})
+
+		It("reports an installed plugin without asking the registry", func() {
+			pb, err := bootstrap.NewPluginBootstrap(true)
+			Expect(err).NotTo(HaveOccurred())
+			plugin := filepath.Join(tempHomeDir, ".devex", "plugins", "devex-plugin-package-manager-apt")
+			Expect(os.MkdirAll(filepath.Dir(plugin), 0o750)).To(Succeed())
+			Expect(os.WriteFile(plugin, []byte("#!/bin/sh\n"), 0o755)).To(Succeed())
+			Expect(pb.IsPluginAvailable(ctx, "package-manager-apt")).To(BeTrue())
+		})
+
+		It("ignores a plugin file that is not executable", func() {
+			pb, err := bootstrap.NewPluginBootstrap(true)
+			Expect(err).NotTo(HaveOccurred())
+			plugin := filepath.Join(tempHomeDir, ".devex", "plugins", "devex-plugin-package-manager-apt")
+			Expect(os.MkdirAll(filepath.Dir(plugin), 0o750)).To(Succeed())
+			Expect(os.WriteFile(plugin, []byte("#!/bin/sh\n"), 0o644)).To(Succeed())
+			Expect(pb.IsPluginAvailable(ctx, "package-manager-apt")).To(BeFalse())
+		})
+	})
+
 	Describe("NewPluginBootstrap", func() {
 		Context("when skipDownload is false", func() {
 			It("should create bootstrap instance with download enabled", func() {
