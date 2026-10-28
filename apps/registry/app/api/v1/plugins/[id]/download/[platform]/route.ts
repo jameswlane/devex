@@ -25,15 +25,6 @@ export async function GET(
 			return createApiError("Plugin not found", 404);
 		}
 
-		// Check if plugin supports this platform
-		const [os] = platform.split("-");
-		if (!plugin.platforms.includes(os)) {
-			return createApiError(
-				`Plugin ${plugin.name} does not support platform ${platform}`,
-				404,
-			);
-		}
-
 		// Get the binary URL from the stored binaries object
 		let binaries = plugin.binaries as Record<
 			string,
@@ -41,6 +32,15 @@ export async function GET(
 		>;
 		let version = plugin.version || "unknown";
 		const requestedVersion = new URL(request.url).searchParams.get("version");
+		// A pinned release is checked against its own binaries below, since the
+		// current platform list may have dropped an OS that release supported.
+		const [os] = platform.split("-");
+		if (requestedVersion === null && !plugin.platforms.includes(os)) {
+			return createApiError(
+				`Plugin ${plugin.name} does not support platform ${platform}`,
+				404,
+			);
+		}
 		if (requestedVersion !== null) {
 			const normalizedVersion = normalizePluginVersion(requestedVersion);
 			if (!normalizedVersion) {

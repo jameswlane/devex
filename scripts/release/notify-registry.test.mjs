@@ -175,7 +175,7 @@ describe("buildPayload from the GoReleaser snapshot fixture", () => {
 		});
 	});
 
-	it("prefers GITHUB_SHA over metadata.json's commit when given", () => {
+	it("prefers the tagged commit in metadata.json over GITHUB_SHA", () => {
 		const payload = buildPayload({
 			distDir: staged.dist,
 			tag,
@@ -183,7 +183,27 @@ describe("buildPayload from the GoReleaser snapshot fixture", () => {
 			now,
 			commitSha: "abcdef1",
 		});
-		assert.equal(payload.commitSha, "abcdef1");
+		assert.equal(payload.commitSha, "e4b080e81501ec61c8400df004bc55cb10eee34d");
+	});
+
+	it("falls back to GITHUB_SHA when metadata.json has no commit", () => {
+		const local = stageDist();
+		try {
+			const metaFile = path.join(local.dist, "metadata.json");
+			const meta = JSON.parse(readFileSync(metaFile, "utf8"));
+			delete meta.commit;
+			writeFileSync(metaFile, JSON.stringify(meta));
+			const payload = buildPayload({
+				distDir: local.dist,
+				tag,
+				metadataPath,
+				now,
+				commitSha: "abcdef1",
+			});
+			assert.equal(payload.commitSha, "abcdef1");
+		} finally {
+			rmSync(local.root, { recursive: true, force: true });
+		}
 	});
 
 	it("refuses a dist built for another version", () => {

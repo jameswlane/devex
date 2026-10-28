@@ -152,6 +152,30 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		expect(mockPrisma.plugin.update).toHaveBeenCalledTimes(1);
 	});
 
+	it("serves a pinned release for a platform the current release dropped", async () => {
+		mockPrisma.plugin.findUnique.mockResolvedValue({
+			...plugin,
+			platforms: ["macos"],
+		});
+
+		const response = await GET(request("1.9.0"), params);
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get("location")).toBe(pinnedUrl);
+	});
+
+	it("still rejects an unsupported platform without a pinned version", async () => {
+		mockPrisma.plugin.findUnique.mockResolvedValue({
+			...plugin,
+			platforms: ["macos"],
+		});
+
+		const response = await GET(request(), params);
+
+		expect(response.status).toBe(404);
+		expect(mockPrisma.plugin.update).not.toHaveBeenCalled();
+	});
+
 	it("supports latest as an explicit download version", async () => {
 		mockPrisma.pluginVersion.findUnique.mockResolvedValue({
 			...pinnedVersion,

@@ -118,3 +118,5 @@ jobs:
     with:
       plugin: ${{ needs.release.outputs.name }}
       version: ${{ needs.release.outputs.version }}
+      # Same registry the release was sent to.
+      registry_url: ${{ vars.REGISTRY_URL || 'https://registry.devex.sh' }}

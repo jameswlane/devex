@@ -106,6 +106,7 @@ async function handleGetPlugin(
 				resource: "pluginVersion",
 				metadata: { pluginId: plugin.id },
 			},
+			1, // best effort: don't retry (and delay the response) on failure
 		);
 	} catch (error) {
 		logger.warn("Could not load plugin version summary", {

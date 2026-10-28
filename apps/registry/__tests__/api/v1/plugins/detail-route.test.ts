@@ -127,6 +127,21 @@ describe("GET /api/v1/plugins/[id]", () => {
 		expect(body.versions).toEqual([]);
 	});
 
+	it("does not retry the best-effort version summary", async () => {
+		const { safeDatabase } = jest.requireMock("@/lib/error-handler") as {
+			safeDatabase: jest.Mock;
+		};
+
+		await GET(request(), params());
+
+		const summaryCall = safeDatabase.mock.calls.find(
+			(call) =>
+				(call[1] as { operation: string }).operation ===
+				"fetch-plugin-version-summary",
+		);
+		expect(summaryCall?.[2]).toBe(1);
+	});
+
 	it("caps the version summary at 50 after semver sorting", async () => {
 		mockPrisma.pluginVersion.findMany.mockResolvedValue(
 			Array.from({ length: 55 }, (_, index) => ({

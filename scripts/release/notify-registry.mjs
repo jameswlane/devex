@@ -275,7 +275,9 @@ export function buildPayload({
 		);
 	}
 
-	const sha = commitSha ?? releaseMeta.commit;
+	// metadata.json holds the tagged commit; GITHUB_SHA is only a fallback, since
+	// re-runs and workflow_call runs report the branch head instead.
+	const sha = releaseMeta.commit ?? commitSha;
 	const doc = yaml.load(
 		readFileSync(
 			metadataPath ?? path.join(repoRoot, "packages", plugin, "metadata.yaml"),

@@ -169,6 +169,25 @@ describe("POST plugin release", () => {
 		expect(response.status).toBe(413);
 		expect(recordPluginRelease).not.toHaveBeenCalled();
 	});
+	it("stops reading a streamed body once it passes 1 MiB", async () => {
+		// No content-length: a chunked body is only bounded by counting bytes.
+		let pulled = 0;
+		const stream = new ReadableStream<Uint8Array>({
+			pull(controller) {
+				pulled++;
+				controller.enqueue(new Uint8Array(256 * 1024));
+				if (pulled > 64) controller.close();
+			},
+		});
+		const streamed = new Request(
+			`https://registry.devex.sh/api/v1/plugins/${payload.plugin}/releases`,
+			{ method: "POST", body: stream, duplex: "half" } as RequestInit,
+		);
+		const response = await POST(streamed, context);
+		expect(response.status).toBe(413);
+		expect(pulled).toBeLessThan(10);
+		expect(recordPluginRelease).not.toHaveBeenCalled();
+	});
 	it("measures UTF-8 bytes rather than characters", async () => {
 		expect((await POST(request("é".repeat(524289)), context)).status).toBe(413);
 	});

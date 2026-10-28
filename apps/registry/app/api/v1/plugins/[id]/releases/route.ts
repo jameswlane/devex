@@ -30,6 +30,28 @@ function errorResponse(
 	);
 }
 
+/** Read the body as text, or return null once it exceeds maxBytes. */
+async function readBodyWithLimit(
+	request: Request,
+	maxBytes: number,
+): Promise<string | null> {
+	if (!request.body) return "";
+	const reader = request.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > maxBytes) {
+			await reader.cancel();
+			return null;
+		}
+		chunks.push(value);
+	}
+	return Buffer.concat(chunks).toString("utf8");
+}
+
 export async function POST(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> },
@@ -43,8 +65,9 @@ export async function POST(
 				"Release body exceeds 1 MB",
 			);
 		}
-		const rawBody = await request.text();
-		if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
+		// content-length can be missing or wrong, so also count the bytes read.
+		const rawBody = await readBodyWithLimit(request, MAX_BODY_BYTES);
+		if (rawBody === null) {
 			return errorResponse(
 				413,
 				"PAYLOAD_TOO_LARGE",
