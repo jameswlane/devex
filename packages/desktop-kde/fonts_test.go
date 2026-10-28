@@ -15,6 +15,8 @@ var _ = Describe("KDE Font Manager", func() {
 	)
 
 	BeforeEach(func() {
+		// Keep unit tests independent of host package managers and font caches.
+		GinkgoT().Setenv("PATH", GinkgoT().TempDir())
 		fm = NewFontManager()
 		ctx = context.Background()
 	})
@@ -153,10 +155,8 @@ var _ = Describe("KDE Font Manager", func() {
 
 		Context("when package manager detection fails", func() {
 			It("should handle package installation gracefully", func() {
-				// This test would require mocking package managers
-				// For now, we just verify the method signature accepts context
 				err := fm.installPackages(ctx, []string{"nonexistent-font-package"})
-				_ = err // Error depends on system state
+				Expect(err).To(MatchError("no supported package manager found"))
 			})
 		})
 	})
@@ -165,14 +165,12 @@ var _ = Describe("KDE Font Manager", func() {
 		Context("when refreshing font cache", func() {
 			It("should handle font cache refresh with context", func() {
 				err := fm.refreshFontCache(ctx)
-				// Error depends on whether fc-cache is available
-				_ = err
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should handle KDE cache update with context", func() {
 				err := fm.updateKDECache(ctx)
-				// Error depends on whether kbuildsycoca5 is available
-				_ = err
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})

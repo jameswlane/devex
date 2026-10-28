@@ -1,6 +1,6 @@
 # DevEx Plugin SDK
 
-[![Go Version](https://img.shields.io/badge/Go-1.24+-blue?logo=go)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-blue?logo=go)](https://golang.org/)
 [![SDK Version](https://img.shields.io/badge/Version-0.1.0-green)](../../CHANGELOG.md)
 [![License](https://img.shields.io/github/license/jameswlane/devex)](../../../LICENSE)
 [![Plugin SDK](https://img.shields.io/badge/Plugin-SDK-8A2BE2?logo=go)](https://github.com/jameswlane/devex)
@@ -385,7 +385,7 @@ compatible_devex_versions:
   - "<3.0.0"
 
 minimum_requirements:
-  go_version: "1.24"
+  go_version: "1.26.10"
   os_support: ["linux", "macos", "windows"]
 ```
 

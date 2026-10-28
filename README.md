@@ -100,7 +100,7 @@ DevEx follows enterprise patterns and best practices:
 
 ### Prerequisites
 
-- **Go**: Version 1.24+ (CLI development)
+- **Go**: Version 1.26+ (CLI development)
 - **Node.js**: Version 18+ (website and docs)
 - **pnpm**: Version 9+ (workspace management)
 - **Task**: Task runner for CLI development

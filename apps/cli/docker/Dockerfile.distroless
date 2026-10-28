@@ -2,7 +2,7 @@
 # Multi-stage build with distroless final image for security and size optimization
 
 # Stage 1: Build environment
-FROM golang:1.21-alpine AS builder
+FROM golang:1.26.10-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates

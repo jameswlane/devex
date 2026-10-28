@@ -122,7 +122,7 @@ devex config show
 ## 💻 Development
 
 ### Prerequisites
-- **Go**: Version 1.24+
+- **Go**: Version 1.26+
 - **Task**: Task runner (`go install github.com/go-task/task/v3/cmd/task@latest`)
 - **golangci-lint**: Linting (`curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin`)
 
