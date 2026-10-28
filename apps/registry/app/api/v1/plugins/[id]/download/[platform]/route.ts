@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { normalizePluginVersion } from "@/app/api/v1/plugins/[id]/versions/helpers";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
@@ -24,20 +25,52 @@ export async function GET(
 			return createApiError("Plugin not found", 404);
 		}
 
-		// Check if plugin supports this platform
+		// Get the binary URL from the stored binaries object
+		let binaries = plugin.binaries as Record<
+			string,
+			{ url: string; checksum: string; size: number }
+		>;
+		let version = plugin.version || "unknown";
+		const requestedVersion = new URL(request.url).searchParams.get("version");
+		// A pinned release is checked against its own binaries below, since the
+		// current platform list may have dropped an OS that release supported.
 		const [os] = platform.split("-");
-		if (!plugin.platforms.includes(os)) {
+		if (requestedVersion === null && !plugin.platforms.includes(os)) {
 			return createApiError(
 				`Plugin ${plugin.name} does not support platform ${platform}`,
 				404,
 			);
 		}
+		if (requestedVersion !== null) {
+			const normalizedVersion = normalizePluginVersion(requestedVersion);
+			if (!normalizedVersion) {
+				return createApiError(
+					"Invalid version format; expected semver or latest",
+					400,
+				);
+			}
 
-		// Get the binary URL from the stored binaries object
-		const binaries = plugin.binaries as Record<
-			string,
-			{ url: string; checksum: string; size: number }
-		>;
+			const pinnedVersion =
+				normalizedVersion === "latest"
+					? plugin.latestVersion
+					: normalizedVersion;
+			if (!pinnedVersion) {
+				return createApiError("Plugin version not found", 404);
+			}
+
+			const pluginVersion = await prisma.pluginVersion.findUnique({
+				where: {
+					pluginId_version: { pluginId: plugin.id, version: pinnedVersion },
+				},
+			});
+			if (!pluginVersion) {
+				return createApiError("Plugin version not found", 404);
+			}
+
+			binaries = pluginVersion.binaries as typeof binaries;
+			version = pluginVersion.version;
+		}
+
 		const binary = binaries?.[platform];
 
 		if (!binary || !binary.url) {
@@ -48,7 +81,6 @@ export async function GET(
 		}
 
 		const githubDownloadUrl = binary.url;
-		const version = plugin.version || "unknown";
 
 		// Update download count and last download time atomically
 		await prisma.plugin.update({

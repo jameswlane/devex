@@ -135,7 +135,7 @@ NEXT_PUBLIC_REGISTRY_URL="https://registry.devex.sh"
 ### API Authentication
 
 All `GET` endpoints (including `/api/v1/registry.json` used by the CLI) are public.
-Every write and admin endpoint requires an `Authorization: Bearer <token>` header,
+Data write and admin endpoints require an `Authorization: Bearer <token>` header,
 checked in constant time by `lib/auth/require-api-key.ts`:
 
 | Secret | Protects |
@@ -153,6 +153,27 @@ curl -X POST https://registry.devex.sh/api/v1/revalidate \
   -H "Content-Type: application/json" \
   -d '{"type":"all"}'
 ```
+
+### Signed plugin release webhooks
+
+`POST /api/v1/plugins/:id/releases` uses a separate
+`REGISTRY_RELEASE_WEBHOOK_SECRET`, shared with the release workflow. Generate it
+with `openssl rand -hex 32` and configure it in the registry environment and the
+sender's secret store. An unset secret disables the endpoint with `503
+CONFIGURATION_ERROR`.
+
+The sender sets `X-DevEx-Timestamp` to Unix seconds and `X-DevEx-Signature` to
+`sha256=<hex HMAC-SHA256(secret, timestamp + "." + rawBody)>`. Sign the exact
+JSON request bytes; timestamps must be within 300 seconds of the registry clock.
+Invalid signatures or timestamps receive `401`; invalid JSON/schema or a plugin
+name that differs from the URL receives `400`. Bodies over 1 MiB receive `413`.
+See `lib/releases/contract.ts` for the payload schema and shared signing vector.
+
+A new version receives `201`; replaying a version refreshes its binaries and
+release metadata and receives `200`. Stable releases at least as new as the
+current latest update plugin metadata and latest binaries; older releases and
+prereleases remain available in release history. Responses use `Cache-Control:
+no-store`, and successful writes are audited as `release-webhook`.
 
 ## 📦 Plugin Management
 
@@ -335,6 +356,15 @@ interface DownloadResponse {
   expires: Date
 }
 ```
+
+### Plugin Version API
+
+- `GET /api/v1/plugins/:id/versions` lists releases newest first by semantic version. Prereleases are excluded by default; pass `?include=prerelease` to include them. Each item contains `version`, `tag`, `prerelease`, `publishedAt`, and `platforms`.
+- `GET /api/v1/plugins/:id/versions/:version` returns a release's URLs, SDK/API compatibility, and binary metadata. `:version` accepts semantic versions with an optional leading `v`, or `latest` for the plugin's current `latestVersion`.
+- `GET /api/v1/plugins/:id` includes `latestVersion` and up to 50 stable releases in its `versions` summary.
+- `GET /api/v1/plugins/:id/download/:platform?version=:version` downloads a pinned release. Omit `version` to retain the current latest-release behavior.
+
+For the version list and detail endpoints, `:id` accepts a plugin's full name or short name. Unknown plugins and versions return `404`; malformed versions return `400`.
 
 ### Search API
 ```typescript

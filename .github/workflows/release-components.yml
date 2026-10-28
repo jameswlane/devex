@@ -1,8 +1,23 @@
 name: release components
 # Tags changed components (CLI, plugin SDK, plugins) and releases each one.
-# Tags pushed with GITHUB_TOKEN do not start other workflows, so this workflow
-# calls goreleaser.yml directly for every tag it creates.
+# Runs automatically on pushes to main that touch apps/cli or packages
+# (release-plan.mjs ignores docs-only changes) and manually via
+# workflow_dispatch (dry_run defaults to true for manual runs).
+#
+# Two mutually exclusive release paths, decided per run:
+#   * Release GitHub App configured (vars.RELEASE_APP_CLIENT_ID +
+#     secrets.RELEASE_APP_PRIVATE_KEY): tags are pushed with the app token.
+#     Those pushes trigger goreleaser.yml via its `push: tags` trigger, so the
+#     `release` matrix job below is SKIPPED and nothing releases twice.
+#   * App not configured: tags are pushed with GITHUB_TOKEN, which cannot
+#     trigger other workflows, so the `release` matrix job calls
+#     goreleaser.yml via workflow_call for every tag (today's behaviour).
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/cli/**'
+      - 'packages/**'
   workflow_dispatch:
     inputs:
       only:
@@ -23,15 +38,42 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    # Loop guard: tag pushes never reach this workflow (the trigger is branch
+    # pushes to main only), and the release bot itself only ever pushes tags.
+    # `[skip release]` in the head commit message is an escape hatch.
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[skip release]') }}
     permissions:
       contents: write  # push tags
     outputs:
       tags: ${{ steps.plan.outputs.tags }}
+      app_token: ${{ steps.app.outputs.configured }}
     steps:
+      - name: Detect release app configuration
+        id: app
+        env:
+          APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          APP_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -n "$APP_CLIENT_ID" ] && [ -n "$APP_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Create release app token
+        if: ${{ steps.app.outputs.configured == 'true' }}
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510  # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write  # push tags only
+      # Check out with the token that pushes tags: checkout stores it as an auth
+      # header, which git sends on push even if the remote URL carries another.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token || github.token }}
       - name: Compute release plan
         id: plan
         env:
@@ -54,9 +96,32 @@ jobs:
           if [ -n "$ONLY" ]; then args+=(--only "$ONLY"); fi
           node scripts/release/release-plan.mjs "${args[@]}" --tag
           jq -r '.[]' <<< "$TAGS" | xargs git push origin
+      - name: Record release mode in the summary
+        if: ${{ !inputs.dry_run }}
+        env:
+          APP_CONFIGURED: ${{ steps.app.outputs.configured }}
+          TAGS: ${{ steps.plan.outputs.tags }}
+        run: |
+          {
+            echo ''
+            echo '## Release mode'
+            if [ "$APP_CONFIGURED" = "true" ]; then
+              echo '- Tags pushed with the **release GitHub App** token.'
+              echo '- Each tag push triggers `goreleaser.yml` via its `push: tags` trigger.'
+              echo '- The `release` matrix job (workflow_call) is **skipped** so nothing releases twice.'
+            else
+              echo '- Tags pushed with `GITHUB_TOKEN` (release GitHub App not configured).'
+              echo '- `GITHUB_TOKEN` pushes do not trigger other workflows, so the `release` matrix job below calls `goreleaser.yml` via `workflow_call`.'
+            fi
+            echo "- Tags: \`$TAGS\`"
+          } >> "$GITHUB_STEP_SUMMARY"
   release:
     needs: plan
-    if: ${{ !inputs.dry_run && needs.plan.outputs.tags != '[]' }}
+    # Only when the release app is NOT configured: those tags were pushed with
+    # GITHUB_TOKEN, which cannot trigger goreleaser.yml, so call it here.
+    # When the app token pushed the tags, goreleaser.yml already runs from the
+    # push:tags trigger and this job stays skipped (mutually exclusive paths).
+    if: ${{ needs.plan.result == 'success' && !inputs.dry_run && needs.plan.outputs.tags != '[]' && needs.plan.outputs.app_token != 'true' }}
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -71,3 +136,4 @@ jobs:
       tag: ${{ matrix.tag }}
     secrets:
       GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+      REGISTRY_RELEASE_WEBHOOK_SECRET: ${{ secrets.REGISTRY_RELEASE_WEBHOOK_SECRET }}

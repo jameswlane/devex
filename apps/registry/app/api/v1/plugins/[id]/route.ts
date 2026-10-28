@@ -9,6 +9,7 @@ import {
 	createOptimizedResponse,
 	ResponseType,
 } from "@/lib/response-optimization";
+import { compareVersions } from "@/lib/version-compare";
 
 // GET /api/v1/plugins/[id] - Get a specific plugin by name
 async function handleGetPlugin(
@@ -89,16 +90,47 @@ async function handleGetPlugin(
 		return createApiError("Plugin not found", 404);
 	}
 
-	return createOptimizedResponse(plugin, {
-		type: ResponseType.STATIC,
-		headers: {
-			"X-Resource-Type": "plugin",
-			"X-Resource-Name": pluginName,
+	// Best effort: the summary is extra detail, so a failure here (for example
+	// before the plugin_versions migration is applied) must not fail the lookup.
+	let versions: { version: string; prerelease: boolean; publishedAt: Date }[] =
+		[];
+	try {
+		versions = await safeDatabase(
+			() =>
+				prisma.pluginVersion.findMany({
+					where: { pluginId: plugin.id, prerelease: false },
+					select: { version: true, prerelease: true, publishedAt: true },
+				}),
+			{
+				operation: "fetch-plugin-version-summary",
+				resource: "pluginVersion",
+				metadata: { pluginId: plugin.id },
+			},
+			1, // best effort: don't retry (and delay the response) on failure
+		);
+	} catch (error) {
+		logger.warn("Could not load plugin version summary", {
+			pluginName,
+			error: error instanceof Error ? error.message : String(error),
+		});
+	}
+	const versionSummary = versions
+		.sort((a, b) => compareVersions(b.version, a.version))
+		.slice(0, 50);
+
+	return createOptimizedResponse(
+		{ ...plugin, versions: versionSummary },
+		{
+			type: ResponseType.STATIC,
+			headers: {
+				"X-Resource-Type": "plugin",
+				"X-Resource-Name": pluginName,
+			},
+			performance: {
+				source: "database",
+			},
 		},
-		performance: {
-			source: "database",
-		},
-	});
+	);
 }
 
 // PUT /api/v1/plugins/[id] - Update a plugin by name

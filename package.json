@@ -36,6 +36,7 @@
 		"release:generate": "node scripts/release/generate-goreleaser.mjs",
 		"release:check": "node scripts/release/generate-goreleaser.mjs --check",
 		"release:plan": "node scripts/release/release-plan.mjs",
+		"release:test": "node --test scripts/release/*.test.mjs",
 		"act:lint": "actionlint .github/workflows/*.yml",
 		"act:validate": "action-validator .github/workflows/*.yml",
 		"act:test": "act push -W .github/workflows/ci.yml -n",

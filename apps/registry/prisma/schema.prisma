@@ -111,7 +111,10 @@ model Plugin {
   lastDownload  DateTime?
 
   // Binary metadata for different platforms
-  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes
+  binaries      Json     @default("{}") // Platform-specific download URLs, checksums, sizes (latest version)
+
+  // Every published release, newest first via publishedAt
+  versions      PluginVersion[]
 
   // Plugin SDK metadata
   sdkVersion    String?  @db.VarChar(50) // Compatible SDK version
@@ -141,6 +144,31 @@ model Plugin {
   @@index([downloadCount(sort: Desc), lastDownload(sort: Desc)], name: "idx_plugins_downloads_recent")
   
   @@map("plugins")
+}
+
+// One row per published plugin release. Rows are only ever added or refreshed,
+// never deleted by release automation, so the CLI can pin any published version.
+model PluginVersion {
+  id           String   @id @default(cuid())
+  pluginId     String
+  plugin       Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  version      String   @db.VarChar(50)  // Semver without the "v": "1.2.3", "1.3.0-rc.1"
+  tag          String   @db.VarChar(200) // Git tag: "packages/package-manager-apt/v1.2.3"
+  prerelease   Boolean  @default(false)
+  binaries     Json     @default("{}")   // Same shape as Plugin.binaries, for this version
+  checksumsUrl String?  @db.VarChar(500)
+  releaseUrl   String?  @db.VarChar(500)
+  commitSha    String?  @db.VarChar(64)
+  sdkVersion   String?  @db.VarChar(50)
+  apiVersion   String?  @db.VarChar(50)
+  source       String   @default("webhook") @db.VarChar(20) // webhook | sync
+  publishedAt  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([pluginId, version])
+  @@index([pluginId, publishedAt(sort: Desc)])
+  @@map("plugin_versions")
 }
 
 model Config {
