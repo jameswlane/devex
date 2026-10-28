@@ -42,6 +42,7 @@ async function handleGetPluginVersion(
 					publishedAt: true,
 					releaseUrl: true,
 					checksumsUrl: true,
+					commitSha: true,
 					sdkVersion: true,
 					apiVersion: true,
 					binaries: true,
