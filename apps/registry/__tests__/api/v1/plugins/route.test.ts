@@ -126,6 +126,10 @@ describe("/api/v1/plugins", () => {
 			const data = await response.json();
 
 			expect(response.status).toBe(200);
+			expect(response.headers.get("Cache-Control")).toBe(
+				"public, max-age=60, s-maxage=240, must-revalidate",
+			);
+			expect(response.headers.get("Vercel-Cache-Tag")).toBe("plugins,registry");
 			expect(data).toHaveProperty("items");
 			expect(data).toHaveProperty("pagination");
 			expect(data).toHaveProperty("meta");
@@ -262,7 +266,7 @@ describe("/api/v1/plugins", () => {
 			const response = await GET(req);
 
 			expect(response.headers.get("Cache-Control")).toBe(
-				"public, max-age=600, s-maxage=1200, stale-while-revalidate=1800",
+				"public, max-age=60, s-maxage=240, must-revalidate",
 			);
 			expect(response.headers.get("X-Total-Count")).toBe("1");
 			expect(response.headers.get("X-Registry-Optimized")).toBe("true");

@@ -1,3 +1,4 @@
+import { invalidateCdnTags, pluginCacheTags } from "./cdn-cache";
 import { dbCircuitBreaker } from "./db-health";
 import { logger } from "./logger";
 import { redis } from "./redis";
@@ -9,7 +10,7 @@ import { transformationService } from "./transformation-service";
  * This service provides a unified approach to invalidating caches across all layers:
  * - Redis caches (query results, transformations)
  * - Prisma Accelerate caches (database queries)
- * - CloudFlare CDN caches (API responses)
+ * - Vercel CDN caches (API responses)
  *
  * Implements cache tagging and dependency tracking for efficient invalidation.
  */
@@ -485,52 +486,16 @@ export class CacheInvalidationService {
 		}
 	}
 
-	/**
-	 * Invalidate CDN caches (CloudFlare or other CDN)
-	 */
+	/** Invalidate Vercel CDN responses independently of Next.js data caches. */
 	private async invalidateCDNCache(
 		options: InvalidationOptions,
 	): Promise<void> {
-		try {
-			// CDN invalidation would typically involve API calls to CloudFlare
-			// This is a placeholder for CDN invalidation logic
-
-			const urls: string[] = [];
-
-			// Build list of URLs to purge based on resource
-			if (options.resource === "all") {
-				urls.push("/api/v1/*");
-			} else if (options.resource) {
-				urls.push(
-					`/api/v1/${options.resource}s`,
-					`/api/v1/${options.resource}s/*`,
-					`/api/v1/registry`,
-				);
-
-				if (options.id) {
-					urls.push(`/api/v1/${options.resource}s/${options.id}`);
-				}
-			}
-
-			logger.debug("CDN cache invalidation triggered", { urls });
-
-			// TODO: Implement actual CDN purge API calls
-			// Example for CloudFlare:
-			// await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/purge_cache`, {
-			//   method: 'POST',
-			//   headers: {
-			//     'Authorization': `Bearer ${apiToken}`,
-			//     'Content-Type': 'application/json',
-			//   },
-			//   body: JSON.stringify({ files: urls })
-			// });
-		} catch (error) {
-			logger.error("Failed to invalidate CDN cache", {
-				error: error instanceof Error ? error.message : String(error),
-				options,
-			});
-			// Don't throw - CDN cache invalidation is not critical
-		}
+		if (process.env.VERCEL !== "1") return;
+		await invalidateCdnTags(
+			options.resource === "plugin" || options.resource === "all"
+				? pluginCacheTags(options.id)
+				: ["registry"],
+		);
 	}
 
 	/**

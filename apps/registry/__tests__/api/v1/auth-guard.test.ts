@@ -7,6 +7,12 @@ import {
 	jest,
 } from "@jest/globals";
 import { NextRequest } from "next/server";
+import { invalidateCdnTags } from "@/lib/cdn-cache";
+
+jest.mock("@/lib/cdn-cache", () => ({
+	...jest.requireActual<typeof import("@/lib/cdn-cache")>("@/lib/cdn-cache"),
+	invalidateCdnTags: jest.fn<typeof invalidateCdnTags>(),
+}));
 
 // Setup all mocks before imports
 jest.mock("@/lib/prisma", () => ({
@@ -430,6 +436,22 @@ describe("API key guard on write and admin endpoints", () => {
 	});
 
 	describe("POST /api/v1/revalidate body handling", () => {
+		it("purges plugin collection tags only after authentication", async () => {
+			const denied = await revalidate(
+				makeRequest("/api/v1/revalidate", { body: { type: "plugin-cdn" } }),
+			);
+			expect(denied.status).toBe(401);
+			expect(invalidateCdnTags).not.toHaveBeenCalled();
+			const response = await revalidate(
+				makeRequest("/api/v1/revalidate", {
+					token: REVALIDATE_KEY,
+					body: { type: "plugin-cdn" },
+				}),
+			);
+			expect(response.status).toBe(200);
+			expect(invalidateCdnTags).toHaveBeenCalledWith(["plugins", "registry"]);
+		});
+
 		it("returns 400 for malformed JSON instead of throwing", async () => {
 			const response = await revalidate(
 				makeRequest("/api/v1/revalidate", {

@@ -170,8 +170,13 @@ describe("/api/v1/registry.json", () => {
 		);
 		const response = await GET(request);
 
-		expect(response.headers.get("Cache-Control")).toBeTruthy();
-		expect(response.headers.get("CDN-Cache-Control")).toBeTruthy();
+		expect(response.headers.get("Cache-Control")).toBe(
+			"public, max-age=60, s-maxage=240, must-revalidate",
+		);
+		expect(response.headers.get("Vercel-Cache-Tag")).toBe("plugins,registry");
+		expect(response.headers.get("CDN-Cache-Control")).toBe(
+			"public, max-age=240, must-revalidate",
+		);
 		expect(response.headers.get("X-Registry-Source")).toBe("database");
 		expect(response.headers.get("X-Registry-Version")).toBe("1.0.0");
 	});

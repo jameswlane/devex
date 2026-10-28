@@ -166,6 +166,10 @@ describe("/api/v1/registry", () => {
 			const data = await response.json();
 
 			expect(response.status).toBe(200);
+			expect(response.headers.get("Cache-Control")).toBe(
+				"public, max-age=60, s-maxage=240, must-revalidate",
+			);
+			expect(response.headers.get("Vercel-Cache-Tag")).toBe("plugins,registry");
 			expect(data).toHaveProperty("data");
 			expect(data).toHaveProperty("pagination");
 			expect(data).toHaveProperty("stats");

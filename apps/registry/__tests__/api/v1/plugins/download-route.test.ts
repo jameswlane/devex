@@ -130,6 +130,9 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 		const response = await GET(request(), params);
 
 		expect(response.status).toBe(302);
+		expect(response.headers.get("Cache-Control")).toBe(
+			"no-cache, no-store, must-revalidate",
+		);
 		expect(response.headers.get("location")).toBe(latestUrl);
 		expect(response.headers.get("X-Plugin-Version")).toBe("1.10.0");
 		expect(response.headers.get("X-Download-Count")).toBe("11");

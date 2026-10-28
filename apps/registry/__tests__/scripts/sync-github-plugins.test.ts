@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	it,
+	jest,
+} from "@jest/globals";
 import type { PrismaClient } from "@prisma/client";
 import { githubApi } from "../../lib/github-api";
 import { recordPluginRelease } from "../../lib/releases/record";
@@ -17,6 +24,14 @@ jest.mock("../../lib/releases/record", () => ({
 }));
 
 describe("sync-github-plugins", () => {
+	const originalKey = process.env.REVALIDATE_API_KEY;
+	const originalUrl = process.env.REGISTRY_URL;
+	afterEach(() => {
+		if (originalKey === undefined) delete process.env.REVALIDATE_API_KEY;
+		else process.env.REVALIDATE_API_KEY = originalKey;
+		if (originalUrl === undefined) delete process.env.REGISTRY_URL;
+		else process.env.REGISTRY_URL = originalUrl;
+	});
 	const validChecksum = "c".repeat(64);
 
 	const mockPrisma = {
@@ -47,6 +62,8 @@ describe("sync-github-plugins", () => {
 
 	beforeEach(() => {
 		jest.clearAllMocks();
+		delete process.env.REVALIDATE_API_KEY;
+		delete process.env.REGISTRY_URL;
 		delete process.env.SYNC_TAG;
 		global.fetch = jest.fn<typeof fetch>();
 		jest.mocked(githubApi.getFileContents).mockResolvedValue({
@@ -199,7 +216,14 @@ describe("sync-github-plugins", () => {
 			latestChanged: true,
 		});
 
+		const warning = jest.spyOn(console, "warn").mockImplementation(() => {});
 		await syncPlugins({ prisma: mockPrisma });
+		expect(warning).toHaveBeenCalledWith(
+			expect.stringContaining(
+				"REVALIDATE_API_KEY and REGISTRY_URL must be configured",
+			),
+		);
+		warning.mockRestore();
 
 		expect(recordPluginRelease).toHaveBeenCalledTimes(3);
 		const recordedVersions = jest

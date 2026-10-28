@@ -455,3 +455,34 @@ The DevEx Plugin Registry is licensed under the [Apache-2.0 License](../../LICEN
 **[Visit Registry](https://registry.devex.sh)** • **[Submit Plugin](https://github.com/jameswlane/devex/issues/new?template=plugin-submission.md)** • **[API Docs](https://registry.devex.sh/docs)**
 
 </div>
+
+### Release cache freshness and CDN invalidation
+
+Plugin metadata and version responses use a 60-second browser TTL and a
+240-second shared CDN TTL, with mandatory revalidation rather than a stale serving
+window. Download redirects remain `no-store`. Responses carry `Vercel-Cache-Tag`
+values `plugin:<name>`, `plugins`, and `registry`; collection tags also cover
+short-name aliases. A successful webhook write invalidates these tags, and a
+successful nightly sync invalidates the collection tags.
+
+Set **REVALIDATE_API_KEY** to the same secret in the Vercel project and the
+GitHub Actions production environment. The sync workflow passes that key and
+`REGISTRY_URL=https://registry.devex.sh` to the script, which sends an authenticated
+`POST /api/v1/revalidate` with `{ "type": "plugin-cdn" }`. HTTPS is required and
+redirects are refused. Missing configuration, non-success responses, and a
+five-second timeout produce warnings without failing sync. The registry endpoint
+and release webhook call `invalidateByTag` from `@vercel/functions` inside Vercel;
+no Vercel account token is needed. Runtime purge failures warn without failing
+release recording. Request credentials and API error bodies are never logged.
+
+Invalidation marks CDN entries stale; the next request can receive stale content
+while Vercel refreshes it in the background. Next.js `revalidateTag` addresses a
+separate data cache and does not replace this CDN purge. The bounded TTL remains
+the fallback when purging is unavailable. After deployment, inspect origin
+headers in tests and production `Cache-Control`, `Age`, and `x-vercel-cache` with
+`curl -sSI`; Vercel consumes `s-maxage` when it is the sole cache-control header.
+Existing cached responses acquire tags only after being refreshed or redeployed.
+
+References: [Vercel cache-control headers](https://vercel.com/docs/caching/cache-control-headers),
+[Vercel CDN invalidate-by-tag REST API](https://vercel.com/docs/rest-api/edge-cache/invalidate-by-tag),
+and [Vercel Functions tag API](https://vercel.com/docs/functions/functions-api-reference/vercel-functions-package).
