@@ -121,6 +121,10 @@ jobs:
 
       - name: Vulnerability check (CLI)
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f  # v1.1.0
+        env:
+          # mise exports GOROOT for its Go; the action installs its own Go,
+          # and a stale GOROOT makes the two toolchains collide.
+          GOROOT: ""
         with:
           go-version-file: apps/cli/go.mod
           go-package: ./...
@@ -160,6 +164,10 @@ jobs:
 
       - name: Vulnerability check (Plugin SDK)
         uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f  # v1.1.0
+        env:
+          # mise exports GOROOT for its Go; the action installs its own Go,
+          # and a stale GOROOT makes the two toolchains collide.
+          GOROOT: ""
         with:
           go-version-file: packages/plugin-sdk/go.mod
           go-package: ./...
