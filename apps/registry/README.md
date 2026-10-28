@@ -380,6 +380,10 @@ interface SearchRequest {
 }
 ```
 
+### Error Handling
+
+- Unknown `/api/*` paths return a `404` with the standard JSON error envelope (`{success: false, error: {code: "NOT_FOUND", message, timestamp, requestId}}`), so API clients always receive JSON rather than an HTML page.
+
 ## 🚀 Deployment
 
 ### Vercel Configuration
