@@ -9,6 +9,6 @@
 		"start": "npx serve public"
 	},
 	"devDependencies": {
-		"serve": "^14.2.3"
+		"serve": "^14.2.6"
 	}
 }
