@@ -73,6 +73,7 @@ var _ = Describe("PluginBootstrap", func() {
 
 	Describe("Initialize", func() {
 		BeforeEach(func() {
+			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true) // Skip download for tests
 			Expect(err).NotTo(HaveOccurred())
@@ -104,6 +105,7 @@ var _ = Describe("PluginBootstrap", func() {
 
 	Describe("Platform Detection", func() {
 		BeforeEach(func() {
+			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
@@ -139,6 +141,7 @@ var _ = Describe("PluginBootstrap", func() {
 		var mockRootCmd *cobra.Command
 
 		BeforeEach(func() {
+			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
@@ -200,12 +203,13 @@ var _ = Describe("PluginBootstrap", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to create plugin directory"))
 		})
 
-		It("should handle plugin loading errors gracefully", func() {
+		It("should initialize with an empty plugin directory", func() {
+			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Initialize should succeed even if plugin loading fails
+			// An existing empty directory has no plugins to load.
 			err = pluginBootstrap.Initialize(ctx)
 			Expect(err).NotTo(HaveOccurred())
 		})

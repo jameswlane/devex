@@ -339,7 +339,7 @@ func (p *PantheonPlugin) handleBackup(args []string) error {
 	}
 
 	var allOutput strings.Builder
-	allOutput.WriteString(fmt.Sprintf("# Pantheon Settings Backup - %s\n", time.Now().Format(time.RFC3339)))
+	fmt.Fprintf(&allOutput, "# Pantheon Settings Backup - %s\n", time.Now().Format(time.RFC3339))
 
 	for _, schema := range schemas {
 		cmd := exec.Command("dconf", "dump", schema)
@@ -349,7 +349,7 @@ func (p *PantheonPlugin) handleBackup(args []string) error {
 			continue
 		}
 
-		allOutput.WriteString(fmt.Sprintf("\n# Schema: %s\n", schema))
+		fmt.Fprintf(&allOutput, "\n# Schema: %s\n", schema)
 		allOutput.Write(output)
 	}
 

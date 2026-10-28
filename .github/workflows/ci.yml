@@ -15,6 +15,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   detect-changes:
     name: Detect Changes
@@ -126,7 +129,7 @@ jobs:
           # and a stale GOROOT makes the two toolchains collide.
           GOROOT: ""
         with:
-          go-version-file: apps/cli/go.mod
+          go-version: "1.26.10"
           go-package: ./...
           work-dir: apps/cli
 
@@ -169,7 +172,7 @@ jobs:
           # and a stale GOROOT makes the two toolchains collide.
           GOROOT: ""
         with:
-          go-version-file: packages/plugin-sdk/go.mod
+          go-version: "1.26.10"
           go-package: ./...
           work-dir: packages/plugin-sdk
 

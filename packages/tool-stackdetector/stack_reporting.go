@@ -380,28 +380,28 @@ func (p *StackDetectorPlugin) formatReportText(report *StackReport) string {
 	text.WriteString("🚀 DevEx Stack Report\n")
 	text.WriteString("====================\n\n")
 
-	text.WriteString(fmt.Sprintf("📅 Generated: %s\n", report.GeneratedAt.Format("2006-01-02 15:04:05")))
-	text.WriteString(fmt.Sprintf("📂 Project: %s\n\n", report.ProjectPath))
+	fmt.Fprintf(&text, "📅 Generated: %s\n", report.GeneratedAt.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&text, "📂 Project: %s\n\n", report.ProjectPath)
 
 	// Summary
 	text.WriteString("📋 Project Summary\n")
 	text.WriteString("------------------\n")
-	text.WriteString(fmt.Sprintf("Primary Language: %s\n", report.Summary.PrimaryLanguage))
-	text.WriteString(fmt.Sprintf("Project Type: %s\n", report.Summary.ProjectType))
-	text.WriteString(fmt.Sprintf("Complexity Level: %s\n", report.Summary.ComplexityLevel))
-	text.WriteString(fmt.Sprintf("Maturity Level: %s\n", report.Summary.MaturityLevel))
-	text.WriteString(fmt.Sprintf("Recommended Action: %s\n\n", report.Summary.RecommendedAction))
+	fmt.Fprintf(&text, "Primary Language: %s\n", report.Summary.PrimaryLanguage)
+	fmt.Fprintf(&text, "Project Type: %s\n", report.Summary.ProjectType)
+	fmt.Fprintf(&text, "Complexity Level: %s\n", report.Summary.ComplexityLevel)
+	fmt.Fprintf(&text, "Maturity Level: %s\n", report.Summary.MaturityLevel)
+	fmt.Fprintf(&text, "Recommended Action: %s\n\n", report.Summary.RecommendedAction)
 
 	// Project size
 	text.WriteString("📏 Project Metrics\n")
 	text.WriteString("------------------\n")
-	text.WriteString(fmt.Sprintf("Total Files: %d\n", report.ProjectSize.TotalFiles))
-	text.WriteString(fmt.Sprintf("Code Files: %d\n", report.ProjectSize.CodeFiles))
-	text.WriteString(fmt.Sprintf("Config Files: %d\n", report.ProjectSize.ConfigFiles))
-	text.WriteString(fmt.Sprintf("Documentation Files: %d\n\n", report.ProjectSize.DocumentFiles))
+	fmt.Fprintf(&text, "Total Files: %d\n", report.ProjectSize.TotalFiles)
+	fmt.Fprintf(&text, "Code Files: %d\n", report.ProjectSize.CodeFiles)
+	fmt.Fprintf(&text, "Config Files: %d\n", report.ProjectSize.ConfigFiles)
+	fmt.Fprintf(&text, "Documentation Files: %d\n\n", report.ProjectSize.DocumentFiles)
 
 	// Technologies
-	text.WriteString(fmt.Sprintf("🔧 Technologies (%d detected)\n", len(report.Technologies)))
+	fmt.Fprintf(&text, "🔧 Technologies (%d detected)\n", len(report.Technologies))
 	text.WriteString("--------------------------------\n")
 	for _, tech := range report.Technologies {
 		confidence := ""
@@ -413,26 +413,26 @@ func (p *StackDetectorPlugin) formatReportText(report *StackReport) string {
 		default:
 			confidence = "🟠 Low"
 		}
-		text.WriteString(fmt.Sprintf("%s - %s (%s)\n", confidence, tech.Name, tech.Category))
+		fmt.Fprintf(&text, "%s - %s (%s)\n", confidence, tech.Name, tech.Category)
 	}
 	text.WriteString("\n")
 
 	// Issues
 	if len(report.Issues) > 0 {
-		text.WriteString(fmt.Sprintf("⚠️  Issues (%d found)\n", len(report.Issues)))
+		fmt.Fprintf(&text, "⚠️  Issues (%d found)\n", len(report.Issues))
 		text.WriteString("-------------------\n")
 		for _, issue := range report.Issues {
-			text.WriteString(fmt.Sprintf("- %s\n", issue))
+			fmt.Fprintf(&text, "- %s\n", issue)
 		}
 		text.WriteString("\n")
 	}
 
 	// Recommendations
 	if len(report.Recommendations) > 0 {
-		text.WriteString(fmt.Sprintf("💡 Recommendations (%d suggestions)\n", len(report.Recommendations)))
+		fmt.Fprintf(&text, "💡 Recommendations (%d suggestions)\n", len(report.Recommendations))
 		text.WriteString("----------------------------------\n")
 		for _, rec := range report.Recommendations {
-			text.WriteString(fmt.Sprintf("- %s\n", rec))
+			fmt.Fprintf(&text, "- %s\n", rec)
 		}
 		text.WriteString("\n")
 	}
