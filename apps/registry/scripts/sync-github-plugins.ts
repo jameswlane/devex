@@ -1,579 +1,361 @@
 #!/usr/bin/env tsx
 
 /**
- * GitHub Plugin Sync Service
+ * GitHub Plugin Sync & Repair Service
  *
- * This script automatically syncs plugin metadata from GitHub tags to the registry database.
- * It should be run via GitHub Actions when new tags are created.
+ * Idempotent nightly repair job and on-demand sync script that fetches plugin
+ * tags and GitHub releases, constructs validated ReleasePayload objects, and
+ * records plugin release versions in the registry database.
  */
 
 import { PrismaClient } from "@prisma/client";
 import { githubApi } from "../lib/github-api";
-import { compareVersions } from "../lib/version-compare";
+import {
+	buildReleasePayload,
+	type GitHubRelease,
+	type GitHubTag,
+	parsePluginTag,
+	sortTagsByVersion,
+} from "../lib/releases/github-release-payload";
+import { recordPluginRelease } from "../lib/releases/record";
 
-interface GitHubTag {
-	name: string;
-	commit: {
-		sha: string;
-		url: string;
-	};
-	zipball_url: string;
-	tarball_url: string;
-}
-
-interface PluginMetadata {
-	name: string;
-	shortName: string;
-	type: string;
-	version: string;
-	description: string;
-	author?: string;
-	license?: string;
-	repository?: string;
-	homepage?: string;
-	platforms: string[];
-	binaries: Record<string, BinaryInfo>;
-	sdkVersion?: string;
-	apiVersion?: string;
-	dependencies: string[];
-	conflicts?: string[];
-}
-
-interface BinaryInfo {
-	url: string;
-	checksum: string;
-	size: number;
-	// How the asset is packaged: SDK v0.0.6+ handles all three, older SDKs only "binary".
-	format: "binary" | "tar.gz" | "zip";
-}
-
-const GITHUB_OWNER = "jameswlane";
-const GITHUB_REPO = "devex";
+const GITHUB_OWNER = process.env.GITHUB_OWNER || "jameswlane";
+const GITHUB_REPO = process.env.GITHUB_REPO || "devex";
 const PLUGIN_TAG_PREFIX = "packages/";
-const prisma = new PrismaClient();
+const defaultPrisma = new PrismaClient();
+
+function parseArgs(args: string[]): {
+	tag?: string;
+	owner?: string;
+	repo?: string;
+} {
+	const result: { tag?: string; owner?: string; repo?: string } = {};
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "--tag" && i + 1 < args.length) {
+			result.tag = args[++i];
+		} else if (arg.startsWith("--tag=")) {
+			result.tag = arg.slice("--tag=".length);
+		} else if (arg === "--owner" && i + 1 < args.length) {
+			result.owner = args[++i];
+		} else if (arg.startsWith("--owner=")) {
+			result.owner = arg.slice("--owner=".length);
+		} else if (arg === "--repo" && i + 1 < args.length) {
+			result.repo = args[++i];
+		} else if (arg.startsWith("--repo=")) {
+			result.repo = arg.slice("--repo=".length);
+		}
+	}
+
+	return result;
+}
+
+export interface SyncOptions {
+	tag?: string;
+	owner?: string;
+	repo?: string;
+	prisma?: PrismaClient;
+}
+
+export interface SyncResult {
+	total: number;
+	succeeded: number;
+	failed: string[];
+}
 
 /**
  * Main sync function
  */
-async function syncPlugins() {
-	try {
-		console.log("🔄 Starting GitHub plugin sync...");
+export async function syncPlugins(
+	options: SyncOptions = {},
+): Promise<SyncResult> {
+	const db = options.prisma || defaultPrisma;
+	const owner = options.owner || GITHUB_OWNER;
+	const repo = options.repo || GITHUB_REPO;
 
-		// Get all DevEx plugin tags from GitHub, oldest version first so the newest wins
-		const allTags = sortTagsByVersion(await getPluginTags());
-		console.log(`📋 Found ${allTags.length} plugin tags`);
+	const cliArgs = parseArgs(process.argv.slice(2));
+	const onlyTag = (
+		options.tag ||
+		cliArgs.tag ||
+		process.env.SYNC_TAG ||
+		""
+	).trim();
 
-		// SYNC_TAG limits the run to the release that was just published
-		const onlyTag = process.env.SYNC_TAG?.trim();
-		const pluginTags = onlyTag
-			? allTags.filter((tag) => tag.name === onlyTag)
-			: allTags;
-		if (onlyTag && pluginTags.length === 0) {
-			throw new Error(`Tag ${onlyTag} was not found among plugin tags`);
-		}
-
-		const failed: string[] = [];
-		for (const tag of pluginTags) {
-			if (!(await processPluginTag(tag))) failed.push(tag.name);
-		}
-
-		// Update registry stats
-		await updateRegistryStats();
-
-		if (failed.length > 0) {
-			throw new Error(
-				`Failed to sync ${failed.length} tag(s): ${failed.join(", ")}`,
-			);
-		}
-
-		console.log("✅ Plugin sync completed successfully");
-	} catch (error) {
-		console.error("❌ Plugin sync failed:", error);
-		await prisma.$disconnect();
-		process.exit(1);
-	} finally {
-		await prisma.$disconnect();
-		process.exit(0);
+	console.log(`🔄 Starting GitHub plugin sync for ${owner}/${repo}...`);
+	if (onlyTag) {
+		console.log(`🎯 Single-tag sync mode requested for: ${onlyTag}`);
 	}
+
+	// 1. Fetch all plugin tags with pagination
+	const allTags = await getPluginTags(owner, repo);
+	console.log(`📋 Found ${allTags.length} plugin tags in repository`);
+
+	const pluginTags = onlyTag
+		? allTags.filter((tag) => tag.name === onlyTag)
+		: allTags;
+
+	if (onlyTag && pluginTags.length === 0) {
+		throw new Error(`Tag ${onlyTag} was not found among plugin tags`);
+	}
+
+	if (pluginTags.length === 0) {
+		console.log("ℹ️ No plugin tags to process");
+		await updateRegistryStats(db);
+		return { total: 0, succeeded: 0, failed: [] };
+	}
+
+	const failed: string[] = [];
+	let succeeded = 0;
+
+	for (const tag of pluginTags) {
+		const success = await processPluginTag(tag, owner, repo, db);
+		if (success) {
+			succeeded++;
+		} else {
+			failed.push(tag.name);
+		}
+	}
+
+	// Update registry stats
+	try {
+		await updateRegistryStats(db);
+	} catch (statsError) {
+		console.warn("⚠️ Failed to update registry stats:", statsError);
+	}
+
+	console.log(
+		`📊 Sync summary: ${succeeded} succeeded, ${failed.length} failed/skipped out of ${pluginTags.length} total`,
+	);
+
+	// Fail closed if every tag failed; otherwise treat partial skips as non-fatal
+	if (pluginTags.length > 0 && succeeded === 0) {
+		throw new Error(
+			`Failed to sync all ${pluginTags.length} tag(s): ${failed.join(", ")}`,
+		);
+	}
+
+	console.log("✅ Plugin sync completed successfully");
+	return {
+		total: pluginTags.length,
+		succeeded,
+		failed,
+	};
 }
 
 /**
- * Get all plugin tags from GitHub with rate limiting and pagination
+ * Get all plugin tags from GitHub with rate limiting and pagination across all pages
  */
-async function getPluginTags(): Promise<GitHubTag[]> {
+async function getPluginTags(
+	owner: string,
+	repo: string,
+): Promise<GitHubTag[]> {
 	try {
-		const allTags: GitHubTag[] = [];
+		const allRawTags: GitHubTag[] = [];
 		let page = 1;
-		let hasMorePages = true;
 
-		while (hasMorePages) {
+		while (true) {
 			console.log(`📋 Fetching tags page ${page}...`);
-
-			const tags = await githubApi.listTags(GITHUB_OWNER, GITHUB_REPO, {
+			const tags = await githubApi.listTags(owner, repo, {
 				per_page: 100,
 				page,
 			});
 
-			if (tags.length === 0) {
-				hasMorePages = false;
+			if (!tags || tags.length === 0) {
 				break;
 			}
 
-			const pluginTags = tags.filter((tag) =>
+			const pluginTags = tags.filter((tag: GitHubTag) =>
 				tag.name.startsWith(PLUGIN_TAG_PREFIX),
-			) as GitHubTag[];
+			);
+			allRawTags.push(...pluginTags);
 
-			allTags.push(...pluginTags);
-
-			// If we got less than 100 tags, we're on the last page
 			if (tags.length < 100) {
-				hasMorePages = false;
-			} else {
-				page++;
+				break;
 			}
+			page++;
 		}
 
-		return allTags;
+		return sortTagsByVersion(allRawTags);
 	} catch (error) {
-		throw new Error(`Failed to fetch GitHub tags: ${error}`);
+		throw new Error(
+			`Failed to fetch GitHub tags: ${error instanceof Error ? error.message : String(error)}`,
+		);
 	}
+}
+
+/**
+ * Fetch metadata.yaml content for a plugin
+ */
+async function fetchMetadataYaml(
+	owner: string,
+	repo: string,
+	fullName: string,
+): Promise<string | undefined> {
+	try {
+		const metadataUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/packages/${fullName}/metadata.yaml`;
+		const response = await fetch(metadataUrl);
+		if (response.ok) {
+			return await response.text();
+		}
+	} catch (err) {
+		console.log(
+			`ℹ️ Could not fetch metadata.yaml from raw URL for ${fullName}: ${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
+
+	try {
+		const file = await githubApi.getFileContents(
+			owner,
+			repo,
+			`packages/${fullName}/metadata.yaml`,
+		);
+		if (file && typeof file.content === "string") {
+			return Buffer.from(file.content, "base64").toString("utf-8");
+		}
+	} catch {
+		// Fallback to undefined so default metadata is used
+	}
+
+	return undefined;
+}
+
+/**
+ * Fetch checksums.txt content from release assets
+ */
+async function fetchChecksumsContent(
+	release: GitHubRelease | null,
+): Promise<string | undefined> {
+	if (!release?.assets) return undefined;
+	const checksumAsset = release.assets.find((a) => a.name === "checksums.txt");
+	if (!checksumAsset?.browser_download_url) return undefined;
+
+	try {
+		const response = await fetch(checksumAsset.browser_download_url);
+		if (response.ok) {
+			return await response.text();
+		}
+	} catch (err) {
+		console.warn(
+			`⚠️ Could not fetch checksums.txt from ${checksumAsset.browser_download_url}: ${err instanceof Error ? err.message : String(err)}`,
+		);
+	}
+
+	return undefined;
 }
 
 /**
  * Process a single plugin tag
  */
-async function processPluginTag(tag: GitHubTag): Promise<boolean> {
+export async function processPluginTag(
+	tag: GitHubTag,
+	owner: string,
+	repo: string,
+	db: PrismaClient,
+): Promise<boolean> {
+	const pluginInfo = parsePluginTag(tag.name);
+	if (!pluginInfo) {
+		console.log(`⚠️ Skipping invalid tag name format: ${tag.name}`);
+		return true;
+	}
+	// The plugin SDK is a library tagged under packages/ too; it has no plugin binaries.
+	if (pluginInfo.fullName === "plugin-sdk") {
+		return true;
+	}
+
+	console.log(
+		`🔧 Processing plugin release: ${pluginInfo.fullName}@${pluginInfo.version} (${tag.name})`,
+	);
+
+	let release: GitHubRelease | null = null;
 	try {
-		const pluginInfo = parsePluginTag(tag.name);
-		if (!pluginInfo) {
-			console.log(`⚠️  Skipping invalid tag: ${tag.name}`);
-			return true;
-		}
-
-		console.log(
-			`🔧 Processing plugin: ${pluginInfo.fullName}@${pluginInfo.version}`,
+		release = await githubApi.getReleaseByTag(owner, repo, tag.name);
+	} catch (err) {
+		console.warn(
+			`⚠️ Could not fetch GitHub release for tag ${tag.name}: ${err instanceof Error ? err.message : String(err)}`,
 		);
+	}
 
-		// Check if the plugin already exists (using fullName as primary identifier)
-		const existingPlugin = await prisma.plugin.findUnique({
-			where: { name: pluginInfo.fullName },
-		});
-
-		// Get plugin metadata from release assets or package.json
-		const metadata = await getPluginMetadata(pluginInfo, tag);
-
-		// Never replace working download links with an empty set (e.g. release still uploading)
-		if (Object.keys(metadata.binaries).length === 0) {
-			throw new Error(
-				`Release ${tag.name} has no downloadable plugin binaries`,
-			);
-		}
-
-		if (existingPlugin) {
-			// Update the existing plugin if the version is newer
-			if (shouldUpdatePlugin(existingPlugin.version, pluginInfo.version)) {
-				await updatePlugin(existingPlugin.id, metadata, pluginInfo);
-				console.log(`✅ Updated plugin: ${pluginInfo.fullName}`);
-			} else {
-				console.log(`ℹ️  Plugin ${pluginInfo.fullName} is up to date`);
-			}
-		} else {
-			// Create new plugin
-			await createPlugin(metadata, pluginInfo);
-			console.log(`✅ Created plugin: ${pluginInfo.fullName}`);
-		}
-
-		// Log sync operation
+	if (!release) {
+		console.warn(`⚠️ No release found for tag ${tag.name}, skipping`);
 		await logSyncOperation(
+			db,
+			owner,
+			repo,
 			"plugin",
 			pluginInfo.fullName,
-			"update",
+			"sync",
+			false,
+			"Release not found",
+			tag,
+		);
+		return false;
+	}
+
+	try {
+		const [metadataYaml, checksumsContent] = await Promise.all([
+			fetchMetadataYaml(owner, repo, pluginInfo.fullName),
+			fetchChecksumsContent(release),
+		]);
+
+		const payload = buildReleasePayload({
+			tag,
+			release,
+			metadataYaml,
+			checksumsContent,
+			owner,
+			repo,
+		});
+
+		const result = await recordPluginRelease(db, payload, "sync");
+
+		console.log(
+			`✅ Recorded release for ${payload.plugin}@${payload.version} (created: ${result.versionCreated}, latestChanged: ${result.latestChanged})`,
+		);
+
+		await logSyncOperation(
+			db,
+			owner,
+			repo,
+			"plugin",
+			pluginInfo.fullName,
+			"sync",
 			true,
 			null,
 			tag,
 		);
+
 		return true;
 	} catch (error) {
-		console.error(`❌ Failed to process tag ${tag.name}:`, error);
+		const errorMsg = error instanceof Error ? error.message : String(error);
+		console.warn(
+			`❌ Failed to process plugin release for tag ${tag.name}:`,
+			errorMsg,
+		);
 
-		// Log failed sync operation
-		const pluginInfo = parsePluginTag(tag.name);
-		if (pluginInfo) {
-			await logSyncOperation(
-				"plugin",
-				pluginInfo.fullName,
-				"update",
-				false,
-				error instanceof Error ? error.message : String(error),
-				tag,
-			);
-		}
+		await logSyncOperation(
+			db,
+			owner,
+			repo,
+			"plugin",
+			pluginInfo.fullName,
+			"sync",
+			false,
+			errorMsg,
+			tag,
+		);
+
 		return false;
 	}
 }
 
-function sortTagsByVersion(tags: GitHubTag[]): GitHubTag[] {
-	const version = (tag: GitHubTag) =>
-		tag.name.slice(tag.name.lastIndexOf("/v") + 2);
-	return [...tags].sort((a, b) => compareVersions(version(a), version(b)));
-}
-
 /**
- * Parse plugin information from tag name
- */
-function parsePluginTag(tagName: string): {
-	name: string;
-	fullName: string;
-	type: string;
-	version: string;
-	githubPath: string;
-} | null {
-	// Expected formats:
-	// - packages/package-manager-{name}/v{version}
-	// - packages/tool-{name}/v{version}
-	// - packages/desktop-{name}/v{version}
-	// - packages/system-setup/v{version}
-
-	// Try pattern: packages/{type}-{name}/v{version}
-	const matchWithType = tagName.match(
-		/^packages\/(package-manager|tool|desktop|system)-(.+)\/v(.+)$/,
-	);
-	if (matchWithType) {
-		const fullName = `${matchWithType[1]}-${matchWithType[2]}`;
-		return {
-			type: matchWithType[1],
-			name: matchWithType[2], // Short name: "curlpipe"
-			fullName: fullName, // Full name: "package-manager-curlpipe"
-			githubPath: `packages/${fullName}`, // GitHub path without version
-			version: matchWithType[3], // Version without 'v': "0.0.1"
-		};
-	}
-	return null;
-}
-
-/**
- * Get plugin metadata from GitHub release or package files
- */
-async function getPluginMetadata(
-	pluginInfo: {
-		name: string;
-		fullName: string;
-		type: string;
-		version: string;
-		githubPath: string;
-	},
-	tag: GitHubTag,
-): Promise<PluginMetadata> {
-	// Default metadata - platforms will be extracted from metadata.yaml
-	const metadata: PluginMetadata = {
-		name: pluginInfo.fullName, // Full name: "package-manager-apt"
-		shortName: pluginInfo.name, // Short name: "apt"
-		type: pluginInfo.type,
-		version: pluginInfo.version,
-		description: `DevEx plugin: ${pluginInfo.name}`,
-		author: "DevEx Team",
-		license: "MIT",
-		repository: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
-		homepage: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/tree/main/packages/${pluginInfo.fullName}`,
-		platforms: [], // Will be extracted from metadata.yaml
-		binaries: {}, // Will be generated after we know the platforms
-		sdkVersion: "1.0.0",
-		apiVersion: "v1",
-		dependencies: [],
-		conflicts: [],
-	};
-
-	// Try to get more detailed metadata from plugin's metadata.yaml file
-	try {
-		const metadataUrl = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/main/packages/${pluginInfo.fullName}/metadata.yaml`;
-		const response = await fetch(metadataUrl);
-
-		if (response.ok) {
-			const yamlContent = await response.text();
-
-			// Parse simple YAML fields (description, author, license, etc.)
-			const descMatch = yamlContent.match(/^description:\s*(.+)$/m);
-			if (descMatch) {
-				metadata.description = descMatch[1].trim();
-			}
-
-			const authorMatch = yamlContent.match(/^author:\s*(.+)$/m);
-			if (authorMatch) {
-				metadata.author = authorMatch[1].trim();
-			}
-
-			const licenseMatch = yamlContent.match(/^license:\s*(.+)$/m);
-			if (licenseMatch) {
-				metadata.license = licenseMatch[1].trim();
-			}
-
-			const homepageMatch = yamlContent.match(/^homepage:\s*(.+)$/m);
-			if (homepageMatch) {
-				metadata.homepage = homepageMatch[1].trim();
-			}
-
-			const sdkVersionMatch = yamlContent.match(/^sdkVersion:\s*(.+)$/m);
-			if (sdkVersionMatch) {
-				metadata.sdkVersion = sdkVersionMatch[1].trim();
-			}
-
-			const apiVersionMatch = yamlContent.match(/^apiVersion:\s*(.+)$/m);
-			if (apiVersionMatch) {
-				metadata.apiVersion = apiVersionMatch[1].trim();
-			}
-
-			// Parse platforms section - extract OS keys (linux, macos, windows)
-			// Format: platforms:\n  linux:\n    distros: ...\n  macos:\n    ...
-			const platformsSection = yamlContent.match(
-				/^platforms:\s*\n((?: {2}\w+:.*\n(?: {4}.*\n)*)*)/m,
-			);
-			if (platformsSection) {
-				const platformLines = platformsSection[1].match(/^ {2}(\w+):/gm);
-				if (platformLines) {
-					metadata.platforms = platformLines.map((line) =>
-						line.trim().replace(":", ""),
-					);
-					console.log(
-						`  📋 Detected platforms: ${metadata.platforms.join(", ")}`,
-					);
-				}
-			}
-
-			// If no platforms detected, fall back to default
-			if (metadata.platforms.length === 0) {
-				console.log(
-					`  ⚠️  No platforms found in metadata.yaml, using default: linux`,
-				);
-				metadata.platforms = ["linux"];
-			}
-		}
-	} catch (error) {
-		console.log(
-			`⚠️  Could not fetch metadata.yaml for ${pluginInfo.fullName}: ${error instanceof Error ? error.message : String(error)}`,
-		);
-		// Fall back to linux-only if metadata.yaml is not available
-		metadata.platforms = ["linux"];
-	}
-
-	// Generate binaries after we know the platforms
-	metadata.binaries = await generateBinaryInfo(pluginInfo, tag);
-
-	return metadata;
-}
-
-/**
- * Parse checksums.txt file from release
- */
-async function parseChecksumsFile(assets: any[]): Promise<Map<string, string>> {
-	const checksumMap = new Map<string, string>();
-
-	// Find checksums.txt file
-	const checksumAsset = assets.find((a: any) => a.name === "checksums.txt");
-	if (!checksumAsset) {
-		console.log("⚠️  No checksums.txt file found in release");
-		return checksumMap;
-	}
-
-	try {
-		// Fetch checksums.txt content
-		const response = await fetch(checksumAsset.browser_download_url);
-		const content = await response.text();
-
-		// Parse format: "checksum  filename" (two spaces between)
-		const lines = content.split("\n");
-		for (const line of lines) {
-			if (!line.trim()) continue;
-
-			// Split on whitespace (handles both single and multiple spaces)
-			const parts = line.trim().split(/\s+/);
-			if (parts.length >= 2) {
-				const checksum = parts[0];
-				const filename = parts[1];
-				checksumMap.set(filename, checksum);
-			}
-		}
-
-		console.log(`📋 Parsed ${checksumMap.size} checksums from checksums.txt`);
-	} catch (error) {
-		console.log(
-			`⚠️  Could not parse checksums.txt: ${error instanceof Error ? error.message : String(error)}`,
-		);
-	}
-
-	return checksumMap;
-}
-
-/**
- * Generate binary information from actual release assets
- */
-async function generateBinaryInfo(
-	pluginInfo: { name: string; fullName: string; version: string },
-	tag: GitHubTag,
-): Promise<Record<string, BinaryInfo>> {
-	const binaries: Record<string, BinaryInfo> = {};
-
-	// Fetch release assets
-	const releaseData = await getReleaseByTag(tag.name);
-	const assets = releaseData?.assets || [];
-
-	if (assets.length === 0) {
-		console.log(`⚠️  No assets found for release ${tag.name}`);
-		return binaries;
-	}
-
-	// Parse checksums from checksums.txt
-	const checksumMap = await parseChecksumsFile(assets);
-
-	// Asset names: devex-plugin-{fullName}_{version}_{os}_{arch}[.tar.gz|.zip|.exe]
-	// A raw binary (no archive extension, or .exe) is preferred because every SDK
-	// version can install it; archives are the fallback for older releases.
-	const assetPattern = new RegExp(
-		`^devex-plugin-${escapeRegExp(pluginInfo.fullName)}_` +
-			`(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)_(linux|darwin|windows)_(amd64|arm64)(\\.tar\\.gz|\\.zip|\\.exe)?$`,
-	);
-	const formatRank = { binary: 0, "tar.gz": 1, zip: 2 } as const;
-
-	const binaryAssets = assets.filter((asset: any) =>
-		assetPattern.test(asset.name),
-	);
-	console.log(
-		`📦 Found ${binaryAssets.length} binary assets for ${pluginInfo.fullName}`,
-	);
-
-	for (const asset of binaryAssets) {
-		const filename = asset.name;
-		const [, , os, arch, ext] = filename.match(assetPattern)!;
-		const format: BinaryInfo["format"] =
-			ext === ".tar.gz" ? "tar.gz" : ext === ".zip" ? "zip" : "binary";
-		const platformKey = `${os}-${arch}`;
-
-		const existing = binaries[platformKey];
-		if (existing && formatRank[existing.format] <= formatRank[format]) {
-			continue;
-		}
-
-		// Get checksum from parsed checksums.txt
-		const checksum = checksumMap.get(filename) || "";
-
-		if (!checksum) {
-			console.log(`⚠️  No checksum found for ${filename}`);
-		}
-
-		binaries[platformKey] = {
-			url: asset.browser_download_url,
-			checksum: checksum,
-			size: asset.size,
-			format,
-		};
-
-		console.log(
-			`  ✓ ${platformKey}: ${(asset.size / 1024 / 1024).toFixed(2)} MB, checksum: ${checksum.slice(0, 16)}...`,
-		);
-	}
-
-	return binaries;
-}
-
-/**
- * Get release data by tag name with rate limiting
- */
-async function getReleaseByTag(tagName: string) {
-	try {
-		return await githubApi.getReleaseByTag(GITHUB_OWNER, GITHUB_REPO, tagName);
-	} catch (error) {
-		console.log(
-			`⚠️  Could not fetch release for tag ${tagName}: ${error instanceof Error ? error.message : String(error)}`,
-		);
-		return null;
-	}
-}
-
-/**
- * Check if the plugin should be updated based on its version
- */
-function shouldUpdatePlugin(
-	currentVersion: string,
-	newVersion: string,
-): boolean {
-	// Equal versions are re-synced so a re-run release refreshes its download links;
-	// older versions never replace newer ones.
-	return compareVersions(newVersion, currentVersion) >= 0;
-}
-
-function escapeRegExp(value: string): string {
-	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Update existing plugin
- */
-async function updatePlugin(
-	pluginId: string,
-	metadata: PluginMetadata,
-	pluginInfo: { githubPath: string },
-) {
-	await prisma.plugin.update({
-		where: { id: pluginId },
-		data: {
-			shortName: metadata.shortName,
-			version: metadata.version,
-			latestVersion: metadata.version,
-			description: metadata.description,
-			type: metadata.type,
-			platforms: metadata.platforms,
-			binaries: metadata.binaries as any,
-			author: metadata.author,
-			license: metadata.license,
-			homepage: metadata.homepage,
-			repository: metadata.repository,
-			dependencies: metadata.dependencies,
-			conflicts: metadata.conflicts || [],
-			sdkVersion: metadata.sdkVersion,
-			apiVersion: metadata.apiVersion,
-			githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
-			githubPath: pluginInfo.githubPath,
-			lastSynced: new Date(),
-		},
-	});
-}
-
-/**
- * Create a new plugin
- */
-async function createPlugin(
-	metadata: PluginMetadata,
-	pluginInfo: { githubPath: string },
-) {
-	await prisma.plugin.create({
-		data: {
-			name: metadata.name,
-			shortName: metadata.shortName,
-			version: metadata.version,
-			latestVersion: metadata.version,
-			description: metadata.description,
-			type: metadata.type,
-			status: "active",
-			platforms: metadata.platforms,
-			binaries: metadata.binaries as any,
-			author: metadata.author,
-			license: metadata.license,
-			homepage: metadata.homepage,
-			repository: metadata.repository,
-			dependencies: metadata.dependencies,
-			conflicts: metadata.conflicts || [],
-			sdkVersion: metadata.sdkVersion,
-			apiVersion: metadata.apiVersion,
-			githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}`,
-			githubPath: pluginInfo.githubPath,
-			lastSynced: new Date(),
-		},
-	});
-}
-
-/**
- * Log sync operation
+ * Log sync operation to database
  */
 async function logSyncOperation(
+	db: PrismaClient,
+	owner: string,
+	repo: string,
 	type: string,
 	name: string,
 	action: string,
@@ -581,44 +363,52 @@ async function logSyncOperation(
 	error: string | null,
 	tag: GitHubTag,
 ) {
-	await prisma.syncLog.create({
-		data: {
-			type,
-			name,
-			action,
-			success,
-			error,
-			githubUrl: `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/${tag.name}`,
-			changes: {
-				tag: tag.name,
-				commit: tag.commit.sha,
+	try {
+		await db.syncLog.create({
+			data: {
+				type,
+				name,
+				action,
+				success,
+				error,
+				githubUrl: `https://github.com/${owner}/${repo}/releases/tag/${tag.name}`,
+				changes: {
+					tag: tag.name,
+					commit: tag.commit?.sha,
+				},
 			},
-		},
-	});
+		});
+	} catch (logErr) {
+		// Non-fatal if sync log cannot be written
+		console.warn(
+			"⚠️ Failed to write syncLog entry:",
+			logErr instanceof Error ? logErr.message : String(logErr),
+		);
+	}
 }
 
 /**
  * Update registry statistics
  */
-async function updateRegistryStats() {
+export async function updateRegistryStats(db: PrismaClient = defaultPrisma) {
 	const [pluginCount, applicationCount, configCount, stackCount] =
 		await Promise.all([
-			prisma.plugin.count({ where: { status: "active" } }),
-			prisma.application.count(),
-			prisma.config.count(),
-			prisma.stack.count(),
+			db.plugin.count({ where: { status: "active" } }),
+			db.application.count(),
+			db.config.count(),
+			db.stack.count(),
 		]);
 
 	const [linuxPlugins, macosPlugins, windowsPlugins] = await Promise.all([
-		prisma.plugin.count({ where: { platforms: { has: "linux" } } }),
-		prisma.plugin.count({ where: { platforms: { has: "macos" } } }),
-		prisma.plugin.count({ where: { platforms: { has: "windows" } } }),
+		db.plugin.count({ where: { platforms: { has: "linux" } } }),
+		db.plugin.count({ where: { platforms: { has: "macos" } } }),
+		db.plugin.count({ where: { platforms: { has: "windows" } } }),
 	]);
 
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 
-	await prisma.registryStats.upsert({
+	await db.registryStats.upsert({
 		where: { date: today },
 		update: {
 			totalPlugins: pluginCount,
@@ -646,9 +436,16 @@ async function updateRegistryStats() {
 	);
 }
 
-// Run the sync if this script is executed directly
+// Run the sync if executed directly from CLI
 if (require.main === module) {
-	syncPlugins().catch(console.error);
+	syncPlugins()
+		.then(async () => {
+			await defaultPrisma.$disconnect();
+			process.exit(0);
+		})
+		.catch(async (error) => {
+			console.error("❌ Plugin sync failed:", error);
+			await defaultPrisma.$disconnect();
+			process.exit(1);
+		});
 }
-
-export { syncPlugins };
