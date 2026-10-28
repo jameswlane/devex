@@ -97,6 +97,9 @@ Run 'devex setup' to begin the guided installation process.`,
 			// Check if running in non-interactive mode
 			if !setup.IsInteractiveMode() {
 				log.Info("Running in non-interactive automated mode")
+				if viper.IsSet("applications") {
+					return executeInstallWithOutput(ctx, nil, nil, verbose, viper.GetBool("dry-run"), repo, settings, cmd.OutOrStdout(), nil)
+				}
 				return setup.RunAutomatedSetup(ctx, repo, settings)
 			}
 

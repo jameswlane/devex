@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"runtime"
 	"sort"
@@ -18,6 +19,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
@@ -76,6 +78,9 @@ Configuration files are located in ~/.local/share/devex/config/:
   # Install with categories
   devex install --categories development,databases
 
+  # Install without prompts (also DEVEX_NONINTERACTIVE=1 or CI)
+  devex install --non-interactive --config ./server.yaml
+
   # Install a lifecycle template
   devex install --template databases --answer databases=postgres,redis --non-interactive
 
@@ -105,7 +110,7 @@ Configuration files are located in ~/.local/share/devex/config/:
 				}, settings, getPluginBootstrap)
 			}
 
-			return executeInstall(ctx, args, categories, verbose, dryRun, repo, settings)
+			return executeInstallWithOutput(ctx, args, categories, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
@@ -115,7 +120,7 @@ Configuration files are located in ~/.local/share/devex/config/:
 	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
 	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
-	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Fail instead of prompting for missing template inputs")
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Install without the TUI; fail instead of prompting for template inputs")
 
 	// Bind flags to Viper for hierarchical config
 	_ = viper.BindPFlag("categories", cmd.Flags().Lookup("categories"))
@@ -129,6 +134,10 @@ Configuration files are located in ~/.local/share/devex/config/:
 
 // executeInstall implements the core installation logic with proper context handling
 func executeInstall(ctx context.Context, apps []string, categories []string, verbose, dryRun bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+	return executeInstallWithOutput(ctx, apps, categories, verbose, dryRun, repo, settings, os.Stdout, nil)
+}
+
+func executeInstallWithOutput(ctx context.Context, apps, categories []string, verbose, dryRun bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, provider pluginBootstrapProvider) error {
 	_, span := tracer.Start(ctx, "install_command",
 		trace.WithAttributes(
 			attribute.StringSlice("apps", apps),
@@ -159,8 +168,12 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 
+	configured, merged, present, err := configuredApplications(settings)
+	if err != nil {
+		return err
+	}
+	settings = merged
 	var appsToInstall []types.CrossPlatformApp
-	var err error
 	switch {
 	case len(apps) > 0:
 		log.Info("Specific app installation requested", "apps", apps)
@@ -168,6 +181,8 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 	case len(categories) > 0:
 		log.Info("Category-based installation requested", "categories", categories)
 		appsToInstall, err = resolveAppsByCategory(settings, categories)
+	case present:
+		appsToInstall = configured
 	default:
 		appsToInstall = settings.GetDefaultApps()
 	}
@@ -176,13 +191,21 @@ func executeInstall(ctx context.Context, apps []string, categories []string, ver
 		span.SetStatus(codes.Error, "App resolution failed")
 		return err
 	}
-	if len(appsToInstall) == 0 {
+	if len(appsToInstall) == 0 && !present {
 		return fmt.Errorf("no applications matched the install request")
 	}
 
 	// Handle dry run
 	if dryRun {
 		return previewInstallation(appsToInstall)
+	}
+
+	if !interaction.IsInteractiveMode() {
+		return runPlainInstall(ctx, out, appsToInstall, repo, settings, provider)
+	}
+
+	if err := prepareApplicationInstallers(ctx, provider); err != nil {
+		return err
 	}
 
 	// Start TUI installation with cross-platform apps
@@ -315,12 +338,17 @@ func resolveAppsByName(settings config.CrossPlatformSettings, requested []string
 	}
 
 	resolved := make([]types.CrossPlatformApp, 0, len(requested))
+	var unknown []string
 	for _, name := range requested {
 		app, ok := byName[normalizeInstallLookup(name)]
 		if !ok {
-			return nil, fmt.Errorf("application '%s' not found", name)
+			unknown = append(unknown, name)
+			continue
 		}
 		resolved = append(resolved, app)
+	}
+	if len(unknown) > 0 {
+		return nil, fmt.Errorf("applications not found: %s", strings.Join(unknown, ", "))
 	}
 	return dedupeApps(resolved), nil
 }

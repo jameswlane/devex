@@ -505,6 +505,10 @@ Examples:
 
 			// If specific app name provided, remove it directly
 			if len(args) > 0 {
+				handled, err := removeInstalledApplication(cmd, args[0], settings, repo, force, dryRun, getPluginBootstrap)
+				if handled || err != nil {
+					return err
+				}
 				return removeSpecificApp(args[0], settings, force, noBackup, cascade, dryRun)
 			}
 
