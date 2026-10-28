@@ -33,6 +33,10 @@ export const CacheTags = {
 	STACK: (id: string) => `stack-${id}`,
 } as const;
 
+// Next.js 16 requires a cache profile; expire: 0 keeps the previous
+// behaviour of expiring tagged data immediately after a write.
+const EXPIRE_NOW = { expire: 0 };
+
 /**
  * Revalidate cache by tag
  * Propagates to all Vercel regions within 300ms
@@ -40,7 +44,7 @@ export const CacheTags = {
 export async function revalidateCacheTag(tag: string): Promise<void> {
 	try {
 		logger.info("Revalidating cache tag", { tag });
-		revalidateTag(tag);
+		revalidateTag(tag, EXPIRE_NOW);
 		logger.info("Cache tag revalidated successfully", { tag });
 	} catch (error) {
 		logger.error(
@@ -66,7 +70,7 @@ export async function revalidateCacheTags(tags: string[]): Promise<void> {
 		});
 
 		for (const tag of tags) {
-			revalidateTag(tag);
+			revalidateTag(tag, EXPIRE_NOW);
 		}
 
 		logger.info("Multiple cache tags revalidated successfully", {

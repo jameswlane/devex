@@ -27,7 +27,7 @@
 		"@vercel/functions": "3.9.11",
 		"bcrypt": "^6.0.0",
 		"ioredis": "^5.4.1",
-		"next": "^15.5.28",
+		"next": "16.4.3",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
 		"recharts": "^3.2.1",
