@@ -247,7 +247,7 @@ async function fetchChecksumsContent(
 /**
  * Process a single plugin tag
  */
-export async function processPluginTag(
+async function processPluginTag(
 	tag: GitHubTag,
 	owner: string,
 	repo: string,
@@ -390,7 +390,7 @@ async function logSyncOperation(
 /**
  * Update registry statistics
  */
-export async function updateRegistryStats(db: PrismaClient = defaultPrisma) {
+async function updateRegistryStats(db: PrismaClient = defaultPrisma) {
 	const [pluginCount, applicationCount, configCount, stackCount] =
 		await Promise.all([
 			db.plugin.count({ where: { status: "active" } }),

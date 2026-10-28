@@ -125,28 +125,49 @@ export function parseChecksums(content: string): Map<string, string> {
 		const trimmed = line.trim();
 		if (!trimmed) continue;
 
-		// Format: "<64-hex-checksum>  [*]<filename>" or whitespace-separated
-		const match = trimmed.match(/^([a-f0-9]{64})\s+\*?(.+)$/i);
+		const match = trimmed.match(/^([a-f0-9]{64})\s+\*?(.+)$/);
 		if (match) {
-			const checksum = match[1].toLowerCase();
-			const filename = match[2].trim();
-			checksumMap.set(filename, checksum);
+			checksumMap.set(match[2], match[1]);
 		}
 	}
 
 	return checksumMap;
 }
 
-function toOptionalUrl(urlStr?: string): string | undefined {
-	if (!urlStr || typeof urlStr !== "string" || !urlStr.trim()) return undefined;
-	try {
-		const parsed = new URL(urlStr.trim());
-		if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-			return parsed.href;
-		}
-		return undefined;
-	} catch {
-		return undefined;
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalString(value: unknown): string | undefined {
+	if (value === undefined) return undefined;
+	if (typeof value !== "string") {
+		throw new Error("metadata.yaml optional string fields must be strings");
+	}
+	return value;
+}
+
+function stringList(value: unknown): string[] {
+	return Array.isArray(value)
+		? value.filter((item): item is string => typeof item === "string")
+		: [];
+}
+
+function shortNameFor(name: string, type: string): string | undefined {
+	return name.startsWith(`${type}-`) ? name.slice(type.length + 1) : undefined;
+}
+
+function registryPlatform(
+	os: string,
+): "linux" | "macos" | "windows" | undefined {
+	switch (os) {
+		case "linux":
+			return "linux";
+		case "darwin":
+			return "macos";
+		case "windows":
+			return "windows";
+		default:
+			return undefined;
 	}
 }
 
@@ -154,162 +175,112 @@ function escapeRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Parse metadata from YAML content or return sensible defaults.
- */
 export function parseMetadataYaml(
 	yamlContent: string | undefined,
 	pluginInfo: ParsedPluginInfo,
 	options: { owner?: string; repo?: string } = {},
 ): ReleasePayload["metadata"] {
-	const owner = options.owner || DEFAULT_OWNER;
-	const repo = options.repo || DEFAULT_REPO;
+	const repository = `${options.owner || DEFAULT_OWNER}/${options.repo || DEFAULT_REPO}`;
+	const parsed: unknown = yamlContent ? YAML.parse(yamlContent) : undefined;
+	if (!isRecord(parsed)) {
+		throw new Error(
+			`${pluginInfo.fullName}: metadata.yaml is empty or not a mapping`,
+		);
+	}
+	if (parsed.name && parsed.name !== pluginInfo.fullName) {
+		throw new Error(
+			`metadata.yaml name "${String(parsed.name)}" does not match plugin "${pluginInfo.fullName}"`,
+		);
+	}
 
-	const defaultMetadata: ReleasePayload["metadata"] = {
-		description: `DevEx plugin: ${pluginInfo.name}`,
-		type: pluginInfo.type,
-		shortName: pluginInfo.name,
-		author: "DevEx Team",
-		license: "MIT",
-		repository: `https://github.com/${owner}/${repo}`,
-		homepage: `https://github.com/${owner}/${repo}/tree/main/packages/${pluginInfo.fullName}`,
-		platforms: ["linux"],
-		sdkVersion: "1.0.0",
-		apiVersion: "v1",
-		dependencies: [],
-		conflicts: [],
+	const platforms = [
+		...new Set(
+			Object.keys(isRecord(parsed.platforms) ? parsed.platforms : {})
+				.map(registryPlatform)
+				.filter(
+					(platform): platform is "linux" | "macos" | "windows" =>
+						platform !== undefined,
+				),
+		),
+	];
+	if (
+		typeof parsed.description !== "string" ||
+		!parsed.description ||
+		typeof parsed.type !== "string" ||
+		!parsed.type
+	) {
+		throw new Error(
+			`${pluginInfo.fullName}: metadata.yaml needs description and type`,
+		);
+	}
+	if (platforms.length === 0) {
+		throw new Error(
+			`${pluginInfo.fullName}: metadata.yaml declares no supported platforms`,
+		);
+	}
+
+	const shortName = shortNameFor(pluginInfo.fullName, parsed.type);
+	const supports =
+		parsed.supports && typeof parsed.supports === "object"
+			? Object.fromEntries(
+					Object.entries(parsed.supports).filter(
+						(entry): entry is [string, boolean] =>
+							typeof entry[1] === "boolean",
+					),
+				)
+			: undefined;
+	const sdkVersion =
+		parsed.sdk_version === undefined ? undefined : String(parsed.sdk_version);
+	const apiVersion =
+		parsed.api_version === undefined ? undefined : String(parsed.api_version);
+	const author = optionalString(parsed.author);
+	const license = optionalString(parsed.license);
+	const homepage =
+		optionalString(parsed.homepage ?? undefined) ??
+		`https://github.com/${repository}/tree/main/packages/${pluginInfo.fullName}`;
+	const metadataRepository =
+		optionalString(parsed.repository ?? undefined) ??
+		`https://github.com/${repository}`;
+
+	return {
+		description: parsed.description,
+		type: parsed.type,
+		...(shortName ? { shortName } : {}),
+		...(author !== undefined ? { author } : {}),
+		...(license !== undefined ? { license } : {}),
+		homepage,
+		repository: metadataRepository,
+		platforms: platforms as ReleasePayload["metadata"]["platforms"],
+		...(typeof parsed.priority === "number" && Number.isInteger(parsed.priority)
+			? { priority: parsed.priority }
+			: {}),
+		...(supports ? { supports } : {}),
+		...(sdkVersion !== undefined ? { sdkVersion } : {}),
+		...(apiVersion !== undefined ? { apiVersion } : {}),
+		dependencies: stringList(parsed.dependencies),
+		conflicts: stringList(parsed.conflicts),
 	};
-
-	if (!yamlContent || !yamlContent.trim()) {
-		return defaultMetadata;
-	}
-
-	try {
-		const parsed = YAML.parse(yamlContent);
-		if (!parsed || typeof parsed !== "object") {
-			return defaultMetadata;
-		}
-
-		// Extract platforms: map darwin -> macos, only allow ["linux", "macos", "windows"]
-		const rawPlatforms: string[] = [];
-		if (Array.isArray(parsed.platforms)) {
-			for (const p of parsed.platforms) {
-				if (typeof p === "string") rawPlatforms.push(p);
-			}
-		} else if (parsed.platforms && typeof parsed.platforms === "object") {
-			rawPlatforms.push(...Object.keys(parsed.platforms));
-		}
-
-		const validPlatformSet = new Set<"linux" | "macos" | "windows">();
-		for (const p of rawPlatforms) {
-			const norm = p.toLowerCase().trim();
-			if (norm === "linux") validPlatformSet.add("linux");
-			else if (norm === "macos" || norm === "darwin" || norm === "osx")
-				validPlatformSet.add("macos");
-			else if (norm === "windows" || norm === "win")
-				validPlatformSet.add("windows");
-		}
-
-		const platforms: [
-			"linux" | "macos" | "windows",
-			...("linux" | "macos" | "windows")[],
-		] =
-			validPlatformSet.size > 0
-				? (Array.from(validPlatformSet) as [
-						"linux" | "macos" | "windows",
-						...("linux" | "macos" | "windows")[],
-					])
-				: ["linux"];
-
-		const dependencies: string[] = Array.isArray(parsed.dependencies)
-			? parsed.dependencies.filter(
-					(d: unknown): d is string => typeof d === "string",
-				)
-			: [];
-
-		const conflicts: string[] = Array.isArray(parsed.conflicts)
-			? parsed.conflicts.filter(
-					(c: unknown): c is string => typeof c === "string",
-				)
-			: [];
-
-		let supports: Record<string, boolean> | undefined;
-		if (parsed.supports && typeof parsed.supports === "object") {
-			supports = {};
-			for (const [k, v] of Object.entries(parsed.supports)) {
-				if (typeof v === "boolean") {
-					supports[k] = v;
-				}
-			}
-			if (Object.keys(supports).length === 0) {
-				supports = undefined;
-			}
-		}
-
-		return {
-			description:
-				typeof parsed.description === "string" && parsed.description.trim()
-					? parsed.description.trim().slice(0, 2000)
-					: defaultMetadata.description,
-			type:
-				typeof parsed.type === "string" && parsed.type.trim()
-					? parsed.type.trim().slice(0, 50)
-					: defaultMetadata.type,
-			shortName:
-				typeof parsed.shortName === "string" && parsed.shortName.trim()
-					? parsed.shortName.trim().slice(0, 50)
-					: defaultMetadata.shortName,
-			author:
-				typeof parsed.author === "string" && parsed.author.trim()
-					? parsed.author.trim().slice(0, 100)
-					: defaultMetadata.author,
-			license:
-				typeof parsed.license === "string" && parsed.license.trim()
-					? parsed.license.trim().slice(0, 50)
-					: defaultMetadata.license,
-			repository:
-				toOptionalUrl(parsed.repository) || defaultMetadata.repository,
-			homepage: toOptionalUrl(parsed.homepage) || defaultMetadata.homepage,
-			platforms,
-			priority:
-				typeof parsed.priority === "number" && Number.isInteger(parsed.priority)
-					? parsed.priority
-					: undefined,
-			supports,
-			sdkVersion:
-				typeof parsed.sdk_version === "string"
-					? parsed.sdk_version.trim()
-					: typeof parsed.sdkVersion === "string"
-						? parsed.sdkVersion.trim()
-						: defaultMetadata.sdkVersion,
-			apiVersion:
-				typeof parsed.api_version === "string"
-					? parsed.api_version.trim()
-					: typeof parsed.apiVersion === "string"
-						? parsed.apiVersion.trim()
-						: defaultMetadata.apiVersion,
-			dependencies,
-			conflicts,
-		};
-	} catch {
-		return defaultMetadata;
-	}
 }
 
-/**
- * Extract platform binaries from release assets, preferring raw binaries over archives.
- * For archives ("tar.gz", "zip"), sets archiveEntry to "devex-plugin-<fullName>" (+".exe" on Windows).
- */
+function releaseDownloadUrl(
+	repository: string,
+	tag: string,
+	asset: string,
+): string {
+	return `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(asset)}`;
+}
+
 export function extractBinariesFromReleaseAssets(
 	assets: GitHubAsset[],
 	pluginFullName: string,
 	checksumMap: Map<string, string>,
+	repository: string,
+	tag: string,
 ): Record<string, ReleaseBinary> {
 	const binaries: Record<string, ReleaseBinary> = {};
-
 	const assetPattern = new RegExp(
 		`^devex-plugin-${escapeRegExp(pluginFullName)}_` +
-			`(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)_(linux|darwin|windows)_(amd64|arm64)(\\.tar\\.gz|\\.zip|\\.exe)?$`,
+			`(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?)_(linux|darwin|windows)_(amd64|arm64)(\\.tar\\.gz|\\.zip|\\.exe)?$`,
 	);
 	const formatRank: Record<ReleaseBinary["format"], number> = {
 		binary: 0,
@@ -317,11 +288,7 @@ export function extractBinariesFromReleaseAssets(
 		zip: 2,
 	};
 
-	const matchingAssets = assets.filter((asset) =>
-		assetPattern.test(asset.name),
-	);
-
-	for (const asset of matchingAssets) {
+	for (const asset of assets) {
 		const match = asset.name.match(assetPattern);
 		if (!match) continue;
 
@@ -330,7 +297,6 @@ export function extractBinariesFromReleaseAssets(
 		const isArchive = ext === ".tar.gz" || ext === ".zip";
 		const format: ReleaseBinary["format"] =
 			ext === ".tar.gz" ? "tar.gz" : ext === ".zip" ? "zip" : "binary";
-
 		const existing = binaries[platformKey];
 		if (existing && formatRank[existing.format] <= formatRank[format]) {
 			continue;
@@ -338,37 +304,27 @@ export function extractBinariesFromReleaseAssets(
 
 		const checksum = checksumMap.get(asset.name);
 		if (!checksum || !/^[a-f0-9]{64}$/.test(checksum)) {
-			continue;
+			throw new Error(`no sha256 checksum for ${asset.name}`);
 		}
-
 		const archiveEntry = isArchive
-			? os === "windows"
-				? `devex-plugin-${pluginFullName}.exe`
-				: `devex-plugin-${pluginFullName}`
+			? `devex-plugin-${pluginFullName}${os === "windows" ? ".exe" : ""}`
 			: undefined;
-
-		const binaryRecord: ReleaseBinary = {
-			url: asset.browser_download_url,
+		binaries[platformKey] = {
+			url: releaseDownloadUrl(repository, tag, asset.name),
 			checksum,
 			size: asset.size,
 			format,
 			...(archiveEntry ? { archiveEntry } : {}),
 		};
-
-		binaries[platformKey] = binaryRecord;
 	}
 
-	return binaries;
+	return Object.fromEntries(
+		Object.entries(binaries).sort(([a], [b]) => a.localeCompare(b)),
+	);
 }
 
-/**
- * Determine if a version or release represents a prerelease.
- */
-export function isPrerelease(
-	version: string,
-	releasePrerelease?: boolean,
-): boolean {
-	return Boolean(releasePrerelease || version.includes("-"));
+export function isPrerelease(version: string): boolean {
+	return version.split("+")[0].includes("-");
 }
 
 export interface BuildPayloadParams {
@@ -394,27 +350,23 @@ export function buildReleasePayload(
 		);
 	}
 
+	const repository = `${params.owner || DEFAULT_OWNER}/${params.repo || DEFAULT_REPO}`;
 	const assets = params.release?.assets || [];
 	const checksumMap = params.checksumsContent
 		? parseChecksums(params.checksumsContent)
 		: new Map<string, string>();
-
 	const binaries = extractBinariesFromReleaseAssets(
 		assets,
 		pluginInfo.fullName,
 		checksumMap,
+		repository,
+		params.tag.name,
 	);
-
 	const metadata = parseMetadataYaml(params.metadataYaml, pluginInfo, {
 		owner: params.owner,
 		repo: params.repo,
 	});
-
-	const prerelease = isPrerelease(
-		pluginInfo.version,
-		params.release?.prerelease,
-	);
-
+	const prerelease = isPrerelease(pluginInfo.version);
 	const commitSha =
 		params.tag.commit?.sha && /^[a-f0-9]{7,64}$/.test(params.tag.commit.sha)
 			? params.tag.commit.sha
@@ -422,11 +374,12 @@ export function buildReleasePayload(
 					/^[a-f0-9]{7,64}$/.test(params.release.target_commitish)
 				? params.release.target_commitish
 				: undefined;
-
-	const releaseUrl = toOptionalUrl(params.release?.html_url);
-
-	const checksumAsset = assets.find((a) => a.name === "checksums.txt");
-	const checksumsUrl = toOptionalUrl(checksumAsset?.browser_download_url);
+	const releaseUrl = `https://github.com/${repository}/releases/tag/${params.tag.name}`;
+	const checksumAsset = assets.find((asset) => asset.name === "checksums.txt");
+	const checksumsUrl =
+		checksumAsset || checksumMap.size > 0
+			? releaseDownloadUrl(repository, params.tag.name, "checksums.txt")
+			: undefined;
 
 	let publishedAt: string;
 	if (params.release?.published_at) {

@@ -1,3 +1,4 @@
+import { describe, expect, it } from "@jest/globals";
 import {
 	buildReleasePayload,
 	extractBinariesFromReleaseAssets,
@@ -191,17 +192,46 @@ conflicts:
 			expect(meta.conflicts).toEqual(["package-manager-dnf"]);
 		});
 
-		it("returns defaults when YAML is empty or undefined", () => {
-			const meta = parseMetadataYaml(undefined, pluginInfo);
-			expect(meta.description).toBe("DevEx plugin: apt");
-			expect(meta.type).toBe("package-manager");
-			expect(meta.platforms).toEqual(["linux"]);
-			expect(meta.dependencies).toEqual([]);
+		it("rejects empty metadata like the webhook sender", () => {
+			expect(() => parseMetadataYaml(undefined, pluginInfo)).toThrow(
+				"metadata.yaml is empty or not a mapping",
+			);
+		});
+
+		it("uses sender defaults and derives shortName from the plugin type", () => {
+			const meta = parseMetadataYaml(
+				`
+name: package-manager-apt
+type: package-manager
+description: APT support
+shortName: ignored
+platforms:
+  darwin: {}
+  linux: {}
+sdkVersion: ignored
+apiVersion: ignored
+`,
+				pluginInfo,
+			);
+			expect(meta).toEqual({
+				description: "APT support",
+				type: "package-manager",
+				shortName: "apt",
+				homepage:
+					"https://github.com/jameswlane/devex/tree/main/packages/package-manager-apt",
+				repository: "https://github.com/jameswlane/devex",
+				platforms: ["macos", "linux"],
+				dependencies: [],
+				conflicts: [],
+			});
 		});
 	});
 
 	describe("extractBinariesFromReleaseAssets", () => {
 		const checksum = "a".repeat(64);
+		const repository = "jameswlane/devex";
+		const tagName = "packages/package-manager-apt/v1.0.0";
+		const download = `https://github.com/${repository}/releases/download/${encodeURIComponent(tagName)}`;
 		const checksumMap = new Map([
 			["devex-plugin-package-manager-apt_1.0.0_linux_amd64.tar.gz", checksum],
 			["devex-plugin-package-manager-apt_1.0.0_linux_amd64", checksum],
@@ -227,10 +257,12 @@ conflicts:
 				assets,
 				"package-manager-apt",
 				checksumMap,
+				repository,
+				tagName,
 			);
 
 			expect(binaries["windows-amd64"]).toEqual({
-				url: "https://example.com/windows.zip",
+				url: `${download}/devex-plugin-package-manager-apt_1.0.0_windows_amd64.zip`,
 				checksum,
 				size: 1024,
 				format: "zip",
@@ -238,7 +270,7 @@ conflicts:
 			});
 
 			expect(binaries["darwin-arm64"]).toEqual({
-				url: "https://example.com/darwin-raw",
+				url: `${download}/devex-plugin-package-manager-apt_1.0.0_darwin_arm64`,
 				checksum,
 				size: 2048,
 				format: "binary",
@@ -264,10 +296,12 @@ conflicts:
 				assets,
 				"package-manager-apt",
 				checksumMap,
+				repository,
+				tagName,
 			);
 
 			expect(binaries["linux-amd64"]).toEqual({
-				url: "https://example.com/linux-raw",
+				url: `${download}/devex-plugin-package-manager-apt_1.0.0_linux_amd64`,
 				checksum,
 				size: 2048,
 				format: "binary",
@@ -276,11 +310,12 @@ conflicts:
 	});
 
 	describe("isPrerelease", () => {
-		it("detects prerelease from version string or release flag", () => {
-			expect(isPrerelease("1.0.0", false)).toBe(false);
-			expect(isPrerelease("1.0.0", true)).toBe(true);
-			expect(isPrerelease("1.0.0-beta.1", false)).toBe(true);
-			expect(isPrerelease("1.0.0-rc.1", undefined)).toBe(true);
+		it("uses only the version's prerelease component", () => {
+			expect(isPrerelease("1.0.0")).toBe(false);
+			expect(isPrerelease("1.0.0-beta.1")).toBe(true);
+			expect(isPrerelease("1.0.0-rc.1")).toBe(true);
+			expect(isPrerelease("1.0.0+build-7")).toBe(false);
+			expect(isPrerelease("1.0.0-beta+build-7")).toBe(true);
 		});
 	});
 
@@ -309,11 +344,19 @@ conflicts:
 			],
 		};
 		const checksumsContent = `${validChecksum}  devex-plugin-tool-git_1.0.0_linux_amd64.tar.gz\n`;
+		const metadataYaml = `
+name: tool-git
+type: tool
+description: Git tooling
+platforms:
+  linux: {}
+`;
 
 		it("builds a validated ReleasePayload", () => {
 			const payload = buildReleasePayload({
 				tag,
 				release,
+				metadataYaml,
 				checksumsContent,
 			});
 
@@ -327,12 +370,12 @@ conflicts:
 			expect(payload.releaseUrl).toBe(
 				"https://github.com/jameswlane/devex/releases/tag/packages/tool-git/v1.0.0",
 			);
-			expect(payload.checksumsUrl).toBe(
-				"https://github.com/downloads/checksums.txt",
-			);
+			const download =
+				"https://github.com/jameswlane/devex/releases/download/packages%2Ftool-git%2Fv1.0.0";
+			expect(payload.checksumsUrl).toBe(`${download}/checksums.txt`);
 			expect(payload.publishedAt).toBe("2026-10-27T12:00:00.000Z");
 			expect(payload.binaries["linux-amd64"]).toEqual({
-				url: "https://github.com/downloads/linux.tar.gz",
+				url: `${download}/devex-plugin-tool-git_1.0.0_linux_amd64.tar.gz`,
 				checksum: validChecksum,
 				size: 512,
 				format: "tar.gz",
@@ -340,11 +383,22 @@ conflicts:
 			});
 		});
 
+		it("does not let GitHub's prerelease flag override a stable version", () => {
+			const payload = buildReleasePayload({
+				tag,
+				release: { ...release, prerelease: true },
+				metadataYaml,
+				checksumsContent,
+			});
+			expect(payload.prerelease).toBe(false);
+		});
+
 		it("throws an error if no binaries match or checksums are missing", () => {
 			expect(() => {
 				buildReleasePayload({
 					tag,
 					release: { ...release, assets: [] },
+					metadataYaml,
 					checksumsContent: "",
 				});
 			}).toThrow();
