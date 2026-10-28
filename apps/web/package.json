@@ -16,7 +16,6 @@
 		"test:ci": "jest --ci --coverage --watchAll=false"
 	},
 	"dependencies": {
-		"@types/js-yaml": "^4.0.9",
 		"dompurify": "^3.4.17",
 		"glob": "^11.1.0",
 		"js-yaml": "^5.5.0",
