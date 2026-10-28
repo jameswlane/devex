@@ -99,7 +99,9 @@ check_inputs() {
 build_binaries() {
 	local context="$1"
 	local version goarch
-	version="$(git -C "$CLI_DIR" describe --tags --always --dirty 2>/dev/null || echo dev)"
+	# Only CLI tags (vX.Y.Z); plugin tags (packages/<name>/vX.Y.Z) share the repository.
+	version="$(git -C "$CLI_DIR" describe --tags --match 'v[0-9]*' --dirty 2>/dev/null || echo dev)"
+	version="${version#v}"
 	goarch="$(cd "$CLI_DIR" && go env GOARCH)"
 
 	log "building devex $version (linux/$goarch)"
