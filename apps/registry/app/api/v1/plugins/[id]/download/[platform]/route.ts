@@ -82,8 +82,9 @@ export async function GET(
 		const githubDownloadUrl = binary.url;
 
 		// Update download count and last download time atomically
+		// By id: pluginName may be a short name ("apt") that no row is named
 		await prisma.plugin.update({
-			where: { name: pluginName },
+			where: { id: plugin.id },
 			data: {
 				downloadCount: {
 					increment: 1,

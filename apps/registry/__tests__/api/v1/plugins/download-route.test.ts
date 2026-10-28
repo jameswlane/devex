@@ -21,7 +21,7 @@ type MockPrisma = {
 		>;
 		update: jest.Mock<
 			(args: {
-				where: { name: string };
+				where: { id: string };
 				data: {
 					downloadCount: { increment: number };
 					lastDownload: Date;
@@ -138,6 +138,10 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 
 		expect(response.status).toBe(302);
 		expect(response.headers.get("location")).toBe(latestUrl);
+		// The counter is updated on the resolved plugin, not the requested name
+		expect(mockPrisma.plugin.update).toHaveBeenCalledWith(
+			expect.objectContaining({ where: { id: plugin.id } }),
+		);
 	});
 
 	it("prefers the real plugin over a legacy row named after its short name", async () => {
