@@ -56,7 +56,7 @@
 	"devDependencies": {
 		"@auto-it/conventional-commits": "^11.3.6",
 		"@auto-it/core": "^11.3.6",
-		"@biomejs/biome": "2.2.4",
+		"@biomejs/biome": "2.6.3",
 		"@commitlint/config-conventional": "^19.8.1",
 		"@commitlint/format": "^19.8.1",
 		"@octokit/rest": "^22.0.1",
