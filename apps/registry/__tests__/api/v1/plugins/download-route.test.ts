@@ -4,7 +4,7 @@ import { NextRequest } from "next/server";
 
 jest.mock("@/lib/prisma", () => ({
 	prisma: {
-		plugin: { findUnique: jest.fn(), update: jest.fn() },
+		plugin: { findUnique: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
 		pluginVersion: { findUnique: jest.fn() },
 	},
 }));
@@ -15,6 +15,9 @@ type MockPrisma = {
 	plugin: {
 		findUnique: jest.Mock<
 			(args: { where: { name: string } }) => Promise<Plugin | null>
+		>;
+		findFirst: jest.Mock<
+			(args: { where: { shortName: string } }) => Promise<Plugin | null>
 		>;
 		update: jest.Mock<
 			(args: {
@@ -122,8 +125,35 @@ describe("GET /api/v1/plugins/[id]/download/[platform]", () => {
 	beforeEach(() => {
 		jest.clearAllMocks();
 		mockPrisma.plugin.findUnique.mockResolvedValue(plugin);
+		mockPrisma.plugin.findFirst.mockResolvedValue(null);
 		mockPrisma.plugin.update.mockResolvedValue(plugin);
 		mockPrisma.pluginVersion.findUnique.mockResolvedValue(pinnedVersion);
+	});
+
+	it("downloads by short name", async () => {
+		mockPrisma.plugin.findUnique.mockResolvedValue(null);
+		mockPrisma.plugin.findFirst.mockResolvedValue(plugin);
+
+		const response = await GET(request(), params);
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get("location")).toBe(latestUrl);
+	});
+
+	it("prefers the real plugin over a legacy row named after its short name", async () => {
+		mockPrisma.plugin.findUnique.mockResolvedValue({
+			...plugin,
+			id: "legacy",
+			name: "apt",
+			latestVersion: null,
+			binaries: {},
+		});
+		mockPrisma.plugin.findFirst.mockResolvedValue(plugin);
+
+		const response = await GET(request(), params);
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get("location")).toBe(latestUrl);
 	});
 
 	it("keeps latest-binary redirect and counter behavior without version", async () => {

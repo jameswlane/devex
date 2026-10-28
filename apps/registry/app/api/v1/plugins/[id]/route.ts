@@ -4,6 +4,7 @@ import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
 import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
 import { createApiError, logger } from "@/lib/logger";
+import { findPluginByNameOrShortName } from "@/lib/plugins/find-plugin";
 import { prisma } from "@/lib/prisma";
 import {
 	createOptimizedResponse,
@@ -34,49 +35,7 @@ async function handleGetPlugin(
 		url: request.url,
 	});
 
-	// Try to find plugin by full name first, then by shortName
-	let plugin = await safeDatabase(
-		() => {
-			logger.info("Executing Prisma findUnique query (by name)", {
-				pluginName,
-				queryType: "findUnique",
-				where: { name: pluginName },
-			});
-			return prisma.plugin.findUnique({
-				where: { name: pluginName },
-			});
-		},
-		{
-			operation: "fetch-plugin-by-name",
-			resource: "plugin",
-			metadata: { name: pluginName },
-		},
-	);
-
-	// If not found by full name, try shortName
-	if (!plugin) {
-		logger.info("Plugin not found by name, trying shortName", {
-			pluginName,
-		});
-
-		plugin = await safeDatabase(
-			() => {
-				logger.info("Executing Prisma findFirst query (by shortName)", {
-					pluginName,
-					queryType: "findFirst",
-					where: { shortName: pluginName },
-				});
-				return prisma.plugin.findFirst({
-					where: { shortName: pluginName },
-				});
-			},
-			{
-				operation: "fetch-plugin-by-shortname",
-				resource: "plugin",
-				metadata: { shortName: pluginName },
-			},
-		);
-	}
+	const plugin = await findPluginByNameOrShortName(pluginName);
 
 	logger.info("Plugin query result", {
 		pluginName,

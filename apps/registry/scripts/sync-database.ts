@@ -207,104 +207,6 @@ async function syncApplications() {
 	}
 }
 
-async function syncPlugins() {
-	console.log("🔌 Syncing plugins...");
-
-	// Find all plugin directories
-	const packagesPath = path.join(process.cwd(), "../../packages");
-	const entries = await fs.readdir(packagesPath, { withFileTypes: true });
-
-	for (const entry of entries) {
-		if (
-			entry.isDirectory() &&
-			(entry.name.startsWith("package-manager-") ||
-				entry.name.startsWith("tool-") ||
-				entry.name.startsWith("system-") ||
-				entry.name.startsWith("desktop-"))
-		) {
-			// Determine plugin type and name based on prefix
-			let pluginType: string;
-			let pluginName: string;
-
-			if (entry.name.startsWith("package-manager-")) {
-				pluginType = "package-manager";
-				pluginName = entry.name.replace("package-manager-", "");
-			} else if (entry.name.startsWith("tool-")) {
-				pluginType = "tool";
-				pluginName = entry.name.replace("tool-", "");
-			} else if (entry.name.startsWith("system-")) {
-				pluginType = "system";
-				pluginName = entry.name.replace("system-", "");
-			} else if (entry.name.startsWith("desktop-")) {
-				pluginType = "desktop";
-				pluginName = entry.name.replace("desktop-", "");
-			} else {
-				continue; // Skip unknown plugin types
-			}
-
-			const pluginPath = path.join(packagesPath, entry.name);
-
-			try {
-				// Read plugin metadata from metadata.yaml
-				const metadataPath = path.join(pluginPath, "metadata.yaml");
-				const metadata = await loadYamlFile<PluginConfig>(metadataPath);
-
-				// Extract platform support from metadata.platforms keys
-				const platforms = Object.keys(metadata.platforms || {});
-
-				// Use priority from metadata, or fallback to type-based priority
-				let priority = metadata.priority;
-				if (priority === undefined) {
-					if (pluginType === "package-manager") priority = 100;
-					else if (pluginType === "tool") priority = 80;
-					else if (pluginType === "system") priority = 90;
-					else if (pluginType === "desktop") priority = 60;
-					else priority = 50;
-				}
-
-				// Get GitHub repository info from metadata
-				const githubUrl = metadata.repository || GITHUB_BASE_URL;
-				const githubPath = metadata.directory || `packages/${entry.name}`;
-
-				await prisma.plugin.upsert({
-					where: { name: pluginName },
-					update: {
-						description:
-							metadata.description ||
-							`${pluginType.charAt(0).toUpperCase() + pluginType.slice(1)} plugin for ${pluginName}`,
-						type: pluginType,
-						priority: priority,
-						status: "active",
-						supports: metadata.supports || {},
-						platforms: platforms,
-						githubUrl: githubUrl,
-						githubPath: githubPath,
-						lastSynced: new Date(),
-					},
-					create: {
-						name: pluginName,
-						description:
-							metadata.description ||
-							`${pluginType.charAt(0).toUpperCase() + pluginType.slice(1)} plugin for ${pluginName}`,
-						type: pluginType,
-						priority: priority,
-						status: "active",
-						supports: metadata.supports || {},
-						platforms: platforms,
-						githubUrl: githubUrl,
-						githubPath: githubPath,
-						lastSynced: new Date(),
-					},
-				});
-
-				console.log(`  ✅ Synced plugin: ${pluginName} (${pluginType})`);
-			} catch (error) {
-				console.error(`  ❌ Failed to sync plugin ${pluginName}:`, error);
-			}
-		}
-	}
-}
-
 async function syncConfigs() {
 	console.log("⚙️ Syncing configs...");
 
@@ -511,7 +413,6 @@ async function main() {
 		// Run sync operations in parallel for better performance
 		const results = await Promise.allSettled([
 			syncApplications(),
-			syncPlugins(),
 			syncConfigs(),
 			syncStacks(),
 		]);
@@ -556,10 +457,4 @@ if (require.main === module) {
 	});
 }
 
-export {
-	syncApplications,
-	syncConfigs,
-	syncPlugins,
-	syncStacks,
-	updateRegistryStats,
-};
+export { syncApplications, syncConfigs, syncStacks, updateRegistryStats };

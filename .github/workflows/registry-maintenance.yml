@@ -1,0 +1,52 @@
+name: registry maintenance
+# One-off maintenance tasks against the production registry database.
+# Every task is a dry run unless `apply` is checked.
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'Maintenance task to run'
+        required: true
+        type: choice
+        options:
+          - cleanup-legacy-plugin-rows
+      apply:
+        description: 'Apply the changes (unchecked = dry run, report only)'
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  # Shares the sync workflow's group so maintenance never races a sync.
+  group: sync-registry-database
+  cancel-in-progress: false
+jobs:
+  maintenance:
+    name: ${{ inputs.task }}${{ inputs.apply && '' || ' (dry run)' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+        run: pnpm prisma generate
+      - name: Remove legacy short-name plugin rows
+        if: inputs.task == 'cleanup-legacy-plugin-rows'
+        working-directory: apps/registry
+        env:
+          PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          args=()
+          if [ "$APPLY" = "true" ]; then args+=(--apply); fi
+          pnpm tsx scripts/cleanup-legacy-plugin-rows.ts "${args[@]}" | tee -a "$GITHUB_STEP_SUMMARY"
