@@ -457,7 +457,7 @@ if (require.main === module) {
 }
 
 export {
-	ProductionMigrationRunner,
-	type MigrationStep,
 	type MigrationExecution,
+	type MigrationStep,
+	ProductionMigrationRunner,
 };

@@ -138,6 +138,7 @@ themes:
 The system automatically migrated from the old monolithic YAML structure:
 
 ### Before (Monolithic)
+
 ```
 config/
 ├── applications.yaml     (86KB, 2000+ lines)
@@ -147,6 +148,7 @@ config/
 ```
 
 ### After (File-per-Application)
+
 ```
 config/
 ├── applications/

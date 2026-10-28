@@ -20,6 +20,7 @@ Modern, responsive marketing website for DevEx built with Next.js 15, TypeScript
 ## 🏗️ Architecture
 
 ### Website Structure
+
 ```
 apps/web/
 ├── src/
@@ -50,6 +51,7 @@ apps/web/
 ```
 
 ### Technology Stack
+
 - **Next.js 15**: React framework with App Router and static generation
 - **TypeScript**: Type-safe development
 - **Tailwind CSS**: Utility-first styling with custom design system
@@ -60,6 +62,7 @@ apps/web/
 ## 🎨 Design System
 
 ### Color Palette
+
 ```css
 /* Primary Colors */
 --primary-50: #eff6ff;
@@ -79,6 +82,7 @@ apps/web/
 ```
 
 ### Typography
+
 ```css
 /* Font Stack */
 --font-sans: ui-sans-serif, system-ui, sans-serif;
@@ -98,6 +102,7 @@ apps/web/
 ## 🚀 Quick Start
 
 ### Development Setup
+
 ```bash
 # Install dependencies
 pnpm install
@@ -109,6 +114,7 @@ pnpm dev
 ```
 
 ### Build and Deploy
+
 ```bash
 # Build for production
 pnpm build
@@ -121,6 +127,7 @@ pnpm export
 ```
 
 ### Environment Configuration
+
 ```bash
 # Development
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
@@ -135,6 +142,7 @@ VERCEL_URL=devex.sh
 ## 📄 Page Structure
 
 ### Landing Page (`/`)
+
 - **Hero Section**: Main value proposition and CTA
 - **Features Grid**: Key DevEx features and benefits
 - **Plugin Showcase**: Highlight popular plugins with categories
@@ -143,18 +151,21 @@ VERCEL_URL=devex.sh
 - **Call-to-Action**: Installation instructions and getting started
 
 ### Plugin Showcase (`/plugins`)
+
 - **Plugin Categories**: Browse plugins by type (package managers, desktop environments)
 - **Search & Filter**: Find plugins by name, platform, or features
 - **Plugin Cards**: Visual plugin information with installation commands
 - **Platform Compatibility**: Clear platform support indicators
 
 ### Documentation (`/docs`)
+
 - **Quick Start Guide**: Step-by-step installation and setup
 - **CLI Reference**: Complete command documentation
 - **Plugin Development**: How to create custom plugins
 - **API Reference**: Technical documentation for developers
 
 ### Blog (`/blog`)
+
 - **Release Notes**: New feature announcements and updates
 - **Tutorials**: In-depth guides and best practices
 - **Case Studies**: Real-world usage examples
@@ -163,78 +174,92 @@ VERCEL_URL=devex.sh
 ## 🔍 SEO Optimization
 
 ### Meta Tags
+
 ```typescript
 export const metadata: Metadata = {
-  title: 'DevEx - Streamline Your Development Environment',
-  description: 'Enterprise-grade CLI tool for automated development environment setup across Linux, macOS, and Windows. 36+ plugins for package managers and desktop environments.',
-  keywords: ['development environment', 'CLI tool', 'package manager', 'Linux', 'macOS', 'automation'],
-  authors: [{ name: 'James Lane', url: 'https://github.com/jameswlane' }],
-  openGraph: {
-    title: 'DevEx - Streamline Your Development Environment',
-    description: 'Automate your dev setup with 36+ plugins for package managers and desktop environments.',
-    url: 'https://devex.sh',
-    siteName: 'DevEx',
-    images: [
-      {
-        url: 'https://devex.sh/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'DevEx - Development Environment Automation'
-      }
-    ]
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'DevEx - Streamline Your Development Environment',
-    description: 'Enterprise-grade CLI for dev environment automation',
-    images: ['https://devex.sh/twitter-image.png']
-  }
-}
+	title: "DevEx - Streamline Your Development Environment",
+	description:
+		"Enterprise-grade CLI tool for automated development environment setup across Linux, macOS, and Windows. 36+ plugins for package managers and desktop environments.",
+	keywords: [
+		"development environment",
+		"CLI tool",
+		"package manager",
+		"Linux",
+		"macOS",
+		"automation",
+	],
+	authors: [{ name: "James Lane", url: "https://github.com/jameswlane" }],
+	openGraph: {
+		title: "DevEx - Streamline Your Development Environment",
+		description:
+			"Automate your dev setup with 36+ plugins for package managers and desktop environments.",
+		url: "https://devex.sh",
+		siteName: "DevEx",
+		images: [
+			{
+				url: "https://devex.sh/og-image.png",
+				width: 1200,
+				height: 630,
+				alt: "DevEx - Development Environment Automation",
+			},
+		],
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "DevEx - Streamline Your Development Environment",
+		description: "Enterprise-grade CLI for dev environment automation",
+		images: ["https://devex.sh/twitter-image.png"],
+	},
+};
 ```
 
 ### Structured Data
+
 ```typescript
 const structuredData = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "DevEx",
-  "description": "Enterprise-grade CLI tool for development environment setup",
-  "url": "https://devex.sh",
-  "downloadUrl": "https://github.com/jameswlane/devex/releases",
-  "applicationCategory": "DeveloperApplication",
-  "operatingSystem": ["Linux", "macOS", "Windows"],
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD"
-  }
-}
+	"@context": "https://schema.org",
+	"@type": "SoftwareApplication",
+	name: "DevEx",
+	description: "Enterprise-grade CLI tool for development environment setup",
+	url: "https://devex.sh",
+	downloadUrl: "https://github.com/jameswlane/devex/releases",
+	applicationCategory: "DeveloperApplication",
+	operatingSystem: ["Linux", "macOS", "Windows"],
+	offers: {
+		"@type": "Offer",
+		price: "0",
+		priceCurrency: "USD",
+	},
+};
 ```
 
 ## 📊 Analytics and Monitoring
 
 ### Performance Tracking
+
 - **Core Web Vitals**: LCP, FID, CLS monitoring
 - **Page Load Times**: First contentful paint and time to interactive
 - **User Journey**: Conversion funnel from landing to installation
 - **A/B Testing**: Feature and content optimization
 
 ### User Analytics
+
 ```typescript
 // Track key user actions
-trackEvent('plugin_interest', {
-  plugin_name: 'package-manager-apt',
-  plugin_category: 'package-manager',
-  user_platform: 'linux'
-})
+trackEvent("plugin_interest", {
+	plugin_name: "package-manager-apt",
+	plugin_category: "package-manager",
+	user_platform: "linux",
+});
 
-trackEvent('installation_started', {
-  source: 'hero_cta',
-  method: 'curl_script'
-})
+trackEvent("installation_started", {
+	source: "hero_cta",
+	method: "curl_script",
+});
 ```
 
 ### Conversion Metrics
+
 - **Installation Rate**: Visitors who download/install DevEx
 - **Plugin Discovery**: Most viewed plugin categories
 - **Documentation Engagement**: Time spent on docs pages
@@ -243,96 +268,107 @@ trackEvent('installation_started', {
 ## 🎨 Component Library
 
 ### Hero Components
+
 ```tsx
 interface HeroProps {
-  title: string
-  subtitle: string
-  ctaText: string
-  ctaLink: string
-  backgroundImage?: string
-  features?: string[]
+	title: string;
+	subtitle: string;
+	ctaText: string;
+	ctaLink: string;
+	backgroundImage?: string;
+	features?: string[];
 }
 
 export function Hero({ title, subtitle, ctaText, ctaLink }: HeroProps) {
-  return (
-    <section className="bg-gradient-to-br from-blue-600 to-purple-700">
-      <div className="container mx-auto px-4 py-20">
-        <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
-          {title}
-        </h1>
-        <p className="text-xl text-blue-100 mb-8 max-w-2xl">
-          {subtitle}
-        </p>
-        <Button href={ctaLink} size="large" variant="secondary">
-          {ctaText}
-        </Button>
-      </div>
-    </section>
-  )
+	return (
+		<section className="bg-gradient-to-br from-blue-600 to-purple-700">
+			<div className="container mx-auto px-4 py-20">
+				<h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
+					{title}
+				</h1>
+				<p className="text-xl text-blue-100 mb-8 max-w-2xl">{subtitle}</p>
+				<Button href={ctaLink} size="large" variant="secondary">
+					{ctaText}
+				</Button>
+			</div>
+		</section>
+	);
 }
 ```
 
 ### Plugin Grid
+
 ```tsx
 interface PluginGridProps {
-  plugins: Plugin[]
-  category?: string
-  limit?: number
+	plugins: Plugin[];
+	category?: string;
+	limit?: number;
 }
 
 export function PluginGrid({ plugins, category, limit }: PluginGridProps) {
-  const filteredPlugins = category 
-    ? plugins.filter(p => p.category === category)
-    : plugins
-  
-  const displayPlugins = limit 
-    ? filteredPlugins.slice(0, limit)
-    : filteredPlugins
+	const filteredPlugins = category
+		? plugins.filter((p) => p.category === category)
+		: plugins;
 
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {displayPlugins.map(plugin => (
-        <PluginCard key={plugin.id} plugin={plugin} />
-      ))}
-    </div>
-  )
+	const displayPlugins = limit
+		? filteredPlugins.slice(0, limit)
+		: filteredPlugins;
+
+	return (
+		<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+			{displayPlugins.map((plugin) => (
+				<PluginCard key={plugin.id} plugin={plugin} />
+			))}
+		</div>
+	);
 }
 ```
 
 ### Feature Cards
+
 ```tsx
 interface FeatureProps {
-  icon: React.ComponentType
-  title: string
-  description: string
-  link?: string
+	icon: React.ComponentType;
+	title: string;
+	description: string;
+	link?: string;
 }
 
-export function FeatureCard({ icon: Icon, title, description, link }: FeatureProps) {
-  return (
-    <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
-      <Icon className="w-12 h-12 text-blue-600 mb-4" />
-      <h3 className="text-xl font-semibold mb-2">{title}</h3>
-      <p className="text-gray-600 mb-4">{description}</p>
-      {link && (
-        <Link href={link} className="text-blue-600 hover:text-blue-700 font-medium">
-          Learn more →
-        </Link>
-      )}
-    </div>
-  )
+export function FeatureCard({
+	icon: Icon,
+	title,
+	description,
+	link,
+}: FeatureProps) {
+	return (
+		<div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+			<Icon className="w-12 h-12 text-blue-600 mb-4" />
+			<h3 className="text-xl font-semibold mb-2">{title}</h3>
+			<p className="text-gray-600 mb-4">{description}</p>
+			{link && (
+				<Link
+					href={link}
+					className="text-blue-600 hover:text-blue-700 font-medium"
+				>
+					Learn more →
+				</Link>
+			)}
+		</div>
+	);
 }
 ```
 
 ## 📱 Mobile Experience
 
 ### Responsive Design
+
 - **Mobile-First**: Designed for mobile, enhanced for desktop
 - **Touch-Friendly**: Large touch targets and intuitive gestures
 - **Fast Loading**: Optimized images and minimal JavaScript
 - **Progressive Enhancement**: Works without JavaScript
 
 ### Performance Optimizations
+
 - **Image Optimization**: Next.js automatic image optimization
 - **Code Splitting**: Page-based and component-based splitting
 - **Static Generation**: Pre-rendered pages for fast loading
@@ -341,26 +377,28 @@ export function FeatureCard({ icon: Icon, title, description, link }: FeaturePro
 ## 🚀 Deployment
 
 ### Vercel Configuration
+
 ```json
 {
-  "buildCommand": "pnpm build",
-  "outputDirectory": ".next",
-  "framework": "nextjs",
-  "functions": {
-    "src/app/api/**": {
-      "runtime": "nodejs18.x"
-    }
-  },
-  "redirects": [
-    {
-      "source": "/download",
-      "destination": "https://github.com/jameswlane/devex/releases/latest"
-    }
-  ]
+	"buildCommand": "pnpm build",
+	"outputDirectory": ".next",
+	"framework": "nextjs",
+	"functions": {
+		"src/app/api/**": {
+			"runtime": "nodejs18.x"
+		}
+	},
+	"redirects": [
+		{
+			"source": "/download",
+			"destination": "https://github.com/jameswlane/devex/releases/latest"
+		}
+	]
 }
 ```
 
 ### Environment Variables
+
 ```bash
 # Analytics
 NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
@@ -378,12 +416,14 @@ NEXT_PUBLIC_NEWSLETTER_ENABLED=true
 ## 🎯 Content Strategy
 
 ### Blog Content
+
 - **Release Announcements**: New features and plugin releases
 - **Technical Tutorials**: Advanced DevEx usage and customization
 - **Platform Guides**: Platform-specific installation and configuration
 - **Community Spotlights**: User success stories and contributions
 
 ### Landing Page Optimization
+
 - **Clear Value Proposition**: Immediate understanding of DevEx benefits
 - **Social Proof**: Usage statistics, testimonials, GitHub stars
 - **Multiple CTAs**: Different entry points for different user types
@@ -392,6 +432,7 @@ NEXT_PUBLIC_NEWSLETTER_ENABLED=true
 ## 🧪 Testing and Quality
 
 ### Performance Testing
+
 ```bash
 # Lighthouse CI
 pnpm lighthouse
@@ -404,6 +445,7 @@ pnpm test:performance
 ```
 
 ### A/B Testing
+
 ```typescript
 // Feature flag integration
 import { useFeatureFlag } from '@/lib/feature-flags'
@@ -423,6 +465,7 @@ export function Hero() {
 ## 🤝 Contributing
 
 ### Content Updates
+
 1. Fork the repository
 2. Create content branch: `git checkout -b content/new-blog-post`
 3. Add/edit content in `content/` directory
@@ -430,6 +473,7 @@ export function Hero() {
 5. Submit Pull Request
 
 ### Design Changes
+
 1. Follow existing design system patterns
 2. Test on multiple screen sizes
 3. Verify accessibility compliance

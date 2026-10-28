@@ -238,12 +238,12 @@ export const prisma = prismaInstance;
 
 // Export additional utilities
 export {
-	withRetry,
-	isNonRetryableError,
 	type ConnectionPoolMetrics,
-	type RetryConfig,
 	type DatabasePoolConfig,
+	isNonRetryableError,
 	poolManager,
+	type RetryConfig,
+	withRetry,
 };
 
 // Enhanced connection lifecycle management

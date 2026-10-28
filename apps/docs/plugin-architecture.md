@@ -184,27 +184,27 @@ func main() {
 
 ```json
 {
-    "name": "@devex/plugin-my-plugin",
-    "version": "1.0.0",
-    "description": "My custom DevEx plugin",
-    "keywords": ["devex", "plugin"],
-    "author": "Your Name",
-    "license": "Apache-2.0",
-    "devex": {
-        "plugin": {
-            "type": "utility",
-            "platforms": ["linux", "darwin", "windows"],
-            "dependencies": [],
-            "priority": 5
-        }
-    }
+	"name": "@devex/plugin-my-plugin",
+	"version": "1.0.0",
+	"description": "My custom DevEx plugin",
+	"keywords": ["devex", "plugin"],
+	"author": "Your Name",
+	"license": "Apache-2.0",
+	"devex": {
+		"plugin": {
+			"type": "utility",
+			"platforms": ["linux", "darwin", "windows"],
+			"dependencies": [],
+			"priority": 5
+		}
+	}
 }
 ```
 
 4. **Add Build Configuration** (`Taskfile.yml`):
 
 ```yaml
-version: '3'
+version: "3"
 
 vars:
   PLUGIN_NAME: devex-plugin-my-plugin
@@ -290,23 +290,23 @@ The plugin registry (`https://registry.devex.sh/v1/registry.json`) contains:
 
 ```json
 {
-  "base_url": "https://github.com/jameswlane/devex/releases/download",
-  "last_updated": "2025-01-01T12:00:00Z",
-  "plugins": {
-    "package-manager-apt": {
-      "name": "package-manager-apt",
-      "version": "1.2.0",
-      "description": "APT package manager support",
-      "platforms": {
-        "linux-amd64": {
-          "url": "https://github.com/.../devex-plugin-package-manager-apt_linux_amd64.tar.gz",
-          "checksum": "sha256:abc123...",
-          "size": 5242880
-        }
-      },
-      "tags": ["package-manager", "apt", "debian", "ubuntu"]
-    }
-  }
+	"base_url": "https://github.com/jameswlane/devex/releases/download",
+	"last_updated": "2025-01-01T12:00:00Z",
+	"plugins": {
+		"package-manager-apt": {
+			"name": "package-manager-apt",
+			"version": "1.2.0",
+			"description": "APT package manager support",
+			"platforms": {
+				"linux-amd64": {
+					"url": "https://github.com/.../devex-plugin-package-manager-apt_linux_amd64.tar.gz",
+					"checksum": "sha256:abc123...",
+					"size": 5242880
+				}
+			},
+			"tags": ["package-manager", "apt", "debian", "ubuntu"]
+		}
+	}
 }
 ```
 

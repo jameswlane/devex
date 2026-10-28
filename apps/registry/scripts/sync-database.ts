@@ -558,8 +558,8 @@ if (require.main === module) {
 
 export {
 	syncApplications,
-	syncPlugins,
 	syncConfigs,
+	syncPlugins,
 	syncStacks,
 	updateRegistryStats,
 };
