@@ -98,7 +98,7 @@ jobs:
           REGISTRY_URL: ${{ vars.REGISTRY_URL }}
         run: |
           # Installed next to the script so the pnpm workspace is not installed.
-          npm install --prefix scripts/release --no-save --no-package-lock --ignore-scripts js-yaml@4.1.1
+          npm install --prefix scripts/release --no-save --no-package-lock --ignore-scripts js-yaml@5.5.0
           node scripts/release/notify-registry.mjs --dist dist --tag "$TAG"
       # workflow_dispatch is one of the few events GITHUB_TOKEN is allowed to trigger.
       - name: Fall back to the registry sync workflow

@@ -24,7 +24,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import yaml from "js-yaml";
+import * as yaml from "js-yaml";
 
 const repoRoot = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
