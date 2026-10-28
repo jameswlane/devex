@@ -91,20 +91,15 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build CLI from source
-        if: inputs.cli_version == ''
-        working-directory: apps/cli
-        run: |
-          go build -o "$RUNNER_TEMP/devex" ./cmd/main.go
-          echo "DEVEX_E2E_BINARY=$RUNNER_TEMP/devex" >> "$GITHUB_ENV"
-
+      # Without cli_version, scripts/e2e-docker.sh builds the CLI from source.
       - name: Download and verify released CLI
         if: inputs.cli_version != ''
         env:
           CLI_VERSION: ${{ inputs.cli_version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${CLI_VERSION##*/v}"
+          # CLI tags are vX.Y.Z; archives are named without the v.
+          version="${CLI_VERSION#v}"
           archive="devex_${version}_linux_amd64.tar.gz"
           release_dir="$RUNNER_TEMP/devex-release"
           mkdir -p "$release_dir"
@@ -114,18 +109,21 @@ jobs:
             --pattern devex_checksums.txt \
             --dir "$release_dir"
           cd "$release_dir"
-          sha256sum --check --ignore-missing devex_checksums.txt
+          # Fail if the archive is missing from checksums.txt, not just mismatched.
+          grep -E "  ${archive}\$" devex_checksums.txt | sha256sum --check --strict -
           tar -xzf "$archive" bin/devex
           install -m 0755 bin/devex "$RUNNER_TEMP/devex"
-          echo "DEVEX_E2E_BINARY=$RUNNER_TEMP/devex" >> "$GITHUB_ENV"
+          echo "E2E_DEVEX_BINARY=$RUNNER_TEMP/devex" >> "$GITHUB_ENV"
 
       - name: Run end-to-end suite
         working-directory: apps/cli
-        run: task e2e:docker DISTRO=${{ matrix.distro }}
+        env:
+          DISTRO: ${{ matrix.distro }}
+        run: ./scripts/e2e-docker.sh
 
       - name: Upload end-to-end artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: cli-e2e-${{ matrix.distro }}-${{ matrix.desktop }}
           path: ./apps/cli/artifacts/e2e/**
