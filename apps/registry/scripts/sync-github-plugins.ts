@@ -9,6 +9,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
+import { requestPluginCdnPurge } from "../lib/cdn-cache";
 import { githubApi } from "../lib/github-api";
 import {
 	buildReleasePayload,
@@ -135,6 +136,7 @@ export async function syncPlugins(
 		);
 	}
 
+	await requestPluginCdnPurge();
 	console.log("✅ Plugin sync completed successfully");
 	return {
 		total: pluginTags.length,

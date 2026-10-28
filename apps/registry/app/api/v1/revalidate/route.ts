@@ -16,6 +16,7 @@ import {
 	revalidateEntity,
 	revalidateStatsCaches,
 } from "@/lib/cache-revalidation";
+import { invalidateCdnTags, pluginCacheTags } from "@/lib/cdn-cache";
 import { withErrorHandling } from "@/lib/error-handler";
 import { logger } from "@/lib/logger";
 
@@ -33,6 +34,9 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
 
 	try {
 		switch (type) {
+			case "plugin-cdn":
+				await invalidateCdnTags(pluginCacheTags());
+				break;
 			case "tag":
 				if (!tags || !Array.isArray(tags)) {
 					return NextResponse.json(
@@ -90,7 +94,7 @@ async function handleRevalidate(request: NextRequest): Promise<NextResponse> {
 				return NextResponse.json(
 					{
 						error:
-							"Invalid 'type' parameter. Use: tag, path, stats, entity, or all",
+							"Invalid 'type' parameter. Use: tag, path, stats, entity, all, or plugin-cdn",
 					},
 					{ status: 400 },
 				);

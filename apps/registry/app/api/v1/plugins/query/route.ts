@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "@/lib/cdn-cache";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
@@ -242,6 +243,8 @@ export async function GET(request: Request) {
 			{
 				type: ResponseType.STATIC,
 				headers: {
+					"Cache-Control": PLUGIN_CACHE_CONTROL,
+					"Vercel-Cache-Tag": pluginCacheTags().join(","),
 					"X-Plugin-Count": String(enrichedPlugins.length),
 					"X-Query-Complexity": "advanced",
 				},

@@ -82,6 +82,8 @@ jobs:
         env:
           PRISMA_DATABASE_URL: ${{ secrets.PRISMA_DATABASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REVALIDATE_API_KEY: ${{ secrets.REVALIDATE_API_KEY }}
+          REGISTRY_URL: https://registry.devex.sh
           SYNC_TAG: ${{ inputs.tag }}
         run: |
           # Run GitHub plugin sync (tsx already in dependencies)

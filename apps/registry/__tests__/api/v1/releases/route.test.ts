@@ -6,16 +6,25 @@ import {
 	it,
 	jest,
 } from "@jest/globals";
+import { invalidateByTag } from "@vercel/functions";
 import { POST } from "@/app/api/v1/plugins/[id]/releases/route";
 import {
 	AuditEventType,
 	type AuditLogger,
 	initializeAuditLogger,
 } from "@/lib/audit-log";
+import { invalidateCdnTags, pluginCacheTags } from "@/lib/cdn-cache";
 import { computeReleaseSignature } from "@/lib/releases/contract";
 import { recordPluginRelease } from "@/lib/releases/record";
 import { payload } from "../../../lib/releases/fixture";
 
+jest.mock("@vercel/functions", () => ({
+	invalidateByTag: jest.fn<typeof invalidateByTag>(),
+}));
+jest.mock("@/lib/cdn-cache", () => ({
+	...jest.requireActual<typeof import("@/lib/cdn-cache")>("@/lib/cdn-cache"),
+	invalidateCdnTags: jest.fn<typeof invalidateCdnTags>(),
+}));
 jest.mock("@/lib/releases/record", () => ({
 	recordPluginRelease: jest.fn<typeof recordPluginRelease>(),
 }));
@@ -55,6 +64,7 @@ function request(
 }
 beforeEach(() => {
 	process.env.REGISTRY_RELEASE_WEBHOOK_SECRET = "test-secret";
+	jest.mocked(invalidateCdnTags).mockResolvedValue(undefined);
 	jest.mocked(recordPluginRelease).mockResolvedValue({
 		pluginId: "plugin-id",
 		versionCreated: true,
@@ -75,6 +85,9 @@ describe("POST plugin release", () => {
 	it("returns 201 for a created version and audits the webhook identity", async () => {
 		const response = await POST(request(), context);
 		expect(response.status).toBe(201);
+		expect(invalidateCdnTags).toHaveBeenCalledWith(
+			pluginCacheTags(payload.plugin),
+		);
 		expect(response.headers.get("cache-control")).toBe("no-store");
 		expect(await response.json()).toEqual({
 			success: true,
@@ -108,6 +121,20 @@ describe("POST plugin release", () => {
 			data: { latestChanged: false },
 		});
 	});
+	it("does not fail the webhook when the CDN runtime purge fails", async () => {
+		const { invalidateCdnTags: realPurge } =
+			jest.requireActual<typeof import("@/lib/cdn-cache")>("@/lib/cdn-cache");
+		jest.mocked(invalidateCdnTags).mockImplementation(realPurge);
+		jest
+			.mocked(invalidateByTag)
+			.mockRejectedValue(new Error("CDN unavailable"));
+		const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+		expect((await POST(request(), context)).status).toBe(201);
+		expect(warn).toHaveBeenCalledWith(
+			expect.stringContaining("CDN purge failed"),
+		);
+		warn.mockRestore();
+	});
 	it("accepts signed JSON whitespace without reserializing it", async () => {
 		expect(
 			(await POST(request(JSON.stringify(payload, null, 2)), context)).status,
@@ -128,6 +155,7 @@ describe("POST plugin release", () => {
 			error: { code: "VALIDATION_ERROR" },
 		});
 		expect(recordPluginRelease).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 	it("includes Zod issues for schema failures", async () => {
 		const response = await POST(request("{}"), context);
@@ -145,6 +173,7 @@ describe("POST plugin release", () => {
 		});
 		expect(response.status).toBe(400);
 		expect(recordPluginRelease).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 	it("verifies signatures before parsing JSON", async () => {
 		const response = await POST(
@@ -154,6 +183,7 @@ describe("POST plugin release", () => {
 		expect(response.status).toBe(401);
 		expect(response.headers.get("cache-control")).toBe("no-store");
 		expect(recordPluginRelease).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 	it("fails closed if the secret is missing", async () => {
 		delete process.env.REGISTRY_RELEASE_WEBHOOK_SECRET;
@@ -163,11 +193,13 @@ describe("POST plugin release", () => {
 			error: { code: "CONFIGURATION_ERROR" },
 		});
 		expect(recordPluginRelease).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 	it("rejects bodies over 1 MiB without trusting content-length", async () => {
 		const response = await POST(request("x".repeat(1024 * 1024 + 1)), context);
 		expect(response.status).toBe(413);
 		expect(recordPluginRelease).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 	it("stops reading a streamed body once it passes 1 MiB", async () => {
 		// No content-length: a chunked body is only bounded by counting bytes.
@@ -187,6 +219,7 @@ describe("POST plugin release", () => {
 		expect(response.status).toBe(413);
 		expect(pulled).toBeLessThan(10);
 		expect(recordPluginRelease).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 	it("measures UTF-8 bytes rather than characters", async () => {
 		expect((await POST(request("é".repeat(524289)), context)).status).toBe(413);
@@ -205,5 +238,6 @@ describe("POST plugin release", () => {
 		expect(response.status).toBe(500);
 		expect(response.headers.get("cache-control")).toBe("no-store");
 		expect(auditLog).not.toHaveBeenCalled();
+		expect(invalidateCdnTags).not.toHaveBeenCalled();
 	});
 });

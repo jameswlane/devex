@@ -1,5 +1,10 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import {
+	PLUGIN_CACHE_CONTROL,
+	PLUGIN_CDN_CACHE_CONTROL,
+	pluginCacheTags,
+} from "@/lib/cdn-cache";
 import { getCorsOrigins, REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
@@ -58,8 +63,9 @@ export const GET = withRateLimit(async function handler(request: NextRequest) {
 
 		return NextResponse.json(response, {
 			headers: {
-				"Cache-Control": `public, max-age=${REGISTRY_CONFIG.DEFAULT_CACHE_DURATION}, s-maxage=${REGISTRY_CONFIG.CDN_CACHE_DURATION}`,
-				"CDN-Cache-Control": "public, max-age=3600",
+				"Cache-Control": PLUGIN_CACHE_CONTROL,
+				"Vercel-Cache-Tag": pluginCacheTags().join(","),
+				"CDN-Cache-Control": PLUGIN_CDN_CACHE_CONTROL,
 				Vary: "Accept-Encoding",
 				"X-Registry-Source": REGISTRY_CONFIG.REGISTRY_SOURCE,
 				"X-Registry-Version": REGISTRY_CONFIG.REGISTRY_VERSION,

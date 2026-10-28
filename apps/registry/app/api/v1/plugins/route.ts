@@ -1,6 +1,7 @@
 import type { Plugin, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
+import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "@/lib/cdn-cache";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -87,6 +88,10 @@ async function handleGetPlugins(request: Request) {
 					transformationCache: "enabled",
 					queryOptimization: "composite-indexes",
 				},
+			},
+			{
+				"Cache-Control": PLUGIN_CACHE_CONTROL,
+				"Vercel-Cache-Tag": pluginCacheTags().join(","),
 			},
 		);
 	} catch (error) {

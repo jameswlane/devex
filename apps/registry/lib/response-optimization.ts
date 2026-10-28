@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "./cdn-cache";
 import { logger } from "./logger";
 
 /**
@@ -277,6 +278,15 @@ function buildResponseHeaders({
 		headers["X-Content-Variant"] = options.variant;
 	}
 
+	// Resource headers identify plugin detail and version responses centrally.
+	const resourceType = options.headers?.["X-Resource-Type"];
+	if (resourceType === "plugin" || resourceType?.startsWith("plugin-")) {
+		headers["Cache-Control"] = PLUGIN_CACHE_CONTROL;
+		headers["Vercel-Cache-Tag"] = pluginCacheTags(
+			options.headers?.["X-Resource-Name"],
+		).join(",");
+	}
+
 	// Merge custom headers (custom headers override defaults)
 	if (options.headers) {
 		Object.assign(headers, options.headers);
@@ -366,6 +376,7 @@ export function createPaginatedResponse<T>(
 		limit: number;
 	},
 	additionalData?: Record<string, any>,
+	headers?: Record<string, string>,
 ) {
 	const { total, page, limit } = pagination;
 	const offset = (page - 1) * limit;
@@ -390,6 +401,7 @@ export function createPaginatedResponse<T>(
 
 	return createOptimizedResponse(responseData, {
 		type: ResponseType.PAGINATED,
+		headers,
 		pagination: {
 			total,
 			count,

@@ -24,6 +24,7 @@
 		"@prisma/extension-accelerate": "^2.0.2",
 		"@tailwindcss/postcss": "^4.1.13",
 		"@upstash/redis": "^1.35.4",
+		"@vercel/functions": "3.9.11",
 		"bcrypt": "^6.0.0",
 		"ioredis": "^5.4.1",
 		"next": "^15.5.7",

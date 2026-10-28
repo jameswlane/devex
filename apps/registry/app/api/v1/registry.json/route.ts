@@ -4,6 +4,11 @@ import {
 	binaryMetadataService,
 	type PlatformBinaries,
 } from "@/lib/binary-metadata";
+import {
+	PLUGIN_CACHE_CONTROL,
+	PLUGIN_CDN_CACHE_CONTROL,
+	pluginCacheTags,
+} from "@/lib/cdn-cache";
 import { REGISTRY_CONFIG } from "@/lib/config";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { CACHE_DURATION, pluginCache } from "@/lib/plugin-cache";
@@ -155,8 +160,9 @@ export const GET = withRateLimit(async function handler(request: Request) {
 
 		return NextResponse.json(response, {
 			headers: {
-				"Cache-Control": `public, max-age=${REGISTRY_CONFIG.DEFAULT_CACHE_DURATION}, s-maxage=${REGISTRY_CONFIG.CDN_CACHE_DURATION}`,
-				"CDN-Cache-Control": "public, max-age=1800", // 30 minutes for plugin registry
+				"Cache-Control": PLUGIN_CACHE_CONTROL,
+				"Vercel-Cache-Tag": pluginCacheTags().join(","),
+				"CDN-Cache-Control": PLUGIN_CDN_CACHE_CONTROL,
 				Vary: "Accept-Encoding",
 				"X-Registry-Source": "database",
 				"X-Registry-Version": REGISTRY_CONFIG.REGISTRY_VERSION,

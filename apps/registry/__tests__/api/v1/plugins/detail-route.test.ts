@@ -99,6 +99,12 @@ describe("GET /api/v1/plugins/[id]", () => {
 		const body = await response.json();
 
 		expect(response.status).toBe(200);
+		expect(response.headers.get("Cache-Control")).toBe(
+			"public, max-age=60, s-maxage=240, must-revalidate",
+		);
+		expect(response.headers.get("Vercel-Cache-Tag")).toBe(
+			"plugin:package-manager-apt,plugins,registry",
+		);
 		expect(body.name).toBe(plugin.name);
 		expect(body.description).toBe(plugin.description);
 		expect(body.latestVersion).toBe("1.10.0");
