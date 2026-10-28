@@ -56,13 +56,13 @@ func main() {
 
 	// Check if a platform is supported
 	if !platform.IsSupportedPlatform() {
-		log.Fatal("Unsupported platform", fmt.Errorf("platform: %s", plat.OS))
+		handleError("checking platform", fmt.Errorf("unsupported platform: %s", plat.OS))
 	}
 
-	// Validate dependencies quietly
+	// Validate dependencies quietly; report failures on stderr since logs go to a file
 	ctx := context.Background()
 	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
-		log.Fatal("Dependency validation failed", fmt.Errorf("failed to validate required dependencies: %w", err))
+		handleError("validating required dependencies", fmt.Errorf("%w; install curl, git and unzip with your package manager (for example: sudo apt-get install curl git unzip)", err))
 	}
 
 	homeDir, err := utils.GetHomeDir()
