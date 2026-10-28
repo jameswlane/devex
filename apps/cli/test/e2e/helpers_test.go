@@ -236,3 +236,28 @@ func processRunning(name string) bool {
 	defer cancel()
 	return exec.CommandContext(ctx, "pgrep", name).Run() == nil
 }
+
+// pathWithout returns a PATH holding links to every command on the current PATH
+// except the named one, so specs can simulate a missing system tool.
+func pathWithout(missing string) string {
+	directory, err := os.MkdirTemp(sandbox.work, "path-")
+	Expect(err).NotTo(HaveOccurred(), "create filtered PATH directory")
+	for _, source := range filepath.SplitList(os.Getenv("PATH")) {
+		entries, err := os.ReadDir(source)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if name == missing {
+				continue
+			}
+			link := filepath.Join(directory, name)
+			if _, err := os.Lstat(link); err == nil {
+				continue // earlier PATH entries win, as in a real lookup
+			}
+			Expect(os.Symlink(filepath.Join(source, name), link)).To(Succeed(), "link %s", name)
+		}
+	}
+	return directory
+}

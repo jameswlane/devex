@@ -11,6 +11,16 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+var _ = Describe("Startup dependency checks", func() {
+	It("explains a missing required tool on stderr instead of failing silently", func() {
+		home := sandbox.isolatedHome()
+		output, err := sandbox.run(home, sandbox.binary, 30*time.Second, map[string]string{"PATH": pathWithout("unzip")}, "--version")
+		Expect(err).To(HaveOccurred(), "the CLI must refuse to start without unzip:\n%s", output)
+		Expect(output).To(ContainSubstring("missing dependency: unzip"), "the error must name the missing tool")
+		Expect(output).To(ContainSubstring("apt-get install"), "the error must say how to install it")
+	})
+})
+
 var _ = Describe("Plugin bootstrap failure modes", func() {
 	It("degrades clearly without downloading when offline and no plugins are installed", func() {
 		home := sandbox.isolatedHome()
