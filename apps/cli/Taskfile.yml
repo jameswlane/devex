@@ -116,6 +116,22 @@ tasks:
     desc: Generate mocks for interfaces
     cmds:
       - go generate ./...
+  # === END-TO-END (CONTAINER SANDBOX) ===
+  e2e:docker:
+    desc: Run the e2e suite in a container sandbox (DISTRO=ubuntu-24.04|debian-12)
+    vars:
+      DISTRO: '{{.DISTRO | default "ubuntu-24.04"}}'
+    env:
+      DISTRO: '{{.DISTRO}}'
+    cmds:
+      - ./scripts/e2e-docker.sh {{.CLI_ARGS}}
+  e2e:docker:all:
+    desc: Run the e2e suite in every container sandbox distro
+    cmds:
+      - task: e2e:docker
+        vars: {DISTRO: ubuntu-24.04}
+      - task: e2e:docker
+        vars: {DISTRO: debian-12}
   # === CLEANUP ===
   clean:
     desc: Clean build artifacts and temporary files

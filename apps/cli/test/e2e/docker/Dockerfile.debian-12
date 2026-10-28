@@ -1,0 +1,43 @@
+# DevEx CLI end-to-end sandbox: Debian 12.
+#
+# Built by scripts/e2e-docker.sh from a staged build context holding two
+# binaries: `devex` and `e2e.test`. The image is deliberately bare so the
+# suite exercises first-run behaviour: the tester home is empty and no devex
+# directories exist until the CLI creates them.
+FROM debian:12
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Unpinned on purpose: the sandbox should track the distro's current packages.
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        git \
+        gzip \
+        procps \
+        sudo \
+        tar \
+        xz-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# The home is created by hand rather than with -m so /etc/skel is not copied.
+RUN useradd --no-create-home --home-dir /home/tester --shell /bin/bash --uid 1000 tester \
+    && install -d -o tester -g tester -m 0755 /home/tester \
+    && echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester \
+    && chmod 0440 /etc/sudoers.d/tester \
+    && install -d -o tester -g tester -m 0755 /artifacts
+
+COPY devex /usr/local/bin/devex
+COPY e2e.test /opt/devex-e2e/e2e.test
+
+ENV DEVEX_E2E_SANDBOX=1 \
+    LANG=C.UTF-8
+
+# hadolint ignore=DL3066
+USER tester
+WORKDIR /home/tester
+
+# Extra arguments to `docker run` (for example --ginkgo.focus=...) are appended.
+ENTRYPOINT ["/opt/devex-e2e/e2e.test", "--ginkgo.v", "--ginkgo.junit-report=/artifacts/junit.xml"]
