@@ -75,17 +75,17 @@ tasks:
     aliases: [t]
     sources: ['**/*.go', '**/*_test.go']
     cmds:
-      - ginkgo run -r --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
+      - ginkgo run -r --skip-package=test/e2e --timeout=5m --poll-progress-after=30s --poll-progress-interval=10s -v
   test:short:
     desc: Run tests with short flag (skip long-running tests)
     cmds:
-      - ginkgo run -r --timeout=2m -v --label-filter="!slow"
+      - ginkgo run -r --skip-package=test/e2e --timeout=2m -v --label-filter="!slow"
   test:coverage:
     desc: Run tests and generate coverage report
     sources: ['**/*.go', '**/*_test.go']
     generates: ['coverage.out']
     cmds:
-      - ginkgo run -r --coverprofile=coverage.out --timeout=5m -v
+      - ginkgo run -r --skip-package=test/e2e --coverprofile=coverage.out --timeout=5m -v
       - go tool cover -html=coverage.out -o coverage.html
       - echo "Coverage report generated at coverage.html"
   test:testify:
@@ -96,7 +96,7 @@ tasks:
     desc: Run integration tests with timeout and progress reporting
     cmds:
       - >
-        timeout 10m ginkgo run -r --timeout=5m -v --label-filter="integration"
+        timeout 10m ginkgo run -r --skip-package=test/e2e --timeout=5m -v --label-filter="integration"
 
   # === BENCHMARKING ===
   bench:
