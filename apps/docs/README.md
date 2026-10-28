@@ -158,7 +158,7 @@ DevEx supports over 36 package managers and desktop environments.
 <Tab value="Linux">
 ```bash
 curl -fsSL https://devex.sh/install | bash
-````
+```
 </Tab>
 <Tab value="macOS">
 ```bash
@@ -171,7 +171,7 @@ brew install jameswlane/tap/devex
 ```
 </Tab>
 </Tabs>
-```
+````
 
 ### Available Components
 
