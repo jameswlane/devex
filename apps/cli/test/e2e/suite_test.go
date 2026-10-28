@@ -38,6 +38,15 @@ var _ = BeforeSuite(func() {
 	sandbox.registry = envDefault("DEVEX_E2E_REGISTRY_URL", "https://registry.devex.sh")
 	sandbox.desktop = envDefault("DEVEX_E2E_DESKTOP", "none")
 	Expect(sandbox.desktop).To(BeElementOf("gnome", "kde", "none"), "DEVEX_E2E_DESKTOP must be gnome, kde, or none")
+	if sandbox.desktop != "gnome" {
+		// The CLI also detects desktops from running processes, not only XDG_CURRENT_DESKTOP.
+		Expect(processRunning("gnome-session")).To(BeFalse(), "a gnome-session process is running; DEVEX_E2E_DESKTOP=%s needs a sandbox without a GNOME session", sandbox.desktop)
+	}
+	if sandbox.desktop != "kde" {
+		for _, name := range []string{"kded4", "kded5"} {
+			Expect(processRunning(name)).To(BeFalse(), "a %s process is running; DEVEX_E2E_DESKTOP=%s needs a sandbox without a KDE session", name, sandbox.desktop)
+		}
+	}
 	sandbox.artifacts = artifactDirectory()
 	sandbox.homes = []string{sandbox.home}
 	sandbox.work, err = os.MkdirTemp("", "devex-e2e-work-")

@@ -229,3 +229,10 @@ func (s *suiteEnvironment) collectArtifacts(spec string) {
 	}
 	GinkgoWriter.Printf("Failure artifacts: %s\n", directory)
 }
+
+// processRunning mirrors the CLI's desktop fallback (pgrep by process name).
+func processRunning(name string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "pgrep", name).Run() == nil
+}
