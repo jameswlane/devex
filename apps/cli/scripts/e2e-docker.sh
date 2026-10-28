@@ -164,6 +164,11 @@ main() {
 	local status=0
 	engine "${run_args[@]}" "$image" "$@" || status=$?
 
+	# The suite writes owner-only files as tester; open them up so the host user
+	# (for example the CI runner, UID 1001) can read and upload them.
+	engine run --rm --user 0 --entrypoint chmod --volume "$artifacts:/artifacts:Z" "$image" -R a+rX /artifacts ||
+		log "could not make $artifacts readable; artifact upload may fail"
+
 	if [[ "$DRY_RUN" == "1" ]]; then
 		log "dry run complete; no image was built or run"
 	elif [[ "$status" -eq 0 ]]; then

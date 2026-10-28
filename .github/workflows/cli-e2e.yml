@@ -79,7 +79,8 @@ jobs:
         desktop: ${{ fromJSON(inputs.desktop == 'gnome' && '["gnome"]' || inputs.desktop == 'kde' && '["kde"]' || inputs.desktop == 'none' && '["none"]' || '["gnome", "none"]') }}
     env:
       DEVEX_E2E_DESKTOP: ${{ matrix.desktop }}
-      DEVEX_E2E_DESTRUCTIVE: ${{ inputs.destructive == false && '0' || '1' }}
+      # A missing input (pull_request, push) compares equal to false, so match the string.
+      DEVEX_E2E_DESTRUCTIVE: ${{ format('{0}', inputs.destructive) == 'false' && '0' || '1' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
