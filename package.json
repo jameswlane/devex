@@ -7,20 +7,20 @@
 		"biome:lint": "biome lint --write",
 		"biome:check": "biome check --write",
 		"build": "turbo build",
-		"build:go": "turbo build:go",
-		"generate": "turbo generate",
+		"build:go": "turbo run build --filter=@devex/cli --filter='./packages/*'",
+		"generate": "turbo run generate",
 		"download": "turbo download",
 		"dev": "turbo dev",
 		"lint": "turbo lint",
-		"lint:go": "turbo lint:go",
+		"lint:go": "turbo run lint --filter=@devex/cli --filter='./packages/*'",
 		"lint:fix": "turbo lint:fix",
 		"test": "turbo test",
-		"test:go": "turbo test:go",
-		"test:ginkgo": "turbo test:ginkgo",
+		"test:go": "turbo run test --filter=@devex/cli --filter='./packages/*'",
+		"test:ginkgo": "turbo run test --filter=@devex/cli --filter='./packages/*'",
 		"clean": "turbo clean",
-		"cli:build": "turbo build:go --filter=@devex/cli",
-		"cli:test": "turbo test:go --filter=@devex/cli",
-		"cli:lint": "turbo lint:go --filter=@devex/cli",
+		"cli:build": "turbo run build --filter=@devex/cli",
+		"cli:test": "turbo run test --filter=@devex/cli",
+		"cli:lint": "turbo run lint --filter=@devex/cli",
 		"auto": "auto",
 		"auto:version": "auto version",
 		"auto:changelog": "auto changelog",
@@ -56,14 +56,19 @@
 	"devDependencies": {
 		"@auto-it/conventional-commits": "^11.3.6",
 		"@auto-it/core": "^11.3.6",
-		"@biomejs/biome": "2.6.3",
-		"@commitlint/config-conventional": "^19.8.1",
-		"@commitlint/format": "^19.8.1",
+		"@biomejs/biome": "2.6.4",
+		"@commitlint/config-conventional": "^21.2.4",
+		"@commitlint/format": "^21.2.3",
 		"@octokit/rest": "^22.0.1",
 		"auto": "^11.3.6",
-		"commitlint": "^19.8.1",
-		"glob": "^11.1.0",
+		"commitlint": "^21.2.4",
+		"glob": "^14.0.3",
 		"js-yaml": "^5.5.0",
 		"turbo": "2.11.10"
+	},
+	"pnpm": {
+		"overrides": {
+			"compression@<1.8.2": "1.8.2"
+		}
 	}
 }
