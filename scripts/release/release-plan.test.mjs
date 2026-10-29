@@ -10,21 +10,47 @@ describe("bumpFor", () => {
 	});
 
 	it("bumps patch for fix and other non-feat commits", () => {
-		assert.equal(bumpFor([{ subject: "fix: correct apt key path", body: "" }]), "patch");
+		assert.equal(
+			bumpFor([{ subject: "fix: correct apt key path", body: "" }]),
+			"patch",
+		);
 		assert.equal(bumpFor([{ subject: "chore: tidy up", body: "" }]), "patch");
-		assert.equal(bumpFor([{ subject: "docs(readme): typo", body: "" }]), "patch");
+		assert.equal(
+			bumpFor([{ subject: "docs(readme): typo", body: "" }]),
+			"patch",
+		);
 	});
 
 	it("bumps minor for feat commits", () => {
-		assert.equal(bumpFor([{ subject: "feat: add dnf backend", body: "" }]), "minor");
-		assert.equal(bumpFor([{ subject: "feat(registry): scoped feature", body: "" }]), "minor");
+		assert.equal(
+			bumpFor([{ subject: "feat: add dnf backend", body: "" }]),
+			"minor",
+		);
+		assert.equal(
+			bumpFor([{ subject: "feat(registry): scoped feature", body: "" }]),
+			"minor",
+		);
 	});
 
 	it("bumps major for breaking changes via ! or BREAKING CHANGE footer", () => {
-		assert.equal(bumpFor([{ subject: "feat!: drop v1 config", body: "" }]), "major");
-		assert.equal(bumpFor([{ subject: "fix(api)!: change return type", body: "" }]), "major");
-		assert.equal(bumpFor([{ subject: "fix: x", body: "text\nBREAKING CHANGE: new format" }]), "major");
-		assert.equal(bumpFor([{ subject: "fix: x", body: "BREAKING-CHANGE: new format" }]), "major");
+		assert.equal(
+			bumpFor([{ subject: "feat!: drop v1 config", body: "" }]),
+			"major",
+		);
+		assert.equal(
+			bumpFor([{ subject: "fix(api)!: change return type", body: "" }]),
+			"major",
+		);
+		assert.equal(
+			bumpFor([
+				{ subject: "fix: x", body: "text\nBREAKING CHANGE: new format" },
+			]),
+			"major",
+		);
+		assert.equal(
+			bumpFor([{ subject: "fix: x", body: "BREAKING-CHANGE: new format" }]),
+			"major",
+		);
 	});
 
 	it("takes the highest bump across commits", () => {
@@ -34,7 +60,10 @@ describe("bumpFor", () => {
 			{ subject: "fix: three", body: "" },
 		];
 		assert.equal(bumpFor(commits), "minor");
-		assert.equal(bumpFor([...commits, { subject: "feat!: four", body: "" }]), "major");
+		assert.equal(
+			bumpFor([...commits, { subject: "feat!: four", body: "" }]),
+			"major",
+		);
 	});
 });
 
