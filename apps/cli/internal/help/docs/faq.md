@@ -27,7 +27,7 @@ Yes, DevEx is completely free and open-source under the MIT license. You can use
 
 The easiest way is the one-line installer:
 ```bash
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 For other installation methods, see the [Installation Guide](installation).
@@ -303,7 +303,7 @@ Yes, all releases are:
 Yes! DevEx works great in containers:
 ```dockerfile
 # Install DevEx in container
-RUN wget -qO- https://devex.sh/install | bash
+RUN wget -qO- https://get.devex.sh/install | bash
 
 # Use in container setup
 RUN devex init --template backend-api --non-interactive
@@ -317,7 +317,7 @@ Absolutely:
 # GitHub Actions example
 - name: Setup development environment
   run: |
-    wget -qO- https://devex.sh/install | bash
+    wget -qO- https://get.devex.sh/install | bash
     devex config import .devex-config.yaml
     devex install --all --no-tui
 ```

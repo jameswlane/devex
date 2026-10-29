@@ -1,0 +1,370 @@
+name: Installers
+
+on:
+  pull_request:
+    paths:
+      - 'apps/get/public/**'
+      - 'apps/get/tests/**'
+      - 'apps/cli/internal/utils/**'
+      - 'apps/cli/cmd/**'
+      - '.github/workflows/installers.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/get/public/**'
+      - 'apps/get/tests/**'
+      - 'apps/cli/internal/utils/**'
+      - 'apps/cli/cmd/**'
+      - '.github/workflows/installers.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    # Container jobs otherwise run steps with sh, and these steps use bash syntax.
+    shell: bash
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installers-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  releases:
+    name: Resolve CLI releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      latest: ${{ steps.versions.outputs.latest }}
+      previous: ${{ steps.versions.outputs.previous }}
+    steps:
+      - name: Resolve latest and previous CLI releases
+        id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t versions < <(
+            gh api repos/jameswlane/devex/releases?per_page=100 \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name | select(test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))'
+          )
+          if [ "${#versions[@]}" -lt 2 ]; then
+            echo "::error::Could not resolve two CLI releases"
+            exit 1
+          fi
+          {
+            echo "latest=${versions[0]}"
+            echo "previous=${versions[1]}"
+          } >> "$GITHUB_OUTPUT"
+
+  bash-installer:
+    name: Bash / ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 10
+    needs: releases
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu:24.04
+            runner: ubuntu-latest
+            container: ubuntu:24.04
+            os: linux
+            shell: /bin/bash
+            rc-file: .bashrc
+          - name: debian:12
+            runner: ubuntu-latest
+            container: debian:12
+            os: linux
+            shell: /bin/bash
+            rc-file: .bashrc
+          - name: macos-latest
+            runner: macos-latest
+            container:
+            os: darwin
+            shell: /bin/zsh
+            rc-file: .zshrc
+    env:
+      LATEST_VERSION: ${{ needs.releases.outputs.latest }}
+      PREVIOUS_VERSION: ${{ needs.releases.outputs.previous }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Install Linux test dependencies
+        if: matrix.os == 'linux'
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends curl git unzip ca-certificates python3
+
+      - name: Test latest, previous, and idempotent PATH setup
+        env:
+          HOME: ${{ runner.temp }}/devex-home
+          SHELL: ${{ matrix.shell }}
+          RC_FILE: ${{ matrix.rc-file }}
+        run: |
+          mkdir -p "$HOME"
+          install_dir="$RUNNER_TEMP/devex-install"
+          bash apps/get/public/install --no-setup --install-dir "$install_dir"
+          test -x "$install_dir/bin/devex"
+          version_output=$("$install_dir/bin/devex" --version)
+          case "$version_output" in
+            *"${LATEST_VERSION#v}"*) ;;
+            *) echo "::error::Expected ${LATEST_VERSION}, got: $version_output"; exit 1 ;;
+          esac
+
+          bash apps/get/public/install --no-setup --install-dir "$install_dir"
+          path_count=$(grep -cF "$install_dir/bin" "$HOME/$RC_FILE" || :)
+          if [ "$path_count" -ne 1 ]; then
+            echo "::error::Expected one PATH entry in $HOME/$RC_FILE, found $path_count"
+            exit 1
+          fi
+
+          bash apps/get/public/install --no-setup --install-dir "$install_dir" --version "$PREVIOUS_VERSION"
+          version_output=$("$install_dir/bin/devex" --version)
+          case "$version_output" in
+            *"${PREVIOUS_VERSION#v}"*) ;;
+            *) echo "::error::Expected ${PREVIOUS_VERSION}, got: $version_output"; exit 1 ;;
+          esac
+
+      - name: Reject a corrupted checksum
+        if: matrix.name == 'ubuntu:24.04'
+        env:
+          HOME: ${{ runner.temp }}/devex-corrupt-home
+          SHELL: /bin/bash
+        run: |
+          release_dir="$RUNNER_TEMP/corrupt-release"
+          bad_install="$RUNNER_TEMP/devex-corrupt-install"
+          mkdir -p "$HOME" "$release_dir/$LATEST_VERSION"
+          version="${LATEST_VERSION#v}"
+          archive="devex_${version}_linux_amd64.tar.gz"
+          release_url="https://github.com/jameswlane/devex/releases/download/$LATEST_VERSION"
+          curl -fsSL -o "$release_dir/$LATEST_VERSION/$archive" "$release_url/$archive"
+          curl -fsSL -o "$release_dir/$LATEST_VERSION/devex_checksums.txt" "$release_url/devex_checksums.txt"
+          zeros=0000000000000000000000000000000000000000000000000000000000000000
+          sed -i -E "s/^[0-9a-fA-F]{64}  ${archive}$/${zeros}  ${archive}/" "$release_dir/$LATEST_VERSION/devex_checksums.txt"
+          grep -F "$zeros  $archive" "$release_dir/$LATEST_VERSION/devex_checksums.txt"
+
+          python3 -m http.server 18765 --bind 127.0.0.1 --directory "$release_dir" >"$RUNNER_TEMP/http.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || :' EXIT
+          ready=0
+          for _ in {1..30}; do
+            if curl -fsS -o /dev/null "http://127.0.0.1:18765/$LATEST_VERSION/devex_checksums.txt"; then
+              ready=1
+              break
+            fi
+            sleep 0.25
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::Local release server did not start"
+            exit 1
+          fi
+
+          set +e
+          output=$(bash apps/get/public/install --no-setup --install-dir "$bad_install" \
+            --version "$LATEST_VERSION" --base-url http://127.0.0.1:18765 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "::error::Installer accepted a corrupted checksum"
+            exit 1
+          fi
+          if ! grep -q "Checksum verification failed" <<< "$output"; then
+            echo "::error::Installer did not fail on the checksum"
+            exit 1
+          fi
+          if [ -e "$bad_install" ]; then
+            echo "::error::Corrupted checksum left an installation"
+            exit 1
+          fi
+
+  bash-missing-dependency:
+    name: Bash / missing unzip
+    runs-on: ubuntu-latest
+    container: ubuntu:24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Install dependencies except unzip
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq --no-install-recommends curl git ca-certificates
+          if command -v unzip >/dev/null 2>&1; then
+            echo "::error::unzip is unexpectedly installed"
+            exit 1
+          fi
+
+      - name: Require unzip
+        run: |
+          set +e
+          output=$(bash apps/get/public/install --no-setup 2>&1)
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "::error::Installer succeeded without unzip"
+            exit 1
+          fi
+          if ! grep -q unzip <<< "$output"; then
+            echo "::error::Failure did not name unzip"
+            exit 1
+          fi
+
+  windows-installer:
+    name: Windows / ${{ matrix.shell }}
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: releases
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [pwsh, powershell]
+    env:
+      INSTALLER_SHELL: ${{ matrix.shell }}
+      LATEST_VERSION: ${{ needs.releases.outputs.latest }}
+      PREVIOUS_VERSION: ${{ needs.releases.outputs.previous }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Run PowerShell installer unit tests
+        shell: pwsh
+        run: pwsh -NoProfile -File apps/get/tests/install.ps1
+
+      - name: Test installation, versions, and idempotent user PATH
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $script = Join-Path $env:GITHUB_WORKSPACE 'apps/get/public/install.ps1'
+          $installDir = Join-Path $env:RUNNER_TEMP 'devex-install'
+          $binPath = Join-Path $installDir 'bin'
+          $executable = Join-Path $binPath 'devex.exe'
+          function Invoke-Installer([string[]]$Arguments) {
+            & $env:INSTALLER_SHELL -NoProfile -File $script @Arguments
+            if ($LASTEXITCODE -ne 0) { throw "Installer failed with exit code $LASTEXITCODE." }
+          }
+          function Assert-Version([string]$Expected) {
+            $output = & $executable --version
+            if ($LASTEXITCODE -ne 0) { throw "devex --version failed with exit code $LASTEXITCODE." }
+            $expectedNumber = $Expected.TrimStart('v')
+            if (($output | Out-String) -notmatch [regex]::Escape($expectedNumber)) {
+              throw "Expected $Expected, got: $($output | Out-String)"
+            }
+          }
+
+          Invoke-Installer @('-NoSetup', '-InstallDir', $installDir)
+          if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'bin/devex.exe was not installed.' }
+          Assert-Version $env:LATEST_VERSION
+          Invoke-Installer @('-NoSetup', '-InstallDir', $installDir)
+
+          $userPath = [Environment]::GetEnvironmentVariable('PATH', 'User')
+          $pathEntries = @($userPath -split ';' | Where-Object {
+            $_ -and $_.TrimEnd('\', '/') -ieq $binPath.TrimEnd('\', '/')
+          })
+          if ($pathEntries.Count -ne 1) { throw "Expected one user PATH entry, found $($pathEntries.Count)." }
+
+          Invoke-Installer @('-Version', $env:PREVIOUS_VERSION, '-NoSetup', '-InstallDir', $installDir)
+          Assert-Version $env:PREVIOUS_VERSION
+          $withoutV = $env:PREVIOUS_VERSION.TrimStart('v')
+          Invoke-Installer @('-Version', $withoutV, '-NoSetup', '-InstallDir', $installDir)
+          Assert-Version $env:PREVIOUS_VERSION
+
+      - name: Reject a corrupted checksum
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $releaseDir = Join-Path $env:RUNNER_TEMP 'corrupt-release'
+          $badInstall = Join-Path $env:RUNNER_TEMP 'devex-corrupt-install'
+          New-Item -ItemType Directory -Path (Join-Path $releaseDir $env:LATEST_VERSION) -Force | Out-Null
+          $version = $env:LATEST_VERSION.TrimStart('v')
+          $archive = "devex_${version}_windows_amd64.tar.gz"
+          $releaseUrl = "https://github.com/jameswlane/devex/releases/download/$env:LATEST_VERSION"
+          # The installer requests <BaseUrl>/<version>/<file>.
+          $archivePath = Join-Path $releaseDir "$env:LATEST_VERSION/$archive"
+          $checksumPath = Join-Path $releaseDir "$env:LATEST_VERSION/devex_checksums.txt"
+          Invoke-WebRequest -Uri "$releaseUrl/$archive" -OutFile $archivePath -UseBasicParsing
+          Invoke-WebRequest -Uri "$releaseUrl/devex_checksums.txt" -OutFile $checksumPath -UseBasicParsing
+
+          $found = $false
+          $corrupted = @(foreach ($line in Get-Content -LiteralPath $checksumPath) {
+            if ($line -cmatch '^([a-fA-F0-9]{64})  (.+)$' -and $Matches[2] -ceq $archive) {
+              $found = $true
+              ('0' * 64) + '  ' + $archive
+            } else {
+              $line
+            }
+          })
+          if (-not $found) { throw "No checksum found for $archive." }
+          [IO.File]::WriteAllLines($checksumPath, [string[]]$corrupted)
+
+          $server = Start-Process -FilePath python -ArgumentList @(
+            '-m', 'http.server', '18766', '--bind', '127.0.0.1', '--directory', $releaseDir
+          ) -PassThru -WindowStyle Hidden
+          try {
+            $baseUrl = 'http://127.0.0.1:18766'
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              try {
+                Invoke-WebRequest -Uri "$baseUrl/$env:LATEST_VERSION/devex_checksums.txt" -UseBasicParsing -TimeoutSec 1 | Out-Null
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Milliseconds 250
+              }
+            }
+            if (-not $ready) { throw 'Local release server did not start.' }
+
+            $output = & $env:INSTALLER_SHELL -NoProfile -File apps/get/public/install.ps1 `
+              -Version $env:LATEST_VERSION -NoSetup -InstallDir $badInstall -BaseUrl $baseUrl 2>&1 | Out-String
+            $status = $LASTEXITCODE
+            Write-Host $output
+            if ($status -eq 0) { throw 'Installer accepted a corrupted checksum.' }
+            if ($output -notmatch 'Checksum verification failed') { throw 'Installer did not fail on the checksum.' }
+            if (Test-Path -LiteralPath $badInstall) { throw 'Corrupted checksum left an installation.' }
+            # The installer was expected to fail; do not let its exit code fail the step.
+            $global:LASTEXITCODE = 0
+          } finally {
+            if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+          }
+
+  windows-cli:
+    name: Windows / CLI from source
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: apps/cli/go.sum
+
+      - name: Run PowerShell installer unit tests
+        shell: pwsh
+        run: pwsh -NoProfile -File apps/get/tests/install.ps1
+
+      - name: Build and smoke test the Windows CLI
+        shell: pwsh
+        working-directory: apps/cli
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $outputDir = Join-Path $env:RUNNER_TEMP 'devex-source'
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+          $executable = Join-Path $outputDir 'devex.exe'
+          go build -o $executable ./cmd/main.go
+          if ($LASTEXITCODE -ne 0) { throw "go build failed with exit code $LASTEXITCODE." }
+
+          $env:USERPROFILE = Join-Path $env:RUNNER_TEMP 'devex-source-home'
+          $env:HOME = $env:USERPROFILE
+          New-Item -ItemType Directory -Path $env:USERPROFILE -Force | Out-Null
+          & $executable --version
+          if ($LASTEXITCODE -ne 0) { throw "devex --version failed with exit code $LASTEXITCODE." }
+          & $executable status --all --no-tui
+          if ($LASTEXITCODE -ne 0) { throw "devex status failed with exit code $LASTEXITCODE." }

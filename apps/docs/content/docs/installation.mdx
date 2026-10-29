@@ -19,20 +19,16 @@ The fastest way to get started with DevEx is using our one-line installer:
 
 ```bash
 # Download and review the installer before execution
-curl -fsSL https://devex.sh/install -o devex-install.sh
+curl -fsSL https://get.devex.sh/install -o devex-install.sh
 less devex-install.sh  # Review the script contents
 ```
 </Callout>
 
 ```bash
-# Using wget (most common) - v1.0.0
-wget -qO- https://devex.sh/install | bash
-
-# Or using curl - v1.0.0
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
-The installer automatically detects which tool you have available and will install missing dependencies if needed.
+The installer needs `curl`, `git` and `unzip`. If any are missing, it stops and prints the command that installs them.
 
 This installer will:
 1. **Download the latest DevEx release** for your platform
@@ -60,21 +56,20 @@ For more control over the installation process:
 Visit the [GitHub releases page](https://github.com/jameswlane/devex/releases) and download the appropriate binary for your system:
 
 ```bash
-# Example for Linux x86_64 - Pin to specific version for security
-wget https://github.com/jameswlane/devex/releases/download/v1.0.0/devex_linux_amd64.tar.gz
+# Example for Linux x86_64 - pin a specific version (archive names omit the "v")
+VERSION=0.3.0
+curl -fsSLO "https://github.com/jameswlane/devex/releases/download/v${VERSION}/devex_${VERSION}_linux_amd64.tar.gz"
 
-# Verify checksum (recommended)
-wget https://github.com/jameswlane/devex/releases/download/v1.0.0/checksums.txt
-sha256sum -c checksums.txt
+# Verify the checksum (recommended)
+curl -fsSLO "https://github.com/jameswlane/devex/releases/download/v${VERSION}/devex_checksums.txt"
+# Extract only if the checksum matches (the archive holds bin/devex plus its assets, config and help)
+sha256sum -c --ignore-missing devex_checksums.txt &&
+  mkdir -p ~/.local/share/devex &&
+  tar -xzf "devex_${VERSION}_linux_amd64.tar.gz" -C ~/.local/share/devex
 
-# Extract
-tar -xzf devex_linux_amd64.tar.gz
-
-# Make executable
-chmod +x devex
-
-# Move to PATH
-sudo mv devex /usr/local/bin/
+# Add it to PATH now and for new shells (use ~/.zshrc for zsh)
+export PATH="$HOME/.local/share/devex/bin:$PATH"
+echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc
 ```
 
 ### 2. Initialize Configuration
@@ -111,30 +106,30 @@ For detailed platform-specific configurations, see our [Platform Guides](/docs/p
 ```bash
 # Prerequisites - Install required tools
 sudo apt update
-sudo apt install -y wget curl ca-certificates
+sudo apt install -y curl git unzip ca-certificates
 
 # Install DevEx (review security guide first)
-wget -qO- https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Linux (Fedora/RHEL)
 
 ```bash
 # Prerequisites - Install required tools
-sudo dnf install -y wget curl ca-certificates
+sudo dnf install -y curl git unzip ca-certificates
 
 # Install DevEx (review security guide first)
-wget -qO- https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Linux (Arch)
 
 ```bash
 # Prerequisites - Install required tools
-sudo pacman -S wget curl ca-certificates
+sudo pacman -S curl git unzip ca-certificates
 
 # Install DevEx (review security guide first)
-wget -qO- https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### macOS
@@ -144,17 +139,15 @@ wget -qO- https://devex.sh/install | bash
 brew install jameswlane/tap/devex
 
 # Or using the installer (review security guide first)
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Windows
 
-```powershell
-# Using winget
-winget install jameswlane.devex
+Windows support is minimal for now: the installer and the CLI run, but Windows package managers are not supported yet. The installer needs `git`.
 
-# Or download from releases page
-# https://github.com/jameswlane/devex/releases
+```powershell
+irm https://get.devex.sh/install.ps1 | iex
 ```
 
 ## Docker Installation
@@ -195,7 +188,7 @@ jobs:
       - name: Install DevEx
         run: |
           # Pin to specific version for CI reproducibility
-          wget -qO- https://devex.sh/install | bash
+          wget -qO- https://get.devex.sh/install | bash
           echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
       
       - name: Setup environment
@@ -209,10 +202,10 @@ setup_environment:
   stage: setup
   image: ubuntu:22.04  # Pin to specific version
   before_script:
-    - apt-get update && apt-get install -y wget curl sudo ca-certificates
+    - apt-get update && apt-get install -y curl git unzip sudo ca-certificates
   script:
     # Pin to specific version for CI reproducibility
-    - wget -qO- https://devex.sh/install | bash
+    - curl -fsSL https://get.devex.sh/install | bash
     - export PATH="$PATH:$HOME/.local/share/devex/bin"
     - devex install --dry-run
 ```
@@ -276,12 +269,12 @@ If downloads fail:
 
 ```bash
 # Use curl instead of wget (with certificate verification)
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 
 # Or set proxy with security considerations
 export https_proxy=http://your-proxy:port
 export http_proxy=http://your-proxy:port
-wget -qO- https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Configuration Issues

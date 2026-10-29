@@ -94,7 +94,7 @@ DevEx follows 12-Factor App configuration principles:
 ### Installation
 ```bash
 # One-line installation
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 
 # Or install locally for development
 cd apps/cli

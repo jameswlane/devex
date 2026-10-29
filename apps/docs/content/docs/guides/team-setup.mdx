@@ -272,7 +272,7 @@ echo "🚀 Welcome to the team! Setting up your development environment..."
 if ! command -v devex &> /dev/null; then
   echo "📦 Installing DevEx..."
   # See /docs/guides/security for best practices
-  curl -fsSL https://devex.sh/install | bash
+  curl -fsSL https://get.devex.sh/install | bash
   source ~/.bashrc
 fi
 
@@ -317,7 +317,7 @@ Configure DevEx for GitHub Codespaces:
 {
   "name": "Team Development Environment",
   "image": "mcr.microsoft.com/devcontainers/universal:latest",
-  "postCreateCommand": "curl -fsSL https://devex.sh/install | bash && devex install --config .devcontainer/devex.yaml",
+  "postCreateCommand": "curl -fsSL https://get.devex.sh/install | bash && devex install --config .devcontainer/devex.yaml",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -366,7 +366,7 @@ jobs:
       - name: Install DevEx
         run: |
           # Install DevEx with version pinning for CI reproducibility
-          curl -fsSL https://devex.sh/install | bash
+          curl -fsSL https://get.devex.sh/install | bash
         
       - name: Validate Configuration
         run: |
@@ -386,8 +386,8 @@ jobs:
 FROM ubuntu:22.04
 
 # Install DevEx with security considerations
-RUN apt-get update && apt-get install -y curl sudo ca-certificates
-RUN curl -fsSL https://devex.sh/install | bash
+RUN apt-get update && apt-get install -y curl git unzip sudo ca-certificates
+RUN curl -fsSL https://get.devex.sh/install | bash
 
 # Copy team configuration
 COPY configs/ /opt/devex-config/

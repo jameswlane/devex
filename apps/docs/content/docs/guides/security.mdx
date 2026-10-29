@@ -30,7 +30,7 @@ Before running any installation script, including DevEx's installer:
     
     ```bash
     # Download the installer script for review
-    curl -fsSL https://devex.sh/install -o devex-install.sh
+    curl -fsSL https://get.devex.sh/install -o devex-install.sh
     
     # Review the script contents
     less devex-install.sh
@@ -46,12 +46,11 @@ Before running any installation script, including DevEx's installer:
     Check the script's authenticity and integrity:
     
     ```bash
-    # Verify the script hasn't been tampered with
-    curl -fsSL https://devex.sh/install.sha256 -o install.sha256
-    sha256sum -c install.sha256
+    # Compare it with the source in the DevEx repository (no output means they match)
+    curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/apps/get/public/install | diff - devex-install.sh
     
     # Check HTTPS certificate
-    curl -I https://devex.sh/install
+    curl -I https://get.devex.sh/install
     ```
   </Step>
   
@@ -65,8 +64,8 @@ Before running any installation script, including DevEx's installer:
     chmod +x devex-install.sh
     ./devex-install.sh
     
-    # Or pipe directly (only after verification)
-    curl -fsSL https://devex.sh/install | bash
+    # Or pass options to the reviewed copy
+    bash devex-install.sh --no-setup
     ```
   </Step>
 </Steps>
@@ -90,13 +89,11 @@ DevEx's official installer is designed with security in mind:
 
 ```bash
 # Verify installer source and integrity
-curl -I https://devex.sh/install
+curl -I https://get.devex.sh/install
 # Should return 200 OK with valid HTTPS certificate
 
-# Check installer signature (when available)
-curl -fsSL https://devex.sh/install.sig -o install.sig
-curl -fsSL https://devex.sh/install -o install.sh
-gpg --verify install.sig install.sh
+# The installer is not signed yet. It verifies every release archive against the
+# release's devex_checksums.txt and stops if the SHA-256 does not match.
 ```
 
 ## Configuration Security
@@ -259,13 +256,13 @@ sudo devex --version                       # No sudo needed
 
 ```bash
 # ✅ Good: Verify HTTPS connection
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 
 # ❌ Bad: Insecure HTTP connection
-curl -fsSL http://devex.sh/install | bash  # Missing HTTPS
+curl -fsSL http://get.devex.sh/install | bash  # Missing HTTPS
 
 # ✅ Good: Verify certificate explicitly
-curl --cacert /etc/ssl/certs/ca-certificates.crt https://devex.sh/install
+curl --cacert /etc/ssl/certs/ca-certificates.crt https://get.devex.sh/install
 ```
 
 **Use Checksums for Verification:**

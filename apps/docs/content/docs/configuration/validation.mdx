@@ -604,8 +604,8 @@ jobs:
       - name: Install DevEx
         run: |
           # Review security guide before installation
-          wget -qO- https://devex.sh/install | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          wget -qO- https://get.devex.sh/install | bash
+          echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
           
       - name: Validate Configuration
         run: |

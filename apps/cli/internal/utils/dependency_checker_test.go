@@ -2,6 +2,9 @@ package utils_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -674,5 +677,27 @@ var _ = Describe("DependencyChecker", func() {
 				Expect(finalMetrics.InstallTime).To(BeNumerically(">=", 0))
 			})
 		})
+	})
+})
+
+var _ = Describe("CheckDependencies", func() {
+	It("finds executables on PATH without which or executing them", func() {
+		directory := GinkgoT().TempDir()
+		name := "test-dependency"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		Expect(os.WriteFile(filepath.Join(directory, name), []byte("not executable content"), 0755)).To(Succeed())
+		GinkgoT().Setenv("PATH", directory)
+		Expect(utils.CheckDependencies(context.Background(), []utils.Dependency{{Name: "test", Command: name}})).To(Succeed())
+	})
+	It("reports the missing dependency", func() {
+		GinkgoT().Setenv("PATH", GinkgoT().TempDir())
+		Expect(utils.CheckDependencies(context.Background(), []utils.Dependency{{Name: "Git", Command: "git"}})).To(MatchError("missing dependency: Git (command: git)"))
+	})
+	It("honors context cancellation", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		Expect(utils.CheckDependencies(ctx, []utils.Dependency{{Name: "git", Command: "git"}})).To(MatchError(context.Canceled))
 	})
 })

@@ -235,7 +235,10 @@ func NewDependencyCheckerWithCache(pm PackageManager, plat platform.Platform, ca
 // CheckDependencies verifies the availability of required dependencies.
 func CheckDependencies(ctx context.Context, dependencies []Dependency) error {
 	for _, dep := range dependencies {
-		if err := exec.CommandContext(ctx, "which", dep.Command).Run(); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := exec.LookPath(dep.Command); err != nil {
 			log.Error("Missing dependency", err, "name", dep.Name, "command", dep.Command)
 			return fmt.Errorf("missing dependency: %s (command: %s)", dep.Name, dep.Command)
 		}

@@ -1,406 +1,168 @@
-#Requires -Version 5.0
+#Requires -Version 5.1
 <#
 .SYNOPSIS
-    Downloads and installs DevEx on Windows.
-
-.DESCRIPTION
-    Retrieves the latest DevEx release from GitHub and installs it to the local machine.
-    DevEx will handle all dependency installation and environment setup after installation.
-
+Installs DevEx on Windows: irm https://get.devex.sh/install.ps1 | iex
 .PARAMETER Version
-    Specifies a specific version of DevEx to install. By default, installs the latest version.
-
+CLI version, with or without a leading v. Defaults to the latest CLI release.
+.PARAMETER NoSetup
+Install only, without prompting or running setup.
+.PARAMETER NonInteractive
+Run devex install --non-interactive without prompting.
+.PARAMETER Config
+Configuration path passed to setup or install.
 .PARAMETER InstallDir
-    Specifies the installation directory. Defaults to %LOCALAPPDATA%\Programs\DevEx
-
-.EXAMPLE
-    irm https://devex.sh/install.ps1 | iex
-
-    Downloads and runs the DevEx installer with default settings.
-
-.EXAMPLE
-    .\install.ps1 -Version "0.26.3"
-
-    Installs a specific version of DevEx.
+Installation directory. Defaults to %LOCALAPPDATA%\Programs\DevEx.
+.PARAMETER BaseUrl
+Release download base URL for testing. Requires an explicit Version.
 #>
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $false)]
     [string]$Version,
-    
-    [Parameter(Mandatory = $false)]
-    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\DevEx"
+    [switch]$NoSetup,
+    [switch]$NonInteractive,
+    [string]$Config,
+    [string]$InstallDir = "$env:LOCALAPPDATA\Programs\DevEx",
+    [string]$BaseUrl = 'https://github.com/jameswlane/devex/releases/download'
 )
 
-# Set strict mode for better error handling
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
-
-function Write-DevExInfo {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-        
-        [Parameter(Mandatory = $false)]
-        [ConsoleColor]$ForegroundColor = $host.UI.RawUI.ForegroundColor
-    )
-    
-    $backup = $host.UI.RawUI.ForegroundColor
-    if ($ForegroundColor -ne $host.UI.RawUI.ForegroundColor) {
-        $host.UI.RawUI.ForegroundColor = $ForegroundColor
-    }
-    Write-Output $Message
-    $host.UI.RawUI.ForegroundColor = $backup
-}
-
-function Write-DevExError {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Message,
-        
-        [Parameter(Mandatory = $false)]
-        [ConsoleColor]$ForegroundColor = [ConsoleColor]::Red
-    )
-    
-    $backup = $host.UI.RawUI.ForegroundColor
-    if ($ForegroundColor -ne $host.UI.RawUI.ForegroundColor) {
-        $host.UI.RawUI.ForegroundColor = $ForegroundColor
-    }
-    Write-Error $Message
-    $host.UI.RawUI.ForegroundColor = $backup
-}
-
-function Test-Prerequisites {
-    # Check PowerShell version
-    if ($PSVersionTable.PSVersion.Major -lt 5) {
-        Write-DevExInfo "PowerShell 5 or later is required. Please update PowerShell." -ForegroundColor Red
-        Write-DevExInfo "Download from: https://microsoft.com/powershell"
-        exit 1
-    }
-    
-    # Check TLS 1.2 support
-    if ([System.Enum]::GetNames([System.Net.SecurityProtocolType]) -notcontains 'Tls12') {
-        Write-DevExInfo "TLS 1.2 is required but not available. Please update .NET Framework." -ForegroundColor Red
-        exit 1
-    }
-    
-    # Enable TLS 1.2
-    try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-    } catch {
-        Write-DevExInfo "Failed to enable TLS 1.2: $_" -ForegroundColor Red
-        exit 1
-    }
-}
-
 function Get-SystemInfo {
-    $arch = $env:PROCESSOR_ARCHITECTURE
-    
-    switch ($arch) {
-        "AMD64" { return "amd64" }
-        "ARM64" { return "arm64" }
-        "x86" {
-            # Check if running under WOW64 (32-bit on 64-bit)
-            if ($env:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-                return "amd64"
-            }
-            Write-DevExInfo "32-bit Windows is not supported" -ForegroundColor Red
-            exit 1
-        }
-        default {
-            Write-DevExInfo "Unsupported architecture: $arch" -ForegroundColor Red
-            exit 1
-        }
+    $architecture = $env:PROCESSOR_ARCHITECTURE
+    if ($env:PROCESSOR_ARCHITEW6432) { $architecture = $env:PROCESSOR_ARCHITEW6432 }
+    switch ($architecture) {
+        'AMD64' { return 'amd64' }
+        'ARM64' { return 'arm64' }
+        default { throw "Unsupported Windows architecture: $architecture" }
     }
 }
 
 function Get-LatestVersion {
-    if ($Version) {
-        return $Version
-    }
-
-    Write-DevExInfo "Fetching latest version..."
-
-    try {
-        # Fetch all releases and filter for CLI versions (exclude plugin releases)
-        # One page of 100 keeps this working even after a burst of plugin releases
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/jameswlane/devex/releases?per_page=100" -UseBasicParsing
-        $latestVersion = $response |
-            Where-Object { $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+$' } |
-            Select-Object -First 1 -ExpandProperty tag_name
-
-        if (-not $latestVersion) {
-            Write-DevExInfo "No CLI release found" -ForegroundColor Red
-            exit 1
+    Write-Host 'Fetching latest CLI version...'
+    for ($page = 1; ; $page++) {
+        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/jameswlane/devex/releases?per_page=100&page=$page" -UseBasicParsing
+        # Windows PowerShell 5.1 emits a JSON array as one object; piping enumerates it in every version.
+        $releases = @($response | ForEach-Object { $_ })
+        foreach ($release in $releases) {
+            if ($release.tag_name -cmatch '^v[0-9]+\.[0-9]+\.[0-9]+$' -and -not $release.draft -and -not $release.prerelease) {
+                return $release.tag_name
+            }
         }
-
-        Write-DevExInfo "✓ Latest version: $latestVersion" -ForegroundColor Green
-        return $latestVersion
-    } catch {
-        Write-DevExInfo "Failed to fetch latest version: $_" -ForegroundColor Red
-        exit 1
+        if ($releases.Count -lt 100) { throw 'No CLI release found.' }
     }
 }
 
 function Get-DevExDownload {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Version,
-        
-        [Parameter(Mandatory = $true)]
-        [string]$Architecture,
-        
-        [Parameter(Mandatory = $true)]
-        [string]$TempDir
-    )
-    
-    # Release assets are named without the leading "v": devex_1.2.3_windows_amd64.tar.gz
-    $fileName = "devex_$($Version.TrimStart('v'))_windows_${Architecture}.tar.gz"
-    $checksumFile = "devex_checksums.txt"
-    $baseUrl = "https://github.com/jameswlane/devex/releases/download/$Version"
-    
-    Write-DevExInfo "Downloading $fileName..."
-    
-    try {
-        # Download tarball
-        $tarballPath = Join-Path $TempDir $fileName
-        Invoke-WebRequest -Uri "$baseUrl/$fileName" -OutFile $tarballPath -UseBasicParsing
-        
-        # Download checksums
-        $checksumPath = Join-Path $TempDir $checksumFile
-        Invoke-WebRequest -Uri "$baseUrl/$checksumFile" -OutFile $checksumPath -UseBasicParsing
-        
-        return @{
-            TarballPath = $tarballPath
-            ChecksumPath = $checksumPath
-            FileName = $fileName
-        }
-    } catch {
-        Write-DevExInfo "Download failed: $_" -ForegroundColor Red
-        exit 1
+    param([string]$Version, [string]$Architecture, [string]$TempDir, [string]$BaseUrl)
+    $fileName = "devex_$($Version.Substring(1))_windows_${Architecture}.tar.gz"
+    $download = @{
+        FileName = $fileName
+        TarballPath = Join-Path $TempDir $fileName
+        ChecksumPath = Join-Path $TempDir 'devex_checksums.txt'
     }
+    $releaseUrl = "$($BaseUrl.TrimEnd('/'))/$Version"
+    Write-Host "Downloading $fileName..."
+    # Windows PowerShell 5.1's progress bar slows downloads; this local copy ends with the function.
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri "$releaseUrl/$fileName" -OutFile $download.TarballPath -UseBasicParsing | Out-Null
+    Invoke-WebRequest -Uri "$releaseUrl/devex_checksums.txt" -OutFile $download.ChecksumPath -UseBasicParsing | Out-Null
+    return $download
 }
 
 function Test-Checksum {
-    param(
-        [Parameter(Mandatory = $true)]
-        [hashtable]$Download
-    )
-    
-    Write-DevExInfo "Verifying checksum..."
-    
-    # Read checksum file
-    $checksums = Get-Content $Download.ChecksumPath
-    $expectedLine = $checksums | Where-Object { $_ -match $Download.FileName }
-    
-    if (-not $expectedLine) {
-        Write-DevExInfo "Checksum not found for $($Download.FileName)" -ForegroundColor Red
-        return $false
-    }
-    
-    # Extract expected hash (format: "filename sha256:hash")
-    if ($expectedLine -match "sha256:([a-f0-9]{64})") {
-        $expectedHash = $matches[1].ToUpper()
-    } else {
-        Write-DevExInfo "Invalid checksum format" -ForegroundColor Red
-        return $false
-    }
-    
-    # Calculate actual hash
-    $actualHash = (Get-FileHash -Path $Download.TarballPath -Algorithm SHA256).Hash
-    
-    if ($actualHash -eq $expectedHash) {
-        Write-DevExInfo "✓ Checksum verified" -ForegroundColor Green
-        return $true
-    } else {
-        Write-DevExInfo "Checksum verification failed!" -ForegroundColor Red
-        Write-DevExInfo "Expected: $expectedHash"
-        Write-DevExInfo "Actual:   $actualHash"
-        return $false
-    }
-}
-
-function Expand-Tarball {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$TarballPath,
-        
-        [Parameter(Mandatory = $true)]
-        [string]$Destination
-    )
-    
-    Write-DevExInfo "Installing DevEx..."
-    
-    # Create destination directory
-    if (-not (Test-Path $Destination)) {
-        New-Item -ItemType Directory -Path $Destination -Force | Out-Null
-    }
-    
-    # Extract using tar (available in Windows 10+)
-    try {
-        # Check if tar is available
-        $tarCmd = Get-Command tar -ErrorAction SilentlyContinue
-        if ($tarCmd) {
-            # Use built-in tar
-            & tar -xzf $TarballPath -C $Destination
-        } else {
-            # Fall back to .NET compression (requires intermediate steps)
-            Write-DevExInfo "Using .NET compression libraries..."
-            
-            # First extract .gz
-            $tarPath = $TarballPath -replace '\.gz$', ''
-            $gzStream = [System.IO.File]::OpenRead($TarballPath)
-            $gzipStream = New-Object System.IO.Compression.GzipStream($gzStream, [System.IO.Compression.CompressionMode]::Decompress)
-            $tarStream = [System.IO.File]::Create($tarPath)
-            $gzipStream.CopyTo($tarStream)
-            $tarStream.Close()
-            $gzipStream.Close()
-            $gzStream.Close()
-            
-            # Then handle .tar extraction manually
-            Write-DevExInfo "Note: Manual tar extraction not fully implemented. Please ensure tar.exe is available." -ForegroundColor Yellow
-            throw "tar.exe not found"
+    param([hashtable]$Download)
+    $hashes = @(foreach ($line in Get-Content -LiteralPath $Download.ChecksumPath) {
+        if ($line -cmatch '^([a-fA-F0-9]{64})  (.+)$' -and $Matches[2] -ceq $Download.FileName) {
+            $Matches[1]
         }
-        
-        Write-DevExInfo "✓ DevEx installed to $Destination" -ForegroundColor Green
-    } catch {
-        Write-DevExInfo "Extraction failed: $_" -ForegroundColor Red
-        exit 1
-    }
+    })
+    if ($hashes.Count -ne 1) { throw "Expected exactly one valid checksum for $($Download.FileName)." }
+    $actual = (Get-FileHash -LiteralPath $Download.TarballPath -Algorithm SHA256).Hash
+    if ($actual -ine $hashes[0]) { throw "Checksum verification failed for $($Download.FileName)." }
+    Write-Host 'Checksum verified.'
+    return $true
 }
 
 function Add-ToPath {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$BinPath
-    )
-    
-    Write-DevExInfo ""
-    Write-DevExInfo "Adding DevEx to PATH..."
-    
-    # Get current user PATH
-    $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-    
-    # Check if already in PATH
-    if ($userPath -notlike "*$BinPath*") {
-        # Add to user PATH
-        $newPath = "$userPath;$BinPath"
-        [Environment]::SetEnvironmentVariable("PATH", $newPath, "User")
-        
-        # Update current session
-        $env:PATH = "$env:PATH;$BinPath"
-        
-        Write-DevExInfo "✓ Added to PATH" -ForegroundColor Green
-    } else {
-        Write-DevExInfo "✓ Already in PATH" -ForegroundColor Green
+    param([string]$BinPath)
+    # Compare complete entries, ignoring Windows path casing and trailing separators.
+    foreach ($target in @('User', 'Process')) {
+        $pathValue = [Environment]::GetEnvironmentVariable('PATH', $target)
+        $entries = @($pathValue -split ';' | Where-Object { $_ })
+        $found = @($entries | Where-Object { $_.TrimEnd('\', '/') -ieq $BinPath.TrimEnd('\', '/') })
+        if ($found.Count -eq 0) {
+            [Environment]::SetEnvironmentVariable('PATH', (($entries + $BinPath) -join ';'), $target)
+        }
     }
 }
 
-function Show-CompletionMessage {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$BinPath
-    )
-    
-    Write-DevExInfo ""
-    Write-DevExInfo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-    Write-DevExInfo "✅ DevEx installed successfully!" -ForegroundColor Green
-    Write-DevExInfo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor Cyan
-    Write-DevExInfo ""
-    Write-DevExInfo "To get started, run:"
-    Write-DevExInfo ""
-    Write-DevExInfo "  devex setup" -ForegroundColor Yellow
-    Write-DevExInfo ""
-    Write-DevExInfo "This will guide you through setting up your"
-    Write-DevExInfo "development environment with your preferred tools."
-    Write-DevExInfo ""
-    
-    # Security: Validate BinPath and construct safe devex path
-    if (-not $BinPath -or $BinPath -match '[<>:"|?*]') {
-        Write-DevExError "Invalid BinPath detected: $BinPath"
-        exit 1
-    }
-    
-    # Use System.IO.Path for secure path construction
-    try {
-        $devexPath = [System.IO.Path]::Combine($BinPath, "devex.exe")
-        # Additional validation - ensure the path is within expected bounds
-        if (-not $devexPath.StartsWith($BinPath)) {
-            Write-DevExError "Security violation: Path traversal attempt detected"
-            exit 1
-        }
-    } catch {
-        Write-DevExError "Failed to construct devex path: $($_.Exception.Message)"
-        exit 1
-    }
-    if (Test-Path $devexPath) {
-        Write-DevExInfo "Press Enter to start the setup, or Ctrl+C to exit..."
-        Read-Host
-        
-        try {
-            # Security: Final validation before command execution
-            $resolvedPath = (Resolve-Path $devexPath).Path
-            if (-not $resolvedPath.EndsWith("devex.exe") -and -not $resolvedPath.EndsWith("devex")) {
-                Write-DevExError "Security violation: Invalid executable path"
-                exit 1
-            }
-            
-            # Execute with limited arguments to prevent injection
-            & $resolvedPath "setup"
-        } catch {
-            Write-DevExInfo "Note: You may need to restart your PowerShell session" -ForegroundColor Yellow
-            Write-DevExInfo "Then run: devex setup"
-        }
-    } else {
-        Write-DevExInfo "Note: You may need to restart your PowerShell session"
-        Write-DevExInfo "Then run: devex setup"
-    }
-}
-
-# Main installation flow
 function Install-DevEx {
-    Write-DevExInfo "🚀 DevEx Installer" -ForegroundColor Cyan
-    Write-DevExInfo "==================" -ForegroundColor Cyan
-    Write-DevExInfo ""
-    
-    # Check prerequisites
-    Test-Prerequisites
-    
-    # Get system information
-    $arch = Get-SystemInfo
-    
-    # Get version to install
-    $version = Get-LatestVersion
-    
-    # Create temp directory
-    $tempDir = Join-Path $env:TEMP "devex-install-$(Get-Random)"
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-    
+    param(
+        [string]$Version,
+        [switch]$NoSetup,
+        [switch]$NonInteractive,
+        [string]$Config,
+        [string]$InstallDir,
+        [string]$BaseUrl
+    )
+    if ($BaseUrl -ne 'https://github.com/jameswlane/devex/releases/download' -and -not $Version) {
+        throw '-BaseUrl requires an explicit -Version.'
+    }
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+    $tag = $Version
+    if ($tag) {
+        if ($tag -cnotmatch '^v?[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$') { throw "Invalid CLI version: $tag" }
+        if (-not $tag.StartsWith('v')) { $tag = "v$tag" }
+    } else {
+        $tag = Get-LatestVersion
+    }
+    $architecture = Get-SystemInfo
+    # Prefer Windows' bsdtar: GNU tar from Git's Unix tools reads "C:\..." as a remote host.
+    $tar = if ($env:SystemRoot) { Join-Path $env:SystemRoot 'System32\tar.exe' }
+    if (-not ($tar -and (Test-Path -LiteralPath $tar))) {
+        $tar = (Get-Command tar -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    }
+    $tempDir = Join-Path $env:TEMP ("devex-install-" + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $tempDir -ErrorAction Stop | Out-Null
     try {
-        # Download DevEx
-        $download = Get-DevExDownload -Version $version -Architecture $arch -TempDir $tempDir
-        
-        # Verify checksum
-        if (-not (Test-Checksum -Download $download)) {
-            exit 1
-        }
-        
-        # Extract to installation directory
-        Expand-Tarball -TarballPath $download.TarballPath -Destination $InstallDir
-        
-        # Add to PATH
-        $binPath = Join-Path $InstallDir "bin"
+        $download = Get-DevExDownload -Version $tag -Architecture $architecture -TempDir $tempDir -BaseUrl $BaseUrl
+        Test-Checksum -Download $download | Out-Null
+        New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop | Out-Null
+        & $tar -xzf $download.TarballPath -C $InstallDir
+        if ($LASTEXITCODE -ne 0) { throw "Archive extraction failed (exit $LASTEXITCODE)." }
+        $binPath = Join-Path ([IO.Path]::GetFullPath($InstallDir)) 'bin'
+        $executable = Join-Path $binPath 'devex.exe'
+        if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Archive did not contain bin/devex.exe.' }
         Add-ToPath -BinPath $binPath
-        
-        # Show completion message
-        Show-CompletionMessage -BinPath $binPath
-        
-    } finally {
-        # Cleanup temp files
-        if (Test-Path $tempDir) {
-            Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host "DevEx $tag installed to $InstallDir."
+        $arguments = @('setup')
+        if ($NonInteractive) { $arguments = @('install', '--non-interactive') }
+        if ($Config) { $arguments += @('--config', $Config) }
+        if ($NoSetup -or (-not $NonInteractive -and [Console]::IsInputRedirected)) {
+            $nextCommand = 'devex setup'
+            if ($Config) { $nextCommand += " --config '" + $Config.Replace("'", "''") + "'" }
+            Write-Host "Next: $nextCommand"
+            return
         }
+        if (-not $NonInteractive) {
+            $answer = Read-Host 'Start DevEx setup? [y/N]'
+            if ($answer -notmatch '^(y|yes)$') { Write-Host 'Next: devex setup'; return }
+        }
+        & $executable @arguments
+        if ($LASTEXITCODE -ne 0) { throw "DevEx failed (exit $LASTEXITCODE)." }
+    } finally {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
-# Run the installer
-Install-DevEx
+# A downloaded script executed through iex must never terminate the caller's shell.
+$previousErrorActionPreference = $ErrorActionPreference
+try {
+    $ErrorActionPreference = 'Stop'
+    Install-DevEx -Version $Version -NoSetup:$NoSetup -NonInteractive:$NonInteractive -Config $Config -InstallDir $InstallDir -BaseUrl $BaseUrl
+    if ($PSCommandPath -and $MyInvocation.InvocationName -ne '.') { $global:LASTEXITCODE = 0 }
+} catch {
+    Write-Host "DevEx installation failed: $($_.Exception.Message)" -ForegroundColor Red
+    if ($PSCommandPath -and $MyInvocation.InvocationName -ne '.') { $global:LASTEXITCODE = 1; exit 1 }
+    return
+} finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+}

@@ -13,13 +13,13 @@ Get up and running with DevEx in just a few minutes!
 ### One-Line Installation (Recommended)
 
 ```bash
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 Or with curl:
 
 ```bash
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Verify Installation
