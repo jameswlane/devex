@@ -1,6 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
+import { PrismaClient } from "../generated/prisma/client";
 import { logger } from "./logger";
+import { prismaConnectionOptions } from "./prisma-connection";
 
 // Connection pool metrics and health monitoring
 interface ConnectionPoolMetrics {
@@ -92,31 +93,17 @@ interface DatabasePoolConfig {
 
 // Create Prisma client with Accelerate extension and enhanced connection pooling
 const createPrismaClient = () => {
-	// Enhanced configuration with connection pooling optimization
-	const config: any = {
+	const connectionString = process.env.PRISMA_DATABASE_URL
+		? enhanceDatabaseUrlWithPooling(process.env.PRISMA_DATABASE_URL)
+		: undefined;
+	const client = new PrismaClient({
+		...prismaConnectionOptions(connectionString),
 		log:
 			process.env.NODE_ENV === "development"
 				? ["query", "info", "warn", "error"]
 				: ["error"],
-		// Error formatting for better debugging
 		errorFormat: "pretty",
-	};
-
-	// Only add datasources if PRISMA_DATABASE_URL is available (avoid build-time errors)
-	if (process.env.PRISMA_DATABASE_URL) {
-		// Parse and enhance the database URL with connection pooling parameters
-		const enhancedUrl = enhanceDatabaseUrlWithPooling(
-			process.env.PRISMA_DATABASE_URL,
-		);
-
-		config.datasources = {
-			db: {
-				url: enhancedUrl,
-			},
-		};
-	}
-
-	const client = new PrismaClient(config);
+	});
 
 	// Extend with Accelerate since it's enabled on Prisma Cloud for additional connection pooling
 	return client.$extends(withAccelerate());

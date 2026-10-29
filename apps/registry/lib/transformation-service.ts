@@ -4,7 +4,7 @@ import type {
 	Plugin,
 	RegistryStats,
 	Stack,
-} from "@prisma/client";
+} from "../generated/prisma/client";
 import { REGISTRY_CONFIG } from "./config";
 import { logger } from "./logger";
 import { redis } from "./redis";

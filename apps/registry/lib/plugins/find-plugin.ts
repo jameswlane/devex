@@ -1,6 +1,6 @@
-import type { Plugin } from "@prisma/client";
 import { safeDatabase } from "@/lib/error-handler";
 import { prisma } from "@/lib/prisma";
+import type { Plugin } from "../../generated/prisma/client";
 
 /**
  * Find a plugin by its full name ("package-manager-apt") or short name ("apt").

@@ -8,9 +8,10 @@
  * records plugin release versions in the registry database.
  */
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 import { requestPluginCdnPurge } from "../lib/cdn-cache";
 import { githubApi } from "../lib/github-api";
+import { prismaConnectionOptions } from "../lib/prisma-connection";
 import {
 	buildReleasePayload,
 	type GitHubRelease,
@@ -23,7 +24,7 @@ import { recordPluginRelease } from "../lib/releases/record";
 const GITHUB_OWNER = process.env.GITHUB_OWNER || "jameswlane";
 const GITHUB_REPO = process.env.GITHUB_REPO || "devex";
 const PLUGIN_TAG_PREFIX = "packages/";
-const defaultPrisma = new PrismaClient();
+const defaultPrisma = new PrismaClient(prismaConnectionOptions());
 
 function parseArgs(args: string[]): {
 	tag?: string;

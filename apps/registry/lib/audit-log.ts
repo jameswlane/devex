@@ -1,5 +1,5 @@
-import type { PrismaClient } from "@prisma/client";
 import crypto from "crypto";
+import type { PrismaClient } from "../generated/prisma/client";
 import { logger } from "./logger";
 import { redis } from "./redis";
 

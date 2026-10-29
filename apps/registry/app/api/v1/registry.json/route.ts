@@ -1,4 +1,3 @@
-import type { Plugin } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
 	binaryMetadataService,
@@ -15,6 +14,7 @@ import { CACHE_DURATION, pluginCache } from "@/lib/plugin-cache";
 import { prisma } from "@/lib/prisma";
 import { RATE_LIMIT_CONFIGS, withRateLimit } from "@/lib/rate-limit";
 import { transformationService } from "@/lib/transformation-service";
+import type { Plugin } from "../../../../generated/prisma/client";
 
 interface PluginMetadata {
 	name: string;

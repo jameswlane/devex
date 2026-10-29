@@ -6,12 +6,13 @@
  * delete them. Run by the "registry maintenance" workflow.
  */
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 import { removeLegacyPluginRows } from "../lib/maintenance/legacy-plugin-rows";
+import { prismaConnectionOptions } from "../lib/prisma-connection";
 
 async function main() {
 	const apply = process.argv.includes("--apply");
-	const prisma = new PrismaClient();
+	const prisma = new PrismaClient(prismaConnectionOptions());
 	try {
 		const { rows, applied } = await removeLegacyPluginRows(prisma, { apply });
 		for (const row of rows) {

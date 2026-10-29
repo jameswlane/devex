@@ -20,7 +20,9 @@
 		"paths": {
 			"@/*": ["./*"]
 		},
-		"target": "ES2017"
+		"target": "ES2023",
+		"types": ["node", "jest"],
+		"rootDir": "."
 	},
 	"include": [
 		"next-env.d.ts",

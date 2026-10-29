@@ -7,11 +7,12 @@
  * backup verification, and comprehensive error handling for production use.
  */
 
-import { PrismaClient } from "@prisma/client";
 import { createHash } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+import { PrismaClient } from "../../generated/prisma/client";
 import { logger } from "../../lib/logger";
+import { prismaConnectionOptions } from "../../lib/prisma-connection";
 
 interface MigrationStep {
 	id: string;
@@ -40,7 +41,7 @@ class ProductionMigrationRunner {
 	private backupDir: string;
 
 	constructor() {
-		this.prisma = new PrismaClient();
+		this.prisma = new PrismaClient(prismaConnectionOptions());
 		this.migrationDir = join(__dirname, "steps");
 		this.backupDir = join(__dirname, "backups");
 

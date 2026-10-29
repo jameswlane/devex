@@ -6,9 +6,9 @@ import {
 	it,
 	jest,
 } from "@jest/globals";
-import type { Plugin } from "@prisma/client";
-import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/client";
 import { NextRequest, type NextResponse } from "next/server";
+import type { Plugin } from "../../../../generated/prisma/client";
 
 // Real error-handler and logger; only the database and rate limiter are faked.
 jest.mock("@/lib/prisma", () => ({
