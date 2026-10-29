@@ -79,6 +79,8 @@ export const ioRedisClient = (() => {
 		try {
 			const redisConfig = createRedisConfig();
 			ioRedisClientInstance = new IORedis(redisConfig.url, {
+				// Preserve the existing Redis wire protocol when upgrading ioredis 6.
+				protocol: 2,
 				maxRetriesPerRequest: redisConfig.maxRetries,
 				connectTimeout: redisConfig.connectTimeout,
 				lazyConnect: true,

@@ -1,6 +1,7 @@
-import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
+import { PrismaClient } from "../generated/prisma/client";
 import { logger, logPerformance } from "./logger";
+import { prismaConnectionOptions } from "./prisma-connection";
 import { redis } from "./redis";
 
 // Performance metrics interface
@@ -38,7 +39,7 @@ export class MonitoredPrismaClient extends PrismaClient {
 
 	constructor(options?: ConstructorParameters<typeof PrismaClient>[0]) {
 		super({
-			...options,
+			...(options ?? prismaConnectionOptions()),
 			log: [
 				{
 					emit: "event",

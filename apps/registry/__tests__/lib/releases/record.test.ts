@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import { type Plugin, type PluginVersion, PrismaClient } from "@prisma/client";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
 import { recordPluginRelease } from "@/lib/releases/record";
+import {
+	type Plugin,
+	type PluginVersion,
+	PrismaClient,
+} from "../../../generated/prisma/client";
+import { prismaConnectionOptions } from "../../../lib/prisma-connection";
 import { payload } from "./fixture";
 
 jest.mock("@/lib/cache-invalidation", () => ({
 	invalidateOnDataChange: jest.fn<typeof invalidateOnDataChange>(),
 }));
-const db = new PrismaClient();
+const db = new PrismaClient(prismaConnectionOptions());
 const date = new Date("2026-10-27T00:00:00Z");
 const plugin: Plugin = {
 	id: "plugin-id",

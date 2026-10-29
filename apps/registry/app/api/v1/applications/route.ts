@@ -1,5 +1,3 @@
-import type { Application } from "@prisma/client";
-import { Prisma } from "@prisma/client";
 import type { NextRequest, NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { safeDatabase, withErrorHandling } from "@/lib/error-handler";
@@ -17,6 +15,8 @@ import {
 	validatePlatform,
 	validateSearchQuery,
 } from "@/lib/validation";
+import type { Application } from "../../../../generated/prisma/client";
+import { Prisma } from "../../../../generated/prisma/client";
 
 type ApplicationWithPlatforms = Application;
 

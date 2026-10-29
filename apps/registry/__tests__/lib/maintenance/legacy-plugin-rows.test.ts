@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import type { PrismaClient } from "@prisma/client";
 import {
 	findLegacyPluginRows,
 	removeLegacyPluginRows,
 } from "@/lib/maintenance/legacy-plugin-rows";
+import type { PrismaClient } from "../../../generated/prisma/client";
 
 type Row = Record<string, unknown>;
 

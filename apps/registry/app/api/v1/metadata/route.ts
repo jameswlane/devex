@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { createApiError, logDatabaseError } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
@@ -6,6 +5,7 @@ import {
 	createOptimizedResponse,
 	ResponseType,
 } from "@/lib/response-optimization";
+import { Prisma } from "../../../../generated/prisma/client";
 
 /**
  * Registry metadata endpoint

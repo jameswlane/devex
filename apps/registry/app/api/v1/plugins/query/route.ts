@@ -1,4 +1,3 @@
-import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "@/lib/cdn-cache";
 import { createApiError, logDatabaseError } from "@/lib/logger";
@@ -8,6 +7,7 @@ import {
 	ResponseType,
 } from "@/lib/response-optimization";
 import { transformationService } from "@/lib/transformation-service";
+import { Prisma } from "../../../../../generated/prisma/client";
 
 /**
  * Advanced plugin query endpoint for smart plugin selection

@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import type { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
 	AuditEventType,
@@ -8,6 +7,7 @@ import {
 } from "@/lib/audit-log";
 import { logger } from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import type { PrismaClient } from "../../generated/prisma/client";
 
 /**
  * Shared bearer-token guard for registry write and admin endpoints.

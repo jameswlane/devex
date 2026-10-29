@@ -1,4 +1,3 @@
-import type { PrismaClient } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
 	AuditEventType,
@@ -11,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { releasePayloadSchema } from "@/lib/releases/contract";
 import { recordPluginRelease } from "@/lib/releases/record";
 import { verifyReleaseSignature } from "@/lib/releases/verify-signature";
+import type { PrismaClient } from "../../../../../../generated/prisma/client";
 
 export const runtime = "nodejs";
 const MAX_BODY_BYTES = 1024 * 1024;

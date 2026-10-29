@@ -1,4 +1,3 @@
-import type { Prisma } from "@prisma/client";
 import type { NextRequest, NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
@@ -11,6 +10,7 @@ import {
 	ResponseType,
 } from "@/lib/response-optimization";
 import { compareVersions } from "@/lib/version-compare";
+import type { Prisma } from "../../../../../generated/prisma/client";
 
 // GET /api/v1/plugins/[id] - Get a specific plugin by name
 async function handleGetPlugin(

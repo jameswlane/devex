@@ -1,23 +1,20 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as yaml from "yaml";
+import { PrismaClient } from "../generated/prisma/client";
+import { prismaConnectionOptions } from "../lib/prisma-connection";
 
 // Get GitHub URL from environment variable
 const GITHUB_BASE_URL =
 	process.env.GITHUB_BASE_URL || "https://github.com/jameswlane/devex";
 
 // Initialize Prisma client with Accelerate and connection pooling
-const prisma = new PrismaClient({
-	datasources: {
-		db: {
-			url: process.env.PRISMA_DATABASE_URL,
-		},
-	},
-}).$extends(withAccelerate());
+const prisma = new PrismaClient(prismaConnectionOptions()).$extends(
+	withAccelerate(),
+);
 
 interface ApplicationConfig {
 	name: string;

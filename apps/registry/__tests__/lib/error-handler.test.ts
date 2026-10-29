@@ -77,7 +77,7 @@ class PrismaClientUnknownRequestError extends Error {
 	}
 }
 
-jest.mock("@prisma/client/runtime/library", () => ({
+jest.mock("@prisma/client/runtime/client", () => ({
 	PrismaClientKnownRequestError,
 	PrismaClientUnknownRequestError,
 }));

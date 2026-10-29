@@ -1,6 +1,6 @@
 import { expect, it, jest } from "@jest/globals";
-import type { Plugin } from "@prisma/client";
 import { GET } from "@/app/api/v1/plugins/query/route";
+import type { Plugin } from "../../../../generated/prisma/client";
 
 jest.mock("@/lib/prisma", () => ({
 	prisma: {

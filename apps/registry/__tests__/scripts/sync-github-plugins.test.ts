@@ -6,7 +6,7 @@ import {
 	it,
 	jest,
 } from "@jest/globals";
-import type { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "../../generated/prisma/client";
 import { githubApi } from "../../lib/github-api";
 import { recordPluginRelease } from "../../lib/releases/record";
 import { syncPlugins } from "../../scripts/sync-github-plugins";
