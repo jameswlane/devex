@@ -23,3 +23,6 @@ tmp/
 # OS files
 .DS_Store
 Thumbs.db
+
+# E2E sandbox output (scripts/e2e-docker.sh)
+artifacts/
