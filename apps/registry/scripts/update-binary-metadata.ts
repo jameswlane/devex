@@ -2,6 +2,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { binaryMetadataService } from "../lib/binary-metadata";
+import { isGitHubUrl } from "../lib/github-url";
 
 const prisma = new PrismaClient();
 
@@ -57,7 +58,7 @@ async function updateBinaryMetadata(options: UpdateOptions = {}) {
 				// Generate binary metadata
 				let binariesMetadata = {};
 
-				if (plugin.githubUrl && plugin.githubUrl.includes("github.com")) {
+				if (plugin.githubUrl && isGitHubUrl(plugin.githubUrl)) {
 					binariesMetadata =
 						await binaryMetadataService.generatePluginBinaryMetadata(
 							plugin.name,

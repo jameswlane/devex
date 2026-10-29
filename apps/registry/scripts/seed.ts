@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import { binaryMetadataService } from "../lib/binary-metadata";
+import { isGitHubUrl } from "../lib/github-url";
 
 // Path traversal protection utilities
 function sanitizePath(inputPath: string): string {
@@ -463,7 +464,7 @@ async function seedPlugins() {
 				// Generate binary metadata for the plugin
 				let binariesMetadata = {};
 				try {
-					if (plugin.repository && plugin.repository.includes("github.com")) {
+					if (plugin.repository && isGitHubUrl(plugin.repository)) {
 						binariesMetadata =
 							await binaryMetadataService.generatePluginBinaryMetadata(
 								plugin.name,
