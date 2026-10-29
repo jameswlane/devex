@@ -47,7 +47,7 @@ For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-se
             run: |
               # Install DevEx with version pinning for CI reproducibility
               set -euo pipefail  # Enable strict error handling
-              curl -fsSL https://devex.sh/install | bash
+              curl -fsSL https://get.devex.sh/install | bash
               echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
               
           - name: Configure DevEx
@@ -95,7 +95,7 @@ For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-se
             run: |
               set -euo pipefail
               # Install DevEx with security considerations
-              curl -fsSL https://devex.sh/install | bash
+              curl -fsSL https://get.devex.sh/install | bash
             
           - name: Install DevEx (Windows)
             if: runner.os == 'Windows'
@@ -154,7 +154,7 @@ For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-se
               set -euo pipefail
               if [ ! -f ~/.local/share/devex/bin/devex ]; then
                 # Install DevEx with caching support
-                curl -fsSL https://devex.sh/install | bash
+                curl -fsSL https://get.devex.sh/install | bash
                 # Verify installation succeeded
                 if [ ! -f ~/.local/share/devex/bin/devex ]; then
                   echo "DevEx installation failed" >&2
@@ -191,8 +191,8 @@ For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-se
           - name: Verify DevEx installer
             run: |
               # Download installer and verify signature
-              curl -fsSL https://devex.sh/install.sig -o installer.sig
-              curl -fsSL https://devex.sh/install -o installer.sh
+              curl -fsSL https://get.devex.sh/install.sig -o installer.sig
+              curl -fsSL https://get.devex.sh/install -o installer.sh
               gpg --verify installer.sig installer.sh
               
           - name: Install DevEx securely
@@ -229,7 +229,7 @@ variables:
 .devex_setup: &devex_setup
   before_script:
     # Install DevEx with GitLab CI considerations
-    - curl -fsSL https://devex.sh/install | bash
+    - curl -fsSL https://get.devex.sh/install | bash
     - export PATH="$PATH:$HOME/.local/share/devex/bin"
     - devex config apply --file $DEVEX_CONFIG
 
@@ -293,7 +293,7 @@ pipeline {
                     sh '''
                         if [ ! -f ${DEVEX_HOME}/bin/devex ]; then
                             # Install DevEx for Jenkins pipeline
-                            curl -fsSL https://devex.sh/install | bash
+                            curl -fsSL https://get.devex.sh/install | bash
                         fi
                     '''
                 }
@@ -380,7 +380,7 @@ pipeline {
     WORKDIR /home/developer
     
     # Install DevEx with security considerations
-    RUN curl -fsSL https://devex.sh/install | bash
+    RUN curl -fsSL https://get.devex.sh/install | bash
     ENV PATH="/home/developer/.local/share/devex/bin:${PATH}"
     
     # Copy team configuration
@@ -407,7 +407,7 @@ pipeline {
     FROM ubuntu:22.04 AS devex-setup
     RUN apt-get update && apt-get install -y curl sudo ca-certificates
     # Install DevEx in multi-stage build
-    RUN curl -fsSL https://devex.sh/install | bash
+    RUN curl -fsSL https://get.devex.sh/install | bash
     COPY .devex/ /root/.devex/
     RUN /root/.local/share/devex/bin/devex install --category build-tools --non-interactive
     
@@ -441,7 +441,7 @@ pipeline {
         && rm -rf /var/lib/apt/lists/*
     
     # Install DevEx with production considerations
-    RUN curl -fsSL https://devex.sh/install | bash
+    RUN curl -fsSL https://get.devex.sh/install | bash
     ENV PATH="/root/.local/share/devex/bin:${PATH}"
     
     # Pre-install common CI tools
@@ -605,7 +605,7 @@ output "deployment_status" {
     - name: Install DevEx
       shell: |
         # Install DevEx via Ansible with error handling
-        curl -fsSL https://devex.sh/install | bash
+        curl -fsSL https://get.devex.sh/install | bash
       when: devex_check.rc != 0
       
     - name: Add DevEx to PATH
@@ -675,7 +675,7 @@ spec:
           - |
             # Install DevEx with security considerations
             apt-get update && apt-get install -y curl ca-certificates
-            curl -fsSL https://devex.sh/install | bash
+            curl -fsSL https://get.devex.sh/install | bash
             export PATH="$PATH:/root/.local/share/devex/bin"
             
             # Apply configuration from ConfigMap
@@ -864,7 +864,7 @@ data:
             winget install jameswlane.devex
         else
             # Install DevEx for Unix-like systems
-            curl -fsSL https://devex.sh/install | bash
+            curl -fsSL https://get.devex.sh/install | bash
         fi
         
         # Add to PATH

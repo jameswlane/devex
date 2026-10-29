@@ -34,7 +34,7 @@ This is a modern monorepo containing:
 
 ```bash
 # Install DevEx CLI
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Basic Usage

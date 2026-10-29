@@ -30,7 +30,7 @@ Before running any installation script, including DevEx's installer:
     
     ```bash
     # Download the installer script for review
-    curl -fsSL https://devex.sh/install -o devex-install.sh
+    curl -fsSL https://get.devex.sh/install -o devex-install.sh
     
     # Review the script contents
     less devex-install.sh
@@ -47,11 +47,11 @@ Before running any installation script, including DevEx's installer:
     
     ```bash
     # Verify the script hasn't been tampered with
-    curl -fsSL https://devex.sh/install.sha256 -o install.sha256
+    curl -fsSL https://get.devex.sh/install.sha256 -o install.sha256
     sha256sum -c install.sha256
     
     # Check HTTPS certificate
-    curl -I https://devex.sh/install
+    curl -I https://get.devex.sh/install
     ```
   </Step>
   
@@ -66,7 +66,7 @@ Before running any installation script, including DevEx's installer:
     ./devex-install.sh
     
     # Or pipe directly (only after verification)
-    curl -fsSL https://devex.sh/install | bash
+    curl -fsSL https://get.devex.sh/install | bash
     ```
   </Step>
 </Steps>
@@ -90,12 +90,12 @@ DevEx's official installer is designed with security in mind:
 
 ```bash
 # Verify installer source and integrity
-curl -I https://devex.sh/install
+curl -I https://get.devex.sh/install
 # Should return 200 OK with valid HTTPS certificate
 
 # Check installer signature (when available)
-curl -fsSL https://devex.sh/install.sig -o install.sig
-curl -fsSL https://devex.sh/install -o install.sh
+curl -fsSL https://get.devex.sh/install.sig -o install.sig
+curl -fsSL https://get.devex.sh/install -o install.sh
 gpg --verify install.sig install.sh
 ```
 
@@ -259,13 +259,13 @@ sudo devex --version                       # No sudo needed
 
 ```bash
 # ✅ Good: Verify HTTPS connection
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 
 # ❌ Bad: Insecure HTTP connection
-curl -fsSL http://devex.sh/install | bash  # Missing HTTPS
+curl -fsSL http://get.devex.sh/install | bash  # Missing HTTPS
 
 # ✅ Good: Verify certificate explicitly
-curl --cacert /etc/ssl/certs/ca-certificates.crt https://devex.sh/install
+curl --cacert /etc/ssl/certs/ca-certificates.crt https://get.devex.sh/install
 ```
 
 **Use Checksums for Verification:**

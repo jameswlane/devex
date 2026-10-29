@@ -9,13 +9,13 @@ Get DevEx up and running on your system in just a few steps.
 The fastest way to install DevEx on Linux or macOS:
 
 ```bash
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 Or with curl:
 
 ```bash
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 This installer will:

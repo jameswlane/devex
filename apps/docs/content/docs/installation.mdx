@@ -19,17 +19,17 @@ The fastest way to get started with DevEx is using our one-line installer:
 
 ```bash
 # Download and review the installer before execution
-curl -fsSL https://devex.sh/install -o devex-install.sh
+curl -fsSL https://get.devex.sh/install -o devex-install.sh
 less devex-install.sh  # Review the script contents
 ```
 </Callout>
 
 ```bash
 # Using wget (most common) - v1.0.0
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 
 # Or using curl - v1.0.0
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 The installer automatically detects which tool you have available and will install missing dependencies if needed.
@@ -114,7 +114,7 @@ sudo apt update
 sudo apt install -y wget curl ca-certificates
 
 # Install DevEx (review security guide first)
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 ### Linux (Fedora/RHEL)
@@ -124,7 +124,7 @@ wget -qO- https://devex.sh/install | bash
 sudo dnf install -y wget curl ca-certificates
 
 # Install DevEx (review security guide first)
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 ### Linux (Arch)
@@ -134,7 +134,7 @@ wget -qO- https://devex.sh/install | bash
 sudo pacman -S wget curl ca-certificates
 
 # Install DevEx (review security guide first)
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 ### macOS
@@ -144,7 +144,7 @@ wget -qO- https://devex.sh/install | bash
 brew install jameswlane/tap/devex
 
 # Or using the installer (review security guide first)
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 ```
 
 ### Windows
@@ -195,7 +195,7 @@ jobs:
       - name: Install DevEx
         run: |
           # Pin to specific version for CI reproducibility
-          wget -qO- https://devex.sh/install | bash
+          wget -qO- https://get.devex.sh/install | bash
           echo "$HOME/.local/share/devex/bin" >> $GITHUB_PATH
       
       - name: Setup environment
@@ -212,7 +212,7 @@ setup_environment:
     - apt-get update && apt-get install -y wget curl sudo ca-certificates
   script:
     # Pin to specific version for CI reproducibility
-    - wget -qO- https://devex.sh/install | bash
+    - wget -qO- https://get.devex.sh/install | bash
     - export PATH="$PATH:$HOME/.local/share/devex/bin"
     - devex install --dry-run
 ```
@@ -276,12 +276,12 @@ If downloads fail:
 
 ```bash
 # Use curl instead of wget (with certificate verification)
-curl -fsSL https://devex.sh/install | bash
+curl -fsSL https://get.devex.sh/install | bash
 
 # Or set proxy with security considerations
 export https_proxy=http://your-proxy:port
 export http_proxy=http://your-proxy:port
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 ```
 
 ### Configuration Issues

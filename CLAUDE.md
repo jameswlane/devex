@@ -514,7 +514,7 @@ pnpm biome:check     # Check formatting and linting
 ### One-Line Setup
 ```bash
 # Install DevEx
-wget -qO- https://devex.sh/install | bash
+wget -qO- https://get.devex.sh/install | bash
 
 # Development setup
 git clone https://github.com/jameswlane/devex.git
