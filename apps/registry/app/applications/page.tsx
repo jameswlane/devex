@@ -53,7 +53,6 @@ export interface ApplicationsResponse {
 	};
 }
 
-import type { Prisma } from "@prisma/client";
 // Import required dependencies for direct database access
 import { prisma } from "@/lib/prisma";
 import { createPaginatedResponse } from "@/lib/response-optimization";
@@ -65,6 +64,7 @@ import {
 	validatePlatform,
 	validateSearchQuery,
 } from "@/lib/validation";
+import type { Prisma } from "../../generated/prisma/client";
 
 // Server-side data fetching function - calls database directly instead of HTTP
 async function fetchApplications(

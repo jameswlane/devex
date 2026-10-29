@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import type { Plugin } from "@prisma/client";
+import type { Plugin } from "../../../generated/prisma/client";
 
 jest.mock("@/lib/prisma", () => ({
 	prisma: { plugin: { findUnique: jest.fn(), findFirst: jest.fn() } },

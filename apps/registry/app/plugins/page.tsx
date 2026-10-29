@@ -48,7 +48,6 @@ export interface PluginsResponse {
 	};
 }
 
-import type { Prisma } from "@prisma/client";
 // Import required dependencies for direct database access
 import { prisma } from "@/lib/prisma";
 import { transformationService } from "@/lib/transformation-service";
@@ -58,6 +57,7 @@ import {
 	validatePluginType,
 	validateSearchQuery,
 } from "@/lib/validation";
+import type { Prisma } from "../../generated/prisma/client";
 
 // Server-side data fetching function - calls database directly instead of HTTP
 async function fetchPlugins(

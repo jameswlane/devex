@@ -1,9 +1,10 @@
 #!/usr/bin/env tsx
 
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../generated/prisma/client";
 import { binaryMetadataService } from "../lib/binary-metadata";
+import { prismaConnectionOptions } from "../lib/prisma-connection";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient(prismaConnectionOptions());
 
 interface UpdateOptions {
 	pluginName?: string;

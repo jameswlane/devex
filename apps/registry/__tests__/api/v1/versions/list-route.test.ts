@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
-import type { Plugin, PluginVersion } from "@prisma/client";
 import { NextRequest } from "next/server";
+import type {
+	Plugin,
+	PluginVersion,
+} from "../../../../generated/prisma/client";
 
 jest.mock("@/lib/prisma", () => ({
 	prisma: {

@@ -1,10 +1,11 @@
 #!/usr/bin/env tsx
 
-import { Prisma, PrismaClient } from "@prisma/client";
 import { existsSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
+import { Prisma, PrismaClient } from "../generated/prisma/client";
 import { binaryMetadataService } from "../lib/binary-metadata";
+import { prismaConnectionOptions } from "../lib/prisma-connection";
 
 // Path traversal protection utilities
 function sanitizePath(inputPath: string): string {
@@ -42,7 +43,7 @@ function isValidDirectoryName(dirName: string): boolean {
 	);
 }
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient(prismaConnectionOptions());
 
 interface WebTool {
 	name: string;

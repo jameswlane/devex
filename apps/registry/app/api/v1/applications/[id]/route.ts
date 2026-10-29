@@ -1,4 +1,3 @@
-import type { Prisma } from "@prisma/client";
 import { type NextRequest, NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import {
@@ -12,6 +11,7 @@ import {
 	createOptimizedResponse,
 	ResponseType,
 } from "@/lib/response-optimization";
+import type { Prisma } from "../../../../../generated/prisma/client";
 
 // GET /api/v1/applications/[id] - Get a specific application by name
 async function handleGetApplication(

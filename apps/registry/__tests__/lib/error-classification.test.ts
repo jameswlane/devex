@@ -12,7 +12,7 @@ import {
 	PrismaClientRustPanicError,
 	PrismaClientUnknownRequestError,
 	PrismaClientValidationError,
-} from "@prisma/client/runtime/library";
+} from "@prisma/client/runtime/client";
 import { NextRequest, type NextResponse } from "next/server";
 import {
 	classifyError,

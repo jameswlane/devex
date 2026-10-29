@@ -1,6 +1,6 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
 import { invalidateOnDataChange } from "@/lib/cache-invalidation";
 import { compareVersions } from "@/lib/version-compare";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import type { ReleasePayload } from "./contract";
 
 export interface RecordedRelease {

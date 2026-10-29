@@ -1,4 +1,3 @@
-import type { Plugin, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { ADMIN_API_KEY_ENV, withApiKey } from "@/lib/auth/require-api-key";
 import { PLUGIN_CACHE_CONTROL, pluginCacheTags } from "@/lib/cdn-cache";
@@ -16,6 +15,7 @@ import {
 	validatePluginType,
 	validateSearchQuery,
 } from "@/lib/validation";
+import type { Plugin, Prisma } from "../../../../generated/prisma/client";
 
 async function handleGetPlugins(request: Request) {
 	try {

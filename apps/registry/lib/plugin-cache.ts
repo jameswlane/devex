@@ -1,4 +1,4 @@
-import type { Plugin } from "@prisma/client";
+import type { Plugin } from "../generated/prisma/client";
 
 // Cache for frequently accessed plugin metadata
 export const pluginCache = new Map<
