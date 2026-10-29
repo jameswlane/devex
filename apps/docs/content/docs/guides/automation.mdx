@@ -188,11 +188,12 @@ For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-se
         steps:
           - uses: actions/checkout@v4
           
-          - name: Verify DevEx installer
+          - name: Download a reviewed DevEx installer
+            env:
+              # Pin the commit whose apps/get/public/install you reviewed.
+              DEVEX_INSTALLER_REF: <commit-sha>
             run: |
-              # Download the installer and compare it with the repository source
-              curl -fsSL https://get.devex.sh/install -o installer.sh
-              curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/apps/get/public/install | diff - installer.sh
+              curl -fsSL "https://raw.githubusercontent.com/jameswlane/devex/${DEVEX_INSTALLER_REF}/apps/get/public/install" -o installer.sh
               
           - name: Install DevEx securely
             run: |
@@ -222,7 +223,7 @@ stages:
   - deploy
 
 variables:
-  DEVEX_VERSION: "latest"
+  # Set DEVEX_VERSION (for example "0.3.0") to pin a release; unset installs the latest.
   DEVEX_CONFIG: ".devex/gitlab-ci.yaml"
 
 .devex_setup: &devex_setup

@@ -62,14 +62,14 @@ curl -fsSLO "https://github.com/jameswlane/devex/releases/download/v${VERSION}/d
 
 # Verify the checksum (recommended)
 curl -fsSLO "https://github.com/jameswlane/devex/releases/download/v${VERSION}/devex_checksums.txt"
-sha256sum -c --ignore-missing devex_checksums.txt
+# Extract only if the checksum matches (the archive holds bin/devex plus its assets, config and help)
+sha256sum -c --ignore-missing devex_checksums.txt &&
+  mkdir -p ~/.local/share/devex &&
+  tar -xzf "devex_${VERSION}_linux_amd64.tar.gz" -C ~/.local/share/devex
 
-# Extract (the archive contains bin/devex plus its assets, config and help)
-mkdir -p ~/.local/share/devex
-tar -xzf "devex_${VERSION}_linux_amd64.tar.gz" -C ~/.local/share/devex
-
-# Add it to PATH
+# Add it to PATH now and for new shells (use ~/.zshrc for zsh)
 export PATH="$HOME/.local/share/devex/bin:$PATH"
+echo 'export PATH="$HOME/.local/share/devex/bin:$PATH"' >> ~/.bashrc
 ```
 
 ### 2. Initialize Configuration
