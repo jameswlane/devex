@@ -386,7 +386,7 @@ jobs:
 FROM ubuntu:22.04
 
 # Install DevEx with security considerations
-RUN apt-get update && apt-get install -y curl sudo ca-certificates
+RUN apt-get update && apt-get install -y curl git unzip sudo ca-certificates
 RUN curl -fsSL https://get.devex.sh/install | bash
 
 # Copy team configuration

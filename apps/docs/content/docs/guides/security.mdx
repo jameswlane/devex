@@ -46,9 +46,8 @@ Before running any installation script, including DevEx's installer:
     Check the script's authenticity and integrity:
     
     ```bash
-    # Verify the script hasn't been tampered with
-    curl -fsSL https://get.devex.sh/install.sha256 -o install.sha256
-    sha256sum -c install.sha256
+    # Compare it with the source in the DevEx repository (no output means they match)
+    curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/apps/get/public/install | diff - devex-install.sh
     
     # Check HTTPS certificate
     curl -I https://get.devex.sh/install
@@ -65,8 +64,8 @@ Before running any installation script, including DevEx's installer:
     chmod +x devex-install.sh
     ./devex-install.sh
     
-    # Or pipe directly (only after verification)
-    curl -fsSL https://get.devex.sh/install | bash
+    # Or pass options to the reviewed copy
+    bash devex-install.sh --no-setup
     ```
   </Step>
 </Steps>
@@ -93,10 +92,8 @@ DevEx's official installer is designed with security in mind:
 curl -I https://get.devex.sh/install
 # Should return 200 OK with valid HTTPS certificate
 
-# Check installer signature (when available)
-curl -fsSL https://get.devex.sh/install.sig -o install.sig
-curl -fsSL https://get.devex.sh/install -o install.sh
-gpg --verify install.sig install.sh
+# The installer is not signed yet. It verifies every release archive against the
+# release's devex_checksums.txt and stops if the SHA-256 does not match.
 ```
 
 ## Configuration Security

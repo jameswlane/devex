@@ -190,10 +190,9 @@ For team-specific automation setups, see [Team Setup Guide](/docs/guides/team-se
           
           - name: Verify DevEx installer
             run: |
-              # Download installer and verify signature
-              curl -fsSL https://get.devex.sh/install.sig -o installer.sig
+              # Download the installer and compare it with the repository source
               curl -fsSL https://get.devex.sh/install -o installer.sh
-              gpg --verify installer.sig installer.sh
+              curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/apps/get/public/install | diff - installer.sh
               
           - name: Install DevEx securely
             run: |
@@ -405,7 +404,7 @@ pipeline {
     
     # Stage 1: Environment setup
     FROM ubuntu:22.04 AS devex-setup
-    RUN apt-get update && apt-get install -y curl sudo ca-certificates
+    RUN apt-get update && apt-get install -y curl git unzip sudo ca-certificates
     # Install DevEx in multi-stage build
     RUN curl -fsSL https://get.devex.sh/install | bash
     COPY .devex/ /root/.devex/
@@ -674,7 +673,7 @@ spec:
           - -c
           - |
             # Install DevEx with security considerations
-            apt-get update && apt-get install -y curl ca-certificates
+            apt-get update && apt-get install -y curl git unzip ca-certificates
             curl -fsSL https://get.devex.sh/install | bash
             export PATH="$PATH:/root/.local/share/devex/bin"
             
