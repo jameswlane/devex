@@ -1,12 +1,20 @@
 import "@testing-library/jest-dom";
-import { TextDecoder, TextEncoder } from "util";
+import { ReadableStream } from "node:stream/web";
+import { TextDecoder, TextEncoder } from "node:util";
+import { MessagePort } from "node:worker_threads";
 
-// Polyfill TextEncoder/TextDecoder for Node.js environment
+// Polyfill Node.js globals missing from the Jest jsdom environment
 if (typeof global.TextEncoder === "undefined") {
 	global.TextEncoder = TextEncoder;
 }
 if (typeof global.TextDecoder === "undefined") {
 	global.TextDecoder = TextDecoder;
+}
+if (typeof global.ReadableStream === "undefined") {
+	global.ReadableStream = ReadableStream;
+}
+if (typeof global.MessagePort === "undefined") {
+	global.MessagePort = MessagePort;
 }
 
 // Mock Next.js router
