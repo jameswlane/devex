@@ -56,14 +56,19 @@
 	"devDependencies": {
 		"@auto-it/conventional-commits": "^11.3.6",
 		"@auto-it/core": "^11.3.6",
-		"@biomejs/biome": "2.6.3",
-		"@commitlint/config-conventional": "^19.8.1",
-		"@commitlint/format": "^19.8.1",
+		"@biomejs/biome": "2.6.4",
+		"@commitlint/config-conventional": "^21.2.4",
+		"@commitlint/format": "^21.2.3",
 		"@octokit/rest": "^22.0.1",
 		"auto": "^11.3.6",
-		"commitlint": "^19.8.1",
-		"glob": "^11.1.0",
+		"commitlint": "^21.2.4",
+		"glob": "^14.0.3",
 		"js-yaml": "^5.5.0",
 		"turbo": "2.11.10"
+	},
+	"pnpm": {
+		"overrides": {
+			"compression@<1.8.2": "1.8.2"
+		}
 	}
 }
