@@ -118,10 +118,13 @@ try {
     $pwsh = (Get-Process -Id $PID).Path
     & $pwsh -NoProfile -File $scriptPath -BaseUrl 'http://localhost:1' 6>$null
     Assert ($LASTEXITCODE -eq 1) 'Script failure must exit nonzero'
-    $source = Get-Content -Raw $scriptPath
-    $source = $source.Replace("[string]`$BaseUrl = 'https://github.com/jameswlane/devex/releases/download'", "[string]`$BaseUrl = 'http://localhost:1'")
-    Invoke-Expression $source 6>$null
-    Assert $true 'iex failure returned without terminating the shell'
+    $original = Get-Content -Raw $scriptPath
+    $source = $original.Replace("[string]`$BaseUrl = 'https://github.com/jameswlane/devex/releases/download'", "[string]`$BaseUrl = 'http://localhost:1'")
+    Assert ($source -cne $original) 'iex test points BaseUrl at localhost'
+    # A child shell, so an installer that calls exit cannot end this test run.
+    $output = & $pwsh -NoProfile -Command { param($src) Invoke-Expression $src 6>$null; 'iex-returned' } -args $source
+    Assert ($LASTEXITCODE -eq 0) 'iex failure must not exit the shell'
+    Assert (@($output) -contains 'iex-returned') 'iex failure returned to the caller'
     Write-Host 'PowerShell installer tests passed.'
 } finally {
     Remove-Item -LiteralPath $temp -Recurse -Force

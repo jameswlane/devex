@@ -60,6 +60,8 @@ function Get-DevExDownload {
     }
     $releaseUrl = "$($BaseUrl.TrimEnd('/'))/$Version"
     Write-Host "Downloading $fileName..."
+    # Windows PowerShell 5.1's progress bar slows downloads; this local copy ends with the function.
+    $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri "$releaseUrl/$fileName" -OutFile $download.TarballPath -UseBasicParsing | Out-Null
     Invoke-WebRequest -Uri "$releaseUrl/devex_checksums.txt" -OutFile $download.ChecksumPath -UseBasicParsing | Out-Null
     return $download
@@ -113,14 +115,18 @@ function Install-DevEx {
         $tag = Get-LatestVersion
     }
     $architecture = Get-SystemInfo
-    $tar = Get-Command tar -CommandType Application -ErrorAction Stop | Select-Object -First 1
+    # Prefer Windows' bsdtar: GNU tar from Git's Unix tools reads "C:\..." as a remote host.
+    $tar = if ($env:SystemRoot) { Join-Path $env:SystemRoot 'System32\tar.exe' }
+    if (-not ($tar -and (Test-Path -LiteralPath $tar))) {
+        $tar = (Get-Command tar -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+    }
     $tempDir = Join-Path $env:TEMP ("devex-install-" + [Guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $tempDir -ErrorAction Stop | Out-Null
     try {
         $download = Get-DevExDownload -Version $tag -Architecture $architecture -TempDir $tempDir -BaseUrl $BaseUrl
         Test-Checksum -Download $download | Out-Null
         New-Item -ItemType Directory -Path $InstallDir -Force -ErrorAction Stop | Out-Null
-        & $tar.Source -xzf $download.TarballPath -C $InstallDir
+        & $tar -xzf $download.TarballPath -C $InstallDir
         if ($LASTEXITCODE -ne 0) { throw "Archive extraction failed (exit $LASTEXITCODE)." }
         $binPath = Join-Path ([IO.Path]::GetFullPath($InstallDir)) 'bin'
         $executable = Join-Path $binPath 'devex.exe'
