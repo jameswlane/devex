@@ -12,7 +12,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as yaml from "js-yaml";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const repoRoot = path.resolve(
+	path.dirname(fileURLToPath(import.meta.url)),
+	"../..",
+);
 const packagesDir = path.join(repoRoot, "packages");
 const NON_PLUGINS = new Set(["plugin-sdk"]);
 const SUPPORTED_OS = ["linux", "darwin", "windows"];
@@ -32,12 +35,18 @@ export function targetsFromMetadata(name, metadata) {
 	const targets = [];
 	for (const [os, spec] of Object.entries(platforms)) {
 		if (!SUPPORTED_OS.includes(os)) {
-			throw new Error(`${name}: unsupported platform "${os}" in metadata.yaml (use ${SUPPORTED_OS.join(", ")})`);
+			throw new Error(
+				`${name}: unsupported platform "${os}" in metadata.yaml (use ${SUPPORTED_OS.join(", ")})`,
+			);
 		}
-		const arches = spec?.architectures?.length ? spec.architectures : DEFAULT_ARCH;
+		const arches = spec?.architectures?.length
+			? spec.architectures
+			: DEFAULT_ARCH;
 		for (const arch of arches) {
 			if (!SUPPORTED_ARCH.includes(arch)) {
-				throw new Error(`${name}: unsupported architecture "${arch}" for ${os} in metadata.yaml`);
+				throw new Error(
+					`${name}: unsupported architecture "${arch}" for ${os} in metadata.yaml`,
+				);
 			}
 			targets.push({ os, arch });
 		}
@@ -50,16 +59,20 @@ export function targetsFromMetadata(name, metadata) {
 
 export function renderConfig(name, targets) {
 	const goos = SUPPORTED_OS.filter((os) => targets.some((t) => t.os === os));
-	const goarch = SUPPORTED_ARCH.filter((arch) => targets.some((t) => t.arch === arch));
+	const goarch = SUPPORTED_ARCH.filter((arch) =>
+		targets.some((t) => t.arch === arch),
+	);
 	const ignore = [];
 	for (const os of goos) {
 		for (const arch of goarch) {
-			if (!targets.some((t) => t.os === os && t.arch === arch)) ignore.push({ os, arch });
+			if (!targets.some((t) => t.os === os && t.arch === arch))
+				ignore.push({ os, arch });
 		}
 	}
 
 	const binary = `devex-plugin-${name}`;
-	const list = (items, indent) => items.map((i) => `${" ".repeat(indent)}- ${i}`).join("\n");
+	const list = (items, indent) =>
+		items.map((i) => `${" ".repeat(indent)}- ${i}`).join("\n");
 	const ignoreBlock = ignore.length
 		? `\n    ignore:\n${ignore.map((i) => `      - goos: ${i.os}\n        goarch: ${i.arch}`).join("\n")}`
 		: "";
@@ -176,9 +189,13 @@ function main() {
 
 	for (const name of pluginDirs()) {
 		const dir = path.join(packagesDir, name);
-		const metadata = yaml.load(readFileSync(path.join(dir, "metadata.yaml"), "utf8"));
+		const metadata = yaml.load(
+			readFileSync(path.join(dir, "metadata.yaml"), "utf8"),
+		);
 		if (metadata?.name && metadata.name !== name) {
-			throw new Error(`${name}: metadata.yaml name "${metadata.name}" does not match its directory`);
+			throw new Error(
+				`${name}: metadata.yaml name "${metadata.name}" does not match its directory`,
+			);
 		}
 		const config = renderConfig(name, targetsFromMetadata(name, metadata));
 		const target = path.join(dir, ".goreleaser.yml");
@@ -194,7 +211,9 @@ function main() {
 	}
 
 	if (stale.length) {
-		console.error("GoReleaser configs are out of date; run `pnpm release:generate`:");
+		console.error(
+			"GoReleaser configs are out of date; run `pnpm release:generate`:",
+		);
 		for (const file of stale) console.error(`  ${file}`);
 		process.exit(1);
 	}
