@@ -247,7 +247,7 @@ func (l *Logger) logWithContext(level log.Level, msg string, keyvals ...any) {
 	}
 
 	// Merge the context into the key-values
-	mergedKeyvals := make([]any, 0, len(l.context)*2+len(keyvals))
+	var mergedKeyvals []any
 	for k, v := range l.context {
 		mergedKeyvals = append(mergedKeyvals, k, v)
 	}
