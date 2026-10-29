@@ -102,6 +102,61 @@ var _ = Describe("Registry Client", func() {
 			Expect(registry).ToNot(BeNil())
 		})
 
+		Context("when the API nests plugins under data", func() {
+			BeforeEach(func() {
+				server.Close()
+				// Shape of https://registry.devex.sh/api/v1/registry, trimmed to one plugin.
+				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = fmt.Fprint(w, `{
+						"base_url": "https://github.com/jameswlane/devex/releases/download",
+						"version": "2.0.0",
+						"last_updated": "2026-10-28T23:49:34.218Z",
+						"source": "database",
+						"data": {
+							"plugins": [{
+								"name": "package-manager-apt",
+								"description": "APT package manager support for Debian/Ubuntu systems",
+								"type": "package-manager",
+								"priority": 10,
+								"status": "active",
+								"supports": {"install": true, "uninstall": true, "repository_management": true},
+								"platforms": ["linux"],
+								"tags": [],
+								"version": "0.0.2",
+								"latestVersion": "0.0.2",
+								"dependencies": [],
+								"conflicts": [],
+								"binaries": {
+									"linux-amd64": {
+										"url": "https://github.com/jameswlane/devex/releases/download/packages%2Fpackage-manager-apt%2Fv0.0.2/devex-plugin-package-manager-apt_0.0.2_linux_amd64",
+										"size": 6795426,
+										"format": "binary",
+										"checksum": "49c14473bf45698eb407b56bd481f53f0f412b513e8e7b9099cc4c7501440875"
+									}
+								},
+								"downloadCount": 36
+							}],
+							"applications": [],
+							"configs": [],
+							"stacks": []
+						},
+						"pagination": {"page": 1, "limit": 50, "totalPages": 1, "totalItems": {"plugins": 1}}
+					}`)
+				}))
+				var err error
+				client, err = sdk.NewRegistryClient(sdk.RegistryConfig{BaseURL: server.URL, Timeout: 30 * time.Second, Logger: NewSilentLogger()})
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("returns the plugins keyed by name", func() {
+				registry, err := client.GetRegistry(ctx)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(registry.Plugins).To(HaveKey("package-manager-apt"))
+				Expect(registry.Plugins["package-manager-apt"].Binaries).To(HaveKey("linux-amd64"))
+			})
+		})
+
 		Context("when server returns error", func() {
 			BeforeEach(func() {
 				server.Close()

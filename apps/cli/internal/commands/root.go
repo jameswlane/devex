@@ -13,6 +13,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -48,11 +49,11 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 				return err
 			}
 
-			// Skip plugin system initialization for setup command to prevent premature downloads
-			// Plugins will be downloaded during the setup flow itself when user confirms
+			// Install resolves applications before initializing plugins so invalid input
+			// fails without downloads; setup initializes plugins in its own flow.
 			cmdName := cmd.Name()
-			if cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
-				log.Debug("Skipping plugin system initialization for setup command")
+			if (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
+				log.Debug("Deferring plugin initialization to command", "command", cmdName)
 				return nil
 			}
 
@@ -132,10 +133,25 @@ func initializeConfig(cmd *cobra.Command) error {
 	viper.SetEnvPrefix("DEVEX")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
+	_ = viper.BindEnv("non-interactive", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE")
 	_ = viper.BindEnv(state.DBPathConfigKey, state.DBPathEnvVar, state.DBPathAutoEnvVar)
 
+	if err := loadCLIConfig(viper.GetString("config")); err != nil {
+		return err
+	}
+
+	// 5. Bind all command flags to Viper for hierarchical configuration
+	if err := viper.BindPFlags(cmd.Flags()); err != nil {
+		return err
+	}
+
+	// 6. Validate configuration after all sources are loaded
+	return validateViperConfiguration()
+}
+
+// loadCLIConfig keeps file loading separate from application resolution.
+func loadCLIConfig(cfgFile string) error {
 	// 3. Configuration file paths (in order of precedence)
-	cfgFile := viper.GetString("config")
 	if cfgFile != "" {
 		// Use config file from the flag
 		viper.SetConfigFile(cfgFile)
@@ -166,13 +182,7 @@ func initializeConfig(cmd *cobra.Command) error {
 		log.Debug("Using config file", "path", viper.ConfigFileUsed())
 	}
 
-	// 5. Bind all command flags to Viper for hierarchical configuration
-	if err := viper.BindPFlags(cmd.Flags()); err != nil {
-		return err
-	}
-
-	// 6. Validate configuration after all sources are loaded
-	return validateViperConfiguration()
+	return nil
 }
 
 // setConfigurationDefaults sets default values for configuration options
@@ -251,6 +261,8 @@ func (r *rootRuntime) initializePluginSystem(ctx context.Context) error {
 		log.Warn("Failed to bootstrap plugins", "error", err)
 		return nil // Don't fail the entire CLI
 	}
+
+	installers.InitializeWithPluginBootstrap(r.pluginBootstrap)
 
 	// TODO: Register plugin commands with root command
 	// This would need to be done differently since we're inside NewRootCmd

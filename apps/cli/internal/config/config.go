@@ -23,6 +23,8 @@ import (
 
 // CrossPlatformSettings represents the new configuration structure
 type CrossPlatformSettings struct {
+	// ApplicationOverrides contains the merged runtime application catalog.
+	ApplicationOverrides []types.CrossPlatformApp   `mapstructure:"-"`
 	DebugMode            bool                       `mapstructure:"debug_mode"`
 	HomeDir              string                     `mapstructure:"home_dir"`
 	Verbose              bool                       `mapstructure:"verbose"`
@@ -157,6 +159,9 @@ type SecurityOverrideField struct {
 
 // GetAllApps returns all applications from the cross-platform configuration
 func (s *CrossPlatformSettings) GetAllApps() []types.CrossPlatformApp {
+	if s.ApplicationOverrides != nil {
+		return append([]types.CrossPlatformApp(nil), s.ApplicationOverrides...)
+	}
 	groups := [][]types.CrossPlatformApp{
 		// Terminal applications
 		s.Terminal.Development,

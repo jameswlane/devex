@@ -374,3 +374,35 @@ df -h ~/.devex/cache
 - [Application Configuration](../config) - Configuring applications
 - [Package Managers](../installers) - Supported installers
 - [Troubleshooting](../troubleshooting) - Common installation issues
+
+## Non-interactive automation
+
+Use `devex install --non-interactive --config ./server.yaml` to install without
+opening the TUI or switching the login shell. `DEVEX_NONINTERACTIVE=1`, CI
+environments, and `non-interactive: true` in the config also enable this mode.
+Flags take precedence over environment variables, then config values, then defaults.
+
+The config's `applications` list replaces default applications. Entries can be
+known application names or full application definitions:
+
+```yaml
+non-interactive: true
+applications:
+  - ripgrep
+  - name: jq
+    category: Utilities
+    linux:
+      install_method: apt
+      install_command: jq
+      uninstall_command: jq
+```
+
+Explicit app arguments select from known apps and inline definitions; categories
+use `--categories`. `--dry-run` previews the selection. Installation continues
+after individual failures, prints a final count, and exits unsuccessfully if any
+apps failed. Successful applications appear in `devex list installed` and can be
+uninstalled using `devex remove jq --force`.
+
+`devex setup --non-interactive` uses the same list when configured. Setup's own
+`-c/--config` still selects a setup step file. For lifecycle templates,
+`--non-interactive` retains its meaning of failing for missing input answers.

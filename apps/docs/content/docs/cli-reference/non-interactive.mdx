@@ -1,0 +1,66 @@
+---
+title: Non-interactive installs
+description: Install a declarative application list in scripts, CI, and server automation
+---
+
+# Non-interactive installs
+
+Use non-interactive mode when DevEx must finish without a terminal or user prompts. It installs applications directly instead of starting the interactive UI, prints one status line per application, and ends with an `installed N of M applications` summary.
+
+```bash
+devex install --non-interactive --config ./devex.yaml
+```
+
+DevEx continues after individual installation failures, then exits unsuccessfully and names the failed applications. Successful installations are recorded for `devex list installed`. Non-interactive installation does not change your login shell, and `--dry-run` still previews the operation without installing packages.
+
+## Application lists
+
+The top-level `applications` key in the Viper configuration file selects which applications to install. Use `--config <path>` to choose a file, or put it at `~/.devex/config.yaml`. Each entry is either the name of an application already known to DevEx or a complete inline application definition:
+
+```yaml
+non-interactive: true
+applications:
+  - ripgrep
+  - name: jq
+    description: Command-line JSON processor
+    category: Utilities
+    linux:
+      install_method: apt
+      install_command: jq
+      uninstall_command: jq
+```
+
+When `applications` is present, it replaces the default application list. Explicit application arguments still take precedence and can select from both known applications and inline definitions. An unknown name fails before anything is installed.
+
+Inline definitions use the same platform-specific schema as the [applications configuration](/docs/configuration/applications). They can also be removed without prompts by loading the same configuration:
+
+```bash
+devex remove jq --force --config ./devex.yaml
+```
+
+`devex setup --non-interactive` uses this application list as well when the configuration contains one. Without an `applications` key, setup retains its default behavior.
+
+## Enabling non-interactive mode
+
+The `non-interactive` setting uses the standard DevEx precedence order, from highest to lowest:
+
+1. **Flag:** `--non-interactive`
+2. **Environment:** `DEVEX_NONINTERACTIVE=1`
+3. **Configuration:** `non-interactive: true`
+4. **Default:** interactive mode
+
+For example, a configuration file can enable non-interactive installs without a flag:
+
+```yaml
+non-interactive: true
+applications:
+  - ripgrep
+```
+
+```bash
+devex install --config ./devex.yaml
+```
+
+DevEx also runs non-interactively, whatever the setting says, when it detects CI (`CI`, `GITHUB_ACTIONS` or `GITLAB_CI` is set) or a dumb terminal (`TERM=dumb`). Outside those environments, `--non-interactive=false` overrides `DEVEX_NONINTERACTIVE` and the configuration file.
+
+On template commands, `--non-interactive` keeps its existing meaning: fail rather than prompt for missing template input.

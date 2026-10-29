@@ -1,0 +1,8 @@
+applications:
+  - name: jq
+    description: Command-line JSON processor
+    category: Utilities
+    linux:
+      install_method: apt
+      install_command: jq
+      uninstall_command: jq

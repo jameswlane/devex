@@ -3,14 +3,13 @@ package setup
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
-	"github.com/spf13/viper"
 )
 
 // createAutomatedSetupModel creates a SetupModel with default selections for automated setup
@@ -122,27 +121,8 @@ func printAutomatedSetupCompletion(model *SetupModel) {
 	}
 }
 
-// IsInteractiveMode checks if we should run in interactive mode (default: yes)
-// Only goes non-interactive if explicitly requested or in CI environments
-func IsInteractiveMode() bool {
-	// Check for explicit non-interactive request (like Homebrew)
-	if os.Getenv("DEVEX_NONINTERACTIVE") == "1" || viper.GetBool("non-interactive") {
-		return false
-	}
-
-	// Check for known CI environments
-	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GITLAB_CI") != "" {
-		return false
-	}
-
-	// Check for explicitly non-interactive terminals
-	if os.Getenv("TERM") == "dumb" {
-		return false
-	}
-
-	// Default to interactive for better user experience
-	return true
-}
+// IsInteractiveMode is retained for callers of the setup package.
+func IsInteractiveMode() bool { return interaction.IsInteractiveMode() }
 
 // RunAutomatedSetup runs a non-interactive setup with sensible defaults
 func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {

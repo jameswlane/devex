@@ -2,9 +2,9 @@
 # Run the DevEx CLI end-to-end suite inside a throwaway container.
 #
 # Builds a static linux devex binary and the Ginkgo suite binary, stages them
-# in a temporary build context, builds the sandbox image for $DISTRO and runs
-# it with ./artifacts/e2e/<distro> mounted at /artifacts. Exits with the
-# container's exit code.
+# with testdata in a temporary build context, builds the sandbox image for
+# $DISTRO and runs it with ./artifacts/e2e/<distro> mounted at /artifacts.
+# Exits with the container's exit code.
 #
 # Usage: scripts/e2e-docker.sh [extra suite args, e.g. --ginkgo.focus=init]
 #
@@ -140,6 +140,7 @@ main() {
 
 	build_binaries "$context"
 	cp "$DOCKERFILE" "$context/Dockerfile"
+	cp -R "$E2E_DIR/testdata" "$context/testdata"
 
 	local image="devex-e2e:$DISTRO"
 	local artifacts="$CLI_DIR/artifacts/e2e/$DISTRO"

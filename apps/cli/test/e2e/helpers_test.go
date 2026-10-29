@@ -62,6 +62,8 @@ func artifactDirectory() string {
 	return directory
 }
 
+// environment builds the isolated child environment. An empty override value
+// unsets that variable instead of setting it to "".
 func (s *suiteEnvironment) environment(home string, overrides map[string]string) []string {
 	values := map[string]string{}
 	for _, entry := range os.Environ() {
@@ -80,6 +82,10 @@ func (s *suiteEnvironment) environment(home string, overrides map[string]string)
 	values["XDG_CONFIG_HOME"] = filepath.Join(home, ".config")
 	values["XDG_CACHE_HOME"] = filepath.Join(home, ".cache")
 	for key, value := range overrides {
+		if value == "" {
+			delete(values, key)
+			continue
+		}
 		values[key] = value
 	}
 	environment := make([]string, 0, len(values))
@@ -127,15 +133,20 @@ func pluginPath(home, name string) string {
 	return filepath.Join(home, ".devex/plugins/devex-plugin-"+name)
 }
 
-func expectedPlugins() []string {
+// osRelease returns a field (ID, VERSION_ID, ...) from /etc/os-release.
+func osRelease(field string) string {
 	release, err := os.ReadFile("/etc/os-release")
 	Expect(err).NotTo(HaveOccurred(), "read Linux distribution")
-	distro := ""
 	for _, line := range strings.Split(string(release), "\n") {
-		if value, ok := strings.CutPrefix(line, "ID="); ok {
-			distro = strings.Trim(value, `"`)
+		if value, ok := strings.CutPrefix(line, field+"="); ok {
+			return strings.Trim(value, `"`)
 		}
 	}
+	return ""
+}
+
+func expectedPlugins() []string {
+	distro := osRelease("ID")
 	Expect(distro).To(BeElementOf("ubuntu", "debian"), "phase 1 supports apt-based ubuntu/debian, got %q", distro)
 	plugins := []string{"package-manager-apt", "tool-shell", "tool-git"}
 	// Bootstrap detects universal package managers from PATH, not distro ID.

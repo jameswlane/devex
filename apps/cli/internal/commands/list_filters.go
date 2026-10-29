@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -15,7 +17,29 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 	installedAppsCache := getInstalledAppsCache(repo)
 
 	// Get all available apps for cross-referencing
-	allApps := settings.GetAllApps()
+	_, merged, _, err := configuredApplications(settings)
+	if err != nil {
+		return nil, err
+	}
+	allApps := merged.GetAllApps()
+	known := make(map[string]bool, len(allApps))
+	for _, app := range allApps {
+		known[app.Name] = true
+	}
+	for name := range installedAppsCache {
+		if known[name] {
+			continue
+		}
+		data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(name))
+		if err != nil || data == "" {
+			continue
+		}
+		var app types.CrossPlatformApp
+		if err := json.Unmarshal([]byte(data), &app); err != nil {
+			return nil, fmt.Errorf("invalid installed definition for %s: %w", name, err)
+		}
+		allApps = append(allApps, app)
+	}
 
 	var installedApps []InstalledApp
 
