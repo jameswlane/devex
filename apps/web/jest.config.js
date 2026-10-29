@@ -26,7 +26,7 @@ const config = {
 				},
 			},
 		],
-		"^.+\\.(js|jsx)$": [
+		"^.+\\.(js|jsx|mjs)$": [
 			"@swc/jest",
 			{
 				jsc: {
@@ -43,7 +43,10 @@ const config = {
 			},
 		],
 	},
-	moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json"],
+	transformIgnorePatterns: [
+		"/node_modules/(?!.*(?:@exodus(?:\\+|/)bytes|@asamuzakjp(?:\\+|/)(?:css-color|dom-selector)|@bramus(?:\\+|/)specificity|@csstools(?:\\+|/)|parse5|entities))",
+	],
+	moduleFileExtensions: ["ts", "tsx", "js", "jsx", "mjs", "json"],
 	collectCoverageFrom: [
 		"app/**/*.{ts,tsx,js,jsx}",
 		"!app/**/*.d.ts",
