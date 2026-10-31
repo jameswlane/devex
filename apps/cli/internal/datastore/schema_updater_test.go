@@ -148,6 +148,37 @@ var _ = Describe("Transactional schema updates", func() {
 		Entry("invalid legacy version", "UPDATE schema_version SET version=99", "invalid legacy schema version"),
 	)
 
+	DescribeTable("rejects a current database whose schema drifted after both trackers were synchronized", func(ctx SpecContext, mutation, message string) {
+		// Initialize through the real startup path so schema_migrations and the
+		// legacy schema_version are both at the latest version (the warm fast path).
+		db, err := NewSQLiteContext(ctx, path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(db.Close()).To(Succeed())
+		var legacy int
+		Expect(conn.QueryRowContext(ctx, "SELECT version FROM schema_version").Scan(&legacy)).To(Succeed())
+		Expect(legacy).To(Equal(5))
+
+		_, err = conn.ExecContext(ctx, mutation)
+		Expect(err).NotTo(HaveOccurred())
+		before, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+
+		db, err = NewSQLiteContext(ctx, path)
+		Expect(db).To(BeNil())
+		Expect(err).To(MatchError(And(ContainSubstring(message), ContainSubstring(recoveryGuidance))))
+		Expect(ApplySchemaUpdates(ctx, conn)).To(MatchError(ContainSubstring(message)))
+
+		after, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(after).To(Equal(before), "rejecting a current database must not write")
+	},
+		Entry("dropped table", "DROP TABLE installed_apps", "incompatible columns"),
+		Entry("dropped column", "ALTER TABLE installed_apps DROP COLUMN version", "incompatible columns"),
+		Entry("dropped index", "DROP INDEX idx_installed_apps_app_name", "incompatible indexes"),
+		Entry("orphan foreign key row", "INSERT INTO app_dependencies(app_name, dependency_name) VALUES ('missing', 'runtime')", "foreign key violations"),
+		Entry("invalid legacy version", "UPDATE schema_version SET version=99", "invalid legacy schema version"),
+	)
+
 	It("verifies a current database read-only without writing", func(ctx SpecContext) {
 		Expect(ApplySchemaUpdates(ctx, conn)).To(Succeed())
 		before, err := os.ReadFile(path)
