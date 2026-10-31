@@ -195,13 +195,13 @@ func (rv *RequirementsValidator) validateDiskSpaceRequirement(minDiskSpaceMB int
 				Status:      ValidationPassed,
 				Message:     fmt.Sprintf("Available disk space: %d MB", availableMBFromSyscall),
 			}
-		} else {
-			return ValidationResult{
-				Requirement: fmt.Sprintf("Disk space >= %d MB", minDiskSpaceMB),
-				Status:      ValidationFailed,
-				Message:     fmt.Sprintf("Insufficient disk space. Available: %d MB, Required: %d MB", availableMBFromSyscall, minDiskSpaceMB),
-				Suggestion:  fmt.Sprintf("Free up at least %d MB of disk space", minDiskSpaceMB-availableMBFromSyscall),
-			}
+		}
+
+		return ValidationResult{
+			Requirement: fmt.Sprintf("Disk space >= %d MB", minDiskSpaceMB),
+			Status:      ValidationFailed,
+			Message:     fmt.Sprintf("Insufficient disk space. Available: %d MB, Required: %d MB", availableMBFromSyscall, minDiskSpaceMB),
+			Suggestion:  fmt.Sprintf("Free up at least %d MB of disk space", minDiskSpaceMB-availableMBFromSyscall),
 		}
 	}
 

@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	// Default plugin registry URL - you would host this
+	// DefaultRegistryURL Default plugin registry URL - you would host this
 	DefaultRegistryURL = "https://registry.devex.sh"
-	// Cache duration for bootstrap initialization
+	// BootstrapCacheDuration Cache duration for bootstrap initialization
 	BootstrapCacheDuration = 24 * time.Hour
 )
 

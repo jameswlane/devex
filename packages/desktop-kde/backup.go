@@ -131,7 +131,7 @@ func (bm *BackupManager) createConfigBackup(backupFile string) error {
 	}
 
 	// Create tar command with existing files only
-	existingItems := []string{}
+	var existingItems []string
 	for _, item := range items {
 		if _, err := os.Stat(item); err == nil {
 			existingItems = append(existingItems, item)

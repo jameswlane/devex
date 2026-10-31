@@ -272,7 +272,7 @@ func isValidProcessName(name string) bool {
 
 // detectPackageManagers detects available package managers on the system
 func (d *Detector) detectPackageManagers(platform *Platform) {
-	packageManagers := []string{}
+	var packageManagers []string
 
 	switch platform.OS {
 	case "linux":
@@ -345,7 +345,7 @@ func isValidCommandName(cmd string) bool {
 
 // GetRequiredPlugins returns the list of plugins needed for this platform
 func (p *Platform) GetRequiredPlugins() []string {
-	plugins := []string{}
+	var plugins []string
 
 	// Add package manager plugins with priority-based selection
 	// Primary package managers are preferred over secondary ones
@@ -410,7 +410,7 @@ func (p *Platform) getPrimaryPackageManagers() []string {
 		},
 	}
 
-	result := []string{}
+	var result []string
 	seen := make(map[string]bool)
 
 	// Get priority order for current OS

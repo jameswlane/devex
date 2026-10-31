@@ -45,7 +45,7 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 	// Parse flags
 	dryRun := false
 	force := false
-	scriptURLs := []string{}
+	var scriptURLs []string
 
 	for _, arg := range args {
 		switch arg {

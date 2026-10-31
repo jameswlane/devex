@@ -42,9 +42,9 @@ func outputInstalledTable(apps []InstalledApp, options ListCommandOptions, write
 
 	if options.Verbose {
 		return renderInstalledAppsTable(apps, config, writer)
-	} else {
-		return renderInstalledAppsList(apps, writer)
 	}
+
+	return renderInstalledAppsList(apps, writer)
 }
 
 // outputAvailableJSON outputs available apps in JSON format
@@ -79,9 +79,9 @@ func outputAvailableTable(apps []AvailableApp, options ListCommandOptions, write
 
 	if options.Verbose {
 		return renderAvailableAppsTable(apps, config, writer)
-	} else {
-		return renderAvailableAppsList(apps, writer)
 	}
+
+	return renderAvailableAppsList(apps, writer)
 }
 
 // outputCategoriesJSON outputs categories in JSON format

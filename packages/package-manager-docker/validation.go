@@ -126,7 +126,7 @@ func (d *DockerInstaller) ValidatePortMapping(portMapping string) error {
 	}
 
 	// Port mapping format: [hostIP:][hostPort:]containerPort[/protocol]
-	portRegex := regexp.MustCompile(`^(?:(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:)?(?:\d{1,5}:))?\d{1,5}(?:\/(?:tcp|udp))?$`)
+	portRegex := regexp.MustCompile(`^(?:(?:\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:)?\d{1,5}:)?\d{1,5}(?:/(?:tcp|udp))?$`)
 	if !portRegex.MatchString(portMapping) {
 		return fmt.Errorf("invalid port mapping format")
 	}

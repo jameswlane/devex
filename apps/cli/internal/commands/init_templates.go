@@ -474,7 +474,7 @@ func createApplicationsConfig(template templates.Template, configDir string) err
 		header := fmt.Sprintf(`# DevEx Applications Configuration
 # Generated from template: %s (ADDITIVE)
 # %s
-# 
+#
 # This configuration adds applications to the default DevEx setup.
 # Default applications (like git) are automatically included.
 
@@ -487,18 +487,17 @@ func createApplicationsConfig(template templates.Template, configDir string) err
 		}
 
 		return writeYAMLConfig(config, filepath.Join(configDir, "applications.yaml"), header)
-	} else {
-		// For non-additive templates, use only template applications
-		config := struct {
-			Applications []types.AppConfig `yaml:"applications"`
-		}{
-			Applications: template.Applications,
-		}
-
-		return writeYAMLConfig(config, filepath.Join(configDir, "applications.yaml"),
-			fmt.Sprintf("# DevEx Applications Configuration\n# Generated from template: %s\n# %s\n\n",
-				template.Metadata.Name, template.Metadata.Description))
 	}
+	// For non-additive templates, use only template applications
+	config := struct {
+		Applications []types.AppConfig `yaml:"applications"`
+	}{
+		Applications: template.Applications,
+	}
+
+	return writeYAMLConfig(config, filepath.Join(configDir, "applications.yaml"),
+		fmt.Sprintf("# DevEx Applications Configuration\n# Generated from template: %s\n# %s\n\n",
+			template.Metadata.Name, template.Metadata.Description))
 }
 
 // createEnvironmentConfig creates the environment.yaml file

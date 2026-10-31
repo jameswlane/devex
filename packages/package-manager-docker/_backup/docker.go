@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -10,9 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/pkg/config"
 	"github.com/jameswlane/devex/pkg/installers/utilities"
-	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/pkg/metrics"
 	"github.com/jameswlane/devex/pkg/types"
 	"github.com/jameswlane/devex/pkg/utils"
@@ -142,7 +143,7 @@ func (d *DockerInstaller) attemptDockerDaemonStartup() error {
 
 	// Wait for Docker daemon to become ready
 	if err := utils.WaitForDockerDaemon(ctx, d.ServiceTimeout); err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
 				"installer": "docker",
 				"operation": "daemon_startup",

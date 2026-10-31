@@ -195,7 +195,7 @@ var _ = Describe("Platform Detector", func() {
 				plugins := mockPlatform.GetRequiredPlugins()
 
 				// Count package manager plugins
-				pmPlugins := []string{}
+				var pmPlugins []string
 				for _, plugin := range plugins {
 					if len(plugin) > 16 && plugin[:16] == "package-manager-" {
 						pmPlugins = append(pmPlugins, plugin)

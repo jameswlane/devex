@@ -114,7 +114,8 @@ func (ie *InstallerError) Is(target error) bool {
 	}
 
 	// Check if target is another InstallerError with same type
-	if ie2, ok := target.(*InstallerError); ok {
+	var ie2 *InstallerError
+	if errors.As(target, &ie2) {
 		return ie.Type == ie2.Type
 	}
 

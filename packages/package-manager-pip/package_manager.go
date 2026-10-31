@@ -77,7 +77,7 @@ func (p *PipPlugin) handleInstall(ctx context.Context, args []string) error {
 	cmdArgs := []string{"install"}
 
 	// Process flags
-	processedArgs := []string{}
+	var processedArgs []string
 	for _, arg := range args {
 		switch arg {
 		case "--user":
@@ -120,7 +120,7 @@ func (p *PipPlugin) handleRemove(ctx context.Context, args []string) error {
 	cmdArgs := []string{"uninstall"}
 
 	// Process flags
-	processedArgs := []string{}
+	var processedArgs []string
 	for _, arg := range args {
 		switch arg {
 		case "--yes", "-y":
@@ -153,7 +153,7 @@ func (p *PipPlugin) handleUpdate(ctx context.Context, args []string) error {
 	// If specific packages provided, update them
 	if len(args) > 0 {
 		// Validate package names
-		processedArgs := []string{}
+		var processedArgs []string
 		for _, arg := range args {
 			if arg != "--all" {
 				if err := p.validatePackageName(arg); err != nil {

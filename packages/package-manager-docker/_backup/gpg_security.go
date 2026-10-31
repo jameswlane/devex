@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -461,7 +462,7 @@ func (d *DefaultGPGVerifier) VerifyFingerprint(ctx context.Context, keyPath, exp
 	cmd := exec.CommandContext(timeoutCtx, "gpg", "--with-fingerprint", "--with-colons", keyPath)
 	output, err := cmd.Output()
 	if err != nil {
-		if timeoutCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
 			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
 				"operation": "gpg_fingerprint_verification",
 			})
@@ -504,7 +505,7 @@ func (d *DefaultGPGVerifier) ImportKey(ctx context.Context, keyPath, outputPath 
 	// Import key using gpg --dearmor
 	cmd := exec.CommandContext(timeoutCtx, "gpg", "--dearmor", "--output", outputPath, keyPath)
 	if err := cmd.Run(); err != nil {
-		if timeoutCtx.Err() == context.DeadlineExceeded {
+		if errors.Is(timeoutCtx.Err(), context.DeadlineExceeded) {
 			metrics.RecordCount(metrics.MetricTimeoutOccurred, map[string]string{
 				"operation": "gpg_key_import",
 			})

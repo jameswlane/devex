@@ -43,7 +43,7 @@ var _ = Describe("GNOME Font Manager", func() {
 			})
 
 			It("should handle empty input", func() {
-				input := []string{}
+				var input []string
 				result := fm.mapFontNames(input)
 				Expect(result).To(BeEmpty())
 			})

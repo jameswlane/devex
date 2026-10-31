@@ -242,10 +242,9 @@ func (bm *BackupManager) copyFileOrDir(ctx context.Context, src, dst string) err
 		// Copy directory recursively
 		cmd := exec.CommandContext(ctx, "cp", "-rp", src, dst)
 		return cmd.Run()
-	} else {
-		// Copy file
-		return bm.copyFile(ctx, src, dst)
 	}
+	// Copy file
+	return bm.copyFile(ctx, src, dst)
 }
 
 // saveBackupMetadata saves backup metadata to a JSON file

@@ -779,12 +779,12 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 			// Fail the installation if configured to do so with enhanced context
 			return fmt.Errorf("database operation failed for app '%s' using %s installer: %w",
 				app.Name, si.getInstallerType(), err)
-		} else {
-			// Log prominently but don't fail the installation with specific guidance
-			si.sendLog("WARN", fmt.Sprintf("Installation of %s succeeded but app tracking may be inconsistent", app.Name))
-			si.sendLog("WARN", "Consider fixing database connectivity for proper app tracking")
-			si.sendLog("WARN", "This may affect 'devex uninstall' and installation status queries")
 		}
+
+		// Log prominently but don't fail the installation with specific guidance
+		si.sendLog("WARN", fmt.Sprintf("Installation of %s succeeded but app tracking may be inconsistent", app.Name))
+		si.sendLog("WARN", "Consider fixing database connectivity for proper app tracking")
+		si.sendLog("WARN", "This may affect 'devex uninstall' and installation status queries")
 	} else {
 		si.sendLog("INFO", fmt.Sprintf("App %s (via %s) registered in database successfully",
 			app.Name, si.getInstallerType()))
@@ -904,12 +904,11 @@ func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyNa
 		downloadAndDearmorCmd := fmt.Sprintf("curl -fsSL %s | sudo gpg --dearmor -o %s", keyURL, keyName)
 		si.sendLog("INFO", fmt.Sprintf("Downloading and dearmorying GPG key: %s", downloadAndDearmorCmd))
 		return si.executeCommandStream(ctx, downloadAndDearmorCmd)
-	} else {
-		// Download the key directly
-		downloadCmd := fmt.Sprintf("curl -fsSL %s | sudo tee %s > /dev/null", keyURL, keyName)
-		si.sendLog("INFO", fmt.Sprintf("Downloading GPG key: %s", downloadCmd))
-		return si.executeCommandStream(ctx, downloadCmd)
 	}
+	// Download the key directly
+	downloadCmd := fmt.Sprintf("curl -fsSL %s | sudo tee %s > /dev/null", keyURL, keyName)
+	si.sendLog("INFO", fmt.Sprintf("Downloading GPG key: %s", downloadCmd))
+	return si.executeCommandStream(ctx, downloadCmd)
 }
 
 // executePackageManagerInstall handles package manager installations with intelligent updates
