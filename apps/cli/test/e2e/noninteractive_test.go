@@ -82,9 +82,9 @@ var _ = Describe("Bare devex", func() {
 		Expect(output).To(ContainSubstring("devex setup"))
 		Expect(output).To(ContainSubstring("devex --help"))
 		Expect(output).NotTo(ContainSubstring("\x1b[?1049h"))
-		_, err = os.Stat(filepath.Join(home, ".devex", "plugins"))
+		_, err = os.Stat(sandbox.paths(home, nil).Plugins())
 		Expect(os.IsNotExist(err)).To(BeTrue(), "bare devex must not bootstrap plugins")
-		logs, err := filepath.Glob(filepath.Join(home, ".local/share/devex/logs", "*.log"))
+		logs, err := filepath.Glob(filepath.Join(sandbox.paths(home, nil).Logs(), "*.log"))
 		Expect(err).NotTo(HaveOccurred())
 		for _, path := range logs {
 			contents, err := os.ReadFile(path)

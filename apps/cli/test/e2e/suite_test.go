@@ -30,9 +30,10 @@ var _ = BeforeSuite(func() {
 	sandbox.home, err = os.UserHomeDir()
 	Expect(err).NotTo(HaveOccurred(), "resolve sandbox HOME")
 	Expect(filepath.IsAbs(sandbox.home)).To(BeTrue(), "HOME must be absolute")
-	for _, relative := range []string{".devex", ".local/share/devex"} {
-		_, err = os.Lstat(filepath.Join(sandbox.home, relative))
-		Expect(os.IsNotExist(err)).To(BeTrue(), "sandbox HOME must start without %s (got %v)", relative, err)
+	dirs := sandbox.paths(sandbox.home, nil)
+	for _, path := range []string{filepath.Join(sandbox.home, ".devex"), dirs.Config, dirs.Data, dirs.State, dirs.Cache} {
+		_, err = os.Lstat(path)
+		Expect(os.IsNotExist(err)).To(BeTrue(), "sandbox HOME must start without %s (got %v)", path, err)
 	}
 	sandbox.binary = envDefault("DEVEX_E2E_BINARY", "devex")
 	sandbox.registry = envDefault("DEVEX_E2E_REGISTRY_URL", "https://registry.devex.sh")

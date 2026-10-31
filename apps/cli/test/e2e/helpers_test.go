@@ -3,6 +3,7 @@
 package e2e_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -80,6 +83,7 @@ func (s *suiteEnvironment) environment(home string, overrides map[string]string)
 	values["XDG_CURRENT_DESKTOP"] = strings.ToUpper(s.desktop)
 	values["XDG_DATA_HOME"] = filepath.Join(home, ".local/share")
 	values["XDG_CONFIG_HOME"] = filepath.Join(home, ".config")
+	values["XDG_STATE_HOME"] = filepath.Join(home, ".local/state")
 	values["XDG_CACHE_HOME"] = filepath.Join(home, ".cache")
 	for key, value := range overrides {
 		if value == "" {
@@ -95,7 +99,26 @@ func (s *suiteEnvironment) environment(home string, overrides map[string]string)
 	return environment
 }
 
+// paths resolves the exact environment passed to the CLI, including per-run overrides.
+func (s *suiteEnvironment) paths(home string, overrides map[string]string) devexpaths.Dirs {
+	values := map[string]string{}
+	for _, entry := range s.environment(home, overrides) {
+		key, value, _ := strings.Cut(entry, "=")
+		values[key] = value
+	}
+	return devexpaths.ForPlatform(runtime.GOOS, home, func(key string) string { return values[key] })
+}
+
 func (s *suiteEnvironment) run(home, binary string, timeout time.Duration, overrides map[string]string, args ...string) (string, error) {
+	output, _, err := s.runCommand(home, binary, timeout, overrides, false, args...)
+	return output, err
+}
+
+func (s *suiteEnvironment) runWithStderr(home, binary string, timeout time.Duration, overrides map[string]string, args ...string) (string, string, error) {
+	return s.runCommand(home, binary, timeout, overrides, true, args...)
+}
+
+func (s *suiteEnvironment) runCommand(home, binary string, timeout time.Duration, overrides map[string]string, separateStderr bool, args ...string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binary, args...)
@@ -105,12 +128,20 @@ func (s *suiteEnvironment) run(home, binary string, timeout time.Duration, overr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
 	cmd.WaitDelay = 2 * time.Second
-	output, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	var output []byte
+	var err error
+	if separateStderr {
+		cmd.Stderr = &stderr
+		output, err = cmd.Output()
+	} else {
+		output, err = cmd.CombinedOutput()
+	}
 	s.commands++
-	transcript := fmt.Sprintf("command: %s %s\nhome: %s\nerror: %v\n%s", binary, strings.Join(args, " "), home, err, output)
+	transcript := fmt.Sprintf("command: %s %s\nhome: %s\nerror: %v\n%s", binary, strings.Join(args, " "), home, err, string(output)+stderr.String())
 	Expect(os.WriteFile(filepath.Join(s.artifacts, fmt.Sprintf("command-%03d.log", s.commands)), []byte(transcript), 0600)).To(Succeed(), "save command transcript")
 	Expect(ctx.Err()).NotTo(HaveOccurred(), "command exceeded %s: %s", timeout, transcript)
-	return string(output), err
+	return string(output), stderr.String(), err
 }
 
 func (s *suiteEnvironment) cli(args ...string) string {
@@ -130,7 +161,7 @@ func checksum(path string) string {
 }
 
 func pluginPath(home, name string) string {
-	return filepath.Join(home, ".devex/plugins/devex-plugin-"+name)
+	return filepath.Join(sandbox.paths(home, nil).Plugins(), "devex-plugin-"+name)
 }
 
 // osRelease returns a field (ID, VERSION_ID, ...) from /etc/os-release.
@@ -184,14 +215,14 @@ func registryChecksum(name string) string {
 }
 
 func snapshotPlugins(home string) map[string]pluginState {
-	entries, err := os.ReadDir(filepath.Join(home, ".devex/plugins"))
+	entries, err := os.ReadDir(sandbox.paths(home, nil).Plugins())
 	Expect(err).NotTo(HaveOccurred(), "list plugin directory")
 	snapshot := make(map[string]pluginState, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		path := filepath.Join(home, ".devex/plugins", entry.Name())
+		path := filepath.Join(sandbox.paths(home, nil).Plugins(), entry.Name())
 		info, err := entry.Info()
 		Expect(err).NotTo(HaveOccurred(), "stat plugin %s", path)
 		snapshot[entry.Name()] = pluginState{checksum(path), info.ModTime(), info.Mode()}
@@ -220,12 +251,12 @@ func (s *suiteEnvironment) collectArtifacts(spec string) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		listing, listErr := exec.CommandContext(ctx, "ls", "-laR", filepath.Join(home, ".devex")).CombinedOutput()
+		dirs := s.paths(home, nil)
+		listing, listErr := exec.CommandContext(ctx, "ls", "-laR", dirs.Config, dirs.Data, dirs.State, dirs.Cache).CombinedOutput()
 		cancel()
 		_ = os.WriteFile(filepath.Join(target, "devex-listing.txt"), append(listing, []byte(fmt.Sprintf("\nls error: %v\n", listErr))...), 0600)
-		for _, relative := range []string{".devex", ".local/share/devex/logs"} {
-			source := filepath.Join(home, relative)
-			destination := filepath.Join(target, relative)
+		for name, source := range map[string]string{"config": dirs.Config, "data": dirs.Data, "state": dirs.State, "cache": dirs.Cache} {
+			destination := filepath.Join(target, name)
 			if _, err := os.Stat(source); os.IsNotExist(err) {
 				continue
 			}
