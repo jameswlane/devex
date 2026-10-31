@@ -17,10 +17,12 @@ var version = "dev" // Set by goreleaser
 // SystemSetupPlugin implements the System setup plugin
 type SystemSetupPlugin struct {
 	*sdk.BasePlugin
+	macOSCheckCommand func(string, ...string) (string, error)
 }
 
 // SystemConfig represents a system configuration item
 type SystemConfig struct {
+	ID          string
 	Name        string
 	Description string
 	Check       func() bool
@@ -159,53 +161,85 @@ func (p *SystemSetupPlugin) configureLinux(ctx context.Context, args []string) e
 }
 
 func (p *SystemSetupPlugin) configureMacOS(ctx context.Context, args []string) error {
+	selected, apply, err := selectMacOSOperations(args)
+	if err != nil {
+		return err
+	}
 	fmt.Println("\nConfiguring macOS system settings...")
 
 	configs := []SystemConfig{
 		{
+			ID:          "finder-hidden-files",
 			Name:        "Show hidden files in Finder",
 			Description: "Make hidden files visible in Finder",
 			Check:       p.checkFinderHiddenFiles,
-			Apply:       p.applyFinderHiddenFiles,
+			Apply:       func() error { return p.applyFinderHiddenFiles(ctx) },
 		},
 		{
+			ID:          "developer-mode",
 			Name:        "Enable developer mode",
 			Description: "Enable developer mode for debugging",
 			Check:       p.checkDeveloperMode,
-			Apply:       p.applyDeveloperMode,
+			Apply:       func() error { return p.applyDeveloperMode(ctx) },
 		},
 		{
+			ID:          "disable-gatekeeper",
 			Name:        "Disable Gatekeeper for development",
 			Description: "Allow unsigned applications during development",
 			Check:       p.checkGatekeeper,
-			Apply:       p.applyGatekeeper,
+			Apply:       func() error { return p.applyGatekeeper(ctx) },
 		},
 	}
 
-	// Check and optionally apply each configuration
 	for _, config := range configs {
-		fmt.Printf("\n%s:\n", config.Name)
+		fmt.Printf("\n%s (%s):\n", config.Name, config.ID)
 		fmt.Printf("  %s\n", config.Description)
 
 		if config.Check() {
 			fmt.Println("  ✓ Already configured")
 		} else {
 			fmt.Println("  ✗ Not configured")
-			if len(args) > 0 && args[0] == "--apply" {
+			if apply && selected[config.ID] {
 				if err := config.Apply(); err != nil {
-					fmt.Printf("  ❌ Failed to apply: %v\n", err)
-				} else {
-					fmt.Println("  ✓ Applied successfully")
+					return fmt.Errorf("apply %s: %w", config.Name, err)
 				}
+				fmt.Println("  ✓ Applied successfully")
 			}
 		}
 	}
 
-	if len(args) == 0 || args[0] != "--apply" {
-		fmt.Println("\nTo apply these configurations, run: system-setup configure --apply")
+	if !apply {
+		fmt.Println("\nTo apply one configuration, run: system-setup apply <finder-hidden-files|developer-mode|disable-gatekeeper>")
 	}
 
 	return nil
+}
+
+func selectMacOSOperations(args []string) (map[string]bool, bool, error) {
+	valid := map[string]bool{
+		"finder-hidden-files": true,
+		"developer-mode":      true,
+		"disable-gatekeeper":  true,
+	}
+	selected := make(map[string]bool)
+	apply := false
+	for _, arg := range args {
+		if arg == "--apply" {
+			apply = true
+			continue
+		}
+		if !valid[arg] {
+			return nil, false, fmt.Errorf("unknown macOS operation %q; choose finder-hidden-files, developer-mode, or disable-gatekeeper", arg)
+		}
+		selected[arg] = true
+	}
+	if apply && len(selected) == 0 {
+		return nil, false, fmt.Errorf("select at least one macOS operation: finder-hidden-files, developer-mode, or disable-gatekeeper")
+	}
+	if !apply && len(selected) > 0 {
+		return nil, false, fmt.Errorf("applying a macOS operation requires --apply or the apply command")
+	}
+	return selected, apply, nil
 }
 
 func (p *SystemSetupPlugin) configureWindows(ctx context.Context, args []string) error {
@@ -261,8 +295,7 @@ func (p *SystemSetupPlugin) configureWindows(ctx context.Context, args []string)
 func (p *SystemSetupPlugin) handleApply(ctx context.Context, args []string) error {
 	fmt.Println("Applying system configuration changes...")
 
-	// Call configure with --apply flag
-	return p.handleConfigure(ctx, []string{"--apply"})
+	return p.handleConfigure(ctx, append([]string{"--apply"}, args...))
 }
 
 func (p *SystemSetupPlugin) handleValidate(ctx context.Context, args []string) error {
@@ -411,44 +444,60 @@ func (p *SystemSetupPlugin) applyDevDirectories() error {
 }
 
 // Helper functions for macOS
+func (p *SystemSetupPlugin) runMacOSCheck(command string, args ...string) (string, error) {
+	if p.macOSCheckCommand != nil {
+		return p.macOSCheckCommand(command, args...)
+	}
+	return sdk.RunCommand(command, args...)
+}
+
 func (p *SystemSetupPlugin) checkFinderHiddenFiles() bool {
-	output, err := sdk.RunCommand("defaults", "read", "com.apple.finder", "AppleShowAllFiles")
+	output, err := p.runMacOSCheck("defaults", "read", "com.apple.finder", "AppleShowAllFiles")
 	if err != nil {
 		return false
 	}
 	return strings.TrimSpace(output) == "YES" || strings.TrimSpace(output) == "1"
 }
 
-func (p *SystemSetupPlugin) applyFinderHiddenFiles() error {
-	if err := sdk.ExecCommandWithContext(context.Background(), false, "defaults", "write", "com.apple.finder", "AppleShowAllFiles", "YES"); err != nil {
-		return err
+func (p *SystemSetupPlugin) applyFinderHiddenFiles(ctx context.Context) error {
+	if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "defaults", "write", "com.apple.finder", "AppleShowAllFiles", "YES"); err != nil {
+		return fmt.Errorf("write Finder preference: %w", err)
 	}
-	return sdk.ExecCommandWithContext(context.Background(), false, "killall", "Finder")
+	if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "killall", "Finder"); err != nil {
+		return fmt.Errorf("restart Finder: %w", err)
+	}
+	return nil
 }
 
 func (p *SystemSetupPlugin) checkDeveloperMode() bool {
-	output, err := sdk.RunCommand("DevToolsSecurity", "-status")
+	output, err := p.runMacOSCheck("DevToolsSecurity", "-status")
 	if err != nil {
 		return false
 	}
 	return strings.Contains(output, "Developer mode is currently enabled")
 }
 
-func (p *SystemSetupPlugin) applyDeveloperMode() error {
-	return sdk.ExecCommandWithContext(context.Background(), true, "DevToolsSecurity", "-enable")
+func (p *SystemSetupPlugin) applyDeveloperMode(ctx context.Context) error {
+	if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, "DevToolsSecurity", "-enable"); err != nil {
+		return fmt.Errorf("enable developer mode (approve the macOS administrator prompt): %w", err)
+	}
+	return nil
 }
 
 func (p *SystemSetupPlugin) checkGatekeeper() bool {
-	output, err := sdk.RunCommand("spctl", "--status")
+	output, err := p.runMacOSCheck("spctl", "--status")
 	if err != nil {
 		return false
 	}
 	return strings.Contains(output, "assessments disabled")
 }
 
-func (p *SystemSetupPlugin) applyGatekeeper() error {
+func (p *SystemSetupPlugin) applyGatekeeper(ctx context.Context) error {
 	fmt.Println("WARNING: This will disable Gatekeeper security. Use with caution!")
-	return sdk.ExecCommandWithContext(context.Background(), true, "spctl", "--master-disable")
+	if err := sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, "spctl", "--master-disable"); err != nil {
+		return fmt.Errorf("disable Gatekeeper (approve the macOS administrator prompt): %w", err)
+	}
+	return nil
 }
 
 // Helper functions for Windows
