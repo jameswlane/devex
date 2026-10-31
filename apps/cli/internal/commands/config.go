@@ -42,6 +42,8 @@ type ConfigSummary struct {
 	Environment      ConfigInfo `yaml:"environment"`
 	System           ConfigInfo `yaml:"system"`
 	Desktop          ConfigInfo `yaml:"desktop"`
+	Dotfiles         ConfigInfo `yaml:"dotfiles"`
+	Security         ConfigInfo `yaml:"security"`
 	InitMetadata     ConfigInfo `yaml:"init_metadata"`
 	Backups          []string   `yaml:"backups"`
 	TotalSize        int64      `yaml:"total_size"`
@@ -168,7 +170,7 @@ Examples:
 				configType = args[0]
 			}
 
-			return editConfiguration(settings, configType, editor)
+			return editConfiguration(cmd.Context(), settings, configType, editor)
 		},
 	}
 
@@ -261,63 +263,55 @@ Examples:
 // buildConfigSummary creates a summary of all configuration files
 func buildConfigSummary(settings config.CrossPlatformSettings) (*ConfigSummary, error) {
 	configDir := settings.GetConfigDir()
+	summary := &ConfigSummary{ConfigDir: configDir}
 
-	summary := &ConfigSummary{
-		ConfigDir: configDir,
+	configs := []struct {
+		name     string
+		info     *ConfigInfo
+		required bool
+	}{
+		{"applications", &summary.Applications, true},
+		{"environments", &summary.Environment, true},
+		{"system", &summary.System, true},
+		{"desktop", &summary.Desktop, false},
+		{"dotfiles.yaml", &summary.Dotfiles, false},
+		{"security.yaml", &summary.Security, false},
 	}
-
-	// Check each configuration file
-	configFiles := map[string]*ConfigInfo{
-		"applications.yaml": &summary.Applications,
-		"environment.yaml":  &summary.Environment,
-		"system.yaml":       &summary.System,
-		"desktop.yaml":      &summary.Desktop,
-		"devex.yaml":        &summary.InitMetadata,
-	}
-
-	var totalSize int64
-	var lastModified time.Time
-
-	for filename, configInfo := range configFiles {
-		path := filepath.Join(configDir, filename)
-		configInfo.Path = path
-
-		if stat, err := os.Stat(path); err == nil {
-			configInfo.Exists = true
-			configInfo.Size = stat.Size()
-			configInfo.ModTime = stat.ModTime()
-			totalSize += stat.Size()
-
-			if stat.ModTime().After(lastModified) {
-				lastModified = stat.ModTime()
+	for _, cfg := range configs {
+		validationErrors, err := inspectConfigPath(filepath.Join(configDir, cfg.name), cfg.info)
+		if err != nil {
+			return nil, err
+		}
+		if !cfg.info.Exists && !strings.HasSuffix(cfg.name, ".yaml") {
+			legacyName := cfg.name
+			if legacyName == "environments" {
+				legacyName = "environment"
 			}
-
-			// Validate YAML syntax
-			if data, err := os.ReadFile(path); err == nil {
-				var content interface{}
-				if err := yaml.Unmarshal(data, &content); err != nil {
-					configInfo.Valid = false
-					configInfo.ErrorMessage = err.Error()
-					summary.ValidationErrors = append(summary.ValidationErrors,
-						fmt.Sprintf("%s: %v", filename, err))
-				} else {
-					configInfo.Valid = true
-				}
+			validationErrors, err = inspectConfigPath(filepath.Join(configDir, legacyName+".yaml"), cfg.info)
+			if err != nil {
+				return nil, err
 			}
-		} else {
-			configInfo.Exists = false
-			// Desktop config is optional
-			if filename != "desktop.yaml" && filename != "devex.yaml" {
-				summary.ValidationErrors = append(summary.ValidationErrors,
-					fmt.Sprintf("%s: file not found", filename))
-			}
+		}
+		summary.ValidationErrors = append(summary.ValidationErrors, validationErrors...)
+		if !cfg.info.Exists && cfg.required {
+			summary.ValidationErrors = append(summary.ValidationErrors, fmt.Sprintf("%s: no configuration files found", cfg.name))
+		}
+		summary.TotalSize += cfg.info.Size
+		if cfg.info.ModTime.After(summary.LastModified) {
+			summary.LastModified = cfg.info.ModTime
 		}
 	}
 
-	summary.TotalSize = totalSize
-	summary.LastModified = lastModified
+	metadataErrors, err := inspectConfigPath(filepath.Join(configDir, "devex.yaml"), &summary.InitMetadata)
+	if err != nil {
+		return nil, err
+	}
+	summary.ValidationErrors = append(summary.ValidationErrors, metadataErrors...)
+	summary.TotalSize += summary.InitMetadata.Size
+	if summary.InitMetadata.ModTime.After(summary.LastModified) {
+		summary.LastModified = summary.InitMetadata.ModTime
+	}
 
-	// Check for backups
 	backupDir := filepath.Join(configDir, "backups")
 	if entries, err := os.ReadDir(backupDir); err == nil {
 		for _, entry := range entries {
@@ -328,6 +322,62 @@ func buildConfigSummary(settings config.CrossPlatformSettings) (*ConfigSummary, 
 	}
 
 	return summary, nil
+}
+
+func inspectConfigPath(path string, info *ConfigInfo) ([]string, error) {
+	stat, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("inspect config path %s: %w", path, err)
+	}
+
+	info.Path = path
+	info.Valid = true
+	var validationErrors []string
+	inspectFile := func(filePath string, fileInfo os.FileInfo) {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			info.Valid = false
+			info.ErrorMessage = err.Error()
+			validationErrors = append(validationErrors, fmt.Sprintf("%s: %v", filePath, err))
+			return
+		}
+		info.Exists = true
+		info.Size += fileInfo.Size()
+		if fileInfo.ModTime().After(info.ModTime) {
+			info.ModTime = fileInfo.ModTime()
+		}
+		var content interface{}
+		if err := yaml.Unmarshal(data, &content); err != nil {
+			info.Valid = false
+			info.ErrorMessage = err.Error()
+			validationErrors = append(validationErrors, fmt.Sprintf("%s: %v", filePath, err))
+		}
+	}
+
+	if !stat.IsDir() {
+		inspectFile(path, stat)
+		return validationErrors, nil
+	}
+	if err := filepath.WalkDir(path, func(filePath string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+			return nil
+		}
+		fileInfo, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		inspectFile(filePath, fileInfo)
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("inspect config directory %s: %w", path, err)
+	}
+	return validationErrors, nil
 }
 
 // outputConfigTable displays the configuration summary as a formatted table
@@ -353,6 +403,8 @@ func outputConfigTable(summary *ConfigSummary, detailed bool) error {
 		{"environment", summary.Environment},
 		{"system", summary.System},
 		{"desktop", summary.Desktop},
+		{"dotfiles.yaml", summary.Dotfiles},
+		{"security.yaml", summary.Security},
 		{"init metadata", summary.InitMetadata},
 	}
 
@@ -371,7 +423,7 @@ func outputConfigTable(summary *ConfigSummary, detailed bool) error {
 			}
 			size = formatSize(cfg.info.Size)
 			modified = cfg.info.ModTime.Format("Jan 02 15:04")
-		} else if cfg.name == "desktop" || cfg.name == "init metadata" {
+		} else if cfg.name == "desktop" || cfg.name == "init metadata" || cfg.name == "dotfiles.yaml" || cfg.name == "security.yaml" {
 			status = yellow("- Optional")
 		}
 
@@ -438,10 +490,8 @@ func outputYAML(summary *ConfigSummary) error {
 }
 
 // editConfiguration opens configuration files for editing
-func editConfiguration(settings config.CrossPlatformSettings, configType, editor string) error {
+func editConfiguration(ctx context.Context, settings config.CrossPlatformSettings, configType, editor string) error {
 	configDir := settings.GetConfigDir()
-
-	// Determine editor
 	if editor == "" {
 		editor = os.Getenv("EDITOR")
 		if editor == "" {
@@ -449,53 +499,88 @@ func editConfiguration(settings config.CrossPlatformSettings, configType, editor
 		}
 	}
 
-	// Determine files to edit
-	var files []string
-	switch configType {
-	case "applications":
-		files = []string{filepath.Join(configDir, "applications.yaml")}
-	case "environment":
-		files = []string{filepath.Join(configDir, "environment.yaml")}
-	case "system":
-		files = []string{filepath.Join(configDir, "system.yaml")}
-	case "desktop":
-		files = []string{filepath.Join(configDir, "desktop.yaml")}
-	case "all":
-		files = []string{
-			filepath.Join(configDir, "applications.yaml"),
-			filepath.Join(configDir, "environment.yaml"),
-			filepath.Join(configDir, "system.yaml"),
-			filepath.Join(configDir, "desktop.yaml"),
-		}
-	default:
-		return fmt.Errorf("unknown configuration type: %s", configType)
+	files, err := editableConfigFiles(configDir, configType)
+	if err != nil {
+		return err
 	}
-
-	// Create files if they don't exist
-	for _, file := range files {
-		if _, err := os.Stat(file); os.IsNotExist(err) {
-			if err := os.MkdirAll(filepath.Dir(file), 0750); err != nil {
-				return fmt.Errorf("failed to create config directory: %w", err)
-			}
-
-			// Create minimal valid YAML
-			content := "# DevEx Configuration\n# Add your configuration below\n\n"
-			if err := os.WriteFile(file, []byte(content), 0600); err != nil {
-				return fmt.Errorf("failed to create config file %s: %w", file, err)
-			}
-		}
-	}
-
-	// Open editor
-	args := append([]string{}, files...)
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, editor, args...) // #nosec G702 -- opens the user's own $EDITOR by design
+	cmd := exec.CommandContext(ctx, editor, files...) // #nosec G702 -- opens the user's own $EDITOR by design
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
 	fmt.Printf("Opening %d file(s) with %s...\n", len(files), editor)
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("edit configuration with %s: %w", editor, err)
+	}
+	return nil
+}
+
+func editableConfigFiles(configDir, configType string) ([]string, error) {
+	configTypes := []string{configType}
+	if configType == "all" {
+		configTypes = []string{"applications", "environment", "system", "desktop", "dotfiles", "security"}
+	}
+	var files []string
+	for _, name := range configTypes {
+		if name == "dotfiles" || name == "security" {
+			path := filepath.Join(configDir, name+".yaml")
+			if _, err := os.Stat(path); err == nil {
+				files = append(files, path)
+			} else if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("check config %s: %w", path, err)
+			}
+			continue
+		}
+		directoryName := name
+		if directoryName == "environment" {
+			directoryName = "environments"
+		}
+		if directoryName != "applications" && directoryName != "environments" && directoryName != "system" && directoryName != "desktop" {
+			return nil, fmt.Errorf("unknown configuration type: %s (use applications, environment, system, desktop, or all)", name)
+		}
+
+		configFiles, err := yamlFilesInDirectory(filepath.Join(configDir, directoryName))
+		if err != nil {
+			return nil, err
+		}
+		if len(configFiles) == 0 {
+			legacyPath := filepath.Join(configDir, name+".yaml")
+			if _, err := os.Stat(legacyPath); err == nil {
+				files = append(files, legacyPath)
+				continue
+			} else if !os.IsNotExist(err) {
+				return nil, fmt.Errorf("check legacy config %s: %w", legacyPath, err)
+			}
+			if err := config.WriteDefaultConfig(configDir); err != nil {
+				return nil, fmt.Errorf("create default configuration: %w", err)
+			}
+			configFiles, err = yamlFilesInDirectory(filepath.Join(configDir, directoryName))
+			if err != nil {
+				return nil, err
+			}
+		}
+		files = append(files, configFiles...)
+	}
+	return files, nil
+}
+
+func yamlFilesInDirectory(dir string) ([]string, error) {
+	var files []string
+	if err := filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if os.IsNotExist(walkErr) && path == dir {
+				return nil
+			}
+			return walkErr
+		}
+		if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+			files = append(files, path)
+		}
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("find configuration files in %s: %w", dir, err)
+	}
+	return files, nil
 }
 
 // validateConfigurationFiles validates all configuration files
@@ -520,10 +605,13 @@ func validateConfigurationFiles(settings config.CrossPlatformSettings, fix, stri
 		info     ConfigInfo
 		required bool
 	}{
-		{"applications.yaml", summary.Applications, true},
-		{"environment.yaml", summary.Environment, true},
-		{"system.yaml", summary.System, true},
-		{"desktop.yaml", summary.Desktop, false},
+		{"applications/", summary.Applications, true},
+		{"environments/", summary.Environment, true},
+		{"system/", summary.System, true},
+		{"desktop/", summary.Desktop, false},
+		{"dotfiles.yaml", summary.Dotfiles, false},
+		{"security.yaml", summary.Security, false},
+		{"devex.yaml", summary.InitMetadata, false},
 	}
 
 	for _, cfg := range configs {
@@ -547,18 +635,28 @@ func validateConfigurationFiles(settings config.CrossPlatformSettings, fix, stri
 			continue
 		}
 
-		// Additional validation for strict mode
-		if strict {
-			if err := validateFileContent(cfg.info.Path, settings); err != nil {
-				fmt.Printf("%s\n", yellow("⚠️ Content issues"))
-				fmt.Printf("  Warning: %s\n", err)
-				warnings++
-			} else {
-				fmt.Printf("%s\n", green("✅ Valid"))
-			}
-		} else {
-			fmt.Printf("%s\n", green("✅ Valid"))
+		fmt.Printf("%s\n", green("✅ Valid YAML"))
+	}
+
+	hasCanonicalConfig := false
+	for _, directory := range config.ConfigDirectories {
+		info, err := os.Stat(filepath.Join(settings.GetConfigDir(), directory))
+		if err == nil && info.IsDir() {
+			hasCanonicalConfig = true
+			break
 		}
+	}
+	if hasCanonicalConfig {
+		validator := config.NewConfigValidator(settings.HomeDir, strict)
+		_ = validator.ValidateDirectoryStructure(settings.GetConfigDir())
+		for _, validationError := range validator.GetErrors() {
+			fmt.Printf("  Error: %s\n", validationError.Error())
+		}
+		for _, warning := range validator.GetWarnings() {
+			fmt.Printf("  Warning: %s\n", warning.Error())
+		}
+		errors += len(validator.GetErrors())
+		warnings += len(validator.GetWarnings())
 	}
 
 	// Summary
@@ -584,17 +682,6 @@ func validateConfigurationFiles(settings config.CrossPlatformSettings, fix, stri
 		return fmt.Errorf("validation failed with %d errors", errors)
 	}
 
-	return nil
-}
-
-// validateFileContent performs content validation on configuration files
-func validateFileContent(filePath string, settings config.CrossPlatformSettings) error {
-	// This is a placeholder for more sophisticated content validation
-	// Could check for:
-	// - Valid application names
-	// - Dependency consistency
-	// - Platform compatibility
-	// - Required fields
 	return nil
 }
 

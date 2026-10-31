@@ -37,7 +37,7 @@ type CrossPlatformSettings struct {
 	ProgrammingLanguages ProgrammingLanguagesConfig `mapstructure:"programming_languages"`
 	Fonts                FontsConfig                `mapstructure:"fonts"`
 	Shell                ShellConfig                `mapstructure:"shell"`
-	Dotfiles             DotfilesConfig             `mapstructure:",inline"`
+	Dotfiles             DotfilesConfig             `mapstructure:",squash"`
 	DesktopEnvironments  DesktopEnvironmentsConfig  `mapstructure:",inline"`
 	Security             SecurityConfigField        `mapstructure:"security"`
 }
@@ -563,108 +563,97 @@ func loadYamlFileIntoViper(path string) error {
 	return nil
 }
 
-// LoadCrossPlatformSettings loads the new consolidated configuration structure
+// LoadCrossPlatformSettings loads the canonical directory tree and legacy files.
 func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
+	return loadCrossPlatformSettings(homeDir, FileApplicationLoader{})
+}
+
+func loadCrossPlatformSettings(homeDir string, applicationLoader ApplicationLoader) (CrossPlatformSettings, error) {
 	log.Info("Loading cross-platform settings", "homeDir", homeDir)
 
-	// Validate configuration files before loading
 	if err := ValidateDirectoryBasedConfig(homeDir, false); err != nil {
 		log.Warn("Configuration validation failed, continuing with loading", "error", err)
-		// Don't fail completely, just warn and continue
 	}
 
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	// Paths for environment-aware configuration inheritance
 	tempSettings := CrossPlatformSettings{HomeDir: homeDir}
 	defaultConfigPath, teamConfigPath, userConfigPath, envDirs := tempSettings.GetConfigDirsWithEnvironment()
-
-	// Load configurations in priority order (lowest to highest):
-	// 1. Default configs
-	// 2. Default environment configs
-	// 3. Team configs
-	// 4. Team environment configs
-	// 5. User configs
-	// 6. User environment configs
-
-	// 1. Load default configs first (lowest priority)
-	for _, file := range CrossPlatformFiles {
-		defaultPath := filepath.Join(defaultConfigPath, file)
-		if exists, _ := fs.Exists(defaultPath); exists {
-			if err := mergeConfigFileIntoViper(v, defaultPath); err != nil {
-				log.Warn("Failed to load default config; skipping", "file", file, "error", err)
-			}
-		}
+	configDirs := []string{
+		defaultConfigPath,
+		envDirs["default"],
+		teamConfigPath,
+		envDirs["team"],
+		userConfigPath,
+		envDirs["user"],
 	}
-
-	// 2. Load default environment configs
-	for _, file := range CrossPlatformFiles {
-		envPath := filepath.Join(envDirs["default"], file)
-		if exists, _ := fs.Exists(envPath); exists {
-			log.Info("Applying default environment config", "file", envPath, "env", tempSettings.GetEnvironment())
-			if err := mergeConfigFileIntoViper(v, envPath); err != nil {
-				log.Warn("Failed to apply default environment config; skipping", "file", envPath, "error", err)
-			}
-		}
-	}
-
-	// 3. Apply team configs
-	for _, file := range CrossPlatformFiles {
-		teamPath := filepath.Join(teamConfigPath, file)
-		if exists, _ := fs.Exists(teamPath); exists {
-			log.Info("Applying team config", "file", teamPath)
-			if err := mergeConfigFileIntoViper(v, teamPath); err != nil {
-				log.Warn("Failed to apply team config; skipping", "file", teamPath, "error", err)
-			}
-		}
-	}
-
-	// 4. Apply team environment configs
-	for _, file := range CrossPlatformFiles {
-		envPath := filepath.Join(envDirs["team"], file)
-		if exists, _ := fs.Exists(envPath); exists {
-			log.Info("Applying team environment config", "file", envPath, "env", tempSettings.GetEnvironment())
-			if err := mergeConfigFileIntoViper(v, envPath); err != nil {
-				log.Warn("Failed to apply team environment config; skipping", "file", envPath, "error", err)
-			}
-		}
-	}
-
-	// 5. Apply user configs
-	for _, file := range CrossPlatformFiles {
-		userPath := filepath.Join(userConfigPath, file)
-		if exists, _ := fs.Exists(userPath); exists {
-			log.Info("Applying user config", "file", userPath)
-			if err := mergeConfigFileIntoViper(v, userPath); err != nil {
-				log.Warn("Failed to apply user config; skipping", "file", userPath, "error", err)
-			}
-		}
-	}
-
-	// 6. Apply user environment configs (highest priority)
-	for _, file := range CrossPlatformFiles {
-		envPath := filepath.Join(envDirs["user"], file)
-		if exists, _ := fs.Exists(envPath); exists {
-			log.Info("Applying user environment config", "file", envPath, "env", tempSettings.GetEnvironment())
-			if err := mergeConfigFileIntoViper(v, envPath); err != nil {
-				log.Warn("Failed to apply user environment config; skipping", "file", envPath, "error", err)
-			}
-		}
-	}
-
-	// Bind global settings
 	v.SetDefault("debug_mode", false)
 	v.SetDefault("home_dir", homeDir)
 	v.AutomaticEnv()
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 
-	// Unmarshal into CrossPlatformSettings struct
 	var settings CrossPlatformSettings
-	if err := v.Unmarshal(&settings); err != nil {
-		log.Error("Failed to unmarshal cross-platform settings", err)
-		return CrossPlatformSettings{}, fmt.Errorf("failed to unmarshal cross-platform settings: %w", err)
+	var catalog []types.CrossPlatformApp
+	var desktops DesktopEnvironmentsConfig
+	for _, configDir := range configDirs {
+		tier, err := loadLegacyConfigDirectory(configDir)
+		if err != nil {
+			return CrossPlatformSettings{}, err
+		}
+		var tierSettings CrossPlatformSettings
+		if err := tier.Unmarshal(&tierSettings); err != nil {
+			return CrossPlatformSettings{}, fmt.Errorf("decode config directory %s: %w", configDir, err)
+		}
+		for key, value := range tier.AllSettings() {
+			v.Set(key, value)
+		}
+		legacyApps, err := loadLegacyInitApplications([]string{configDir})
+		if err != nil {
+			return CrossPlatformSettings{}, err
+		}
+		directoryApps, err := applicationLoader.LoadApplications([]string{configDir})
+		if err != nil {
+			return CrossPlatformSettings{}, fmt.Errorf("load application catalog: %w", err)
+		}
+		if err := loadDirectorySettings(&tierSettings, []string{configDir}); err != nil {
+			return CrossPlatformSettings{}, fmt.Errorf("load directory configuration: %w", err)
+		}
+		catalog = mergeApplications(catalog, tierSettings.GetAllApps(), legacyApps, directoryApps)
+
+		// Persist canonical settings into the same precedence stream as legacy
+		// settings, so a higher tier wins regardless of its file layout.
+		if tierSettings.ProgrammingLanguages != nil {
+			v.Set("programming_languages", tierSettings.ProgrammingLanguages)
+		}
+		if tierSettings.Fonts != nil {
+			v.Set("fonts", tierSettings.Fonts)
+		}
+		if tierSettings.Shell != nil {
+			v.Set("shell", tierSettings.Shell)
+		}
+		if tierSettings.Dotfiles.Git != nil {
+			v.Set("git", tierSettings.Dotfiles.Git)
+		}
+		if tierSettings.Dotfiles.SSH != nil {
+			v.Set("ssh", tierSettings.Dotfiles.SSH)
+		}
+		if tierSettings.Dotfiles.Terminal != nil {
+			v.Set("terminal", tierSettings.Dotfiles.Terminal)
+		}
+		if tierSettings.Dotfiles.GlobalTheme != "" {
+			v.Set("global_theme", tierSettings.Dotfiles.GlobalTheme)
+		}
+		mergeDesktopEnvConfig(&desktops.GNOME, tierSettings.DesktopEnvironments.GNOME)
+		mergeDesktopEnvConfig(&desktops.KDE, tierSettings.DesktopEnvironments.KDE)
+		mergeDesktopEnvConfig(&desktops.MacOS, tierSettings.DesktopEnvironments.MacOS)
+		mergeDesktopEnvConfig(&desktops.Windows, tierSettings.DesktopEnvironments.Windows)
 	}
+	if err := v.Unmarshal(&settings); err != nil {
+		return CrossPlatformSettings{}, fmt.Errorf("decode cross-platform settings: %w", err)
+	}
+	settings.ApplicationOverrides = catalog
+	settings.DesktopEnvironments = desktops
 
 	log.Info("Cross-platform settings loaded successfully")
 	return settings, nil

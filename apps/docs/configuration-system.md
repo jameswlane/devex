@@ -135,7 +135,7 @@ themes:
 
 ## Migration from Monolithic Files
 
-The system automatically migrated from the old monolithic YAML structure:
+New installations use the file-per-application structure. Existing monolithic YAML files still load for compatibility, but each legacy file produces a deprecation warning; migrate its contents manually into the directories below. `devex init` writes only the canonical tree.
 
 ### Before (Monolithic)
 

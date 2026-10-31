@@ -192,6 +192,30 @@ configure_ssh: false`,
 			})
 		})
 
+		Context("with canonical directory configuration", func() {
+			BeforeEach(func() {
+				Expect(config.WriteDefaultConfig(configDir)).To(Succeed())
+			})
+
+			It("validates the shipped tree", func() {
+				cmd := commands.NewConfigCmd(mockRepo, *settings)
+				cmd.SetArgs([]string{"validate"})
+				Expect(cmd.Execute()).To(Succeed())
+			})
+
+			It("detects content errors in nested application files", func() {
+				path := filepath.Join(configDir, "applications", "development", "git.yaml")
+				content := []byte("description: Missing name\nlinux:\n  install_method: apt\n  install_command: git\n")
+				Expect(os.WriteFile(path, content, 0600)).To(Succeed())
+
+				cmd := commands.NewConfigCmd(mockRepo, *settings)
+				cmd.SetArgs([]string{"validate"})
+				err := cmd.Execute()
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("validation failed"))
+			})
+		})
+
 		Context("with missing required files", func() {
 			It("should detect missing files", func() {
 				cmd := commands.NewConfigCmd(mockRepo, *settings)
@@ -234,9 +258,10 @@ configure_ssh: false`,
 				err := cmd.Execute()
 				Expect(err).ToNot(HaveOccurred())
 
-				// Verify file was created
-				appPath := filepath.Join(configDir, "applications.yaml")
+				// Verify a canonical file was created
+				appPath := filepath.Join(configDir, "applications", "development", "git.yaml")
 				Expect(appPath).To(BeAnExistingFile())
+				Expect(filepath.Join(configDir, "applications.yaml")).NotTo(BeAnExistingFile())
 			})
 		})
 	})

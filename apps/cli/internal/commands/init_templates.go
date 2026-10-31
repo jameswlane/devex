@@ -420,29 +420,29 @@ func customizeTemplate(template *templates.Template, reader *bufio.Reader, yello
 
 // generateConfigFromTemplate creates configuration files from template
 func generateConfigFromTemplate(template templates.Template, configDir string, platformInfo platform.DetectionResult) error {
-	// Create applications.yaml
+	if err := config.WriteDefaultConfig(configDir); err != nil {
+		return fmt.Errorf("failed to create default configuration: %w", err)
+	}
+	if !template.Metadata.Additive {
+		if err := os.RemoveAll(filepath.Join(configDir, "applications")); err != nil {
+			return fmt.Errorf("failed to replace default applications: %w", err)
+		}
+	}
+
 	if err := createApplicationsConfig(template, configDir); err != nil {
 		return fmt.Errorf("failed to create applications config: %w", err)
 	}
-
-	// Create environment.yaml
 	if err := createEnvironmentConfig(template, configDir); err != nil {
 		return fmt.Errorf("failed to create environment config: %w", err)
 	}
-
-	// Create system.yaml
 	if err := createSystemConfig(template, configDir); err != nil {
 		return fmt.Errorf("failed to create system config: %w", err)
 	}
-
-	// Create desktop.yaml if needed
 	if template.Desktop != nil && platformInfo.DesktopEnv != "" {
 		if err := createDesktopConfig(template, configDir, platformInfo); err != nil {
 			return fmt.Errorf("failed to create desktop config: %w", err)
 		}
 	}
-
-	// Create metadata file
 	if err := createMetadataConfig(template, configDir, platformInfo); err != nil {
 		return fmt.Errorf("failed to create metadata config: %w", err)
 	}
@@ -450,87 +450,90 @@ func generateConfigFromTemplate(template templates.Template, configDir string, p
 	return nil
 }
 
-// createApplicationsConfig creates the applications.yaml file
 func createApplicationsConfig(template templates.Template, configDir string) error {
-	var finalApplications []types.AppConfig
-
-	if template.Metadata.Additive {
-		// For additive templates, start with default git application and add template apps
-		gitApp := types.AppConfig{
-			BaseConfig: types.BaseConfig{
-				Name:        "git",
-				Description: "Version control system",
-				Category:    "development",
-			},
-			InstallMethod: "apt",
-			Default:       true,
+	header := fmt.Sprintf("# DevEx Application Configuration\n# Generated from template: %s\n# %s\n\n",
+		template.Metadata.Name, template.Metadata.Description)
+	for _, app := range template.Applications {
+		path, err := applicationConfigPath(configDir, "applications", app.Category, app.Name)
+		if err != nil {
+			return err
 		}
-		finalApplications = append(finalApplications, gitApp)
-
-		// Add template applications
-		finalApplications = append(finalApplications, template.Applications...)
-
-		// Add comment indicating this is additive
-		header := fmt.Sprintf(`# DevEx Applications Configuration
-# Generated from template: %s (ADDITIVE)
-# %s
-#
-# This configuration adds applications to the default DevEx setup.
-# Default applications (like git) are automatically included.
-
-`, template.Metadata.Name, template.Metadata.Description)
-
-		config := struct {
-			Applications []types.AppConfig `yaml:"applications"`
-		}{
-			Applications: finalApplications,
+		if err := writeYAMLConfig(config.CrossPlatformAppFromLegacy(app), path, header); err != nil {
+			return err
 		}
-
-		return writeYAMLConfig(config, filepath.Join(configDir, "applications.yaml"), header)
 	}
-	// For non-additive templates, use only template applications
-	config := struct {
-		Applications []types.AppConfig `yaml:"applications"`
-	}{
-		Applications: template.Applications,
-	}
-
-	return writeYAMLConfig(config, filepath.Join(configDir, "applications.yaml"),
-		fmt.Sprintf("# DevEx Applications Configuration\n# Generated from template: %s\n# %s\n\n",
-			template.Metadata.Name, template.Metadata.Description))
+	return nil
 }
 
-// createEnvironmentConfig creates the environment.yaml file
 func createEnvironmentConfig(template templates.Template, configDir string) error {
-	config := template.Environment
-
-	return writeYAMLConfig(config, filepath.Join(configDir, "environment.yaml"),
+	return writeYAMLConfig(template.Environment, filepath.Join(configDir, "environments", "preferences.yaml"),
 		fmt.Sprintf("# DevEx Environment Configuration\n# Generated from template: %s\n\n",
 			template.Metadata.Name))
 }
 
-// createSystemConfig creates the system.yaml file
 func createSystemConfig(template templates.Template, configDir string) error {
-	config := template.System
-
-	return writeYAMLConfig(config, filepath.Join(configDir, "system.yaml"),
+	if err := writeYAMLConfig(template.System, filepath.Join(configDir, "system", "template.yaml"),
 		fmt.Sprintf("# DevEx System Configuration\n# Generated from template: %s\n\n",
-			template.Metadata.Name))
+			template.Metadata.Name)); err != nil {
+		return err
+	}
+	if template.System.GlobalTheme != "" {
+		return writeYAMLConfig(map[string]string{"global_theme": template.System.GlobalTheme},
+			filepath.Join(configDir, "system", "global.yaml"), "")
+	}
+	return nil
 }
 
-// createDesktopConfig creates the desktop.yaml file
 func createDesktopConfig(template templates.Template, configDir string, platformInfo platform.DetectionResult) error {
 	if template.Desktop == nil {
 		return nil
 	}
 
-	// Override environment with detected platform
-	desktopConfig := *template.Desktop
-	desktopConfig.Environment = platformInfo.DesktopEnv
-
-	return writeYAMLConfig(desktopConfig, filepath.Join(configDir, "desktop.yaml"),
+	desktopConfig := config.DesktopEnvConfig{}
+	for _, name := range template.Desktop.Themes {
+		desktopConfig.Themes = append(desktopConfig.Themes, types.Theme{Name: name})
+	}
+	for _, id := range template.Desktop.Extensions {
+		desktopConfig.Extensions = append(desktopConfig.Extensions, types.GnomeExtension{ID: id})
+	}
+	path := filepath.Join(configDir, "desktop", configurationPathPart(platformInfo.DesktopEnv), "template.yaml")
+	return writeYAMLConfig(desktopConfig, path,
 		fmt.Sprintf("# DevEx Desktop Configuration\n# Generated from template: %s\n# Desktop Environment: %s\n\n",
 			template.Metadata.Name, platformInfo.DesktopEnv))
+}
+
+func applicationConfigPath(configDir, directory, category, name string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("application name is required")
+	}
+	if strings.TrimSpace(category) == "" {
+		category = "development"
+	}
+	categoryPart := configurationPathPart(category)
+	namePart := configurationPathPart(name)
+	if categoryPart == "" || namePart == "" {
+		return "", fmt.Errorf("application %q needs an alphanumeric name and category", name)
+	}
+	return filepath.Join(configDir, directory, categoryPart, namePart+".yaml"), nil
+}
+
+func configurationPathPart(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var result strings.Builder
+	lastDash := false
+	for _, char := range value {
+		valid := char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '_' || char == '-'
+		if valid {
+			result.WriteRune(char)
+			lastDash = false
+			continue
+		}
+		if !lastDash && result.Len() > 0 {
+			result.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(result.String(), "-")
 }
 
 // createMetadataConfig creates the devex.yaml metadata file
@@ -557,6 +560,9 @@ func writeYAMLConfig(config interface{}, path, header string) error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
 	content := header + string(data)
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)

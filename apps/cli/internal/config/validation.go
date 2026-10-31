@@ -63,7 +63,7 @@ func (v *ConfigValidator) ValidateDirectoryStructure(configPath string) error {
 		}
 
 		if err := v.validateDirectory(dirPath, dirName); err != nil {
-			log.Warn("Directory validation failed", "directory", dirName, "error", err)
+			v.addError(dirName, "", "Unable to read configuration directory", err)
 		}
 	}
 
@@ -83,7 +83,7 @@ func (v *ConfigValidator) ValidateDirectoryStructure(configPath string) error {
 
 // validateDirectory validates all YAML files in a specific directory
 func (v *ConfigValidator) validateDirectory(dirPath, dirName string) error {
-	files, err := getDirectoryFiles(dirPath)
+	files, err := getDirectoryFilesRecursive(dirPath, 5)
 	if err != nil {
 		return err
 	}
@@ -100,6 +100,13 @@ func (v *ConfigValidator) validateDirectory(dirPath, dirName string) error {
 
 // validateConfigFile validates a single configuration file
 func (v *ConfigValidator) validateConfigFile(filePath, dirName, filename string) error {
+	if dirName == "system" && filename == "git.yaml" {
+		if _, err := loadGitConfig(filePath); err != nil {
+			v.addError(filename, "git", "Invalid Git configuration", err)
+			return err
+		}
+		return nil
+	}
 	// Load file into temporary Viper instance
 	fileViper, err := loadYamlFileToViper(filePath)
 	if err != nil {
@@ -202,38 +209,25 @@ func (v *ConfigValidator) validateDesktopConfig(fileViper *viper.Viper, filename
 
 // validateCrossPlatformApp validates a cross-platform application structure
 func (v *ConfigValidator) validateCrossPlatformApp(app types.CrossPlatformApp, filename string) {
-	// Validate platform configurations exist
 	hasAnyPlatform := false
-
+	if app.AllPlatforms.InstallMethod != "" {
+		hasAnyPlatform = true
+		v.validateOSConfig(app.AllPlatforms, "all_platforms", filename)
+	}
 	if app.Linux.InstallMethod != "" {
 		hasAnyPlatform = true
 		v.validateOSConfig(app.Linux, "linux", filename)
 	}
-
 	if app.MacOS.InstallMethod != "" {
 		hasAnyPlatform = true
 		v.validateOSConfig(app.MacOS, "macos", filename)
 	}
-
 	if app.Windows.InstallMethod != "" {
 		hasAnyPlatform = true
 		v.validateOSConfig(app.Windows, "windows", filename)
 	}
-
 	if !hasAnyPlatform {
 		v.addError(filename, "platforms", "No platform configurations found", nil)
-	}
-
-	// Validate category if present
-	if app.Category != "" {
-		validCategories := []string{
-			"Development Tools", "Databases", "System Monitoring", "Utilities",
-			"Programming Languages", "Text Editors", "Terminal Emulators",
-			"File Sharing", "Optional Apps", "System Utilities",
-		}
-		if !contains(validCategories, app.Category) {
-			v.addWarning(filename, "category", fmt.Sprintf("Unknown category: %s", app.Category), nil)
-		}
 	}
 }
 
@@ -243,14 +237,14 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 		v.addError(filename, platform+".install_method", "Install method is required", nil)
 	}
 
-	if osConfig.InstallCommand == "" {
+	if osConfig.InstallCommand == "" && (osConfig.InstallMethod != "curlpipe" || osConfig.DownloadURL == "") {
 		v.addError(filename, platform+".install_command", "Install command is required", nil)
 	}
 
 	// Validate platform-specific install methods
 	switch platform {
 	case "linux":
-		validMethods := []string{"apt", "dnf", "pacman", "zypper", "emerge", "snap", "flatpak", "appimage"}
+		validMethods := []string{"apt", "dnf", "pacman", "zypper", "emerge", "snap", "flatpak", "appimage", "deb", "script", "curlpipe", "mise", "pip", "cargo", "npm"}
 		if !contains(validMethods, osConfig.InstallMethod) {
 			v.addWarning(filename, platform+".install_method",
 				fmt.Sprintf("Uncommon Linux install method: %s", osConfig.InstallMethod), nil)
