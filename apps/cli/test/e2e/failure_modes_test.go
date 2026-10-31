@@ -5,6 +5,7 @@ package e2e_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -55,5 +56,17 @@ var _ = Describe("Plugin bootstrap failure modes", func() {
 		entries, readErr := os.ReadDir(filepath.Join(home, ".devex/plugins"))
 		Expect(readErr).NotTo(HaveOccurred(), "bootstrap creates the empty plugin directory")
 		Expect(entries).To(BeEmpty(), "failed downloads must leave no plugins or partial downloads")
+	})
+})
+
+var _ = Describe("Command execution failure modes", func() {
+	It("prints the error message exactly once on stderr and exits nonzero", func() {
+		home := sandbox.isolatedHome()
+		output, err := sandbox.run(home, sandbox.binary, 30*time.Second, nil, "notacommand")
+		Expect(err).To(HaveOccurred(), "unknown command must fail")
+		Expect(strings.Count(output, "Error:")).To(Equal(1), "error message must be printed exactly once")
+		Expect(output).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
+		Expect(output).To(ContainSubstring("Run 'devex --help' for usage."))
+		Expect(output).NotTo(ContainSubstring("Error executing root command"))
 	})
 })

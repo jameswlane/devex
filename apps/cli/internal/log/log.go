@@ -280,6 +280,20 @@ func Error(msg string, err error, keyvals ...any) {
 	}
 }
 
+// ErrorToFile logs an error message with the current context to the log file only,
+// even in debug mode. It is a no-op when no log file is open.
+func ErrorToFile(msg string, err error, keyvals ...any) {
+	if logger == nil || logger.logFile == nil || logger.silentMode {
+		return
+	}
+	if err != nil {
+		keyvals = append(keyvals, "error", err.Error())
+	}
+	fileLogger := &Logger{logger: log.New(logger.logFile), context: logger.context}
+	fileLogger.logger.SetLevel(logger.logger.GetLevel())
+	fileLogger.logWithContext(log.ErrorLevel, msg, keyvals...)
+}
+
 // Fatal logs a fatal error and exits the application.
 func Fatal(msg string, err error, keyvals ...any) {
 	if logger != nil {

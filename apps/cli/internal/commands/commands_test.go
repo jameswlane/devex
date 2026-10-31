@@ -1,7 +1,9 @@
 package commands_test
 
 import (
+	"bytes"
 	"io"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -72,6 +74,22 @@ var _ = Describe("Commands", func() {
 			err := cmd.Execute()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("invalid argument"))
+		})
+	})
+
+	Context("Root Command Error Handling", func() {
+		It("prints the error to stderr once when an unknown command is provided", func() {
+			rootCmd := commands.NewRootCmd("test", repo, settings)
+			var errBuf bytes.Buffer
+			rootCmd.SetErr(&errBuf)
+			rootCmd.SetOut(&errBuf)
+			rootCmd.SetArgs([]string{"notacommand"})
+
+			err := rootCmd.Execute()
+			Expect(err).To(HaveOccurred())
+			Expect(strings.Count(errBuf.String(), "Error:")).To(Equal(1))
+			Expect(errBuf.String()).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
+			Expect(errBuf.String()).To(ContainSubstring("Run 'devex --help' for usage."))
 		})
 	})
 })

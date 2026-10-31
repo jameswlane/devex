@@ -3,6 +3,8 @@ package log_test
 import (
 	"bytes"
 	"fmt"
+	"io"
+	"os"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -101,6 +103,40 @@ var _ = Describe("Log Levels", func() {
 		Expect(buffer.String()).To(ContainSubstring("ERRO")) // Match logger's exact output
 		Expect(buffer.String()).To(ContainSubstring("Test Error"))
 		Expect(buffer.String()).To(ContainSubstring("an error occurred"))
+	})
+
+	It("does not write file-only errors to a non-file logger", func() {
+		buffer := &bytes.Buffer{}
+		log.InitDefaultLogger(buffer)
+
+		log.ErrorToFile("File Only Error", fmt.Errorf("an error occurred"))
+		Expect(buffer.String()).To(BeEmpty())
+	})
+
+	It("writes file-only errors to the log file but not stderr in debug mode", func() {
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+
+		originalStderr := os.Stderr
+		r, w, err := os.Pipe()
+		Expect(err).ToNot(HaveOccurred())
+		os.Stderr = w
+		initErr := log.InitFileLogger(true)
+		os.Stderr = originalStderr
+		Expect(initErr).ToNot(HaveOccurred())
+
+		log.ErrorToFile("File Only Error", fmt.Errorf("an error occurred"))
+		logFile := log.GetLogFile()
+		Expect(log.Close()).To(Succeed())
+		Expect(w.Close()).To(Succeed())
+
+		stderrOutput, err := io.ReadAll(r)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(stderrOutput)).ToNot(ContainSubstring("File Only Error"))
+
+		content, err := os.ReadFile(logFile)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(string(content)).To(ContainSubstring("File Only Error"))
+		Expect(string(content)).To(ContainSubstring("an error occurred"))
 	})
 
 	It("logs fatal messages", func() {

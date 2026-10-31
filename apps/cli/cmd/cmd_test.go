@@ -1,9 +1,14 @@
 package main_test
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -67,6 +72,29 @@ var _ = Describe("Main", func() {
 			Expect(exitCalled).To(BeTrue())
 		})
 	})
+
+	Context("CLI error execution", func() {
+		It("prints the error message exactly once on stderr and exits nonzero for unknown commands", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			goBin, goEnv := isolatedGoRunEnv(GinkgoT().TempDir())
+			cmd := exec.CommandContext(ctx, goBin, "run", ".", "notacommand")
+			cmd.Dir = "."
+			cmd.Env = goEnv
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
+
+			stderrOutput := stderr.String()
+			Expect(strings.Count(stderrOutput, "Error:")).To(Equal(1))
+			Expect(stderrOutput).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
+			Expect(stderrOutput).To(ContainSubstring("Run 'devex --help' for usage."))
+			Expect(stderrOutput).NotTo(ContainSubstring("Error executing root command"))
+		})
+	})
 })
 
 // Helper function to test initializeDatabase
@@ -84,6 +112,36 @@ func testInitializeDatabase(homeDir string) types.Repository {
 	repo := repository.NewRepository(sqlite)
 	Expect(repo).ToNot(BeNil(), "repository should not be nil")
 	return repo
+}
+
+// isolatedGoRunEnv returns the parent's go binary and an environment for `go run`
+// with a temporary HOME and no debug variables, keeping the parent's Go cache locations.
+func isolatedGoRunEnv(home string) (string, []string) {
+	out, err := exec.CommandContext(context.Background(), "go", "env", "GOROOT", "GOPATH", "GOCACHE", "GOMODCACHE").Output()
+	Expect(err).ToNot(HaveOccurred(), "failed to read go env")
+	values := strings.Split(strings.TrimSpace(string(out)), "\n")
+	Expect(values).To(HaveLen(4))
+
+	overrides := map[string]string{
+		"HOME":       home,
+		"GOPATH":     values[1],
+		"GOCACHE":    values[2],
+		"GOMODCACHE": values[3],
+	}
+	excluded := map[string]bool{"DEBUG": true, "DEVEX_DEBUG": true, "DEVEX_VERBOSE": true}
+
+	env := make([]string, 0, len(os.Environ())+len(overrides))
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if _, overridden := overrides[key]; overridden || excluded[key] {
+			continue
+		}
+		env = append(env, kv)
+	}
+	for key, value := range overrides {
+		env = append(env, key+"="+value)
+	}
+	return filepath.Join(values[0], "bin", "go"), env
 }
 
 // Helper function to test handleError
