@@ -141,14 +141,14 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 				name = strings.TrimSpace(name)
 
 				// Try to get from database first
-				if installedApp, err := repo.GetApp(name); err == nil {
+				if installedApp, err := repo.GetApp(name); err == nil && installedApp != nil {
 					appsToCheck = append(appsToCheck, *installedApp)
 				} else {
 					// Try to get from configuration
 					if app, err := settings.GetApplicationByName(name); err == nil {
 						appsToCheck = append(appsToCheck, *app)
 					} else {
-						fmt.Printf("Warning: Application '%s' not found in configuration\n", name)
+						fmt.Printf("Warning: Unknown application '%s': not tracked by DevEx and not found in configuration\n", name)
 					}
 				}
 			}
