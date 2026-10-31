@@ -361,6 +361,9 @@ func RequireSudo() bool {
 // Deprecated: use ExecOperationWithContext with explicit scope. False retains
 // historical current-process behavior for plugins that have not migrated.
 func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args ...string) error {
+	if useSudo && runtime.GOOS == "windows" {
+		return ExecOperationWithContext(ctx, OperationPrivilege{Scope: ScopeSystem}, name, args...)
+	}
 	if useSudo && !NewPrivilegeResolver().Elevated {
 		sudo, err := exec.LookPath("sudo")
 		if err != nil {

@@ -40,8 +40,8 @@ Windows files, so native platform implementations need not edit the core contrac
 `PrivilegeAdapter.Run(ctx, plan, OperationIO) error` is the platform extension
 point. It does not depend on `exec.Cmd`, so macOS authorization and UAC
 ShellExecuteEx/process handles can implement it directly. `PrivilegeAdapterForOS`
-selects Unix sudo on Unix and an unavailable adapter on Windows for operations
-requiring elevation or identity switching. Assign `DefaultPrivilegeAdapter` at
+selects Unix sudo on Unix and the Windows token-aware adapter on Windows.
+Assign `DefaultPrivilegeAdapter` at
 startup to install a native adapter. Both scoped SDK execution and executable
 plugin dispatch use Run. `CommandPrivilegeAdapter.Prepare` is an optional seam for
 argv-based executors; `PrepareOperation` requires that optional capability.
@@ -51,8 +51,60 @@ instead. Native adapters must preserve argv,
 context, target account/home, stdio where supported and native result status.
 Native operation error types implement `NativeExitStatus` (`ExitCode() int`) so
 ExitStatus can preserve their code without requiring an exec.ExitError.
-No native macOS Authorization Services (#126) or Windows UAC (#133) adapter is
-implemented here; neither needs to change the core run contract.
+Native macOS Authorization Services (#126) can use the same core run contract.
+
+## Windows scope and elevation
+
+Declare `ScopeUser` for personal package-manager operations and `ScopeSystem`
+for administrator operations, including HKLM registry writes and WSL installation.
+The Windows default reads `TokenElevation` from the process token, rather than
+assuming administrator-group membership means the process is elevated. A filtered
+administrator token still requires elevation. `SUDO_USER` is ignored on Windows;
+it cannot establish the original Windows account. User identity remains an account
+database SID and home, with `USERPROFILE` honored only for the implicit unelevated user.
+
+This adapter implements the precise elevation-required result option: it never
+opens a UAC dialog or relaunches the whole CLI. An unelevated system operation
+returns `AuthorizationRequired` with no-process status `-1` and the native
+`ERROR_ELEVATION_REQUIRED` (740) as its cause. Open a terminal with **Run as
+administrator**, approve UAC, and repeat only the system operation. An already
+elevated system operation executes directly. Unattended system operations require
+an administrator-provisioned elevated process; the SDK does not bypass consent,
+credentials, policy, or the secure desktop.
+
+User operations execute directly only from a non-elevated process. Elevated
+user-scope operations and requested account switching fail closed with guidance
+to use a non-elevated terminal as the intended user. The adapter does not guess an
+original user from Explorer or a linked token, and never elevates a user-scope
+package manager. It rechecks token elevation before execution; token query failures
+also return `AuthorizationRequired` without starting a child.
+
+Direct execution uses `exec.CommandContext`, preserving argv (no shell wrapper),
+stdio, cancellation and child exit codes. Launch error `ERROR_CANCELLED` (1223)
+is a typed `AuthorizationDenied`, retaining its native status and cause; ordinary
+child exit codes, including 740 and 1223, remain command failures. Access-denied
+errors alone do not establish UAC denial. An executable manifest requiring elevation
+returns `AuthorizationRequired` without retrying a user command as administrator.
+
+`ShellExecuteEx` with `runas` cannot directly preserve the shared stdio streams or
+cancel a pending UAC consent dialog. A host may install its own run-style adapter
+with an explicitly documented interactive transport; this default does not silently
+detach commands or drop captured plugin diagnostics. This behavior applies equally
+to interactive and unattended calls. Legacy `useSudo=true` calls also use Windows
+system scope, so existing privileged registry and WSL operations receive the same
+token checks and actionable result rather than searching for Unix sudo.
+
+Linux Ginkgo tests exercise the Windows policy with mocked token facts and launches,
+including denied authorization, unelevated user installs, elevated administrator
+operations, argv, streams, cancellation and exit status. Windows amd64 and arm64
+cross-builds verify native API integration. A real Windows host is still required
+to verify actual filtered/elevated tokens, account SID/profile resolution, native
+process launch errors and exit codes, and HKLM/WSL behavior under local UAC policy;
+no real consent dialog is exercised by this default adapter.
+On a Windows host, run `go test -ginkgo.focus='Windows native privilege wiring' .`
+from `packages/plugin-sdk` in both regular and administrator terminals. These focused
+specs check token facts, account resolution and legacy dispatch without modifying
+the system; the full existing SDK suite also contains Unix shell fixtures.
 
 The scoped Unix adapter probes with `sudo -n true`, which never prompts. A failed
 probe may mean a password is required or that sudoers permits only the exact
@@ -81,7 +133,7 @@ contract guarantees account HOME/USER/LOGNAME, not arbitrary DEVEX_* variables o
 a caller-supplied PATH. Hosts needing an allowlist can implement it in their
 adapter without forwarding credentials or overriding resolved identity variables.
 
-Compatibility: the deprecated boolean `ExecCommandWithContext(ctx, true, ...)`
+Compatibility on Unix: the deprecated boolean `ExecCommandWithContext(ctx, true, ...)`
 executes exactly one `sudo -- COMMAND ARGS` when not already elevated, with no
 identity lookup and no authorization preflight. Missing sudo now yields typed
 AuthorizationRequired rather than silently running unelevated. False retains
