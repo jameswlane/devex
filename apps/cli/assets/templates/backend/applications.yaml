@@ -21,12 +21,8 @@ applications:
     install_method: apt
     install_command: jq
   # Containerization & Orchestration
+  # Resolve Docker and its platform-specific setup from the application catalog.
   - name: docker
-    category: container
-    description: Container platform
-    default: true
-    install_method: apt
-    install_command: docker.io
   - name: kubectl
     category: container
     description: Kubernetes command-line tool

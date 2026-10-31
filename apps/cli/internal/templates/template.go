@@ -251,6 +251,10 @@ func (tm *TemplateManager) ValidateTemplate(template Template) error {
 
 	// Validate applications
 	for _, app := range template.Applications {
+		// Name-only entries are catalog references, resolved by the planner.
+		if app.Name != "" && app.InstallMethod == "" && app.InstallCommand == "" {
+			continue
+		}
 		if err := app.Validate(); err != nil {
 			return fmt.Errorf("invalid application '%s': %w", app.Name, err)
 		}

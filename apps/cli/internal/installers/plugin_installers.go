@@ -3,6 +3,7 @@ package installers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -219,7 +220,9 @@ func catalogPackageArguments(method, command string) ([]string, error) {
 	}
 	packages := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if !strings.HasPrefix(part, "-") {
+		// Homebrew's --cask selects the cask namespace (Docker Desktop), so the
+		// plugin must receive it for both install and removal.
+		if !strings.HasPrefix(part, "-") || (manager == "brew" && part == "--cask") {
 			packages = append(packages, part)
 		}
 	}
@@ -318,10 +321,15 @@ func runInstallCommands(ctx context.Context, commands []types.InstallCommand) er
 	log.Info("Starting runInstallCommands", "commands", len(commands))
 
 	for _, cmd := range commands {
+		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
+			return err
+		}
 		if cmd.Shell != "" {
-			processedCommand := utils.ExpandUserPlaceholders(cmd.Shell, *plan.IntendedUser)
-			log.Info("Executing shell command", "command", processedCommand)
-			output, err := utils.ExecAsUserWithContext(ctx, processedCommand)
+			log.Info("Executing shell command", "command", cmd.Shell)
+			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
+			if output != "" {
+				fmt.Fprint(os.Stdout, output)
+			}
 			if err != nil {
 				log.Error("Failed to execute shell command", err, "output", output)
 				return fmt.Errorf("failed to execute shell command: %w", err)

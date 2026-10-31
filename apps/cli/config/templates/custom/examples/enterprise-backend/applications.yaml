@@ -30,12 +30,8 @@ applications:
     install_method: apt
     install_command: ldap-utils
   # Containerization & Orchestration (Enterprise)
+  # Resolve Docker and its platform-specific setup from the application catalog.
   - name: docker
-    category: container
-    description: Container platform with enterprise security
-    default: true
-    install_method: apt
-    install_command: docker.io
     config:
       enterprise_registry: "registry.company.com"
       security_scanning: true

@@ -25,3 +25,9 @@ func SetOrphanRemovalForTest(remover func(context.Context)) func() {
 	removeOrphanedPackages = remover
 	return func() { removeOrphanedPackages = previous }
 }
+
+func SetDockerDataRemovalForTest(remover func(context.Context) error) func() {
+	previous := removeDockerDataFiles
+	removeDockerDataFiles = remover
+	return func() { removeDockerDataFiles = previous }
+}

@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"os/user"
 	"runtime"
+	"strings"
+	"sync"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 )
 
 // BaseConfig defines common fields shared across multiple configurations.
@@ -127,6 +132,8 @@ func (f *Font) Validate() error {
 
 // InstallCommand defines a command to execute during installation.
 type InstallCommand struct {
+	// Scope defaults to user; system explicitly requests the SDK elevation policy.
+	Scope             string       `mapstructure:"scope" yaml:"scope,omitempty"`
 	Shell             string       `mapstructure:"shell" yaml:"shell"`
 	UpdateShellConfig string       `mapstructure:"update_shell_config" yaml:"update_shell_config"`
 	Copy              *CopyCommand `mapstructure:"copy" yaml:"copy"`
@@ -365,6 +372,8 @@ type CrossPlatformApp struct {
 	AllPlatforms        OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
 }
 
+var catalogPlatform = sync.OnceValue(platform.DetectPlatform)
+
 // GetOSConfig returns the appropriate OS configuration for the current platform
 func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	// Check if all_platforms is defined (cross-platform tools like mise)
@@ -375,13 +384,85 @@ func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	// Return OS-specific config
 	switch runtime.GOOS {
 	case "linux":
-		return app.Linux
+		if len(app.Linux.PlatformRequirements) == 0 {
+			return app.Linux
+		}
+		return app.LinuxConfigForPlatform(catalogPlatform())
 	case "darwin":
 		return app.MacOS
 	case "windows":
 		return app.Windows
 	default:
 		return OSConfig{} // Empty config for unsupported OS
+	}
+}
+
+// LinuxConfigForDistribution selects a Linux configuration without a known version.
+// Version-constrained requirements need LinuxConfigForPlatform to establish a match.
+func (app *CrossPlatformApp) LinuxConfigForDistribution(distribution string, like ...string) OSConfig {
+	return app.LinuxConfigForPlatform(platform.DetectionResult{
+		Distribution: distribution, DistributionLike: like, Architecture: runtime.GOARCH,
+	})
+}
+
+// LinuxConfigForPlatform preserves the primary unless its requirements do not match.
+func (app *CrossPlatformApp) LinuxConfigForPlatform(detected platform.DetectionResult) OSConfig {
+	if len(app.Linux.PlatformRequirements) == 0 {
+		return app.Linux
+	}
+	ids := append([]string{detected.Distribution}, detected.DistributionLike...)
+	ids = append(ids, "linux")
+	for _, id := range ids {
+		if app.Linux.matchesLinuxRequirement(id, detected) {
+			return app.Linux
+		}
+	}
+	// Exact ID wins over ID_LIKE; os-release orders related IDs by proximity.
+	for _, id := range ids {
+		for _, alternative := range app.Linux.Alternatives {
+			if alternative.matchesLinuxRequirement(id, detected) {
+				return alternative
+			}
+		}
+	}
+	return app.Linux
+}
+
+func (config OSConfig) matchesLinuxRequirement(id string, detected platform.DetectionResult) bool {
+	if id == "" {
+		return false
+	}
+	for _, requirement := range config.PlatformRequirements {
+		if requirement.OS != id || (requirement.Arch != "" && catalogArchitecture(requirement.Arch) != catalogArchitecture(detected.Architecture)) {
+			continue
+		}
+		if requirement.Version != "" {
+			version, err := semver.NewVersion(detected.Version)
+			if err != nil {
+				continue
+			}
+			constraint := requirement.Version
+			if strings.HasSuffix(constraint, "+") {
+				constraint = ">=" + strings.TrimSuffix(constraint, "+")
+			}
+			required, err := semver.NewConstraint(constraint)
+			if err != nil || !required.Check(version) {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func catalogArchitecture(arch string) string {
+	switch arch {
+	case "x86_64":
+		return "amd64"
+	case "aarch64":
+		return "arm64"
+	default:
+		return arch
 	}
 }
 

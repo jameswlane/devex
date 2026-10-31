@@ -13,6 +13,8 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
 
 type StepExecutor interface {
@@ -324,14 +326,40 @@ func (e PluginStepExecutor) ExecuteStep(ctx context.Context, step templates.Plan
 		return nil, fmt.Errorf("step %q is missing a command", step.ID)
 	}
 	args := append([]string{step.Request.Command}, step.Request.Args...)
+	if step.App != nil && step.Request.Command == "install" {
+		if err := executeAppHooks(ctx, step.App.PreInstall); err != nil {
+			return nil, fmt.Errorf("%s pre-install hook: %w", step.App.Name, err)
+		}
+	}
 	if err := e.PluginExecutor.ExecutePlugin(ctx, step.Request.Plugin, args); err != nil {
 		return nil, err
+	}
+	if step.App != nil && step.Request.Command == "install" {
+		if err := executeAppHooks(ctx, step.App.PostInstall); err != nil {
+			return nil, fmt.Errorf("%s post-install hook: %w", step.App.Name, err)
+		}
 	}
 	return map[string]any{
 		"plugin":  step.Request.Plugin,
 		"command": step.Request.Command,
 		"args":    append([]string(nil), step.Request.Args...),
 	}, nil
+}
+
+func executeAppHooks(ctx context.Context, hooks []types.InstallCommand) error {
+	for _, hook := range hooks {
+		if hook.Shell == "" {
+			continue
+		}
+		output, err := utils.ExecInstallHookWithContext(ctx, hook)
+		if output != "" {
+			fmt.Fprint(os.Stdout, output)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type PluginDispatchStepExecutor struct {

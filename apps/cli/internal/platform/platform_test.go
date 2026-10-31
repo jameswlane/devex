@@ -101,11 +101,12 @@ ID_LIKE=debian
 PRETTY_NAME="Ubuntu 22.04.3 LTS"
 VERSION_ID="22.04"`,
 				DetectionResult{
-					OS:           "linux",
-					DesktopEnv:   "unknown",
-					Distribution: "ubuntu",
-					Version:      "22.04",
-					Architecture: "amd64",
+					OS:               "linux",
+					DesktopEnv:       "unknown",
+					Distribution:     "ubuntu",
+					DistributionLike: []string{"debian"},
+					Version:          "22.04",
+					Architecture:     "amd64",
 				},
 			),
 			Entry("macOS",
@@ -319,4 +320,17 @@ VERSION_ID="22.04"`,
 			),
 		)
 	})
+})
+
+var _ = Describe("Distribution ancestry", func() {
+	DescribeTable("reads ID_LIKE without changing ID", func(release string, expected []string) {
+		detector := NewPlatformDetectorWithProviders(MockRuntimeProvider{goos: "linux"}, MockFileSystemProvider{files: map[string][]byte{"/etc/os-release": []byte(release)}})
+		result := detector.Detect()
+		Expect(result.Distribution).To(Equal("linuxmint"))
+		Expect(result.DistributionLike).To(Equal(expected))
+	},
+		Entry("quoted parents", "ID=linuxmint\nID_LIKE=\"ubuntu debian\"", []string{"ubuntu", "debian"}),
+		Entry("single parent", "ID=linuxmint\nID_LIKE=ubuntu", []string{"ubuntu"}),
+		Entry("unknown ancestry", "ID=linuxmint", []string(nil)),
+	)
 })
