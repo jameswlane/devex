@@ -369,14 +369,14 @@ func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args
 		args = append([]string{"--", name}, args...)
 		name = sudo
 	}
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := NewCommandContext(ctx, name, args...)
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Run()
 }
 
 // ExecCommandOutputWithContext executes a command and returns output with context support
 func ExecCommandOutputWithContext(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := NewCommandContext(ctx, name, args...)
 	output, err := cmd.Output()
 	return string(output), err
 }
@@ -542,7 +542,7 @@ func FileExists(path string) bool {
 
 // RunCommand runs a command and returns its output
 func RunCommand(name string, args ...string) (string, error) {
-	cmd := exec.Command(name, args...)
+	cmd := NewCommandContext(context.Background(), name, args...)
 	output, err := cmd.CombinedOutput()
 	return string(output), err
 }
@@ -1254,7 +1254,7 @@ func (em *ExecutableManager) getPluginMetadataWithContext(ctx context.Context, p
 	defer cancel()
 
 	// Execute plugin with --plugin-info flag
-	cmd := exec.CommandContext(metadataCtx, pluginPath, "--plugin-info")
+	cmd := NewCommandContext(metadataCtx, pluginPath, "--plugin-info")
 	output, err := cmd.Output()
 	if err != nil {
 		// Return basic metadata if plugin doesn't respond
@@ -1306,7 +1306,7 @@ func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, plugi
 	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
 		err = RunOperation(ctx, ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args}, streams)
 	} else {
-		err = runPreparedCommand(exec.CommandContext(ctx, pluginInfo.Path, args...), streams)
+		err = runPreparedCommand(NewCommandContext(ctx, pluginInfo.Path, args...), streams)
 	}
 	if err != nil {
 		return decodeExecutionError(diagnostic.String(), err)

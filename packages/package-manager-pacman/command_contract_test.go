@@ -11,12 +11,13 @@ import (
 )
 
 type operationContract struct {
-	command    string
-	args       []string
-	currentArg []string
-	nativeArgv []string
-	elevated   bool
-	pending    string
+	command      string
+	args         []string
+	currentArg   []string
+	nativeArgv   []string
+	noNativeCall bool
+	elevated     bool
+	pending      string
 }
 
 var pacmanContracts = []operationContract{
@@ -26,7 +27,7 @@ var pacmanContracts = []operationContract{
 		currentArg: []string{"install", "git", "vim"},
 		nativeArgv: []string{"-S", "--noconfirm", "git", "vim"},
 		elevated:   true,
-		pending:    "install uses the apt-style install verb instead of -S and omits --noconfirm",
+		pending:    "#193: install uses the apt-style install verb instead of -S and omits --noconfirm",
 	},
 	{
 		command:    "remove",
@@ -34,27 +35,31 @@ var pacmanContracts = []operationContract{
 		currentArg: []string{"remove", "git", "vim"},
 		nativeArgv: []string{"-R", "--noconfirm", "git", "vim"},
 		elevated:   true,
-		pending:    "remove uses the apt-style remove verb instead of -R and omits --noconfirm",
+		pending:    "#194: remove uses the apt-style remove verb instead of -R and omits --noconfirm",
 	},
 	{
 		command:    "update",
 		currentArg: []string{"update"},
-		nativeArgv: []string{"-Syu", "--noconfirm"},
-		elevated:   true,
-		pending:    "update uses an invalid update verb instead of -Syu and omits --noconfirm",
+		// Provisional safe no-op: #195 must decide an Arch-safe refresh policy
+		// before enabling this contract; neither -Sy nor -Syu is implied by
+		// the advertised repository-refresh operation.
+		noNativeCall: true,
+		elevated:     true,
+		pending:      "#195: update must be a safe refresh/no-op; refresh versus explicitly advertised full upgrade remains undecided",
 	},
 	{
-		command:    "search",
+		command: "search",
+		// Preserve the current single native regex; term-splitting policy is separate.
 		args:       []string{"web", "server"},
 		currentArg: []string{"search", "web server"},
 		nativeArgv: []string{"-Ss", "web server"},
-		pending:    "search uses the apt-style search verb instead of -Ss",
+		pending:    "#196: search uses the apt-style search verb instead of -Ss",
 	},
 	{
 		command:    "list",
 		currentArg: []string{"list"},
 		nativeArgv: []string{"-Q"},
-		pending:    "list advertises installed packages but uses list instead of the -Q installed query",
+		pending:    "#197: list advertises installed packages but uses list instead of the -Q installed query",
 	},
 }
 
@@ -101,15 +106,20 @@ var _ = Describe("Pacman command contracts", func() {
 
 		assertNativeArgv := func() {
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
+			if contract.noNativeCall {
+				Expect(recorder.Calls("pacman")).To(BeEmpty())
+				Expect(recorder.Calls("sudo")).To(BeEmpty())
+				return
+			}
 			Expect(recorder.Calls("pacman")).To(Equal([]sdktest.Call{{
 				Args:               contract.nativeArgv,
 				ElevationRequested: contract.elevated,
 			}}))
 		}
 		if contract.pending == "" {
-			It(fmt.Sprintf("uses the required native argv for %s", contract.command), assertNativeArgv)
+			It(fmt.Sprintf("honors the advertised native operation for %s", contract.command), assertNativeArgv)
 		} else {
-			PIt(fmt.Sprintf("uses the required native argv for %s: %s", contract.command, contract.pending), assertNativeArgv)
+			PIt(fmt.Sprintf("honors the advertised native operation for %s: %s", contract.command, contract.pending), assertNativeArgv)
 		}
 	}
 

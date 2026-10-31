@@ -26,7 +26,7 @@ var dnfContracts = []operationContract{
 		currentArg: []string{"install", "git", "vim"},
 		nativeArgv: []string{"install", "--assumeyes", "git", "vim"},
 		elevated:   true,
-		pending:    "install omits --assumeyes, so DNF can block for confirmation",
+		pending:    "#189: install omits --assumeyes, so DNF can block for confirmation",
 	},
 	{
 		command:    "remove",
@@ -34,17 +34,18 @@ var dnfContracts = []operationContract{
 		currentArg: []string{"remove", "git", "vim"},
 		nativeArgv: []string{"remove", "--assumeyes", "git", "vim"},
 		elevated:   true,
-		pending:    "remove omits --assumeyes, so DNF can block for confirmation",
+		pending:    "#190: remove omits --assumeyes, so DNF can block for confirmation",
 	},
 	{
 		command:    "update",
 		currentArg: []string{"update"},
-		nativeArgv: []string{"update", "--assumeyes"},
+		nativeArgv: []string{"makecache"},
 		elevated:   true,
-		pending:    "update omits --assumeyes, so DNF can block for confirmation",
+		pending:    "#191: update must refresh repository metadata with makecache, not upgrade installed packages",
 	},
 	{
-		command:    "search",
+		command: "search",
+		// Search currently treats all CLI words as one native phrase/regex.
 		args:       []string{"web", "server"},
 		currentArg: []string{"search", "web server"},
 		nativeArgv: []string{"search", "web server"},
@@ -53,7 +54,7 @@ var dnfContracts = []operationContract{
 		command:    "list",
 		currentArg: []string{"list"},
 		nativeArgv: []string{"list", "installed"},
-		pending:    "list advertises installed packages but omits the installed query",
+		pending:    "#192: list advertises installed packages but omits the installed query",
 	},
 }
 

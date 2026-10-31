@@ -3,15 +3,22 @@ package sdktest
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // TestingT is the test environment used by Recorder.
 type TestingT interface {
 	Helper()
+	Cleanup(func())
 	TempDir() string
 	Setenv(key, value string)
 	Fatalf(format string, args ...any)
@@ -69,10 +76,12 @@ func NewRecorder(t TestingT, commands ...string) *Recorder {
 	t.Setenv("DEVEX_SDKTEST_LOG_DIR", recorder.logDir)
 	t.Setenv("DEVEX_SDKTEST_ELEVATED", "0")
 
-	recorder.installSudo()
 	for _, command := range commands {
 		recorder.install(command)
 	}
+
+	recorder.installSudo()
+	recorder.installExecutionBoundary()
 
 	return recorder
 }
@@ -104,7 +113,7 @@ func (r *Recorder) Script(command string, args []string, response Response) {
 	r.writeCommand(command)
 }
 
-// Calls returns all recorded invocations of command in execution order.
+// Calls returns invocations in execution order for this executable only.
 func (r *Recorder) Calls(command string) []Call {
 	r.t.Helper()
 
@@ -162,7 +171,7 @@ func (r *Recorder) Reset() {
 func (r *Recorder) install(command string) {
 	r.t.Helper()
 
-	if command == "" || command == "sudo" || filepath.Base(command) != command {
+	if command == "" || command == "." || command == ".." || command == "sudo" || filepath.Base(command) != command {
 		r.t.Fatalf("invalid fake executable name %q", command)
 	}
 	if _, exists := r.responses[command]; exists {
@@ -182,17 +191,69 @@ func (r *Recorder) installSudo() {
 		r.t.Fatalf("create sudo call log: %v", err)
 	}
 
-	logPath := filepath.Join(r.logDir, "sudo")
-	script := fmt.Sprintf(`#!/bin/sh
-{
-  printf '%%s\0' '0' "$#" "$@"
-} >> %s
-if [ "$#" -eq 0 ]; then
-  exit 1
-fi
-DEVEX_SDKTEST_ELEVATED=1 "$@"
-`, shellQuote(logPath))
-	r.writeExecutable("sudo", script)
+	r.writeCommand("sudo")
+}
+
+// Install process-global hooks alongside the environment; cleanup restores both.
+func (r *Recorder) installExecutionBoundary() {
+	originalCommand := sdk.NewCommandContext
+	originalResolver := sdk.NewPrivilegeResolver
+	originalAdapter := sdk.DefaultPrivilegeAdapter
+	r.t.Cleanup(func() {
+		sdk.NewCommandContext = originalCommand
+		sdk.NewPrivilegeResolver = originalResolver
+		sdk.DefaultPrivilegeAdapter = originalAdapter
+	})
+	sdk.NewCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		for command := range r.responses {
+			fake := filepath.Join(r.binDir, command)
+			if name == command || name == fake {
+				return exec.CommandContext(ctx, fake, args...)
+			}
+		}
+		// Construct no process for an unregistered name, even if it is absolute.
+		return &exec.Cmd{Args: append([]string{name}, args...), Err: fmt.Errorf("sdktest: executable %q is not a registered fake", name)}
+	}
+	sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
+		account := func() (*user.User, error) {
+			return &user.User{Username: "devex-test-user", Uid: "1000", Gid: "1000", HomeDir: os.Getenv("HOME")}, nil
+		}
+		return sdk.PrivilegeResolver{
+			Elevated:    false,
+			CurrentUser: account,
+			LookupUser: func(name string) (*user.User, error) {
+				if name != "devex-test-user" {
+					return nil, fmt.Errorf("sdktest: account %q is not registered", name)
+				}
+				return account()
+			},
+			Getenv: os.Getenv,
+		}
+	}
+	sdk.DefaultPrivilegeAdapter = sdk.UnixSudoAdapter{}
+}
+
+// Only authorization probes and explicit registered fake targets are supported.
+func (r *Recorder) writeSudoDispatch(script *strings.Builder) {
+	script.WriteString(`if [ "$#" -eq 1 ] && [ "$1" = '-v' ]; then exit 0; fi
+if [ "$#" -eq 2 ] && [ "$1" = '-n' ] && [ "$2" = 'true' ]; then exit 0; fi
+if [ "${1-}" = '--' ]; then shift; fi
+case "${1-}" in
+`)
+	commands := make([]string, 0, len(r.responses))
+	for command := range r.responses {
+		if command != "sudo" {
+			commands = append(commands, command)
+		}
+	}
+	sort.Strings(commands)
+	for _, command := range commands {
+		fake := filepath.Join(r.binDir, command)
+		fmt.Fprintf(script, "  %s|%s) shift; DEVEX_SDKTEST_ELEVATED=1 %s \"$@\"; exit $? ;;\n", shellQuote(command), shellQuote(fake), shellQuote(fake))
+	}
+	script.WriteString(`  *) printf '%s\n' 'sdktest: sudo target is not a registered fake' >&2; exit 127 ;;
+esac
+`)
 }
 
 func (r *Recorder) writeCommand(command string) {
@@ -217,7 +278,11 @@ func (r *Recorder) writeCommand(command string) {
 		}
 		fmt.Fprintf(&script, "  exit %d\nfi\n", scripted.response.ExitCode)
 	}
-	script.WriteString("exit 0\n")
+	if command == "sudo" {
+		r.writeSudoDispatch(&script)
+	} else {
+		script.WriteString("exit 0\n")
+	}
 	r.writeExecutable(command, script.String())
 }
 
