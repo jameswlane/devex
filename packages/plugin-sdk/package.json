@@ -5,7 +5,7 @@
 	"private": true,
 	"scripts": {
 		"build": "go build ./...",
-		"test": "ginkgo run .",
+		"test": "go run github.com/onsi/ginkgo/v2/ginkgo run -r .",
 		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
 		"mod": "go mod tidy"

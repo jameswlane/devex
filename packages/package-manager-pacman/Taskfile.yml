@@ -5,7 +5,13 @@ tasks:
   build:
     desc: Build package-manager-pacman plugin for all platforms
     cmds:
-      - mkdir -p dist\n      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default \"dev\"}}" -o dist/devex-plugin-package-manager-pacman-linux-amd64 .\n      - GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default \"dev\"}}" -o dist/devex-plugin-package-manager-pacman-linux-arm64 .
+      - mkdir -p dist
+      - |
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+        -o dist/devex-plugin-package-manager-pacman-linux-amd64 .
+      - |
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+        -o dist/devex-plugin-package-manager-pacman-linux-arm64 .
   test:
     desc: Run tests
     cmds:
@@ -19,8 +25,8 @@ tasks:
     cmds:
       - task: build
       - mkdir -p ~/.devex/plugins
-      - cp dist/\{{.PLUGIN_NAME}}-\{{OS}}-\{{ARCH}}* ~/.devex/plugins/\{{.PLUGIN_NAME}}
-      - chmod +x ~/.devex/plugins/\{{.PLUGIN_NAME}}
+      - cp dist/{{.PLUGIN_NAME}}-{{OS}}-{{ARCH}}* ~/.devex/plugins/{{.PLUGIN_NAME}}
+      - chmod +x ~/.devex/plugins/{{.PLUGIN_NAME}}
   clean:
     desc: Clean build artifacts
     cmds:

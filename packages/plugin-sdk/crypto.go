@@ -96,21 +96,21 @@ func (v *GPGVerifier) LoadPublicKeyFromKeyserver(keyID string) error {
 	if keyID == "" {
 		return fmt.Errorf("failed to load key  from any keyserver")
 	}
-	
+
 	// Basic validation for key ID format (should be hex)
 	if len(keyID) < 8 {
 		return fmt.Errorf("failed to load key %s from any keyserver", keyID)
 	}
-	
+
 	for _, keyserver := range v.keyservers {
 		keyURL := fmt.Sprintf("%s/pks/lookup?op=get&search=0x%s", keyserver, keyID)
-		
+
 		if err := v.LoadPublicKey(keyURL); err == nil {
 			return nil // Successfully loaded from this keyserver
 		}
 		// Continue to next keyserver if this one fails
 	}
-	
+
 	return fmt.Errorf("failed to load key %s from any keyserver", keyID)
 }
 
@@ -135,7 +135,7 @@ func (v *GPGVerifier) VerifySignature(filePath, signaturePath string) error {
 
 	// Try to parse as armored signature
 	var sigReader io.Reader = bytes.NewReader(sigData)
-	
+
 	if block, err := armor.Decode(bytes.NewReader(sigData)); err == nil {
 		sigReader = block.Body
 	}
@@ -284,7 +284,7 @@ func (v *SystemGPGVerifier) ImportPublicKeyWithContext(ctx context.Context, keyP
 	}
 
 	keyring := filepath.Join(tempDir, "pubring.kbx")
-	cmd := exec.CommandContext(ctx, v.gpgPath, "--homedir", tempDir, "--no-default-keyring", "--keyring", keyring, "--batch", "--import", keyPath)
+	cmd := NewCommandContext(ctx, v.gpgPath, "--homedir", tempDir, "--no-default-keyring", "--keyring", keyring, "--batch", "--import", keyPath)
 	cmd.Env = append(os.Environ(), "GNUPGHOME="+tempDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -306,7 +306,7 @@ func (v *SystemGPGVerifier) VerifyDetachedSignatureWithContext(ctx context.Conte
 	}
 
 	keyring := filepath.Join(tempDir, "pubring.kbx")
-	cmd := exec.CommandContext(ctx, v.gpgPath, "--homedir", tempDir, "--no-default-keyring", "--keyring", keyring, "--batch", "--status-fd", "1", "--verify", signaturePath, filePath)
+	cmd := NewCommandContext(ctx, v.gpgPath, "--homedir", tempDir, "--no-default-keyring", "--keyring", keyring, "--batch", "--status-fd", "1", "--verify", signaturePath, filePath)
 	cmd.Env = append(os.Environ(), "GNUPGHOME="+tempDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -353,13 +353,13 @@ func (d *Downloader) verifyPluginSignature(pluginPath, downloadURL string) error
 
 	// Try modern Go crypto first
 	verifier := NewGPGVerifier()
-	
+
 	// Load public key
 	if err := verifier.LoadPublicKey(d.publicKeyPath); err != nil {
 		if d.logger != nil {
 			d.logger.Warning("Failed to load public key with Go crypto: %v", err)
 		}
-		
+
 		// Fallback to system GPG
 		return d.verifyWithSystemGPG(pluginPath, signatureURL)
 	}
@@ -369,7 +369,7 @@ func (d *Downloader) verifyPluginSignature(pluginPath, downloadURL string) error
 		if d.logger != nil {
 			d.logger.Warning("Go crypto verification failed: %v", err)
 		}
-		
+
 		// Fallback to system GPG
 		return d.verifyWithSystemGPG(pluginPath, signatureURL)
 	}

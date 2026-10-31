@@ -209,7 +209,7 @@ func (unavailablePrivilegeAdapter) Run(ctx context.Context, plan ExecutionPlan, 
 	if plan.Elevate || plan.SwitchUser {
 		return authorizationRequired("configure a native platform privilege adapter", nil)
 	}
-	return runPreparedCommand(exec.CommandContext(ctx, plan.Name, plan.Args...), streams)
+	return runPreparedCommand(NewCommandContext(ctx, plan.Name, plan.Args...), streams)
 }
 
 func runPreparedCommand(cmd *exec.Cmd, streams OperationIO) error {
@@ -276,11 +276,11 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 		}
 		name = sudo
 	}
-	return exec.CommandContext(ctx, name, args...), nil
+	return NewCommandContext(ctx, name, args...), nil
 }
 
 func probeSudo(ctx context.Context, sudo string) error {
-	return exec.CommandContext(ctx, sudo, "-n", "true").Run()
+	return NewCommandContext(ctx, sudo, "-n", "true").Run()
 }
 
 func (a UnixSudoAdapter) Run(ctx context.Context, plan ExecutionPlan, streams OperationIO) error {
