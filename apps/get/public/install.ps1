@@ -131,6 +131,15 @@ function Install-DevEx {
         $binPath = Join-Path ([IO.Path]::GetFullPath($InstallDir)) 'bin'
         $executable = Join-Path $binPath 'devex.exe'
         if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Archive did not contain bin/devex.exe.' }
+        $dataDir = Join-Path $env:LOCALAPPDATA 'DevEx'
+        if ($env:DEVEX_DATA_DIR -and [IO.Path]::IsPathRooted($env:DEVEX_DATA_DIR)) { $dataDir = $env:DEVEX_DATA_DIR }
+        foreach ($directory in @('config', 'assets', 'help', 'migrations')) {
+            $source = Join-Path $InstallDir $directory
+            if (Test-Path -LiteralPath $source -PathType Container) {
+                New-Item -ItemType Directory -Path $dataDir -Force -ErrorAction Stop | Out-Null
+                Copy-Item -LiteralPath $source -Destination $dataDir -Recurse -Force -ErrorAction Stop
+            }
+        }
         Add-ToPath -BinPath $binPath
         Write-Host "DevEx $tag installed to $InstallDir."
         $arguments = @('setup')

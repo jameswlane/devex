@@ -7,7 +7,7 @@
 set -euo pipefail
 
 REPO="jameswlane/devex"
-INSTALL_DIR="$HOME/.local/share/devex"
+INSTALL_DIR="$HOME/.local/bin"
 CHECKSUM_FILE="devex_checksums.txt"
 TEMP_DIR=""
 
@@ -20,7 +20,7 @@ Options:
   --no-setup           Install only; do not run setup or prompt
   --non-interactive    Run devex install --non-interactive after installation
   --config PATH        Pass --config PATH to the setup/install command
-  --install-dir DIR    Install into DIR (default: ~/.local/share/devex)
+  --install-dir DIR    Install into DIR (default: ~/.local/bin)
   --shell SHELL        Configure PATH for bash, zsh or fish (default: $SHELL)
   --base-url URL       Release download base URL; requires --version
   --help               Show this help
@@ -143,9 +143,10 @@ latest_cli_version() {
 
 add_to_path() {
     local shell_config="$1"
-    local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
+    local path_line
+    printf -v path_line 'export PATH="$PATH":%q' "$INSTALL_DIR"
 
-    if [ -f "$shell_config" ] && grep -qF "$INSTALL_DIR/bin" "$shell_config"; then
+    if [ -f "$shell_config" ] && grep -qxF "$path_line" "$shell_config"; then
         echo "  ✓ Already configured: $shell_config"
         return
     fi
@@ -162,7 +163,7 @@ add_to_path() {
 add_to_fish_path() {
     local shell_config="$1"
 
-    if [ -f "$shell_config" ] && grep -qF "$INSTALL_DIR/bin" "$shell_config"; then
+    if [ -f "$shell_config" ] && grep -qF "$INSTALL_DIR" "$shell_config"; then
         echo "  ✓ Already configured: $shell_config"
         return
     fi
@@ -172,13 +173,17 @@ add_to_fish_path() {
     {
         echo ""
         echo "# DevEx CLI"
-        printf "set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR/bin"
+        printf "set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR"
     } >> "$shell_config"
 }
 
 configure_path() {
     local os="$1"
     local target_shell="$2"
+
+    case ":${PATH:-}:" in
+        *":$INSTALL_DIR:"*) echo "  ✓ Already on PATH: $INSTALL_DIR"; return ;;
+    esac
 
     case "$target_shell" in
         zsh)
@@ -213,9 +218,9 @@ configure_path() {
 
     echo "To add DevEx to another shell manually, add the matching line to its config:"
     echo "  bash: ~/.bashrc (also ~/.bash_profile or ~/.profile for macOS login shells); zsh: ~/.zshrc"
-    printf "    export PATH=\"\$PATH\":%q\n" "$INSTALL_DIR/bin"
+    printf "    export PATH=\"\$PATH\":%q\n" "$INSTALL_DIR"
     echo "  fish: ~/.config/fish/config.fish"
-    printf "    set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR/bin"
+    printf "    set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR"
     echo "Restart the configured shell to use DevEx."
 }
 
@@ -394,8 +399,21 @@ main() {
     mkdir -p "$INSTALL_DIR"
     # Absolute, so the PATH line written to shell rc files works from any directory.
     INSTALL_DIR="$(cd "$INSTALL_DIR" && pwd)"
-    tar -xzf "$TEMP_DIR/$filename" -C "$INSTALL_DIR"
-    chmod +x "$INSTALL_DIR/bin/devex"
+    mkdir -p "$TEMP_DIR/extracted"
+    tar -xzf "$TEMP_DIR/$filename" -C "$TEMP_DIR/extracted"
+    install -m 755 "$TEMP_DIR/extracted/bin/devex" "$INSTALL_DIR/devex"
+    local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
+    case "$data_dir" in /*) ;; *) data_dir="$HOME/.local/share" ;; esac
+    data_dir="$data_dir/devex"
+    case "${DEVEX_DATA_DIR:-}" in /*) data_dir="$DEVEX_DATA_DIR" ;; esac
+    mkdir -p "$data_dir"
+    local directory
+    for directory in config assets help migrations; do
+        if [ -d "$TEMP_DIR/extracted/$directory" ]; then
+            mkdir -p "$data_dir/$directory"
+            cp -R "$TEMP_DIR/extracted/$directory/." "$data_dir/$directory/"
+        fi
+    done
 
     echo ""
     echo "Adding DevEx to PATH..."
@@ -420,7 +438,7 @@ main() {
     fi
 
     if [ "$non_interactive" = "1" ]; then
-        "$INSTALL_DIR/bin/devex" install --non-interactive ${command_args[@]+"${command_args[@]}"}
+        "$INSTALL_DIR/devex" install --non-interactive ${command_args[@]+"${command_args[@]}"}
         return
     fi
 
@@ -436,7 +454,7 @@ main() {
     if { : < /dev/tty; } 2>/dev/null; then
         printf "Press Enter to start the setup, or Ctrl+C to exit..." > /dev/tty
         read -r _ < /dev/tty
-        "$INSTALL_DIR/bin/devex" setup ${command_args[@]+"${command_args[@]}"} < /dev/tty
+        "$INSTALL_DIR/devex" setup ${command_args[@]+"${command_args[@]}"} < /dev/tty
     else
         echo "After restarting your shell, run:"
         print_setup_command "$config"

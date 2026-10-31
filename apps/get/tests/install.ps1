@@ -19,6 +19,7 @@ $temp = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temp | Out-Null
 try {
     $env:LOCALAPPDATA = $temp
+    $env:DEVEX_DATA_DIR = Join-Path $temp 'data with spaces'
     $env:TEMP = $temp
     $env:PROCESSOR_ARCHITECTURE = 'AMD64'
     $env:PROCESSOR_ARCHITEW6432 = ''
@@ -77,8 +78,10 @@ try {
         $fakeExe = Join-Path $fixture 'bin/devex.exe'
         Set-Content $fakeExe "#!/bin/sh`nprintf '%s\n' `"`$@`" > `"`$DEVEX_TEST_LOG`"" -NoNewline
         & chmod +x $fakeExe
+        New-Item -ItemType Directory -Path (Join-Path $fixture 'config') | Out-Null
+        Set-Content (Join-Path $fixture 'config/example.yaml') 'fixture: true'
         $archive = Join-Path $temp 'fixture.tar.gz'
-        & tar -czf $archive -C $fixture bin
+        & tar -czf $archive -C $fixture bin config
         Assert ($LASTEXITCODE -eq 0) 'Create fixture archive'
         $env:DEVEX_TEST_ARCHIVE = $archive
         $env:DEVEX_TEST_LOG = Join-Path $temp 'args.txt'
@@ -99,6 +102,7 @@ try {
         foreach ($version in @('1.2.3', 'v1.2.3')) {
             Install-DevEx -Version $version -NoSetup -InstallDir $destination -BaseUrl 'http://localhost:1234'
             Assert (Test-Path (Join-Path $destination 'bin/devex.exe')) 'Installed executable'
+            Assert (Test-Path (Join-Path $env:DEVEX_DATA_DIR 'config/example.yaml')) 'Bundled config installed in data directory'
             Assert (-not (Test-Path $env:DEVEX_TEST_LOG)) 'NoSetup never runs setup'
         }
         Install-DevEx -Version '1.2.3' -NonInteractive -Config 'config with spaces.yml' -InstallDir $destination -BaseUrl 'http://localhost:1234'
