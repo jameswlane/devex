@@ -610,8 +610,8 @@ type DownloaderConfig struct {
 
 // NewDownloader creates a new plugin downloader with default security settings
 func NewDownloader(registryURL, pluginDir string) *Downloader {
-	homeDir, _ := os.UserHomeDir()
-	cacheDir := filepath.Join(homeDir, ".devex", "plugin-cache")
+	dirs, _ := ResolvePaths()
+	cacheDir := filepath.Join(dirs.Cache, "plugins")
 
 	return &Downloader{
 		registryURL:      registryURL,

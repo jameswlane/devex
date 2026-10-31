@@ -6,6 +6,8 @@ import sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
 type Dirs = sdk.Paths
 
-var Resolve = sdk.ResolvePaths
-var ForHome = sdk.PathsForHome
-var ForPlatform = sdk.ResolvePathsFor
+func Resolve() (Dirs, error)   { return sdk.ResolvePaths() }
+func ForHome(home string) Dirs { return sdk.PathsForHome(home) }
+func ForPlatform(platform, home string, getenv func(string) string) Dirs {
+	return sdk.ResolvePathsFor(platform, home, getenv)
+}

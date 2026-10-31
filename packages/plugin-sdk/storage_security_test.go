@@ -22,7 +22,7 @@ var _ = Describe("Elevated plugin storage symlink safety", func() {
 	var binary PlatformBinary
 	BeforeEach(func() {
 		home = GinkgoT().TempDir()
-		pluginDir = filepath.Join(home, ".devex", "plugins")
+		pluginDir = PathsForHome(home).Plugins()
 		outside = filepath.Join(GinkgoT().TempDir(), "outside")
 		Expect(os.WriteFile(outside, []byte("untouched"), 0600)).To(Succeed())
 		payload = []byte("#!/bin/sh\necho plugin\n")
@@ -105,13 +105,14 @@ var _ = Describe("Elevated plugin storage symlink safety", func() {
 	DescribeTable("refuses symlinked storage directories",
 		func(component string) {
 			target := GinkgoT().TempDir()
-			if component != ".devex" {
-				Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0755)).To(Succeed())
+			path := filepath.Join(home, ".local")
+			if component == "plugins" {
+				path = pluginDir
 			}
-			path := filepath.Join(home, ".devex")
-			if component != ".devex" {
-				path = filepath.Join(path, component)
+			if component == "plugin-cache" {
+				path = d.cacheDir
 			}
+			Expect(os.MkdirAll(filepath.Dir(path), 0755)).To(Succeed())
 			Expect(os.Symlink(target, path)).To(Succeed())
 			var err error
 			if component == "plugin-cache" {
@@ -127,10 +128,10 @@ var _ = Describe("Elevated plugin storage symlink safety", func() {
 			entries, err := os.ReadDir(target)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(entries).To(BeEmpty())
-		}, Entry(".devex", ".devex"), Entry("plugins", "plugins"), Entry("cache", "plugin-cache"),
+		}, Entry("data ancestor", ".local"), Entry("plugins", "plugins"), Entry("cache", "plugin-cache"),
 	)
 	It("refuses an existing directory owned by a different account", func() {
-		Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0755)).To(Succeed())
+		Expect(os.MkdirAll(filepath.Join(home, ".local"), 0755)).To(Succeed())
 		d.installOwner.UID = fmt.Sprint(os.Getuid() + 1)
 		Expect(d.PrepareInstallDirectory()).To(MatchError(ContainSubstring("not owned by intended UID")))
 	})

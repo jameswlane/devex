@@ -30,6 +30,12 @@ func ResolvePaths() (Paths, error) {
 // PathsForHome resolves paths for an already resolved home. Relative environment
 // values are ignored, as required by the XDG specification.
 func PathsForHome(home string) Paths {
+	if home == "" {
+		identity, err := NewPrivilegeResolver().ResolveUser(nil)
+		if err == nil {
+			home = identity.HomeDir
+		}
+	}
 	return ResolvePathsFor(runtime.GOOS, home, os.Getenv)
 }
 
@@ -50,25 +56,29 @@ func ResolvePathsFor(platform, home string, getenv func(string) string) Paths {
 				env = "APPDATA"
 				base = filepath.Join(home, "AppData", "Roaming")
 			}
-			if value := getenv(env); absolutePath(value) {
+			if value := getenv(env); absolutePathFor(platform, value) {
 				base = value
 			}
-		} else if value := getenv("XDG_" + key + "_HOME"); absolutePath(value) {
+		} else if value := getenv("XDG_" + key + "_HOME"); absolutePathFor(platform, value) {
 			base = value
 		}
 		*dirs[i] = filepath.Join(base, name)
-		if value := getenv("DEVEX_" + key + "_DIR"); absolutePath(value) {
+		if value := getenv("DEVEX_" + key + "_DIR"); absolutePathFor(platform, value) {
 			*dirs[i] = filepath.Clean(value)
 		}
 	}
 	if platform == "windows" {
-		p.Bin = filepath.Join(filepath.Dir(p.Data), "Programs", "DevEx")
+		base := getenv("LOCALAPPDATA")
+		if !absolutePathFor(platform, base) {
+			base = filepath.Join(home, "AppData", "Local")
+		}
+		p.Bin = filepath.Join(base, "Programs", "DevEx", "bin")
 	}
 	return p
 }
 
-func absolutePath(value string) bool {
-	return filepath.IsAbs(value) || (len(value) > 2 && value[1] == ':' && (value[2] == '\\' || value[2] == '/'))
+func absolutePathFor(platform, value string) bool {
+	return filepath.IsAbs(value) || platform == "windows" && (len(value) > 2 && value[1] == ':' && (value[2] == '\\' || value[2] == '/'))
 }
 
 func (p Paths) Plugins() string  { return filepath.Join(p.Data, "plugins") }

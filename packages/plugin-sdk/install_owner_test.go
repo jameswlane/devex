@@ -17,7 +17,7 @@ import (
 var _ = Describe("Elevated plugin download ownership", func() {
 	It("assigns the intended owner to directories, downloaded executables and records", func() {
 		home := GinkgoT().TempDir()
-		dir := filepath.Join(home, ".devex", "plugins")
+		dir := PathsForHome(home).Plugins()
 		payload := []byte("\x7fELF" + strings.Repeat("\x00", 64))
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(payload) }))
 		DeferCleanup(server.Close)
@@ -34,7 +34,7 @@ var _ = Describe("Elevated plugin download ownership", func() {
 		}
 		Expect(d.PrepareInstallDirectory()).To(Succeed())
 		Expect(d.downloadAndVerifyPlugin(context.Background(), "example", "1", PlatformBinary{URL: server.URL, Checksum: fmt.Sprintf("%x", sha256.Sum256(payload)), Size: int64(len(payload))})).To(Succeed())
-		Expect(owned).To(ContainElements(filepath.Join(home, ".devex"), dir, installRecordPath(dir, "example")))
+		Expect(owned).To(ContainElements(filepath.Join(home, ".local"), dir, installRecordPath(dir, "example")))
 		binaryOwned := false
 		for _, path := range owned {
 			if strings.Contains(filepath.Base(path), "-bin-") {
@@ -44,11 +44,11 @@ var _ = Describe("Elevated plugin download ownership", func() {
 		Expect(binaryOwned).To(BeTrue())
 		Expect(filepath.Join(dir, "devex-plugin-example")).To(BeAnExistingFile())
 		d.cacheRegistry(&PluginRegistry{})
-		Expect(owned).To(ContainElements(filepath.Join(home, ".devex", "plugin-cache"), filepath.Join(home, ".devex", "plugin-cache", "registry.json")))
+		Expect(owned).To(ContainElements(filepath.Join(PathsForHome(home).Cache, "plugins"), filepath.Join(PathsForHome(home).Cache, "plugins", "registry.json")))
 	})
 	It("fails a download when ownership cannot be assigned", func() {
 		home := GinkgoT().TempDir()
-		d := NewDownloader("http://unused.invalid", filepath.Join(home, ".devex", "plugins"))
+		d := NewDownloader("http://unused.invalid", PathsForHome(home).Plugins())
 		Expect(d.SetInstallOwner(UserIdentity{UID: "1000", GID: "1000", HomeDir: home})).To(Succeed())
 		d.chown = func(string, int, int) error { return os.ErrPermission }
 		Expect(d.PrepareInstallDirectory()).To(MatchError(ContainSubstring("set plugin owner")))

@@ -1,11 +1,12 @@
 package sdk_test
 
 import (
+	"os/user"
+	"path/filepath"
+
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"os/user"
-	"path/filepath"
 )
 
 var _ = Describe("Shared paths", func() {
