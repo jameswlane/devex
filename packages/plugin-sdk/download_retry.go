@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -51,8 +52,10 @@ func defaultRetryBackoff(ctx context.Context, attempt int, retryAfter time.Durat
 	}
 }
 
-func (d *Downloader) doWithRetry(ctx context.Context, client *http.Client, method, requestURL string) (*http.Response, error) {
-	var lastNetworkErr error
+// doWithRetry keeps transport, status, and response-body failures within one attempt
+// budget. consume must discard any partial payload before returning an error.
+func (d *Downloader) doWithRetry(ctx context.Context, client *http.Client, method, requestURL string, consume func(*http.Response) error) (*http.Response, error) {
+	var lastErr error
 	for attempt := 1; attempt <= downloadMaxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -62,39 +65,47 @@ func (d *Downloader) doWithRetry(ctx context.Context, client *http.Client, metho
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
 		resp, err := client.Do(req)
-		if err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
+		var retryAfter time.Duration
+		if err == nil {
+			if isTransientHTTPStatus(resp.StatusCode) {
+				if attempt == downloadMaxAttempts {
+					return resp, nil
+				}
+				retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+				_ = resp.Body.Close()
+			} else {
+				if resp.StatusCode != http.StatusOK {
+					return resp, nil
+				}
+				err = consume(resp)
+				_ = resp.Body.Close()
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				if err == nil {
+					return resp, nil
+				}
 			}
-			if !isTransientNetworkError(err) {
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if err != nil {
+			if !isTransientNetworkError(err) && !errors.Is(err, io.ErrUnexpectedEOF) {
 				return nil, err
 			}
-			lastNetworkErr = err
-		} else {
-			if !isTransientHTTPStatus(resp.StatusCode) {
-				return resp, nil
-			}
-			if attempt == downloadMaxAttempts {
-				return resp, nil
-			}
-			retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
-			_ = resp.Body.Close()
+			lastErr = err
+		}
+		if attempt < downloadMaxAttempts {
 			if err := d.waitForRetry(ctx, attempt, retryAfter); err != nil {
 				return nil, err
 			}
-			continue
-		}
-
-		if attempt < downloadMaxAttempts {
-			if err := d.waitForRetry(ctx, attempt, 0); err != nil {
-				return nil, err
-			}
 		}
 	}
-	if isRegistryUnreachable(lastNetworkErr) {
-		return nil, &RegistryUnavailableError{Err: lastNetworkErr}
+	if isRegistryUnreachable(lastErr) {
+		return nil, &RegistryUnavailableError{Err: lastErr}
 	}
-	return nil, lastNetworkErr
+	return nil, lastErr
 }
 
 func (d *Downloader) waitForRetry(ctx context.Context, attempt int, retryAfter time.Duration) error {
@@ -120,7 +131,7 @@ func isRegistryUnreachable(err error) bool {
 		return true
 	}
 	var opErr *net.OpError
-	return errors.As(err, &opErr)
+	return errors.As(err, &opErr) && opErr.Op == "dial"
 }
 
 func parseRetryAfter(value string, now time.Time) time.Duration {
@@ -129,9 +140,12 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 		return 0
 	}
 	var delay time.Duration
-	if seconds, err := strconv.Atoi(value); err == nil {
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
 		if seconds < 0 {
 			return 0
+		}
+		if seconds >= int64(maxRetryAfter/time.Second) {
+			return maxRetryAfter
 		}
 		delay = time.Duration(seconds) * time.Second
 	} else if retryAt, err := http.ParseTime(value); err == nil {

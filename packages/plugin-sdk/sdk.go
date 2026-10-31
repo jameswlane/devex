@@ -748,7 +748,12 @@ func (d *Downloader) fetchPluginDirect(ctx context.Context, pluginName string) (
 	client := &http.Client{Timeout: 30 * time.Second}
 	pluginURL := fmt.Sprintf("%s/api/v1/plugins/%s", d.registryURL, pluginName)
 
-	resp, err := d.doWithRetry(ctx, client, http.MethodGet, pluginURL)
+	var body []byte
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, pluginURL, func(resp *http.Response) error {
+		var err error
+		body, err = io.ReadAll(resp.Body)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch plugin: %w", err)
 	}
@@ -764,7 +769,7 @@ func (d *Downloader) fetchPluginDirect(ctx context.Context, pluginName string) (
 
 	// Parse plugin metadata
 	var metadata PluginMetadata
-	if err := json.NewDecoder(resp.Body).Decode(&metadata); err != nil {
+	if err := json.Unmarshal(body, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to parse plugin metadata: %w", err)
 	}
 
@@ -802,7 +807,7 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 
 			var unavailableErr *RegistryUnavailableError
 			if errors.As(err, &unavailableErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return downloadErr
+				return multiErr
 			}
 
 			// Check strategy and critical status
@@ -887,8 +892,16 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 
 	// Fetch fresh registry
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := d.doWithRetry(ctx, client, http.MethodGet, d.registryURL+"/api/v1/registry")
+	var body []byte
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, d.registryURL+"/api/v1/registry", func(resp *http.Response) error {
+		var err error
+		body, err = io.ReadAll(resp.Body)
+		return err
+	})
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// Return cached registry if available
 		if cachedRegistry != nil {
 			if d.logger != nil {
@@ -906,7 +919,7 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 
 	// Parse registry
 	var registry PluginRegistry
-	if err := json.NewDecoder(resp.Body).Decode(&registry); err != nil {
+	if err := json.Unmarshal(body, &registry); err != nil {
 		return nil, fmt.Errorf("failed to parse registry: %w", err)
 	}
 
@@ -1003,7 +1016,24 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 
 	// Create HTTP client with timeout
 	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := d.doWithRetry(ctx, client, http.MethodGet, downloadURL)
+	// Each attempt owns a new temporary payload; failed reads never reach verification.
+	var payloadFile *os.File
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, downloadURL, func(resp *http.Response) error {
+		file, err := createStorageTemp(root, ".devex-plugin-"+pluginName+"-download-")
+		if err != nil {
+			return fmt.Errorf("failed to create temp file: %w", err)
+		}
+		if _, err := io.Copy(file, resp.Body); err != nil {
+			_ = file.Close()
+			_ = root.Remove(filepath.Base(file.Name()))
+			return fmt.Errorf("failed to read plugin payload: %w", err)
+		}
+		payloadFile = file
+		return nil
+	})
+	if payloadFile != nil {
+		defer func() { _ = payloadFile.Close(); _ = root.Remove(filepath.Base(payloadFile.Name())) }()
+	}
 	if err != nil {
 		return fmt.Errorf("failed to download plugin from registry proxy: %w", err)
 	}
@@ -1030,18 +1060,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 		return fmt.Errorf("download failed: HTTP %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
-	// Download into a unique temp file owned by this invocation
-	payloadFile, err := createStorageTemp(root, ".devex-plugin-"+pluginName+"-download-")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
 	payloadPath := payloadFile.Name()
-	defer func() { _ = payloadFile.Close(); _ = root.Remove(filepath.Base(payloadPath)) }()
-
-	_, copyErr := io.Copy(payloadFile, resp.Body)
-	if copyErr != nil {
-		return fmt.Errorf("failed to download plugin: %w", copyErr)
-	}
 	payloadChecksum, err := openFileSHA256(payloadFile)
 	if err != nil {
 		return fmt.Errorf("failed to hash downloaded plugin: %w", err)
