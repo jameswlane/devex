@@ -13,6 +13,15 @@ in one transaction covering the entire pending upgrade. An error or cancellation
 rolls back the upgrade, including any newly created tables and version records.
 Repeat startup preserves app records and migration timestamps.
 
+Startup is safe to run from several processes at once. Connections wait up to
+five seconds for another process's lock (`busy_timeout`) and enforce foreign keys
+(`foreign_keys=ON`). A database that is already at the supported version is
+verified read-only (`PRAGMA quick_check`, migration history and the legacy
+`schema_version` tracker) and takes no write lock. Only when migrations are
+pending does DevEx take the write lock up front (`BEGIN IMMEDIATE`), run the full
+`PRAGMA integrity_check`, and validate the schema against the embedded SQL before
+and after applying them.
+
 ## Compatibility
 
 - Fresh databases receive the complete schema, including dependency tracking,
@@ -38,6 +47,9 @@ Repeat startup preserves app records and migration timestamps.
 ## Recovery
 
 The startup error includes the database path and the failing check or migration.
+It recommends restoring a backup only for corruption or schema problems. For lock
+contention (`database is locked`) or cancellation it advises retrying and closing
+other `devex` processes instead; the database itself is not damaged in that case.
 The default path is `~/.devex/datastore.db` for the resolved user home.
 
 1. Stop all DevEx processes before copying or restoring the database. Keep a

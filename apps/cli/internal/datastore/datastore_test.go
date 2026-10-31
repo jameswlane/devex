@@ -25,4 +25,17 @@ var _ = Describe("SQLite initialization", func() {
 		Expect(db.Conn().QueryRowContext(ctx, "SELECT COUNT(*) FROM protected_packages").Scan(&count)).To(Succeed())
 		Expect(count).To(Equal(10))
 	})
+
+	It("enforces foreign keys on the runtime connection so dependency rows cascade", func(ctx SpecContext) {
+		db, err := datastore.NewSQLiteContext(ctx, filepath.Join(GinkgoT().TempDir(), "datastore.db"))
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { Expect(db.Close()).To(Succeed()) })
+		Expect(db.Exec("INSERT INTO installed_apps(app_name) VALUES ('editor')")).To(Succeed())
+		Expect(db.Exec("INSERT INTO app_dependencies(app_name, dependency_name) VALUES ('editor', 'runtime')")).To(Succeed())
+		Expect(db.Exec("INSERT INTO app_dependencies(app_name, dependency_name) VALUES ('missing', 'runtime')")).NotTo(Succeed())
+		Expect(db.Exec("DELETE FROM installed_apps WHERE app_name = 'editor'")).To(Succeed())
+		var count int
+		Expect(db.Conn().QueryRowContext(ctx, "SELECT COUNT(*) FROM app_dependencies").Scan(&count)).To(Succeed())
+		Expect(count).To(BeZero())
+	})
 })
