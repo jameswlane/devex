@@ -40,8 +40,8 @@ Windows files, so native platform implementations need not edit the core contrac
 `PrivilegeAdapter.Run(ctx, plan, OperationIO) error` is the platform extension
 point. It does not depend on `exec.Cmd`, so macOS authorization and UAC
 ShellExecuteEx/process handles can implement it directly. `PrivilegeAdapterForOS`
-selects Unix sudo on Unix and the Windows token-aware adapter on Windows.
-Assign `DefaultPrivilegeAdapter` at
+selects macOS authorization on Darwin, Unix sudo on other Unix hosts, and the
+Windows token-aware adapter on Windows. Assign `DefaultPrivilegeAdapter` at
 startup to install a native adapter. Both scoped SDK execution and executable
 plugin dispatch use Run. `CommandPrivilegeAdapter.Prepare` is an optional seam for
 argv-based executors; `PrepareOperation` requires that optional capability.
@@ -51,7 +51,45 @@ instead. Native adapters must preserve argv,
 context, target account/home, stdio where supported and native result status.
 Native operation error types implement `NativeExitStatus` (`ExitCode() int`) so
 ExitStatus can preserve their code without requiring an exec.ExitError.
-Native macOS Authorization Services (#126) can use the same core run contract.
+
+## macOS authorization
+
+Non-elevated user-scope operations, including Homebrew and `defaults` preference
+writes, run directly in the invoking user's session. Under sudo, user-scope
+operations switch back to the resolved `SUDO_USER` through the Unix adapter rather
+than requesting administrator authorization. System-scope operations run directly
+when already elevated.
+
+A non-elevated system-scope operation uses `/usr/bin/osascript` and AppleScript's
+`do shell script ... with administrator privileges`, which presents the native
+Authorization Services prompt in an interactive console session. The adapter passes
+the command and arguments as AppleScript arguments and applies `quoted form` to
+each one; it authorizes only the selected command and does not enable developer
+mode, disable Gatekeeper, or change any other security setting as a side effect.
+Stdin, stdout and stderr are attached to `osascript`; AppleScript returns the
+target's standard output after the command finishes rather than streaming it
+incrementally.
+
+Authorization cancellation (`-128`), denial (`-60005`) and Authorization Services
+cancellation (`-60006`) return typed `AuthorizationDenied` with the native status.
+An `osascript` start failure returns `AuthorizationRequired`; context cancellation
+and other command failures remain distinct. Headless sessions without access to
+the native prompt are not a supported elevation path.
+
+### Native permission-denial smoke test
+
+**Status: NOT RUN — no macOS host is available in the development environment.**
+
+On an interactive macOS arm64 host, build a small helper in this module that calls
+`ExecOperationWithContext` with `ScopeSystem` and `/usr/bin/true`, then prints the
+returned error, its `AuthorizationError.Kind`, and `ExitStatus`. Run it as a
+non-root user and cancel the native administrator prompt. Verify that the helper
+reports `AuthorizationDenied`, preserves status `-128`, and that `/usr/bin/true`
+never runs. Repeat with `/usr/bin/id -un` and approve the prompt to verify the
+privileged command outputs `root`; before and after both runs, verify that
+`DevToolsSecurity -status` and `spctl --status` are unchanged. Also run a
+`ScopeUser` helper for `/usr/bin/whoami` and verify that it outputs the invoking
+user without displaying an authorization prompt.
 
 ## Windows scope and elevation
 
