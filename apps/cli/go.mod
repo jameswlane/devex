@@ -14,7 +14,7 @@ require (
 	github.com/jameswlane/devex/packages/plugin-sdk v0.0.5
 	github.com/muesli/reflow v0.3.0
 	github.com/onsi/ginkgo/v2 v2.33.1
-	github.com/onsi/gomega v1.40.0
+	github.com/onsi/gomega v1.44.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
