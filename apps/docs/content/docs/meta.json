@@ -3,6 +3,7 @@
 	"pages": [
 		"index",
 		"installation",
+		"files-and-directories",
 		"cli-reference",
 		"configuration",
 		"platforms",
