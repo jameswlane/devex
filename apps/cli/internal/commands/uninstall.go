@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -37,7 +38,7 @@ func NewUninstallCmd(repo types.Repository, settings config.CrossPlatformSetting
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Uninstall applications from your development environment",
-		Long: `The uninstall command removes applications that were previously installed by DevEx.
+		Long: `The uninstall command removes applications using their saved installation definitions or the current catalog.
 
 It supports uninstalling:
   • Individual applications by name
@@ -86,7 +87,7 @@ Safety features:
 	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep configuration files")
 	cmd.Flags().BoolVar(&keepData, "keep-data", false, "Keep user data and databases")
 	cmd.Flags().BoolVar(&removeOrphans, "remove-orphans", false, "Remove orphaned dependencies")
-	cmd.Flags().BoolVar(&cascade, "cascade", false, "Remove dependent packages")
+	cmd.Flags().BoolVar(&cascade, "cascade", false, "Allow noncritical dependency conflicts (select dependents explicitly)")
 	cmd.Flags().BoolVar(&backup, "backup", false, "Create backup before uninstalling")
 	cmd.Flags().BoolVar(&stopServices, "stop-services", false, "Stop services before uninstalling")
 	cmd.Flags().BoolVar(&cleanupSystem, "cleanup-system", false, "Clean up system files (service files, desktop files, icons)")
@@ -94,11 +95,71 @@ Safety features:
 	return cmd
 }
 
+var (
+	getUninstallInstaller  = installers.GetInstaller
+	removeOrphanedPackages = handleOrphanRemoval
+)
+
+func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSettings, name string) (types.AppConfig, error) {
+	data, definitionErr := repo.Get("installed-app-definition:" + normalizeInstallLookup(name))
+	if definitionErr != nil && !strings.Contains(definitionErr.Error(), "not found") {
+		return types.AppConfig{}, fmt.Errorf("failed to read installed definition for %s: %w", name, definitionErr)
+	}
+	if definitionErr == nil && data != "" {
+		var definition types.CrossPlatformApp
+		if err := json.Unmarshal([]byte(data), &definition); err != nil {
+			return types.AppConfig{}, fmt.Errorf("invalid installed definition for %s: %w", name, err)
+		}
+		if definition.Name == "" {
+			return types.AppConfig{}, fmt.Errorf("invalid installed definition for %s: application name is empty", name)
+		}
+		return definition.ToLegacyAppConfig(), nil
+	}
+
+	installedApp, installedErr := repo.GetApp(name)
+	if installedErr != nil && !strings.Contains(installedErr.Error(), "not found") {
+		return types.AppConfig{}, fmt.Errorf("failed to read installation record for %s: %w", name, installedErr)
+	}
+	if installedApp != nil && installedApp.InstallMethod != "" {
+		return *installedApp, nil
+	}
+
+	catalogApp, catalogErr := settings.GetApplicationByName(name)
+	if catalogErr == nil && catalogApp != nil {
+		return *catalogApp, nil
+	}
+
+	if installedApp != nil {
+		return types.AppConfig{}, fmt.Errorf("application %q is tracked but its installed definition is unavailable", name)
+	}
+	return types.AppConfig{}, fmt.Errorf("application %q is not tracked by DevEx and was not found in configuration", name)
+}
+
+func clearUninstallRecords(repo types.Repository, name string) error {
+	if err := repo.DeleteApp(name); err != nil {
+		return fmt.Errorf("failed to remove installation record: %w", err)
+	}
+	if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(name), ""); err != nil {
+		return fmt.Errorf("failed to clear saved application definition: %w", err)
+	}
+	return nil
+}
+
+func uninstallFailuresError(failures []string) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	return fmt.Errorf("uninstall failed: %s", strings.Join(failures, "; "))
+}
+
 func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings) error {
-	// Update settings with runtime flags
+	_, mergedSettings, _, err := configuredApplications(settings)
+	if err != nil {
+		return fmt.Errorf("failed to load applications from configuration: %w", err)
+	}
+	settings = mergedSettings
 	settings.Verbose = viper.GetBool("verbose")
 
-	// Color setup
 	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
 	red := color.New(color.FgRed).SprintFunc()
@@ -106,24 +167,32 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 
 	log.Info("Starting uninstall process")
 
-	// Determine which apps to uninstall
 	var appsToUninstall []types.AppConfig
+	var failures []string
+	resolveTrackedApp := func(tracked types.AppConfig) {
+		app, err := resolveUninstallApp(repo, settings, tracked.Name)
+		if err != nil {
+			failures = append(failures, err.Error())
+			return
+		}
+		appsToUninstall = append(appsToUninstall, app)
+	}
 
 	switch {
 	case all:
-		// Get all installed apps
 		installedApps, err := repo.ListApps()
 		if err != nil {
 			return fmt.Errorf("failed to list installed apps: %w", err)
 		}
-		appsToUninstall = installedApps
-
-		if len(appsToUninstall) == 0 {
+		if len(installedApps) == 0 {
 			fmt.Println("No applications are currently installed.")
 			return nil
 		}
+		for _, app := range installedApps {
+			resolveTrackedApp(app)
+		}
 
-		if !force {
+		if !force && len(appsToUninstall) > 0 {
 			fmt.Printf("%s You are about to uninstall %d applications:\n", yellow("⚠️"), len(appsToUninstall))
 			for _, app := range appsToUninstall {
 				fmt.Printf("  • %s (%s)\n", app.Name, app.InstallMethod)
@@ -137,45 +206,35 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 	case category != "":
-		// Get apps by category
 		installedApps, err := repo.ListApps()
 		if err != nil {
 			return fmt.Errorf("failed to list installed apps: %w", err)
 		}
-
-		for _, app := range installedApps {
+		for _, tracked := range installedApps {
+			if tracked.Category != "" && tracked.Category != category {
+				continue
+			}
+			app, err := resolveUninstallApp(repo, settings, tracked.Name)
+			if err != nil {
+				// An unresolved definition has no reliable category, so its failure remains actionable.
+				failures = append(failures, err.Error())
+				continue
+			}
 			if app.Category == category {
 				appsToUninstall = append(appsToUninstall, app)
 			}
 		}
-
-		if len(appsToUninstall) == 0 {
-			fmt.Printf("No installed applications found in category '%s'.\n", category)
-			return nil
-		}
 	case len(apps) > 0:
-		// Get specific apps
 		for _, appName := range apps {
-			// Split comma-separated values
-			names := strings.Split(appName, ",")
-			for _, name := range names {
+			for _, name := range strings.Split(appName, ",") {
 				name = strings.TrimSpace(name)
-
-				// Check if app is in the database (installed by DevEx)
-				installedApp, err := repo.GetApp(name)
+				app, err := resolveUninstallApp(repo, settings, name)
 				if err != nil {
-					// Try to find in configuration
-					app, configErr := settings.GetApplicationByName(name)
-					if configErr != nil {
-						fmt.Printf("%s Application '%s' not found in configuration or installation database\n",
-							yellow("⚠️"), name)
-						continue
-					}
-					// Use config app but mark as potentially not installed
-					appsToUninstall = append(appsToUninstall, *app)
-				} else {
-					appsToUninstall = append(appsToUninstall, *installedApp)
+					fmt.Printf("%s %v\n", yellow("⚠️"), err)
+					failures = append(failures, err.Error())
+					continue
 				}
+				appsToUninstall = append(appsToUninstall, app)
 			}
 		}
 	default:
@@ -183,11 +242,17 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	}
 
 	if len(appsToUninstall) == 0 {
-		fmt.Println("No applications to uninstall.")
+		if err := uninstallFailuresError(failures); err != nil {
+			return err
+		}
+		if category != "" {
+			fmt.Printf("No installed applications found in category '%s'.\n", category)
+		} else {
+			fmt.Println("No applications to uninstall.")
+		}
 		return nil
 	}
 
-	// Detect conflicts before proceeding
 	fmt.Printf("%s Checking for conflicts...\n", cyan("🔍"))
 	conflictDetector := NewConflictDetector(repo)
 	conflicts, err := conflictDetector.DetectConflicts(ctx, appsToUninstall, cascade)
@@ -208,7 +273,8 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 
 		if !summary.CanProceed && !force {
 			fmt.Printf("\n%s Cannot proceed due to %d critical conflicts. Use --force to override.\n", red("❌"), summary.CriticalCount)
-			return nil
+			failures = append(failures, fmt.Sprintf("critical conflicts prevented uninstalling %d application(s)", summary.CriticalCount))
+			return uninstallFailuresError(failures)
 		}
 
 		if summary.CriticalCount == 0 {
@@ -217,43 +283,46 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		fmt.Println()
 	}
 
-	// Show what will be uninstalled
 	fmt.Printf("%s Uninstalling %d application(s):\n\n", cyan("📦"), len(appsToUninstall))
 
 	success := 0
-	failed := 0
 	skipped := 0
-
 	for i, app := range appsToUninstall {
 		fmt.Printf("[%d/%d] %s (%s)\n", i+1, len(appsToUninstall), app.Name, app.InstallMethod)
 
-		// Get the installer
-		installer := installers.GetInstaller(ctx, app.InstallMethod)
-		if installer == nil {
-			fmt.Printf("  %s Invalid install method: %s\n", red("❌"), app.InstallMethod)
-			failed++
+		removeCommand := strings.TrimSpace(app.UninstallCommand)
+		if removeCommand == "" {
+			removeCommand = strings.TrimSpace(app.InstallCommand)
+		}
+		if removeCommand == "" {
+			fmt.Printf("  %s No uninstall or install command is configured\n", red("❌"))
+			failures = append(failures, fmt.Sprintf("%s: no uninstall or install command is configured", app.Name))
 			continue
 		}
 
-		// Check if app is actually installed
+		installer := getUninstallInstaller(ctx, app.InstallMethod)
+		if installer == nil {
+			fmt.Printf("  %s Invalid install method: %s\n", red("❌"), app.InstallMethod)
+			failures = append(failures, fmt.Sprintf("%s: invalid install method %q", app.Name, app.InstallMethod))
+			continue
+		}
+
 		installed, err := installer.IsInstalled(app.InstallCommand)
 		if err != nil {
 			fmt.Printf("  %s Failed to check installation status: %v\n", red("❌"), err)
-			failed++
+			failures = append(failures, fmt.Sprintf("%s: failed to check installation status: %v", app.Name, err))
 			continue
 		}
 
 		if !installed {
 			fmt.Printf("  %s Not installed (skipping)\n", yellow("⚠️"))
 			skipped++
-			// Remove from database anyway since it's tracked but not installed
-			if err := repo.DeleteApp(app.Name); err != nil {
-				log.Warn("Failed to remove app from database", "app", app.Name, "error", err)
+			if err := clearUninstallRecords(repo, app.Name); err != nil {
+				failures = append(failures, fmt.Sprintf("%s: failed to clear stale installation records: %v", app.Name, err))
 			}
 			continue
 		}
 
-		// Create backup if requested
 		if backup {
 			bm := NewBackupManager(repo)
 			backupEntry, err := bm.CreateBackup(ctx, &app)
@@ -264,23 +333,21 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
-		// Stop services if requested
 		if stopServices {
 			if err := stopAppServices(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to stop services: %v\n", yellow("⚠️"), err)
 			}
 		}
 
-		// Uninstall the application
-		if err := installer.Uninstall(app.UninstallCommand, repo); err != nil {
+		if err := installer.Uninstall(removeCommand, repo); err != nil {
 			fmt.Printf("  %s Failed to uninstall: %v\n", red("❌"), err)
-			failed++
+			failures = append(failures, fmt.Sprintf("%s: %v", app.Name, err))
 			continue
 		}
 
+		success++
 		fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
 
-		// Clean up configuration files if requested
 		if !keepConfig {
 			if err := cleanupConfigFiles(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up config files: %v\n", yellow("⚠️"), err)
@@ -289,7 +356,6 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
-		// Clean up data files if requested
 		if !keepData {
 			if err := cleanupDataFiles(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up data files: %v\n", yellow("⚠️"), err)
@@ -298,7 +364,6 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
-		// Clean up system files if requested
 		if cleanupSystem {
 			if err := cleanupSystemFiles(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up system files: %v\n", yellow("⚠️"), err)
@@ -307,34 +372,33 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
-		// Remove from database
-		if err := repo.DeleteApp(app.Name); err != nil {
-			fmt.Printf("  %s Warning: Failed to remove from database: %v\n", yellow("⚠️"), err)
+		if err := clearUninstallRecords(repo, app.Name); err != nil {
+			fmt.Printf("  %s Failed to update installation records: %v\n", red("❌"), err)
+			failures = append(failures, fmt.Sprintf("%s: uninstalled but failed to update installation records: %v", app.Name, err))
 		}
 
-		success++
 		fmt.Println()
 	}
 
-	// Handle orphan removal if requested
 	if removeOrphans && success > 0 {
 		fmt.Printf("\n%s Checking for orphaned packages...\n", cyan("🔍"))
-		// Try to remove orphans based on the package manager used
-		// This is a simplified approach - in production you'd want to detect the package manager
-		handleOrphanRemoval(ctx)
+		removeOrphanedPackages(ctx)
 	}
 
-	// Summary
-	fmt.Printf("%s Uninstall complete!\n", green("✅"))
+	if len(failures) > 0 {
+		fmt.Printf("%s Uninstall finished with errors!\n", red("❌"))
+	} else {
+		fmt.Printf("%s Uninstall complete!\n", green("✅"))
+	}
 	fmt.Printf("  Successfully uninstalled: %s\n", green(fmt.Sprintf("%d", success)))
 	if skipped > 0 {
 		fmt.Printf("  Skipped (not installed): %s\n", yellow(fmt.Sprintf("%d", skipped)))
 	}
-	if failed > 0 {
-		fmt.Printf("  Failed: %s\n", red(fmt.Sprintf("%d", failed)))
+	if len(failures) > 0 {
+		fmt.Printf("  Failed: %s\n", red(fmt.Sprintf("%d", len(failures))))
 	}
 
-	return nil
+	return uninstallFailuresError(failures)
 }
 
 func cleanupConfigFiles(app *types.AppConfig) error {

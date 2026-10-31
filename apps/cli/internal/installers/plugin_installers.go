@@ -98,13 +98,19 @@ func GetInstaller(ctx context.Context, method string) types.BaseInstaller {
 	return &PluginBasedInstaller{
 		method:          method,
 		pluginBootstrap: pluginBootstrap,
+		ctx:             ctx,
 	}
+}
+
+type pluginExecutor interface {
+	ExecutePluginWithContext(context.Context, string, []string) error
 }
 
 // PluginBasedInstaller wraps plugin execution in the BaseInstaller interface
 type PluginBasedInstaller struct {
 	method          string
-	pluginBootstrap *bootstrap.PluginBootstrap
+	pluginBootstrap pluginExecutor
+	ctx             context.Context
 }
 
 // Install executes the plugin install command
@@ -127,7 +133,7 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 		}
 	}
 
-	return p.pluginBootstrap.ExecutePlugin(pluginName, args)
+	return p.pluginBootstrap.ExecutePluginWithContext(p.ctx, pluginName, args)
 }
 
 // Uninstall executes the plugin remove command
@@ -149,7 +155,7 @@ func (p *PluginBasedInstaller) Uninstall(command string, repo types.Repository) 
 		}
 	}
 
-	return p.pluginBootstrap.ExecutePlugin(pluginName, args)
+	return p.pluginBootstrap.ExecutePluginWithContext(p.ctx, pluginName, args)
 }
 
 // IsInstalled checks if a package is installed using the plugin
@@ -159,12 +165,29 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 	}
 
 	pluginName := "package-manager-" + p.method
-	args := []string{"list"}
+	operation := "list"
+	switch p.method {
+	case "apt", "appimage", "deb", "flatpak", "mise", "pip":
+		operation = "is-installed"
+	}
+	args := []string{operation}
+	if operation == "is-installed" {
+		for _, part := range strings.Fields(command) {
+			if !strings.HasPrefix(part, "-") && part != "install" && part != "remove" && part != "sudo" {
+				args = append(args, part)
+			}
+		}
+	}
 
-	// For now, we'll return true and let the plugin handle the check
-	// This is a simplified implementation
-	err := p.pluginBootstrap.ExecutePlugin(pluginName, args)
-	return err == nil, nil
+	// Plugins currently use the same error exit for an absent package and a
+	// discovery failure. Neither is proof of absence: preserve the error and
+	// tracking until the plugin protocol can distinguish them. For plugins
+	// without a package-specific check, list only verifies plugin availability;
+	// the remove operation remains responsible for checking the package.
+	if err := p.pluginBootstrap.ExecutePluginWithContext(p.ctx, pluginName, args); err != nil {
+		return false, fmt.Errorf("plugin %s installation check failed: %w", pluginName, err)
+	}
+	return true, nil
 }
 
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {

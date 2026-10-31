@@ -5,4 +5,3 @@ applications:
     linux:
       install_method: apt
       install_command: jq
-      uninstall_command: jq

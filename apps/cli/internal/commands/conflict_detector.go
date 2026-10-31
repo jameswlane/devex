@@ -114,7 +114,7 @@ func (cd *ConflictDetector) checkDependencyConflicts(ctx context.Context, app *t
 
 			if cascade {
 				severity = "info"
-				resolution = "Will be automatically uninstalled due to --cascade flag"
+				resolution = fmt.Sprintf("Dependency conflict allowed by --cascade; select '%s' explicitly to uninstall it", dependent)
 			}
 
 			conflicts = append(conflicts, UninstallConflict{
