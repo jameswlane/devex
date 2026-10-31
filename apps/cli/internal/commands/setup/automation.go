@@ -98,17 +98,28 @@ func printAutomatedSetupPlan() {
 func printAutomatedSetupCompletion(model *SetupModel) {
 	selectedShell := model.getSelectedShell()
 
-	fmt.Printf("\n🎉 Automated setup complete!\n")
-	fmt.Printf("Your development environment has been set up with:\n")
+	if model.installation.hasInstallErrors() {
+		fmt.Printf("\n⚠️  Automated setup completed with issues:\n")
+		for _, issue := range model.installation.getErrors() {
+			fmt.Printf("  • %s\n", issue)
+		}
+		fmt.Printf("\nWhat was attempted:\n")
+	} else {
+		fmt.Printf("\n🎉 Automated setup complete!\n")
+		fmt.Printf("Your development environment has been set up with:\n")
+	}
 	fmt.Printf("  • %s shell with DevEx configuration\n", selectedShell)
 	fmt.Printf("  • Essential development tools\n")
 	fmt.Printf("  • Programming languages: Node.js, Python\n")
 	fmt.Printf("  • Database: PostgreSQL\n")
 
-	if model.shellSwitched {
+	switch {
+	case model.installation.hasInstallErrors():
+		fmt.Printf("\nReview the issues above and retry shell configuration.\n")
+	case model.shellSwitched:
 		fmt.Printf("\nYour shell has been switched to %s. Please restart your terminal\n", selectedShell)
 		fmt.Printf("or run 'exec %s' to start using your new environment.\n", selectedShell)
-	} else {
+	default:
 		fmt.Printf("\nYour environment is configured for %s.\n", selectedShell)
 	}
 
@@ -157,6 +168,7 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	// Handle shell configuration and switching
 	if err := model.finalizeSetup(ctx); err != nil {
 		log.Warn("Shell setup had issues", "error", err)
+		model.recordShellConfigurationFailure(model.getSelectedShell(), err)
 		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
 	}
 

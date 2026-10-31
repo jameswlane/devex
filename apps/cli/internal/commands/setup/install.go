@@ -77,6 +77,7 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 		// Run shell finalization (same as automated setup)
 		if err := m.finalizeSetup(ctx); err != nil {
 			log.Warn("Shell setup had issues during TUI installation", "error", err)
+			m.recordShellConfigurationFailure(m.getSelectedShell(), err)
 			// Don't fail the entire setup for shell config issues
 		}
 
@@ -121,6 +122,7 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// 1. Shell configuration using tool-shell plugin (conditional on shell selection or config)
 	if err := m.handleShellConfiguration(ctx, pluginBootstrap, selectedShell); err != nil {
 		log.Warn("Shell configuration failed", "error", err)
+		m.recordShellConfigurationFailure(selectedShell, err)
 		// Don't fail the entire setup for shell config issues
 	}
 
@@ -146,7 +148,6 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 }
 
 // handleShellConfiguration configures the selected shell using tool-shell plugin
-// Uses plugin only if user changed shell from default or if custom shell config exists
 func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap, selectedShell string) error {
 	// For now, we'll always run shell configuration since we can't easily detect existing config
 	// TODO: Add detection of existing shell configuration files to check if config is needed
@@ -157,17 +158,15 @@ func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstr
 	manager := pluginBootstrap.GetManager()
 	installedPlugins := manager.ListPluginsWithContext(ctx)
 
-	if _, exists := installedPlugins["tool-shell"]; !exists {
-		log.Warn("tool-shell plugin not available, skipping shell configuration")
-		return nil
+	plugin, exists := installedPlugins["tool-shell"]
+	if !exists {
+		return fmt.Errorf("tool-shell plugin is not installed; rerun 'devex setup' to install required plugins, then retry shell configuration")
 	}
 
 	log.Info("Configuring shell using tool-shell plugin", "shell", selectedShell)
 
-	// Execute tool-shell plugin with the selected shell
-	args := []string{"configure", selectedShell}
-	if err := pluginBootstrap.ExecutePlugin("tool-shell", args); err != nil { //nolint:contextcheck
-		return fmt.Errorf("failed to configure shell using tool-shell plugin. This may be due to shell configuration file permissions or an unsupported shell type. Please check that your shell configuration files are writable and that your shell is supported: %w", err)
+	if err := runShellSetup(ctx, plugin.Path, selectedShell); err != nil {
+		return err
 	}
 
 	log.Info("Shell configuration completed successfully", "shell", selectedShell)
