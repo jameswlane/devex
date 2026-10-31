@@ -3,6 +3,7 @@ package main_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,7 +17,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	devex "github.com/jameswlane/devex/apps/cli/cmd"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/errors"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 var _ = Describe("Main", func() {
@@ -116,3 +120,50 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	}
 	return filepath.Join(values[0], "bin", "go"), env
 }
+
+var _ = Describe("CLI startup regression coverage", func() {
+	It("keeps inspection commands usable with a linked legacy config and previews tracked applications", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		goBin, env := isolatedGoRunEnv(home)
+		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
+		build.Env = env
+		output, err := build.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		// Set a legacy link that migration refuses before touching any source.
+		Expect(os.MkdirAll(filepath.Join(home, ".devex"), 0700)).To(Succeed())
+		Expect(os.Symlink("dotfiles.yaml", filepath.Join(home, ".devex", "config.yaml"))).To(Succeed())
+		for _, args := range [][]string{{"--help"}, {"completion", "bash"}, {"paths"}, {"--version"}, {"config", "show"}} {
+			cmd := exec.CommandContext(ctx, binary, args...)
+			cmd.Env = append(env, "DEVEX_OFFLINE=true", "DEVEX_DISABLE_UPDATE_CHECK=true")
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+			output, err := cmd.Output()
+			Expect(err).NotTo(HaveOccurred(), "%v: %s", args, stderr.String())
+			Expect(output).NotTo(BeEmpty())
+			Expect(stderr.String()).To(And(ContainSubstring("Warning: legacy migration skipped"), ContainSubstring("devex paths")))
+		}
+		state := filepath.Join(home, ".local", "state", "devex")
+		Expect(os.MkdirAll(state, 0700)).To(Succeed())
+		path := filepath.Join(state, "datastore.db")
+		db, err := datastore.NewSQLiteContext(ctx, path)
+		Expect(err).NotTo(HaveOccurred())
+		repo := repository.NewRepository(db)
+		Expect(repo.AddApp("tracked-editor")).To(Succeed())
+		definition, err := json.Marshal(types.CrossPlatformApp{Name: "tracked-editor", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "tracked-package"}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.Set("installed-app-definition:tracked-editor", string(definition))).To(Succeed())
+		Expect(db.Close()).To(Succeed())
+		before, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		for _, args := range [][]string{{"uninstall", "--all", "--dry-run"}, {"uninstall", "--app", "tracked-editor", "--dry-run"}} {
+			cmd := exec.CommandContext(ctx, binary, args...)
+			cmd.Env = append(env, "DEVEX_OFFLINE=true", "DEVEX_DISABLE_UPDATE_CHECK=true")
+			output, err := cmd.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), string(output))
+			Expect(string(output)).To(And(ContainSubstring("tracked-editor"), ContainSubstring("tracked-package")))
+			Expect(string(output)).NotTo(ContainSubstring("No applications are currently installed"))
+			Expect(os.ReadFile(path)).To(Equal(before))
+		}
+	})
+})

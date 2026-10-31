@@ -1,6 +1,8 @@
 package sdk_test
 
 import (
+	"fmt"
+	"os"
 	"os/user"
 	"path/filepath"
 
@@ -66,5 +68,16 @@ var _ = Describe("Shared paths", func() {
 		p, err := sdk.ResolvePaths()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(p.Home).To(Equal("/home/alice"))
+	})
+	It("falls back to the OS home if the privilege resolver fails", func() {
+		original := sdk.NewPrivilegeResolver
+		DeferCleanup(func() { sdk.NewPrivilegeResolver = original })
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
+			return sdk.PrivilegeResolver{CurrentUser: func() (*user.User, error) { return nil, fmt.Errorf("account unavailable") }}
+		}
+		home, err := os.UserHomeDir()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sdk.PathsForHome("").Home).To(Equal(home))
+		Expect(filepath.IsAbs(sdk.PathsForHome("").Backups())).To(BeTrue())
 	})
 })

@@ -36,6 +36,9 @@ func PathsForHome(home string) Paths {
 			home = identity.HomeDir
 		}
 	}
+	if home == "" {
+		home, _ = os.UserHomeDir()
+	}
 	return ResolvePathsFor(runtime.GOOS, home, os.Getenv)
 }
 

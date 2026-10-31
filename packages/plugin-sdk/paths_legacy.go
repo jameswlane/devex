@@ -11,6 +11,10 @@ import (
 	"strings"
 )
 
+// ErrMigrationRefused identifies unsafe layouts that require manual repair.
+// Filesystem I/O failures remain distinct so callers can fail operational commands.
+var ErrMigrationRefused = errors.New("legacy migration refused")
+
 type legacyMove struct{ source, destination string }
 
 // Keep legacy knowledge here for the one-release compatibility window.
@@ -68,7 +72,7 @@ func openPathRoot(path string, create bool, owner *Downloader) (*os.Root, error)
 	if owner != nil {
 		rel, err := filepath.Rel(owner.installOwner.HomeDir, path)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			return nil, fmt.Errorf("elevated storage must remain beneath invoking user's home: %s", path)
+			return nil, fmt.Errorf("%w: elevated storage must remain beneath invoking user's home: %s", ErrMigrationRefused, path)
 		}
 		root, err := openPathRoot(owner.installOwner.HomeDir, false, nil)
 		if err != nil {
@@ -91,7 +95,7 @@ func openPathRoot(path string, create bool, owner *Downloader) (*os.Root, error)
 	}
 
 	if !filepath.IsAbs(path) {
-		return nil, fmt.Errorf("storage path must be absolute: %s", path)
+		return nil, fmt.Errorf("%w: storage path must be absolute: %s", ErrMigrationRefused, path)
 	}
 	volume := filepath.VolumeName(path) + string(os.PathSeparator)
 	root, err := os.OpenRoot(volume)
@@ -119,7 +123,7 @@ func openPathRoot(path string, create bool, owner *Downloader) (*os.Root, error)
 			}
 			if err == nil {
 				if !before.IsDir() || before.Mode()&os.ModeSymlink != 0 {
-					err = fmt.Errorf("refusing symlinked storage directory %s", logical)
+					err = fmt.Errorf("%w: refusing symlinked storage directory %s", ErrMigrationRefused, logical)
 				} else {
 					next, err = root.OpenRoot(part)
 					if err == nil {
@@ -127,7 +131,11 @@ func openPathRoot(path string, create bool, owner *Downloader) (*os.Root, error)
 						if e != nil || !os.SameFile(before, after) {
 							_ = next.Close()
 							next = nil
-							err = fmt.Errorf("storage directory changed while opening %s", logical)
+							if e != nil {
+								err = e
+							} else {
+								err = fmt.Errorf("%w: storage directory changed while opening %s", ErrMigrationRefused, logical)
+							}
 						}
 					}
 				}
@@ -155,7 +163,7 @@ func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 		}
 		if identity.UID != "0" {
 			if identity.HomeDir != p.Home {
-				return fmt.Errorf("migration home does not match invoking account")
+				return fmt.Errorf("%w: migration home does not match invoking account", ErrMigrationRefused)
 			}
 			owner = &Downloader{installOwner: identity}
 		}
@@ -186,9 +194,6 @@ func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 	}
 	defer func() { _ = root.Close() }()
 	for _, cache := range []string{"cache", "plugin-cache", "setup-cache"} {
-		if err := validateLegacy(ctx, filepath.Join(old, cache)); err != nil {
-			return err
-		}
 		if _, err := root.Lstat(cache); err == nil {
 			if dryRun {
 				_, _ = fmt.Fprintf(out, "Would discard legacy cache %s\n", filepath.Join(old, cache))
@@ -235,7 +240,7 @@ func validateLegacy(ctx context.Context, path string) error {
 		return err
 	}
 	if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
-		return fmt.Errorf("refusing symlinked or special migration source %s", path)
+		return fmt.Errorf("%w: refusing symlinked or special migration source %s", ErrMigrationRefused, path)
 	}
 	if info.IsDir() {
 		child, err := root.OpenRoot(filepath.Base(path))
@@ -266,7 +271,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return err
 	}
 	if strings.HasPrefix(filepath.Clean(destination), filepath.Clean(source)+string(os.PathSeparator)) {
-		return fmt.Errorf("migration destination must not be inside source: %s", destination)
+		return fmt.Errorf("%w: migration destination must not be inside source: %s", ErrMigrationRefused, destination)
 	}
 	if filepath.Clean(source) == filepath.Clean(destination) {
 		return nil
@@ -288,7 +293,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("refusing symlinked source %s", source)
+		return fmt.Errorf("%w: refusing symlinked source %s", ErrMigrationRefused, source)
 	}
 	if info.IsDir() {
 		if dry {
@@ -337,7 +342,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return nil
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("refusing special source %s", source)
+		return fmt.Errorf("%w: refusing special source %s", ErrMigrationRefused, source)
 	}
 	parent, e := openPathRoot(filepath.Dir(destination), false, nil)
 	if e == nil {
@@ -347,7 +352,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 	}
 	if target, err := os.Lstat(destination); err == nil {
 		if target.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("refusing symlinked migration destination %s", destination)
+			return fmt.Errorf("%w: refusing symlinked migration destination %s", ErrMigrationRefused, destination)
 		}
 		_, _ = fmt.Fprintf(out, "Keeping existing %s (legacy source retained: %s)\n", destination, source)
 		return nil
@@ -373,7 +378,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return err
 	}
 	if !os.SameFile(info, opened) {
-		return fmt.Errorf("source changed while opening %s", source)
+		return fmt.Errorf("%w: source changed while opening %s", ErrMigrationRefused, source)
 	}
 	temp, err := createStorageTemp(dst, ".migration-")
 	if err != nil {
@@ -414,7 +419,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return err
 	}
 	if !published.Mode().IsRegular() || !os.SameFile(published, staged) {
-		return fmt.Errorf("migration temporary file was replaced before publication: %s", destination)
+		return fmt.Errorf("%w: migration temporary file was replaced before publication: %s", ErrMigrationRefused, destination)
 	}
 	directory, err := dst.Open(".")
 	if err != nil {
@@ -430,7 +435,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return err
 	}
 	if !os.SameFile(info, current) {
-		return fmt.Errorf("migration source changed: %s", source)
+		return fmt.Errorf("%w: migration source changed: %s", ErrMigrationRefused, source)
 	}
 	if err := src.Remove(name); err != nil {
 		return err

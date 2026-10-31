@@ -25,9 +25,6 @@ const (
 	StatusUpdateInterval = 100 // Milliseconds between status updates
 )
 
-// Configuration paths and directories
-const ()
-
 // Application categories for organization
 const (
 	CategoryDevelopment = "Development Tools"
