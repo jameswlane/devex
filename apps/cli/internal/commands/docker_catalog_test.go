@@ -14,9 +14,11 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -108,9 +110,27 @@ var _ = Describe("Docker application catalog", func() {
 		Expect(yaml.Unmarshal(data, &app)).To(Succeed())
 		for _, id := range []string{"linuxmint", "pop", "elementary", "zorin", "unmatched"} {
 			Expect(app.LinuxConfigForDistribution(id).InstallMethod).To(Equal("apt"), id)
-			Expect(app.LinuxConfigForDistribution(id, "ubuntu", "debian").InstallMethod).To(Equal("apt"), id)
+			Expect(app.LinuxConfigForDistribution(id, "ubuntu", "debian")).To(Equal(app.Linux), id)
 		}
 	}, Entry("bat", "bat"), Entry("fzf", "fzf"), Entry("ripgrep", "ripgrep"), Entry("eza", "eza"), Entry("fd-find", "fd-find"), Entry("zoxide", "zoxide"), Entry("tldr", "tldr"))
+
+	DescribeTable("preserves curlpipe primaries and their hooks on Ubuntu and Debian", func(name, distro, version string) {
+		data, err := os.ReadFile(filepath.Join("..", "..", "config", "applications", "development", name+".yaml"))
+		Expect(err).NotTo(HaveOccurred())
+		var app types.CrossPlatformApp
+		Expect(yaml.Unmarshal(data, &app)).To(Succeed())
+		selected := app.LinuxConfigForPlatform(platform.DetectionResult{Distribution: distro, Version: version, Architecture: "amd64"})
+		Expect(selected.InstallMethod).To(Equal("curlpipe"))
+		Expect(selected).To(Equal(app.Linux))
+		Expect(selected.PostInstall).NotTo(BeEmpty())
+	},
+		Entry("neovim Ubuntu 22.04", "neovim", "ubuntu", "22.04"),
+		Entry("neovim Ubuntu 24.04", "neovim", "ubuntu", "24.04"),
+		Entry("neovim Debian 12", "neovim", "debian", "12"),
+		Entry("lazygit Ubuntu 22.04", "lazygit", "ubuntu", "22.04"),
+		Entry("lazygit Ubuntu 24.04", "lazygit", "ubuntu", "24.04"),
+		Entry("lazygit Debian 12", "lazygit", "debian", "12"),
+	)
 
 	DescribeTable("configures the parent apt repository and rejects unsupported systems before running apt", func(release, repository, codename string) {
 		// Replace only the os-release read; stub all commands so no host changes occur.
@@ -160,18 +180,37 @@ dpkg() { echo amd64; }
 			}
 			return nil
 		}))
+		// Cleanup resolves the user home even for absolute config paths.
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
 		// Pin Linux apt config independently of the host distribution.
-		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "Docker"}, InstallMethod: "apt", InstallCommand: docker.Linux.InstallCommand, UninstallCommand: docker.Linux.UninstallCommand}
+		configPath := filepath.Join(GinkgoT().TempDir(), "docker.conf")
+		Expect(os.WriteFile(configPath, []byte("docker config"), 0600)).To(Succeed())
+		app := types.AppConfig{ConfigFiles: []types.ConfigFile{{Destination: configPath}}, BaseConfig: types.BaseConfig{Name: "Docker"}, InstallMethod: "apt", InstallCommand: docker.Linux.InstallCommand, UninstallCommand: docker.Linux.UninstallCommand}
 		Expect(repo.SaveApp(app)).To(Succeed())
+		definition, err := json.Marshal(types.CrossPlatformApp{Name: "Docker", AllPlatforms: types.OSConfig{
+			InstallMethod: app.InstallMethod, InstallCommand: app.InstallCommand, UninstallCommand: app.UninstallCommand, ConfigFiles: app.ConfigFiles,
+		}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.Set("installed-app-definition:docker", string(definition))).To(Succeed())
 		cmd := commands.NewUninstallCmd(repo, config.CrossPlatformSettings{})
 		cmd.SetArgs(append([]string{"--app", "Docker", "--force"}, flags...))
-		err := cmd.ExecuteContext(ctx)
+		err = cmd.ExecuteContext(ctx)
 		if uninstallFails || cleanupFails || len(flags) > 1 {
 			Expect(err).To(HaveOccurred())
 		} else {
 			Expect(err).NotTo(HaveOccurred())
 		}
 		Expect(calls).To(Equal(expectedCalls))
+		if !uninstallFails && len(flags) <= 1 {
+			_, err := repo.GetApp("Docker")
+			Expect(err).To(HaveOccurred())
+			definition, err := repo.Get("installed-app-definition:docker")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(definition).To(BeEmpty())
+			Expect(configPath).NotTo(BeAnExistingFile())
+		} else {
+			Expect(configPath).To(BeAnExistingFile())
+		}
 	},
 		Entry("default preserves data", []string{}, false, false, 0),
 		Entry("opt-in removes data", []string{"--remove-docker-data"}, false, false, 1),
@@ -179,5 +218,46 @@ dpkg() { echo amd64; }
 		Entry("cleanup failures reach caller", []string{"--remove-docker-data"}, false, true, 1),
 		Entry("keep-data conflicts with removal", []string{"--remove-docker-data", "--keep-data"}, false, false, 0),
 	)
+
+	It("warns when Docker data removal does not apply to the selected application", func() {
+		repo := mocks.NewMockRepository()
+		Expect(repo.SaveApp(types.AppConfig{BaseConfig: types.BaseConfig{Name: "example"}, InstallMethod: "apt", InstallCommand: "example"})).To(Succeed())
+		useRecordingInstaller(&recordingInstaller{})
+		DeferCleanup(commands.SetDockerDataRemovalForTest(func(context.Context) error {
+			Fail("Docker data cleanup must not run for another application")
+			return nil
+		}))
+		var warnings bytes.Buffer
+		cmd := commands.NewUninstallCmd(repo, config.CrossPlatformSettings{})
+		cmd.SetErr(&warnings)
+		cmd.SetArgs([]string{"--app", "example", "--force", "--remove-docker-data"})
+		Expect(cmd.ExecuteContext(context.Background())).To(Succeed())
+		Expect(warnings.String()).To(ContainSubstring("--remove-docker-data has no effect"))
+	})
+
+	It("previews Docker data removal without running cleanup", func() {
+		if runtime.GOOS != "linux" {
+			Skip("Linux Docker Engine data")
+		}
+		repo := mocks.NewMockRepository()
+		definition, err := json.Marshal(types.CrossPlatformApp{Name: "Docker", AllPlatforms: types.OSConfig{
+			InstallMethod: "apt", InstallCommand: docker.Linux.InstallCommand, UninstallCommand: docker.Linux.UninstallCommand,
+		}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.SaveApp(types.AppConfig{BaseConfig: types.BaseConfig{Name: "Docker"}, InstallMethod: "apt"})).To(Succeed())
+		Expect(repo.Set("installed-app-definition:docker", string(definition))).To(Succeed())
+		DeferCleanup(commands.SetDockerDataRemovalForTest(func(context.Context) error {
+			Fail("Docker data cleanup must not run during a preview")
+			return nil
+		}))
+		viper.Set("dry-run", true)
+		DeferCleanup(viper.Set, "dry-run", false)
+		var out bytes.Buffer
+		cmd := commands.NewUninstallCmd(repo, config.CrossPlatformSettings{})
+		cmd.SetOut(&out)
+		cmd.SetArgs([]string{"--app", "Docker", "--remove-docker-data"})
+		Expect(cmd.ExecuteContext(context.Background())).To(Succeed())
+		Expect(out.String()).To(ContainSubstring("Would permanently delete Docker data in /var/lib/docker and /var/lib/containerd"))
+	})
 
 })

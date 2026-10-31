@@ -87,7 +87,7 @@ Safety features:
 				apps = []string{appName}
 			}
 
-			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, removeDockerData, repo, settings, cmd.OutOrStdout())
+			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, removeDockerData, repo, settings, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 
@@ -97,7 +97,7 @@ Safety features:
 	cmd.Flags().BoolVar(&all, "all", false, "Uninstall all applications (requires confirmation)")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompts")
 	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep configuration files")
-	cmd.Flags().BoolVar(&removeDockerData, "remove-docker-data", false, "Permanently delete /var/lib/docker after uninstalling Docker on Linux (data is kept by default)")
+	cmd.Flags().BoolVar(&removeDockerData, "remove-docker-data", false, "Permanently delete /var/lib/docker and /var/lib/containerd after uninstalling Docker on Linux (data is kept by default)")
 	cmd.Flags().BoolVar(&keepData, "keep-data", false, "Keep user data and databases")
 	cmd.Flags().BoolVar(&removeOrphans, "remove-orphans", false, "Remove orphaned dependencies")
 	cmd.Flags().BoolVar(&cascade, "cascade", false, "Allow noncritical dependency conflicts (select dependents explicitly)")
@@ -166,7 +166,7 @@ func uninstallFailuresError(failures []error) error {
 	return fmt.Errorf("uninstall failed: %w", errors.Join(failures...))
 }
 
-func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, removeDockerData bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer) error {
+func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, removeDockerData bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, warnings io.Writer) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -265,6 +265,18 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		return fmt.Errorf("you must specify --app, --apps, --category, or --all")
 	}
 
+	if removeDockerData {
+		hasDocker := false
+		for _, app := range appsToUninstall {
+			hasDocker = hasDocker || strings.EqualFold(app.Name, "docker")
+		}
+		if runtime.GOOS != "linux" {
+			fmt.Fprintln(warnings, "Warning: --remove-docker-data has no effect outside Linux; remove Docker Desktop data manually.")
+		} else if !hasDocker {
+			fmt.Fprintln(warnings, "Warning: --remove-docker-data has no effect because Docker is not selected for uninstall.")
+		}
+	}
+
 	if len(appsToUninstall) == 0 {
 		if err := uninstallFailuresError(failures); err != nil {
 			return err
@@ -348,7 +360,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 				fmt.Fprintf(out, "  Would clean system files and refresh icon cache for %s\n", app.Name)
 			}
 			if removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
-				fmt.Fprintf(out, "  Would permanently delete Docker data in /var/lib/docker\n")
+				fmt.Fprintf(out, "  Would permanently delete Docker data in /var/lib/docker and /var/lib/containerd\n")
 			}
 			fmt.Fprintf(out, "  Would clear installation records for %s (including stale records if absent)\n", app.Name)
 		}
@@ -435,8 +447,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 
 		if removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
 			if err := removeDockerDataFiles(ctx); err != nil {
-				failures = append(failures, fmt.Errorf("%s: packages removed but Docker data cleanup failed: %w; retry with sudo rm -rf -- /var/lib/docker", app.Name, err))
-				continue
+				failures = append(failures, fmt.Errorf("%s: packages removed but Docker data cleanup failed: %w; retry with sudo rm -rf -- /var/lib/docker /var/lib/containerd", app.Name, err))
 			}
 		}
 		success++
@@ -785,6 +796,6 @@ if [ -d /run/systemd/system ]; then
     fi
   done
 fi
-rm -rf -- /var/lib/docker`})
+rm -rf -- /var/lib/docker /var/lib/containerd`})
 	return err
 }

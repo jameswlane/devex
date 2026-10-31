@@ -18,7 +18,7 @@ windows:
 linux:
   install_method: apt
   install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  # Package removal preserves data; --remove-docker-data explicitly deletes /var/lib/docker.
+  # Package removal preserves data; --remove-docker-data explicitly deletes /var/lib/docker and /var/lib/containerd.
   uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   official_support: true
   platform_requirements:
