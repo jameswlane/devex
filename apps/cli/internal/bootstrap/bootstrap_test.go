@@ -2,9 +2,14 @@ package bootstrap_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
+	"sync/atomic"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
@@ -13,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 )
 
 var _ = Describe("PluginBootstrap", func() {
@@ -188,6 +194,66 @@ var _ = Describe("PluginBootstrap", func() {
 
 			manager := pluginBootstrap.GetManager()
 			Expect(manager).NotTo(BeNil())
+		})
+	})
+
+	Describe("Required plugin failures", func() {
+		It("preserves the apt HTTP 500 cause through installation after a later connection failure", func() {
+			if runtime.GOOS != "linux" {
+				Skip("APT platform detection requires Linux")
+			}
+			// Make platform detection deterministic with only APT on PATH.
+			binDir := GinkgoT().TempDir()
+			Expect(os.WriteFile(filepath.Join(binDir, "apt"), []byte("#!/bin/sh\nexit 0\n"), 0755)).To(Succeed())
+			GinkgoT().Setenv("PATH", binDir)
+			closed := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+			closed.Close()
+			var aptRequests, laterRequests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/v1/registry":
+					_ = json.NewEncoder(w).Encode(sdk.PluginRegistry{Plugins: map[string]sdk.PluginMetadata{"package-manager-apt": {}}})
+				case "/api/v1/plugins/package-manager-apt":
+					aptRequests.Add(1)
+					w.WriteHeader(http.StatusInternalServerError)
+				default:
+					laterRequests.Add(1)
+					http.Redirect(w, r, closed.URL, http.StatusTemporaryRedirect)
+				}
+			}))
+			defer server.Close()
+			GinkgoT().Setenv("DEVEX_PLUGIN_REGISTRY_URL", server.URL)
+			pb, err := bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pb.Initialize(ctx)).To(Succeed())
+			Expect(aptRequests.Load()).To(Equal(int32(3)))
+			Expect(laterRequests.Load()).To(Equal(int32(3)))
+			installers.InitializeWithPluginBootstrap(pb)
+			DeferCleanup(func() { installers.InitializeWithPluginBootstrap(nil) })
+			installer := installers.GetInstaller(ctx, "apt")
+			Expect(installer).NotTo(BeNil())
+			err = installer.Install("git", nil)
+			Expect(err).To(MatchError(ContainSubstring("package-manager-apt")))
+			Expect(err).To(MatchError(ContainSubstring("HTTP 500")))
+			Expect(err.Error()).NotTo(ContainSubstring("unreachable"))
+		})
+
+		It("returns the original download failure when a command needs the plugin", func() {
+			GinkgoT().Setenv("DEVEX_PLUGIN_REGISTRY_URL", "http://127.0.0.1:1")
+			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
+			pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pluginBootstrap.Initialize(ctx)).To(Succeed())
+			requiredPlugins := pluginBootstrap.GetPlatform().GetRequiredPlugins()
+			Expect(requiredPlugins).NotTo(BeEmpty())
+
+			for _, pluginName := range requiredPlugins {
+				err = pluginBootstrap.ExecutePluginWithContext(ctx, pluginName, nil)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(pluginName))
+				Expect(err.Error()).To(ContainSubstring("failed to download plugin"))
+				Expect(err.Error()).To(ContainSubstring("plugin registry is unreachable"))
+			}
 		})
 	})
 

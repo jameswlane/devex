@@ -237,6 +237,12 @@ func catalogPackageArguments(method, command string) ([]string, error) {
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
 	installer := GetInstaller(ctx, app.InstallMethod)
 	if installer == nil {
+		pluginName := "package-manager-" + app.InstallMethod
+		if pluginBootstrap != nil {
+			if err := pluginBootstrap.PluginDownloadError(pluginName); err != nil {
+				return fmt.Errorf("required plugin %s is unavailable: %w", pluginName, err)
+			}
+		}
 		log.Error("Unsupported install method", fmt.Errorf("method: %s", app.InstallMethod))
 		return fmt.Errorf("install method '%s' is not supported on this platform", app.InstallMethod)
 	}

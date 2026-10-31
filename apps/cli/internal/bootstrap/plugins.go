@@ -88,12 +88,13 @@ func (c *BootstrapCache) setCachedPlugins(plugins []string) {
 
 // PluginBootstrap handles the automatic plugin discovery and loading
 type PluginBootstrap struct {
-	detector     *platform.Detector
-	downloader   *sdk.Downloader
-	manager      *sdk.ExecutableManager
-	platform     *platform.Platform
-	skipDownload bool
-	cache        *BootstrapCache
+	detector       *platform.Detector
+	downloader     *sdk.Downloader
+	manager        *sdk.ExecutableManager
+	platform       *platform.Platform
+	skipDownload   bool
+	cache          *BootstrapCache
+	downloadErrors map[string]error
 }
 
 // GetRegistryURL returns the plugin registry URL from environment or default
@@ -228,8 +229,16 @@ func (b *PluginBootstrap) Initialize(ctx context.Context) error {
 		}
 
 		if err := b.downloader.DownloadRequiredPluginsWithContext(ctx, requiredPlugins); err != nil {
-			log.Warning("Failed to download some plugins: %v", err)
-			// Continue anyway - some plugins might still be available
+			b.recordDownloadErrors(err)
+			var unavailableErr *sdk.RegistryUnavailableError
+			if errors.As(err, &unavailableErr) {
+				for _, pluginName := range requiredPlugins {
+					if _, recorded := b.downloadErrors[pluginName]; !recorded {
+						b.downloadErrors[pluginName] = &sdk.DownloadError{Plugin: pluginName, Err: unavailableErr}
+					}
+				}
+			}
+			// Continue anyway - commands that do not need these plugins remain available.
 		}
 	}
 
@@ -282,6 +291,28 @@ func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName stri
 	return exists
 }
 
+func (b *PluginBootstrap) recordDownloadErrors(err error) {
+	if b.downloadErrors == nil {
+		b.downloadErrors = make(map[string]error)
+	}
+	var multiErr *sdk.MultiError
+	if errors.As(err, &multiErr) {
+		for _, downloadErr := range multiErr.Errors {
+			b.recordDownloadErrors(downloadErr)
+		}
+		return
+	}
+	var downloadErr *sdk.DownloadError
+	if errors.As(err, &downloadErr) {
+		b.downloadErrors[downloadErr.Plugin] = downloadErr
+	}
+}
+
+// PluginDownloadError returns the bootstrap download failure for a plugin, if any.
+func (b *PluginBootstrap) PluginDownloadError(pluginName string) error {
+	return b.downloadErrors[pluginName]
+}
+
 // ExecutePlugin executes a plugin with given arguments
 func (b *PluginBootstrap) ExecutePlugin(pluginName string, args []string) error {
 	return b.ExecutePluginWithContext(context.Background(), pluginName, args)
@@ -291,6 +322,11 @@ func (b *PluginBootstrap) ExecutePlugin(pluginName string, args []string) error 
 func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginName string, args []string) error {
 	if err := validatePluginName(pluginName); err != nil {
 		return fmt.Errorf("invalid plugin name: %w", err)
+	}
+	if _, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]; !installed {
+		if err := b.PluginDownloadError(pluginName); err != nil {
+			return fmt.Errorf("required plugin %s is unavailable: %w", pluginName, err)
+		}
 	}
 
 	return b.manager.ExecutePluginWithContext(ctx, pluginName, args)
