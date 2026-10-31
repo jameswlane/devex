@@ -63,19 +63,7 @@ type BackupInfo struct {
 
 // NewRemoveModel creates a new remove command TUI model
 func NewRemoveModel(settings config.CrossPlatformSettings) *RemoveModel {
-	// Get currently configured applications
-	userConfigDir := settings.GetConfigDir()
-	userAppsPath := filepath.Join(userConfigDir, "applications.yaml")
-	var configuredApps []types.AppConfig
-
-	if data, err := os.ReadFile(userAppsPath); err == nil {
-		var userConfig struct {
-			Applications []types.AppConfig `yaml:"applications"`
-		}
-		if yaml.Unmarshal(data, &userConfig) == nil {
-			configuredApps = userConfig.Applications
-		}
-	}
+	configuredApps, _ := configuredEditableApplications(settings)
 
 	// Create dependency map
 	dependencyMap := buildDependencyMap(configuredApps)
@@ -259,23 +247,6 @@ func (m RemoveModel) View() string {
 
 // removeAppFromConfig removes an application from the user's configuration
 func (m *RemoveModel) removeAppFromConfig(app types.AppConfig, createBackup bool) error {
-	userConfigDir := m.settings.GetConfigDir()
-	userAppsPath := filepath.Join(userConfigDir, "applications.yaml")
-
-	// Read existing configuration
-	var userConfig struct {
-		Applications []types.AppConfig `yaml:"applications"`
-	}
-
-	data, err := os.ReadFile(userAppsPath)
-	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	if err := yaml.Unmarshal(data, &userConfig); err != nil {
-		return fmt.Errorf("failed to parse config file: %w", err)
-	}
-
 	// Create undo operation before modification
 	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
 	undoManager := undo.NewUndoManager(baseDir)
@@ -296,31 +267,8 @@ func (m *RemoveModel) removeAppFromConfig(app types.AppConfig, createBackup bool
 		fmt.Fprintf(os.Stderr, "Warning: Failed to record undo operation: %v\n", err)
 	}
 
-	// Find and remove the application
-	newApps := make([]types.AppConfig, 0, len(userConfig.Applications))
-	found := false
-	for _, existingApp := range userConfig.Applications {
-		if existingApp.Name != app.Name {
-			newApps = append(newApps, existingApp)
-		} else {
-			found = true
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("application not found in configuration")
-	}
-
-	userConfig.Applications = newApps
-
-	// Write back to file
-	newData, err := yaml.Marshal(userConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(userAppsPath, newData, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	if err := deleteApplicationConfig(m.settings.GetConfigDir(), app.Name); err != nil {
+		return err
 	}
 
 	// Create new version after successful configuration change
@@ -546,26 +494,14 @@ Examples:
 
 // removeSpecificApp removes a specific application by name
 func removeSpecificApp(appName string, settings config.CrossPlatformSettings, force, noBackup, cascade, dryRun bool) error {
-	userConfigDir := settings.GetConfigDir()
-	userAppsPath := filepath.Join(userConfigDir, "applications.yaml")
-
-	// Read current configuration
-	var userConfig struct {
-		Applications []types.AppConfig `yaml:"applications"`
-	}
-
-	data, err := os.ReadFile(userAppsPath)
+	apps, err := configuredEditableApplications(settings)
 	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
-	}
-
-	if err := yaml.Unmarshal(data, &userConfig); err != nil {
-		return fmt.Errorf("failed to parse config file: %w", err)
+		return err
 	}
 
 	// Find the target application
 	var targetApp *types.AppConfig
-	for _, app := range userConfig.Applications {
+	for _, app := range apps {
 		if strings.EqualFold(app.Name, appName) {
 			targetApp = &app
 			break
@@ -577,30 +513,30 @@ func removeSpecificApp(appName string, settings config.CrossPlatformSettings, fo
 	}
 
 	// Check dependencies
-	dependencyMap := buildDependencyMap(userConfig.Applications)
+	dependencyMap := buildDependencyMap(apps)
 	dependentApps := getDependentApps(targetApp.Name, dependencyMap)
-
-	if len(dependentApps) > 0 && !force && !cascade {
-		return fmt.Errorf("cannot remove '%s': required by %s (use --force or --cascade)",
-			targetApp.Name, strings.Join(dependentApps, ", "))
-	}
 
 	if dryRun {
 		fmt.Printf("Would remove application '%s'\n", targetApp.Name)
 		if len(dependentApps) > 0 {
 			if cascade {
 				fmt.Printf("Would also remove dependent apps: %s\n", strings.Join(dependentApps, ", "))
-			} else if force {
-				fmt.Printf("Warning: This will break dependencies for: %s\n", strings.Join(dependentApps, ", "))
+			} else {
+				fmt.Printf("Warning: Required by %s; removal requires --force or --cascade\n", strings.Join(dependentApps, ", "))
 			}
 		}
 		return nil
 	}
 
+	if len(dependentApps) > 0 && !force && !cascade {
+		return fmt.Errorf("cannot remove '%s': required by %s (use --force or --cascade)",
+			targetApp.Name, strings.Join(dependentApps, ", "))
+	}
+
 	// Create backup
 	if !noBackup {
 		model := &RemoveModel{settings: settings}
-		if err := model.createBackup(userConfig.Applications); err != nil {
+		if err := model.createBackup(apps); err != nil {
 			return fmt.Errorf("failed to create backup: %w", err)
 		}
 		fmt.Println("✅ Backup created successfully")

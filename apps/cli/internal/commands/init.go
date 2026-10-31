@@ -539,7 +539,7 @@ func importApplications(content interface{}, configDir string) error {
 	if err != nil {
 		return err
 	}
-	apps, err := decodeImportedApplications(data)
+	apps, err := config.DecodeApplicationConfigs(data)
 	if err != nil {
 		return err
 	}

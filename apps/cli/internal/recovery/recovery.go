@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
+	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
 )
 
@@ -551,21 +552,15 @@ func (rm *RecoveryManager) executeConfigReset(step RecoveryStep, ctx RecoveryCon
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Create default configuration files
-	defaultConfigs := map[string]string{
-		"applications.yaml": "categories: {}",
-		"environment.yaml":  "languages: {}",
-		"system.yaml":       "git: {}",
+	if err := config.WriteDefaultConfig(configDir); err != nil {
+		return fmt.Errorf("restore default configuration tree: %w", err)
 	}
-
-	for filename, content := range defaultConfigs {
-		path := filepath.Join(configDir, filename)
-		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-			return fmt.Errorf("failed to create default %s: %w", filename, err)
-		}
+	files, err := config.ConfigurationFiles(configDir)
+	if err != nil {
+		return err
 	}
+	result.Metadata["reset_files"] = len(files)
 
-	result.Metadata["reset_files"] = len(defaultConfigs)
 	return nil
 }
 

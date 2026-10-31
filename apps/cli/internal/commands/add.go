@@ -12,7 +12,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -51,20 +50,10 @@ func NewAddModel(settings config.CrossPlatformSettings) *AddModel {
 	// Get all available applications
 	availableApps := settings.GetApplications()
 
-	// Get currently configured applications
-	userConfigDir := settings.GetConfigDir()
-	userAppsPath := filepath.Join(userConfigDir, "applications.yaml")
 	configuredApps := make(map[string]bool)
-
-	if data, err := os.ReadFile(userAppsPath); err == nil {
-		var userConfig struct {
-			Applications []types.AppConfig `yaml:"applications"`
-		}
-		if yaml.Unmarshal(data, &userConfig) == nil {
-			for _, app := range userConfig.Applications {
-				configuredApps[app.Name] = true
-			}
-		}
+	apps, _ := configuredEditableApplications(settings)
+	for _, app := range apps {
+		configuredApps[strings.ToLower(app.Name)] = true
 	}
 
 	// Create list items
@@ -72,7 +61,7 @@ func NewAddModel(settings config.CrossPlatformSettings) *AddModel {
 	for _, app := range availableApps {
 		items = append(items, AppItem{
 			app:         app,
-			isInstalled: configuredApps[app.Name],
+			isInstalled: configuredApps[strings.ToLower(app.Name)],
 		})
 	}
 
@@ -207,11 +196,21 @@ func (m AddModel) View() string {
 // addAppToConfig adds an application to the user's configuration
 func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 	userConfigDir := m.settings.GetConfigDir()
-	userAppsPath := filepath.Join(userConfigDir, "applications.yaml")
-
-	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(userConfigDir, 0750); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+	apps, err := configuredEditableApplications(m.settings)
+	if err != nil {
+		return err
+	}
+	for _, existing := range apps {
+		if strings.EqualFold(existing.Name, app.Name) {
+			return fmt.Errorf("application %q is already in your configuration", app.Name)
+		}
+	}
+	if err := migrateApplicationConfig(userConfigDir); err != nil {
+		return err
+	}
+	path, err := applicationConfigPath(userConfigDir, "applications", app.Category, app.Name)
+	if err != nil {
+		return err
 	}
 
 	// Create undo operation before modification
@@ -233,40 +232,16 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to record undo operation: %v\n", err)
 	}
 
-	// Read existing configuration or create new one
-	var userConfig struct {
-		Applications []types.AppConfig `yaml:"applications"`
-	}
-
-	if data, err := os.ReadFile(userAppsPath); err == nil {
-		if err := yaml.Unmarshal(data, &userConfig); err != nil {
-			return fmt.Errorf("failed to parse existing config: %w", err)
+	// Keep every platform definition rather than saving only the current OS.
+	definition := config.CrossPlatformAppFromLegacy(app)
+	for _, candidate := range m.settings.GetAllApps() {
+		if strings.EqualFold(candidate.Name, app.Name) {
+			definition = candidate
+			break
 		}
 	}
-
-	// Check if app already exists (shouldn't happen due to UI check, but be safe)
-	for _, existingApp := range userConfig.Applications {
-		if existingApp.Name == app.Name {
-			return fmt.Errorf("application already exists in configuration")
-		}
-	}
-
-	// Add the new application
-	userConfig.Applications = append(userConfig.Applications, app)
-
-	// Sort applications by name for consistency
-	sort.Slice(userConfig.Applications, func(i, j int) bool {
-		return userConfig.Applications[i].Name < userConfig.Applications[j].Name
-	})
-
-	// Write back to file
-	data, err := yaml.Marshal(userConfig)
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(userAppsPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	if err := writeYAMLConfig(definition, path, ""); err != nil {
+		return err
 	}
 
 	// Create new version after successful configuration change
@@ -394,20 +369,13 @@ func addSpecificApp(appName string, settings config.CrossPlatformSettings, dryRu
 		return fmt.Errorf("application '%s' not found", appName)
 	}
 
-	// Check if already in configuration
-	userConfigDir := settings.GetConfigDir()
-	userAppsPath := filepath.Join(userConfigDir, "applications.yaml")
-
-	if data, err := os.ReadFile(userAppsPath); err == nil {
-		var userConfig struct {
-			Applications []types.AppConfig `yaml:"applications"`
-		}
-		if yaml.Unmarshal(data, &userConfig) == nil {
-			for _, app := range userConfig.Applications {
-				if app.Name == targetApp.Name {
-					return fmt.Errorf("application '%s' is already in your configuration", appName)
-				}
-			}
+	apps, err := configuredEditableApplications(settings)
+	if err != nil {
+		return err
+	}
+	for _, app := range apps {
+		if strings.EqualFold(app.Name, targetApp.Name) {
+			return fmt.Errorf("application '%s' is already in your configuration", appName)
 		}
 	}
 
