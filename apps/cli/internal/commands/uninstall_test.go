@@ -2,6 +2,7 @@ package commands_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,12 +10,69 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
+
+type recordingInstaller struct {
+	uninstallCommands []string
+	statusErrors      map[string]error
+	uninstallErrors   map[string]error
+	installed         map[string]bool
+}
+
+func (r *recordingInstaller) Install(string, types.Repository) error {
+	return nil
+}
+
+func (r *recordingInstaller) Uninstall(command string, _ types.Repository) error {
+	r.uninstallCommands = append(r.uninstallCommands, command)
+	return r.uninstallErrors[command]
+}
+
+func (r *recordingInstaller) IsInstalled(command string) (bool, error) {
+	if err := r.statusErrors[command]; err != nil {
+		return false, err
+	}
+	if installed, ok := r.installed[command]; ok {
+		return installed, nil
+	}
+	return true, nil
+}
+
+type nilLookupRepository struct {
+	types.Repository
+}
+
+func (r *nilLookupRepository) GetApp(string) (*types.AppConfig, error) {
+	return nil, nil
+}
+
+type definitionSetErrorRepository struct {
+	types.Repository
+}
+
+func (r *definitionSetErrorRepository) Set(string, string) error {
+	return fmt.Errorf("definition store unavailable")
+}
+
+type deleteAppErrorRepository struct {
+	types.Repository
+}
+
+func (r *deleteAppErrorRepository) DeleteApp(string) error {
+	return fmt.Errorf("tracking store unavailable")
+}
+
+func useRecordingInstaller(installer *recordingInstaller) {
+	DeferCleanup(commands.SetUninstallInstallerForTest(func(context.Context, string) types.BaseInstaller {
+		return installer
+	}))
+}
 
 var _ = Describe("Uninstall Command", func() {
 	var (
@@ -25,6 +83,8 @@ var _ = Describe("Uninstall Command", func() {
 	)
 
 	BeforeEach(func() {
+		viper.Reset()
+		DeferCleanup(viper.Reset)
 		mockRepo = mocks.NewMockRepository()
 		settings = config.CrossPlatformSettings{}
 
@@ -83,75 +143,418 @@ var _ = Describe("Uninstall Command", func() {
 		})
 	})
 
+	Describe("application resolution", func() {
+		It("uses the stored definition for a tracked inline app", func() {
+			definition := types.CrossPlatformApp{
+				Name:     "inline-app",
+				Category: "Custom",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:    "apt",
+					InstallCommand:   "inline-package",
+					UninstallCommand: "inline-package",
+					Dependencies:     []string{"inline-dependency"},
+					ConfigFiles:      []types.ConfigFile{{Destination: filepath.Join(tempDir, "inline.conf")}},
+					CleanupFiles:     []string{filepath.Join(tempDir, "inline-data")},
+				},
+			}
+			data, err := json.Marshal(definition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.AddApp(definition.Name)).To(Succeed())
+			Expect(mockRepo.Set("installed-app-definition:inline-app", string(data))).To(Succeed())
+
+			resolved, err := commands.ResolveUninstallApp(mockRepo, settings, definition.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resolved.Name).To(Equal(definition.Name))
+			Expect(resolved.Category).To(Equal("Custom"))
+			Expect(resolved.InstallMethod).To(Equal("apt"))
+			Expect(resolved.UninstallCommand).To(Equal("inline-package"))
+			Expect(resolved.Dependencies).To(Equal([]string{"inline-dependency"}))
+			Expect(resolved.ConfigFiles).To(Equal(definition.AllPlatforms.ConfigFiles))
+			Expect(resolved.CleanupFiles).To(Equal(definition.AllPlatforms.CleanupFiles))
+		})
+
+		It("merges a tracked name with its bundled catalog definition", func() {
+			definition := types.CrossPlatformApp{
+				Name:     "bundled-app",
+				Category: "Utilities",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:    "apt",
+					InstallCommand:   "bundled-package",
+					UninstallCommand: "bundled-package",
+					Dependencies:     []string{"bundled-dependency"},
+					ConfigFiles:      []types.ConfigFile{{Destination: filepath.Join(tempDir, "bundled.conf")}},
+				},
+			}
+			settings.Terminal.Utilities = []types.CrossPlatformApp{definition}
+			Expect(mockRepo.AddApp(definition.Name)).To(Succeed())
+
+			resolved, err := commands.ResolveUninstallApp(mockRepo, settings, definition.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resolved.Name).To(Equal(definition.Name))
+			Expect(resolved.Category).To(Equal("Utilities"))
+			Expect(resolved.InstallMethod).To(Equal("apt"))
+			Expect(resolved.Dependencies).To(Equal([]string{"bundled-dependency"}))
+			Expect(resolved.ConfigFiles).To(Equal(definition.AllPlatforms.ConfigFiles))
+		})
+
+		It("keeps support for known catalog apps installed outside DevEx", func() {
+			definition := types.CrossPlatformApp{
+				Name: "external-app",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:  "apt",
+					InstallCommand: "external-package",
+				},
+			}
+			settings.Terminal.Utilities = []types.CrossPlatformApp{definition}
+
+			resolved, err := commands.ResolveUninstallApp(mockRepo, settings, definition.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(resolved.InstallCommand).To(Equal("external-package"))
+		})
+
+		It("handles an exact nil lookup without panicking", func() {
+			repo := &nilLookupRepository{Repository: mockRepo}
+			_, err := commands.ResolveUninstallApp(repo, settings, "unknown-app")
+			Expect(err).To(MatchError(ContainSubstring("not tracked by DevEx")))
+		})
+
+		It("reports saved-definition read errors", func() {
+			_, err := commands.ResolveUninstallApp(&mocks.FailingMockRepository{}, settings, "test-app")
+			Expect(err).To(MatchError(ContainSubstring("failed to read installed definition")))
+		})
+	})
+
 	Describe("Uninstall execution", func() {
-		Context("when uninstalling a single app", func() {
-			It("should attempt to uninstall the app", func() {
-				cmd := commands.NewUninstallCmd(mockRepo, settings)
+		It("executes a stored inline definition with the install-command fallback and clears its records", func() {
+			definition := types.CrossPlatformApp{
+				Name: "inline-app",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:  "apt",
+					InstallCommand: "inline-package",
+				},
+			}
+			data, err := json.Marshal(definition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.AddApp(definition.Name)).To(Succeed())
+			Expect(mockRepo.Set("installed-app-definition:inline-app", string(data))).To(Succeed())
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", definition.Name, "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"inline-package"}))
+			_, err = mockRepo.GetApp(definition.Name)
+			Expect(err).To(HaveOccurred())
+			stored, err := mockRepo.Get("installed-app-definition:inline-app")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored).To(BeEmpty())
+		})
+
+		It("executes a catalog definition with the install-command fallback", func() {
+			definition := types.CrossPlatformApp{
+				Name: "catalog-app",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:  "apt",
+					InstallCommand: "catalog-package",
+				},
+			}
+			settings.Terminal.Utilities = []types.CrossPlatformApp{definition}
+			Expect(mockRepo.AddApp(definition.Name)).To(Succeed())
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", definition.Name, "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"catalog-package"}))
+		})
+
+		It("resolves a legacy inline app from runtime configuration", func() {
+			viper.Reset()
+			DeferCleanup(viper.Reset)
+			viper.Set("applications", []any{map[string]any{
+				"name":     "legacy-inline",
+				"category": "Custom",
+				"all_platforms": map[string]any{
+					"install_method":  "apt",
+					"install_command": "legacy-package",
+				},
+			}})
+			Expect(mockRepo.AddApp("legacy-inline")).To(Succeed())
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", "legacy-inline", "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"legacy-package"}))
+		})
+
+		It("prefers the saved definition over a runtime inline override", func() {
+			definition := types.CrossPlatformApp{Name: "test-app", AllPlatforms: types.OSConfig{
+				InstallMethod: "apt", InstallCommand: "saved-package",
+			}}
+			data, err := json.Marshal(definition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.Set("installed-app-definition:test-app", string(data))).To(Succeed())
+			viper.Set("applications", []any{map[string]any{
+				"name":          "test-app",
+				"all_platforms": map[string]any{"install_method": "apt", "install_command": "current-package"},
+			}})
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", "test-app", "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"saved-package"}))
+		})
+
+		It("retains the tracking and saved-definition records when uninstall fails", func() {
+			definition := types.CrossPlatformApp{
+				Name: "inline-app",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:  "apt",
+					InstallCommand: "inline-package",
+				},
+			}
+			data, err := json.Marshal(definition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.AddApp(definition.Name)).To(Succeed())
+			Expect(mockRepo.Set("installed-app-definition:inline-app", string(data))).To(Succeed())
+			installer := &recordingInstaller{uninstallErrors: map[string]error{
+				"inline-package": fmt.Errorf("remove failed"),
+			}}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", definition.Name, "--force"})
+
+			Expect(cmd.Execute()).To(MatchError(And(ContainSubstring(definition.Name), ContainSubstring("remove failed"))))
+			_, err = mockRepo.GetApp(definition.Name)
+			Expect(err).NotTo(HaveOccurred())
+			stored, err := mockRepo.Get("installed-app-definition:inline-app")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored).To(Equal(string(data)))
+		})
+
+		It("continues after mixed uninstall and status-discovery failures", func() {
+			failing := types.AppConfig{
+				BaseConfig:       types.BaseConfig{Name: "failing-app"},
+				InstallMethod:    "apt",
+				InstallCommand:   "failing-package",
+				UninstallCommand: "failing-package",
+			}
+			broken := types.AppConfig{
+				BaseConfig:       types.BaseConfig{Name: "broken-app"},
+				InstallMethod:    "apt",
+				InstallCommand:   "broken-package",
+				UninstallCommand: "broken-package",
+			}
+			Expect(mockRepo.SaveApp(failing)).To(Succeed())
+			Expect(mockRepo.SaveApp(broken)).To(Succeed())
+			brokenDefinition := types.CrossPlatformApp{Name: broken.Name, AllPlatforms: types.OSConfig{
+				InstallMethod: "apt", InstallCommand: broken.InstallCommand,
+			}}
+			data, err := json.Marshal(brokenDefinition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.Set("installed-app-definition:broken-app", string(data))).To(Succeed())
+			installer := &recordingInstaller{
+				uninstallErrors: map[string]error{"failing-package": fmt.Errorf("remove failed")},
+				statusErrors:    map[string]error{"broken-package": fmt.Errorf("discovery failed")},
+			}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--apps", "test-app,failing-app,broken-app", "--force"})
+
+			err = cmd.Execute()
+			Expect(err).To(MatchError(And(ContainSubstring("remove failed"), ContainSubstring("discovery failed"))))
+			Expect(installer.uninstallCommands).To(Equal([]string{"test-app", "failing-package"}))
+			_, err = mockRepo.GetApp("test-app")
+			Expect(err).To(HaveOccurred())
+			_, err = mockRepo.GetApp("failing-app")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = mockRepo.GetApp("broken-app")
+			Expect(err).NotTo(HaveOccurred())
+			stored, err := mockRepo.Get("installed-app-definition:broken-app")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored).To(Equal(string(data)))
+		})
+
+		It("clears tracking and saved-definition records after confirmed absence", func() {
+			definition := types.CrossPlatformApp{
+				Name: "test-app",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:  "apt",
+					InstallCommand: "test-app",
+				},
+			}
+			data, err := json.Marshal(definition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.Set("installed-app-definition:test-app", string(data))).To(Succeed())
+			installer := &recordingInstaller{installed: map[string]bool{"test-app": false}}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", "test-app", "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(BeEmpty())
+			_, err = mockRepo.GetApp("test-app")
+			Expect(err).To(HaveOccurred())
+			stored, err := mockRepo.Get("installed-app-definition:test-app")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored).To(BeEmpty())
+		})
+
+		DescribeTable("reports saved-definition persistence errors",
+			func(installed bool) {
+				definition := types.CrossPlatformApp{
+					Name: "test-app",
+					AllPlatforms: types.OSConfig{
+						InstallMethod:  "apt",
+						InstallCommand: "test-app",
+					},
+				}
+				data, err := json.Marshal(definition)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mockRepo.Set("installed-app-definition:test-app", string(data))).To(Succeed())
+				installer := &recordingInstaller{installed: map[string]bool{"test-app": installed}}
+				useRecordingInstaller(installer)
+				repo := &definitionSetErrorRepository{Repository: mockRepo}
+				cmd := commands.NewUninstallCmd(repo, settings)
 				cmd.SetArgs([]string{"--app", "test-app", "--force"})
 
-				err := cmd.Execute()
+				Expect(cmd.Execute()).To(MatchError(ContainSubstring("failed to clear saved application definition")))
+				stored, err := mockRepo.Get("installed-app-definition:test-app")
 				Expect(err).NotTo(HaveOccurred())
+				Expect(stored).To(Equal(string(data)))
+			},
+			Entry("after removal", true),
+			Entry("after confirmed absence", false),
+		)
 
-				// Since apt installer is not available in test environment,
-				// the app should still exist in repository (uninstall failed)
-				_, err = mockRepo.GetApp("test-app")
+		DescribeTable("reports tracking-record deletion errors",
+			func(installed bool) {
+				installer := &recordingInstaller{installed: map[string]bool{"test-app": installed}}
+				useRecordingInstaller(installer)
+				repo := &deleteAppErrorRepository{Repository: mockRepo}
+				cmd := commands.NewUninstallCmd(repo, settings)
+				cmd.SetArgs([]string{"--app", "test-app", "--force"})
+
+				Expect(cmd.Execute()).To(MatchError(ContainSubstring("tracking store unavailable")))
+				_, err := mockRepo.GetApp("test-app")
 				Expect(err).NotTo(HaveOccurred())
-			})
+			},
+			Entry("after removal", true),
+			Entry("after confirmed absence", false),
+		)
 
-			It("should handle non-existent app gracefully", func() {
-				cmd := commands.NewUninstallCmd(mockRepo, settings)
-				cmd.SetArgs([]string{"--app", "non-existent-app", "--force"})
+		It("rejects a definition without any effective removal command before mutation", func() {
+			app := types.AppConfig{
+				BaseConfig:    types.BaseConfig{Name: "commandless-app"},
+				InstallMethod: "apt",
+			}
+			Expect(mockRepo.SaveApp(app)).To(Succeed())
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", app.Name, "--force"})
 
-				err := cmd.Execute()
-				Expect(err).NotTo(HaveOccurred())
-			})
+			Expect(cmd.Execute()).To(MatchError(ContainSubstring("no uninstall or install command")))
+			Expect(installer.uninstallCommands).To(BeEmpty())
+			_, err := mockRepo.GetApp(app.Name)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
-		Context("when uninstalling multiple apps", func() {
+		It("ignores resolution failures for apps known to be outside the requested category", func() {
+			target := testApp
+			target.Name = "development-app"
+			target.Category = "Development"
+			target.InstallCommand = "development-package"
+			target.UninstallCommand = "development-package"
+			other := types.AppConfig{
+				BaseConfig:    types.BaseConfig{Name: "other-app", Category: "Utilities"},
+				InstallMethod: "apt",
+			}
+			Expect(mockRepo.SaveApp(target)).To(Succeed())
+			Expect(mockRepo.SaveApp(other)).To(Succeed())
+			Expect(mockRepo.Set("installed-app-definition:other-app", "not-json")).To(Succeed())
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--category", "Development", "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"development-package"}))
+			_, err := mockRepo.GetApp(other.Name)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("uninstalls explicitly selected dependents in cascade mode", func() {
+			dependent := types.AppConfig{
+				BaseConfig:    types.BaseConfig{Name: "dependent-app"},
+				InstallMethod: "apt", InstallCommand: "dependent-package",
+				Dependencies: []string{"test-app"},
+			}
+			Expect(mockRepo.SaveApp(dependent)).To(Succeed())
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--apps", "dependent-app,test-app", "--cascade", "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"dependent-package", "test-app"}))
+			_, err := mockRepo.GetApp(dependent.Name)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("returns an error for an unknown app without panicking", func() {
+			cmd := commands.NewUninstallCmd(&nilLookupRepository{Repository: mockRepo}, settings)
+			cmd.SetArgs([]string{"--app", "non-existent-app", "--force"})
+
+			Expect(cmd.Execute()).To(MatchError(ContainSubstring("non-existent-app")))
+		})
+
+		It("reports unresolved apps with unknown categories", func() {
+			Expect(mockRepo.AddApp("legacy-unknown-category")).To(Succeed())
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--category", "Development", "--force"})
+
+			Expect(cmd.Execute()).To(MatchError(ContainSubstring("legacy-unknown-category")))
+			_, err := mockRepo.GetApp("legacy-unknown-category")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when removing orphans", func() {
+			var orphanCalls int
+
 			BeforeEach(func() {
-				// Add multiple test apps
-				for i := 1; i <= 3; i++ {
-					app := types.AppConfig{
-						BaseConfig: types.BaseConfig{
-							Name: fmt.Sprintf("test-app-%d", i),
-						},
-						InstallMethod:    "apt",
-						InstallCommand:   fmt.Sprintf("test-app-%d", i),
-						UninstallCommand: fmt.Sprintf("test-app-%d", i),
-					}
-					mockRepo.SaveApp(app)
-				}
+				orphanCalls = 0
+				DeferCleanup(commands.SetOrphanRemovalForTest(func(context.Context) {
+					orphanCalls++
+				}))
 			})
 
-			It("should attempt to uninstall multiple apps", func() {
+			It("runs orphan cleanup after a successful uninstall", func() {
+				installer := &recordingInstaller{}
+				useRecordingInstaller(installer)
 				cmd := commands.NewUninstallCmd(mockRepo, settings)
-				cmd.SetArgs([]string{"--apps", "test-app-1,test-app-2", "--force"})
+				cmd.SetArgs([]string{"--app", "test-app", "--force", "--remove-orphans"})
 
-				err := cmd.Execute()
-				Expect(err).NotTo(HaveOccurred())
-
-				// Since apt installer is not available in test environment,
-				// the apps should still exist (uninstall failed)
-				_, err = mockRepo.GetApp("test-app-1")
-				Expect(err).NotTo(HaveOccurred())
-				_, err = mockRepo.GetApp("test-app-2")
-				Expect(err).NotTo(HaveOccurred())
-				_, err = mockRepo.GetApp("test-app-3")
-				Expect(err).NotTo(HaveOccurred())
+				Expect(cmd.Execute()).To(Succeed())
+				Expect(orphanCalls).To(Equal(1))
 			})
-		})
 
-		Context("when using all flag", func() {
-			It("should require confirmation without force", func() {
+			It("does not run orphan cleanup without a successful uninstall", func() {
+				installer := &recordingInstaller{uninstallErrors: map[string]error{
+					"test-app": fmt.Errorf("remove failed"),
+				}}
+				useRecordingInstaller(installer)
 				cmd := commands.NewUninstallCmd(mockRepo, settings)
-				cmd.SetArgs([]string{"--all"})
+				cmd.SetArgs([]string{"--app", "test-app", "--force", "--remove-orphans"})
 
-				// This would normally prompt for confirmation
-				// In tests, we can't easily simulate user input
-				// So we test with force flag
-				cmd.SetArgs([]string{"--all", "--force"})
-				err := cmd.Execute()
-				Expect(err).NotTo(HaveOccurred())
+				Expect(cmd.Execute()).To(HaveOccurred())
+				Expect(orphanCalls).To(BeZero())
 			})
 		})
 	})
@@ -402,6 +805,17 @@ var _ = Describe("ConflictDetector", func() {
 			summary := conflictDetector.SummarizeConflicts(conflicts)
 			Expect(summary.TotalConflicts).To(Equal(len(conflicts)))
 			Expect(summary.CanProceed).To(Equal(summary.CriticalCount == 0))
+		})
+
+		It("resolves non-critical dependency conflicts in cascade mode", func() {
+			conflicts := []commands.UninstallConflict{{
+				Type:     commands.ConflictTypeDependency,
+				AppName:  "dependency",
+				Severity: "warning",
+			}}
+			remaining, err := conflictDetector.ResolveConflicts(conflicts, commands.UninstallOptions{Cascade: true})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(remaining).To(BeEmpty())
 		})
 	})
 })

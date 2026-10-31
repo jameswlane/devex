@@ -271,11 +271,16 @@ func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName stri
 
 // ExecutePlugin executes a plugin with given arguments
 func (b *PluginBootstrap) ExecutePlugin(pluginName string, args []string) error {
+	return b.ExecutePluginWithContext(context.Background(), pluginName, args)
+}
+
+// ExecutePluginWithContext executes a plugin with cancellation from the caller.
+func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginName string, args []string) error {
 	if err := validatePluginName(pluginName); err != nil {
 		return fmt.Errorf("invalid plugin name: %w", err)
 	}
 
-	return b.manager.ExecutePlugin(pluginName, args)
+	return b.manager.ExecutePluginWithContext(ctx, pluginName, args)
 }
 
 // GetPlatform returns the detected platform

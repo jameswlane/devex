@@ -94,11 +94,12 @@ var _ = Describe("Package manager install lifecycle", func() {
 				entry.verifyInstalled(home)
 			})
 
-			It("removes the package without prompting", func() {
+			It("uninstalls the package without prompting and clears tracking", func() {
 				// run gives the CLI no stdin, so a prompt reads EOF instead of hanging.
-				output, err := sandbox.run(home, sandbox.binary, packageInstallTimeout, nil, "remove", entry.pkg, "--force", "--config", fixture)
-				Expect(err).NotTo(HaveOccurred(), "remove failed:\n%s", output)
+				output, err := sandbox.run(home, sandbox.binary, packageInstallTimeout, nil, "uninstall", "--app", entry.pkg, "--force", "--config", fixture)
+				Expect(err).NotTo(HaveOccurred(), "uninstall failed:\n%s", output)
 				entry.verifyRemoved(home)
+				Expect(installedApps(home, fixture)).NotTo(ContainElement(entry.pkg), "uninstall must clear the tracking record")
 			})
 		})
 	}

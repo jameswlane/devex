@@ -60,3 +60,13 @@ var _ = Describe("Non-interactive install configuration", func() {
 		Expect(output).To(MatchRegexp(`(?m)^installed 0 of %d applications$`, len(byName)+len(inline)), "plain output must end with the summary")
 	})
 })
+
+var _ = Describe("Non-interactive uninstall", func() {
+	It("returns a nonzero exit code for an unknown application", func() {
+		home := sandbox.isolatedHome()
+		output, err := sandbox.run(home, sandbox.binary, time.Minute, nil, "uninstall", "--app", "not-a-devex-application", "--force")
+		Expect(err).To(HaveOccurred(), "an unknown application must fail uninstall:\n%s", output)
+		Expect(output).To(ContainSubstring("not-a-devex-application"))
+		Expect(output).NotTo(ContainSubstring("panic"))
+	})
+})
