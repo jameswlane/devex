@@ -2,6 +2,8 @@ package commands_test
 
 import (
 	"encoding/json"
+	"io"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,6 +12,8 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore"
+	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -114,6 +118,79 @@ var _ = Describe("Status Command", func() {
 
 				err := cmd.Execute()
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("with the real repository", func() {
+			var (
+				realRepo     types.Repository
+				realSettings config.CrossPlatformSettings
+			)
+
+			BeforeEach(func() {
+				db := datastore.NewInMemorySQLite()
+				DeferCleanup(func() {
+					Expect(db.Close()).To(Succeed())
+				})
+				realRepo = repository.NewRepository(db)
+				Expect(realRepo).NotTo(BeNil())
+				realSettings = config.CrossPlatformSettings{
+					ApplicationOverrides: []types.CrossPlatformApp{
+						{
+							Name: "curl",
+							AllPlatforms: types.OSConfig{
+								InstallMethod:  "apt",
+								InstallCommand: "curl",
+							},
+						},
+					},
+				}
+			})
+
+			It("checks a tracked app", func() {
+				Expect(realRepo.AddApp("git")).To(Succeed())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--app", "git", "--no-tui", "--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring(`"name": "git"`))
+			})
+
+			It("falls back to the catalog for an untracked app", func() {
+				app, err := realRepo.GetApp("curl")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(app).To(BeNil())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--app", "curl", "--no-tui", "--format", "json"})
+
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring(`"name": "curl"`))
+				Expect(output).To(ContainSubstring(`"install_method": "apt"`))
+			})
+
+			It("reports an unknown app without panicking", func() {
+				app, err := realRepo.GetApp("unknown-app")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(app).To(BeNil())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--app", "unknown-app", "--no-tui"})
+
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring("Unknown application 'unknown-app'"))
+				Expect(output).To(ContainSubstring("No applications to check"))
 			})
 		})
 
@@ -283,3 +360,21 @@ var _ = Describe("Status Command", func() {
 		})
 	})
 })
+
+func captureStatusStdout(fn func()) string {
+	oldStdout := os.Stdout
+	readPipe, writePipe, err := os.Pipe()
+	Expect(err).NotTo(HaveOccurred())
+	os.Stdout = writePipe
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	fn()
+
+	Expect(writePipe.Close()).To(Succeed())
+	output, err := io.ReadAll(readPipe)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(readPipe.Close()).To(Succeed())
+	return string(output)
+}
