@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // UninstallHistoryEntry represents an entry in the uninstall history
@@ -84,7 +86,7 @@ Requirements:
 				return fmt.Errorf("you must specify --app or use --list to see available rollbacks")
 			}
 
-			return runRollback(appName, force, restoreConfig, restoreData, repo, settings)
+			return runRollback(cmd.Context(), appName, force, restoreConfig, restoreData, repo, settings, cmd.OutOrStdout())
 		},
 	}
 
@@ -153,7 +155,11 @@ func listRollbackHistory(repo types.Repository) error {
 	return nil
 }
 
-func runRollback(appName string, force bool, restoreConfig bool, restoreData bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+func runRollback(ctx context.Context, appName string, force bool, restoreConfig bool, restoreData bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dryRun := viper.GetBool("dry-run")
 	// Color setup
 	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
@@ -165,7 +171,7 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 
 	// Check if app is already installed
 	_, err := repo.GetApp(appName)
-	if err == nil && !force {
+	if err == nil && !force && !dryRun {
 		fmt.Printf("%s Application '%s' is already installed.\n", yellow("⚠️"), appName)
 		fmt.Print("Do you want to continue anyway? (y/N): ")
 		var response string
@@ -198,6 +204,35 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 	fmt.Printf("Found backup from: %s\n", selectedBackup.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("Backup location: %s\n\n", selectedBackup.BackupPath)
 
+	_, mergedSettings, _, err := configuredApplications(settings)
+	if err != nil {
+		return fmt.Errorf("failed to load rollback configuration: %w", err)
+	}
+	settings = mergedSettings
+	if dryRun {
+		name, args, err := rollbackInstallCommand(appName, settings)
+		if err != nil {
+			return err
+		}
+		// Reuse the privilege planner: resolving elevation never prompts or runs sudo.
+		plan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{
+			Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, Name: name, Args: args,
+		})
+		if err != nil {
+			return fmt.Errorf("cannot preview rollback privileges for %s: %w", appName, err)
+		}
+		fmt.Fprintf(out, "Would reinstall %s: %s %s (scope: system, intended user: %s, elevation required: %t)\n", appName, name, strings.Join(args, " "), plan.IntendedUser.Username, plan.Elevate)
+		if restoreConfig {
+			fmt.Fprintf(out, "Would restore configuration from %s\n", selectedBackup.BackupPath)
+		}
+		if restoreData {
+			fmt.Fprintf(out, "Would restore data from %s\n", selectedBackup.BackupPath)
+		}
+		fmt.Fprintf(out, "Would enable and start services: %s\n", strings.Join(getAppServicesForUninstall(&types.AppConfig{BaseConfig: types.BaseConfig{Name: appName}}), ", "))
+		fmt.Fprintln(out, "Package availability and backup contents are not verified by this offline preview")
+		return ctx.Err()
+	}
+
 	if !force {
 		fmt.Print("Do you want to proceed with rollback? (y/N): ")
 		var response string
@@ -210,7 +245,7 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 
 	// Step 1: Reinstall the application
 	fmt.Printf("%s Reinstalling application...\n", cyan("📦"))
-	if err := reinstallApplication(appName, selectedBackup, repo, settings); err != nil {
+	if err := reinstallApplication(ctx, appName, settings); err != nil {
 		return fmt.Errorf("failed to reinstall application: %w", err)
 	}
 	fmt.Printf("  %s Application reinstalled successfully\n", green("✅"))
@@ -218,7 +253,7 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 	// Step 2: Restore configuration files if requested
 	if restoreConfig {
 		fmt.Printf("%s Restoring configuration files...\n", cyan("⚙️"))
-		if err := bm.RestoreBackup(selectedBackup.BackupPath); err != nil {
+		if err := bm.RestoreBackup(ctx, selectedBackup.BackupPath); err != nil {
 			fmt.Printf("  %s Warning: Failed to restore config files: %v\n", yellow("⚠️"), err)
 		} else {
 			fmt.Printf("  %s Configuration files restored\n", green("✅"))
@@ -228,7 +263,7 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 	// Step 3: Restore data files if requested
 	if restoreData {
 		fmt.Printf("%s Restoring data files...\n", cyan("💾"))
-		if err := bm.RestoreBackup(selectedBackup.BackupPath); err != nil {
+		if err := bm.RestoreBackup(ctx, selectedBackup.BackupPath); err != nil {
 			fmt.Printf("  %s Warning: Failed to restore data files: %v\n", yellow("⚠️"), err)
 		} else {
 			fmt.Printf("  %s Data files restored\n", green("✅"))
@@ -237,7 +272,7 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 
 	// Step 4: Restart services if they were stopped
 	fmt.Printf("%s Checking services...\n", cyan("🔧"))
-	if err := restartAppServices(appName); err != nil {
+	if err := restartAppServices(ctx, appName); err != nil {
 		fmt.Printf("  %s Warning: Failed to restart services: %v\n", yellow("⚠️"), err)
 	} else {
 		fmt.Printf("  %s Services checked and started if needed\n", green("✅"))
@@ -249,69 +284,41 @@ func runRollback(appName string, force bool, restoreConfig bool, restoreData boo
 	return nil
 }
 
-func reinstallApplication(appName string, backup *BackupEntry, repo types.Repository, settings config.CrossPlatformSettings) error {
+func rollbackInstallCommand(appName string, settings config.CrossPlatformSettings) (string, []string, error) {
 	// Try to find the application in the configuration
 	app, err := settings.GetApplicationByName(appName)
 	if err != nil {
-		return fmt.Errorf("application '%s' not found in configuration: %w", appName, err)
+		return "", nil, fmt.Errorf("application '%s' not found in configuration: %w", appName, err)
 	}
 
 	// Use the original install method
 	switch app.InstallMethod {
 	case "apt":
-		return reinstallWithApt(appName)
+		return "sudo", []string{"apt", "install", "-y", appName}, nil
 	case "dnf":
-		return reinstallWithDnf(appName)
+		return "sudo", []string{"dnf", "install", "-y", appName}, nil
 	case "pacman":
-		return reinstallWithPacman(appName)
+		return "sudo", []string{"pacman", "-S", "--noconfirm", appName}, nil
 	case "zypper":
-		return reinstallWithZypper(appName)
+		return "sudo", []string{"zypper", "install", "-y", appName}, nil
 	case "snap":
-		return reinstallWithSnap(appName)
+		return "sudo", []string{"snap", "install", appName}, nil
 	case "flatpak":
-		return reinstallWithFlatpak(appName)
+		return "flatpak", []string{"install", "-y", appName}, nil
 	default:
-		return fmt.Errorf("unsupported install method: %s", app.InstallMethod)
+		return "", nil, fmt.Errorf("unsupported install method: %s", app.InstallMethod)
 	}
 }
 
-func reinstallWithApt(appName string) error {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "sudo", "apt", "install", "-y", appName)
-	return cmd.Run()
+func reinstallApplication(ctx context.Context, appName string, settings config.CrossPlatformSettings) error {
+	name, args, err := rollbackInstallCommand(appName, settings)
+	if err != nil {
+		return err
+	}
+	return exec.CommandContext(ctx, name, args...).Run()
 }
 
-func reinstallWithDnf(appName string) error {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "sudo", "dnf", "install", "-y", appName)
-	return cmd.Run()
-}
-
-func reinstallWithPacman(appName string) error {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "sudo", "pacman", "-S", "--noconfirm", appName)
-	return cmd.Run()
-}
-
-func reinstallWithZypper(appName string) error {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "sudo", "zypper", "install", "-y", appName)
-	return cmd.Run()
-}
-
-func reinstallWithSnap(appName string) error {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "sudo", "snap", "install", appName)
-	return cmd.Run()
-}
-
-func reinstallWithFlatpak(appName string) error {
-	ctx := context.Background()
-	cmd := exec.CommandContext(ctx, "flatpak", "install", "-y", appName)
-	return cmd.Run()
-}
-
-func restartAppServices(appName string) error {
+func restartAppServices(ctx context.Context, appName string) error {
 	// Create a dummy app config to use existing service functions
 	app := &types.AppConfig{
 		BaseConfig: types.BaseConfig{
@@ -326,7 +333,6 @@ func restartAppServices(appName string) error {
 
 	log.Info("Restarting services for app", "app", appName, "services", services)
 
-	ctx := context.Background()
 	for _, service := range services {
 		// Enable the service
 		cmd := fmt.Sprintf("sudo systemctl enable %s", service)
