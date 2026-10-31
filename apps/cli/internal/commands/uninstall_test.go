@@ -485,6 +485,33 @@ var _ = Describe("Uninstall Command", func() {
 			Expect(stored).To(BeEmpty())
 		})
 
+		It("does not block removal when a list-only plugin cannot probe installation status", func() {
+			definition := types.CrossPlatformApp{
+				Name: "dnf-app",
+				AllPlatforms: types.OSConfig{
+					InstallMethod:  "dnf",
+					InstallCommand: "dnf-package",
+				},
+			}
+			data, err := json.Marshal(definition)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mockRepo.AddApp(definition.Name)).To(Succeed())
+			Expect(mockRepo.Set("installed-app-definition:dnf-app", string(data))).To(Succeed())
+
+			installer := &recordingInstaller{}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", definition.Name, "--force"})
+
+			Expect(cmd.Execute()).To(Succeed())
+			Expect(installer.uninstallCommands).To(Equal([]string{"dnf-package"}))
+			_, err = mockRepo.GetApp(definition.Name)
+			Expect(err).To(HaveOccurred())
+			stored, err := mockRepo.Get("installed-app-definition:dnf-app")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(stored).To(BeEmpty())
+		})
+
 		DescribeTable("reports saved-definition persistence errors",
 			func(installed bool) {
 				definition := types.CrossPlatformApp{

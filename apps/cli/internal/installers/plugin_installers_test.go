@@ -35,7 +35,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Expect(executor.ctx).To(BeIdenticalTo(ctx))
 	})
 
-	DescribeTable("preserves plugin discovery errors instead of confirming absence",
+	DescribeTable("preserves plugin discovery errors for package-specific probes",
 		func(method, operation string) {
 			probeErr := errors.New("plugin discovery failed")
 			executor := &recordingPluginExecutor{err: probeErr}
@@ -47,7 +47,44 @@ var _ = Describe("Plugin installation discovery", func() {
 			Expect(errors.Is(err, probeErr)).To(BeTrue())
 			Expect(executor.args[0]).To(Equal(operation))
 		},
-		Entry("package-specific probe", "apt", "is-installed"),
-		Entry("list fallback", "brew", "list"),
+		Entry("apt probe", "apt", "is-installed"),
+		Entry("flatpak probe", "flatpak", "is-installed"),
+		Entry("pip probe", "pip", "is-installed"),
 	)
+
+	DescribeTable("skips the installed probe for plugins without an is-installed operation",
+		func(method string) {
+			probeErr := errors.New("offline list failure")
+			executor := &recordingPluginExecutor{err: probeErr}
+			installer := &PluginBasedInstaller{method: method, pluginBootstrap: executor, ctx: context.Background()}
+
+			installed, err := installer.IsInstalled("git")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed).To(BeTrue())
+			Expect(executor.args).To(BeNil())
+		},
+		Entry("dnf plugin", "dnf"),
+		Entry("brew plugin", "brew"),
+		Entry("pacman plugin", "pacman"),
+	)
+
+	It("allows removal when a list-only plugin's list operation would fail offline", func() {
+		executor := &recordingPluginExecutor{
+			err: errors.New("offline metadata failure"),
+		}
+		installer := &PluginBasedInstaller{method: "dnf", pluginBootstrap: executor, ctx: context.Background()}
+
+		// IsInstalled skips probe and treats package as present
+		installed, err := installer.IsInstalled("git")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(installed).To(BeTrue())
+		Expect(executor.args).To(BeNil())
+
+		// Reset error for successful removal
+		executor.err = nil
+		err = installer.Uninstall("sudo remove -y git", nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(executor.name).To(Equal("package-manager-dnf"))
+		Expect(executor.args).To(Equal([]string{"remove", "git"}))
+	})
 })
