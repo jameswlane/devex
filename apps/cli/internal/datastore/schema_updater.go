@@ -2,6 +2,7 @@ package datastore
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/migrations"
 )
@@ -65,7 +67,7 @@ func applySchemaUpdates(ctx context.Context, db *sql.DB, resources fs.FS) error 
 	}
 	defer func() { _ = conn.Close() }()
 
-	upToDate, err := schemaUpToDate(ctx, conn, len(updates))
+	upToDate, err := schemaUpToDate(ctx, conn, updates)
 	if err != nil || upToDate {
 		return err
 	}
@@ -102,12 +104,16 @@ func inTransaction(ctx context.Context, conn *sql.Conn, begin string, commit boo
 	return nil
 }
 
-// schemaUpToDate reports whether the database is fully migrated without writing.
-// It performs only a quick integrity check and reads the migration history;
-// full structural validation is reserved for databases with pending migrations.
+// schemaUpToDate reports whether the database is fully migrated and valid
+// without writing. It runs a quick integrity check, reads the migration history
+// and then performs the same structural validation (tables, columns, indexes,
+// foreign keys, legacy tracker, foreign key check) as the migration path, all
+// inside a read-only transaction. A current but drifted or corrupt schema is
+// therefore rejected on every startup, not only when migrations are pending.
 // Anything that is not definitely current is handed to migrateSchema, which
 // re-checks under the write lock and reports precise errors.
-func schemaUpToDate(ctx context.Context, conn *sql.Conn, latest int) (bool, error) {
+func schemaUpToDate(ctx context.Context, conn *sql.Conn, updates []schemaMigration) (bool, error) {
+	latest := len(updates)
 	upToDate := false
 	err := inTransaction(ctx, conn, "BEGIN", false, func() error {
 		var quick string
@@ -132,7 +138,13 @@ func schemaUpToDate(ctx context.Context, conn *sql.Conn, latest int) (bool, erro
 		if err := conn.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MAX(version), 0) FROM schema_version").Scan(&count, &legacy); err != nil {
 			return fmt.Errorf("read legacy schema version: %w", err)
 		}
-		upToDate = count == 1 && legacy == latest
+		if count != 1 || legacy != latest {
+			return nil // legacy tracker needs synchronizing: a write, so use the migration path
+		}
+		if err := validateSchema(ctx, conn, updates, current); err != nil {
+			return schemaErrorf("incompatible schema at version %d: %w", current, err)
+		}
+		upToDate = true
 		return nil
 	})
 	return upToDate, err
@@ -232,28 +244,91 @@ func schemaVersion(ctx context.Context, db schemaQuerier, latest int) (int, erro
 	return current, nil
 }
 
+// schemaChecks compare one table's structure; the same queries run against the
+// reference schema and the database under inspection.
+var schemaChecks = []struct {
+	name  string
+	query string
+}{
+	{"columns", `SELECT name, UPPER(type), CASE WHEN ?1 = 'schema_migrations' AND name = 'applied_at' THEN 0 ELSE "notnull" END, dflt_value, pk FROM pragma_table_info(?1) ORDER BY cid`},
+	{"indexes", `SELECT il.name, il."unique", il.partial, ii.seqno, ii.name FROM pragma_index_list(?) il JOIN pragma_index_info(il.name) ii ORDER BY il.name, ii.seqno`},
+	{"foreign keys", `SELECT "table", "from", "to", on_update, on_delete, match FROM pragma_foreign_key_list(?) ORDER BY id, seq`},
+}
+
+// referenceSchema is the expected structure of every table at one schema version.
+type referenceSchema struct {
+	tables   []string
+	expected map[string][][][]any // table -> rows of each schemaChecks entry
+}
+
+var (
+	referenceMu    sync.Mutex
+	referenceCache = map[[sha256.Size]byte]*referenceSchema{}
+)
+
+// loadReferenceSchema builds the expected schema by replaying the versioned
+// resources in a throwaway in-memory database. The result is immutable and
+// cached per process, so startups validate against it without rebuilding it.
+func loadReferenceSchema(ctx context.Context, updates []schemaMigration, version int) (*referenceSchema, error) {
+	hash := sha256.New()
+	for _, update := range updates[:max(1, version)] {
+		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00", update.name, update.query)
+	}
+	_, _ = fmt.Fprintf(hash, "%d\x00%s", version, updates[historyMigrationVersion-1].query)
+	var key [sha256.Size]byte
+	copy(key[:], hash.Sum(nil))
+
+	referenceMu.Lock()
+	defer referenceMu.Unlock()
+	if cached, ok := referenceCache[key]; ok {
+		return cached, nil
+	}
+
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		return nil, fmt.Errorf("open schema reference: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+	db.SetMaxOpenConns(1)
+	for _, update := range updates[:max(1, version)] {
+		if _, err := db.ExecContext(ctx, update.query); err != nil {
+			return nil, fmt.Errorf("build schema reference from %s: %w", update.name, err)
+		}
+	}
+	if _, err := db.ExecContext(ctx, updates[historyMigrationVersion-1].query); err != nil {
+		return nil, fmt.Errorf("build migration history reference: %w", err)
+	}
+	names, err := schemaRows(ctx, db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	reference := &referenceSchema{expected: map[string][][][]any{}}
+	for _, row := range names {
+		name, ok := row[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid schema reference table name: %v", row[0])
+		}
+		reference.tables = append(reference.tables, name)
+		for _, check := range schemaChecks {
+			rows, err := schemaRows(ctx, db, check.query, name)
+			if err != nil {
+				return nil, err
+			}
+			reference.expected[name] = append(reference.expected[name], rows)
+		}
+	}
+	referenceCache[key] = reference
+	return reference, nil
+}
+
 // Validate against a schema built from the same versioned resources rather than
 // duplicating column definitions in Go. Extra application tables are permitted.
 func validateSchema(ctx context.Context, tx schemaConn, updates []schemaMigration, version int) error {
-	reference, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		return fmt.Errorf("open schema reference: %w", err)
-	}
-	defer func() { _ = reference.Close() }()
-	reference.SetMaxOpenConns(1)
-	for _, update := range updates[:max(1, version)] {
-		if _, err := reference.ExecContext(ctx, update.query); err != nil {
-			return fmt.Errorf("build schema reference from %s: %w", update.name, err)
-		}
-	}
-	if _, err := reference.ExecContext(ctx, updates[historyMigrationVersion-1].query); err != nil {
-		return fmt.Errorf("build migration history reference: %w", err)
-	}
-
-	tables, err := schemaRows(ctx, reference, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	reference, err := loadReferenceSchema(ctx, updates, version)
 	if err != nil {
 		return err
 	}
+	tables := reference.tables
 	if version == 0 {
 		actual, err := schemaRows(ctx, tx, "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations'")
 		if err != nil {
@@ -261,35 +336,19 @@ func validateSchema(ctx context.Context, tx schemaConn, updates []schemaMigratio
 		}
 		if len(actual) == 0 {
 			// Fresh database: only the newly-created history table exists.
-			tables = [][]any{{"schema_migrations"}}
+			tables = []string{"schema_migrations"}
 		}
 	}
-	checks := []struct {
-		name  string
-		query string
-	}{
-		{"columns", `SELECT name, UPPER(type), CASE WHEN ?1 = 'schema_migrations' AND name = 'applied_at' THEN 0 ELSE "notnull" END, dflt_value, pk FROM pragma_table_info(?1) ORDER BY cid`},
-		{"indexes", `SELECT il.name, il."unique", il.partial, ii.seqno, ii.name FROM pragma_index_list(?) il JOIN pragma_index_info(il.name) ii ORDER BY il.name, ii.seqno`},
-		{"foreign keys", `SELECT "table", "from", "to", on_update, on_delete, match FROM pragma_foreign_key_list(?) ORDER BY id, seq`},
-	}
-	for _, table := range tables {
-		name, ok := table[0].(string)
-		if !ok {
-			return fmt.Errorf("invalid schema reference table name: %v", table[0])
-		}
+	for _, name := range tables {
 		if version == 0 && name == "schema_version" {
 			continue // The old minimal schema did not have this table.
 		}
-		for _, check := range checks {
-			expected, err := schemaRows(ctx, reference, check.query, name)
-			if err != nil {
-				return err
-			}
+		for i, check := range schemaChecks {
 			actual, err := schemaRows(ctx, tx, check.query, name)
 			if err != nil {
 				return err
 			}
-			if !reflect.DeepEqual(actual, expected) {
+			if !reflect.DeepEqual(actual, reference.expected[name][i]) {
 				return fmt.Errorf("table %s has incompatible %s", name, check.name)
 			}
 		}

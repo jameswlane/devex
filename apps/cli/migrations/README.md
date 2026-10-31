@@ -16,11 +16,17 @@ Repeat startup preserves app records and migration timestamps.
 Startup is safe to run from several processes at once. Connections wait up to
 five seconds for another process's lock (`busy_timeout`) and enforce foreign keys
 (`foreign_keys=ON`). A database that is already at the supported version is
-verified read-only (`PRAGMA quick_check`, migration history and the legacy
-`schema_version` tracker) and takes no write lock. Only when migrations are
-pending does DevEx take the write lock up front (`BEGIN IMMEDIATE`), run the full
-`PRAGMA integrity_check`, and validate the schema against the embedded SQL before
-and after applying them.
+verified read-only inside a deferred transaction and takes no write lock:
+`PRAGMA quick_check`, the migration history, the legacy `schema_version` tracker,
+the same structural validation used for upgrades (required tables, columns,
+indexes and foreign keys compared with the embedded SQL), and
+`PRAGMA foreign_key_check`. A current database whose schema drifted or became
+inconsistent is therefore rejected on every startup, not only when migrations
+are pending. The expected schema is built once per process and reused. Only when
+migrations are pending, or the legacy tracker needs synchronizing, does DevEx
+take the write lock up front (`BEGIN IMMEDIATE`), run the full
+`PRAGMA integrity_check`, and validate the schema against the embedded SQL
+before and after applying them.
 
 ## Compatibility
 
