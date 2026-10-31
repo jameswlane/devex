@@ -41,7 +41,7 @@ func NewSnapPlugin() *SnapPlugin {
 			{
 				Name:        "update",
 				Description: "Update installed snaps",
-				Usage:       "Refresh all installed snaps or specific snaps to latest versions. Runs unattended (snap refresh never prompts); extra snap flags such as --channel=candidate are forwarded unchanged and snap's own exit status is preserved",
+				Usage:       "Refresh all installed snaps or specific snaps to latest versions. snap refresh itself never prompts, but when not run as root it runs through sudo, which may ask for a password unless passwordless sudo is configured; extra snap flags such as --channel=candidate are forwarded unchanged and snap's own exit status is preserved",
 			},
 			{
 				Name:        "search",
@@ -106,11 +106,12 @@ func (p *SnapPlugin) handleRemove(ctx context.Context, args []string) error {
 	return sdk.ExecCommandWithContext(ctx, true, "snap", cmdArgs...)
 }
 
-// handleUpdate runs `snap refresh`. The contract is unattended by default:
-// snap refresh never prompts, so no extra confirmation flag is added. Every
-// argument (snap names and flags such as --channel=candidate) is forwarded
-// unchanged as a separate argv element, and snap's native error and exit
-// status are returned unmodified.
+// handleUpdate runs `snap refresh`. snap refresh itself never prompts, so no
+// extra confirmation flag is added; when not running as root it is invoked
+// through sudo, which may prompt for a password unless passwordless sudo is
+// configured. Every argument (snap names and flags such as --channel=candidate)
+// is forwarded unchanged as a separate argv element, and snap's native error
+// and exit status are returned unmodified.
 func (p *SnapPlugin) handleUpdate(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		fmt.Println("Refreshing installed snaps...")
