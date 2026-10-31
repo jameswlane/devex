@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/jameswlane/devex/apps/cli/internal/datastore"
 	"github.com/jameswlane/devex/apps/cli/internal/errors"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -16,16 +15,8 @@ type repository struct {
 	db         types.Database
 }
 
-// NewRepository initializes and returns a Repository instance
-// Returns nil if schema initialization fails
+// NewRepository returns a repository for an initialized database.
 func NewRepository(db types.Database) types.Repository {
-	// Ensure schema is initialized
-	err := datastore.InitializeSchema(db.Conn())
-	if err != nil {
-		log.Error("Failed to initialize database schema", err)
-		return nil
-	}
-
 	return &repository{
 		appRepo:    NewAppRepository(db),
 		systemRepo: NewSystemRepository(db),

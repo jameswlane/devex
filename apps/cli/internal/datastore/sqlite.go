@@ -12,48 +12,34 @@ type SQLite struct {
 	conn *sql.DB
 }
 
-// NewSQLite initializes SQLite with schema and file path
+// NewSQLite opens and migrates a database using a background context.
 func NewSQLite(dbPath string) (*SQLite, error) {
+	return NewSQLiteContext(context.Background(), dbPath)
+}
+
+// NewSQLiteContext validates and migrates the database before making it available.
+func NewSQLiteContext(ctx context.Context, dbPath string) (*SQLite, error) {
 	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
+		return nil, fmt.Errorf("open SQLite database %q: %w", dbPath, err)
 	}
-
-	err = InitializeSchema(conn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
+	// Keep in-memory databases and connection-local SQLite state consistent.
+	conn.SetMaxOpenConns(1)
+	if err := ApplySchemaUpdates(ctx, conn); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("initialize SQLite database %q: %w; back up the database and restore a compatible backup or use a CLI supporting its schema", dbPath, err)
 	}
-
 	return &SQLite{conn: conn}, nil
 }
 
-// Conn returns the underlying SQL connection
+// Conn returns the underlying SQL connection.
 func (s *SQLite) Conn() *sql.DB {
 	return s.conn
 }
 
-// InitializeSchema ensures the required database schema is created
+// InitializeSchema validates and applies the embedded schema to an existing connection.
 func InitializeSchema(conn *sql.DB) error {
-	schema := `
-    CREATE TABLE IF NOT EXISTS system_data (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS installed_apps (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        app_name TEXT NOT NULL UNIQUE
-    );
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );`
-	ctx := context.Background()
-	_, err := conn.ExecContext(ctx, schema)
-	if err != nil {
-		return fmt.Errorf("failed to execute schema: %w", err)
-	}
-	return nil
+	return ApplySchemaUpdates(context.Background(), conn)
 }
 
 // Exec executes a query without returning rows (e.g., INSERT, UPDATE, DELETE).

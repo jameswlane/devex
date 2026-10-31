@@ -83,7 +83,12 @@ func main() {
 	log.Info("DevEx CLI started", "version", version, "platform", fmt.Sprintf("%s/%s", plat.OS, plat.Architecture))
 
 	// Initialize a database with proper directory creation
-	repo := initializeDatabase(homeDir)
+	repo, db, err := initializeDatabase(ctx, homeDir)
+	if err != nil {
+		handleError("initializing database", err)
+		return
+	}
+	defer func() { _ = db.Close() }()
 
 	// Load cross-platform configuration
 	crossPlatformSettings, err := config.LoadCrossPlatformSettings(homeDir)
@@ -159,22 +164,16 @@ func exitCode(err error) int {
 	return 1
 }
 
-func initializeDatabase(homeDir string) types.Repository {
-	// Ensure .devex directory exists
+func initializeDatabase(ctx context.Context, homeDir string) (types.Repository, *datastore.SQLite, error) {
 	devexDir := filepath.Join(homeDir, ".devex")
 	if err := os.MkdirAll(devexDir, 0750); err != nil {
-		handleError("creating .devex directory", err)
+		return nil, nil, fmt.Errorf("create datastore directory %q: %w; check directory permissions", devexDir, err)
 	}
 
 	dbPath := filepath.Join(devexDir, "datastore.db")
-	sqlite, err := datastore.NewSQLite(dbPath)
+	sqlite, err := datastore.NewSQLiteContext(ctx, dbPath)
 	if err != nil {
-		handleError("initializing database", err)
+		return nil, nil, err
 	}
-
-	repo := repository.NewRepository(sqlite)
-	if repo == nil {
-		handleError("initializing repository", fmt.Errorf("repository initialization failed"))
-	}
-	return repo
+	return repository.NewRepository(sqlite), sqlite, nil
 }

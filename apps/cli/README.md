@@ -140,6 +140,12 @@ devex system apply
 devex config show
 ```
 
+## Datastore compatibility
+
+Startup validates and applies embedded SQLite migrations before commands run. See
+[datastore schema compatibility and recovery](migrations/README.md) for supported
+versions, legacy upgrades, and recovery after a failed migration.
+
 ## 💻 Development
 
 ### Prerequisites
