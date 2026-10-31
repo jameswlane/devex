@@ -1,29 +1,83 @@
 /**
- * Robust HTML sanitization and search term processing service
- * Uses DOMPurify for industry-standard XSS protection with server-side support
+ * Search term sanitization service
+ *
+ * Search terms are plain text used only for filtering, so markup is reduced to
+ * its text content without a DOM. This keeps jsdom out of serverless functions.
  */
-
-import DOMPurify from "dompurify";
-import { JSDOM } from "jsdom";
 
 interface SanitizationResult {
 	sanitized: string;
 	warnings: string[];
 }
 
-// Create server-side DOM for DOMPurify
-let serverPurify: typeof DOMPurify;
-if (typeof window === "undefined") {
-	const window = new JSDOM("").window;
-	serverPurify = DOMPurify(window);
-} else {
-	serverPurify = DOMPurify;
+// Elements whose content is never searchable text.
+const DROPPED_CONTENT_TAGS = ["script", "style", "template", "noscript"];
+
+// Template delimiters stripped to keep terms inert in template contexts.
+const TEMPLATE_DELIMITERS: Array<[string, string]> = [
+	["{{", "}}"],
+	["${", "}"],
+	["<%", "%>"],
+];
+
+function removeDelimited(input: string, open: string, close: string): string {
+	let output = "";
+	let index = 0;
+	const lower = input.toLowerCase();
+	const openLower = open.toLowerCase();
+	while (index < input.length) {
+		const start = lower.indexOf(openLower, index);
+		if (start === -1) {
+			output += input.slice(index);
+			break;
+		}
+		output += `${input.slice(index, start)} `;
+		const end = lower.indexOf(close.toLowerCase(), start + open.length);
+		if (end === -1) {
+			break;
+		}
+		index = end + close.length;
+	}
+	return output;
+}
+
+function isTagStart(char: string | undefined): boolean {
+	return char !== undefined && /[A-Za-z/!?]/.test(char);
 }
 
 /**
- * Sanitizes HTML content using DOMPurify with comprehensive security configuration
- * Handles XSS vectors, malicious scripts, and unsafe attributes
- * Works both client-side and server-side
+ * Reduces markup to text with linear scans (no backtracking regexes):
+ * drops script/style-like element content, template expressions and every tag.
+ */
+function stripMarkup(input: string): string {
+	let text = input;
+	for (const tag of DROPPED_CONTENT_TAGS) {
+		text = removeDelimited(text, `<${tag}`, `</${tag}>`);
+	}
+	for (const [open, close] of TEMPLATE_DELIMITERS) {
+		text = removeDelimited(text, open, close);
+	}
+
+	let output = "";
+	for (let i = 0; i < text.length; i++) {
+		if (text[i] === "<" && isTagStart(text[i + 1])) {
+			const end = text.indexOf(">", i + 1);
+			if (end === -1) {
+				break;
+			}
+			output += " ";
+			i = end;
+			continue;
+		}
+		output += text[i];
+	}
+	// Any remaining angle brackets are not markup; drop them so terms stay inert.
+	return output.replace(/[<>]/g, " ").replace(/\s+/g, " ");
+}
+
+/**
+ * Sanitizes untrusted input to plain text: strips all tags, script and style
+ * content, and template expressions, and reports suspicious patterns.
  */
 export function sanitizeHtmlContent(input: string): SanitizationResult {
 	if (!input || typeof input !== "string") {
@@ -53,24 +107,9 @@ export function sanitizeHtmlContent(input: string): SanitizationResult {
 		}
 	}
 
-	// Configure DOMPurify for maximum security - strip all HTML tags but keep text content
-	const cleanHtml = serverPurify.sanitize(input, {
-		// Strip all HTML tags but keep text content
-		ALLOWED_TAGS: [],
-		ALLOWED_ATTR: [],
-		// Keep content when tags are removed - this is crucial for text extraction
-		KEEP_CONTENT: true,
-		// Prevent DOM clobbering attacks
-		SANITIZE_DOM: true,
-		SANITIZE_NAMED_PROPS: true,
-		// Safe for templates - handles template strings safely
-		SAFE_FOR_TEMPLATES: true,
-		// Return clean text string
-		RETURN_DOM: false,
-		RETURN_DOM_FRAGMENT: false,
-	});
+	const cleanHtml = stripMarkup(input);
 
-	// Check if DOMPurify removed anything significant
+	// Check if sanitization removed anything significant
 	if (cleanHtml.length < input.length * 0.5 && input.length > 10) {
 		warnings.push("Significant content was removed during sanitization");
 	}
