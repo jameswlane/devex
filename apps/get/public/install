@@ -105,10 +105,38 @@ check_dependencies() {
     return 1
 }
 
+# Tag behind github.com's /releases/latest redirect. Only CLI releases are marked
+# latest (plugin goreleaser configs set make_latest: false), and the redirect is
+# not subject to the unauthenticated API rate limit.
+latest_release_redirect_tag() {
+    local url
+    url=$(curl -fsSIL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest") || return 1
+    case "$url" in
+        */releases/tag/*) printf '%s\n' "${url#*/releases/tag/}" ;;
+        *) return 1 ;;
+    esac
+}
+
+# GitHub API request, authenticated when a token is available (60 vs 5000 requests/hour).
+fetch_github_api() {
+    local token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+    if [ -n "$token" ]; then
+        curl -fsSL -H "Authorization: Bearer $token" "$1"
+    else
+        curl -fsSL "$1"
+    fi
+}
+
 # Newest vX.Y.Z tag. Plugin and SDK releases use packages/<name>/vX.Y.Z tags and
 # are skipped. One page of 100 keeps this working even after a burst of plugin releases.
 latest_cli_version() {
-    fetch "https://api.github.com/repos/${REPO}/releases?per_page=100" |
+    local tag
+    tag=$(latest_release_redirect_tag 2>/dev/null || true)
+    if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        printf '%s\n' "$tag"
+        return
+    fi
+    fetch_github_api "https://api.github.com/repos/${REPO}/releases?per_page=100" |
         sed -n 's/.*"tag_name": *"\(v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)".*/\1/p' |
         head -n 1
 }
