@@ -6,12 +6,13 @@ set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 installer="$script_dir/../public/install"
-# Import definitions without main's final invocation, as in the PowerShell tests.
-# shellcheck source=/dev/null
-source <(sed '$d' "$installer")
-
 test_dir=$(mktemp -d)
 trap 'rm -rf "$test_dir"' EXIT
+# Import definitions without main's final invocation, as in the PowerShell tests.
+sed '$d' "$installer" > "$test_dir/installer-definitions.sh"
+# shellcheck source=/dev/null
+source "$test_dir/installer-definitions.sh"
+
 mkdir -p "$test_dir/fixture/bin" "$test_dir/releases"
 printf '#!/bin/sh\nexit 0\n' > "$test_dir/fixture/bin/devex"
 for platform in linux darwin; do
@@ -56,10 +57,13 @@ test_shell() {
     export HOME="$test_dir/home-$case_number"
     INSTALL_DIR="$HOME/install with spaces"
     mkdir -p "$HOME"
-    local configs=(.bashrc .bash_profile .zshrc .config/fish/config.fish)
+    local configs=(.bashrc .bash_profile .profile .zshrc .config/fish/config.fish)
     local config expected output first_output
-    if [ "$existing" = yes ]; then
+    if [ "$existing" != no ]; then
         for config in "${configs[@]}"; do
+            if [ "$existing" = profile ] && [ "$config" = .bash_profile ]; then
+                continue
+            fi
             mkdir -p "$(dirname "$HOME/$config")"
             printf '# Existing %s\n' "$config" > "$HOME/$config"
             cp "$HOME/$config" "$HOME/$(basename "$config").before"
@@ -71,12 +75,13 @@ test_shell() {
     [ -x "$INSTALL_DIR/bin/devex" ] || fail "Executable was not installed"
     assert_contains "$output" 'To add DevEx to another shell manually'
     assert_contains "$output" 'export PATH="$PATH"'
-    assert_contains "$output" 'set -gx PATH $PATH'
+    assert_contains "$output" "set -gx PATH \$PATH \"$INSTALL_DIR/bin\""
     for config in "${configs[@]}"; do
         expected=no
         case "$selected:$config" in
             bash:.bashrc|zsh:.zshrc|fish:.config/fish/config.fish) expected=yes ;;
-            bash:.bash_profile) [ "$test_os" != darwin ] || expected=yes ;;
+            bash:.bash_profile) [ "$test_os" != darwin ] || [ "$existing" = profile ] || expected=yes ;;
+            bash:.profile) [ "$test_os" != darwin ] || [ "$existing" != profile ] || expected=yes ;;
         esac
         if [ "$expected" = yes ]; then
             [ "$(grep -cF "$INSTALL_DIR/bin" "$HOME/$config" || :)" -eq 1 ] ||
@@ -88,7 +93,13 @@ test_shell() {
             else
                 assert_contains "$(cat "$HOME/$config")" 'export PATH='
             fi
-        elif [ "$existing" = yes ]; then
+            if [ "$existing" != no ]; then
+                assert_contains "$(cat "$HOME/$config")" "# Existing $config"
+            elif [ "$config" = .bash_profile ]; then
+                assert_contains "$(cat "$HOME/$config")" '[ -f "$HOME/.profile" ] && . "$HOME/.profile"'
+                assert_contains "$(cat "$HOME/$config")" '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"'
+            fi
+        elif [ -f "$HOME/$(basename "$config").before" ]; then
             cmp "$HOME/$config" "$HOME/$(basename "$config").before" ||
                 fail "Changed another shell's config: $config"
         else
@@ -116,6 +127,17 @@ for test_os in linux darwin; do
         test_shell "$test_os" /bin/unknown invalid zsh "$existing" --shell zsh
     done
 done
+
+# A macOS bash login must keep reading an existing .profile when .bash_profile is absent.
+test_shell darwin /bin/bash '' bash profile
+
+# Control characters make printf %q emit Bash-only quoting; fish must keep double quotes.
+test_os=linux current_shell=/bin/fish env_shell=''
+export HOME="$test_dir/fish-manual-home"
+INSTALL_DIR="$HOME/"$'install\twith-tab'
+fish_output=$(run_installer)
+fish_path_line=$(tail -n 1 "$HOME/.config/fish/config.fish")
+assert_contains "$fish_output" "    $fish_path_line"
 
 assert_rejected() {
     local output

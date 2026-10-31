@@ -162,7 +162,19 @@ configure_path() {
         bash)
             add_to_path "$HOME/.bashrc"
             if [ "$os" = "darwin" ]; then
-                add_to_path "$HOME/.bash_profile"
+                if [ -f "$HOME/.bash_profile" ]; then
+                    add_to_path "$HOME/.bash_profile"
+                elif [ -f "$HOME/.profile" ]; then
+                    add_to_path "$HOME/.profile"
+                else
+                    # Keep login shells connected to existing and future config.
+                    # shellcheck disable=SC2016 # HOME expands when the login shell reads this file.
+                    {
+                        echo '[ -f "$HOME/.profile" ] && . "$HOME/.profile"'
+                        echo '[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"'
+                    } > "$HOME/.bash_profile"
+                    add_to_path "$HOME/.bash_profile"
+                fi
             fi
             ;;
         *)
@@ -172,10 +184,10 @@ configure_path() {
     esac
 
     echo "To add DevEx to another shell manually, add the matching line to its config:"
-    echo "  bash: ~/.bashrc (also ~/.bash_profile for macOS login shells); zsh: ~/.zshrc"
+    echo "  bash: ~/.bashrc (also ~/.bash_profile or ~/.profile for macOS login shells); zsh: ~/.zshrc"
     printf "    export PATH=\"\$PATH\":%q\n" "$INSTALL_DIR/bin"
     echo "  fish: ~/.config/fish/config.fish"
-    printf "    set -gx PATH \$PATH %q\n" "$INSTALL_DIR/bin"
+    printf "    set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR/bin"
     echo "Restart the configured shell to use DevEx."
 }
 
