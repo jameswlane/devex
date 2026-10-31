@@ -132,9 +132,9 @@ func runDetect(cmd *cobra.Command, args []string, settings config.CrossPlatformS
 	fmt.Printf("%s Technology Detection\n\n", cyan("🔍"))
 	fmt.Printf("%s This feature requires the stack-detector plugin.\n", yellow("⚠️"))
 	fmt.Printf("To install and use the stack detector:\n\n")
-	fmt.Printf("1. The plugin will be automatically downloaded on first use\n")
+	fmt.Printf("1. Run: devex plugin install tool-stackdetector\n")
 	fmt.Printf("2. Run: devex plugin run tool-stackdetector detect\n")
-	fmt.Printf("3. Or configure auto-detection in your devex config\n\n")
+	fmt.Printf("3. Run: devex plugin info tool-stackdetector to see supported commands\n\n")
 	fmt.Printf("For more information, see: https://docs.devex.sh/plugins/stack-detector\n")
 
 	return nil
@@ -159,7 +159,7 @@ func runDetectSuggest(settings config.CrossPlatformSettings) error {
 
 	fmt.Printf("%s Configuration Suggestions\n\n", cyan("💡"))
 	fmt.Printf("%s This feature requires the stack-detector plugin.\n", yellow("⚠️"))
-	fmt.Printf("Run: devex plugin run tool-stackdetector suggest\n")
+	fmt.Printf("Run: devex plugin run tool-stackdetector report\n")
 
 	return nil
 }
@@ -171,7 +171,7 @@ func runDetectApply(settings config.CrossPlatformSettings) error {
 
 	fmt.Printf("%s Applying Detection Suggestions\n\n", cyan("🔧"))
 	fmt.Printf("%s This feature requires the stack-detector plugin.\n", yellow("⚠️"))
-	fmt.Printf("Run: devex plugin run tool-stackdetector apply\n")
+	fmt.Printf("Run: devex plugin run tool-stackdetector report\n")
 
 	return nil
 }

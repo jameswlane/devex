@@ -659,7 +659,7 @@ func (d *Downloader) SetStrategy(strategy DownloadStrategy) {
 
 // GetAvailablePlugins returns available plugins from registry with caching
 func (d *Downloader) GetAvailablePlugins(ctx context.Context) (map[string]PluginMetadata, error) {
-	registry, err := d.fetchRegistry()
+	registry, err := d.fetchRegistryWithContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
 	}
@@ -696,6 +696,15 @@ func (d *Downloader) SearchPlugins(ctx context.Context, query string) (map[strin
 
 // DownloadPluginWithContext downloads a plugin with context for cancellation
 func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName string) error {
+	return d.downloadPlugin(ctx, pluginName, false)
+}
+
+// DownloadValidatedPluginWithContext verifies checksums and executable metadata before replacing a plugin.
+func (d *Downloader) DownloadValidatedPluginWithContext(ctx context.Context, pluginName string) error {
+	return d.downloadPlugin(ctx, pluginName, true)
+}
+
+func (d *Downloader) downloadPlugin(ctx context.Context, pluginName string, validate bool) error {
 	// Fetch plugin metadata directly from the API
 	metadata, err := d.fetchPluginDirect(ctx, pluginName)
 	if err != nil {
@@ -720,7 +729,7 @@ func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName s
 	}
 
 	// Download and verify plugin
-	return d.downloadAndVerifyPlugin(ctx, pluginName, metadata.Version, binary)
+	return d.downloadAndVerifyPluginValidated(ctx, pluginName, metadata.Version, binary, validate)
 }
 
 // fetchPluginDirect fetches plugin metadata directly from the API endpoint
@@ -858,7 +867,10 @@ func (d *Downloader) getCacheDuration() time.Duration {
 }
 
 // fetchRegistry fetches the plugin registry with environment-aware caching
-func (d *Downloader) fetchRegistry() (*PluginRegistry, error) {
+func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegistry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Try to load from cache first
 	cachedRegistry := d.loadCachedRegistry()
 	cacheDuration := d.getCacheDuration()
@@ -868,8 +880,15 @@ func (d *Downloader) fetchRegistry() (*PluginRegistry, error) {
 
 	// Fetch fresh registry
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(d.registryURL + "/api/v1/registry")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.registryURL+"/api/v1/registry", nil)
 	if err != nil {
+		return nil, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		// Return cached registry if available
 		if cachedRegistry != nil {
 			if d.logger != nil {
@@ -933,6 +952,10 @@ var pluginInstallLocks sync.Map
 
 // downloadAndVerifyPlugin downloads and verifies a plugin binary
 func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName string, version string, binary PlatformBinary) error {
+	return d.downloadAndVerifyPluginValidated(ctx, pluginName, version, binary, false)
+}
+
+func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, pluginName string, version string, binary PlatformBinary, validate bool) error {
 	pluginPath := filepath.Join(d.pluginDir, fmt.Sprintf("devex-plugin-%s", pluginName))
 	if runtime.GOOS == "windows" {
 		pluginPath += ".exe"
@@ -1067,6 +1090,39 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	}
 
 	if err := d.ownInstallFile(binaryFile, filepath.Join(d.pluginDir, filepath.Base(binaryPath))); err != nil {
+		return err
+	}
+	if validate {
+		// Close the writable descriptor before execution (ETXTBSY on Unix).
+		if err := binaryFile.Close(); err != nil {
+			return err
+		}
+		if runtime.GOOS == "windows" {
+			executablePath := binaryPath + ".exe"
+			if err := root.Rename(filepath.Base(binaryPath), filepath.Base(executablePath)); err != nil {
+				return err
+			}
+			binaryPath = executablePath
+		}
+		binaryFile, err = root.Open(filepath.Base(binaryPath))
+		if err != nil {
+			return err
+		}
+		metadataCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		output, err := exec.CommandContext(metadataCtx, binaryPath, "--plugin-info").Output()
+		if err != nil {
+			return fmt.Errorf("new plugin %s failed executable validation: %w", pluginName, err)
+		}
+		var info PluginInfo
+		if err := json.Unmarshal(output, &info); err != nil {
+			return fmt.Errorf("new plugin %s returned invalid metadata: %w", pluginName, err)
+		}
+		if info.Name != pluginName || strings.TrimPrefix(info.Version, "v") != strings.TrimPrefix(version, "v") {
+			return fmt.Errorf("new plugin metadata mismatch: expected %s %s, got %s %s", pluginName, version, info.Name, info.Version)
+		}
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := publishStorageFile(root, binaryFile, pluginBase); err != nil {
@@ -1297,6 +1353,14 @@ func (em *ExecutableManager) ExecutePlugin(pluginName string, args []string) err
 
 // ExecutePluginWithContext executes a plugin using the caller's context for cancellation
 func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, pluginName string, args []string) error {
+	return em.ExecutePluginWithIO(ctx, pluginName, args, OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+}
+
+// ExecutePluginWithIO executes an installed plugin with caller-owned streams.
+func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams OperationIO) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	plugins := em.ListPluginsWithContext(ctx)
 	pluginInfo, exists := plugins[pluginName]
 	if !exists {
@@ -1304,12 +1368,18 @@ func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, plugi
 	}
 
 	var diagnostic diagnosticTail
-	streams := OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: io.MultiWriter(os.Stderr, &diagnostic)}
+	if streams.Stderr == nil {
+		streams.Stderr = io.Discard
+	}
+	streams.Stderr = io.MultiWriter(streams.Stderr, &diagnostic)
 	var err error
 	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
 		err = RunOperation(ctx, ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args}, streams)
 	} else {
 		err = runPreparedCommand(NewCommandContext(ctx, pluginInfo.Path, args...), streams)
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	if err != nil {
 		return decodeExecutionError(diagnostic.String(), err)

@@ -9,6 +9,7 @@
 		"template",
 		"add-remove",
 		"status-list",
+		"plugin",
 		"recovery",
 		"global-flags"
 	]
