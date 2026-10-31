@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 )
 
@@ -103,8 +105,7 @@ var DefaultCacheConfig = CacheConfig{
 // NewCacheManager creates a new cache manager instance
 func NewCacheManager(settings config.CrossPlatformSettings) (*CacheManager, error) {
 	// Use HomeDir to construct the devex config directory, similar to other managers
-	devexDir := filepath.Join(settings.HomeDir, ".devex")
-	baseDir := filepath.Join(devexDir, "cache")
+	baseDir := devexpaths.ForHome(settings.HomeDir).Cache
 
 	cm := &CacheManager{
 		baseDir:        baseDir,

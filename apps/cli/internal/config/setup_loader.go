@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -88,7 +90,7 @@ func (l *SetupConfigLoader) Load() (*types.SetupConfig, error) {
 func (l *SetupConfigLoader) loadFromFile(path string) ([]byte, error) {
 	// Expand home directory if needed
 	if len(path) > 0 && path[0] == '~' {
-		home, err := os.UserHomeDir()
+		home, err := devexHomeDir()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}
@@ -115,9 +117,9 @@ func (l *SetupConfigLoader) loadDefaultConfig() ([]byte, error) {
 	}
 
 	// Add user home directory path
-	if home, err := os.UserHomeDir(); err == nil {
-		searchPaths = append(searchPaths, filepath.Join(home, ".devex", "config", "setup.yaml"))
-		searchPaths = append(searchPaths, filepath.Join(home, ".local", "share", "devex", "config", "setup.yaml"))
+	if home, err := devexHomeDir(); err == nil {
+		searchPaths = append(searchPaths, devexpaths.ForHome(home).ReadPath(filepath.Join(devexpaths.ForHome(home).Config, "config", "setup.yaml")))
+		searchPaths = append(searchPaths, filepath.Join(devexpaths.ForHome(home).Defaults(), "setup.yaml"))
 	}
 
 	// Try each path
@@ -403,11 +405,11 @@ func (l *SetupConfigLoader) loadFromURL(url string) ([]byte, bool, error) {
 
 // getCacheDir returns the cache directory for setup configs
 func (l *SetupConfigLoader) getCacheDir() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := devexHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, ".devex", "setup-cache"), nil
+	return filepath.Join(devexpaths.ForHome(home).Cache, "setup"), nil
 }
 
 // getCachePath returns the cache file path for a URL

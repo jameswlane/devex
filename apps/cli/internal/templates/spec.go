@@ -175,7 +175,7 @@ func (tm *TemplateManager) GetAvailableTemplateSpecsWithSources() ([]TemplateSpe
 		}
 	}
 
-	userSpecs, err := tm.loadTemplateSpecsFromDir(tm.userTemplatesDir)
+	userSpecs, err := tm.loadTemplateSpecsFromDir(tm.readTemplatesDir())
 	if err != nil {
 		log.Info("No user template specs found", "error", err)
 	} else {

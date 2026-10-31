@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/cobra"
@@ -63,10 +64,10 @@ The install command automates the installation of your development environment w
 Configuration hierarchy (highest to lowest priority):
   • Command-line flags
   • Environment variables (DEVEX_*)
-  • Configuration files (~/.devex/config.yaml)
+  • Configuration files ($DEVEX_CONFIG_DIR/config.yaml)
   • Default values
 
-Configuration files are located in ~/.local/share/devex/config/:
+Configuration files are located in $DEVEX_DATA_DIR/config/:
   • applications.yaml - Development tools and applications
   • environment.yaml - Programming languages and fonts
   • desktop.yaml - Themes, extensions, and desktop settings
@@ -260,7 +261,7 @@ func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName s
 }
 
 func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateInstallOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to determine user home directory: %w", err)
 	}
@@ -439,7 +440,7 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 	// metadata directly so dry runs stay offline and can still display privileges.
 	if plugins == nil {
 		if home, err := utils.GetHomeDir(); err == nil {
-			plugins = sdk.NewExecutableManager(filepath.Join(home, ".devex", "plugins")).ListPluginsWithContext(ctx)
+			plugins = sdk.NewExecutableManager(devexpaths.ForHome(home).ReadPath(devexpaths.ForHome(home).Plugins())).ListPluginsWithContext(ctx)
 		}
 	}
 	log.Info("Dry run - showing what would be installed:")

@@ -85,6 +85,21 @@ func NewSQLiteContext(ctx context.Context, dbPath string) (*SQLite, error) {
 	return &SQLite{conn: conn}, nil
 }
 
+// NewSQLiteReadOnlyContext opens existing installation state without applying
+// schema updates or permitting writes during a command preview.
+func NewSQLiteReadOnlyContext(ctx context.Context, dbPath string) (*SQLite, error) {
+	conn, err := sql.Open("sqlite", sqliteDSN(dbPath)+"&mode=ro")
+	if err != nil {
+		return nil, fmt.Errorf("open read-only datastore %q: %w", dbPath, err)
+	}
+	conn.SetMaxOpenConns(1)
+	if err := conn.PingContext(ctx); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("read datastore %q: %w; check permissions and database integrity", dbPath, err)
+	}
+	return &SQLite{conn: conn}, nil
+}
+
 // Conn returns the underlying SQL connection.
 func (s *SQLite) Conn() *sql.DB {
 	return s.conn

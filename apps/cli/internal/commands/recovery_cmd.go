@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
@@ -40,7 +41,7 @@ Examples:
 			execute, _ := cmd.Flags().GetString("execute")
 			format, _ := cmd.Flags().GetString("format")
 
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			recoveryManager := recovery.NewRecoveryManager(baseDir)
 
 			if listOptions {

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // handleBackup creates timestamped backups of shell configuration files
@@ -17,10 +19,12 @@ func (p *ShellPlugin) handleBackup(ctx context.Context, args []string) error {
 		return fmt.Errorf("could not detect current shell")
 	}
 
-	homeDir, err := os.UserHomeDir()
+	identity, err := sdk.NewPrivilegeResolver().ResolveUser(nil)
 	if err != nil {
 		return fmt.Errorf("failed to get home directory: %w", err)
 	}
+
+	homeDir := identity.HomeDir
 
 	// Determine files to backup
 	filesToBackup := p.getFilesToBackup(currentShell, homeDir)
@@ -73,7 +77,7 @@ func (p *ShellPlugin) getFilesToBackup(shell, homeDir string) []string {
 
 // createBackupDirectory creates a timestamped backup directory
 func (p *ShellPlugin) createBackupDirectory(homeDir string) (string, error) {
-	backupDir := filepath.Join(homeDir, ".devex", "backups", "shell")
+	backupDir := filepath.Join(sdk.PathsForHome(homeDir).Backups(), "shell")
 	timestamp := time.Now().Format("20060102-150405")
 	backupPath := filepath.Join(backupDir, timestamp)
 

@@ -25,14 +25,6 @@ const (
 	StatusUpdateInterval = 100 // Milliseconds between status updates
 )
 
-// Configuration paths and directories
-const (
-	DefaultConfigDir  = ".local/share/devex/config"
-	OverrideConfigDir = ".devex"
-	LogsDir           = ".local/share/devex/logs"
-	BackupsDir        = ".devex/backups"
-)
-
 // Application categories for organization
 const (
 	CategoryDevelopment = "Development Tools"

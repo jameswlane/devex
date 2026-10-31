@@ -5,11 +5,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/spf13/cobra"
 
@@ -337,8 +338,7 @@ func newCacheConfigCmd(repo types.Repository, settings config.CrossPlatformSetti
 			config := cache.DefaultCacheConfig
 
 			// Construct cache directory path similar to other managers
-			devexDir := filepath.Join(settings.HomeDir, ".devex")
-			cacheDir := filepath.Join(devexDir, "cache")
+			cacheDir := devexpaths.ForHome(settings.HomeDir).Cache
 
 			fmt.Printf("DevEx Cache Configuration\n")
 			fmt.Printf("========================\n\n")

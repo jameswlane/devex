@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -33,13 +35,13 @@ type BackupEntry struct {
 
 // NewBackupManager creates a new backup manager instance
 func NewBackupManager(repo types.Repository) *BackupManager {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		// Fallback to temp directory
 		homeDir = "/tmp"
 	}
 
-	backupDir := filepath.Join(homeDir, ".devex", "backups")
+	backupDir := devexpaths.ForHome(homeDir).Backups()
 
 	return &BackupManager{
 		backupDir: backupDir,
@@ -154,7 +156,7 @@ func (bm *BackupManager) backupConfigFiles(ctx context.Context, app *types.AppCo
 
 		// Expand home directory if needed
 		if strings.HasPrefix(srcPath, "~/") {
-			homeDir, err := os.UserHomeDir()
+			homeDir, err := devexHomeDir()
 			if err != nil {
 				continue
 			}
@@ -195,7 +197,7 @@ func (bm *BackupManager) backupDataFiles(ctx context.Context, app *types.AppConf
 
 		// Expand home directory if needed
 		if strings.HasPrefix(srcPath, "~/") {
-			homeDir, err := os.UserHomeDir()
+			homeDir, err := devexHomeDir()
 			if err != nil {
 				continue
 			}
@@ -280,7 +282,11 @@ Data Files: %d files
 func (bm *BackupManager) ListBackups() ([]BackupEntry, error) {
 	// This is a simplified implementation
 	// In production, this would query the database
-	entries, err := os.ReadDir(bm.backupDir)
+	readDir := bm.backupDir
+	if dirs, err := devexpaths.Resolve(); err == nil {
+		readDir = dirs.ReadPath(readDir)
+	}
+	entries, err := os.ReadDir(readDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []BackupEntry{}, nil
@@ -299,7 +305,7 @@ func (bm *BackupManager) ListBackups() ([]BackupEntry, error) {
 					appName = parts[0]
 				}
 
-				backupPath := filepath.Join(bm.backupDir, entry.Name())
+				backupPath := filepath.Join(readDir, entry.Name())
 				info, err := entry.Info()
 				if err != nil {
 					continue
@@ -366,7 +372,7 @@ func (bm *BackupManager) restoreDirectory(ctx context.Context, backupDir, dirTyp
 		var dstPath string
 		if dirType == "config" {
 			// Restore to home directory or appropriate config location
-			homeDir, err := os.UserHomeDir()
+			homeDir, err := devexHomeDir()
 			if err != nil {
 				continue
 			}

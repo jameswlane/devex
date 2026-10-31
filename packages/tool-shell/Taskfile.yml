@@ -6,12 +6,24 @@ tasks:
     desc: Build Shell tool plugin for all platforms
     cmds:
       - mkdir -p dist
-      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-linux-amd64 .
-      - GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-linux-arm64 .
-      - GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-darwin-amd64 .
-      - GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-darwin-arm64 .
-      - GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-windows-amd64.exe .
-      - GOOS=windows GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-windows-arm64.exe .
+      - |
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-linux-amd64 .
+      - |
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-linux-arm64 .
+      - |
+        GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-darwin-amd64 .
+      - |
+        GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-darwin-arm64 .
+      - |
+        GOOS=windows GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-windows-amd64.exe .
+      - |
+        GOOS=windows GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-windows-arm64.exe .
   test:
     desc: Run tests
     cmds:
@@ -21,12 +33,15 @@ tasks:
     cmds:
       - golangci-lint run
   install:local:
+    vars:
+      PLUGIN_DIR:
+        sh: go -C ../plugin-sdk run ./cmd/plugin-path
     desc: Install plugin locally for testing
     cmds:
       - task: build
-      - mkdir -p ~/.devex/plugins
-      - cp dist/{{.PLUGIN_NAME}}-{{OS}}-{{ARCH}}* ~/.devex/plugins/{{.PLUGIN_NAME}}
-      - chmod +x ~/.devex/plugins/{{.PLUGIN_NAME}}
+      - mkdir -p "{{.PLUGIN_DIR}}"
+      - cp dist/{{.PLUGIN_NAME}}-{{OS}}-{{ARCH}}* "{{.PLUGIN_DIR}}"/{{.PLUGIN_NAME}}
+      - chmod +x "{{.PLUGIN_DIR}}"/{{.PLUGIN_NAME}}
   clean:
     desc: Clean build artifacts
     cmds:

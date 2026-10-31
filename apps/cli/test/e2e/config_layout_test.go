@@ -16,8 +16,8 @@ var _ = Describe("Canonical configuration layout", func() {
 		home := sandbox.isolatedHome()
 		output, err := sandbox.run(home, sandbox.binary, time.Minute, nil, "init", "--profile", "backend", "--interactive=false")
 		Expect(err).NotTo(HaveOccurred(), "devex init failed:\n%s", output)
-		Expect(filepath.Join(home, ".local/share/devex/config/applications/development/git.yaml")).To(BeAnExistingFile())
-		Expect(filepath.Join(home, ".local/share/devex/config/applications.yaml")).NotTo(BeAnExistingFile())
+		Expect(filepath.Join(sandbox.paths(home, nil).Defaults(), "applications/development/git.yaml")).To(BeAnExistingFile())
+		Expect(filepath.Join(sandbox.paths(home, nil).Defaults(), "applications.yaml")).NotTo(BeAnExistingFile())
 
 		output, err = sandbox.run(home, sandbox.binary, time.Minute, nil, "list", "available")
 		Expect(err).NotTo(HaveOccurred(), "devex list available failed:\n%s", output)
@@ -27,7 +27,7 @@ var _ = Describe("Canonical configuration layout", func() {
 
 		output, err = sandbox.run(home, sandbox.binary, time.Minute, nil, "config", "show", "--format", "yaml")
 		Expect(err).NotTo(HaveOccurred(), "devex config show failed:\n%s", output)
-		Expect(output).To(ContainSubstring(filepath.Join(home, ".local/share/devex/config/applications")))
+		Expect(output).To(ContainSubstring(filepath.Join(sandbox.paths(home, nil).Defaults(), "applications")))
 
 		output, err = sandbox.run(home, sandbox.binary, time.Minute, nil, "config", "validate", "--strict")
 		Expect(err).NotTo(HaveOccurred(), "devex config validate failed:\n%s", output)

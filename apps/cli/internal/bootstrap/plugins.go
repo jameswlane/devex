@@ -7,6 +7,8 @@ import (
 	"slices"
 	"text/tabwriter"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -121,7 +123,7 @@ func getRegistryURLFromConfig() string {
 	}
 
 	// Check for config file
-	configPath := filepath.Join(identity.HomeDir, ".devex", "config.yaml")
+	configPath := devexpaths.ForHome(identity.HomeDir).ReadPath(filepath.Join(devexpaths.ForHome(identity.HomeDir).Config, "config.yaml"))
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return ""
@@ -158,7 +160,7 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 		return nil, fmt.Errorf("failed to get user home directory: home directory not accessible: %w", err)
 	}
 
-	pluginDir := filepath.Join(homeDir, ".devex", "plugins")
+	pluginDir := devexpaths.ForHome(homeDir).ReadPath(devexpaths.ForHome(homeDir).Plugins())
 
 	// Get registry URL with fallback to default
 	registryURL := GetRegistryURL()
@@ -658,8 +660,12 @@ func (b *PluginBootstrap) handleRegistryInfo(cmd *cobra.Command, args []string) 
 	}
 
 	// Check config file
-	homeDir, _ := os.UserHomeDir()
-	configPath := filepath.Join(homeDir, ".devex", "config.yaml")
+	dirs, err := devexpaths.Resolve()
+	if err != nil {
+		return err
+	}
+	homeDir := dirs.Home
+	configPath := filepath.Join(devexpaths.ForHome(homeDir).Config, "config.yaml")
 	if configURL := getRegistryURLFromConfig(); configURL != "" {
 		cmd.Printf("✓ Config file setting: %s\n", configURL)
 		cmd.Printf("  Location: %s\n", configPath)
@@ -674,7 +680,7 @@ func (b *PluginBootstrap) handleRegistryInfo(cmd *cobra.Command, args []string) 
 	cmd.Println("\nTo use a custom registry:")
 	cmd.Println("1. Set environment variable:")
 	cmd.Println("   export DEVEX_PLUGIN_REGISTRY_URL=https://your-registry.com/v1")
-	cmd.Println("\n2. Or add to config file (~/.devex/config.yaml):")
+	cmd.Println("\n2. Or add to config file ($DEVEX_CONFIG_DIR/config.yaml):")
 	cmd.Println("   plugin_registry_url: https://your-registry.com/v1")
 
 	return nil

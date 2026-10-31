@@ -155,7 +155,7 @@ dependencies:
       - system-linux
     conflicts: []
 # User override configuration
-# Users can specify their preferences in ~/.devex/config.yaml
+# Users can specify their preferences in $DEVEX_CONFIG_DIR/config.yaml
 user_overrides:
 # Example user configuration:
 # preferred_package_manager: flatpak

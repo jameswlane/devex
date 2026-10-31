@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/charmbracelet/log"
 )
 
@@ -119,12 +121,11 @@ func InitFileLogger(debugMode bool) error {
 	systemInfo := gatherBasicSystemInfo()
 
 	// Create logs directory
-	homeDir := os.Getenv("HOME")
-	if homeDir == "" {
-		homeDir = "/tmp" // Fallback for systems without HOME
+	dirs, err := devexpaths.Resolve()
+	if err != nil {
+		return err
 	}
-
-	logsDir := filepath.Join(homeDir, ".local", "share", "devex", "logs")
+	logsDir := dirs.Logs()
 	if err := os.MkdirAll(logsDir, 0750); err != nil { // #nosec G703 -- fixed path under the user home directory
 		return fmt.Errorf("failed to create logs directory: %w", err)
 	}

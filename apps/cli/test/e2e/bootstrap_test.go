@@ -24,19 +24,19 @@ var _ = Describe("Fresh sandbox CLI lifecycle", Ordered, func() {
 
 	It("bootstraps plugins and creates secure runtime directories", func() {
 		sandbox.cli("list")
-		for _, relative := range []string{".devex", ".devex/plugins", ".local/share/devex/logs"} {
-			path := filepath.Join(sandbox.home, relative)
+		dirs := sandbox.paths(sandbox.home, nil)
+		for _, path := range []string{dirs.Data, dirs.Plugins(), dirs.State, dirs.Logs()} {
 			info, err := os.Stat(path)
 			Expect(err).NotTo(HaveOccurred(), "first run must create %s", path)
 			Expect(info.IsDir()).To(BeTrue(), "%s must be a directory", path)
 			Expect(info.Mode().Perm()&0002).To(BeZero(), "%s must not be world-writable", path)
 		}
-		database := filepath.Join(sandbox.home, ".devex/datastore.db")
+		database := filepath.Join(dirs.State, "datastore.db")
 		info, err := os.Stat(database)
 		Expect(err).NotTo(HaveOccurred(), "CLI initializes the SQLite datastore")
 		Expect(info.Mode().IsRegular()).To(BeTrue(), "datastore must be a regular file")
 		Expect(info.Mode().Perm()&0002).To(BeZero(), "datastore must not be world-writable")
-		logs, err := filepath.Glob(filepath.Join(sandbox.home, ".local/share/devex/logs/devex-*.log"))
+		logs, err := filepath.Glob(filepath.Join(dirs.Logs(), "devex-*.log"))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(logs).NotTo(BeEmpty(), "first run must write a CLI log")
 		for _, path := range logs {
@@ -46,13 +46,15 @@ var _ = Describe("Fresh sandbox CLI lifecycle", Ordered, func() {
 		}
 		// LoadCrossPlatformSettings only reads defaults. `setup`/`init` writes config;
 		// list/version must not manufacture user configuration on an empty HOME.
-		_, err = os.Stat(filepath.Join(sandbox.home, ".local/share/devex/config"))
-		Expect(os.IsNotExist(err)).To(BeTrue(), "plain CLI startup does not create the default config directory")
+		for _, path := range []string{dirs.Config, dirs.Defaults()} {
+			_, err = os.Stat(path)
+			Expect(os.IsNotExist(err)).To(BeTrue(), "plain CLI startup does not create configuration at %s", path)
+		}
 	})
 
 	It("downloads exactly the platform plugins with registry SHA256 and SDK version metadata", func() {
 		plugins = expectedPlugins()
-		entries, err := os.ReadDir(filepath.Join(sandbox.home, ".devex/plugins"))
+		entries, err := os.ReadDir(sandbox.paths(sandbox.home, nil).Plugins())
 		Expect(err).NotTo(HaveOccurred())
 		installed := make([]string, 0, len(entries))
 		for _, entry := range entries {

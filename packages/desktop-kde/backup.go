@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // BackupManager handles KDE settings backup and restore
@@ -216,7 +218,7 @@ func (bm *BackupManager) getBackupDirectory(args []string) string {
 	if len(args) > 0 {
 		return args[0]
 	}
-	return filepath.Join(os.Getenv("HOME"), ".devex", "backups", "kde")
+	return filepath.Join(sdk.PathsForHome("").Backups(), "kde")
 }
 
 // generateTimestamp creates a timestamp string for backup files

@@ -144,7 +144,9 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 			Expect(summary).To(Or(ContainSubstring("completed with issues"), ContainSubstring("Completed with Issues")))
 			Expect(summary).To(ContainSubstring("permission denied"))
 			Expect(summary).To(ContainSubstring(`"selected_shell":"bash"`))
-			Expect(summary).To(ContainSubstring(`| "$HOME/.devex/plugins/devex-plugin-tool-shell" setup`))
+			dirs, err := sdk.ResolvePaths()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(summary).To(ContainSubstring("| " + singleQuote(filepath.Join(dirs.Plugins(), "devex-plugin-tool-shell")) + " setup"))
 			Expect(summary).NotTo(ContainSubstring("Your environment is configured"))
 		}
 	})

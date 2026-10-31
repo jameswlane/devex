@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // SetInstallOwner accepts a resolved Unix account for elevated plugin storage.
@@ -13,11 +14,11 @@ func (d *Downloader) SetInstallOwner(identity UserIdentity) error {
 	if _, _, err := installOwnerIDs(&identity); err != nil {
 		return err
 	}
-	if filepath.Clean(d.pluginDir) != filepath.Join(identity.HomeDir, ".devex", "plugins") {
-		return fmt.Errorf("elevated plugin storage must be inside the intended user's .devex/plugins")
+	if filepath.Clean(d.pluginDir) != PathsForHome(identity.HomeDir).Plugins() {
+		return fmt.Errorf("elevated plugin storage must be at the resolved invoking user data directory")
 	}
 	d.installOwner = &identity
-	d.cacheDir = filepath.Join(identity.HomeDir, ".devex", "plugin-cache")
+	d.cacheDir = filepath.Join(PathsForHome(identity.HomeDir).Cache, "plugins")
 	return nil
 }
 
@@ -135,21 +136,31 @@ func (d *Downloader) openInstallStorage(cache bool) (*os.Root, error) {
 	if cache {
 		path = d.cacheDir
 	}
+	if !filepath.IsAbs(path) {
+		return nil, fmt.Errorf("plugin storage path must be absolute; check DevEx directory configuration: %s", path)
+	}
 	if d.installOwner == nil {
 		return openStorageRoot(path)
 	}
-	home, err := os.OpenRoot(d.installOwner.HomeDir)
+	rel, err := filepath.Rel(d.installOwner.HomeDir, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return nil, fmt.Errorf("elevated storage must remain beneath invoking user's home: %s", path)
+	}
+	home, err := openPathRoot(d.installOwner.HomeDir, false, nil)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = home.Close() }()
-	devexPath := filepath.Join(d.installOwner.HomeDir, ".devex")
-	devex, err := d.openOwnedDirectory(home, ".devex", devexPath)
-	if err != nil {
-		return nil, err
+	logical := d.installOwner.HomeDir
+	for _, part := range strings.Split(rel, string(os.PathSeparator)) {
+		logical = filepath.Join(logical, part)
+		next, err := d.openOwnedDirectory(home, part, logical)
+		_ = home.Close()
+		if err != nil {
+			return nil, err
+		}
+		home = next
 	}
-	defer func() { _ = devex.Close() }()
-	return d.openOwnedDirectory(devex, filepath.Base(path), path)
+	return home, nil
 }
 
 // PrepareInstallDirectory refuses linked/foreign-owned storage before elevated writes.

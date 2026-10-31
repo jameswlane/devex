@@ -1,5 +1,4 @@
 name: Installers
-
 on:
   pull_request:
     paths:
@@ -17,19 +16,15 @@ on:
       - 'apps/cli/cmd/**'
       - '.github/workflows/installers.yml'
   workflow_dispatch:
-
 defaults:
   run:
     # Container jobs otherwise run steps with sh, and these steps use bash syntax.
     shell: bash
-
 permissions:
   contents: read
-
 concurrency:
   group: installers-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   releases:
     name: Resolve CLI releases
@@ -56,7 +51,6 @@ jobs:
             echo "latest=${versions[0]}"
             echo "previous=${versions[1]}"
           } >> "$GITHUB_OUTPUT"
-
   bash-installer:
     name: Bash / ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
@@ -90,14 +84,12 @@ jobs:
       PREVIOUS_VERSION: ${{ needs.releases.outputs.previous }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Linux test dependencies
         if: matrix.os == 'linux'
         run: |
           apt-get update -qq
           apt-get install -y -qq --no-install-recommends curl git unzip ca-certificates python3
-
       - name: Test latest, previous, and idempotent PATH setup
         env:
           HOME: ${{ runner.temp }}/devex-home
@@ -105,32 +97,31 @@ jobs:
           RC_FILE: ${{ matrix.rc-file }}
         run: |
           mkdir -p "$HOME"
+          # --install-dir names the directory that receives the binary (default ~/.local/bin).
           install_dir="$RUNNER_TEMP/devex-install"
           bash apps/get/public/install --no-setup --install-dir "$install_dir"
-          test -x "$install_dir/bin/devex"
-          version_output=$("$install_dir/bin/devex" --version)
+          test -x "$install_dir/devex"
+          version_output=$("$install_dir/devex" --version)
           case "$version_output" in
             *"${LATEST_VERSION#v}"*) ;;
             *) echo "::error::Expected ${LATEST_VERSION}, got: $version_output"; exit 1 ;;
           esac
 
           bash apps/get/public/install --no-setup --install-dir "$install_dir"
-          path_count=$(grep -cF "$install_dir/bin" "$HOME/$RC_FILE" || :)
+          path_count=$(grep -cF "$install_dir" "$HOME/$RC_FILE" || :)
           if [ "$path_count" -ne 1 ]; then
             echo "::error::Expected one PATH entry in $HOME/$RC_FILE, found $path_count"
             exit 1
           fi
 
           bash apps/get/public/install --no-setup --install-dir "$install_dir" --version "$PREVIOUS_VERSION"
-          version_output=$("$install_dir/bin/devex" --version)
+          version_output=$("$install_dir/devex" --version)
           case "$version_output" in
             *"${PREVIOUS_VERSION#v}"*) ;;
             *) echo "::error::Expected ${PREVIOUS_VERSION}, got: $version_output"; exit 1 ;;
           esac
-
       - name: Run Bash installer unit tests
         run: bash apps/get/tests/install.sh
-
       - name: Reject a corrupted checksum
         if: matrix.name == 'ubuntu:24.04'
         env:
@@ -183,7 +174,6 @@ jobs:
             echo "::error::Corrupted checksum left an installation"
             exit 1
           fi
-
   bash-missing-dependency:
     name: Bash / missing unzip
     runs-on: ubuntu-latest
@@ -191,8 +181,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install dependencies except unzip
         run: |
           apt-get update -qq
@@ -201,7 +190,6 @@ jobs:
             echo "::error::unzip is unexpectedly installed"
             exit 1
           fi
-
       - name: Require unzip
         run: |
           set +e
@@ -217,7 +205,6 @@ jobs:
             echo "::error::Failure did not name unzip"
             exit 1
           fi
-
   windows-installer:
     name: Windows / ${{ matrix.shell }}
     runs-on: windows-latest
@@ -233,12 +220,10 @@ jobs:
       PREVIOUS_VERSION: ${{ needs.releases.outputs.previous }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run PowerShell installer unit tests
         shell: pwsh
         run: pwsh -NoProfile -File apps/get/tests/install.ps1
-
       - name: Test installation, versions, and idempotent user PATH
         shell: pwsh
         run: |
@@ -276,7 +261,6 @@ jobs:
           $withoutV = $env:PREVIOUS_VERSION.TrimStart('v')
           Invoke-Installer @('-Version', $withoutV, '-NoSetup', '-InstallDir', $installDir)
           Assert-Version $env:PREVIOUS_VERSION
-
       - name: Reject a corrupted checksum
         shell: pwsh
         run: |
@@ -334,25 +318,21 @@ jobs:
           } finally {
             if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
           }
-
   windows-cli:
     name: Windows / CLI from source
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
-
       - name: Run PowerShell installer unit tests
         shell: pwsh
         run: pwsh -NoProfile -File apps/get/tests/install.ps1
-
       - name: Build and smoke test the Windows CLI
         shell: pwsh
         working-directory: apps/cli

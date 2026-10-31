@@ -1,0 +1,42 @@
+---
+title: Files and directories
+description: DevEx storage locations, overrides, backups, and legacy migration
+---
+
+DevEx follows the XDG Base Directory convention on Linux and macOS. macOS deliberately uses these same defaults instead of Library directories, so developer tools and shell configuration behave consistently across both systems.
+
+Run `devex paths` to print the resolved directories for the invoking user, including when running through sudo.
+
+| Kind | Default on Linux and macOS | Contents |
+| --- | --- | --- |
+| Config | `$XDG_CONFIG_HOME/devex` (`~/.config/devex`) | `config.yaml`, user override `config/`, `environments/`, team configuration, custom templates |
+| Data | `$XDG_DATA_HOME/devex` (`~/.local/share/devex`) | `plugins/`, bundled default `config/`, `assets/`, `help/`, `migrations/`, `backups/` |
+| State | `$XDG_STATE_HOME/devex` (`~/.local/state/devex`) | `datastore.db`, run state, `logs/` |
+| Cache | `$XDG_CACHE_HOME/devex` (`~/.cache/devex`) | Registry cache, downloads, setup cache, update checks |
+| Binary | `~/.local/bin/devex` | CLI executable |
+
+`DEVEX_CONFIG_DIR`, `DEVEX_DATA_DIR`, `DEVEX_STATE_DIR`, and `DEVEX_CACHE_DIR` override the complete directory for their respective kinds, taking precedence over XDG variables. Environment paths must be absolute; empty or relative values use the defaults. `DEVEX_TEAM_CONFIG_DIR` can separately select team configuration.
+
+For example:
+
+```bash
+export XDG_STATE_HOME="$HOME/state"
+export DEVEX_CACHE_DIR="/tmp/devex-cache"
+devex paths
+```
+
+On Windows, config defaults to `%APPDATA%\DevEx`. Data, state, and cache default to `%LOCALAPPDATA%\DevEx`; the installer places the executable in `%LOCALAPPDATA%\Programs\DevEx\bin`. The same `DEVEX_*_DIR` overrides apply on Windows. Windows does not use `XDG_*` variables.
+
+## What to back up
+
+Back up config and state to preserve your custom settings and installation history. Back up `data/backups` if you need copies of shell, desktop, or application configuration. Bundled defaults and plugins can be reinstalled. Cache is safe to delete; DevEx downloads or recreates it when needed.
+
+## Existing installations
+
+On startup, DevEx migrates the old `~/.devex` configuration, installation database, plugins, and backups to their new directories and moves logs out of the old data tree. The old cache is discarded. Custom templates, team configuration, and auxiliary state are also preserved.
+
+Migration prints each moved file. It copies and publishes complete files before removing their sources, can resume after interruption, and never overwrites an existing destination. Conflicting source files remain in the old directory for you to review. Symlinked sources or storage directories are refused; replace them with real files and directories before retrying.
+
+Use `devex --dry-run paths` to preview migration without moving files, creating directories, or writing logs or a database. For one release, DevEx also reads a missing new location from its old location. Writers use the resolved directories. A README in `~/.devex` records the new paths; the legacy directory is retained for this compatibility release.
+
+The Linux/macOS installer puts the binary in `~/.local/bin`, and bundled resources in the data directory. It adds a PATH entry only for the current or explicitly selected shell, and only when the binary directory is absent from PATH. `--install-dir` selects a different binary directory.

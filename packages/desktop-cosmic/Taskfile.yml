@@ -6,8 +6,12 @@ tasks:
     desc: Build COSMIC desktop plugin for all platforms
     cmds:
       - mkdir -p dist
-      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-linux-amd64 .
-      - GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" -o dist/{{.PLUGIN_NAME}}-linux-arm64 .
+      - |
+        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-linux-amd64 .
+      - |
+        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+          -o dist/{{.PLUGIN_NAME}}-linux-arm64 .
   test:
     desc: Run tests
     cmds:
@@ -17,12 +21,15 @@ tasks:
     cmds:
       - golangci-lint run
   install:local:
+    vars:
+      PLUGIN_DIR:
+        sh: go -C ../plugin-sdk run ./cmd/plugin-path
     desc: Install plugin locally for testing
     cmds:
       - task: build
-      - mkdir -p ~/.devex/plugins
-      - cp dist/{{.PLUGIN_NAME}}-linux-{{ARCH}} ~/.devex/plugins/{{.PLUGIN_NAME}}
-      - chmod +x ~/.devex/plugins/{{.PLUGIN_NAME}}
+      - mkdir -p "{{.PLUGIN_DIR}}"
+      - cp dist/{{.PLUGIN_NAME}}-linux-{{ARCH}} "{{.PLUGIN_DIR}}"/{{.PLUGIN_NAME}}
+      - chmod +x "{{.PLUGIN_DIR}}"/{{.PLUGIN_NAME}}
   clean:
     desc: Clean build artifacts
     cmds:

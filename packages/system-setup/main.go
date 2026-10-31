@@ -329,7 +329,7 @@ func (p *SystemSetupPlugin) handleBackup(ctx context.Context, args []string) err
 	}
 
 	// Create a backup directory
-	backupDir := filepath.Join(homeDir, ".devex", "backups", "system")
+	backupDir := filepath.Join(sdk.PathsForHome(homeDir).Backups(), "system")
 	timestamp := time.Now().Format("20060102-150405")
 	backupPath := filepath.Join(backupDir, timestamp)
 
@@ -410,11 +410,15 @@ func (p *SystemSetupPlugin) applySwappiness() error {
 }
 
 func (p *SystemSetupPlugin) checkDevDirectories() bool {
-	homeDir, _ := os.UserHomeDir()
+	identity, err := sdk.NewPrivilegeResolver().ResolveUser(nil)
+	if err != nil {
+		return false
+	}
+	homeDir := identity.HomeDir
 	dirs := []string{
 		filepath.Join(homeDir, "Development"),
 		filepath.Join(homeDir, "Projects"),
-		filepath.Join(homeDir, ".devex"),
+		sdk.PathsForHome(homeDir).Config,
 	}
 
 	for _, dir := range dirs {
@@ -426,13 +430,17 @@ func (p *SystemSetupPlugin) checkDevDirectories() bool {
 }
 
 func (p *SystemSetupPlugin) applyDevDirectories() error {
-	homeDir, _ := os.UserHomeDir()
+	identity, err := sdk.NewPrivilegeResolver().ResolveUser(nil)
+	if err != nil {
+		return err
+	}
+	homeDir := identity.HomeDir
 	dirs := []string{
 		filepath.Join(homeDir, "Development"),
 		filepath.Join(homeDir, "Projects"),
-		filepath.Join(homeDir, ".devex"),
-		filepath.Join(homeDir, ".devex", "backups"),
-		filepath.Join(homeDir, ".devex", "configs"),
+		sdk.PathsForHome(homeDir).Config,
+		sdk.PathsForHome(homeDir).Backups(),
+		filepath.Join(sdk.PathsForHome(homeDir).Config, "config"),
 	}
 
 	for _, dir := range dirs {

@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 )
 
 // NotificationPolicy contains only cheap inputs; suppression is decided before
@@ -31,20 +33,8 @@ func (p NotificationPolicy) Enabled() bool {
 
 // CacheDir follows #209's proposed cache layout without migrating other storage.
 func CacheDir() (string, error) {
-	if dir := os.Getenv("DEVEX_CACHE_DIR"); dir != "" {
-		return dir, nil
-	}
-	if os.Getenv("LOCALAPPDATA") != "" && os.PathSeparator == '\\' {
-		return filepath.Join(os.Getenv("LOCALAPPDATA"), "DevEx", "cache"), nil
-	}
-	if dir := os.Getenv("XDG_CACHE_HOME"); filepath.IsAbs(dir) {
-		return filepath.Join(dir, "devex"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".cache", "devex"), nil
+	dirs, err := devexpaths.Resolve()
+	return dirs.Cache, err
 }
 
 type notificationCache struct {

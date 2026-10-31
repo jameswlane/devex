@@ -321,7 +321,7 @@ func (p *MATEPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of MATE settings
 func (p *MATEPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "mate")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "mate")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

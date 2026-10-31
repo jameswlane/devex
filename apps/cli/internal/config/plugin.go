@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,19 +25,21 @@ type PluginSettings struct {
 // PluginConfigManager manages plugin configurations
 type PluginConfigManager struct {
 	configPath string
+	readPath   string
 	config     *PluginConfig
 }
 
 // NewPluginConfigManager creates a new plugin config manager
 func NewPluginConfigManager() (*PluginConfigManager, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get home directory: %w", err)
 	}
 
-	configPath := filepath.Join(homeDir, ".devex", "plugins.yaml")
+	configPath := filepath.Join(devexpaths.ForHome(homeDir).Config, "plugins.yaml")
 	manager := &PluginConfigManager{
 		configPath: configPath,
+		readPath:   devexpaths.ForHome(homeDir).ReadPath(configPath),
 		config: &PluginConfig{
 			Plugins: make(map[string]PluginSettings),
 		},
@@ -51,7 +55,11 @@ func NewPluginConfigManager() (*PluginConfigManager, error) {
 
 // Load loads the plugin configuration from disk
 func (m *PluginConfigManager) Load() error {
-	data, err := os.ReadFile(m.configPath)
+	path := m.configPath
+	if _, err := os.Stat(path); os.IsNotExist(err) && m.readPath != "" {
+		path = m.readPath
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}

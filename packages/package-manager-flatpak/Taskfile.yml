@@ -17,12 +17,15 @@ tasks:
     cmds:
       - golangci-lint run
   install:local:
+    vars:
+      PLUGIN_DIR:
+        sh: go -C ../plugin-sdk run ./cmd/plugin-path
     desc: Install plugin locally for testing
     cmds:
       - task: build
-      - mkdir -p ~/.devex/plugins
-      - cp dist/\{{.PLUGIN_NAME}}-\{{OS}}-\{{ARCH}}* ~/.devex/plugins/\{{.PLUGIN_NAME}}
-      - chmod +x ~/.devex/plugins/\{{.PLUGIN_NAME}}
+      - mkdir -p "{{.PLUGIN_DIR}}"
+      - cp dist/\{{.PLUGIN_NAME}}-\{{OS}}-\{{ARCH}}* "{{.PLUGIN_DIR}}"/\{{.PLUGIN_NAME}}
+      - chmod +x "{{.PLUGIN_DIR}}"/\{{.PLUGIN_NAME}}
   clean:
     desc: Clean build artifacts
     cmds:

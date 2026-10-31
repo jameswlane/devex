@@ -13,10 +13,11 @@ sed '$d' "$installer" > "$test_dir/installer-definitions.sh"
 # shellcheck source=/dev/null
 source "$test_dir/installer-definitions.sh"
 
-mkdir -p "$test_dir/fixture/bin" "$test_dir/releases"
+mkdir -p "$test_dir/fixture/bin" "$test_dir/fixture/config" "$test_dir/releases"
+printf 'fixture: true\n' > "$test_dir/fixture/config/example.yaml"
 printf '#!/bin/sh\nexit 0\n' > "$test_dir/fixture/bin/devex"
 for platform in linux darwin; do
-    tar -czf "$test_dir/releases/devex_1.2.3_${platform}_amd64.tar.gz" -C "$test_dir/fixture" bin
+    tar -czf "$test_dir/releases/devex_1.2.3_${platform}_amd64.tar.gz" -C "$test_dir/fixture" bin config
 done
 (cd "$test_dir/releases" && for archive in *.tar.gz; do
     if command -v sha256sum >/dev/null 2>&1; then
@@ -55,6 +56,7 @@ test_shell() {
     shift 5
     case_number=$((case_number + 1))
     export HOME="$test_dir/home-$case_number"
+    export DEVEX_DATA_DIR="$HOME/data"
     INSTALL_DIR="$HOME/install with spaces"
     mkdir -p "$HOME"
     local configs=(.bashrc .bash_profile .profile .zshrc .config/fish/config.fish)
@@ -72,10 +74,12 @@ test_shell() {
 
     first_output=$(run_installer "$@")
     output=$(run_installer "$@")
-    [ -x "$INSTALL_DIR/bin/devex" ] || fail "Executable was not installed"
+    [ -x "$INSTALL_DIR/devex" ] || fail "Executable was not installed"
+    [ -f "$DEVEX_DATA_DIR/config/example.yaml" ] || fail "Bundled config was not installed in the data directory"
+    [ ! -d "$INSTALL_DIR/config" ] || fail "Bundled config was mixed with binaries"
     assert_contains "$output" 'To add DevEx to another shell manually'
     assert_contains "$output" 'export PATH="$PATH"'
-    assert_contains "$output" "set -gx PATH \$PATH \"$INSTALL_DIR/bin\""
+    assert_contains "$output" "set -gx PATH \$PATH \"$INSTALL_DIR\""
     for config in "${configs[@]}"; do
         expected=no
         case "$selected:$config" in
@@ -84,7 +88,7 @@ test_shell() {
             bash:.profile) [ "$test_os" != darwin ] || [ "$existing" != profile ] || expected=yes ;;
         esac
         if [ "$expected" = yes ]; then
-            [ "$(grep -cF "$INSTALL_DIR/bin" "$HOME/$config" || :)" -eq 1 ] ||
+            [ "$(grep -cF "# DevEx CLI" "$HOME/$config" || :)" -eq 1 ] ||
                 fail "Expected one PATH entry in $config for $selected on $test_os"
             assert_contains "$first_output" "Adding to $HOME/$config"
             assert_contains "$output" "Already configured: $HOME/$config"
@@ -134,6 +138,7 @@ test_shell darwin /bin/bash '' bash profile
 # Control characters make printf %q emit Bash-only quoting; fish must keep double quotes.
 test_os=linux current_shell=/bin/fish env_shell=''
 export HOME="$test_dir/fish-manual-home"
+export DEVEX_DATA_DIR="$HOME/data"
 INSTALL_DIR="$HOME/"$'install\twith-tab'
 fish_output=$(run_installer)
 fish_path_line=$(tail -n 1 "$HOME/.config/fish/config.fish")
@@ -184,4 +189,34 @@ assert_contains "$(GITHUB_TOKEN='' GH_TOKEN=other token_request)" 'Authorization
 help_output=$(main --help)
 assert_contains "$help_output" '--shell SHELL'
 assert_contains "$help_output" 'DEVEX_SHELL'
+# An existing PATH entry must leave every shell rc file untouched.
+test_os=linux current_shell=/bin/bash env_shell=''
+export HOME="$test_dir/on-path-home"
+export DEVEX_DATA_DIR="$HOME/data"
+INSTALL_DIR="$HOME/.local/bin"
+mkdir -p "$HOME"
+PATH="$PATH:$INSTALL_DIR" on_path_output=$(PATH="$PATH:$INSTALL_DIR" run_installer)
+assert_contains "$on_path_output" 'Already on PATH:'
+[ ! -e "$HOME/.bashrc" ] || fail 'Wrote shell config for a directory already on PATH'
+[ -x "$INSTALL_DIR/devex" ] || fail 'Default local bin executable missing'
+# Upgrades remove the old generated PATH entry in the selected shell only,
+# including when the new directory is already on the process PATH.
+for selected in bash zsh fish; do
+    export HOME="$test_dir/legacy-$selected"
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$HOME/.config/fish"
+    printf 'export PATH="$PATH:%s/.local/share/devex/bin"\n# keep bash\n' "$HOME" > "$HOME/.bashrc"
+    cp "$HOME/.bashrc" "$HOME/.zshrc"
+    printf 'set -gx PATH $PATH "%s/.local/share/devex/bin"\n# keep fish\n' "$HOME" > "$HOME/.config/fish/config.fish"
+    case "$selected" in
+        bash) selected_rc="$HOME/.bashrc"; other_rc="$HOME/.zshrc" ;;
+        zsh) selected_rc="$HOME/.zshrc"; other_rc="$HOME/.bashrc" ;;
+        fish) selected_rc="$HOME/.config/fish/config.fish"; other_rc="$HOME/.bashrc" ;;
+    esac
+    cp "$other_rc" "$HOME/other.before"
+    PATH="$PATH:$INSTALL_DIR" configure_path linux "$selected" >/dev/null
+    if grep -qF '.local/share/devex/bin' "$selected_rc"; then fail 'Legacy PATH entry remains'; fi
+    assert_contains "$(cat "$selected_rc")" '# keep'
+    cmp "$other_rc" "$HOME/other.before" || fail 'Changed an unselected shell during upgrade'
+done
 echo "Bash installer tests passed ($case_number shell isolation scenarios, plus validation and help)."

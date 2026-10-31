@@ -33,8 +33,8 @@ The installer needs `curl`, `git` and `unzip`. If any are missing, it stops and 
 This installer will:
 1. **Download the latest DevEx release** for your platform
 2. **Verify checksums** for security
-3. **Install to** `~/.local/share/devex/`
-4. **Update your PATH** for your current or explicitly selected shell
+3. **Install the binary to** `~/.local/bin/devex` and bundled resources to the [data directory](/docs/files-and-directories)
+4. **Update your PATH** for your current or explicitly selected shell when the binary directory is missing from PATH
 5. **Run the setup** with default configurations
 
 ### Shell PATH Configuration
@@ -297,7 +297,7 @@ sudo chown -R $USER:$USER ~/.local/share/devex
 sudo chown -R $USER:$USER ~/.devex
 
 # Fix binary permissions
-chmod +x ~/.local/share/devex/bin/devex
+chmod +x ~/.local/bin/devex
 ```
 
 ### Network Issues

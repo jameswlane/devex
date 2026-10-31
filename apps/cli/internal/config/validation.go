@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/spf13/viper"
@@ -316,7 +318,7 @@ func contains(slice []string, item string) bool {
 
 // ValidateDirectoryBasedConfig is a convenience function for validating directory-based configs
 func ValidateDirectoryBasedConfig(homeDir string, strict bool) error {
-	configPath := filepath.Join(homeDir, ".local/share/devex/config")
+	configPath := devexpaths.ForHome(homeDir).Defaults()
 
 	validator := NewConfigValidator(homeDir, strict)
 	return validator.ValidateDirectoryStructure(configPath)

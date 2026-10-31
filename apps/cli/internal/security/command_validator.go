@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -433,13 +435,13 @@ func LoadSecurityConfig(configPath string) (*SecurityConfig, error) {
 // LoadSecurityConfigFromDefaults loads security config from standard locations
 func LoadSecurityConfigFromDefaults(homeDir string) (*SecurityConfig, error) {
 	// Try user override first
-	userConfigPath := filepath.Join(homeDir, ".devex", "security.yaml")
+	userConfigPath := devexpaths.ForHome(homeDir).ReadPath(filepath.Join(devexpaths.ForHome(homeDir).Config, "security.yaml"))
 	if _, err := os.Stat(userConfigPath); err == nil {
 		return LoadSecurityConfig(userConfigPath)
 	}
 
 	// Try system default
-	systemConfigPath := filepath.Join(homeDir, ".local", "share", "devex", "config", "security.yaml")
+	systemConfigPath := filepath.Join(devexpaths.ForHome(homeDir).Defaults(), "security.yaml")
 	if _, err := os.Stat(systemConfigPath); err == nil {
 		return LoadSecurityConfig(systemConfigPath)
 	}

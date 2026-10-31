@@ -25,3 +25,5 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
 )
+
+replace github.com/jameswlane/devex/packages/plugin-sdk => ../plugin-sdk

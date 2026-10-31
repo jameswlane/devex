@@ -311,7 +311,7 @@ func (p *BudgiePlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of Budgie settings
 func (p *BudgiePlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "budgie")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "budgie")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

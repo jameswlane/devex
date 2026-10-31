@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/fs"
@@ -597,6 +599,7 @@ func loadCrossPlatformSettings(homeDir string, applicationLoader ApplicationLoad
 	var catalog []types.CrossPlatformApp
 	var desktops DesktopEnvironmentsConfig
 	for _, configDir := range configDirs {
+		configDir = devexpaths.ForHome(homeDir).ReadPath(configDir)
 		tier, err := loadLegacyConfigDirectory(configDir)
 		if err != nil {
 			return CrossPlatformSettings{}, err
@@ -708,7 +711,7 @@ func (s *CrossPlatformSettings) GetConfigDir() string {
 	if s.HomeDir == "" {
 		s.HomeDir = defaultHomeDir()
 	}
-	return filepath.Join(s.HomeDir, ".local/share/devex/config")
+	return devexpaths.ForHome(s.HomeDir).Defaults()
 }
 
 // GetUserConfigDir returns the user override configuration directory path
@@ -716,7 +719,7 @@ func (s *CrossPlatformSettings) GetUserConfigDir() string {
 	if s.HomeDir == "" {
 		s.HomeDir = defaultHomeDir()
 	}
-	return filepath.Join(s.HomeDir, ".devex/config")
+	return filepath.Join(devexpaths.ForHome(s.HomeDir).Config, "config")
 }
 
 // GetTeamConfigDir returns the team/organization configuration directory path
@@ -728,7 +731,7 @@ func (s *CrossPlatformSettings) GetTeamConfigDir() string {
 	if teamDir := os.Getenv("DEVEX_TEAM_CONFIG_DIR"); teamDir != "" {
 		return teamDir
 	}
-	return filepath.Join(s.HomeDir, ".devex/team")
+	return filepath.Join(devexpaths.ForHome(s.HomeDir).Config, "team")
 }
 
 // GetConfigDirs returns both default and user config directories for inheritance
@@ -834,7 +837,7 @@ func (s *CrossPlatformSettings) GetDesktopSettings() interface{} {
 
 // defaultHomeDir returns the default home directory
 func defaultHomeDir() string {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return "/tmp" // Fallback
 	}
