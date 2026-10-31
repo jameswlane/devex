@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run with bash apps/get/tests/install.sh; no test framework or network required.
 # Assertions deliberately match literal shell variables in generated config.
-# shellcheck disable=SC2016
+# shellcheck disable=SC2016,SC2329
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -156,6 +156,31 @@ assert_rejected --shell tcsh
 assert_rejected --shell /bin/bash
 env_shell=invalid
 assert_rejected
+# Latest version: the redirect wins without an API call; nested plugin tags and
+# redirect failures fall back to the release listing.
+api_calls=0
+fetch_github_api() {
+    api_calls=$((api_calls + 1))
+    printf '%s\n' '[{"tag_name": "packages/tool-git/v0.2.0"}, {"tag_name": "v4.5.6"}]'
+}
+latest_release_redirect_tag() { echo v7.8.9; }
+[ "$(latest_cli_version)" = v7.8.9 ] || fail 'redirect tag was not used'
+[ "$api_calls" -eq 0 ] || fail 'release listing was queried despite a redirect tag'
+latest_release_redirect_tag() { echo packages/plugin-sdk/v0.3.0; }
+[ "$(latest_cli_version)" = v4.5.6 ] || fail 'nested plugin tag was accepted as the CLI version'
+latest_release_redirect_tag() { return 1; }
+[ "$(latest_cli_version)" = v4.5.6 ] || fail 'redirect failure did not fall back to the release listing'
+fetch_github_api() { return 22; }
+[ -z "$(latest_cli_version || true)" ] || fail 'a version was reported when every lookup failed'
+
+# API requests send a token only when one is set (fresh definitions, real fetch_github_api).
+token_request() {
+    bash -c 'source "$1"; curl() { printf "%s\n" "$*"; }; fetch_github_api https://api.test' _ "$test_dir/installer-definitions.sh"
+}
+[[ "$(GITHUB_TOKEN='' GH_TOKEN='' token_request)" != *Authorization* ]] || fail 'Authorization header sent without a token'
+assert_contains "$(GITHUB_TOKEN=secret token_request)" 'Authorization: Bearer secret'
+assert_contains "$(GITHUB_TOKEN='' GH_TOKEN=other token_request)" 'Authorization: Bearer other'
+
 help_output=$(main --help)
 assert_contains "$help_output" '--shell SHELL'
 assert_contains "$help_output" 'DEVEX_SHELL'
