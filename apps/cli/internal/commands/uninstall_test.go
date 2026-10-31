@@ -515,12 +515,12 @@ var _ = Describe("Uninstall Command", func() {
 			Expect(cmd.Execute()).To(MatchError(ContainSubstring("non-existent-app")))
 		})
 
-		It("reports unresolved apps with unknown categories", func() {
+		It("skips unresolved apps with unknown categories without failing", func() {
 			Expect(mockRepo.AddApp("legacy-unknown-category")).To(Succeed())
 			cmd := commands.NewUninstallCmd(mockRepo, settings)
 			cmd.SetArgs([]string{"--category", "Development", "--force"})
 
-			Expect(cmd.Execute()).To(MatchError(ContainSubstring("legacy-unknown-category")))
+			Expect(cmd.Execute()).To(Succeed())
 			_, err := mockRepo.GetApp("legacy-unknown-category")
 			Expect(err).NotTo(HaveOccurred())
 		})
