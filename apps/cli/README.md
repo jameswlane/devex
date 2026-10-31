@@ -310,6 +310,12 @@ git commit -m "feat!: redesign configuration system"
 5. Commit with conventional commits: `git commit -m "feat: your feature"`
 6. Push and create a Pull Request
 
+## CLI self-update
+
+Run `devex self-update --check` to check for a release or `devex self-update` to
+install it. See the [self-update reference](https://docs.devex.sh/docs/cli-reference/self-update)
+for notification settings, verification, and rollback.
+
 ## 📄 License
 
 This project is licensed under the [Apache-2.0 License](../../LICENSE).
