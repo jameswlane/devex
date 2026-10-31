@@ -25,6 +25,7 @@ var _ = Describe("Add Command", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-add-test")
 		Expect(err).ToNot(HaveOccurred())
+		GinkgoT().Setenv("HOME", tempDir)
 
 		// Create a basic settings with temp directory
 		settings = &config.CrossPlatformSettings{

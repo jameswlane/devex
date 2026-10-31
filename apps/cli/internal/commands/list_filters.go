@@ -212,7 +212,7 @@ func filterInstalledApps(apps []InstalledApp, options ListCommandOptions) []Inst
 
 	for _, app := range apps {
 		// Apply category filter
-		if options.Category != "" && !strings.EqualFold(app.Category, options.Category) {
+		if options.Category != "" && !matchesListCategory(app.Category, options.Category) {
 			continue
 		}
 
@@ -257,7 +257,7 @@ func filterAvailableApps(apps []AvailableApp, options ListCommandOptions) []Avai
 
 	for _, app := range apps {
 		// Apply category filter
-		if options.Category != "" && !strings.EqualFold(app.Category, options.Category) {
+		if options.Category != "" && !matchesListCategory(app.Category, options.Category) {
 			continue
 		}
 
@@ -343,4 +343,19 @@ func getPreferredInstallationMethod(app types.CrossPlatformApp) string {
 	}
 
 	return "manual"
+}
+
+// matchesListCategory accepts category labels and their short, case-insensitive slugs.
+func matchesListCategory(category, filter string) bool {
+	categorySlug := configurationPathPart(category)
+	filterSlug := configurationPathPart(filter)
+	if categorySlug == filterSlug {
+		return true
+	}
+	for _, suffix := range []string{"-tools", "-apps"} {
+		if strings.TrimSuffix(categorySlug, suffix) == filterSlug {
+			return true
+		}
+	}
+	return false
 }

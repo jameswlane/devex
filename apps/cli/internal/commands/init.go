@@ -458,84 +458,7 @@ func initWithProfile(profileName string, settings config.CrossPlatformSettings, 
 }
 
 func validateConfiguration(settings config.CrossPlatformSettings) error {
-	fmt.Println("🔍 Validating DevEx configuration...")
-
-	errors := []string{}
-	warnings := []string{}
-
-	// Check configuration directory
-	configDir := settings.GetConfigDir()
-	if _, err := os.Stat(configDir); os.IsNotExist(err) {
-		errors = append(errors, fmt.Sprintf("Configuration directory not found: %s", configDir))
-	}
-
-	// Validate each configuration file
-	configFiles := []string{
-		"applications.yaml",
-		"environment.yaml",
-		"system.yaml",
-		"desktop.yaml",
-	}
-
-	for _, file := range configFiles {
-		path := filepath.Join(configDir, file)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if file == "desktop.yaml" {
-				// Desktop config is optional
-				warnings = append(warnings, fmt.Sprintf("Optional file missing: %s", file))
-			} else {
-				errors = append(errors, fmt.Sprintf("Required file missing: %s", file))
-			}
-			continue
-		}
-
-		// Try to parse the YAML
-		data, err := os.ReadFile(path)
-		if err != nil {
-			errors = append(errors, fmt.Sprintf("Failed to read %s: %v", file, err))
-			continue
-		}
-
-		var content map[string]interface{}
-		if err := yaml.Unmarshal(data, &content); err != nil {
-			errors = append(errors, fmt.Sprintf("Invalid YAML in %s: %v", file, err))
-		}
-	}
-
-	// Validate application configurations
-	apps := settings.GetApplications()
-	for _, app := range apps {
-		if err := app.Validate(); err != nil {
-			errors = append(errors, fmt.Sprintf("Invalid app config for %s: %v", app.Name, err))
-		}
-	}
-
-	// Print results
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-
-	if len(errors) == 0 && len(warnings) == 0 {
-		fmt.Println(green("✅ Configuration is valid!"))
-		return nil
-	}
-
-	if len(warnings) > 0 {
-		fmt.Println(yellow("\n⚠️  Warnings:"))
-		for _, warning := range warnings {
-			fmt.Printf("  • %s\n", warning)
-		}
-	}
-
-	if len(errors) > 0 {
-		fmt.Println(red("\n❌ Errors:"))
-		for _, err := range errors {
-			fmt.Printf("  • %s\n", err)
-		}
-		return fmt.Errorf("configuration validation failed with %d errors", len(errors))
-	}
-
-	return nil
+	return validateConfigurationFiles(settings, false, false)
 }
 
 func exportInitConfiguration(settings config.CrossPlatformSettings) error {
@@ -567,55 +490,200 @@ func exportInitConfiguration(settings config.CrossPlatformSettings) error {
 }
 
 func importInitConfiguration(file string, settings config.CrossPlatformSettings, force bool) error {
-	// Check for existing configuration
 	configDir := settings.GetConfigDir()
 	if _, err := os.Stat(configDir); !os.IsNotExist(err) && !force {
 		return fmt.Errorf("configuration already exists. Use --force to overwrite")
 	}
 
-	// Read import file
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("failed to read import file: %w", err)
 	}
-
-	// Parse the configuration
 	var imported map[string]interface{}
 	if err := yaml.Unmarshal(data, &imported); err != nil {
 		return fmt.Errorf("invalid configuration file: %w", err)
 	}
-
-	// Create config directory if it doesn't exist
-	if err := os.MkdirAll(configDir, 0750); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+	if err := config.WriteDefaultConfig(configDir); err != nil {
+		return fmt.Errorf("failed to create default configuration: %w", err)
 	}
 
-	// Save each configuration section
-	sections := map[string]string{
-		"applications": "applications.yaml",
-		"environment":  "environment.yaml",
-		"system":       "system.yaml",
-		"desktop":      "desktop.yaml",
+	if content, ok := imported["applications"]; ok {
+		if err := importApplications(content, configDir); err != nil {
+			return fmt.Errorf("failed to import applications: %w", err)
+		}
 	}
-
-	for section, filename := range sections {
-		if content, ok := imported[section]; ok {
-			data, err := yaml.Marshal(content)
-			if err != nil {
-				return fmt.Errorf("failed to process %s section: %w", section, err)
-			}
-
-			path := filepath.Join(configDir, filename)
-			if err := os.WriteFile(path, data, 0600); err != nil {
-				return fmt.Errorf("failed to write %s: %w", filename, err)
-			}
+	if content, ok := imported["environment"]; ok {
+		if err := importEnvironment(content, configDir); err != nil {
+			return fmt.Errorf("failed to import environment: %w", err)
+		}
+	}
+	if content, ok := imported["system"]; ok {
+		if err := importSystem(content, configDir); err != nil {
+			return fmt.Errorf("failed to import system: %w", err)
+		}
+	}
+	if content, ok := imported["desktop"]; ok {
+		if err := importDesktop(content, configDir); err != nil {
+			return fmt.Errorf("failed to import desktop: %w", err)
 		}
 	}
 
 	green := color.New(color.FgGreen).SprintFunc()
 	fmt.Printf("%s Configuration imported successfully!\n", green("✅"))
 	fmt.Printf("Configuration saved to: %s\n", configDir)
+	return nil
+}
 
+func importApplications(content interface{}, configDir string) error {
+	data, err := yaml.Marshal(content)
+	if err != nil {
+		return err
+	}
+	apps, err := config.DecodeApplicationConfigs(data)
+	if err != nil {
+		return err
+	}
+	if err := os.RemoveAll(filepath.Join(configDir, "applications")); err != nil {
+		return err
+	}
+	for _, app := range apps {
+		path, err := applicationConfigPath(configDir, "applications", app.Category, app.Name)
+		if err != nil {
+			return err
+		}
+		if err := writeYAMLConfig(app, path, ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func decodeImportedApplications(data []byte) ([]types.CrossPlatformApp, error) {
+	var legacy []types.AppConfig
+	if err := yaml.Unmarshal(data, &legacy); err != nil {
+		return nil, fmt.Errorf("applications must be a list: %w", err)
+	}
+	var crossPlatform []types.CrossPlatformApp
+	if err := yaml.Unmarshal(data, &crossPlatform); err != nil {
+		return nil, fmt.Errorf("invalid applications: %w", err)
+	}
+	apps := make([]types.CrossPlatformApp, 0, len(legacy))
+	for index, app := range legacy {
+		converted := config.CrossPlatformAppFromLegacy(app)
+		if index < len(crossPlatform) {
+			candidate := crossPlatform[index]
+			if candidate.AllPlatforms.InstallMethod != "" || candidate.Linux.InstallMethod != "" || candidate.MacOS.InstallMethod != "" || candidate.Windows.InstallMethod != "" {
+				converted = candidate
+			}
+		}
+		apps = append(apps, converted)
+	}
+	return apps, nil
+}
+
+func importEnvironment(content interface{}, configDir string) error {
+	section, ok := content.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("environment must be a mapping")
+	}
+	for _, item := range []struct {
+		key       string
+		directory string
+		category  string
+	}{
+		{key: "programming_languages", directory: "environments/programming-languages"},
+		{key: "shell", directory: "environments", category: "shell"},
+	} {
+		value, exists := section[item.key]
+		if !exists {
+			continue
+		}
+		data, err := yaml.Marshal(value)
+		if err != nil {
+			return err
+		}
+		apps, err := decodeImportedApplications(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", item.key, err)
+		}
+		for _, app := range apps {
+			var path string
+			if item.category == "" {
+				name := configurationPathPart(app.Name)
+				if name == "" {
+					return fmt.Errorf("application name is required")
+				}
+				path = filepath.Join(configDir, item.directory, name+".yaml")
+			} else {
+				path, err = applicationConfigPath(configDir, item.directory, item.category, app.Name)
+				if err != nil {
+					return err
+				}
+			}
+			if err := writeYAMLConfig(app, path, ""); err != nil {
+				return err
+			}
+		}
+	}
+	if value, exists := section["fonts"]; exists {
+		data, err := yaml.Marshal(value)
+		if err != nil {
+			return err
+		}
+		var fonts []types.Font
+		if err := yaml.Unmarshal(data, &fonts); err != nil {
+			return fmt.Errorf("fonts must be a list: %w", err)
+		}
+		for _, font := range fonts {
+			name := configurationPathPart(font.Name)
+			if name == "" {
+				return fmt.Errorf("font name is required")
+			}
+			path := filepath.Join(configDir, "environments", "fonts", name+".yaml")
+			if err := writeYAMLConfig(font, path, ""); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func importSystem(content interface{}, configDir string) error {
+	section, ok := content.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("system must be a mapping")
+	}
+	for _, key := range []string{"git", "ssh", "terminal"} {
+		value, exists := section[key]
+		if !exists {
+			continue
+		}
+		if err := writeYAMLConfig(value, filepath.Join(configDir, "system", key+".yaml"), ""); err != nil {
+			return err
+		}
+	}
+	if value, exists := section["global_theme"]; exists {
+		if err := writeYAMLConfig(map[string]interface{}{"global_theme": value}, filepath.Join(configDir, "system", "global.yaml"), ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func importDesktop(content interface{}, configDir string) error {
+	section, ok := content.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("desktop must be a mapping")
+	}
+	for name, value := range section {
+		directory := configurationPathPart(name)
+		if directory == "" {
+			return fmt.Errorf("desktop environment name is required")
+		}
+		if err := writeYAMLConfig(value, filepath.Join(configDir, "desktop", directory, "imported.yaml"), ""); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -692,89 +760,6 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 	return nil
 }
 
-func createDefaultConfigs(configDir string, config InitConfig) error {
-	// Only create files if they don't exist
-	files := map[string]string{
-		"applications.yaml": getDefaultApplicationsConfig(config),
-		"environment.yaml":  getDefaultEnvironmentConfig(config),
-		"system.yaml":       getDefaultSystemConfig(config),
-	}
-
-	if config.Desktop.Environment != "" {
-		files["desktop.yaml"] = getDefaultDesktopConfig(config)
-	}
-
-	for filename, content := range files {
-		path := filepath.Join(configDir, filename)
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-				return fmt.Errorf("failed to write %s: %w", filename, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func getDefaultApplicationsConfig(config InitConfig) string {
-	// Return a minimal applications config based on selections
-	return fmt.Sprintf(`# DevEx Applications Configuration
-# Generated by: devex init --profile %s
-
-applications:
-  - name: git
-    category: development
-    default: true
-    install_method: apt
-    install_command: git
-
-# Add more applications as needed
-`, config.Profile)
-}
-
-func getDefaultEnvironmentConfig(config InitConfig) string {
-	return fmt.Sprintf(`# DevEx Environment Configuration
-# Generated by: devex init --profile %s
-
-shell: %s
-editor: %s
-
-languages: %v
-
-# Add more environment settings as needed
-`, config.Profile, config.Environment.Shell, config.Environment.Editor, config.Environment.Languages)
-}
-
-func getDefaultSystemConfig(config InitConfig) string {
-	gitConfig := "false"
-	if config.System.GitConfig {
-		gitConfig = "true"
-	}
-	sshConfig := "false"
-	if config.System.SSHConfig {
-		sshConfig = "true"
-	}
-
-	result := fmt.Sprintf(`# DevEx System Configuration
-# Generated by: devex init --profile %s
-
-configure_git: %s
-configure_ssh: %s
-`, config.Profile, gitConfig, sshConfig)
-
-	if config.System.GlobalTheme != "" {
-		result += fmt.Sprintf("global_theme: '%s'\n", config.System.GlobalTheme)
-	}
-
-	return result
-}
-
-func getDefaultDesktopConfig(config InitConfig) string {
-	return fmt.Sprintf(`# DevEx Desktop Configuration
-# Generated by: devex init --profile %s
-
-desktop_environment: %s
-
-# Add desktop-specific settings here
-`, config.Profile, config.Desktop.Environment)
+func createDefaultConfigs(configDir string, _ InitConfig) error {
+	return config.WriteDefaultConfig(configDir)
 }

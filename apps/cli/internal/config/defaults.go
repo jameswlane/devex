@@ -18,6 +18,9 @@ var ConfigDirectories = []string{
 
 // CrossPlatformFiles defines the current consolidated configuration files
 var CrossPlatformFiles = []string{
+	"applications.yaml",
+	"environment.yaml",
+	"system.yaml",
 	"terminal.yaml",
 	"terminal-optional.yaml",
 	"desktop.yaml",

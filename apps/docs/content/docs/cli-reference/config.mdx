@@ -94,7 +94,7 @@ devex config show [flags]
     {
       "config_dir": "/home/user/.local/share/devex/config",
       "applications": {
-        "path": "/home/user/.local/share/devex/config/applications.yaml",
+        "path": "/home/user/.local/share/devex/config/applications",
         "size": 46234,
         "modified": "2024-08-17T14:30:00Z",
         "exists": true,
@@ -109,111 +109,84 @@ devex config show [flags]
 
 ### devex config edit
 
-Open configuration files in your preferred editor.
+Open every YAML file in a canonical configuration directory with your preferred editor. If only a legacy monolithic file exists, DevEx opens that file instead; if no configuration exists, it writes the shipped defaults first.
 
 ```bash
-devex config edit <file> [flags]
+devex config edit [config-type] [flags]
 ```
 
 #### Arguments
 
-- `file`: Configuration file to edit (`applications`, `environment`, `desktop`, `system`)
+- `config-type`: Directory to edit (`applications`, `environment`, `desktop`, `system`, or `all`; defaults to `all`)
 
 #### Options
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--editor` | `string` | `$EDITOR` | Editor to use (vim, nano, code, etc.) |
-| `--backup` | `bool` | `true` | Create backup before editing |
-| `--template` | `string` | | Start from a template |
+| `--editor` | `string` | `$EDITOR` or `vim` | Editor executable |
 
 #### Examples
 
 ```bash
-# Edit applications configuration
+# Edit every applications/<category>/<app>.yaml file
 devex config edit applications
 
 # Use specific editor
 devex config edit environment --editor code
 
-# Edit with automatic backup
-devex config edit desktop --backup
-
-# Start from template
-devex config edit applications --template backend-team
+# Edit all configuration directories
+devex config edit all
 ```
 
 ### devex config validate
 
-Validate configuration files for syntax and logical errors.
+Recursively validate canonical configuration files for YAML syntax, required fields, and platform configuration errors. Legacy monolithic files remain supported.
 
 ```bash
-devex config validate [file] [flags]
+devex config validate [flags]
 ```
 
 #### Options
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--strict` | `bool` | `false` | Enable strict validation mode |
-| `--fix` | `bool` | `false` | Automatically fix common issues |
-| `--schema` | `string` | | Custom schema file to validate against |
+| `--strict` | `bool` | `false` | Require the `system/` directory during content validation |
+| `--fix` | `bool` | `false` | Attempt automatic fixes (currently reports that auto-fix is not implemented) |
 
 #### Examples
 
-<Tabs items={['All Files', 'Specific File', 'Strict Mode', 'Auto-fix']}>
+<Tabs items={['All Files', 'Nested Files', 'Strict Mode', 'Auto-fix']}>
   <Tab value="All Files">
     ```bash
     devex config validate
-    
-    Validation Results:
-    ✓ applications.yaml - No issues found
-    ✓ environment.yaml - No issues found  
-    ⚠ desktop.yaml - 1 warning
-      → Line 45: Theme 'custom-theme' not found in available themes
-    ✗ system.yaml - 1 error
-      → Line 12: Invalid Git email format
-    
-    Summary: 2 files valid, 1 warning, 1 error
+
+    Checking applications/... ✅ Valid YAML
+    Checking environments/... ✅ Valid YAML
+    Checking system/... ✅ Valid YAML
+    Checking desktop/... ✅ Valid YAML
     ```
   </Tab>
-  
-  <Tab value="Specific File">
+
+  <Tab value="Nested Files">
     ```bash
-    devex config validate applications
-    
-    Validating applications.yaml:
-    ✓ YAML syntax valid
-    ✓ Schema validation passed
-    ✓ Cross-references resolved
-    ✓ Platform compatibility checked
-    
-    247 applications defined
-    No issues found
+    # Validation includes every nested category and application file.
+    devex config validate
+
+    # Example error:
+    # Required field missing in development/git.yaml.name
     ```
   </Tab>
-  
+
   <Tab value="Strict Mode">
     ```bash
     devex config validate --strict
-    
-    # Strict mode checks:
-    # - Unused configurations
-    # - Deprecated options
-    # - Performance implications
-    # - Security best practices
     ```
   </Tab>
-  
+
   <Tab value="Auto-fix">
     ```bash
     devex config validate --fix
-    
-    Auto-fixing issues:
-    ✓ Fixed indentation in applications.yaml
-    ✓ Sorted applications alphabetically
-    ✓ Removed duplicate entries
-    ⚠ Could not fix: Invalid email in system.yaml (manual fix required)
+    # When errors are found, reports that auto-fix is not yet implemented.
     ```
   </Tab>
 </Tabs>

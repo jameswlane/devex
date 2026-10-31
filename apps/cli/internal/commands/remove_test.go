@@ -29,6 +29,7 @@ var _ = Describe("Remove Command", func() {
 		var err error
 		tempDir, err = os.MkdirTemp("", "devex-remove-test")
 		Expect(err).ToNot(HaveOccurred())
+		GinkgoT().Setenv("HOME", tempDir)
 
 		settings = &config.CrossPlatformSettings{
 			HomeDir: tempDir,
@@ -129,7 +130,7 @@ var _ = Describe("Remove Command", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify the application was removed
-				data, err := os.ReadFile(appsConfigPath)
+				data, err := readApplicationTree(configDir)
 				Expect(err).ToNot(HaveOccurred())
 
 				var config struct {
@@ -167,7 +168,7 @@ var _ = Describe("Remove Command", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify the application was removed
-				data, err := os.ReadFile(appsConfigPath)
+				data, err := readApplicationTree(configDir)
 				Expect(err).ToNot(HaveOccurred())
 
 				var config struct {
@@ -192,7 +193,7 @@ var _ = Describe("Remove Command", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify all dependent applications were removed
-				data, err := os.ReadFile(appsConfigPath)
+				data, err := readApplicationTree(configDir)
 				Expect(err).ToNot(HaveOccurred())
 
 				var config struct {
@@ -226,7 +227,7 @@ var _ = Describe("Remove Command", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// Verify no changes were made
-				data, err := os.ReadFile(appsConfigPath)
+				data, err := readApplicationTree(configDir)
 				Expect(err).ToNot(HaveOccurred())
 
 				var config struct {
@@ -413,7 +414,7 @@ var _ = Describe("Remove Command", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			// Verify the application was removed
-			data, err := os.ReadFile(appsConfigPath)
+			data, err := readApplicationTree(configDir)
 			Expect(err).ToNot(HaveOccurred())
 
 			var config struct {
@@ -426,3 +427,18 @@ var _ = Describe("Remove Command", func() {
 		})
 	})
 })
+
+// readApplicationTree presents the canonical files as a list for the removal assertions.
+func readApplicationTree(dir string) ([]byte, error) {
+	apps, err := config.LoadApplicationConfigs(dir)
+	if err != nil {
+		return nil, err
+	}
+	legacy := make([]types.AppConfig, 0, len(apps))
+	for _, app := range apps {
+		legacy = append(legacy, app.ToLegacyAppConfig())
+	}
+	return yaml.Marshal(struct {
+		Applications []types.AppConfig `yaml:"applications"`
+	}{legacy})
+}

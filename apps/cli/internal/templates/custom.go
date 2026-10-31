@@ -19,6 +19,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
+	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
 	"github.com/jameswlane/devex/apps/cli/internal/version"
 )
@@ -172,23 +173,20 @@ func (ctm *CustomTemplateManager) CreateTemplate(manifest *CustomTemplateManifes
 		Path: targetDir,
 	}
 
-	// Copy configuration files
-	configFiles := map[string]string{
-		"applications.yaml": filepath.Join(sourceConfigDir, "applications.yaml"),
-		"environment.yaml":  filepath.Join(sourceConfigDir, "environment.yaml"),
-		"system.yaml":       filepath.Join(sourceConfigDir, "system.yaml"),
-		"desktop.yaml":      filepath.Join(sourceConfigDir, "desktop.yaml"),
+	configFiles, err := config.ConfigurationFiles(sourceConfigDir)
+	if err != nil {
+		return err
 	}
-
 	var copiedFiles []string
-	for fileName, sourcePath := range configFiles {
-		if _, err := os.Stat(sourcePath); err == nil {
-			targetPath := filepath.Join(targetDir, fileName)
-			if err := ctm.copyFile(sourcePath, targetPath); err != nil {
-				return fmt.Errorf("failed to copy %s: %w", fileName, err)
-			}
-			copiedFiles = append(copiedFiles, fileName)
+	for _, fileName := range configFiles {
+		targetPath := filepath.Join(targetDir, fileName)
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0750); err != nil {
+			return err
 		}
+		if err := ctm.copyFile(filepath.Join(sourceConfigDir, fileName), targetPath); err != nil {
+			return fmt.Errorf("copy configuration %s: %w", fileName, err)
+		}
+		copiedFiles = append(copiedFiles, fileName)
 	}
 
 	manifest.Files = copiedFiles
