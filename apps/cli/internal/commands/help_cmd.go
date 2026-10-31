@@ -2,19 +2,42 @@ package commands
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"golang.org/x/term"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
+
+var isTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+}
+
+// isInteractiveHelp determines if interactive help should be shown
+func isInteractiveHelp(cmd *cobra.Command) bool {
+	nonInteractive, _ := cmd.Flags().GetBool("non-interactive")
+	if nonInteractive {
+		return false
+	}
+	if !interaction.IsInteractiveMode() {
+		return false
+	}
+	if !isTerminal() {
+		return false
+	}
+	return true
+}
 
 // NewHelpCmd creates a new help command
 func NewHelpCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "help [topic]",
+		Use:   "help [command|topic]",
 		Short: "Show contextual help with interactive viewer",
 		Long: `Display help information with an interactive terminal viewer.
 
@@ -24,10 +47,13 @@ Without arguments, launches an interactive help browser where you can:
   • Navigate with keyboard shortcuts
   • View detailed markdown documentation
 
-With a topic argument, shows help for that specific topic.
+Without a TTY or in non-interactive mode, prints the standard command list.
+
+When given a command name (e.g., 'devex help install'), it displays help for that
+command directly. If no matching command is found, it searches help topics.
 
 Examples:
-  devex help              # Interactive help browser  
+  devex help              # Interactive help browser (or command list without TTY)
   devex help install      # Help for install command
   devex help templates    # Template system documentation
   devex help --search git # Search for git-related topics`,
@@ -36,16 +62,42 @@ Examples:
 
 			// Handle search mode
 			if searchQuery != "" {
-				return runHelpSearch(searchQuery)
+				return runHelpSearch(cmd, searchQuery)
 			}
 
-			// Handle specific topic
+			// Handle list mode
+			listFlag, _ := cmd.Flags().GetBool("list")
+			if listFlag {
+				return runHelpList(cmd)
+			}
+
+			// Handle specific command or topic
 			if len(args) > 0 {
-				topic := args[0]
-				return runHelpTopic(topic)
+				if cmd.Root() != nil {
+					targetCmd, remainingArgs, err := cmd.Root().Find(args)
+					if err == nil && targetCmd != nil && targetCmd != cmd.Root() && len(remainingArgs) == 0 {
+						targetCmd.SetOut(cmd.OutOrStdout())
+						targetCmd.SetErr(cmd.ErrOrStderr())
+						targetCmd.InitDefaultHelpFlag()
+						return targetCmd.Help()
+					}
+				}
+
+				topic := strings.Join(args, " ")
+				return runHelpTopic(cmd, topic)
 			}
 
-			// Launch interactive help browser
+			// Launch interactive help browser or print root help if non-interactive / no TTY
+			if !isInteractiveHelp(cmd) {
+				if root := cmd.Root(); root != nil {
+					// Cobra adds these flags lazily when the root itself executes.
+					root.InitDefaultHelpFlag()
+					root.InitDefaultVersionFlag()
+					return root.Help()
+				}
+				return cmd.Help()
+			}
+
 			return runInteractiveHelp()
 		},
 	}
@@ -53,6 +105,9 @@ Examples:
 	// Add flags
 	cmd.Flags().StringP("search", "s", "", "Search help topics")
 	cmd.Flags().BoolP("list", "l", false, "List all available topics")
+	cmd.Flags().Bool("non-interactive", false, "Run in non-interactive mode")
+
+	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
 
 	return cmd
 }
@@ -63,54 +118,83 @@ func runInteractiveHelp() error {
 }
 
 // runHelpTopic shows help for a specific topic
-func runHelpTopic(topic string) error {
-	// Try to show specific topic
-	err := help.ShowHelpTopic(topic)
+func runHelpTopic(cmd *cobra.Command, topic string) error {
+	hm, err := help.NewHelpManager()
+	if err != nil {
+		return fmt.Errorf("failed to initialize help system: %w", err)
+	}
+
+	_, err = hm.GetTopic(topic)
 	if err != nil {
 		// If specific topic not found, try searching
-		fmt.Printf("Topic '%s' not found. Searching for related topics...\n\n", topic)
-		return runHelpSearch(topic)
+		fmt.Fprintf(cmd.OutOrStdout(), "Topic '%s' not found. Searching for related topics...\n\n", topic)
+		return runHelpSearchWithManager(cmd, hm, topic)
 	}
+
+	if isInteractiveHelp(cmd) {
+		return help.ShowHelpTopic(topic)
+	}
+
+	rendered, err := hm.RenderTopic(topic)
+	if err != nil {
+		return fmt.Errorf("failed to render help topic: %w", err)
+	}
+
+	fmt.Fprint(cmd.OutOrStdout(), rendered)
 	return nil
 }
 
 // runHelpSearch searches and displays help topics
-func runHelpSearch(query string) error {
-	helpManager, err := help.NewHelpManager()
+func runHelpSearch(cmd *cobra.Command, query string) error {
+	hm, err := help.NewHelpManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize help system: %w", err)
 	}
+	return runHelpSearchWithManager(cmd, hm, query)
+}
 
-	results := helpManager.SearchTopics(query)
+func runHelpSearchWithManager(cmd *cobra.Command, hm *help.HelpManager, query string) error {
+	results := hm.SearchTopics(query)
 	if len(results) == 0 {
-		fmt.Printf("No help topics found for '%s'\n\n", query)
-		fmt.Println("Available topics:")
-		return runHelpList()
+		fmt.Fprintf(cmd.OutOrStdout(), "No help topics found for '%s'\n\n", query)
+		fmt.Fprintln(cmd.OutOrStdout(), "Available topics:")
+		return runHelpListWithManager(cmd, hm)
 	}
 
 	if len(results) == 1 {
 		// If only one result, show it directly
-		return help.ShowHelpTopic(results[0].ID)
+		if isInteractiveHelp(cmd) {
+			return help.ShowHelpTopic(results[0].ID)
+		}
+		rendered, err := hm.RenderTopic(results[0].ID)
+		if err != nil {
+			return fmt.Errorf("failed to render help topic: %w", err)
+		}
+		fmt.Fprint(cmd.OutOrStdout(), rendered)
+		return nil
 	}
 
 	// Multiple results - show list and let user choose
-	fmt.Printf("Found %d topics for '%s':\n\n", len(results), query)
+	fmt.Fprintf(cmd.OutOrStdout(), "Found %d topics for '%s':\n\n", len(results), query)
 	for i, topic := range results {
-		fmt.Printf("%d. %s\n   %s\n\n", i+1, topic.Title, topic.Description)
+		fmt.Fprintf(cmd.OutOrStdout(), "%d. %s\n   %s\n\n", i+1, topic.Title, topic.Description)
 	}
 
-	fmt.Println("Use 'devex help <topic-id>' to view a specific topic or 'devex help' for interactive browser.")
+	fmt.Fprintln(cmd.OutOrStdout(), "Use 'devex help <topic-id>' to view a specific topic or 'devex help' for interactive browser.")
 	return nil
 }
 
 // runHelpList lists all available help topics
-func runHelpList() error {
-	helpManager, err := help.NewHelpManager()
+func runHelpList(cmd *cobra.Command) error {
+	hm, err := help.NewHelpManager()
 	if err != nil {
 		return fmt.Errorf("failed to initialize help system: %w", err)
 	}
+	return runHelpListWithManager(cmd, hm)
+}
 
-	topics := helpManager.ListTopics()
+func runHelpListWithManager(cmd *cobra.Command, hm *help.HelpManager) error {
+	topics := hm.ListTopics()
 	categories := make(map[string][]*help.HelpTopic)
 
 	// Group by category
@@ -120,13 +204,13 @@ func runHelpList() error {
 
 	// Display by category
 	for category, categoryTopics := range categories {
-		fmt.Printf("\n%s:\n", category)
+		fmt.Fprintf(cmd.OutOrStdout(), "\n%s:\n", category)
 		for _, topic := range categoryTopics {
-			fmt.Printf("  %-20s %s\n", topic.ID, topic.Description)
+			fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %s\n", topic.ID, topic.Description)
 		}
 	}
 
-	fmt.Println("\nUse 'devex help <topic>' to view detailed help or 'devex help' for interactive browser.")
+	fmt.Fprintln(cmd.OutOrStdout(), "\nUse 'devex help <topic>' to view detailed help or 'devex help' for interactive browser.")
 	return nil
 }
 
@@ -142,6 +226,18 @@ func AddContextualHelp(cmd *cobra.Command, context help.HelpContext, specific st
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		showContextualHelp, _ := c.Flags().GetBool("help-context")
 		if showContextualHelp {
+			if !isInteractiveHelp(c) {
+				hm, err := help.NewHelpManager()
+				if err != nil {
+					return err
+				}
+				content, err := hm.GetContextualHelp(context, specific)
+				if err != nil {
+					return err
+				}
+				fmt.Fprint(c.OutOrStdout(), content)
+				return nil
+			}
 			return help.ShowContextualHelp(context, specific)
 		}
 
