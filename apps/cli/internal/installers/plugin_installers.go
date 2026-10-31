@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -97,8 +99,8 @@ func GetInstaller(ctx context.Context, method string) types.BaseInstaller {
 
 	return &PluginBasedInstaller{
 		method:          method,
-		pluginBootstrap: pluginBootstrap,
 		ctx:             ctx,
+		pluginBootstrap: pluginBootstrap,
 	}
 }
 
@@ -133,7 +135,7 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 		}
 	}
 
-	return p.pluginBootstrap.ExecutePluginWithContext(p.ctx, pluginName, args)
+	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
 }
 
 // Uninstall executes the plugin remove command
@@ -155,7 +157,7 @@ func (p *PluginBasedInstaller) Uninstall(command string, repo types.Repository) 
 		}
 	}
 
-	return p.pluginBootstrap.ExecutePluginWithContext(p.ctx, pluginName, args)
+	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
 }
 
 // IsInstalled checks if a package is installed using the plugin
@@ -184,7 +186,7 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 	// tracking until the plugin protocol can distinguish them. For plugins
 	// without a package-specific check, list only verifies plugin availability;
 	// the remove operation remains responsible for checking the package.
-	if err := p.pluginBootstrap.ExecutePluginWithContext(p.ctx, pluginName, args); err != nil {
+	if err := p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args); err != nil {
 		return false, fmt.Errorf("plugin %s installation check failed: %w", pluginName, err)
 	}
 	return true, nil
@@ -248,7 +250,7 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	log.Info("Installing app", "app", app.Name)
 
 	// Execute pre-install commands
-	if err := runInstallCommands(app.PreInstall); err != nil {
+	if err := runInstallCommands(ctx, app.PreInstall); err != nil {
 		return fmt.Errorf("failed to execute pre-install commands: %w", err)
 	}
 
@@ -258,7 +260,7 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	}
 
 	// Execute post-install commands
-	if err := runInstallCommands(app.PostInstall); err != nil {
+	if err := runInstallCommands(ctx, app.PostInstall); err != nil {
 		return fmt.Errorf("failed to execute post-install commands: %w", err)
 	}
 
@@ -266,14 +268,21 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	return nil
 }
 
-func runInstallCommands(commands []types.InstallCommand) error {
+func runInstallCommands(ctx context.Context, commands []types.InstallCommand) error {
+	if len(commands) == 0 {
+		return nil
+	}
+	plan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "install-hooks"})
+	if err != nil {
+		return err
+	}
 	log.Info("Starting runInstallCommands", "commands", len(commands))
 
 	for _, cmd := range commands {
 		if cmd.Shell != "" {
-			processedCommand := utils.ReplacePlaceholders(cmd.Shell, map[string]string{})
+			processedCommand := utils.ExpandUserPlaceholders(cmd.Shell, *plan.IntendedUser)
 			log.Info("Executing shell command", "command", processedCommand)
-			output, err := utils.ExecAsUser(processedCommand)
+			output, err := utils.ExecAsUserWithContext(ctx, processedCommand)
 			if err != nil {
 				log.Error("Failed to execute shell command", err, "output", output)
 				return fmt.Errorf("failed to execute shell command: %w", err)
@@ -281,10 +290,10 @@ func runInstallCommands(commands []types.InstallCommand) error {
 		}
 
 		if cmd.Copy != nil {
-			source := utils.ReplacePlaceholders(cmd.Copy.Source, map[string]string{})
-			destination := utils.ReplacePlaceholders(cmd.Copy.Destination, map[string]string{})
+			source := utils.ExpandUserPlaceholders(cmd.Copy.Source, *plan.IntendedUser)
+			destination := utils.ExpandUserPlaceholders(cmd.Copy.Destination, *plan.IntendedUser)
 			log.Info("Copying file", "source", source, "destination", destination)
-			if err := utils.CopyFile(source, destination); err != nil {
+			if err := utils.CopyUserFileWithContext(ctx, source, destination); err != nil {
 				log.Error("Failed to copy file", err, "source", source, "destination", destination)
 				return fmt.Errorf("failed to copy file from %s to %s: %w", source, destination, err)
 			}
@@ -319,4 +328,11 @@ func (m *MockInstaller) IsInstalled(command string) (bool, error) {
 	log.Info("Mock check installed", "method", m.method, "command", command)
 	// Simulate package being installed in test mode
 	return true, nil
+}
+
+func (p *PluginBasedInstaller) context() context.Context {
+	if p.ctx == nil {
+		return context.Background()
+	}
+	return p.ctx
 }

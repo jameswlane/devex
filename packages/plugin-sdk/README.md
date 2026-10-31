@@ -416,3 +416,5 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 **[DevEx CLI](../../cli)** • **[Plugin Registry](https://registry.devex.sh)** • **[Plugin Documentation](https://docs.devex.sh/plugins)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+Operation privileges and platform adapter extension points are documented in [PRIVILEGES.md](PRIVILEGES.md).

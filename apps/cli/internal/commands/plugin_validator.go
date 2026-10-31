@@ -356,7 +356,7 @@ func (v *PluginValidator) ValidatePlugins(ctx context.Context, requiredPlugins [
 
 	// Get installed plugins from manager
 	manager := v.pluginBootstrap.GetManager()
-	installedPlugins := manager.ListPlugins()
+	installedPlugins := manager.ListPluginsWithContext(ctx)
 
 	// Create installed plugins set for O(1) lookup
 	installedSet := make(map[string]bool)
@@ -582,7 +582,7 @@ func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginN
 
 	// Get plugin manager to access plugin information
 	manager := v.pluginBootstrap.GetManager()
-	pluginInfo, exists := manager.ListPlugins()[pluginName]
+	pluginInfo, exists := manager.ListPluginsWithContext(ctx)[pluginName]
 	if !exists {
 		return enhanceErrorMessage("Plugin manager lookup", pluginName,
 			fmt.Errorf("plugin not found in manager"))

@@ -1,8 +1,11 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"io"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
 	"github.com/spf13/afero"
 
@@ -39,5 +42,26 @@ func CopyFile(source, destination string) error {
 		return fmt.Errorf("failed to copy file content: %w", err)
 	}
 
+	return nil
+}
+
+// CopyUserFileWithContext creates configuration files under the intended user's
+// authority, including when the CLI itself was invoked with sudo.
+func CopyUserFileWithContext(ctx context.Context, source, destination string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	plan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{
+		Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "cp", Args: []string{"--", source, destination},
+	})
+	if err != nil {
+		return err
+	}
+	if !plan.SwitchUser {
+		return CopyFile(source, destination)
+	}
+	if output, err := ExecOperationWithContext(ctx, plan.Privilege, plan.Name, plan.Args...); err != nil {
+		return fmt.Errorf("copy user configuration: %s: %w", output, err)
+	}
 	return nil
 }

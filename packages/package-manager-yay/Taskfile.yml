@@ -5,7 +5,15 @@ tasks:
   build:
     desc: Build package-manager-yay plugin for all platforms
     cmds:
-      - mkdir -p dist\n      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default \"dev\"}}" -o dist/devex-plugin-package-manager-yay-linux-amd64 .\n      - GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default \"dev\"}}" -o dist/devex-plugin-package-manager-yay-linux-arm64 .
+      - mkdir -p dist
+      - |-
+        GOOS=linux GOARCH=amd64 go build \
+        -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+        -o dist/{{.PLUGIN_NAME}}-linux-amd64 .
+      - |-
+        GOOS=linux GOARCH=arm64 go build \
+        -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+        -o dist/{{.PLUGIN_NAME}}-linux-arm64 .
   test:
     desc: Run tests
     cmds:

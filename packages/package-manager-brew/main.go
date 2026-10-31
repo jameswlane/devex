@@ -30,26 +30,31 @@ func NewBrewPlugin() *BrewPlugin {
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Install packages using Homebrew",
 				Usage:       "Install one or more packages with dependency resolution",
 			},
 			{
 				Name:        "remove",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Remove packages using Homebrew",
 				Usage:       "Remove one or more packages from the system",
 			},
 			{
 				Name:        "update",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Update package repositories",
 				Usage:       "Update package repository information",
 			},
 			{
 				Name:        "search",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Search for packages",
 				Usage:       "Search for packages by name or description",
 			},
 			{
 				Name:        "list",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "List packages",
 				Usage:       "List installed packages",
 			},
@@ -92,7 +97,7 @@ func (p *BrewPlugin) handleInstall(ctx context.Context, args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "brew", cmdArgs...)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", cmdArgs...)
 }
 
 func (p *BrewPlugin) handleRemove(ctx context.Context, args []string) error {
@@ -103,12 +108,12 @@ func (p *BrewPlugin) handleRemove(ctx context.Context, args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "brew", cmdArgs...)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", cmdArgs...)
 }
 
 func (p *BrewPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "brew", "update")
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", "update")
 }
 
 func (p *BrewPlugin) handleSearch(ctx context.Context, args []string) error {
@@ -119,11 +124,11 @@ func (p *BrewPlugin) handleSearch(ctx context.Context, args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommandWithContext(ctx, false, "brew", "search", searchTerm)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", "search", searchTerm)
 }
 
 func (p *BrewPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "brew", "list")
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", "list")
 }
 
 func main() {

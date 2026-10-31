@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 )
 
@@ -31,4 +33,19 @@ func ReplacePlaceholders(input string, customPlaceholders map[string]string) str
 
 	log.Info("Final string after placeholder replacement", "output", output)
 	return output
+}
+
+// ExpandUserPlaceholders expands account variables from a resolved privilege plan,
+// so elevated callers cannot substitute root's HOME into user configuration.
+func ExpandUserPlaceholders(input string, identity sdk.UserIdentity) string {
+	return os.Expand(input, func(key string) string {
+		switch key {
+		case "HOME":
+			return identity.HomeDir
+		case "USER", "LOGNAME":
+			return identity.Username
+		default:
+			return os.Getenv(key)
+		}
+	})
 }

@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/otel"
@@ -197,7 +199,7 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 
 	// Handle dry run
 	if dryRun {
-		return previewInstallation(appsToInstall)
+		return previewInstallation(ctx, appsToInstall, provider, out)
 	}
 
 	if !interaction.IsInteractiveMode() {
@@ -254,8 +256,7 @@ func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName s
 	if e.bootstrap == nil {
 		return fmt.Errorf("plugin bootstrap is required")
 	}
-	// The SDK has no context-aware ExecutePlugin yet; ctx is checked above.
-	return e.bootstrap.ExecutePlugin(pluginName, args) //nolint:contextcheck
+	return e.bootstrap.ExecutePluginWithContext(ctx, pluginName, args)
 }
 
 func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateInstallOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {
@@ -426,11 +427,42 @@ func validateInstallInputs(apps []string, categories []string) error {
 }
 
 // previewInstallation shows what would be installed without executing
-func previewInstallation(apps []types.CrossPlatformApp) error {
+func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, provider pluginBootstrapProvider, out io.Writer) error {
+	var plugins map[string]sdk.PluginMetadata
+	if provider != nil {
+		if b := provider(); b != nil {
+			plugins = b.GetManager().ListPluginsWithContext(ctx)
+		}
+	}
+
+	// Normal install defers bootstrap until after preview; discover existing local
+	// metadata directly so dry runs stay offline and can still display privileges.
+	if plugins == nil {
+		if home, err := utils.GetHomeDir(); err == nil {
+			plugins = sdk.NewExecutableManager(filepath.Join(home, ".devex", "plugins")).ListPluginsWithContext(ctx)
+		}
+	}
 	log.Info("Dry run - showing what would be installed:")
 
 	for _, app := range apps {
-		log.Info("Would install", "app", app.Name, "category", app.Category)
+		if len(app.GetOSConfig().PreInstall)+len(app.GetOSConfig().PostInstall) > 0 {
+			hooks, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "install-hooks"})
+			if err != nil {
+				return fmt.Errorf("preview %s hooks: %w", app.Name, err)
+			}
+			fmt.Fprintf(out, "  Hooks and configuration copies: scope=user, intended user=%s\n", hooks.IntendedUser.Username)
+		}
+		pluginName := "package-manager-" + app.GetOSConfig().InstallMethod
+		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, []string{"install"})
+		if privilege == nil {
+			fmt.Fprintf(out, "Would install %s (scope: unspecified; legacy or unavailable plugin metadata)\n", app.Name)
+			continue
+		}
+		plan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{Privilege: *privilege, Name: pluginName})
+		if err != nil {
+			return fmt.Errorf("preview %s privilege: %w", app.Name, err)
+		}
+		fmt.Fprintf(out, "Would install %s (scope: %s, intended user: %s, elevation required: %t)\n", app.Name, privilege.Scope, plan.IntendedUser.Username, plan.Elevate)
 	}
 
 	log.Info("Total applications", "count", len(apps))
