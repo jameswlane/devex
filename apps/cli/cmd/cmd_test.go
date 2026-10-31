@@ -1,9 +1,14 @@
 package main_test
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -65,6 +70,27 @@ var _ = Describe("Main", func() {
 				testHandleError(errors.New("unexpected error"))
 			}).ToNot(Panic())
 			Expect(exitCalled).To(BeTrue())
+		})
+	})
+
+	Context("CLI error execution", func() {
+		It("prints the error message exactly once on stderr and exits nonzero for unknown commands", func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			cmd := exec.CommandContext(ctx, "go", "run", ".", "notacommand")
+			cmd.Dir = "."
+			var stderr bytes.Buffer
+			cmd.Stderr = &stderr
+
+			err := cmd.Run()
+			Expect(err).To(HaveOccurred())
+
+			stderrOutput := stderr.String()
+			Expect(strings.Count(stderrOutput, "Error:")).To(Equal(1))
+			Expect(stderrOutput).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
+			Expect(stderrOutput).To(ContainSubstring("Run 'devex --help' for usage."))
+			Expect(stderrOutput).NotTo(ContainSubstring("Error executing root command"))
 		})
 	})
 })
