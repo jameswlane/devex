@@ -199,4 +199,24 @@ PATH="$PATH:$INSTALL_DIR" on_path_output=$(PATH="$PATH:$INSTALL_DIR" run_install
 assert_contains "$on_path_output" 'Already on PATH:'
 [ ! -e "$HOME/.bashrc" ] || fail 'Wrote shell config for a directory already on PATH'
 [ -x "$INSTALL_DIR/devex" ] || fail 'Default local bin executable missing'
+# Upgrades remove the old generated PATH entry in the selected shell only,
+# including when the new directory is already on the process PATH.
+for selected in bash zsh fish; do
+    export HOME="$test_dir/legacy-$selected"
+    INSTALL_DIR="$HOME/.local/bin"
+    mkdir -p "$HOME/.config/fish"
+    printf 'export PATH="$PATH:%s/.local/share/devex/bin"\n# keep bash\n' "$HOME" > "$HOME/.bashrc"
+    cp "$HOME/.bashrc" "$HOME/.zshrc"
+    printf 'set -gx PATH $PATH "%s/.local/share/devex/bin"\n# keep fish\n' "$HOME" > "$HOME/.config/fish/config.fish"
+    case "$selected" in
+        bash) selected_rc="$HOME/.bashrc"; other_rc="$HOME/.zshrc" ;;
+        zsh) selected_rc="$HOME/.zshrc"; other_rc="$HOME/.bashrc" ;;
+        fish) selected_rc="$HOME/.config/fish/config.fish"; other_rc="$HOME/.bashrc" ;;
+    esac
+    cp "$other_rc" "$HOME/other.before"
+    PATH="$PATH:$INSTALL_DIR" configure_path linux "$selected" >/dev/null
+    if grep -qF '.local/share/devex/bin' "$selected_rc"; then fail 'Legacy PATH entry remains'; fi
+    assert_contains "$(cat "$selected_rc")" '# keep'
+    cmp "$other_rc" "$HOME/other.before" || fail 'Changed an unselected shell during upgrade'
+done
 echo "Bash installer tests passed ($case_number shell isolation scenarios, plus validation and help)."

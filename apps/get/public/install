@@ -144,6 +144,7 @@ latest_cli_version() {
 add_to_path() {
     local shell_config="$1"
     local path_line
+    # shellcheck disable=SC2016 # Expand PATH when the shell reads the rc file.
     printf -v path_line 'export PATH="$PATH":%q' "$INSTALL_DIR"
 
     if [ -f "$shell_config" ] && grep -qxF "$path_line" "$shell_config"; then
@@ -177,9 +178,48 @@ add_to_fish_path() {
     } >> "$shell_config"
 }
 
+# Remove only installer-generated legacy entries, and only from the selected
+# shell's rc files when switching to the default XDG binary location.
+remove_legacy_path() {
+    local shell_config="$1" line temporary removed=no
+    [ -f "$shell_config" ] || return 0
+    temporary=$(mktemp "${shell_config}.devex.XXXXXX")
+    while IFS= read -r line || [ -n "$line" ]; do
+        # shellcheck disable=SC2016 # Match the literal variables in old rc entries.
+        case "$line" in
+            "export PATH=\"\$PATH:$HOME/.local/share/devex/bin\""|\
+            "export PATH=\"\$PATH\":$HOME/.local/share/devex/bin"|\
+            'export PATH="$PATH:$HOME/.local/share/devex/bin"'|\
+            "set -gx PATH \$PATH \"$HOME/.local/share/devex/bin\"") removed=yes ;;
+            *) printf '%s\n' "$line" >> "$temporary" ;;
+        esac
+    done < "$shell_config"
+    if [ "$removed" = yes ]; then
+        cat "$temporary" > "$shell_config"
+    fi
+    rm -f "$temporary"
+}
+
 configure_path() {
     local os="$1"
     local target_shell="$2"
+
+    if [ "$INSTALL_DIR" = "$HOME/.local/bin" ]; then
+        case "$target_shell" in
+            zsh) remove_legacy_path "$HOME/.zshrc" ;;
+            fish) remove_legacy_path "$HOME/.config/fish/config.fish" ;;
+            bash)
+                remove_legacy_path "$HOME/.bashrc"
+                if [ "$os" = darwin ]; then
+                    if [ -f "$HOME/.bash_profile" ]; then
+                        remove_legacy_path "$HOME/.bash_profile"
+                    else
+                        remove_legacy_path "$HOME/.profile"
+                    fi
+                fi
+                ;;
+        esac
+    fi
 
     case ":${PATH:-}:" in
         *":$INSTALL_DIR:"*) echo "  ✓ Already on PATH: $INSTALL_DIR"; return ;;
