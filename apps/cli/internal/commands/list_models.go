@@ -150,11 +150,12 @@ func (tc *TableConfig) calculateAvailableAppWidths(apps []AvailableApp) {
 
 // InstalledApp represents an application that has been installed on the system
 type InstalledApp struct {
-	Name        string
-	Description string
-	Category    string
-	Method      string
-	Status      string
+	Name              string
+	Description       string
+	Category          string
+	Method            string
+	Status            string
+	MissingDefinition bool `json:"missing_definition" yaml:"missing_definition"`
 }
 
 // AvailableApp represents an application available for installation
