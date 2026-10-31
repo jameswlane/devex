@@ -148,6 +148,52 @@ var _ = Describe("Transactional schema updates", func() {
 		Entry("invalid legacy version", "UPDATE schema_version SET version=99", "invalid legacy schema version"),
 	)
 
+	It("verifies a current database read-only without writing", func(ctx SpecContext) {
+		Expect(ApplySchemaUpdates(ctx, conn)).To(Succeed())
+		before, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+
+		readOnly, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { Expect(readOnly.Close()).To(Succeed()) })
+		Expect(ApplySchemaUpdates(ctx, readOnly)).To(Succeed())
+
+		after, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(after).To(Equal(before))
+	})
+
+	It("does not wait for the write lock when the database is current", func(ctx SpecContext) {
+		Expect(ApplySchemaUpdates(ctx, conn)).To(Succeed())
+		writer, err := sql.Open("sqlite", sqliteDSN(path))
+		Expect(err).NotTo(HaveOccurred())
+		writer.SetMaxOpenConns(1)
+		DeferCleanup(func() { Expect(writer.Close()).To(Succeed()) })
+		holder, err := writer.Conn(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { Expect(holder.Close()).To(Succeed()) })
+		_, err = holder.ExecContext(ctx, "BEGIN IMMEDIATE")
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _, _ = holder.ExecContext(context.Background(), "ROLLBACK") })
+
+		// Another process holds the write lock; verification only needs to read.
+		Expect(ApplySchemaUpdates(ctx, conn)).To(Succeed())
+	})
+
+	DescribeTable("validates schema drift when migrations are pending", func(ctx SpecContext, version int, mutation, message string) {
+		seedVersion(ctx, version)
+		_, err := conn.ExecContext(ctx, mutation)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ApplySchemaUpdates(ctx, conn)).To(MatchError(ContainSubstring(message)))
+	},
+		Entry("missing column", 4, "ALTER TABLE installed_apps DROP COLUMN version", "incompatible columns"),
+		Entry("missing index", 3, "DROP INDEX idx_installed_apps_app_name", "incompatible indexes"),
+		Entry("missing table", 4, "DROP TABLE system_data", "incompatible columns"),
+		Entry("foreign key violation", 5,
+			"INSERT INTO app_dependencies(app_name, dependency_name) VALUES ('missing', 'runtime'); DELETE FROM schema_migrations WHERE version=5",
+			"foreign key violations"),
+	)
+
 	It("rolls back a migration when its version record cannot be written", func(ctx SpecContext) {
 		seedVersion(ctx, 1)
 		_, err := conn.ExecContext(ctx, `CREATE TRIGGER reject_migration_version
