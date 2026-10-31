@@ -97,26 +97,12 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	selectedShell := m.getSelectedShell()
 	log.Info("Finalizing setup", "selectedShell", selectedShell)
 
-	// Initialize plugin bootstrap for post-installation configuration
-	// Try with downloads enabled first, but fall back to skip downloads if registry is unavailable
-	pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+	// Reuse the plugin step's bootstrap so finalization never downloads again.
+	pluginBootstrap, err := m.initializePlugins(ctx)
 	if err != nil {
-		log.Warn("Plugin download failed during finalization, trying with downloads disabled", "error", err)
-		pluginBootstrap, err = bootstrap.NewPluginBootstrap(true) // Skip downloads
+		return fmt.Errorf("initialize plugins for setup finalization: %w", err)
 	}
-	if err != nil {
-		log.Error("Failed to initialize plugin system for finalization", err)
-		return fmt.Errorf("failed to initialize plugin system. This may be due to network connectivity issues, insufficient permissions, or missing dependencies. Please check your internet connection, ensure you have write access to the plugin directory, and try again: %w", err)
-	}
-
-	// Set plugin downloader to silent mode for cleaner finalization
 	pluginBootstrap.SetSilent(true)
-
-	// Initialize plugin system
-	if err := pluginBootstrap.Initialize(ctx); err != nil {
-		log.Error("Failed to bootstrap plugins for finalization", err)
-		return fmt.Errorf("plugin initialization failed: %w", err)
-	}
 
 	// 1. Shell configuration using tool-shell plugin (conditional on shell selection or config)
 	if err := m.handleShellConfiguration(ctx, pluginBootstrap, selectedShell); err != nil {

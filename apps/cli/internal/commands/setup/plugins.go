@@ -10,7 +10,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/spf13/viper"
 )
 
 // initializePluginStatuses creates the initial plugin status list
@@ -100,33 +102,28 @@ func (m *SetupModel) startPluginInstallation() tea.Cmd {
 	)
 }
 
+// initializePlugins shares one initialization attempt, including failures, across setup stages.
+func (m *SetupModel) initializePlugins(ctx context.Context) (*bootstrap.PluginBootstrap, error) {
+	m.pluginOnce.Do(func() {
+		m.pluginBootstrap, m.pluginError = bootstrap.NewPluginBootstrap(viper.GetBool("skip-plugin-download") || viper.GetBool("offline"))
+		if m.pluginError != nil {
+			m.pluginError = fmt.Errorf("create setup plugin system: %w; check permissions on ~/.devex/plugins", m.pluginError)
+			return
+		}
+		m.pluginError = m.pluginBootstrap.Initialize(ctx)
+		if m.pluginError == nil {
+			installers.InitializeWithPluginBootstrap(m.pluginBootstrap)
+		}
+	})
+	return m.pluginBootstrap, m.pluginError
+}
+
 func (m *SetupModel) runPluginInstallation() tea.Cmd {
 	return func() tea.Msg {
 		// Pre-allocate error collection with bounds checking for memory safety
 		allErrors := make([]error, 0, MaxErrorMessages)
 
-		// Initialize plugin bootstrap with smart download fallback
-		// Try with downloads enabled first, but fall back to skip downloads if registry is unavailable
-		pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
-		if err != nil {
-			log.Warn("Plugin download failed, trying with downloads disabled", "error", err)
-			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true) // Skip downloads
-		}
-		if err != nil {
-			log.Error("Failed to initialize plugin system", err)
-			allErrors = addErrorSafe(allErrors, fmt.Errorf("failed to initialize plugin system: %w", err))
-			return PluginInstallCompleteMsg{
-				Errors:            allErrors,
-				SuccessCount:      0,
-				TotalCount:        len(m.plugins.requiredPlugins),
-				SuccessfulPlugins: []string{},
-			}
-		}
-
-		// Note: Plugin downloader uses logger adapter that writes to log file
-		// No need to call SetSilent() - logger is already configured for TUI compatibility
-
-		// Create context with configurable timeout for plugin installation
+		// Create context with configurable timeout for plugin installation.
 		ctx, cancel := context.WithTimeout(context.Background(), m.plugins.timeout)
 		defer cancel()
 
@@ -140,7 +137,8 @@ func (m *SetupModel) runPluginInstallation() tea.Cmd {
 		}
 
 		// Initialize plugins and collect any errors
-		if err := pluginBootstrap.Initialize(ctx); err != nil {
+		pluginBootstrap, err := m.initializePlugins(ctx)
+		if err != nil {
 			log.Error("Failed to bootstrap plugins", err)
 			allErrors = addErrorSafe(allErrors, fmt.Errorf("plugin initialization failed: %w", err))
 
@@ -150,6 +148,10 @@ func (m *SetupModel) runPluginInstallation() tea.Cmd {
 				allErrors = addErrorSafe(allErrors, timeoutErr)
 			}
 			// Continue to verify what plugins were installed despite errors
+		}
+
+		if pluginBootstrap == nil {
+			return PluginInstallCompleteMsg{Errors: allErrors, TotalCount: len(m.plugins.requiredPlugins)}
 		}
 
 		// Don't immediately update plugin statuses - let the simulation complete first

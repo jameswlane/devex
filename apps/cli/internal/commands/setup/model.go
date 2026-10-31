@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -173,6 +174,11 @@ type SetupModel struct {
 	git          GitConfiguration
 	installation InstallationState
 	plugins      PluginState
+
+	// One bootstrap attempt is shared by plugin installation and finalization.
+	pluginOnce      sync.Once
+	pluginBootstrap *bootstrap.PluginBootstrap
+	pluginError     error
 
 	// External dependencies
 	repo     types.Repository
