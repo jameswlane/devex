@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS app_dependencies (
     dependency_type TEXT NOT NULL DEFAULT 'required', -- 'required', 'optional', 'suggested'
     auto_installed BOOLEAN DEFAULT FALSE,
     detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (app_name) REFERENCES installed_apps(name) ON DELETE CASCADE,
+    FOREIGN KEY (app_name) REFERENCES installed_apps(app_name) ON DELETE CASCADE,
     UNIQUE(app_name, dependency_name)
 );
 
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS app_dependents (
     app_name TEXT NOT NULL,
     dependent_name TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (app_name) REFERENCES installed_apps(name) ON DELETE CASCADE,
+    FOREIGN KEY (app_name) REFERENCES installed_apps(app_name) ON DELETE CASCADE,
     UNIQUE(app_name, dependent_name)
 );
 
