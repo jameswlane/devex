@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -34,7 +36,7 @@ if [ "$MOCK_SNAP_FAIL" = "1" ]; then
 	echo "mock native failure" >&2
 	exit 42
 fi
-echo "$@" >> "` + logFile + `"
+for a in "$@"; do printf '%s\n' "$a" >> "` + logFile + `"; done
 exit 0
 `
 		Expect(os.WriteFile(mockSnap, []byte(mockScript), 0755)).To(Succeed())
@@ -69,7 +71,7 @@ esac
 
 			content, err := os.ReadFile(logFile)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(Equal("refresh core firefox\n"))
+			Expect(string(content)).To(Equal("refresh\ncore\nfirefox\n"))
 		})
 
 		It("records snap refresh with options and flags", func() {
@@ -78,7 +80,31 @@ esac
 
 			content, err := os.ReadFile(logFile)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(Equal("refresh --channel=candidate vlc\n"))
+			Expect(string(content)).To(Equal("refresh\n--channel=candidate\nvlc\n"))
+		})
+
+		It("forwards separate flag and value argv elements unchanged", func() {
+			err := plugin.Execute("update", []string{"--channel", "candidate", "vlc"})
+			Expect(err).NotTo(HaveOccurred())
+
+			content, err := os.ReadFile(logFile)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strings.Split(strings.TrimSuffix(string(content), "\n"), "\n")).
+				To(Equal([]string{"refresh", "--channel", "candidate", "vlc"}))
+		})
+
+		It("prints the runtime refresh message to stdout", func() {
+			r, w, err := os.Pipe()
+			Expect(err).NotTo(HaveOccurred())
+			orig := os.Stdout
+			os.Stdout = w
+			err = plugin.Execute("update", []string{"core", "firefox"})
+			os.Stdout = orig
+			Expect(w.Close()).To(Succeed())
+			out, readErr := io.ReadAll(r)
+			Expect(readErr).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(out)).To(ContainSubstring("Refreshing packages: core, firefox\n"))
 		})
 
 		It("preserves native failure exit status when snap refresh fails", func() {
@@ -95,7 +121,7 @@ esac
 
 			content, err := os.ReadFile(logFile)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(string(content)).To(Equal("refresh notepad-plus-plus\n"))
+			Expect(string(content)).To(Equal("refresh\nnotepad-plus-plus\n"))
 		})
 	})
 
