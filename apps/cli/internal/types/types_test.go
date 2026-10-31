@@ -125,3 +125,21 @@ var _ = Describe("AptSource", func() {
 		Expect(source.RequireDearmor).To(BeTrue())
 	})
 })
+
+var _ = Describe("Linux catalog selection", func() {
+	It("prefers a matching alternative over an unrestricted primary", func() {
+		app := types.CrossPlatformApp{Linux: types.OSConfig{InstallMethod: "apt", Alternatives: []types.OSConfig{{InstallMethod: "dnf", PlatformRequirements: []types.PlatformRequirement{{OS: "fedora"}}}}}}
+		Expect(app.LinuxConfigForDistribution("fedora").InstallMethod).To(Equal("dnf"))
+		Expect(app.LinuxConfigForDistribution("unmatched")).To(Equal(app.Linux))
+	})
+	It("matches the exact ID before parent IDs, then parents in order", func() {
+		app := types.CrossPlatformApp{Linux: types.OSConfig{InstallMethod: "apt", PlatformRequirements: []types.PlatformRequirement{{OS: "debian"}}, Alternatives: []types.OSConfig{
+			{InstallMethod: "ubuntu-apt", PlatformRequirements: []types.PlatformRequirement{{OS: "ubuntu"}}},
+			{InstallMethod: "mint-apt", PlatformRequirements: []types.PlatformRequirement{{OS: "linuxmint"}}},
+			{InstallMethod: "snap"},
+		}}}
+		Expect(app.LinuxConfigForDistribution("linuxmint", "ubuntu", "debian").InstallMethod).To(Equal("mint-apt"))
+		Expect(app.LinuxConfigForDistribution("pop", "ubuntu", "debian").InstallMethod).To(Equal("ubuntu-apt"))
+		Expect(app.LinuxConfigForDistribution("unmatched")).To(Equal(app.Linux))
+	})
+})

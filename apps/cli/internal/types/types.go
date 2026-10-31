@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/user"
 	"runtime"
+	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 )
@@ -369,6 +370,8 @@ type CrossPlatformApp struct {
 	AllPlatforms        OSConfig `mapstructure:"all_platforms" yaml:"all_platforms,omitempty"`
 }
 
+var catalogPlatform = sync.OnceValue(platform.DetectPlatform)
+
 // GetOSConfig returns the appropriate OS configuration for the current platform
 func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	// Check if all_platforms is defined (cross-platform tools like mise)
@@ -379,7 +382,8 @@ func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	// Return OS-specific config
 	switch runtime.GOOS {
 	case "linux":
-		return app.LinuxConfigForDistribution(platform.DetectPlatform().Distribution)
+		detected := catalogPlatform()
+		return app.LinuxConfigForDistribution(detected.Distribution, detected.DistributionLike...)
 	case "darwin":
 		return app.MacOS
 	case "windows":
@@ -391,14 +395,24 @@ func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 
 // LinuxConfigForDistribution selects a distribution-specific package manager.
 // Keep the primary configuration as the fallback for existing catalog entries.
-func (app *CrossPlatformApp) LinuxConfigForDistribution(distribution string) OSConfig {
+func (app *CrossPlatformApp) LinuxConfigForDistribution(distribution string, like ...string) OSConfig {
 	configs := append([]OSConfig{app.Linux}, app.Linux.Alternatives...)
-	for _, config := range configs {
-		if len(config.PlatformRequirements) == 0 {
-			return config
+	// Exact ID wins over ID_LIKE; os-release orders related IDs by proximity.
+	for _, id := range append([]string{distribution}, like...) {
+		if id == "" {
+			continue
 		}
+		for _, config := range configs {
+			for _, requirement := range config.PlatformRequirements {
+				if requirement.OS == id {
+					return config
+				}
+			}
+		}
+	}
+	for _, config := range configs {
 		for _, requirement := range config.PlatformRequirements {
-			if requirement.OS == distribution || requirement.OS == "linux" {
+			if requirement.OS == "linux" {
 				return config
 			}
 		}

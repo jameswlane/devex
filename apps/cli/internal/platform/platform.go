@@ -93,11 +93,12 @@ func (d DefaultFileSystemProvider) Stat(name string) (os.FileInfo, error) {
 
 // DetectionResult represents the result of platform detection
 type DetectionResult struct {
-	OS           string
-	DesktopEnv   string
-	Distribution string
-	Version      string
-	Architecture string
+	DistributionLike []string
+	OS               string
+	DesktopEnv       string
+	Distribution     string
+	Version          string
+	Architecture     string
 }
 
 // PlatformDetector handles platform detection with configurable dependencies
@@ -131,11 +132,12 @@ func DetectPlatform() DetectionResult {
 // Detect performs platform detection using the configured providers
 func (pd *PlatformDetector) Detect() DetectionResult {
 	return DetectionResult{
-		OS:           pd.runtime.GOOS(),
-		DesktopEnv:   pd.detectDesktopEnvironment(),
-		Distribution: pd.detectDistribution(),
-		Version:      pd.detectVersion(),
-		Architecture: pd.runtime.GOARCH(),
+		OS:               pd.runtime.GOOS(),
+		DesktopEnv:       pd.detectDesktopEnvironment(),
+		Distribution:     pd.detectDistribution(),
+		DistributionLike: pd.detectDistributionLike(),
+		Version:          pd.detectVersion(),
+		Architecture:     pd.runtime.GOARCH(),
 	}
 }
 
@@ -311,4 +313,21 @@ func (pd *PlatformDetector) GetSystemPackageManager() string {
 	default:
 		return "unknown"
 	}
+}
+
+// detectDistributionLike reads the ordered parent distributions from os-release.
+func (pd *PlatformDetector) detectDistributionLike() []string {
+	if pd.runtime.GOOS() != "linux" {
+		return nil
+	}
+	data, err := pd.fs.ReadFile("/etc/os-release")
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if value, ok := strings.CutPrefix(strings.TrimSpace(line), "ID_LIKE="); ok {
+			return strings.Fields(strings.Trim(value, "\"'"))
+		}
+	}
+	return nil
 }

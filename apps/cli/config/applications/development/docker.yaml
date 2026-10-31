@@ -18,7 +18,7 @@ windows:
 linux:
   install_method: apt
   install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-  # Package removal deliberately preserves /var/lib/docker and /var/lib/containerd.
+  # Package removal preserves data; --remove-docker-data explicitly deletes /var/lib/docker.
   uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   official_support: true
   platform_requirements:
@@ -29,17 +29,23 @@ linux:
       shell: |
         set -eu
         . /etc/os-release
-        case "$ID" in
-          debian|ubuntu) ;;
-          *) echo "Docker apt installation requires Debian or Ubuntu; select a supported package manager." >&2; exit 1 ;;
-        esac
+        docker_distro=
+        for distro in "$ID" ${ID_LIKE:-}; do
+          case "$distro" in
+            debian|ubuntu) docker_distro=$distro; break ;;
+          esac
+        done
+        if [ -z "$docker_distro" ]; then
+          echo "Docker apt installation requires Debian, Ubuntu, or a derivative with ID_LIKE; select a supported package manager." >&2
+          exit 1
+        fi
         apt-get update
         apt-get install -y ca-certificates curl
         install -m 0755 -d /etc/apt/keyrings
-        curl -fsSL "https://download.docker.com/linux/$ID/gpg" -o /etc/apt/keyrings/docker.asc
+        curl -fsSL "https://download.docker.com/linux/$docker_distro/gpg" -o /etc/apt/keyrings/docker.asc
         chmod a+r /etc/apt/keyrings/docker.asc
         printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
-          "$(dpkg --print-architecture)" "$ID" "${UBUNTU_CODENAME:-$VERSION_CODENAME}" \
+          "$(dpkg --print-architecture)" "$docker_distro" "${UBUNTU_CODENAME:-$VERSION_CODENAME}" \
           > /etc/apt/sources.list.d/docker.list
         apt-get update
   post_install: &linux_post_install
@@ -86,7 +92,7 @@ linux:
     - install_method: pacman
       install_command: docker docker-buildx docker-compose
       uninstall_command: docker docker-buildx docker-compose
-      official_support: false
+      official_support: true
       platform_requirements:
         - os: arch
       post_install: *linux_post_install
