@@ -99,7 +99,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
-	cmd.AddCommand(NewHelpCmd(repo, settings))
+	cmd.SetHelpCommand(NewHelpCmd(repo, settings))
 
 	// Define persistent flags (available to all subcommands)
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
