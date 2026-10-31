@@ -167,29 +167,29 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 	}
 
 	pluginName := "package-manager-" + p.method
-	operation := "list"
 	switch p.method {
 	case "apt", "appimage", "deb", "flatpak", "mise", "pip":
-		operation = "is-installed"
-	}
-	args := []string{operation}
-	if operation == "is-installed" {
+		args := []string{"is-installed"}
 		for _, part := range strings.Fields(command) {
 			if !strings.HasPrefix(part, "-") && part != "install" && part != "remove" && part != "sudo" {
 				args = append(args, part)
 			}
 		}
-	}
 
-	// Plugins currently use the same error exit for an absent package and a
-	// discovery failure. Neither is proof of absence: preserve the error and
-	// tracking until the plugin protocol can distinguish them. For plugins
-	// without a package-specific check, list only verifies plugin availability;
-	// the remove operation remains responsible for checking the package.
-	if err := p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args); err != nil {
-		return false, fmt.Errorf("plugin %s installation check failed: %w", pluginName, err)
+		// Plugins currently use the same error exit for an absent package and a
+		// discovery failure. Neither is proof of absence: preserve the error and
+		// tracking until the plugin protocol can distinguish them.
+		if err := p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args); err != nil {
+			return false, fmt.Errorf("plugin %s installation check failed: %w", pluginName, err)
+		}
+		return true, nil
+	default:
+		// For plugins without a package-specific installed query, skip the
+		// probe (treating status as unknown) so offline uninstalls are not
+		// blocked by a full package list query. Removal will report whether
+		// the package was present.
+		return true, nil
 	}
-	return true, nil
 }
 
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
