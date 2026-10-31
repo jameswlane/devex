@@ -40,8 +40,8 @@ func NewSnapPlugin() *SnapPlugin {
 			},
 			{
 				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Update installed snaps",
+				Usage:       "Refresh all installed snaps or specific snaps to latest versions",
 			},
 			{
 				Name:        "search",
@@ -107,8 +107,14 @@ func (p *SnapPlugin) handleRemove(ctx context.Context, args []string) error {
 }
 
 func (p *SnapPlugin) handleUpdate(ctx context.Context, args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "snap", "update")
+	if len(args) == 0 {
+		fmt.Println("Refreshing installed snaps...")
+	} else {
+		fmt.Printf("Refreshing packages: %s\n", strings.Join(args, ", "))
+	}
+
+	cmdArgs := append([]string{"refresh"}, args...)
+	return sdk.ExecCommandWithContext(ctx, true, "snap", cmdArgs...)
 }
 
 func (p *SnapPlugin) handleSearch(ctx context.Context, args []string) error {
