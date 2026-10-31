@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,6 +40,30 @@ func configuredEditableApplications(settings config.CrossPlatformSettings) ([]ty
 	return result, nil
 }
 
+// writeNewApplicationConfig reserves the path so a filename collision cannot replace an application.
+func writeNewApplicationConfig(app types.CrossPlatformApp, path string) error {
+	data, err := yaml.Marshal(app)
+	if err != nil {
+		return fmt.Errorf("marshal application %q: %w", app.Name, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		return fmt.Errorf("create configuration directory for application %q at %s: %w", app.Name, path, err)
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if os.IsExist(err) {
+		return fmt.Errorf("cannot save application %q: configuration path %s already exists; rename the existing file or change the application's name or category, then retry", app.Name, path)
+	}
+	if err != nil {
+		return fmt.Errorf("create application %q at %s: %w", app.Name, path, err)
+	}
+	_, writeErr := file.Write(data)
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		// A failed write must not leave an incomplete definition that a retry could load.
+		return fmt.Errorf("write application %q at %s: %w", app.Name, path, errors.Join(err, os.Remove(path)))
+	}
+	return nil
+}
+
 // migrateApplicationConfig preserves platform definitions when replacing a legacy file.
 func migrateApplicationConfig(dir string) error {
 	legacy := filepath.Join(dir, "applications.yaml")
@@ -67,8 +92,8 @@ func migrateApplicationConfig(dir string) error {
 		if err != nil {
 			return err
 		}
-		if err := writeYAMLConfig(app, path, ""); err != nil {
-			return err
+		if err := writeNewApplicationConfig(app, path); err != nil {
+			return fmt.Errorf("migrate applications from %s (legacy file retained): %w", legacy, err)
 		}
 	}
 	if err := os.Remove(legacy); err != nil {

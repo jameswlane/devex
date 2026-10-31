@@ -240,7 +240,7 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 			break
 		}
 	}
-	if err := writeYAMLConfig(definition, path, ""); err != nil {
+	if err := writeNewApplicationConfig(definition, path); err != nil {
 		return err
 	}
 

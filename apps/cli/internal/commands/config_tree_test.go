@@ -59,6 +59,92 @@ var _ = Describe("Configuration tree operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(apps).To(ConsistOf(SatisfyAll(HaveField("Linux.InstallMethod", "apt"), HaveField("MacOS.InstallMethod", "brew"))))
 	})
+	DescribeTable("rejects add filename collisions without changing the existing application", func(existingName string) {
+		path := filepath.Join(settings.GetConfigDir(), "applications/development/node-js.yaml")
+		original := types.CrossPlatformApp{Name: existingName, Category: "development", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "original"}}
+		Expect(writeYAMLConfig(original, path, "# Preserve this definition\n")).To(Succeed())
+		before, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		settings.ApplicationOverrides = []types.CrossPlatformApp{{Name: "node-js", Category: "development", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "replacement"}}}
+
+		Expect(addSpecificApp("node-js", settings, false)).To(MatchError(And(ContainSubstring("already exists"), ContainSubstring(path), ContainSubstring("rename the existing file"))))
+		Expect(os.ReadFile(path)).To(Equal(before))
+		apps, err := config.LoadApplicationConfigs(settings.GetConfigDir())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(apps).To(ConsistOf(HaveField("Name", existingName)))
+	}, Entry("simplified names collide", "Node.js"), Entry("filename differs from the application name", "unrelated"))
+
+	It("retains both legacy applications when their simplified filenames collide and supports retry", func() {
+		dir := settings.GetConfigDir()
+		legacy := filepath.Join(dir, "applications.yaml")
+		definitions := []types.CrossPlatformApp{
+			{Name: "Node.js", Category: "development", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "node-original"}},
+			{Name: "node-js", Category: "development", MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "node-other"}},
+		}
+		Expect(writeYAMLConfig(map[string]interface{}{"applications": definitions}, legacy, "")).To(Succeed())
+		before, err := os.ReadFile(legacy)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(migrateApplicationConfig(dir)).To(MatchError(And(ContainSubstring("legacy file retained"), ContainSubstring("already exists"))))
+		Expect(os.ReadFile(legacy)).To(Equal(before))
+		path := filepath.Join(dir, "applications/development/node-js.yaml")
+		written, err := config.LoadApplicationConfigs(dir)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(written).To(ConsistOf(definitions[0], definitions[1]))
+		canonical, err := (config.FileApplicationLoader{}).LoadApplications([]string{dir})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(canonical).To(ConsistOf(definitions[0]))
+
+		Expect(os.Rename(path, filepath.Join(filepath.Dir(path), "node-original.yaml"))).To(Succeed())
+		Expect(migrateApplicationConfig(dir)).To(Succeed())
+		Expect(legacy).NotTo(BeAnExistingFile())
+		Expect(config.LoadApplicationConfigs(dir)).To(ConsistOf(definitions[0], definitions[1]))
+	})
+
+	It("retains legacy and existing files when migration collides with a differently named application", func() {
+		dir := settings.GetConfigDir()
+		legacy := filepath.Join(dir, "applications.yaml")
+		Expect(writeYAMLConfig(map[string]interface{}{"applications": []types.CrossPlatformApp{{Name: "node-js", Category: "development"}}}, legacy, "")).To(Succeed())
+		path := filepath.Join(dir, "applications/development/node-js.yaml")
+		Expect(writeYAMLConfig(types.CrossPlatformApp{Name: "unrelated", Category: "development"}, path, "")).To(Succeed())
+		before, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(migrateApplicationConfig(dir)).To(MatchError(ContainSubstring("already exists")))
+		Expect(legacy).To(BeAnExistingFile())
+		Expect(os.ReadFile(path)).To(Equal(before))
+		Expect(config.LoadApplicationConfigs(dir)).To(ConsistOf(HaveField("Name", "node-js"), HaveField("Name", "unrelated")))
+	})
+
+	It("keeps the legacy file after a partial migration failure and completes on retry", func() {
+		dir := settings.GetConfigDir()
+		legacy := filepath.Join(dir, "applications.yaml")
+		definitions := []types.CrossPlatformApp{
+			{Name: "first", Category: "development", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "first"}},
+			{Name: "second", Category: "blocked", MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "second"}},
+		}
+		Expect(writeYAMLConfig(map[string]interface{}{"applications": definitions}, legacy, "")).To(Succeed())
+		before, err := os.ReadFile(legacy)
+		Expect(err).NotTo(HaveOccurred())
+		// A file in place of the second category fails even when tests run as root.
+		blocked := filepath.Join(dir, "applications/blocked")
+		Expect(os.MkdirAll(filepath.Dir(blocked), 0750)).To(Succeed())
+		Expect(os.WriteFile(blocked, []byte("obstruction"), 0600)).To(Succeed())
+
+		Expect(migrateApplicationConfig(dir)).To(MatchError(And(ContainSubstring("legacy file retained"), ContainSubstring("second"), ContainSubstring("create configuration directory"))))
+		Expect(os.ReadFile(legacy)).To(Equal(before))
+		first := filepath.Join(dir, "applications/development/first.yaml")
+		Expect(first).To(BeAnExistingFile())
+		firstBefore, err := os.ReadFile(first)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(config.LoadApplicationConfigs(dir)).To(ConsistOf(definitions[0], definitions[1]))
+
+		Expect(os.Remove(blocked)).To(Succeed())
+		Expect(migrateApplicationConfig(dir)).To(Succeed())
+		Expect(legacy).NotTo(BeAnExistingFile())
+		Expect(os.ReadFile(first)).To(Equal(firstBefore))
+		Expect(config.LoadApplicationConfigs(dir)).To(ConsistOf(definitions[0], definitions[1]))
+	})
 	It("resets recovery configuration to a loadable tree", func() {
 		base := filepath.Join(settings.HomeDir, ".devex")
 		dir := filepath.Join(base, "config")
