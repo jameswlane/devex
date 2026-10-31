@@ -409,7 +409,7 @@ theme=%s
 
 // handleBackup creates a backup of LXQt settings
 func (p *LXQtPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "lxqt")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "lxqt")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

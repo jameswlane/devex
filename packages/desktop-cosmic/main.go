@@ -363,7 +363,7 @@ func (p *CosmicPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of COSMIC settings
 func (p *CosmicPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "cosmic")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "cosmic")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

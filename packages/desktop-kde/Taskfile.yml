@@ -21,11 +21,14 @@ tasks:
     cmds:
       - golangci-lint run
   install:local:
+    vars:
+      PLUGIN_DIR:
+        sh: go -C ../plugin-sdk run ./cmd/plugin-path
     desc: Install plugin locally for testing
     cmds:
       - task: build:single
-      - mkdir -p ~/.devex/plugins
-      - cp {{.PLUGIN_NAME}} ~/.devex/plugins/
+      - mkdir -p "{{.PLUGIN_DIR}}"
+      - cp {{.PLUGIN_NAME}} "{{.PLUGIN_DIR}}"/
   build:single:
     desc: Build for current platform
     cmds:

@@ -292,7 +292,7 @@ func (p *CinnamonPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of Cinnamon settings
 func (p *CinnamonPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "cinnamon")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "cinnamon")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

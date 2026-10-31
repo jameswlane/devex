@@ -316,7 +316,7 @@ func (p *PantheonPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of Pantheon settings
 func (p *PantheonPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "pantheon")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "pantheon")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

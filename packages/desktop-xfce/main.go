@@ -303,7 +303,7 @@ func (p *XFCEPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of XFCE settings
 func (p *XFCEPlugin) handleBackup(args []string) error {
-	backupDir := filepath.Join(os.Getenv("HOME"), ".devex", "backups", "xfce")
+	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "xfce")
 	if len(args) > 0 {
 		backupDir = args[0]
 	}

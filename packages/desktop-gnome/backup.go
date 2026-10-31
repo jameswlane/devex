@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // BackupManager handles GNOME settings backup and restore
@@ -112,7 +114,7 @@ func (bm *BackupManager) getBackupDirectory(args []string) string {
 	if len(args) > 0 {
 		return args[0]
 	}
-	return filepath.Join(os.Getenv("HOME"), ".devex", "backups", "gnome")
+	return filepath.Join(sdk.PathsForHome("").Backups(), "gnome")
 }
 
 // generateTimestamp creates a timestamp string for backup files

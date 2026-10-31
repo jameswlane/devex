@@ -19,7 +19,7 @@ var _ = Describe("Directory policy regression guard", func() {
 		if _, err := os.Stat(filepath.Join(repo, "apps/cli")); os.IsNotExist(err) {
 			Skip("monorepo guard only applies in a DevEx checkout")
 		}
-		hardcoded := regexp.MustCompile(`(?:"|/|\\)\.devex(?:"|/|\\)`)
+		hardcoded := regexp.MustCompile(`(?:"|/|\\|~)\.devex(?:"|/|\\)`)
 		var violations []string
 		for _, base := range []string{"apps/cli", "packages"} {
 			Expect(filepath.WalkDir(filepath.Join(repo, base), func(path string, entry fs.DirEntry, err error) error {
@@ -32,7 +32,7 @@ var _ = Describe("Directory policy regression guard", func() {
 					}
 					return nil
 				}
-				if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || path == filepath.Join(repo, "packages/plugin-sdk/paths_legacy.go") {
+				if (!strings.HasSuffix(path, ".go") && entry.Name() != "Taskfile.yml") || strings.HasSuffix(path, "_test.go") || path == filepath.Join(repo, "packages/plugin-sdk/paths_legacy.go") {
 					return nil
 				}
 				content, err := os.ReadFile(path)
