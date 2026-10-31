@@ -6,6 +6,7 @@ import (
 	"os/user"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
@@ -56,6 +57,29 @@ var _ = Describe("Elevated CLI user operations", func() {
 		Expect(output).To(Equal("recorded"))
 		Expect(commands.name).To(Equal("/fake/sudo"))
 		Expect(commands.args).To(Equal([]string{"-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "printf", "%s", "hello; $(false)"}))
+	})
+	It("runs system hooks elevated for the resolved invoking account and preserves shell variables", func() {
+		script := `usermod -aG docker "$DEVEX_INVOKING_USER"; echo "${VERSION_CODENAME}"`
+		output, err := utils.ExecInstallHookWithContext(context.Background(), types.InstallCommand{Scope: "system", Shell: script})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(output).To(Equal("recorded"))
+		Expect(commands.args).To(Equal([]string{"DEVEX_INVOKING_USER=alice", "bash", "-c", script}))
+		Expect(commands.name).To(HaveSuffix("/env"))
+	})
+	It("rejects an invalid hook scope before dispatch", func() {
+		_, err := utils.ExecInstallHookWithContext(context.Background(), types.InstallCommand{Scope: "invalid", Shell: "true"})
+		Expect(err).To(MatchError(ContainSubstring("use user or system")))
+		Expect(commands.name).To(BeEmpty())
+	})
+	It("refuses a system group hook as plain root without an invoking user", func() {
+		resolver := sdk.NewPrivilegeResolver()
+		resolver.Getenv = func(string) string { return "" }
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+		_, err := utils.ExecInstallHookWithContext(context.Background(), types.InstallCommand{Scope: "system", Shell: "usermod -aG docker root"})
+		var auth *sdk.AuthorizationError
+		Expect(errors.As(err, &auth)).To(BeTrue())
+		Expect(auth.Kind).To(Equal(sdk.AuthorizationRequired))
+		Expect(commands.name).To(BeEmpty())
 	})
 	It("copies configuration with switched argv instead of writing as root", func() {
 		Expect(utils.CopyUserFileWithContext(context.Background(), "/source with spaces", "/Users/alice/config")).To(Succeed())

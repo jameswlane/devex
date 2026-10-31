@@ -572,6 +572,13 @@ func legacyAppsToSteps(apps []types.AppConfig) []TemplateStepSpec {
 	steps := make([]TemplateStepSpec, 0, len(apps))
 	for i, app := range apps {
 		appCopy := app
+		if app.InstallMethod == "" && app.InstallCommand == "" {
+			steps = append(steps, TemplateStepSpec{
+				ID: slugifyTemplateID(app.Name), Order: (i + 1) * 10,
+				App: &TemplateAppAction{Ref: app.Name},
+			})
+			continue
+		}
 		steps = append(steps, TemplateStepSpec{
 			ID:    slugifyTemplateID(app.Name),
 			Order: (i + 1) * 10,

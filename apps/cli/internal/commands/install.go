@@ -451,6 +451,19 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 				return fmt.Errorf("preview %s hooks: %w", app.Name, err)
 			}
 			fmt.Fprintf(out, "  Hooks and configuration copies: scope=user, intended user=%s\n", hooks.IntendedUser.Username)
+			for _, hook := range append(app.GetOSConfig().PreInstall, app.GetOSConfig().PostInstall...) {
+				privilege, err := utils.InstallHookPrivilege(hook)
+				if err != nil {
+					return fmt.Errorf("preview %s hook: %w", app.Name, err)
+				}
+				if privilege.Scope == sdk.ScopeSystem {
+					plan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{Privilege: privilege, Name: "install-hook"})
+					if err != nil {
+						return fmt.Errorf("preview %s system hook: %w", app.Name, err)
+					}
+					fmt.Fprintf(out, "  Install hook: scope=system, intended user=%s, elevation required=%t\n", hooks.IntendedUser.Username, plan.Elevate)
+				}
+			}
 		}
 		pluginName := "package-manager-" + app.GetOSConfig().InstallMethod
 		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, []string{"install"})

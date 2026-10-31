@@ -15,6 +15,7 @@
 #   E2E_DEVEX_BINARY        prebuilt linux devex binary to test instead of building one
 #   DEVEX_E2E_DESKTOP       passed through to the suite when set
 #   DEVEX_E2E_DESTRUCTIVE   passed through to the suite when set
+#   DEVEX_E2E_DOCKER        opt in to the privileged nested Docker lifecycle
 #   DEVEX_E2E_REGISTRY_URL  passed through to the suite when set
 
 set -euo pipefail
@@ -26,7 +27,7 @@ DOCKERFILE_DIR="$E2E_DIR/docker"
 
 DISTRO="${DISTRO:-ubuntu-24.04}"
 DRY_RUN="${E2E_DRY_RUN:-0}"
-PASSTHROUGH_VARS=(DEVEX_E2E_DESKTOP DEVEX_E2E_DESTRUCTIVE DEVEX_E2E_REGISTRY_URL)
+PASSTHROUGH_VARS=(DEVEX_E2E_DESKTOP DEVEX_E2E_DESTRUCTIVE DEVEX_E2E_DOCKER DEVEX_E2E_REGISTRY_URL)
 
 log() {
 	printf '==> %s\n' "$*" >&2
@@ -141,6 +142,8 @@ main() {
 	build_binaries "$context"
 	cp "$DOCKERFILE" "$context/Dockerfile"
 	cp -R "$E2E_DIR/testdata" "$context/testdata"
+	mkdir -p "$context/testdata/catalog"
+	cp "$CLI_DIR/config/applications/development/docker.yaml" "$context/testdata/catalog/docker.yaml"
 
 	local image="devex-e2e:$DISTRO"
 	local artifacts="$CLI_DIR/artifacts/e2e/$DISTRO"
@@ -154,6 +157,11 @@ main() {
 	chmod a+rwx "$artifacts"
 
 	local run_args=(run --rm --name "devex-e2e-$DISTRO-$$" --volume "$artifacts:/artifacts:Z")
+	# A nested Docker daemon needs a privileged disposable sandbox. Opt in only
+	# for the destructive Docker catalog lifecycle test.
+	if [[ "${DEVEX_E2E_DOCKER:-}" == "1" && "${DEVEX_E2E_DESTRUCTIVE:-}" == "1" ]]; then
+		run_args+=(--privileged)
+	fi
 	local var
 	for var in "${PASSTHROUGH_VARS[@]}"; do
 		if [[ -n "${!var:-}" ]]; then

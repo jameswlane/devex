@@ -23,6 +23,25 @@ func (r testAppResolver) ResolveTemplateApp(ref string) (*types.AppConfig, error
 }
 
 var _ = Describe("Template Runtime Planner", func() {
+	DescribeTable("resolves Docker from the catalog in shipped directory templates",
+		func(id string) {
+			manager := templates.NewTemplateManager(GinkgoT().TempDir())
+			spec, err := manager.GetTemplateSpec(id)
+			Expect(err).NotTo(HaveOccurred())
+			found := false
+			for _, step := range spec.Lifecycle[templates.LifecycleInstall] {
+				if step.ID == "docker" {
+					Expect(step.App).NotTo(BeNil())
+					Expect(step.App.Ref).To(Equal("docker"))
+					Expect(step.App.App).To(BeNil())
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue(), "template must retain Docker as a catalog reference")
+		},
+		Entry("backend", "backend"),
+		Entry("full-stack", "full-stack"),
+	)
 	var (
 		tempDir string
 		manager *templates.TemplateManager

@@ -113,6 +113,9 @@ var _ = Describe("Catalog package arguments", func() {
 								Expect(err).NotTo(HaveOccurred(), "%s: %s", path, field)
 								Expect(packages).NotTo(BeEmpty(), "%s: %s", path, field)
 								for _, pkg := range packages {
+									if method == "brew" && pkg == "--cask" {
+										continue // Homebrew's cask selector is forwarded intentionally.
+									}
 									Expect(strings.HasPrefix(pkg, "-")).To(BeFalse(), path)
 								}
 								checked++

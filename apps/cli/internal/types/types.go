@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/user"
 	"runtime"
+
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 )
 
 // BaseConfig defines common fields shared across multiple configurations.
@@ -127,6 +129,8 @@ func (f *Font) Validate() error {
 
 // InstallCommand defines a command to execute during installation.
 type InstallCommand struct {
+	// Scope defaults to user; system explicitly requests the SDK elevation policy.
+	Scope             string       `mapstructure:"scope" yaml:"scope,omitempty"`
 	Shell             string       `mapstructure:"shell" yaml:"shell"`
 	UpdateShellConfig string       `mapstructure:"update_shell_config" yaml:"update_shell_config"`
 	Copy              *CopyCommand `mapstructure:"copy" yaml:"copy"`
@@ -375,7 +379,7 @@ func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	// Return OS-specific config
 	switch runtime.GOOS {
 	case "linux":
-		return app.Linux
+		return app.LinuxConfigForDistribution(platform.DetectPlatform().Distribution)
 	case "darwin":
 		return app.MacOS
 	case "windows":
@@ -383,6 +387,23 @@ func (app *CrossPlatformApp) GetOSConfig() OSConfig {
 	default:
 		return OSConfig{} // Empty config for unsupported OS
 	}
+}
+
+// LinuxConfigForDistribution selects a distribution-specific package manager.
+// Keep the primary configuration as the fallback for existing catalog entries.
+func (app *CrossPlatformApp) LinuxConfigForDistribution(distribution string) OSConfig {
+	configs := append([]OSConfig{app.Linux}, app.Linux.Alternatives...)
+	for _, config := range configs {
+		if len(config.PlatformRequirements) == 0 {
+			return config
+		}
+		for _, requirement := range config.PlatformRequirements {
+			if requirement.OS == distribution || requirement.OS == "linux" {
+				return config
+			}
+		}
+	}
+	return app.Linux
 }
 
 // IsSupported checks if the app is supported on the current platform
