@@ -220,13 +220,33 @@ var _ = Describe("Self update", func() {
 		Expect(selfupdate.CheckNotification(context.Background(), client, "0.3.2", dir, now.Add(time.Hour))).To(BeEmpty())
 		Expect(requests.Load()).To(Equal(int32(1)))
 	})
-	It("finishes immediately without waiting for an outstanding background request", func() {
+	It("keeps an interrupted request retryable without consuming the 24 hour window", func() {
+		dir := GinkgoT().TempDir()
+		path := filepath.Join(dir, "update-check.json")
+		now := time.Now()
 		started := make(chan struct{})
-		finished := make(chan struct{})
-		n := selfupdate.StartNotification(context.Background(), func(ctx context.Context) string { close(started); <-ctx.Done(); close(finished); return "" })
-		<-started
-		Expect(n.Finish()).To(BeEmpty())
-		Eventually(finished).Should(BeClosed())
+		slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			close(started)
+			<-r.Context().Done()
+		}))
+		DeferCleanup(slowServer.Close)
+		slowClient := &selfupdate.Client{HTTP: slowServer.Client(), BaseURL: slowServer.URL}
+		ctx, cancel := context.WithCancel(context.Background())
+		DeferCleanup(cancel)
+		finished := make(chan string, 1)
+		go func() { finished <- selfupdate.CheckNotification(ctx, slowClient, "0.3.2", dir, now) }()
+		Eventually(started).Should(BeClosed())
+		Expect(path).NotTo(BeAnExistingFile())
+		Expect(path + ".lock").To(BeAnExistingFile())
+		// A concurrent invocation cannot start a duplicate lookup.
+		Expect(selfupdate.CheckNotification(context.Background(), client, "0.3.2", dir, now)).To(BeEmpty())
+		Expect(requests.Load()).To(BeZero())
+		cancel()
+		Eventually(finished).Should(Receive(BeEmpty()))
+		Expect(path).NotTo(BeAnExistingFile())
+		Expect(path + ".lock").NotTo(BeAnExistingFile())
+		Expect(selfupdate.CheckNotification(context.Background(), client, "0.3.2", dir, now.Add(time.Second))).To(ContainSubstring("0.3.3 is available"))
+		Expect(requests.Load()).To(Equal(int32(1)))
 	})
 })
 

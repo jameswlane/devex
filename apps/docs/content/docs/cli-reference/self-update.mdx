@@ -1,0 +1,113 @@
+---
+title: Self-Update
+description: Check for DevEx CLI releases, install verified updates, and restore the previous binary
+---
+
+# Self-Update
+
+`devex self-update` installs the latest stable DevEx CLI release for your operating
+system and architecture. Package-managed installations must be updated through
+their package manager instead.
+
+## Update notifications
+
+Interactive runs of released DevEx builds check for a newer stable CLI release in
+the background. A detached helper has a two-second timeout and can finish after a
+short command exits. Command completion never waits for the network. Once a result
+is cached, a single notice appears on stderr after command output:
+
+```text
+DevEx 0.3.3 is available (you have 0.3.2). Run 'devex self-update'.
+```
+
+Completed checks, including offline and rate-limit failures, are cached for 24
+hours. Cancelled or timed-out lookups remain eligible for retry. Concurrent checks
+share a lock; an abandoned lock expires after one minute. Plugin and SDK release
+tags are ignored.
+
+The cache is stored in `$DEVEX_CACHE_DIR/update-check.json`, when set, or
+`$XDG_CACHE_HOME/devex/update-check.json`. The default is
+`~/.cache/devex/update-check.json` on Linux and macOS, and
+`%LOCALAPPDATA%\DevEx\cache\update-check.json` on Windows.
+
+### Disable notifications
+
+Set the environment variable for all runs in your shell:
+
+```sh
+export DEVEX_NO_UPDATE_CHECK=1
+```
+
+Or add this top-level setting to your CLI configuration, such as
+`~/.devex/config.yaml` or the file selected by `--config /path/to/config.yaml`:
+
+```yaml
+update_check: false
+```
+
+Automatic checks and notices are also suppressed for redirected or non-TTY stdout
+or stderr, `--format json`, `--format yaml`, CI, `--non-interactive`, `--offline`,
+development builds, and prerelease builds. The `self-update` and `completion`
+commands do not start background checks. Disabling automatic notifications does
+not disable an explicit `devex self-update` command.
+
+## Usage and flags
+
+```sh
+devex self-update --check                 # Report the latest stable release
+devex self-update                         # Install the latest stable CLI
+devex self-update --version v0.3.3         # Select a specific release
+devex self-update --pre                   # Include prereleases
+devex self-update --version v0.4.0-rc.1 --pre
+devex self-update --dry-run               # Preview without changing files
+devex self-update --rollback              # Restore the previous binary offline
+```
+
+| Flag | Behavior |
+|------|----------|
+| `--check` | Report the selected release and release notes URL without changing files. |
+| `--version vX.Y.Z` | Install a specific release, including a downgrade. A pinned prerelease also requires `--pre`. |
+| `--pre` | Include prereleases when selecting a release. |
+| `--rollback` | Swap the current binary with `devex.previous` without downloading. Cannot be combined with `--version`, `--check`, or `--pre`. |
+| `--dry-run` | Global flag: report the selected release or planned rollback without modifying files. |
+
+Without `--version`, an equal or newer installed release is left unchanged.
+Successful checks and updates show the release notes URL. Explicit online updates
+have a two-minute timeout. `--offline` rejects downloads; rollback works offline.
+
+## Verification and installation
+
+Self-update downloads the release archive and verifies its SHA-256 checksum
+against `devex_checksums.txt`. A mismatch aborts the update. If `cosign` is on
+`PATH`, the checksums file's Sigstore bundle must also verify using the DevEx
+GitHub Actions certificate identity and issuer. A missing bundle or failed
+signature aborts the update. Without cosign, checksum verification still runs;
+install cosign if you require signature verification.
+
+The new executable is staged in the install directory and replaces the current
+binary atomically. On Windows, the running executable is renamed aside first.
+An unwritable install directory is refused with instructions to reinstall in a
+user-owned location. Self-update never escalates privileges.
+
+Only the executable is replaced. Configuration files, plugins, bundled `config/`,
+`assets/`, and `help/` files are left unchanged.
+
+## Rollback
+
+The previous executable is saved alongside the installed binary as
+`devex.previous`. Restore it without contacting GitHub:
+
+```sh
+devex self-update --rollback
+```
+
+Rollback swaps the current and previous binaries, allowing you to switch back
+again. It requires an existing `devex.previous` file and a writable install
+directory.
+
+## Network failures and authentication
+
+Set `GITHUB_TOKEN` optionally to raise the GitHub API rate limit. The token is sent
+only to API requests and is never forwarded to release asset downloads. Explicit
+checks and updates return actionable connection and rate-limit errors; background
+notifications remain silent on failure.

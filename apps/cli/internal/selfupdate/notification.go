@@ -52,8 +52,8 @@ type notificationCache struct {
 	Latest    string    `json:"latest,omitempty"`
 }
 
-// CheckNotification runs in the caller's background goroutine. Failed attempts
-// are cached too, so offline/rate-limited invocations do not retry for 24 hours.
+// CheckNotification runs in the detached helper. Completed failures are cached
+// too, so offline/rate-limited invocations do not retry for 24 hours.
 func CheckNotification(ctx context.Context, client *Client, current, dir string, now time.Time) string {
 	path := filepath.Join(dir, "update-check.json")
 	var cached notificationCache
@@ -67,7 +67,7 @@ func CheckNotification(ctx context.Context, client *Client, current, dir string,
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return ""
 	}
-	// Reserve this day's attempt before networking. Exclusive creation avoids
+	// Hold the lock throughout networking. Exclusive creation avoids
 	// duplicate checks by concurrent invocations; stale locks expire quickly.
 	lockPath := path + ".lock"
 	if info, err := os.Stat(lockPath); err == nil && now.Sub(info.ModTime()) > time.Minute {
@@ -83,15 +83,15 @@ func CheckNotification(ctx context.Context, client *Client, current, dir string,
 	if data, err := os.ReadFile(path); err == nil && json.Unmarshal(data, &cached) == nil && !cached.CheckedAt.After(now) && now.Sub(cached.CheckedAt) < 24*time.Hour {
 		return notificationMessage(cached.Latest, current)
 	}
-	cached = notificationCache{CheckedAt: now}
-	if !writeCache(path, cached) {
-		return ""
-	}
 	release, err := client.Find(ctx, "", false)
-	if err != nil {
+	// An interrupted lookup has no result to cache and must remain retryable.
+	if ctx.Err() != nil {
 		return ""
 	}
-	cached.Latest = release.Tag
+	cached = notificationCache{CheckedAt: now}
+	if err == nil {
+		cached.Latest = release.Tag
+	}
 	_ = writeCache(path, cached)
 	return notificationMessage(cached.Latest, current)
 }
@@ -126,29 +126,41 @@ func notificationMessage(latest, current string) string {
 	return fmt.Sprintf("DevEx %s is available (you have %s). Run 'devex self-update'.", strings.TrimPrefix(latest, "v"), strings.TrimPrefix(current, "v"))
 }
 
-// Notification never waits for the network at command completion. Very short
-// commands may exit before discovery completes; subsequent runs use the cache.
+// Notification only reads the cache at command completion. A detached helper
+// refreshes it even when the foreground command exits before discovery finishes.
 type Notification struct {
-	result <-chan string
-	cancel context.CancelFunc
+	current, dir string
 }
 
-func StartNotification(ctx context.Context, check func(context.Context) string) *Notification {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	result := make(chan string, 1)
-	go func() { result <- check(ctx) }()
-	return &Notification{result: result, cancel: cancel}
+func StartNotification(ctx context.Context, current, dir string) *Notification {
+	return startNotification(ctx, current, dir, launchNotificationHelper)
+}
+
+func startNotification(ctx context.Context, current, dir string, launch func(context.Context, string, string) error) *Notification {
+	if ctx.Err() != nil {
+		return nil
+	}
+	if _, fresh := cachedNotification(current, dir, time.Now()); !fresh {
+		// Starting the process is local; no network request delays the command.
+		// The helper owns its timeout and lock, and never writes to the terminal.
+		_ = launch(ctx, current, dir)
+	}
+	return &Notification{current: current, dir: dir}
 }
 
 func (n *Notification) Finish() string {
 	if n == nil {
 		return ""
 	}
-	defer n.cancel()
-	select {
-	case message := <-n.result:
-		return message
-	default:
-		return ""
+	message, _ := cachedNotification(n.current, n.dir, time.Now())
+	return message
+}
+
+func cachedNotification(current, dir string, now time.Time) (string, bool) {
+	var cached notificationCache
+	data, err := os.ReadFile(filepath.Join(dir, "update-check.json"))
+	if err != nil || json.Unmarshal(data, &cached) != nil || cached.CheckedAt.After(now) || now.Sub(cached.CheckedAt) >= 24*time.Hour {
+		return "", false
 	}
+	return notificationMessage(cached.Latest, current), true
 }

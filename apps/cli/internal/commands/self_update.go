@@ -94,7 +94,7 @@ func terminalWriter(writer io.Writer) bool {
 }
 
 // startUpdateNotification must stay cheap when suppressed, especially for the
-// bare-command startup path. All path and network work happens in the callback.
+// bare-command startup path. Resolve paths only after checking policy and TTYs.
 func startUpdateNotification(cmd *cobra.Command, version string) *selfupdate.Notification {
 	policy := updateNotificationPolicy(cmd, version, true)
 	if cmd.Name() == "self-update" || cmd.Name() == "completion" || !policy.Enabled() {
@@ -103,16 +103,11 @@ func startUpdateNotification(cmd *cobra.Command, version string) *selfupdate.Not
 	if !terminalWriter(cmd.OutOrStdout()) || !terminalWriter(cmd.ErrOrStderr()) {
 		return nil
 	}
-	token := os.Getenv("GITHUB_TOKEN")
-	return selfupdate.StartNotification(cmd.Context(), func(ctx context.Context) string {
-		dir, err := selfupdate.CacheDir()
-		if err != nil {
-			return ""
-		}
-		client := selfupdate.NewClient()
-		client.Token = token
-		return selfupdate.CheckNotification(ctx, client, version, dir, time.Now())
-	})
+	dir, err := selfupdate.CacheDir()
+	if err != nil {
+		return nil
+	}
+	return selfupdate.StartNotification(cmd.Context(), version, dir)
 }
 
 func updateNotificationPolicy(cmd *cobra.Command, version string, tty bool) selfupdate.NotificationPolicy {
