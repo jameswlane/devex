@@ -303,7 +303,7 @@ var _ = Describe("Docker Installer Advanced Tests", func() {
 		Context("memory and resource usage", func() {
 			It("handles many concurrent container operations", func() {
 				// Test with multiple containers to verify resource management
-				containerNames := []string{}
+				var containerNames []string
 				for i := 0; i < 10; i++ {
 					containerName := fmt.Sprintf("concurrent-test-%d", i)
 					containerNames = append(containerNames, containerName)

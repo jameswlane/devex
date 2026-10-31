@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -29,7 +30,7 @@ func (r *schemaRepository) GetVersion() (int, error) {
 	result := r.db.QueryRow(query)
 	err := result.Scan(&version)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			// No migrations have been applied yet, return version 0
 			return 0, nil
 		}

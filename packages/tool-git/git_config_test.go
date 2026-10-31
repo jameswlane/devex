@@ -71,7 +71,7 @@ var _ = Describe("Git Config", func() {
 
 		Context("with empty arguments", func() {
 			It("should return empty strings", func() {
-				args := []string{}
+				var args []string
 				name, email := plugin.ParseConfigArgs(args)
 				Expect(name).To(Equal(""))
 				Expect(email).To(Equal(""))

@@ -21,7 +21,7 @@ const (
 	MaxBackups       = 50
 	BackupTimeFormat = "20060102-150405"
 	MetadataFile     = ".backup-metadata.json"
-	// Security limits for tar extraction
+	// MaxFileSize Security limits for tar extraction
 	MaxFileSize  = 100 * 1024 * 1024  // 100MB per file
 	MaxTotalSize = 1024 * 1024 * 1024 // 1GB total
 	MaxFiles     = 10000              // Maximum number of files

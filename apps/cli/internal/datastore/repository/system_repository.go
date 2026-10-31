@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -27,7 +28,7 @@ func (r *systemRepository) Get(key string) (string, error) {
 
 	var value string
 	err := row.Scan(&value)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("key '%s' not found", key)
 	}
 	if err != nil {

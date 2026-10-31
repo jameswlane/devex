@@ -78,7 +78,7 @@ func TestStreamingInstaller_ResourceCleanup(t *testing.T) {
 		// but we can test the cleanup pattern
 
 		// Create a minimal model for testing
-		apps := []types.CrossPlatformApp{}
+		var apps []types.CrossPlatformApp
 		m := NewModel(apps)
 
 		// Create program

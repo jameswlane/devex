@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -28,7 +29,7 @@ func (r *AppRepository) GetApp(appName string) (*types.AppConfig, error) {
 	var name string
 	err := row.Scan(&name)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to query app: %w", err)

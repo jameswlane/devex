@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func ValidateTimeoutConfig(config TimeoutConfig) error {
 	if config.Shell < 0 {
 		return fmt.Errorf("shell timeout cannot be negative")
 	}
-	
+
 	return nil
 }
 
@@ -43,33 +44,35 @@ func ValidateTimeout(timeout time.Duration, operationType string) error {
 	if timeout < 0 {
 		return fmt.Errorf("%s timeout cannot be negative", operationType)
 	}
-	
+
 	// Warn if timeout is extremely short (likely a mistake)
 	if timeout > 0 && timeout < 5*time.Second {
 		// Note: We don't return an error for short timeouts, just document the concern
 		// Some operations might legitimately need very short timeouts
 		_ = timeout // Suppress unused variable warning
 	}
-	
-	// Warn if timeout is extremely long (potentially a mistake)  
+
+	// Warn if timeout is extremely long (potentially a mistake)
 	if timeout > 2*time.Hour {
 		// Note: We don't return an error for long timeouts, just document the concern
 		// Some operations like large builds might legitimately need very long timeouts
 		_ = timeout // Suppress unused variable warning
 	}
-	
+
 	return nil
 }
 
 // IsTimeoutError checks if an error is a TimeoutError
 func IsTimeoutError(err error) bool {
-	_, ok := err.(*TimeoutError)
+	var timeoutError *TimeoutError
+	ok := errors.As(err, &timeoutError)
 	return ok
 }
 
 // GetTimeoutError extracts TimeoutError from error chain
 func GetTimeoutError(err error) *TimeoutError {
-	if timeoutErr, ok := err.(*TimeoutError); ok {
+	var timeoutErr *TimeoutError
+	if errors.As(err, &timeoutErr) {
 		return timeoutErr
 	}
 	return nil
@@ -81,26 +84,26 @@ func NormalizeTimeout(timeout time.Duration, operationType string) time.Duration
 	if timeout <= 0 {
 		return DefaultTimeouts().GetTimeout(operationType)
 	}
-	
+
 	// Set minimum timeout to prevent too-short operations that may fail spuriously
 	minTimeout := 5 * time.Second
 	if timeout < minTimeout {
 		return minTimeout
 	}
-	
+
 	// Set maximum timeout to prevent runaway operations
 	maxTimeout := 2 * time.Hour
 	if timeout > maxTimeout {
 		return maxTimeout
 	}
-	
+
 	return timeout
 }
 
 // TimeoutConfigFromDefaults creates a timeout config with specific overrides
 func TimeoutConfigFromDefaults(overrides map[string]time.Duration) TimeoutConfig {
 	config := DefaultTimeouts()
-	
+
 	for operation, timeout := range overrides {
 		switch operation {
 		case "default":
@@ -121,7 +124,7 @@ func TimeoutConfigFromDefaults(overrides map[string]time.Duration) TimeoutConfig
 			config.Shell = timeout
 		}
 	}
-	
+
 	return config
 }
 
@@ -160,7 +163,7 @@ var dangerousEnvVars = map[string]EnvVarConfig{
 		AllowEmpty:  true,
 	},
 	"LD_LIBRARY_PATH": {
-		Name:        "LD_LIBRARY_PATH", 
+		Name:        "LD_LIBRARY_PATH",
 		Severity:    EnvVarDangerous,
 		Description: "Can redirect library loading to malicious libraries",
 		AllowEmpty:  true,
@@ -177,7 +180,7 @@ var dangerousEnvVars = map[string]EnvVarConfig{
 		Description: "macOS equivalent of LD_PRELOAD",
 		AllowEmpty:  true,
 	},
-	
+
 	// Python-related security risks
 	"PYTHONPATH": {
 		Name:        "PYTHONPATH",
@@ -191,7 +194,7 @@ var dangerousEnvVars = map[string]EnvVarConfig{
 		Description: "Executes arbitrary Python code on startup",
 		AllowEmpty:  true,
 	},
-	
+
 	// Configuration injection risks
 	"APT_CONFIG": {
 		Name:        "APT_CONFIG",
@@ -218,7 +221,7 @@ var dangerousEnvVars = map[string]EnvVarConfig{
 		AllowEmpty:  true,
 	},
 	"ZYPPER_CONFIG": {
-		Name:        "ZYPPER_CONFIG", 
+		Name:        "ZYPPER_CONFIG",
 		Severity:    EnvVarDangerous,
 		Description: "Can override Zypper configuration with malicious settings",
 		AllowEmpty:  true,
@@ -231,7 +234,7 @@ var dangerousEnvVars = map[string]EnvVarConfig{
 		ValidateFunc: validateFlatpakUserDir,
 	},
 	"FLATPAK_SYSTEM_DIR": {
-		Name:         "FLATPAK_SYSTEM_DIR", 
+		Name:         "FLATPAK_SYSTEM_DIR",
 		Severity:     EnvVarWarning,
 		Description:  "Can redirect Flatpak system directory",
 		AllowEmpty:   true,
@@ -279,7 +282,7 @@ var dangerousEnvVars = map[string]EnvVarConfig{
 		AllowEmpty:   true,
 		ValidateFunc: validatePipIndexURL,
 	},
-	
+
 	// Shell and execution risks
 	"IFS": {
 		Name:        "IFS",
@@ -319,7 +322,7 @@ var systemEnvVars = map[string]EnvVarConfig{
 		ValidateFunc: validateUsername,
 	},
 	"LOGNAME": {
-		Name:         "LOGNAME", 
+		Name:         "LOGNAME",
 		Severity:     EnvVarSafe,
 		Description:  "Login name - validate format",
 		AllowEmpty:   false,
@@ -396,7 +399,7 @@ func ValidateEnvironmentVariable(name, value string) error {
 			}
 		}
 	}
-	
+
 	// Check system variables
 	if config, exists := systemEnvVars[name]; exists {
 		if !config.AllowEmpty && value == "" {
@@ -408,7 +411,7 @@ func ValidateEnvironmentVariable(name, value string) error {
 			}
 		}
 	}
-	
+
 	// Check DevEx variables
 	if config, exists := devexEnvVars[name]; exists {
 		if !config.AllowEmpty && value == "" {
@@ -420,7 +423,7 @@ func ValidateEnvironmentVariable(name, value string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -448,16 +451,16 @@ func SafeGetEnvWithDefault(name, defaultValue string) (string, error) {
 // SanitizeEnvironmentForLogging removes sensitive environment variables for logging
 func SanitizeEnvironmentForLogging(env []string) []string {
 	sanitized := make([]string, 0, len(env))
-	
+
 	for _, envVar := range env {
 		parts := strings.SplitN(envVar, "=", 2)
 		if len(parts) != 2 {
 			continue
 		}
-		
+
 		name := parts[0]
 		value := parts[1]
-		
+
 		// Check if this is a sensitive variable
 		if shouldRedactEnvVar(name) {
 			sanitized = append(sanitized, name+"=[REDACTED]")
@@ -467,7 +470,7 @@ func SanitizeEnvironmentForLogging(env []string) []string {
 			sanitized = append(sanitized, envVar)
 		}
 	}
-	
+
 	return sanitized
 }
 
@@ -484,7 +487,7 @@ func SanitizeEnvVarForLogging(name, value string) string {
 // CheckEnvironmentSecurity performs a comprehensive security check of environment variables
 func CheckEnvironmentSecurity() []SecurityIssue {
 	var issues []SecurityIssue
-	
+
 	// Check for dangerous variables
 	for name, config := range dangerousEnvVars {
 		value := os.Getenv(name)
@@ -507,7 +510,7 @@ func CheckEnvironmentSecurity() []SecurityIssue {
 			}
 		}
 	}
-	
+
 	// Validate system variables
 	for name, config := range systemEnvVars {
 		value := os.Getenv(name)
@@ -516,7 +519,7 @@ func CheckEnvironmentSecurity() []SecurityIssue {
 				if err := config.ValidateFunc(value); err != nil {
 					issues = append(issues, SecurityIssue{
 						Type:        "invalid_env_var",
-						Severity:    "medium", 
+						Severity:    "medium",
 						Description: fmt.Sprintf("System environment variable %s has invalid value: %s", name, err.Error()),
 						Variable:    name,
 					})
@@ -531,7 +534,7 @@ func CheckEnvironmentSecurity() []SecurityIssue {
 			})
 		}
 	}
-	
+
 	return issues
 }
 
@@ -549,7 +552,7 @@ func validatePath(value string) error {
 	if value == "" {
 		return fmt.Errorf("PATH cannot be empty")
 	}
-	
+
 	paths := strings.Split(value, string(os.PathListSeparator))
 	for _, path := range paths {
 		// Check for suspicious paths
@@ -575,24 +578,24 @@ func validateHomePath(value string) error {
 	if value == "" {
 		return fmt.Errorf("HOME cannot be empty")
 	}
-	
+
 	// Check for path traversal
 	if strings.Contains(value, "..") {
 		return fmt.Errorf("HOME contains path traversal: %s", value)
 	}
-	
+
 	// Must be an absolute path
 	if !filepath.IsAbs(value) {
 		return fmt.Errorf("HOME must be an absolute path: %s", value)
 	}
-	
+
 	// Check if directory exists and is accessible
 	if info, err := os.Stat(value); err != nil {
 		return fmt.Errorf("HOME directory is not accessible: %s", value)
 	} else if !info.IsDir() {
 		return fmt.Errorf("HOME is not a directory: %s", value)
 	}
-	
+
 	return nil
 }
 
@@ -600,17 +603,17 @@ func validateUsername(value string) error {
 	if value == "" {
 		return fmt.Errorf("username cannot be empty")
 	}
-	
+
 	// Check for suspicious characters
 	if strings.ContainsAny(value, "\n\r\t\x00;|&`$()[]{}") {
 		return fmt.Errorf("username contains suspicious characters: %s", value)
 	}
-	
+
 	// Must be reasonable length
 	if len(value) > 32 {
 		return fmt.Errorf("username is too long: %s", value)
 	}
-	
+
 	return nil
 }
 
@@ -618,24 +621,24 @@ func validateShellPath(value string) error {
 	if value == "" {
 		return fmt.Errorf("SHELL cannot be empty")
 	}
-	
+
 	// Must be an absolute path
 	if !filepath.IsAbs(value) {
 		return fmt.Errorf("SHELL must be an absolute path: %s", value)
 	}
-	
+
 	// Check for path traversal
 	if strings.Contains(value, "..") {
 		return fmt.Errorf("SHELL contains path traversal: %s", value)
 	}
-	
+
 	// Should exist and be executable
 	if info, err := os.Stat(value); err != nil {
 		return fmt.Errorf("SHELL does not exist: %s", value)
 	} else if info.Mode()&0111 == 0 {
 		return fmt.Errorf("SHELL is not executable: %s", value)
 	}
-	
+
 	return nil
 }
 
@@ -643,17 +646,17 @@ func validateTempDir(value string) error {
 	if value == "" {
 		return nil // Empty is allowed
 	}
-	
+
 	// Must be an absolute path
 	if !filepath.IsAbs(value) {
 		return fmt.Errorf("TMPDIR must be an absolute path: %s", value)
 	}
-	
+
 	// Check for path traversal
 	if strings.Contains(value, "..") {
 		return fmt.Errorf("TMPDIR contains path traversal: %s", value)
 	}
-	
+
 	return nil
 }
 
@@ -661,7 +664,7 @@ func validateDockerHost(value string) error {
 	if value == "" {
 		return nil
 	}
-	
+
 	// Check for suspicious protocols or hosts
 	if strings.HasPrefix(value, "tcp://") {
 		// Extract host part
@@ -675,7 +678,7 @@ func validateDockerHost(value string) error {
 	} else if !strings.HasPrefix(value, "unix://") && !strings.HasPrefix(value, "fd://") {
 		return fmt.Errorf("DOCKER_HOST has unsupported protocol: %s", value)
 	}
-	
+
 	return nil
 }
 
@@ -683,24 +686,24 @@ func validatePipIndexURL(value string) error {
 	if value == "" {
 		return nil
 	}
-	
+
 	// Must be HTTPS for security
 	if !strings.HasPrefix(value, "https://") {
 		return fmt.Errorf("pip index URL must use HTTPS: '%s'", value)
 	}
-	
+
 	// Check for suspicious domains
 	suspiciousDomains := []string{
 		"bit.ly", "tinyurl.com", "short.link", "t.co",
 		"localhost", "127.0.0.1", "0.0.0.0",
 	}
-	
+
 	for _, domain := range suspiciousDomains {
 		if strings.Contains(value, domain) {
 			return fmt.Errorf("PIP index URL contains suspicious domain: %s", value)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -708,14 +711,14 @@ func validateDevexEnv(value string) error {
 	if value == "" {
 		return nil
 	}
-	
+
 	allowedEnvs := []string{"development", "dev", "staging", "production", "prod", "test", "testing"}
 	for _, env := range allowedEnvs {
 		if value == env {
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("invalid DEVEX_ENV value: %s (allowed: %s)", value, strings.Join(allowedEnvs, ", "))
 }
 
@@ -735,17 +738,17 @@ func validateDirectoryPath(value, varName string) error {
 	if value == "" {
 		return nil
 	}
-	
+
 	// Must be an absolute path
 	if !filepath.IsAbs(value) {
 		return fmt.Errorf("%s must be an absolute path: %s", varName, value)
 	}
-	
+
 	// Check for path traversal
 	if strings.Contains(value, "..") {
 		return fmt.Errorf("%s contains path traversal: %s", varName, value)
 	}
-	
+
 	return nil
 }
 
@@ -754,29 +757,29 @@ func shouldRedactEnvVar(name string) bool {
 		"PASSWORD", "PASSWD", "SECRET", "TOKEN", "KEY", "CREDENTIAL",
 		"AUTH", "API_KEY", "ACCESS_TOKEN", "PRIVATE_KEY", "CERT",
 	}
-	
+
 	upperName := strings.ToUpper(name)
 	for _, pattern := range redactPatterns {
 		if strings.Contains(upperName, pattern) {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 func shouldPartiallyRedactEnvVar(name string) bool {
 	partialRedactVars := []string{
-		"PATH", "HOME", "USER", "LOGNAME", 
+		"PATH", "HOME", "USER", "LOGNAME",
 		"DOCKER_HOST", "PIP_INDEX_URL",
 	}
-	
+
 	for _, varName := range partialRedactVars {
 		if name == varName {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -784,11 +787,10 @@ func partiallyRedactValue(value string) string {
 	if len(value) <= 8 {
 		return "[REDACTED]"
 	}
-	
+
 	// Show first and last 2 characters with middle redacted
 	return value[:2] + "..." + value[len(value)-2:]
 }
-
 
 // Package manager specific validation functions
 
@@ -808,7 +810,7 @@ func validateHomebrewPrefix(value string) error {
 	if err := validateDirectoryPath(value, "HOMEBREW_PREFIX"); err != nil {
 		return err
 	}
-	
+
 	// Additional validation for Homebrew prefix - should be safe locations
 	if value != "" {
 		safePrefixes := []string{"/usr/local", "/opt/homebrew", "/home/linuxbrew/.linuxbrew"}
@@ -823,7 +825,7 @@ func validateHomebrewPrefix(value string) error {
 		}
 		return fmt.Errorf("HOMEBREW_PREFIX points to potentially unsafe location: %s", value)
 	}
-	
+
 	return nil
 }
 
@@ -831,7 +833,7 @@ func validateHomebrewRepository(value string) error {
 	if err := validateDirectoryPath(value, "HOMEBREW_REPOSITORY"); err != nil {
 		return err
 	}
-	
+
 	// Additional validation for Homebrew repository
 	if value != "" {
 		// Should be within Homebrew prefix or user home
@@ -847,6 +849,6 @@ func validateHomebrewRepository(value string) error {
 		}
 		return fmt.Errorf("HOMEBREW_REPOSITORY points to potentially unsafe location: %s", value)
 	}
-	
+
 	return nil
 }

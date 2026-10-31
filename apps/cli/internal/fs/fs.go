@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	AppFs    afero.Fs = afero.NewOsFs()
-	AppAfero          = &afero.Afero{Fs: AppFs}
+	AppFs    = afero.NewOsFs()
+	AppAfero = &afero.Afero{Fs: AppFs}
 	initOnce sync.Once
 )
 

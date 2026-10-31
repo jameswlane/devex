@@ -241,7 +241,7 @@ tmpfs /dev/shm tmpfs rw,nosuid,nodev 0 0
 
 				// Result depends on whether tests are running in container
 				// We just ensure it returns without error
-				Expect(result).To(BeAssignableToTypeOf(bool(false)))
+				Expect(result).To(BeAssignableToTypeOf(false))
 			})
 		})
 	})

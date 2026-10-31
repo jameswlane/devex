@@ -228,7 +228,7 @@ var _ = Describe("RequirementsValidator", func() {
 		})
 
 		It("should handle empty results", func() {
-			results := []system.ValidationResult{}
+			var results []system.ValidationResult
 
 			hasFailures := validator.HasFailures(results)
 			Expect(hasFailures).To(BeFalse())

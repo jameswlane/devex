@@ -205,7 +205,7 @@ var _ = Describe("Downloading plugins from the registry", func() {
 
 		entries, err := os.ReadDir(pluginDir)
 		Expect(err).ToNot(HaveOccurred())
-		names := []string{}
+		var names []string
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}

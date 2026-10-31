@@ -255,7 +255,7 @@ var _ = Describe("ThemeSelector", func() {
 
 	Describe("ShowThemeSelector Edge Cases", func() {
 		It("should handle empty themes list", func() {
-			themes := []types.Theme{}
+			var themes []types.Theme
 
 			_, err := ShowThemeSelector("neovim", themes)
 
