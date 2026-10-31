@@ -122,18 +122,11 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 	}
 
 	pluginName := "package-manager-" + p.method
-	args := []string{"install"}
-
-	// Parse command to extract package names
-	if command != "" {
-		// Simple command parsing - split on spaces and filter out common flags
-		parts := strings.Fields(command)
-		for _, part := range parts {
-			if !strings.HasPrefix(part, "-") && part != "install" && part != "sudo" {
-				args = append(args, part)
-			}
-		}
+	packages, err := catalogPackageArguments(p.method, command)
+	if err != nil {
+		return err
 	}
+	args := append([]string{"install"}, packages...)
 
 	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
 }
@@ -145,17 +138,11 @@ func (p *PluginBasedInstaller) Uninstall(command string, repo types.Repository) 
 	}
 
 	pluginName := "package-manager-" + p.method
-	args := []string{"remove"}
-
-	// Parse command to extract package names
-	if command != "" {
-		parts := strings.Fields(command)
-		for _, part := range parts {
-			if !strings.HasPrefix(part, "-") && part != "remove" && part != "sudo" {
-				args = append(args, part)
-			}
-		}
+	packages, err := catalogPackageArguments(p.method, command)
+	if err != nil {
+		return err
 	}
+	args := append([]string{"remove"}, packages...)
 
 	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
 }
@@ -169,12 +156,11 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 	pluginName := "package-manager-" + p.method
 	switch p.method {
 	case "apt", "appimage", "deb", "flatpak", "mise", "pip":
-		args := []string{"is-installed"}
-		for _, part := range strings.Fields(command) {
-			if !strings.HasPrefix(part, "-") && part != "install" && part != "remove" && part != "sudo" {
-				args = append(args, part)
-			}
+		packages, err := catalogPackageArguments(p.method, command)
+		if err != nil {
+			return false, err
 		}
+		args := append([]string{"is-installed"}, packages...)
 
 		// Plugins currently use the same error exit for an absent package and a
 		// discovery failure. Neither is proof of absence: preserve the error and
@@ -190,6 +176,59 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		// the package was present.
 		return true, nil
 	}
+}
+
+// catalogPackageArguments normalizes package-manager command prefixes, not shell
+// programs. Flags retain the existing behavior of being omitted from plugin argv.
+// Package identifiers (including versions, URLs and local archives) stay intact.
+func catalogPackageArguments(method, command string) ([]string, error) {
+	parts := strings.Fields(command)
+	if method == "script" || method == "curlpipe" {
+		// These methods consume scripts rather than package identifiers. Preserve
+		// their existing token handling; interpreting scripts is outside this parser.
+		packages := make([]string, 0, len(parts))
+		for _, part := range parts {
+			if !strings.HasPrefix(part, "-") && part != "sudo" && part != "install" && part != "remove" {
+				packages = append(packages, part)
+			}
+		}
+		return packages, nil
+	}
+	if strings.ContainsAny(command, "\n\r|;&`") || strings.Contains(command, "$(") {
+		return nil, fmt.Errorf("invalid %s catalog command: use package identifiers and move shell commands to pre_install or post_install", method)
+	}
+
+	// Only consume a manager name when it introduces a command. A package
+	// named apt, pip, sudo, install or remove must remain a package identifier.
+	start := 0
+	if len(parts) > 1 && parts[0] == "sudo" {
+		start++
+	}
+	manager := method
+	if start < len(parts) && (parts[start] == method ||
+		((method == "apt" || method == "deb") && (parts[start] == "apt" || parts[start] == "apt-get"))) {
+		start++
+	}
+	verb := ""
+	if start < len(parts)-1 {
+		switch parts[start] {
+		case "install", "remove", "uninstall":
+			verb = parts[start]
+			parts = parts[start+1:]
+		}
+	}
+	packages := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if !strings.HasPrefix(part, "-") {
+			packages = append(packages, part)
+		}
+	}
+	// The only explicit Flatpak remote in the catalog is flathub. It is a
+	// repository selector, never an application to install, remove or probe.
+	if manager == "flatpak" && verb == "install" && len(packages) > 1 && packages[0] == "flathub" {
+		packages = packages[1:]
+	}
+	return packages, nil
 }
 
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
