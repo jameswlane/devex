@@ -89,8 +89,11 @@ Examples:
 
 			// Launch interactive help browser or print root help if non-interactive / no TTY
 			if !isInteractiveHelp(cmd) {
-				if cmd.Root() != nil {
-					return cmd.Root().Help()
+				if root := cmd.Root(); root != nil {
+					// Cobra adds these flags lazily when the root itself executes.
+					root.InitDefaultHelpFlag()
+					root.InitDefaultVersionFlag()
+					return root.Help()
 				}
 				return cmd.Help()
 			}

@@ -96,6 +96,14 @@ var _ = Describe("Help Command", func() {
 		Expect(output).To(ContainSubstring("install"))
 	})
 
+	It("includes the root help and version flags in the non-interactive fallback", func() {
+		Expect(run("help", "--non-interactive")).To(Succeed())
+		output := out.String()
+
+		Expect(output).To(ContainSubstring("-h, --help"))
+		Expect(output).To(ContainSubstring("--version"))
+	})
+
 	It("shows command help directly for 'help install' without topic search fallback", func() {
 		Expect(run("help", "install")).To(Succeed())
 		output := out.String()
