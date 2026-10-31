@@ -1,0 +1,57 @@
+---
+title: Plugin Management
+description: List, find, install, run, update, and remove DevEx plugins
+---
+
+# devex plugin
+
+Manage executable plugins in `~/.devex/plugins`. Plugin management does not automatically download the platform's recommended plugins.
+
+```bash
+devex plugin list
+devex plugin list --format json
+devex plugin search desktop
+devex plugin install tool-stackdetector
+devex plugin info tool-stackdetector
+devex plugin run tool-stackdetector detect --path .
+devex plugin update tool-stackdetector tool-shell
+devex plugin update --all
+devex plugin remove tool-stackdetector
+devex plugin registry
+```
+
+## List and inspect
+
+`list` shows each installed plugin's name, installed version, executable path, latest registry version, and whether a newer version is available. `--format json` returns an array with `name`, `version`, `path`, `latest_version`, and `update_available` fields. Empty installations return `[]`. If the registry is unavailable, listing still succeeds and reports the latest version as `unknown`, with a warning on stderr. Registry results may come from the SDK cache.
+
+`info <name>` reads installed metadata and lists supported commands. `search [query]` searches registry names, descriptions, and tags.
+
+## Install and run
+
+`install <name>` downloads the current registry release for your operating system and architecture. Downloads require SHA-256 verification and valid executable metadata before replacing an existing plugin.
+
+`run <name> <command> [args...]` requires an installed plugin and a command advertised by its metadata. Arguments after `run` pass through literally, including plugin flags and `--`. Place DevEx flags before `plugin run`, for example:
+
+```bash
+devex --offline plugin run tool-stackdetector detect --path .
+```
+
+The child receives stdin and streams stdout and stderr directly. DevEx preserves the child's nonzero exit status and cancels the child when interrupted. Use `devex plugin info <name>` to discover supported commands.
+
+## Update
+
+Select one or more installed names, or use `--all` to update every installed plugin. Combining names with `--all`, or omitting both, is an error. The downloader keeps the previous binary and install record until the downloaded payload passes checksum and executable metadata validation. Failed updates return an error; `--all` continues attempting the other plugins and reports failures.
+
+## Remove
+
+`remove <name>` deletes the executable and its hidden `.devex-plugin-<name>.install.json` install record. Output names the commands that stop working. Package-manager plugins and `system-setup` are treated as critical because installation and setup workflows may depend on them. Their removal requires `--force`:
+
+```bash
+devex plugin remove package-manager-apt --force
+```
+
+## Registry and offline mode
+
+`registry` displays the configured registry URL. Configuration precedence is `DEVEX_PLUGIN_REGISTRY_URL`, then `plugin_registry_url` in `~/.devex/config.yaml`, then `https://registry.devex.sh`.
+
+`--offline` allows local `list`, `info`, `run`, and `remove` operations. Offline lists show `unknown` for latest versions. `search`, `install`, and `update` require registry access and return an actionable error in offline mode.

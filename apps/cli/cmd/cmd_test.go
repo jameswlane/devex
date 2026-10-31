@@ -3,10 +3,10 @@ package main_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -60,14 +60,26 @@ var _ = Describe("Main", func() {
 
 		It("logs and exits on invalid input error", func() {
 			Expect(func() {
-				testHandleError(errors.ErrInvalidInput)
+				devex.HandleErrorForTest("test", errors.ErrInvalidInput)
 			}).ToNot(Panic())
 			Expect(exitCalled).To(BeTrue())
 		})
 
+		It("preserves a plugin process exit code at the CLI boundary", func() {
+			if runtime.GOOS == "windows" {
+				Skip("requires a POSIX shell")
+			}
+			childError := exec.CommandContext(context.Background(), "sh", "-c", "exit 23").Run()
+			Expect(childError).To(HaveOccurred())
+			code := 0
+			devex.Exit = func(value int) { code = value }
+			devex.HandleErrorForTest("plugin", childError)
+			Expect(code).To(Equal(23))
+		})
+
 		It("logs and exits on unexpected error", func() {
 			Expect(func() {
-				testHandleError(errors.New("unexpected error"))
+				devex.HandleErrorForTest("test", errors.New("unexpected error"))
 			}).ToNot(Panic())
 			Expect(exitCalled).To(BeTrue())
 		})
@@ -142,12 +154,4 @@ func isolatedGoRunEnv(home string) (string, []string) {
 		env = append(env, key+"="+value)
 	}
 	return filepath.Join(values[0], "bin", "go"), env
-}
-
-// Helper function to test handleError
-func testHandleError(err error) {
-	if err != nil {
-		fmt.Printf("Error: %s\n", err.Error())
-		devex.Exit(1)
-	}
 }

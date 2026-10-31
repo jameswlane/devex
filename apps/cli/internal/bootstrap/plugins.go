@@ -2,6 +2,11 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"slices"
+	"text/tabwriter"
+
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +15,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Masterminds/semver/v3"
+	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
@@ -300,257 +308,295 @@ func (b *PluginBootstrap) SetSilent(silent bool) {
 	}
 }
 
-// createPluginManagementCmd creates the plugin management command tree
+// NewPluginManagementCmd registers the management surface before Cobra resolves arguments.
+// Initialization is deferred so help works without network or filesystem access.
+func NewPluginManagementCmd() *cobra.Command {
+	return (&PluginBootstrap{}).createPluginManagementCmd()
+}
+
 func (b *PluginBootstrap) createPluginManagementCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "plugin",
-		Short: "Manage DevEx plugins",
-		Long:  `Install, remove, list, and manage DevEx plugins`,
+		Use: "plugin", Short: "Install, inspect, run, update, and remove DevEx plugins",
+		Example: "  devex plugin list --format json\n  devex plugin install tool-stackdetector\n  devex plugin run tool-stackdetector detect --path .\n  devex plugin update --all",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Preserve the root's configuration setup when overriding its hook.
+			if root := cmd.Root(); root.Name() != "plugin" && root.PersistentPreRunE != nil {
+				if err := root.PersistentPreRunE(cmd, args); err != nil {
+					return err
+				}
+			}
+			if b.manager == nil {
+				initialized, err := NewPluginBootstrap(true)
+				if err != nil {
+					return err
+				}
+				*b = *initialized
+			}
+			if err := cmd.Context().Err(); err != nil {
+				return err
+			}
+			if err := b.manager.DiscoverPluginsWithContext(cmd.Context()); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			return cmd.Context().Err()
+		},
 	}
-
-	// plugin list command
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List installed plugins",
-		RunE:  b.handleListPlugins,
-	}
-
-	// plugin search command
-	searchCmd := &cobra.Command{
-		Use:   "search [query]",
-		Short: "Search available plugins",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  b.handleSearchPlugins,
-	}
-
-	// plugin install command
-	installCmd := &cobra.Command{
-		Use:   "install [plugin-name]",
-		Short: "Install a plugin",
-		Args:  cobra.ExactArgs(1),
-		RunE:  b.handleInstallPlugin,
-	}
-
-	// plugin remove command
-	removeCmd := &cobra.Command{
-		Use:   "remove [plugin-name]",
-		Short: "Remove a plugin",
-		Args:  cobra.ExactArgs(1),
-		RunE:  b.handleRemovePlugin,
-	}
-
-	// plugin update command
-	updateCmd := &cobra.Command{
-		Use:   "update [plugin-name]",
-		Short: "Update plugins (or specific plugin)",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  b.handleUpdatePlugins,
-	}
-
-	// plugin info command
-	infoCmd := &cobra.Command{
-		Use:   "info [plugin-name]",
-		Short: "Show plugin information",
-		Args:  cobra.ExactArgs(1),
-		RunE:  b.handlePluginInfo,
-	}
-
-	// plugin registry command
-	registryCmd := &cobra.Command{
-		Use:   "registry",
-		Short: "Show plugin registry configuration",
-		Long: `Show the current plugin registry URL configuration.
-
-The registry URL can be configured via:
-1. Environment variable: DEVEX_PLUGIN_REGISTRY_URL
-2. Config file: ~/.devex/config.yaml (plugin_registry_url key)
-3. Default: https://registry.devex.sh/v1`,
-		RunE: b.handleRegistryInfo,
-	}
-
-	cmd.AddCommand(listCmd, searchCmd, installCmd, removeCmd, updateCmd, infoCmd, registryCmd)
+	list := &cobra.Command{Use: "list", Short: "List installed versions, paths, and registry updates", Args: cobra.NoArgs, RunE: b.handleListPlugins}
+	list.Flags().String("format", "table", "Output format (table, json)")
+	search := &cobra.Command{Use: "search [query]", Short: "Search the plugin registry", Args: cobra.MaximumNArgs(1), RunE: b.handleSearchPlugins}
+	install := &cobra.Command{Use: "install <name>", Short: "Install a checksum-verified plugin", Args: pluginNamesArgs(1), RunE: b.handleInstallPlugin}
+	remove := &cobra.Command{Use: "remove <name>", Short: "Remove an installed plugin and its install record", Args: pluginNamesArgs(1), RunE: b.handleRemovePlugin}
+	remove.Flags().Bool("force", false, "Allow removal of critical package-manager and system-setup plugins")
+	update := &cobra.Command{Use: "update [name...]", Short: "Update named plugins or every installed plugin with --all", Args: func(cmd *cobra.Command, args []string) error {
+		all, _ := cmd.Flags().GetBool("all")
+		if (len(args) == 0) == !all {
+			return fmt.Errorf("specify plugin names or --all, for example: devex plugin update --all")
+		}
+		return pluginNamesArgs(-1)(cmd, args)
+	}, RunE: b.handleUpdatePlugins}
+	update.Flags().Bool("all", false, "Update all installed plugins")
+	info := &cobra.Command{Use: "info <name>", Short: "Show installed plugin metadata and commands", Args: pluginNamesArgs(1), RunE: b.handlePluginInfo}
+	run := &cobra.Command{Use: "run <name> <command> [args...]", Short: "Run an installed plugin command (flags are passed through)", DisableFlagParsing: true, Args: func(cmd *cobra.Command, args []string) error {
+		if err := cobra.MinimumNArgs(2)(cmd, args); err != nil {
+			return err
+		}
+		return validatePluginName(args[0])
+	}, RunE: b.handleRunPlugin}
+	registry := &cobra.Command{Use: "registry", Short: "Show plugin registry configuration", Args: cobra.NoArgs, RunE: b.handleRegistryInfo}
+	cmd.AddCommand(list, search, install, remove, update, info, run, registry)
 	return cmd
 }
 
-// handleListPlugins lists all installed plugins
-func (b *PluginBootstrap) handleListPlugins(cmd *cobra.Command, args []string) error {
-	plugins := b.manager.ListPlugins()
-
-	if len(plugins) == 0 {
-		log.Println("No plugins installed")
-		log.Printf("Platform: %s", b.platform.String())
-		log.Printf("Available package managers: %s", strings.Join(b.platform.PackageManagers, ", "))
-		log.Println("\nRun 'devex plugin search' to find available plugins")
+func pluginNamesArgs(count int) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if count >= 0 {
+			if err := cobra.ExactArgs(count)(cmd, args); err != nil {
+				return err
+			}
+		}
+		for _, name := range args {
+			if err := validatePluginName(name); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
+}
 
-	log.Printf("Platform: %s", b.platform.String())
-	log.Printf("Plugin directory: %s\n", b.manager.GetPluginDir())
-	log.Println("Installed plugins:")
+type installedPlugin struct {
+	Name            string `json:"name"`
+	Version         string `json:"version"`
+	Path            string `json:"path"`
+	LatestVersion   string `json:"latest_version"`
+	UpdateAvailable bool   `json:"update_available"`
+}
 
-	for name, pluginInfo := range plugins {
-		fmt.Printf("📦 %s v%s\n", name, pluginInfo.Version)
-		fmt.Printf("   %s\n", pluginInfo.Description)
-		if len(pluginInfo.Commands) > 0 {
-			fmt.Printf("   Commands: %s\n", strings.Join(getCommandNames(pluginInfo.Commands), ", "))
-		}
-		fmt.Println()
+func (b *PluginBootstrap) handleListPlugins(cmd *cobra.Command, args []string) error {
+	format, _ := cmd.Flags().GetString("format")
+	if format != "table" && format != "json" {
+		return fmt.Errorf("invalid format %q: use table or json", format)
 	}
+	installed := b.manager.ListPluginsWithContext(cmd.Context())
+	latest := map[string]sdk.PluginMetadata{}
+	if !viper.GetBool("offline") && len(installed) > 0 {
+		var err error
+		latest, err = b.downloader.GetAvailablePlugins(cmd.Context())
+		if err != nil {
+			if cmd.Context().Err() != nil {
+				return cmd.Context().Err()
+			}
+			cmd.PrintErrf("Warning: latest registry versions unavailable: %v\n", err)
+		}
+	}
+	rows := make([]installedPlugin, 0, len(installed))
+	for _, name := range sortedPluginNames(installed) {
+		metadata := installed[name]
+		row := installedPlugin{Name: name, Version: metadata.Version, Path: metadata.Path, LatestVersion: "unknown"}
+		if remote, ok := latest[name]; ok {
+			row.LatestVersion = remote.Version
+			localVersion, localErr := semver.NewVersion(metadata.Version)
+			remoteVersion, remoteErr := semver.NewVersion(remote.Version)
+			row.UpdateAvailable = localErr == nil && remoteErr == nil && remoteVersion.GreaterThan(localVersion)
+		}
+		rows = append(rows, row)
+	}
+	if format == "json" {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(rows)
+	}
+	if len(rows) == 0 {
+		cmd.Println("No plugins installed. Run 'devex plugin search' to find plugins.")
+		return nil
+	}
+	writer := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(writer, "NAME\tVERSION\tLATEST\tSTATUS\tPATH")
+	for _, row := range rows {
+		status := ""
+		if row.UpdateAvailable {
+			status = "update available"
+		}
+		_, _ = fmt.Fprintf(writer, "%s\t%s\t%s\t%s\t%s\n", row.Name, row.Version, row.LatestVersion, status, row.Path)
+	}
+	return writer.Flush()
+}
 
+func sortedPluginNames(plugins map[string]sdk.PluginMetadata) []string {
+	names := make([]string, 0, len(plugins))
+	for name := range plugins {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func requirePluginNetwork() error {
+	if viper.GetBool("offline") {
+		return fmt.Errorf("registry access is disabled by --offline; retry without offline mode")
+	}
 	return nil
 }
 
-// handleSearchPlugins searches for available plugins
 func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
+	if err := requirePluginNetwork(); err != nil {
+		return err
+	}
 	query := ""
 	if len(args) > 0 {
 		query = args[0]
 	}
-
-	var results map[string]sdk.PluginMetadata
-	var err error
-
-	if query == "" {
-		results, err = b.downloader.GetAvailablePlugins(ctx)
-	} else {
-		results, err = b.downloader.SearchPlugins(ctx, query)
-	}
-
+	results, err := b.downloader.SearchPlugins(cmd.Context(), query)
 	if err != nil {
-		return fmt.Errorf("failed to search plugins: %w", err)
+		return fmt.Errorf("search plugin registry (check DEVEX_PLUGIN_REGISTRY_URL and your connection): %w", err)
 	}
-
 	if len(results) == 0 {
-		if query == "" {
-			fmt.Println("No plugins available")
-		} else {
-			fmt.Printf("No plugins found for query: %s\n", query)
-		}
-		return nil
+		cmd.Printf("No plugins found for query: %s\n", query)
 	}
-
-	fmt.Printf("Available plugins:\n\n")
-	for name, metadata := range results {
-		fmt.Printf("📦 %s v%s\n", name, metadata.Version)
-		fmt.Printf("   %s\n", metadata.Description)
-		if len(metadata.Tags) > 0 {
-			fmt.Printf("   Tags: %s\n", strings.Join(metadata.Tags, ", "))
-		}
-
-		// Check if available for current platform
-		platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
-		_, platformSupported := metadata.Binaries[platformKey]
-		if platformSupported {
-			fmt.Printf("   ✅ Available for your platform\n")
-		} else {
-			fmt.Printf("   ❌ Not available for your platform (%s)\n", runtime.GOOS)
-		}
-		fmt.Println()
+	for _, name := range sortedPluginNames(results) {
+		metadata := results[name]
+		key := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
+		_, supported := metadata.Binaries[key]
+		cmd.Printf("%s %s — %s (available for %s: %t)\n", name, metadata.Version, metadata.Description, key, supported)
 	}
-
 	return nil
 }
 
-// handleInstallPlugin installs a specific plugin
 func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-	pluginName := args[0]
-
-	if err := b.downloader.DownloadPluginWithContext(ctx, pluginName); err != nil {
-		return fmt.Errorf("failed to install plugin: %w", err)
+	if err := requirePluginNetwork(); err != nil {
+		return err
 	}
-
-	// Reload plugins
-	if err := b.manager.DiscoverPluginsWithContext(ctx); err != nil {
-		fmt.Printf("Warning: failed to reload plugins: %v\n", err)
+	if err := b.downloader.DownloadValidatedPluginWithContext(cmd.Context(), args[0]); err != nil {
+		return fmt.Errorf("install plugin %s: %w", args[0], err)
 	}
-
-	fmt.Printf("Plugin %s installed successfully!\n", pluginName)
-	fmt.Println("Restart devex or run 'devex plugin list' to see new commands")
+	if err := b.manager.DiscoverPluginsWithContext(cmd.Context()); err != nil {
+		return err
+	}
+	cmd.Printf("Plugin %s installed successfully. Run 'devex plugin info %s' for commands.\n", args[0], args[0])
 	return nil
 }
 
-// handleRemovePlugin removes a specific plugin
+func (b *PluginBootstrap) installed(cmd *cobra.Command, name string) (sdk.PluginMetadata, error) {
+	metadata, ok := b.manager.ListPluginsWithContext(cmd.Context())[name]
+	if !ok {
+		return metadata, fmt.Errorf("plugin %s is not installed; run 'devex plugin install %s'", name, name)
+	}
+	return metadata, nil
+}
+
+func (b *PluginBootstrap) handleRunPlugin(cmd *cobra.Command, args []string) error {
+	metadata, err := b.installed(cmd, args[0])
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(getCommandNames(metadata.Commands), args[1]) {
+		return fmt.Errorf("unknown command %q for plugin %s; run 'devex plugin info %s' for available commands", args[1], args[0], args[0])
+	}
+	return b.manager.ExecutePluginWithIO(cmd.Context(), args[0], args[1:], sdk.OperationIO{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()})
+}
+
 func (b *PluginBootstrap) handleRemovePlugin(cmd *cobra.Command, args []string) error {
-	pluginName := args[0]
-
-	plugins := b.manager.ListPlugins()
-	pluginInfo, exists := plugins[pluginName]
-	if !exists {
-		return fmt.Errorf("plugin %s is not installed", pluginName)
+	metadata, err := b.installed(cmd, args[0])
+	if err != nil {
+		return err
 	}
-
-	if err := os.Remove(pluginInfo.Path); err != nil {
-		return fmt.Errorf("failed to remove plugin: %w", err)
+	affected := "devex plugin run " + args[0] + " {" + strings.Join(getCommandNames(metadata.Commands), ", ") + "}"
+	critical := strings.HasPrefix(args[0], "package-manager-") || args[0] == "system-setup"
+	if critical {
+		affected += "; devex install, uninstall, setup, and maintain may require this plugin"
 	}
-
-	fmt.Printf("Plugin %s removed successfully\n", pluginName)
+	force, _ := cmd.Flags().GetBool("force")
+	if critical && !force {
+		return fmt.Errorf("refusing to remove critical plugin %s without --force; commands that will stop working: %s", args[0], affected)
+	}
+	// Root confines cleanup to the plugin directory, including sidecar paths.
+	root, err := os.OpenRoot(b.manager.GetPluginDir())
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	if err := root.Remove(filepath.Base(metadata.Path)); err != nil {
+		return fmt.Errorf("remove plugin binary: %w", err)
+	}
+	if err := root.Remove(".devex-plugin-" + args[0] + ".install.json"); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("binary removed but install record cleanup failed: %w", err)
+	}
+	if err := b.manager.DiscoverPluginsWithContext(cmd.Context()); err != nil {
+		return err
+	}
+	cmd.Printf("Removed %s. Commands that will stop working: %s\n", args[0], affected)
 	return nil
 }
 
-// handleUpdatePlugins updates plugins
 func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-	if len(args) == 0 {
-		// Update all plugins
-		return b.updateAllPlugins(ctx)
+	if err := requirePluginNetwork(); err != nil {
+		return err
 	}
-
-	// Update specific plugin
-	pluginName := args[0]
-	return b.downloader.DownloadPluginWithContext(ctx, pluginName)
-}
-
-// handlePluginInfo shows information about a specific plugin
-func (b *PluginBootstrap) handlePluginInfo(cmd *cobra.Command, args []string) error {
-	pluginName := args[0]
-
-	plugins := b.manager.ListPlugins()
-	pluginInfo, exists := plugins[pluginName]
-	if !exists {
-		return fmt.Errorf("plugin %s is not installed", pluginName)
+	plugins := b.manager.ListPluginsWithContext(cmd.Context())
+	all, _ := cmd.Flags().GetBool("all")
+	if all {
+		args = sortedPluginNames(plugins)
 	}
-
-	fmt.Printf("Plugin: %s\n", pluginInfo.Name)
-	fmt.Printf("Version: %s\n", pluginInfo.Version)
-	fmt.Printf("Description: %s\n", pluginInfo.Description)
-	fmt.Printf("Path: %s\n", pluginInfo.Path)
-	fmt.Printf("Commands:\n")
-
-	for _, pluginCmd := range pluginInfo.Commands {
-		fmt.Printf("  %s - %s\n", pluginCmd.Name, pluginCmd.Description)
-	}
-
-	return nil
-}
-
-// updateAllPlugins updates all installed plugins
-func (b *PluginBootstrap) updateAllPlugins(ctx context.Context) error {
-	plugins := b.manager.ListPluginsWithContext(ctx)
-
-	if len(plugins) == 0 {
-		fmt.Println("No plugins installed to update")
-		return nil
-	}
-
-	fmt.Printf("Updating %d plugins...\n", len(plugins))
-
-	for name := range plugins {
-		if err := b.downloader.DownloadPluginWithContext(ctx, name); err != nil {
-			fmt.Printf("Warning: failed to update plugin %s: %v\n", name, err)
+	// Validate the entire selection before starting downloads.
+	for _, name := range args {
+		if _, err := b.installed(cmd, name); err != nil {
+			return err
 		}
 	}
+	if len(args) == 0 {
+		cmd.Println("No plugins installed to update")
+		return nil
+	}
+	var failures []error
+	for _, name := range args {
+		if err := cmd.Context().Err(); err != nil {
+			return err
+		}
+		if err := b.downloader.DownloadValidatedPluginWithContext(cmd.Context(), name); err != nil {
+			failures = append(failures, fmt.Errorf("update plugin %s: %w", name, err))
+			continue
+		}
+		cmd.Printf("Updated %s\n", name)
+	}
+	if err := b.manager.DiscoverPluginsWithContext(cmd.Context()); err != nil {
+		failures = append(failures, err)
+	}
+	return errors.Join(failures...)
+}
 
-	fmt.Println("Plugin update complete!")
+func (b *PluginBootstrap) handlePluginInfo(cmd *cobra.Command, args []string) error {
+	metadata, err := b.installed(cmd, args[0])
+	if err != nil {
+		return err
+	}
+	cmd.Printf("Plugin: %s\nVersion: %s\nDescription: %s\nPath: %s\nCommands:\n", args[0], metadata.Version, metadata.Description, metadata.Path)
+	for _, command := range metadata.Commands {
+		cmd.Printf("  %s - %s\n", command.Name, command.Description)
+	}
 	return nil
 }
 
-// getCommandNames extracts command names from PluginCommand slice
 func getCommandNames(commands []sdk.PluginCommand) []string {
 	names := make([]string, len(commands))
-	for i, cmd := range commands {
-		names[i] = cmd.Name
+	for i, command := range commands {
+		names[i] = command.Name
 	}
 	return names
 }
@@ -564,36 +610,36 @@ var validPluginNameRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`
 func (b *PluginBootstrap) handleRegistryInfo(cmd *cobra.Command, args []string) error {
 	registryURL := GetRegistryURL()
 
-	fmt.Println("Plugin Registry Configuration")
-	fmt.Println("=============================")
-	fmt.Printf("Current URL: %s\n\n", registryURL)
+	cmd.Println("Plugin Registry Configuration")
+	cmd.Println("=============================")
+	cmd.Printf("Current URL: %s\n\n", registryURL)
 
 	// Check environment variable
 	if envURL := os.Getenv("DEVEX_PLUGIN_REGISTRY_URL"); envURL != "" {
-		fmt.Printf("✓ Environment variable set: DEVEX_PLUGIN_REGISTRY_URL=%s\n", envURL)
+		cmd.Printf("✓ Environment variable set: DEVEX_PLUGIN_REGISTRY_URL=%s\n", envURL)
 	} else {
-		fmt.Println("✗ Environment variable not set: DEVEX_PLUGIN_REGISTRY_URL")
+		cmd.Println("✗ Environment variable not set: DEVEX_PLUGIN_REGISTRY_URL")
 	}
 
 	// Check config file
 	homeDir, _ := os.UserHomeDir()
 	configPath := filepath.Join(homeDir, ".devex", "config.yaml")
 	if configURL := getRegistryURLFromConfig(); configURL != "" {
-		fmt.Printf("✓ Config file setting: %s\n", configURL)
-		fmt.Printf("  Location: %s\n", configPath)
+		cmd.Printf("✓ Config file setting: %s\n", configURL)
+		cmd.Printf("  Location: %s\n", configPath)
 	} else {
-		fmt.Printf("✗ No registry URL in config file: %s\n", configPath)
+		cmd.Printf("✗ No registry URL in config file: %s\n", configPath)
 	}
 
 	// Show default
-	fmt.Printf("\nDefault URL: %s\n", DefaultRegistryURL)
+	cmd.Printf("\nDefault URL: %s\n", DefaultRegistryURL)
 
 	// Show example configuration
-	fmt.Println("\nTo use a custom registry:")
-	fmt.Println("1. Set environment variable:")
-	fmt.Println("   export DEVEX_PLUGIN_REGISTRY_URL=https://your-registry.com/v1")
-	fmt.Println("\n2. Or add to config file (~/.devex/config.yaml):")
-	fmt.Println("   plugin_registry_url: https://your-registry.com/v1")
+	cmd.Println("\nTo use a custom registry:")
+	cmd.Println("1. Set environment variable:")
+	cmd.Println("   export DEVEX_PLUGIN_REGISTRY_URL=https://your-registry.com/v1")
+	cmd.Println("\n2. Or add to config file (~/.devex/config.yaml):")
+	cmd.Println("   plugin_registry_url: https://your-registry.com/v1")
 
 	return nil
 }

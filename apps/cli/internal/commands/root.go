@@ -75,6 +75,11 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 			// Install resolves applications before initializing plugins so invalid input
 			// fails without downloads; bare devex and setup own their setup flow.
 			cmdName := cmd.Name()
+			for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
+				if parent.Name() == "plugin" {
+					return nil
+				}
+			}
 			if cmd.Parent() == nil || (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
 				log.Debug("Deferring plugin initialization to command", "command", cmdName)
 				return nil
@@ -123,6 +128,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
+	cmd.AddCommand(bootstrap.NewPluginManagementCmd())
 	cmd.SetHelpCommand(NewHelpCmd(repo, settings))
 
 	// Define persistent flags (available to all subcommands)
@@ -289,10 +295,6 @@ func (r *rootRuntime) initializePluginSystem(ctx context.Context) error {
 	}
 
 	installers.InitializeWithPluginBootstrap(r.pluginBootstrap)
-
-	// TODO: Register plugin commands with root command
-	// This would need to be done differently since we're inside NewRootCmd
-	// For now, plugins will be accessed via the plugin subcommand
 
 	// Show platform info in verbose mode
 	if viper.GetBool("verbose") {

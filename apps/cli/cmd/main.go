@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -60,7 +64,8 @@ func main() {
 	}
 
 	// Validate dependencies quietly; report failures on stderr since logs go to a file
-	ctx := context.Background()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
 		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
 	}
@@ -87,13 +92,13 @@ func main() {
 	rootCmd := commands.NewRootCmd(version, repo, crossPlatformSettings)
 
 	// Execute the command (fixed: removed duplicate execution)
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		// Cobra already printed the error and usage hint to stderr; keep this record file-only.
 		log.ErrorToFile("Error executing root command", err)
 		if closeErr := log.Close(); closeErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", closeErr)
 		}
-		Exit(1)
+		Exit(exitCode(err))
 	}
 
 	// Close the log file if it was opened
@@ -129,15 +134,24 @@ func handleError(context string, err error) {
 	if err != nil {
 		log.Error("Error occurred", err, "context", context)
 		closeErr := log.Close()
-		_, err := fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
-		if err != nil {
+		_, writeErr := fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
+		if writeErr != nil {
 			return
 		}
 		if closeErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", closeErr)
 		}
-		Exit(1)
+		Exit(exitCode(err))
 	}
+}
+
+// exitCode preserves a plugin process exit status at the CLI boundary.
+func exitCode(err error) int {
+	var childExit *exec.ExitError
+	if errors.As(err, &childExit) && childExit.ExitCode() > 0 {
+		return childExit.ExitCode()
+	}
+	return 1
 }
 
 func initializeDatabase(homeDir string) types.Repository {
