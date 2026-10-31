@@ -1,0 +1,12 @@
+version: '3'
+tasks:
+  build:
+    desc: Build {{.PLUGIN_NAME}} for all supported platforms
+    cmds:
+      - mkdir -p dist
+      - for: {var: BUILD_PLATFORMS}
+        cmd: |
+          GOOS={{index (splitList "/" .ITEM) 0}} \
+          GOARCH={{index (splitList "/" .ITEM) 1}} \
+          go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
+            -o dist/{{.PLUGIN_NAME}}-{{replace "/" "-" .ITEM}}{{if hasPrefix "windows/" .ITEM}}.exe{{end}} .

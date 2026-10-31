@@ -1,17 +1,13 @@
 version: '3'
 vars:
   PLUGIN_NAME: devex-plugin-package-manager-dnf
+  BUILD_PLATFORMS: >-
+    linux/amd64 linux/arm64
+includes:
+  plugin:
+    taskfile: ../Taskfile.plugin.yml
+    flatten: true
 tasks:
-  build:
-    desc: Build package-manager-dnf plugin for all platforms
-    cmds:
-      - mkdir -p dist
-      - |
-        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
-        -o dist/devex-plugin-package-manager-dnf-linux-amd64 .
-      - |
-        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
-        -o dist/devex-plugin-package-manager-dnf-linux-arm64 .
   test:
     desc: Run tests
     cmds:

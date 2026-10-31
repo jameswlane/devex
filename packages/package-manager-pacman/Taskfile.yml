@@ -1,17 +1,13 @@
 version: '3'
 vars:
   PLUGIN_NAME: devex-plugin-package-manager-pacman
+  BUILD_PLATFORMS: >-
+    linux/amd64 linux/arm64
+includes:
+  plugin:
+    taskfile: ../Taskfile.plugin.yml
+    flatten: true
 tasks:
-  build:
-    desc: Build package-manager-pacman plugin for all platforms
-    cmds:
-      - mkdir -p dist
-      - |
-        GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
-        -o dist/devex-plugin-package-manager-pacman-linux-amd64 .
-      - |
-        GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default "dev"}}" \
-        -o dist/devex-plugin-package-manager-pacman-linux-arm64 .
   test:
     desc: Run tests
     cmds:

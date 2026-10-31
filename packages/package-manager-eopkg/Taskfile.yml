@@ -1,11 +1,13 @@
 version: '3'
 vars:
   PLUGIN_NAME: devex-plugin-package-manager-eopkg
+  BUILD_PLATFORMS: >-
+    linux/amd64 linux/arm64
+includes:
+  plugin:
+    taskfile: ../Taskfile.plugin.yml
+    flatten: true
 tasks:
-  build:
-    desc: Build package-manager-eopkg plugin for all platforms
-    cmds:
-      - mkdir -p dist\n      - GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version={{.VERSION | default \"dev\"}}" -o dist/devex-plugin-package-manager-eopkg-linux-amd64 .\n      - GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version={{.VERSION | default \"dev\"}}" -o dist/devex-plugin-package-manager-eopkg-linux-arm64 .
   test:
     desc: Run tests
     cmds:
