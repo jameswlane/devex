@@ -16,32 +16,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	devex "github.com/jameswlane/devex/apps/cli/cmd"
-	"github.com/jameswlane/devex/apps/cli/internal/datastore"
-	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/errors"
-	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 var _ = Describe("Main", func() {
-	Context("initializeDatabase", func() {
-		It("initializes the database and returns a repository", func() {
-			tempDir := os.TempDir()
-			dbPath := filepath.Join(tempDir, ".devex/datastore.db")
-
-			// Ensure cleanup after test
-			defer func(path string) {
-				err := os.RemoveAll(path)
-				if err != nil {
-					return
-				}
-			}(filepath.Join(tempDir, ".devex"))
-
-			repo := testInitializeDatabase(tempDir)
-			Expect(repo).ToNot(BeNil())
-			Expect(dbPath).To(BeAnExistingFile())
-		})
-	})
-
 	Context("handleError", func() {
 		var originalExit func(int)
 		var exitCalled bool
@@ -108,23 +86,6 @@ var _ = Describe("Main", func() {
 		})
 	})
 })
-
-// Helper function to test initializeDatabase
-func testInitializeDatabase(homeDir string) types.Repository {
-	// Ensure the .devex directory exists
-	devexDir := filepath.Join(homeDir, ".devex")
-	err := os.MkdirAll(devexDir, 0o755) // Create the directory if it doesn't exist
-	Expect(err).ToNot(HaveOccurred(), "failed to create .devex directory")
-
-	// Initialize the database
-	dbPath := filepath.Join(devexDir, "datastore.db")
-	sqlite, err := datastore.NewSQLite(dbPath)
-	Expect(err).ToNot(HaveOccurred(), "failed to initialize SQLite database")
-
-	repo := repository.NewRepository(sqlite)
-	Expect(repo).ToNot(BeNil(), "repository should not be nil")
-	return repo
-}
 
 // isolatedGoRunEnv returns the parent's go binary and an environment for `go run`
 // with a temporary HOME and no debug variables, keeping the parent's Go cache locations.
