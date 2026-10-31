@@ -2,10 +2,6 @@
 
 [![License](https://img.shields.io/github/license/jameswlane/devex)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/jameswlane/devex)](https://github.com/jameswlane/devex/releases)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/cli-ci.yml?label=CLI%20Build)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/plugins-ci.yml?label=Plugins%20Build)
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jameswlane/devex/sdk-ci.yml?label=SDK%20Build)
-
 
 DevEx is a powerful, enterprise-grade CLI tool designed to streamline the setup and management of development environments across Linux, macOS, and Windows. With support for 36+ package managers and desktop environments, DevEx automates application installation, system configuration, and development workflow setup.
 
