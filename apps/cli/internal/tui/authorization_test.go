@@ -64,16 +64,19 @@ var _ = Describe("Noninteractive installer authorization", func() {
 	})
 	It("never prompts when a catalog pipeline invokes sudo", func() {
 		bash, err := exec.LookPath("bash")
-		// The recorder deliberately isolates PATH; use the host shell explicitly.
+		// The recorder deliberately isolates PATH; append the host shell's directory
+		// so the recorded fake sudo still wins over a real (possibly passwordless) one.
 		if err != nil {
 			bash = "/bin/bash"
 		}
-		GinkgoT().Setenv("PATH", filepath.Dir(bash)+string(os.PathListSeparator)+os.Getenv("PATH"))
+		GinkgoT().Setenv("PATH", os.Getenv("PATH")+string(os.PathListSeparator)+filepath.Dir(bash))
 		recorder.Script("sudo", []string{"-n", "-n", "apt-get", "update"}, sdktest.Response{ExitCode: 1})
 		recorder.Script("sudo", []string{"-n", "apt-get", "update"}, sdktest.Response{ExitCode: 1})
 		recorder.Script("sudo", []string{"-n", "-v"}, sdktest.Response{ExitCode: 1})
 		err = installer.executeCommandStream(context.Background(), "echo ready | sudo apt-get update")
 		Expect(err).To(MatchError(ContainSubstring("sudo authorization expired")))
+		// The recorded fake, not the host's sudo, must have handled the pipeline.
+		Expect(recorder.Calls("sudo")).NotTo(BeEmpty())
 		for _, call := range recorder.Calls("sudo") {
 			Expect(call.Args[0]).To(Equal("-n"))
 		}
