@@ -34,8 +34,45 @@ This installer will:
 1. **Download the latest DevEx release** for your platform
 2. **Verify checksums** for security
 3. **Install to** `~/.local/share/devex/`
-4. **Update your PATH** in `~/.bashrc`
+4. **Update your PATH** for your current or explicitly selected shell
 5. **Run the setup** with default configurations
+
+### Shell PATH Configuration
+
+On Linux and macOS, the installer chooses the shell from `$SHELL`, even when you
+pipe the installer into `bash`. It updates only that shell's config: `~/.bashrc`
+for bash, `~/.zshrc` for zsh, or `~/.config/fish/config.fish` for fish. On macOS,
+bash also gets a PATH entry in `~/.bash_profile` for login shells. Existing config
+files for other shells stay unchanged, and their config directories are never
+created. Reinstalling does not add duplicate PATH entries.
+
+Choose a different shell with `--shell bash|zsh|fish` or `DEVEX_SHELL`.
+The flag takes precedence over the environment variable, which takes precedence
+over `$SHELL`:
+
+```bash
+curl -fsSL https://get.devex.sh/install | bash -s -- --shell zsh --no-setup
+curl -fsSL https://get.devex.sh/install | DEVEX_SHELL=fish bash -s -- --no-setup
+```
+
+The installer prints every file it changes or finds already configured. If
+`$SHELL` is unset or unsupported, it installs the binary without changing any
+shell config and prints instructions to select a shell or configure PATH manually.
+Invalid explicit shell selections fail before installation.
+
+To add DevEx to another shell manually, add the matching line to that shell's
+config and restart the shell. Use your chosen install directory if you passed
+`--install-dir`:
+
+```bash
+# Bash: ~/.bashrc (also ~/.bash_profile on macOS); zsh: ~/.zshrc
+export PATH="$PATH:$HOME/.local/share/devex/bin"
+```
+
+```fish
+# Fish: ~/.config/fish/config.fish
+set -gx PATH $PATH "$HOME/.local/share/devex/bin"
+```
 
 ### What Gets Installed
 
