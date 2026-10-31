@@ -3,7 +3,10 @@ package bootstrap_test
 import (
 	"context"
 	"os"
+	"os/user"
 	"path/filepath"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -34,6 +37,16 @@ var _ = Describe("PluginBootstrap", func() {
 			os.RemoveAll(tempHomeDir)
 		})
 
+		originalResolver := sdk.NewPrivilegeResolver
+		resolver := originalResolver()
+		resolver.Elevated = false
+		account, err := resolver.CurrentUser()
+		Expect(err).NotTo(HaveOccurred())
+		copyAccount := *account
+		copyAccount.HomeDir = tempHomeDir
+		resolver.CurrentUser = func() (*user.User, error) { return &copyAccount, nil }
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+		DeferCleanup(func() { sdk.NewPrivilegeResolver = originalResolver })
 		ctx = context.Background()
 	})
 
@@ -71,6 +84,41 @@ var _ = Describe("PluginBootstrap", func() {
 	})
 
 	Describe("NewPluginBootstrap", func() {
+		It("uses an overridden HOME for the current non-elevated account", func() {
+			resolver := sdk.NewPrivilegeResolver()
+			account, err := resolver.CurrentUser()
+			Expect(err).NotTo(HaveOccurred())
+			copyAccount := *account
+			copyAccount.HomeDir = "/unused-account-home"
+			resolver.CurrentUser = func() (*user.User, error) { return &copyAccount, nil }
+			sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+			b, err := bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(b.GetManager().GetPluginDir()).To(Equal(filepath.Join(tempHomeDir, ".devex", "plugins")))
+			Expect(b.GetManager().GetPluginDir()).To(BeADirectory())
+		})
+		It("uses the original account home under sudo and prepares user-owned storage", func() {
+			resolver := sdk.NewPrivilegeResolver()
+			account, err := resolver.CurrentUser()
+			Expect(err).NotTo(HaveOccurred())
+			resolver.Elevated = true
+			resolver.CurrentUser = func() (*user.User, error) {
+				return &user.User{Username: "root", Uid: "0", Gid: "0", HomeDir: "/root"}, nil
+			}
+			resolver.LookupUser = func(string) (*user.User, error) { return account, nil }
+			resolver.Getenv = func(key string) string {
+				if key == "SUDO_USER" {
+					return account.Username
+				}
+				return ""
+			}
+			sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+			GinkgoT().Setenv("HOME", "/root")
+			b, err := bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(b.GetManager().GetPluginDir()).To(Equal(filepath.Join(tempHomeDir, ".devex", "plugins")))
+			Expect(b.GetManager().GetPluginDir()).To(BeADirectory())
+		})
 		Context("when skipDownload is false", func() {
 			It("should create bootstrap instance with download enabled", func() {
 				bootstrap, err := bootstrap.NewPluginBootstrap(false)
@@ -93,7 +141,14 @@ var _ = Describe("PluginBootstrap", func() {
 
 		Context("when home directory is not accessible", func() {
 			BeforeEach(func() {
-				os.Setenv("HOME", "/nonexistent/directory")
+				GinkgoT().Setenv("HOME", "/nonexistent/directory")
+				resolver := sdk.NewPrivilegeResolver()
+				account, err := resolver.CurrentUser()
+				Expect(err).NotTo(HaveOccurred())
+				copyAccount := *account
+				copyAccount.HomeDir = "/nonexistent/directory"
+				resolver.CurrentUser = func() (*user.User, error) { return &copyAccount, nil }
+				sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
 			})
 
 			It("should return an error", func() {

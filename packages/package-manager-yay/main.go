@@ -30,26 +30,31 @@ func NewYayPlugin() *YayPlugin {
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Install packages using Yay",
 				Usage:       "Install one or more packages with dependency resolution",
 			},
 			{
 				Name:        "remove",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Remove packages using Yay",
 				Usage:       "Remove one or more packages from the system",
 			},
 			{
 				Name:        "update",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Update package repositories",
 				Usage:       "Update package repository information",
 			},
 			{
 				Name:        "search",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "Search for packages",
 				Usage:       "Search for packages by name or description",
 			},
 			{
 				Name:        "list",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
 				Description: "List packages",
 				Usage:       "List installed packages",
 			},
@@ -92,7 +97,7 @@ func (p *YayPlugin) handleInstall(ctx context.Context, args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "yay", cmdArgs...)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", cmdArgs...)
 }
 
 func (p *YayPlugin) handleRemove(ctx context.Context, args []string) error {
@@ -103,12 +108,12 @@ func (p *YayPlugin) handleRemove(ctx context.Context, args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "yay", cmdArgs...)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", cmdArgs...)
 }
 
 func (p *YayPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "yay", "update")
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", "update")
 }
 
 func (p *YayPlugin) handleSearch(ctx context.Context, args []string) error {
@@ -119,11 +124,11 @@ func (p *YayPlugin) handleSearch(ctx context.Context, args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommandWithContext(ctx, false, "yay", "search", searchTerm)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", "search", searchTerm)
 }
 
 func (p *YayPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "yay", "list")
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", "list")
 }
 
 func main() {

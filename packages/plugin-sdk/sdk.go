@@ -261,10 +261,11 @@ type PluginInfo struct {
 
 // PluginCommand represents a command provided by a plugin
 type PluginCommand struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Usage       string            `json:"usage"`
-	Flags       map[string]string `json:"flags,omitempty"`
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Usage       string              `json:"usage"`
+	Flags       map[string]string   `json:"flags,omitempty"`
+	Privilege   *OperationPrivilege `json:"privilege,omitempty"`
 }
 
 // Plugin interface for implementing plugins
@@ -356,21 +357,20 @@ func RequireSudo() bool {
 	return CommandExists("sudo") && os.Getuid() != 0
 }
 
-// ExecCommandWithContext executes a command with context support for cancellation
+// ExecCommandWithContext executes a legacy command.
+// Deprecated: use ExecOperationWithContext with explicit scope. False retains
+// historical current-process behavior for plugins that have not migrated.
 func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args ...string) error {
-	var cmd *exec.Cmd
-
-	if useSudo && RequireSudo() {
-		cmdArgs := append([]string{name}, args...)
-		cmd = exec.CommandContext(ctx, "sudo", cmdArgs...)
-	} else {
-		cmd = exec.CommandContext(ctx, name, args...)
+	if useSudo && !NewPrivilegeResolver().Elevated {
+		sudo, err := exec.LookPath("sudo")
+		if err != nil {
+			return authorizationRequired("sudo is unavailable; install sudo or configure a scoped platform adapter", err)
+		}
+		args = append([]string{"--", name}, args...)
+		name = sudo
 	}
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	return cmd.Run()
 }
 
@@ -524,8 +524,12 @@ func HandleArgs(plugin Plugin, args []string) {
 		fmt.Print(string(output))
 	default:
 		if err := plugin.Execute(command, args[1:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			writeExecutionError(os.Stderr, err)
+			status := ExitStatus(err)
+			if status < 0 {
+				status = 1
+			}
+			os.Exit(status)
 		}
 	}
 }
@@ -577,6 +581,8 @@ type PlatformBinary struct {
 
 // Downloader handles secure plugin downloading from registry with verification
 type Downloader struct {
+	installOwner     *UserIdentity
+	chown            func(string, int, int) error
 	registryURL      string
 	pluginDir        string
 	cacheDir         string
@@ -706,7 +712,7 @@ func (d *Downloader) DownloadPluginWithContext(ctx context.Context, pluginName s
 	}
 
 	// Ensure plugin directory exists
-	if err := os.MkdirAll(d.pluginDir, 0755); err != nil {
+	if err := d.PrepareInstallDirectory(); err != nil {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
 
@@ -905,17 +911,18 @@ func (d *Downloader) loadCachedRegistry() *PluginRegistry {
 
 // cacheRegistry saves registry to cache
 func (d *Downloader) cacheRegistry(registry *PluginRegistry) {
-	if err := os.MkdirAll(d.cacheDir, 0755); err != nil {
-		return // Ignore cache errors
+	root, err := d.openInstallStorage(true)
+	if err != nil {
+		return
 	}
-
-	cachePath := filepath.Join(d.cacheDir, "registry.json")
+	defer func() { _ = root.Close() }()
 	data, err := json.MarshalIndent(registry, "", "  ")
 	if err != nil {
 		return
 	}
-
-	_ = os.WriteFile(cachePath, data, 0644) // Ignore cache write errors
+	_ = atomicStorageWrite(root, "registry.json", data, 0644, func(file *os.File) error {
+		return d.ownInstallFile(file, filepath.Join(d.cacheDir, "registry.json"))
+	}) // Registry cache remains best effort.
 }
 
 // Cross-process locking is omitted because the standard library has no portable flock API.
@@ -933,12 +940,21 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	installLock.Lock()
 	defer installLock.Unlock()
 
+	root, err := d.openInstallStorage(false)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	pluginBase := filepath.Base(pluginPath)
+	if err := rejectStorageSymlink(root, pluginBase); err != nil {
+		return err
+	}
 	// Check if the plugin already exists and is up to date
-	if d.isPluginUpToDate(pluginName, pluginPath, binary.Checksum) {
+	if d.isPluginUpToDate(root, pluginName, pluginBase, binary.Checksum) {
 		if d.logger != nil {
 			d.logger.Printf("Plugin %s is already up to date\n", pluginName)
 		}
-		return nil
+		return d.ownExistingInstallFile(root, pluginBase)
 	}
 
 	platformKey := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
@@ -994,22 +1010,18 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	}
 
 	// Download into a unique temp file owned by this invocation
-	payloadFile, err := os.CreateTemp(d.pluginDir, ".devex-plugin-"+pluginName+"-*.download")
+	payloadFile, err := createStorageTemp(root, ".devex-plugin-"+pluginName+"-download-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	payloadPath := payloadFile.Name()
-	defer func() { _ = os.Remove(payloadPath) }()
+	defer func() { _ = payloadFile.Close(); _ = root.Remove(filepath.Base(payloadPath)) }()
 
 	_, copyErr := io.Copy(payloadFile, resp.Body)
-	closeErr := payloadFile.Close()
 	if copyErr != nil {
 		return fmt.Errorf("failed to download plugin: %w", copyErr)
 	}
-	if closeErr != nil {
-		return fmt.Errorf("failed to write downloaded plugin: %w", closeErr)
-	}
-	payloadChecksum, err := fileSHA256(payloadPath)
+	payloadChecksum, err := openFileSHA256(payloadFile)
 	if err != nil {
 		return fmt.Errorf("failed to hash downloaded plugin: %w", err)
 	}
@@ -1029,30 +1041,32 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 	}
 
 	// Release assets may be tar.gz/zip archives or raw binaries; extract the executable
-	binaryFile, err := os.CreateTemp(d.pluginDir, ".devex-plugin-"+pluginName+"-*.bin")
+	binaryFile, err := createStorageTemp(root, ".devex-plugin-"+pluginName+"-bin-")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
 	binaryPath := binaryFile.Name()
-	_ = binaryFile.Close()
-	defer func() { _ = os.Remove(binaryPath) }()
+	defer func() { _ = binaryFile.Close(); _ = root.Remove(filepath.Base(binaryPath)) }()
 
-	format, err := ExtractPluginExecutable(payloadPath, binaryPath, pluginName, runtime.GOOS)
+	format, err := extractPluginExecutableTo(payloadFile, binaryFile, pluginName, runtime.GOOS)
 	if err != nil {
 		return fmt.Errorf("failed to unpack plugin %s: %w", pluginName, err)
 	}
 
-	binaryChecksum, err := fileSHA256(binaryPath)
+	binaryChecksum, err := openFileSHA256(binaryFile)
 	if err != nil {
 		return fmt.Errorf("failed to hash plugin executable: %w", err)
 	}
 
 	// Make executable and move to final location
-	if err := os.Chmod(binaryPath, 0755); err != nil { // #nosec G302 - plugin must be executable
+	if err := binaryFile.Chmod(0755); err != nil { // #nosec G302 - plugin must be executable
 		return fmt.Errorf("failed to make plugin executable: %w", err)
 	}
 
-	if err := os.Rename(binaryPath, pluginPath); err != nil {
+	if err := d.ownInstallFile(binaryFile, filepath.Join(d.pluginDir, filepath.Base(binaryPath))); err != nil {
+		return err
+	}
+	if err := publishStorageFile(root, binaryFile, pluginBase); err != nil {
 		return fmt.Errorf("failed to move plugin to final location: %w", err)
 	}
 
@@ -1064,8 +1078,15 @@ func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName str
 		BinaryChecksum:  binaryChecksum,
 		InstalledAt:     time.Now().UTC(),
 	}
-	if err := writeInstallRecord(d.pluginDir, record); err != nil && d.logger != nil {
-		d.logger.Warning("Failed to record install of plugin %s: %v", pluginName, err)
+	if err := writeInstallRecordTo(root, record, func(file *os.File) error {
+		return d.ownInstallFile(file, installRecordPath(d.pluginDir, pluginName))
+	}); err != nil {
+		if d.installOwner != nil {
+			return err
+		}
+		if d.logger != nil {
+			d.logger.Warning("Failed to record install of plugin %s: %v", pluginName, err)
+		}
 	}
 
 	if d.logger != nil {
@@ -1098,23 +1119,30 @@ func (d *Downloader) validatePluginBinary(pluginName string, binary PlatformBina
 // The registry checksum describes the downloaded payload (often an archive), so the install
 // record is used to map it to the extracted executable. Installed files that are archives
 // (written by older SDK versions that skipped extraction) are never considered up to date.
-func (d *Downloader) isPluginUpToDate(pluginName, pluginPath, expectedChecksum string) bool {
+func (d *Downloader) isPluginUpToDate(root *os.Root, pluginName, pluginBase, expectedChecksum string) bool {
 	if !d.verifyChecksums || expectedChecksum == "" {
 		return false // Always redownload if checksums are disabled or checksum is empty
 	}
 	expectedChecksum = normalizeChecksum(expectedChecksum)
 
-	format, err := DetectPayloadFormat(pluginPath)
-	if err != nil || format != PayloadFormatBinary {
-		return false
-	}
-
-	actualChecksum, err := fileSHA256(pluginPath)
+	file, err := root.Open(pluginBase)
 	if err != nil {
 		return false
 	}
-
-	if record, err := readInstallRecord(d.pluginDir, pluginName); err == nil {
+	defer func() { _ = file.Close() }()
+	var header [4]byte
+	n, err := file.ReadAt(header[:], 0)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return false
+	}
+	if strings.HasPrefix(string(header[:n]), string(gzipMagic)) || strings.HasPrefix(string(header[:n]), string(zipMagic)) {
+		return false
+	}
+	actualChecksum, err := openFileSHA256(file)
+	if err != nil {
+		return false
+	}
+	if record, err := readInstallRecord(root, pluginName); err == nil {
 		return record.PayloadChecksum == expectedChecksum && record.BinaryChecksum == actualChecksum
 	}
 
@@ -1272,12 +1300,18 @@ func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, plugi
 		return fmt.Errorf("plugin %s is not installed", pluginName)
 	}
 
-	cmd := exec.CommandContext(ctx, pluginInfo.Path, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	return cmd.Run()
+	var diagnostic diagnosticTail
+	streams := OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: io.MultiWriter(os.Stderr, &diagnostic)}
+	var err error
+	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
+		err = RunOperation(ctx, ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args}, streams)
+	} else {
+		err = runPreparedCommand(exec.CommandContext(ctx, pluginInfo.Path, args...), streams)
+	}
+	if err != nil {
+		return decodeExecutionError(diagnostic.String(), err)
+	}
+	return nil
 }
 
 // DiscoverPlugins refreshes the plugin cache and returns directory errors
@@ -1313,31 +1347,45 @@ func (em *ExecutableManager) InstallPlugin(sourcePath, pluginName string) error 
 		pluginPath += ".exe"
 	}
 
-	// Ensure plugin directory exists
-	if err := os.MkdirAll(em.pluginDir, 0755); err != nil {
+	storage := &Downloader{pluginDir: em.pluginDir}
+	resolver := NewPrivilegeResolver()
+	if resolver.Elevated {
+		identity, err := resolver.ResolveUser(nil)
+		if err != nil {
+			return err
+		}
+		if identity.UID != "0" {
+			if err := storage.SetInstallOwner(*identity); err != nil {
+				return err
+			}
+		}
+	}
+	root, err := storage.openInstallStorage(false)
+	if err != nil {
 		return fmt.Errorf("failed to create plugin directory: %w", err)
 	}
-
-	// Copy plugin
+	defer func() { _ = root.Close() }()
 	sourceFile, err := os.Open(sourcePath)
 	if err != nil {
 		return fmt.Errorf("failed to open source plugin: %w", err)
 	}
 	defer func() { _ = sourceFile.Close() }()
-
-	destFile, err := os.Create(pluginPath)
+	destFile, err := createStorageTemp(root, ".devex-install-")
 	if err != nil {
-		return fmt.Errorf("failed to create destination plugin: %w", err)
+		return err
 	}
-	defer func() { _ = destFile.Close() }()
-
+	defer func() { _ = destFile.Close(); _ = root.Remove(filepath.Base(destFile.Name())) }()
 	if _, err := io.Copy(destFile, sourceFile); err != nil {
 		return fmt.Errorf("failed to copy plugin: %w", err)
 	}
-
-	// Make executable
-	if err := os.Chmod(pluginPath, 0755); err != nil {
+	if err := destFile.Chmod(0755); err != nil {
 		return fmt.Errorf("failed to make plugin executable: %w", err)
+	}
+	if err := storage.ownInstallFile(destFile, pluginPath); err != nil {
+		return err
+	}
+	if err := publishStorageFile(root, destFile, filepath.Base(pluginPath)); err != nil {
+		return err
 	}
 
 	// Clear cache to force refresh

@@ -106,13 +106,13 @@ func GetRegistryURL() string {
 
 // getRegistryURLFromConfig attempts to read registry URL from config file
 func getRegistryURLFromConfig() string {
-	homeDir, err := os.UserHomeDir()
+	identity, err := sdk.NewPrivilegeResolver().ResolveUser(nil)
 	if err != nil {
 		return ""
 	}
 
 	// Check for config file
-	configPath := filepath.Join(homeDir, ".devex", "config.yaml")
+	configPath := filepath.Join(identity.HomeDir, ".devex", "config.yaml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return ""
@@ -137,24 +137,19 @@ func getRegistryURLFromConfig() string {
 
 // NewPluginBootstrap creates a new plugin bootstrap instance
 func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
-	homeDir, err := os.UserHomeDir()
+	resolver := sdk.NewPrivilegeResolver()
+	identity, err := resolver.ResolveUser(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user home directory: %w", err)
 	}
 
+	homeDir := identity.HomeDir
 	// Verify the home directory is accessible
 	if _, err := os.Stat(homeDir); err != nil {
 		return nil, fmt.Errorf("failed to get user home directory: home directory not accessible: %w", err)
 	}
 
 	pluginDir := filepath.Join(homeDir, ".devex", "plugins")
-
-	// Create plugin directory if download is enabled (real use case)
-	if !skipDownload {
-		if err := os.MkdirAll(pluginDir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create plugin directory: %w", err)
-		}
-	}
 
 	// Get registry URL with fallback to default
 	registryURL := GetRegistryURL()
@@ -165,6 +160,16 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 	}
 
 	downloader := sdk.NewDownloader(registryURL, pluginDir)
+	if resolver.Elevated && identity.UID != "0" {
+		if err := downloader.SetInstallOwner(*identity); err != nil {
+			return nil, err
+		}
+	}
+	if !skipDownload {
+		if err := downloader.PrepareInstallDirectory(); err != nil {
+			return nil, fmt.Errorf("failed to create plugin directory: %w", err)
+		}
+	}
 
 	// Configure downloader to use CLI logger adapter
 	// In test mode, silence stdout but still log to file
