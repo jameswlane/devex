@@ -263,7 +263,7 @@ func (m *SetupModel) getSelectedShell() string {
 	if m.selections.selectedShell >= 0 && m.selections.selectedShell < len(m.system.shells) {
 		return m.system.shells[m.selections.selectedShell]
 	}
-	return "zsh" // Default fallback
+	return DetectCurrentShell()
 }
 
 // getSelectedTheme returns the currently selected theme or empty string

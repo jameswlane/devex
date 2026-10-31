@@ -220,6 +220,9 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 		}
 	}
 
+	shells := SupportedShells
+	defaultShellIdx := GetDefaultShellIndex(shells)
+
 	return &SetupModel{
 		step:          StepSystemOverview,
 		cursor:        0,
@@ -227,11 +230,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 		// System information
 		system: SystemInfo{
-			shells: []string{
-				"zsh",
-				"bash",
-				"fish",
-			},
+			shells:           shells,
 			languages:        getProgrammingLanguageNames(settings),
 			databases:        []string{"PostgreSQL", "MySQL", "Redis", "MongoDB"},
 			desktopApps:      desktopApps,
@@ -242,7 +241,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 		// User selections
 		selections: UISelections{
-			selectedShell: 0, // Default to first shell (zsh)
+			selectedShell: defaultShellIdx,
 			selectedLangs: make(map[int]bool),
 			selectedDBs:   make(map[int]bool),
 			selectedApps:  make(map[int]bool),

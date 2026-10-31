@@ -136,7 +136,6 @@ steps:
         - label: "zsh (recommended)"
           value: "zsh"
           description: "Modern shell with powerful features"
-          default: true
         - label: "bash"
           value: "bash"
           description: "Bourne Again Shell - widely compatible"

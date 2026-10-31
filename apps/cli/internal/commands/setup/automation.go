@@ -17,6 +17,9 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 	// Get plugin timeout from environment or use default
 	pluginTimeout := getPluginTimeout()
 
+	shells := SupportedShells
+	defaultShellIdx := GetDefaultShellIndex(shells)
+
 	return &SetupModel{
 		step:          0,
 		cursor:        0,
@@ -24,11 +27,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// System information
 		system: SystemInfo{
-			shells: []string{
-				"zsh",
-				"bash",
-				"fish",
-			},
+			shells:    shells,
 			languages: getProgrammingLanguageNames(settings),
 			databases: []string{
 				"PostgreSQL",
@@ -42,7 +41,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// User selections
 		selections: UISelections{
-			selectedShell: DefaultShellIndex, // Default to zsh (first option)
+			selectedShell: defaultShellIdx,
 			selectedLangs: map[int]bool{
 				DefaultNodeJSIndex: true, // Node.js
 				DefaultPythonIndex: true, // Python
@@ -84,10 +83,10 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 }
 
 // printAutomatedSetupPlan displays the planned installation to the user
-func printAutomatedSetupPlan() {
+func printAutomatedSetupPlan(model *SetupModel) {
 	fmt.Println("🚀 Starting automated DevEx setup...")
 	fmt.Println("Selected for installation:")
-	fmt.Println("  • zsh shell with DevEx configuration")
+	fmt.Printf("  • %s shell with DevEx configuration\n", model.getSelectedShell())
 	fmt.Println("  • Essential development tools")
 	fmt.Println("  • Programming languages: Node.js, Python")
 	fmt.Println("  • Database: PostgreSQL")
@@ -134,10 +133,10 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	// Convert default selections to CrossPlatformApp objects
 	apps := model.buildAppList()
 
-	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", "zsh", "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
+	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
 
 	// Display the planned installation to the user
-	printAutomatedSetupPlan()
+	printAutomatedSetupPlan(model)
 
 	// Use the regular installer system for non-interactive mode
 	var errors []string
