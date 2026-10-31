@@ -20,6 +20,7 @@ These flags are available for all DevEx commands and provide consistent behavior
 
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
+| `--non-interactive` | | `bool` | `false` | Run without interactive prompts and suppress update notifications |
 | `--verbose` | `-v` | `bool` | `false` | Enable verbose output with detailed information |
 | `--dry-run` | | `bool` | `false` | Show the supported command's plan without executing it |
 | `--help` | `-h` | `bool` | `false` | Show help information for the command |
@@ -55,6 +56,10 @@ dry-run invocation can still create startup files. The remaining preview audit
 includes startup initialization, `undo`, `recover`, interactive and automated
 `setup`, direct plugin dispatch, and an SDK preview capability contract. Do not
 assume that the global flag prevents every side effect in those paths yet.
+
+Use `--non-interactive` for automation; see the [non-interactive reference](/docs/cli-reference/non-interactive).
+Background release notifications can also be disabled with `DEVEX_NO_UPDATE_CHECK=1`
+or `update_check: false` in your CLI configuration; see [self-update](/docs/cli-reference/self-update).
 
 ### Configuration Flags
 

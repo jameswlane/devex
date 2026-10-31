@@ -17,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/selfupdate"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
@@ -29,6 +30,10 @@ var (
 // Version updated for plugin SDK integration release
 
 func main() {
+	if selfupdate.RunNotificationHelper(context.Background(), os.Args[1:]) {
+		return
+	}
+
 	// Determine debug mode from command line arguments or environment
 	debugMode := isDebugMode()
 

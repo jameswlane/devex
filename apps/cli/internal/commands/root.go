@@ -17,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/selfupdate"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -43,6 +44,7 @@ func newRootCmd(version string, repo types.Repository, settings config.CrossPlat
 	if options.hasTerminal == nil {
 		options.hasTerminal = hasInteractiveTerminal
 	}
+	var notification *selfupdate.Notification
 	cmd := &cobra.Command{
 		Use:   "devex",
 		Short: "DevEx CLI for setting up your development environment",
@@ -72,6 +74,8 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 				return nil
 			}
 
+			notification = startUpdateNotification(cmd, version)
+
 			// Install resolves applications before initializing plugins so invalid input
 			// fails without downloads; bare devex and setup own their setup flow.
 			cmdName := cmd.Name()
@@ -85,7 +89,15 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 				return nil
 			}
 
+			if cmdName == "self-update" {
+				return nil
+			}
 			return runtime.initializePluginSystem(cmd.Context())
+		},
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			if message := notification.Finish(); message != "" {
+				cmd.PrintErrln(message)
+			}
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !interaction.IsInteractiveMode() || !options.hasTerminal(cmd) {
@@ -106,6 +118,8 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
+
+	cmd.AddCommand(NewSelfUpdateCmd(version, nil))
 
 	// Register other commands
 	cmd.AddCommand(setupCmd)
@@ -137,6 +151,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	cmd.PersistentFlags().String("config", "", "Config file (default: ~/.devex/config.yaml)")
 	cmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
 	cmd.PersistentFlags().Bool("skip-plugin-download", false, "Skip automatic plugin downloads")
+	cmd.PersistentFlags().Bool("non-interactive", false, "Run without interactive prompts")
 	cmd.PersistentFlags().Bool("offline", false, "Run in offline mode (no plugin downloads)")
 
 	// Bind persistent flags to viper for global access
@@ -231,6 +246,7 @@ func setConfigurationDefaults() {
 	viper.SetDefault("non-interactive", false)
 	viper.SetDefault("skip-plugin-download", false)
 	viper.SetDefault("offline", false)
+	viper.SetDefault("update_check", true)
 
 	log.Debug("Configuration defaults set")
 }
