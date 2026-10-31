@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/fatih/color"
@@ -17,22 +19,24 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
 
 func NewUninstallCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	var (
-		appName       string
-		apps          []string
-		category      string
-		all           bool
-		force         bool
-		keepConfig    bool
-		keepData      bool
-		removeOrphans bool
-		cascade       bool
-		backup        bool
-		stopServices  bool
-		cleanupSystem bool
+		appName          string
+		apps             []string
+		category         string
+		all              bool
+		force            bool
+		keepConfig       bool
+		keepData         bool
+		removeDockerData bool
+		removeOrphans    bool
+		cascade          bool
+		backup           bool
+		stopServices     bool
+		cleanupSystem    bool
 	)
 
 	cmd := &cobra.Command{
@@ -68,14 +72,20 @@ Safety features:
   devex uninstall --app mysql --force
 
   # Uninstall but keep configuration files
-  devex uninstall --app vscode --keep-config`,
+  devex uninstall --app vscode --keep-config
+
+  # Uninstall Docker and permanently delete its Linux images, containers and volumes
+  devex uninstall --app Docker --remove-docker-data`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if removeDockerData && keepData {
+				return fmt.Errorf("--remove-docker-data cannot be combined with --keep-data")
+			}
 			// Determine which flag was used
 			if appName != "" {
 				apps = []string{appName}
 			}
 
-			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, repo, settings)
+			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, removeDockerData, repo, settings, cmd.ErrOrStderr())
 		},
 	}
 
@@ -85,6 +95,7 @@ Safety features:
 	cmd.Flags().BoolVar(&all, "all", false, "Uninstall all applications (requires confirmation)")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompts")
 	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep configuration files")
+	cmd.Flags().BoolVar(&removeDockerData, "remove-docker-data", false, "Permanently delete /var/lib/docker and /var/lib/containerd after uninstalling Docker on Linux (data is kept by default)")
 	cmd.Flags().BoolVar(&keepData, "keep-data", false, "Keep user data and databases")
 	cmd.Flags().BoolVar(&removeOrphans, "remove-orphans", false, "Remove orphaned dependencies")
 	cmd.Flags().BoolVar(&cascade, "cascade", false, "Allow noncritical dependency conflicts (select dependents explicitly)")
@@ -98,6 +109,7 @@ Safety features:
 var (
 	getUninstallInstaller  = installers.GetInstaller
 	removeOrphanedPackages = handleOrphanRemoval
+	removeDockerDataFiles  = cleanupDockerData
 )
 
 func resolveUninstallApp(repo types.Repository, settings config.CrossPlatformSettings, name string) (types.AppConfig, error) {
@@ -152,7 +164,7 @@ func uninstallFailuresError(failures []string) error {
 	return fmt.Errorf("uninstall failed: %s", strings.Join(failures, "; "))
 }
 
-func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, removeDockerData bool, repo types.Repository, settings config.CrossPlatformSettings, warnings io.Writer) error {
 	_, mergedSettings, _, err := configuredApplications(settings)
 	if err != nil {
 		return fmt.Errorf("failed to load applications from configuration: %w", err)
@@ -239,6 +251,18 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		}
 	default:
 		return fmt.Errorf("you must specify --app, --apps, --category, or --all")
+	}
+
+	if removeDockerData {
+		hasDocker := false
+		for _, app := range appsToUninstall {
+			hasDocker = hasDocker || strings.EqualFold(app.Name, "docker")
+		}
+		if runtime.GOOS != "linux" {
+			fmt.Fprintln(warnings, "Warning: --remove-docker-data has no effect outside Linux; remove Docker Desktop data manually.")
+		} else if !hasDocker {
+			fmt.Fprintln(warnings, "Warning: --remove-docker-data has no effect because Docker is not selected for uninstall.")
+		}
 	}
 
 	if len(appsToUninstall) == 0 {
@@ -345,6 +369,11 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			continue
 		}
 
+		if removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
+			if err := removeDockerDataFiles(ctx); err != nil {
+				failures = append(failures, fmt.Sprintf("%s: packages removed but Docker data cleanup failed: %v; retry with sudo rm -rf -- /var/lib/docker /var/lib/containerd", app.Name, err))
+			}
+		}
 		success++
 		fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
 
@@ -679,4 +708,18 @@ func handleOrphanRemoval(ctx context.Context) {
 	}
 
 	fmt.Println("Could not detect package manager for orphan removal")
+}
+
+// cleanupDockerData runs only after explicit opt-in and successful package removal.
+func cleanupDockerData(ctx context.Context) error {
+	_, err := utils.ExecInstallHookWithContext(ctx, types.InstallCommand{Scope: "system", Shell: `set -eu
+if [ -d /run/systemd/system ]; then
+  for unit in docker.service docker.socket; do
+    if systemctl is-active --quiet "$unit"; then
+      systemctl stop "$unit"
+    fi
+  done
+fi
+rm -rf -- /var/lib/docker /var/lib/containerd`})
+	return err
 }

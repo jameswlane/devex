@@ -1,0 +1,98 @@
+name: Docker
+description: Docker Engine on Linux and Docker Desktop on macOS and Windows
+category: Development Tools
+default: false
+desktop_environments:
+  - all
+macos:
+  install_method: brew
+  install_command: --cask docker
+  uninstall_command: --cask docker
+  brew_cask: true
+  official_support: true
+windows:
+  install_method: winget
+  install_command: Docker.DockerDesktop
+  uninstall_command: Docker.DockerDesktop
+  official_support: true
+linux:
+  install_method: apt
+  install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  # Package removal preserves data; --remove-docker-data explicitly deletes /var/lib/docker and /var/lib/containerd.
+  uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  official_support: true
+  platform_requirements:
+    - os: debian
+    - os: ubuntu
+  pre_install:
+    - scope: system
+      shell: |
+        set -eu
+        . /etc/os-release
+        docker_distro=
+        for distro in "$ID" ${ID_LIKE:-}; do
+          case "$distro" in
+            debian|ubuntu) docker_distro=$distro; break ;;
+          esac
+        done
+        if [ -z "$docker_distro" ]; then
+          echo "Docker apt installation requires Debian, Ubuntu, or a derivative with ID_LIKE; select a supported package manager." >&2
+          exit 1
+        fi
+        apt-get update
+        apt-get install -y ca-certificates curl
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL "https://download.docker.com/linux/$docker_distro/gpg" -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+        printf 'deb [arch=%s signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/%s %s stable\n' \
+          "$(dpkg --print-architecture)" "$docker_distro" "${UBUNTU_CODENAME:-$VERSION_CODENAME}" \
+          > /etc/apt/sources.list.d/docker.list
+        apt-get update
+  post_install: &linux_post_install
+    - scope: system
+      shell: |
+        set -eu
+        if [ -d /run/systemd/system ]; then
+          systemctl enable --now docker.service
+        else
+          echo "Docker service was not started: systemd is unavailable. Start dockerd with your service manager."
+        fi
+        getent group docker >/dev/null || groupadd --system docker
+        usermod -aG docker "$DEVEX_INVOKING_USER"
+        echo "Docker is installed. Log out and log back in to use the docker group."
+  alternatives:
+    - install_method: dnf
+      install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      official_support: true
+      platform_requirements:
+        - os: fedora
+      pre_install:
+        - scope: system
+          shell: |
+            set -eu
+            install -m 0755 -d /etc/yum.repos.d
+            dnf install -y ca-certificates curl
+            curl -fsSL https://download.docker.com/linux/fedora/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo
+      post_install: *linux_post_install
+    - install_method: dnf
+      install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      official_support: true
+      platform_requirements:
+        - os: rhel
+      pre_install:
+        - scope: system
+          shell: |
+            set -eu
+            install -m 0755 -d /etc/yum.repos.d
+            dnf install -y ca-certificates curl
+            curl -fsSL https://download.docker.com/linux/rhel/docker-ce.repo -o /etc/yum.repos.d/docker-ce.repo
+      post_install: *linux_post_install
+    - install_method: pacman
+      install_command: docker docker-buildx docker-compose
+      uninstall_command: docker docker-buildx docker-compose
+      official_support: true
+      platform_requirements:
+        - os: arch
+      post_install: *linux_post_install

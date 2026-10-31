@@ -50,7 +50,7 @@ The runner copies that binary into the container instead of using a source build
 
 ### Configuration
 
-`scripts/e2e-docker.sh` reads `DISTRO`, `CONTAINER_ENGINE` (`docker` or `podman`), `E2E_DEVEX_BINARY` and `E2E_DRY_RUN=1` (print the engine commands without running them), and passes the `DEVEX_E2E_DESKTOP`, `DEVEX_E2E_DESTRUCTIVE` and `DEVEX_E2E_REGISTRY_URL` settings through to the suite.
+`scripts/e2e-docker.sh` reads `DISTRO`, `CONTAINER_ENGINE` (`docker` or `podman`), `E2E_DEVEX_BINARY` and `E2E_DRY_RUN=1` (print the engine commands without running them), and passes the `DEVEX_E2E_DESKTOP`, `DEVEX_E2E_DESTRUCTIVE`, `DEVEX_E2E_DOCKER` and `DEVEX_E2E_REGISTRY_URL` settings through to the suite.
 
 The suite itself reads:
 
@@ -61,6 +61,7 @@ The suite itself reads:
 | `DEVEX_E2E_REGISTRY_URL` | `https://registry.devex.sh` | Registry used for plugin downloads and expected latest-version checksums. |
 | `DEVEX_E2E_DESKTOP` | `none` | `gnome`, `kde`, or `none`; controls `XDG_CURRENT_DESKTOP` and expected desktop plugins. The CLI also detects running `gnome-session`/`kded` processes, so the suite stops early if a different desktop session is running. |
 | `DEVEX_E2E_DESTRUCTIVE` | disabled | Set to `1` to allow specs that install and uninstall packages with sudo. |
+| `DEVEX_E2E_DOCKER` | disabled | Set to `1` with destructive specs to enable the privileged Debian Docker lifecycle. |
 | `DEVEX_E2E_TESTDATA` | `/opt/devex-e2e/testdata` | Root directory for configuration fixtures staged into the container image. |
 | `DEVEX_E2E_ARTIFACTS` | `/artifacts` if writable, otherwise a temporary directory | Destination for test logs and copies of `~/.devex` state. |
 
@@ -69,6 +70,17 @@ For example, to enable destructive specs locally:
 ```bash
 DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=debian-12
 ```
+
+The Docker catalog lifecycle also needs a nested daemon. Enable it explicitly in
+a disposable Debian sandbox; the runner adds `--privileged` when both flags are set:
+
+```bash
+DEVEX_E2E_DESTRUCTIVE=1 DEVEX_E2E_DOCKER=1 task e2e:docker DISTRO=debian-12 -- --ginkgo.focus='Docker catalog'
+```
+
+This stages the real Docker catalog YAML, installs the official engine packages,
+checks `docker version` in a fresh docker-group session, and verifies uninstall
+preserves `/var/lib/docker`. It uses a vfs daemon because the sandbox has no systemd.
 
 ### Add a package-manager suite
 

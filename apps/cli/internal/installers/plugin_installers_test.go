@@ -21,6 +21,14 @@ func (r *recordingPluginExecutor) ExecutePluginWithContext(ctx context.Context, 
 }
 
 var _ = Describe("Plugin installation discovery", func() {
+	It("preserves the Docker Desktop cask flag for install and removal", func() {
+		executor := &recordingPluginExecutor{}
+		installer := &PluginBasedInstaller{method: "brew", pluginBootstrap: executor, ctx: context.Background()}
+		Expect(installer.Install("--cask docker", nil)).To(Succeed())
+		Expect(executor.args).To(Equal([]string{"install", "--cask", "docker"}))
+		Expect(installer.Uninstall("--cask docker", nil)).To(Succeed())
+		Expect(executor.args).To(Equal([]string{"remove", "--cask", "docker"}))
+	})
 	It("checks the requested APT packages and forwards the caller context", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()

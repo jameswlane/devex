@@ -1158,6 +1158,17 @@ func (si *StreamingInstaller) executeMiseInstall(ctx context.Context, app types.
 // executeCommands executes a list of install commands with context cancellation support
 func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand) error {
 	for _, cmd := range commands {
+		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
+			return err
+		}
+		if cmd.Scope == "system" {
+			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
+			si.sendLog("INFO", output)
+			if err != nil {
+				return fmt.Errorf("install hook failed: %w", err)
+			}
+			continue
+		}
 		// Check for context cancellation before each command
 		select {
 		case <-ctx.Done():
