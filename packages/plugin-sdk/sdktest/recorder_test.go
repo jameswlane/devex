@@ -60,7 +60,7 @@ var _ = Describe("Recorder", func() {
 		Expect(sdk.ExecOperationWithContext(context.Background(), sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, "manager", "install")).To(Succeed())
 		Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{
 			{Args: []string{"-n", "true"}},
-			{Args: []string{"--", "manager", "install"}},
+			{Args: []string{"-n", "--", "manager", "install"}},
 		}))
 		Expect(recorder.Calls("manager")).To(Equal([]sdktest.Call{
 			{Args: []string{"install"}, ElevationRequested: true},

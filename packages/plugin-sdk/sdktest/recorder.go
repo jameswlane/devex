@@ -237,6 +237,8 @@ func (r *Recorder) installExecutionBoundary() {
 func (r *Recorder) writeSudoDispatch(script *strings.Builder) {
 	script.WriteString(`if [ "$#" -eq 1 ] && [ "$1" = '-v' ]; then exit 0; fi
 if [ "$#" -eq 2 ] && [ "$1" = '-n' ] && [ "$2" = 'true' ]; then exit 0; fi
+if [ "${1-}" = '-n' ]; then shift; fi
+if [ "$#" -eq 1 ] && [ "$1" = '-v' ]; then exit 0; fi
 if [ "${1-}" = '--' ]; then shift; fi
 case "${1-}" in
 `)

@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -166,10 +167,19 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	// Display the planned installation to the user
 	printAutomatedSetupPlan(model)
 
+	if err := tui.AuthorizeInstallation(ctx, apps, false); err != nil {
+		return err
+	}
 	// Use the regular installer system for non-interactive mode
 	var errors []string
 	for _, app := range apps {
+		if err := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
+			return err
+		}
 		if err := installers.InstallCrossPlatformApp(ctx, app, settings, repo); err != nil {
+			if authErr := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); authErr != nil {
+				return authErr
+			}
 			errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
 		}
 	}

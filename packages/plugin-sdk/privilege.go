@@ -266,13 +266,13 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 				}
 				return nil, NewAuthorizationDeniedError("authorization adapter rejected the operation", exit.ExitCode(), err)
 			}
-			args = append([]string{"--", name}, args...)
+			args = append([]string{"-n", "--", name}, args...)
 		} else {
 			if plan.IntendedUser == nil || plan.IntendedUser.UID == "0" {
 				return nil, fmt.Errorf("user-scope plan requires a non-root identity")
 			}
 			// sudo -H sets HOME; env also makes account environment explicit and portable.
-			args = append([]string{"-H", "-u", plan.IntendedUser.Username, "--", "env", "HOME=" + plan.IntendedUser.HomeDir, "USER=" + plan.IntendedUser.Username, "LOGNAME=" + plan.IntendedUser.Username, name}, args...)
+			args = append([]string{"-n", "-H", "-u", plan.IntendedUser.Username, "--", "env", "HOME=" + plan.IntendedUser.HomeDir, "USER=" + plan.IntendedUser.Username, "LOGNAME=" + plan.IntendedUser.Username, name}, args...)
 		}
 		name = sudo
 	}

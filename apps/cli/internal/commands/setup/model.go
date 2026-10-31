@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -163,6 +164,7 @@ type SystemInfo struct {
 // SetupModel represents the state of our guided setup UI
 // This model is organized into focused sub-structures for better maintainability
 type SetupModel struct {
+	ctx context.Context
 	// Navigation state
 	step          int
 	cursor        int
@@ -294,3 +296,6 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 func (m *SetupModel) HasErrors() bool {
 	return m.installation.hasInstallErrors()
 }
+
+// SetContext propagates command cancellation into foreground installation work.
+func (m *SetupModel) SetContext(ctx context.Context) { m.ctx = ctx }

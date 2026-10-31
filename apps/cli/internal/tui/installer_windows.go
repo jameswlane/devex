@@ -2,7 +2,10 @@
 
 package tui
 
-import "syscall"
+import (
+	"os/exec"
+	"syscall"
+)
 
 // getPlatformSysProcAttr returns Windows-specific SysProcAttr configuration
 func (ce *DefaultCommandExecutor) getPlatformSysProcAttr() *syscall.SysProcAttr {
@@ -11,3 +14,5 @@ func (ce *DefaultCommandExecutor) getPlatformSysProcAttr() *syscall.SysProcAttr 
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
 	}
 }
+
+func configureCommandCancellation(cmd *exec.Cmd) {}

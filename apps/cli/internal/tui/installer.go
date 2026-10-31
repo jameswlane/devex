@@ -28,6 +28,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // Command constants for improved maintainability
@@ -448,8 +449,29 @@ func (ce *DefaultCommandExecutor) ExecuteCommand(ctx context.Context, command st
 	}
 
 	// Parse and execute using safest method
-	executable, args, _ := parseCommand(command)
-
+	executable, args, needsShell := parseCommand(command)
+	if !needsShell && executable == "sudo" {
+		if len(args) > 0 && args[0] == "-n" {
+			args = args[1:]
+		}
+		if len(args) == 0 {
+			return nil, fmt.Errorf("sudo requires a command")
+		}
+		if strings.HasPrefix(args[0], "-") {
+			cmd := exec.CommandContext(ctx, "sudo", append([]string{"-n"}, args...)...)
+			cmd.SysProcAttr = ce.getPlatformSysProcAttr()
+			return cmd, nil
+		}
+		cmd, err := sdk.PrepareOperation(ctx, sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, Name: args[0], Args: args[1:]})
+		if err != nil {
+			return nil, err
+		}
+		cmd.SysProcAttr = ce.getPlatformSysProcAttr()
+		return cmd, nil
+	}
+	if needsShell && strings.Contains(command, "sudo ") {
+		args = []string{"-c", utils.NonInteractiveSudoShell(command)}
+	}
 	cmd := exec.CommandContext(ctx, executable, args...)
 	cmd.SysProcAttr = ce.getPlatformSysProcAttr()
 
@@ -490,7 +512,7 @@ func (sce *SecureCommandExecutor) ExecuteCommand(ctx context.Context, command st
 	var cmd *exec.Cmd
 	if needsShell {
 		// Use shell for complex commands (pipes, redirections, etc.)
-		cmd = exec.CommandContext(ctx, "bash", "-c", command)
+		cmd = exec.CommandContext(ctx, "bash", "-c", utils.NonInteractiveSudoShell(command))
 	} else {
 		// Direct execution for simple commands
 		cmd = exec.CommandContext(ctx, executable, args...)
@@ -608,6 +630,9 @@ func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager 
 //   - error: nil on success, context.Canceled if cancelled, or other error on critical failures
 func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	for i, app := range apps {
+		if err := AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
+			return err
+		}
 		// Check for context cancellation before each app
 		select {
 		case <-ctx.Done():
@@ -633,6 +658,9 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 				})
 			}
 			// If the error is due to context cancellation, stop installation entirely
+			if errors.Is(err, ErrSudoAuthorization) {
+				return err
+			}
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -857,7 +885,7 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 
 		// Add the repository source
 		if source.SourceRepo != "" {
-			addSourceCmd := fmt.Sprintf("echo '%s' | sudo tee %s > /dev/null",
+			addSourceCmd := fmt.Sprintf("echo '%s' | sudo -n tee %s > /dev/null",
 				source.SourceRepo, source.SourceName)
 			if err := si.executeCommandStream(ctx, addSourceCmd); err != nil {
 				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
@@ -867,13 +895,13 @@ func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.C
 
 	// Update package lists
 	si.sendLog("INFO", "Updating package lists...")
-	if err := si.executeCommandStream(ctx, "sudo apt-get update"); err != nil {
+	if err := si.executeCommandStream(ctx, "sudo -n apt-get update"); err != nil {
 		return err
 	}
 
 	// Install package - construct proper APT command
 	// Use 'apt-get' for scripted operations to avoid CLI warnings
-	aptCommand := fmt.Sprintf("sudo apt-get install -y %s", osConfig.InstallCommand)
+	aptCommand := fmt.Sprintf("sudo -n apt-get install -y %s", osConfig.InstallCommand)
 	return si.executeCommandStream(ctx, aptCommand)
 }
 
@@ -894,19 +922,19 @@ func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyNa
 	}
 
 	// Ensure the keyrings directory exists
-	createDirCmd := "sudo mkdir -p /etc/apt/keyrings"
+	createDirCmd := "sudo -n mkdir -p /etc/apt/keyrings"
 	if err := si.executeCommandStream(ctx, createDirCmd); err != nil {
 		return fmt.Errorf("failed to create keyrings directory: %w", err)
 	}
 
 	if requireDearmor {
 		// Download and dearmor the key in one command
-		downloadAndDearmorCmd := fmt.Sprintf("curl -fsSL %s | sudo gpg --dearmor -o %s", keyURL, keyName)
+		downloadAndDearmorCmd := fmt.Sprintf("curl -fsSL %s | sudo -n gpg --dearmor -o %s", keyURL, keyName)
 		si.sendLog("INFO", fmt.Sprintf("Downloading and dearmorying GPG key: %s", downloadAndDearmorCmd))
 		return si.executeCommandStream(ctx, downloadAndDearmorCmd)
 	}
 	// Download the key directly
-	downloadCmd := fmt.Sprintf("curl -fsSL %s | sudo tee %s > /dev/null", keyURL, keyName)
+	downloadCmd := fmt.Sprintf("curl -fsSL %s | sudo -n tee %s > /dev/null", keyURL, keyName)
 	si.sendLog("INFO", fmt.Sprintf("Downloading GPG key: %s", downloadCmd))
 	return si.executeCommandStream(ctx, downloadCmd)
 }
@@ -922,27 +950,27 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	var installCmd string
 	switch packageManager {
 	case "dnf":
-		installCmd = fmt.Sprintf("sudo dnf install -y %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n dnf install -y %s", osConfig.InstallCommand)
 	case "yum":
-		installCmd = fmt.Sprintf("sudo yum install -y %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n yum install -y %s", osConfig.InstallCommand)
 	case "pacman":
-		installCmd = fmt.Sprintf("sudo pacman -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n pacman -S --noconfirm %s", osConfig.InstallCommand)
 	case "zypper":
-		installCmd = fmt.Sprintf("sudo zypper install -y %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n zypper install -y %s", osConfig.InstallCommand)
 	case "brew":
 		installCmd = fmt.Sprintf("brew install %s", osConfig.InstallCommand)
 	case "apk":
-		installCmd = fmt.Sprintf("sudo apk add %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n apk add %s", osConfig.InstallCommand)
 	case "emerge":
-		installCmd = fmt.Sprintf("sudo emerge %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n emerge %s", osConfig.InstallCommand)
 	case "eopkg":
-		installCmd = fmt.Sprintf("sudo eopkg install -y %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n eopkg install -y %s", osConfig.InstallCommand)
 	case "flatpak":
 		installCmd = fmt.Sprintf("flatpak install -y %s", osConfig.InstallCommand)
 	case "snap":
-		installCmd = fmt.Sprintf("sudo snap install %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n snap install %s", osConfig.InstallCommand)
 	case "xbps":
-		installCmd = fmt.Sprintf("sudo xbps-install -y %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n xbps-install -y %s", osConfig.InstallCommand)
 	case "yay":
 		installCmd = fmt.Sprintf("yay -S --noconfirm %s", osConfig.InstallCommand)
 	default:
@@ -1165,6 +1193,11 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
 			si.sendLog("INFO", output)
 			if err != nil {
+				if os.Geteuid() != 0 {
+					if authErr := authorizeSudo(ctx, false); authErr != nil {
+						return authErr
+					}
+				}
 				return fmt.Errorf("install hook failed: %w", err)
 			}
 			continue
@@ -1222,6 +1255,10 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 		return fmt.Errorf("empty command")
 	}
 
+	// A foreground authorization is the only place sudo may read the terminal.
+	if strings.HasPrefix(strings.TrimSpace(command), "sudo ") && !strings.HasPrefix(strings.TrimSpace(command), "sudo -n ") {
+		command = strings.Replace(command, "sudo ", "sudo -n ", 1)
+	}
 	// Execute command using the pluggable executor interface
 	cmd, err := si.executor.ExecuteCommand(timeoutCtx, command)
 	if err != nil {
@@ -1238,12 +1275,8 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 		return err
 	}
 
-	// Create pipe for stdin (for password prompts)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-
+	// Cancel the whole process group, including shell pipeline children.
+	configureCommandCancellation(cmd)
 	// Start command
 	if err := cmd.Start(); err != nil {
 		return err
@@ -1263,13 +1296,6 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 		si.streamOutput(stderr, "STDERR")
 	}()
 
-	// Monitor for password prompts with goroutine tracking
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		si.monitorForInput(stderr, stdin)
-	}()
-
 	// Wait for command completion
 	cmdErr := cmd.Wait()
 
@@ -1279,6 +1305,14 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	// Wait for all goroutines to finish processing the remaining data
 	wg.Wait()
 
+	if timeoutCtx.Err() != nil {
+		return timeoutCtx.Err()
+	}
+	if cmdErr != nil && strings.Contains(command, "sudo ") {
+		if err := authorizeSudo(ctx, false); err != nil {
+			return err
+		}
+	}
 	return cmdErr
 }
 
@@ -1553,6 +1587,10 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 		}
 	}()
 
+	if err := AuthorizeInstallation(ctx, apps, true); err != nil {
+		return err
+	}
+
 	// Create cancellable context from the passed context for installation control
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -1561,7 +1599,7 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 	m := NewModel(apps)
 
 	// Create program
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx))
 
 	// Ensure proper cleanup even if Run() panics
 	defer func() {
@@ -1574,11 +1612,13 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 	installer := NewStreamingInstaller(p, repo, ctx, settings)
 	defer installer.cancel() // Ensure cleanup
 
+	result := make(chan error, 1)
 	// Start installation in background with context cancellation
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				installer.sendLog("ERROR", fmt.Sprintf("Installation goroutine panic: %v", r))
+				result <- fmt.Errorf("installation panic: %v", r)
 			}
 		}()
 
@@ -1586,10 +1626,13 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 		case <-ctx.Done():
 			// Installation was cancelled
 			installer.sendLog("INFO", "Installation cancelled by user")
+			result <- ctx.Err()
 			return
 		case <-time.After(installer.config.InitializationDelay):
 			// Let TUI initialize before starting installation
-			if err := installer.InstallApps(ctx, apps, settings); err != nil {
+			installErr := installer.InstallApps(ctx, apps, settings)
+			result <- installErr
+			if err := installErr; err != nil {
 				installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
 			} else {
 				installer.sendLog("INFO", "Installation completed successfully")
@@ -1614,7 +1657,10 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 	// SECURITY: Clean up channels to prevent memory leaks
 	m.CleanupChannels()
 
-	return err
+	if err != nil {
+		return err
+	}
+	return <-result
 }
 
 // handleThemeSelection uses the global theme preference instead of prompting for individual apps
