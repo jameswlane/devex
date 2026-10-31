@@ -197,6 +197,7 @@ func (m *SetupModel) View() string {
 		s += subtitleStyle.Render("Choose your preferred shell (zsh is recommended):")
 		s += "\n\n"
 
+		currentShell := DetectCurrentShell()
 		for i, shell := range m.system.shells {
 			cursor := " "
 			if m.cursor == i {
@@ -216,6 +217,10 @@ func (m *SetupModel) View() string {
 				description = " (classic - widely compatible)"
 			case "fish":
 				description = " (user-friendly - smart completions)"
+			}
+
+			if shell == currentShell {
+				description = " (current)" + description
 			}
 
 			s += fmt.Sprintf("%s [%s] %s%s\n", cursor, selected, shell, description)

@@ -10,10 +10,6 @@ const (
 	PluginDownloadTimeout   = 2 * time.Minute  // Plugin download timeout for network operations
 	NetworkOperationTimeout = 30 * time.Second // General network operation timeout for API calls and downloads
 
-	// Default shell index (zsh) - used when no explicit shell selection is made
-	// Corresponds to the index in the shell options array where zsh is the first option
-	DefaultShellIndex = 0
-
 	// UI Configuration constants for terminal interface appearance
 	ProgressBarWidth = 50  // Width of progress bars in terminal characters (fits in standard 80-column terminals)
 	MaxErrorMessages = 100 // Maximum number of error messages to collect to prevent unbounded memory growth during installation failures

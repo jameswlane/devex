@@ -89,6 +89,17 @@ DevEx follows 12-Factor App configuration principles:
 3. **Configuration files** (`~/.devex/config.yaml`)
 4. **Default values** (lowest precedence)
 
+### Automated setup shell
+
+Automated setup uses the basename of `$SHELL`, falling back to `bash` when it is unset or unsupported. Override it with `devex setup --non-interactive --shell=fish`, or set the following in `~/.devex/config.yaml`:
+
+```yaml
+setup:
+  shell: fish
+```
+
+The supported values are `bash`, `zsh`, and `fish`. `--shell` takes precedence over `DEVEX_SETUP_SHELL` and the `setup.shell` configuration key.
+
 ## 🚀 Quick Start
 
 ### Installation

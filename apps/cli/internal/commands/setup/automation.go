@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
@@ -13,9 +15,24 @@ import (
 )
 
 // createAutomatedSetupModel creates a SetupModel with default selections for automated setup
-func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) *SetupModel {
+func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) (*SetupModel, error) {
 	// Get plugin timeout from environment or use default
 	pluginTimeout := getPluginTimeout()
+
+	shells := SupportedShells
+	defaultShellIdx := GetDefaultShellIndex(shells)
+	if shell := viper.GetString("setup.shell"); shell != "" {
+		defaultShellIdx = -1
+		for i, supported := range shells {
+			if shell == supported {
+				defaultShellIdx = i
+				break
+			}
+		}
+		if defaultShellIdx < 0 {
+			return nil, fmt.Errorf("unsupported setup shell %q: set --shell or setup.shell to one of %s", shell, strings.Join(shells, ", "))
+		}
+	}
 
 	return &SetupModel{
 		step:          0,
@@ -24,11 +41,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// System information
 		system: SystemInfo{
-			shells: []string{
-				"zsh",
-				"bash",
-				"fish",
-			},
+			shells:    shells,
 			languages: getProgrammingLanguageNames(settings),
 			databases: []string{
 				"PostgreSQL",
@@ -42,7 +55,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// User selections
 		selections: UISelections{
-			selectedShell: DefaultShellIndex, // Default to zsh (first option)
+			selectedShell: defaultShellIdx,
 			selectedLangs: map[int]bool{
 				DefaultNodeJSIndex: true, // Node.js
 				DefaultPythonIndex: true, // Python
@@ -80,14 +93,14 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 		// External dependencies
 		repo:     repo,
 		settings: settings,
-	}
+	}, nil
 }
 
 // printAutomatedSetupPlan displays the planned installation to the user
-func printAutomatedSetupPlan() {
+func printAutomatedSetupPlan(model *SetupModel) {
 	fmt.Println("🚀 Starting automated DevEx setup...")
 	fmt.Println("Selected for installation:")
-	fmt.Println("  • zsh shell with DevEx configuration")
+	fmt.Printf("  • %s shell with DevEx configuration\n", model.getSelectedShell())
 	fmt.Println("  • Essential development tools")
 	fmt.Println("  • Programming languages: Node.js, Python")
 	fmt.Println("  • Database: PostgreSQL")
@@ -129,15 +142,18 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	log.Info("Running automated setup with default selections")
 
 	// Create a minimal setup model with default selections for automation
-	model := createAutomatedSetupModel(repo, settings)
+	model, err := createAutomatedSetupModel(repo, settings)
+	if err != nil {
+		return err
+	}
 
 	// Convert default selections to CrossPlatformApp objects
 	apps := model.buildAppList()
 
-	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", "zsh", "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
+	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
 
 	// Display the planned installation to the user
-	printAutomatedSetupPlan()
+	printAutomatedSetupPlan(model)
 
 	// Use the regular installer system for non-interactive mode
 	var errors []string

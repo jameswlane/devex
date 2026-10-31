@@ -63,6 +63,23 @@ var _ = Describe("Setup Command", func() {
 		})
 	})
 
+	Describe("Automated shell flag", func() {
+		It("binds --shell to setup.shell and overrides configuration", func() {
+			viper.SetConfigType("yaml")
+			Expect(viper.ReadConfig(strings.NewReader("setup:\n  shell: bash"))).To(Succeed())
+			cmd := commands.NewSetupCmd(repo, settings)
+			Expect(viper.GetString("setup.shell")).To(Equal("bash"))
+			Expect(cmd.ParseFlags([]string{"--shell", "fish"})).To(Succeed())
+			Expect(viper.GetString("setup.shell")).To(Equal("fish"))
+		})
+
+		It("rejects an unsupported shell in automated mode", func() {
+			cmd := commands.NewSetupCmd(repo, settings)
+			cmd.SetArgs([]string{"--non-interactive", "--shell", "dash"})
+			Expect(cmd.Execute()).To(MatchError(ContainSubstring("unsupported setup shell")))
+		})
+	})
+
 	Describe("isInteractiveMode", func() {
 		// Helper function to test the private isInteractiveMode function
 		var testIsInteractiveMode = func() bool {

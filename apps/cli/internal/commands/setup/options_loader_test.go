@@ -71,13 +71,13 @@ var _ = Describe("OptionsLoader", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(options).To(HaveLen(3))
 
-				labels := make([]string, len(options))
+				values := make([]string, len(options))
 				for i, opt := range options {
-					labels[i] = opt.Label
+					values[i] = opt.Value
 				}
-				Expect(labels).To(ContainElement("zsh"))
-				Expect(labels).To(ContainElement("bash"))
-				Expect(labels).To(ContainElement("fish"))
+				Expect(values).To(ContainElement("zsh"))
+				Expect(values).To(ContainElement("bash"))
+				Expect(values).To(ContainElement("fish"))
 			})
 
 			It("should load desktop environments on Linux", func() {

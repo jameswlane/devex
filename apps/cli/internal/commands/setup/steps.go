@@ -45,6 +45,7 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		// Only show shell selection on compatible systems
 		if m.system.detectedPlatform.OS != "windows" {
 			m.step = StepShell
+			m.cursor = m.selections.selectedShell
 		} else {
 			m.step = StepTheme // Windows gets theme selection without shell
 		}
@@ -96,6 +97,7 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 	case StepTheme:
 		if m.system.detectedPlatform.OS != "windows" {
 			m.step = StepShell
+			m.cursor = m.selections.selectedShell
 		} else {
 			m.step = StepDatabases
 		}

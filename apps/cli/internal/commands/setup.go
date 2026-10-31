@@ -45,6 +45,9 @@ Run 'devex setup' to begin the guided installation process.`,
   # Run automated setup (non-interactive mode)
   DEVEX_NONINTERACTIVE=1 devex setup
 
+  # Choose a shell for automated setup
+  devex setup --non-interactive --shell=fish
+
   # Setup with verbose logging
   devex setup --verbose
 
@@ -146,10 +149,12 @@ Run 'devex setup' to begin the guided installation process.`,
 
 	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	cmd.Flags().Bool("non-interactive", false, "Run in non-interactive mode (automated)")
+	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
 	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
 
 	_ = viper.BindPFlag("verbose", cmd.Flags().Lookup("verbose"))
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
+	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))
 	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
 
 	return cmd

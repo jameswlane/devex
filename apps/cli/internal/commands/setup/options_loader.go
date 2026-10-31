@@ -142,15 +142,16 @@ func (ol *OptionsLoader) getDesktopAppOptions() []types.QuestionOption {
 
 // getAvailableShells returns shell options based on system
 func (ol *OptionsLoader) getAvailableShells() []types.QuestionOption {
-	// For now, return standard shells
-	// In the future, this could detect installed shells
-	shells := []string{"zsh", "bash", "fish"}
+	shells := SupportedShells
+	currentShell := DetectCurrentShell()
 
 	options := make([]types.QuestionOption, len(shells))
 	for i, shell := range shells {
+		label := shell
 		description := ""
 		switch shell {
 		case "zsh":
+			label = "zsh (recommended)"
 			description = "Modern shell with powerful features"
 		case "bash":
 			description = "Bourne Again Shell - widely compatible"
@@ -158,10 +159,15 @@ func (ol *OptionsLoader) getAvailableShells() []types.QuestionOption {
 			description = "Friendly interactive shell"
 		}
 
+		if shell == currentShell {
+			label = fmt.Sprintf("%s (current)", label)
+		}
+
 		options[i] = types.QuestionOption{
-			Label:       shell,
+			Label:       label,
 			Value:       shell,
 			Description: description,
+			Default:     shell == currentShell,
 		}
 	}
 
