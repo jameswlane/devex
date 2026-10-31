@@ -67,7 +67,13 @@ jobs:
           changed_plugins=()
           # Shared execution changes must exercise all current recorder adopters.
           if [ "${{ steps.changes.outputs.sdk }}" = "true" ]; then
-            changed_plugins+=("package-manager-dnf" "package-manager-pacman")
+            changed_plugins+=(
+              "package-manager-dnf" "package-manager-pacman"
+              "package-manager-apk" "package-manager-appimage" "package-manager-deb"
+              "package-manager-emerge" "package-manager-eopkg"
+              "package-manager-nixflake" "package-manager-nixpkgs"
+              "package-manager-rpm" "package-manager-xbps" "package-manager-zypper"
+            )
           fi
 
           while IFS= read -r file; do
