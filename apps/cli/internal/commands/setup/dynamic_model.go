@@ -23,6 +23,7 @@ type DynamicSetupModel struct {
 	textInput       textinput.Model
 	cursor          int
 	selected        map[int]bool
+	options         []types.QuestionOption
 	validationError string
 	spinner         spinner.Model
 	executing       bool
@@ -54,13 +55,15 @@ func NewDynamicSetupModel(
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 
-	return &DynamicSetupModel{
+	model := &DynamicSetupModel{
 		executor:       executor,
 		actionExecutor: actionExecutor,
 		textInput:      ti,
 		selected:       make(map[int]bool),
 		spinner:        s,
 	}
+	model.resetCursor()
+	return model
 }
 
 // Init initializes the model
@@ -85,6 +88,7 @@ func (m *DynamicSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.err = err
 			return m, nil
 		}
+		m.resetCursor()
 		// Check if we've reached the end
 		if m.executor.IsComplete() {
 			m.quitting = true
@@ -154,7 +158,7 @@ func (m *DynamicSetupModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	case "down", "j":
 		if step.Type == types.StepTypeQuestion && !m.executing {
 			if step.Question != nil {
-				maxOptions := len(step.Question.Options)
+				maxOptions := len(m.options)
 				m.cursor++
 				if m.cursor >= maxOptions {
 					m.cursor = maxOptions - 1
@@ -187,6 +191,7 @@ func (m *DynamicSetupModel) handleEnter(step *types.SetupStep) (tea.Model, tea.C
 			m.err = err
 			return m, nil
 		}
+		m.resetCursor()
 		// Check if we've reached the end
 		if m.executor.IsComplete() {
 			m.quitting = true
@@ -225,14 +230,14 @@ func (m *DynamicSetupModel) handleQuestionSubmit(step *types.SetupStep) (tea.Mod
 
 	case types.QuestionTypeSelect:
 		// Get selected option
-		if m.cursor >= 0 && m.cursor < len(step.Question.Options) {
-			answer = step.Question.Options[m.cursor].Value
+		if m.cursor >= 0 && m.cursor < len(m.options) {
+			answer = m.options[m.cursor].Value
 		}
 
 	case types.QuestionTypeMultiSelect:
 		// Get all selected options
 		var selected []string
-		for i, opt := range step.Question.Options {
+		for i, opt := range m.options {
 			if m.selected[i] {
 				selected = append(selected, opt.Value)
 			}
@@ -288,6 +293,29 @@ func (m *DynamicSetupModel) resetCursor() {
 	m.cursor = 0
 	m.selected = make(map[int]bool)
 	m.textInput.SetValue("")
+	m.options = nil
+	step := m.executor.GetCurrentStep()
+	if step == nil || step.Question == nil {
+		return
+	}
+	options, err := m.executor.LoadOptions(step.Question)
+	if err != nil {
+		m.err = fmt.Errorf("failed to load options for step %q: %w", step.ID, err)
+		return
+	}
+	m.options = options
+	defaultFound := false
+	for i, option := range options {
+		if option.Default {
+			if !defaultFound {
+				m.cursor = i
+				defaultFound = true
+			}
+			if step.Question.Type == types.QuestionTypeMultiSelect {
+				m.selected[i] = true
+			}
+		}
+	}
 }
 
 // View renders the current step
@@ -382,15 +410,7 @@ func (m *DynamicSetupModel) renderQuestionStep(step *types.SetupStep) string {
 
 	var s strings.Builder
 
-	// Load options if needed
-	options := step.Question.Options
-	if step.Question.OptionsSource != nil {
-		loadedOptions, err := m.executor.LoadOptions(step.Question)
-		if err != nil {
-			return fmt.Sprintf("Error loading options: %v", err)
-		}
-		options = loadedOptions
-	}
+	options := m.options
 
 	// Render prompt
 	promptStyle := lipgloss.NewStyle().Bold(true)

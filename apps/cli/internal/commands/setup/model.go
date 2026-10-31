@@ -225,7 +225,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 	return &SetupModel{
 		step:          StepSystemOverview,
-		cursor:        0,
+		cursor:        defaultShellIdx,
 		shellSwitched: false,
 
 		// System information

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
@@ -13,12 +15,24 @@ import (
 )
 
 // createAutomatedSetupModel creates a SetupModel with default selections for automated setup
-func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) *SetupModel {
+func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatformSettings) (*SetupModel, error) {
 	// Get plugin timeout from environment or use default
 	pluginTimeout := getPluginTimeout()
 
 	shells := SupportedShells
 	defaultShellIdx := GetDefaultShellIndex(shells)
+	if shell := viper.GetString("setup.shell"); shell != "" {
+		defaultShellIdx = -1
+		for i, supported := range shells {
+			if shell == supported {
+				defaultShellIdx = i
+				break
+			}
+		}
+		if defaultShellIdx < 0 {
+			return nil, fmt.Errorf("unsupported setup shell %q: set --shell or setup.shell to one of %s", shell, strings.Join(shells, ", "))
+		}
+	}
 
 	return &SetupModel{
 		step:          0,
@@ -79,7 +93,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 		// External dependencies
 		repo:     repo,
 		settings: settings,
-	}
+	}, nil
 }
 
 // printAutomatedSetupPlan displays the planned installation to the user
@@ -128,7 +142,10 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	log.Info("Running automated setup with default selections")
 
 	// Create a minimal setup model with default selections for automation
-	model := createAutomatedSetupModel(repo, settings)
+	model, err := createAutomatedSetupModel(repo, settings)
+	if err != nil {
+		return err
+	}
 
 	// Convert default selections to CrossPlatformApp objects
 	apps := model.buildAppList()

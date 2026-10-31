@@ -1,7 +1,12 @@
 package setup
 
 import (
+	"context"
 	"os"
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -184,37 +189,86 @@ var _ = Describe("Shell Detection and Default Selection", func() {
 
 		It("should default to bash when SHELL is /bin/bash", func() {
 			_ = os.Setenv("SHELL", "/bin/bash")
-			model := createAutomatedSetupModel(mockRepo, mockSettings)
+			model, err := createAutomatedSetupModel(mockRepo, mockSettings)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(model.getSelectedShell()).To(Equal("bash"))
 			Expect(model.selections.selectedShell).To(Equal(1))
 		})
 
 		It("should default to zsh when SHELL is /bin/zsh", func() {
 			_ = os.Setenv("SHELL", "/bin/zsh")
-			model := createAutomatedSetupModel(mockRepo, mockSettings)
+			model, err := createAutomatedSetupModel(mockRepo, mockSettings)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(model.getSelectedShell()).To(Equal("zsh"))
 			Expect(model.selections.selectedShell).To(Equal(0))
 		})
 
 		It("should default to fish when SHELL is /usr/bin/fish", func() {
 			_ = os.Setenv("SHELL", "/usr/bin/fish")
-			model := createAutomatedSetupModel(mockRepo, mockSettings)
+			model, err := createAutomatedSetupModel(mockRepo, mockSettings)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(model.getSelectedShell()).To(Equal("fish"))
 			Expect(model.selections.selectedShell).To(Equal(2))
 		})
 
 		It("should default to bash when SHELL is unset", func() {
 			_ = os.Unsetenv("SHELL")
-			model := createAutomatedSetupModel(mockRepo, mockSettings)
+			model, err := createAutomatedSetupModel(mockRepo, mockSettings)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(model.getSelectedShell()).To(Equal("bash"))
 			Expect(model.selections.selectedShell).To(Equal(1))
 		})
 
 		It("should default to bash when SHELL is unsupported", func() {
 			_ = os.Setenv("SHELL", "/bin/tcsh")
-			model := createAutomatedSetupModel(mockRepo, mockSettings)
+			model, err := createAutomatedSetupModel(mockRepo, mockSettings)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(model.getSelectedShell()).To(Equal("bash"))
 			Expect(model.selections.selectedShell).To(Equal(1))
+		})
+	})
+
+	Describe("Shell overrides and cursor navigation", func() {
+		BeforeEach(func() { viper.Reset() })
+		AfterEach(func() { viper.Reset() })
+
+		DescribeTable("Space selects the current shell after forward and backward navigation", func(shellEnv, expected string) {
+			if shellEnv == "" {
+				Expect(os.Unsetenv("SHELL")).To(Succeed())
+			} else {
+				Expect(os.Setenv("SHELL", shellEnv)).To(Succeed())
+			}
+			model := NewSetupModel(mocks.NewMockRepository(), config.CrossPlatformSettings{}, platform.DetectionResult{OS: "linux"})
+			model.step = StepDatabases
+			model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			Expect(model.step).To(Equal(StepShell))
+			Expect(model.cursor).To(Equal(model.selections.selectedShell))
+			model.Update(tea.KeyMsg{Type: tea.KeySpace})
+			Expect(model.getSelectedShell()).To(Equal(expected))
+			model.nextStep()
+			model.prevStep()
+			model.Update(tea.KeyMsg{Type: tea.KeySpace})
+			Expect(model.getSelectedShell()).To(Equal(expected))
+		},
+			Entry("bash", "/bin/bash", "bash"),
+			Entry("zsh", "/bin/zsh", "zsh"),
+			Entry("fish", "/usr/bin/fish", "fish"),
+			Entry("unset", "", "bash"),
+		)
+
+		DescribeTable("honors an automated shell override from configuration", func(shell string) {
+			Expect(os.Setenv("SHELL", "/bin/bash")).To(Succeed())
+			viper.SetConfigType("yaml")
+			Expect(viper.ReadConfig(strings.NewReader("setup:\n  shell: " + shell))).To(Succeed())
+			model, err := createAutomatedSetupModel(mocks.NewMockRepository(), config.CrossPlatformSettings{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(model.getSelectedShell()).To(Equal(shell))
+		}, Entry("zsh", "zsh"), Entry("fish", "fish"), Entry("bash", "bash"))
+
+		It("rejects an unsupported override before installing anything", func() {
+			viper.Set("setup.shell", "dash")
+			err := RunAutomatedSetup(context.Background(), mocks.NewMockRepository(), config.CrossPlatformSettings{})
+			Expect(err).To(MatchError(ContainSubstring("unsupported setup shell \"dash\": set --shell or setup.shell to one of zsh, bash, fish")))
 		})
 	})
 
