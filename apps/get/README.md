@@ -31,3 +31,17 @@ npm run dev
 ```
 
 Opens local server at http://localhost:3000 serving static files.
+
+## Installer Tests
+
+Run the offline installer tests (no framework dependency):
+
+```bash
+bash apps/get/tests/install.sh
+pwsh -NoProfile -File apps/get/tests/install.ps1
+```
+
+Run these commands from the repository root. CI runs the Bash tests on Linux and
+macOS and the PowerShell tests on Windows via `.github/workflows/installers.yml`.
+See the [installation guide](../docs/content/docs/installation.mdx#shell-path-configuration)
+for `--shell`, `DEVEX_SHELL`, and manual PATH configuration.

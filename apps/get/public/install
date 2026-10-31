@@ -21,6 +21,7 @@ Options:
   --non-interactive    Run devex install --non-interactive after installation
   --config PATH        Pass --config PATH to the setup/install command
   --install-dir DIR    Install into DIR (default: ~/.local/share/devex)
+  --shell SHELL        Configure PATH for bash, zsh or fish (default: $SHELL)
   --base-url URL       Release download base URL; requires --version
   --help               Show this help
 
@@ -28,6 +29,7 @@ Environment:
   DEVEX_VERSION            Version to install
   DEVEX_NO_SETUP=1         Install only
   DEVEX_NONINTERACTIVE=1   Run devex install --non-interactive
+  DEVEX_SHELL              Shell to configure (overridden by --shell)
 EOF
 }
 
@@ -116,6 +118,7 @@ add_to_path() {
     local path_line="export PATH=\"\$PATH:$INSTALL_DIR/bin\""
 
     if [ -f "$shell_config" ] && grep -qF "$INSTALL_DIR/bin" "$shell_config"; then
+        echo "  ✓ Already configured: $shell_config"
         return
     fi
 
@@ -132,6 +135,7 @@ add_to_fish_path() {
     local shell_config="$1"
 
     if [ -f "$shell_config" ] && grep -qF "$INSTALL_DIR/bin" "$shell_config"; then
+        echo "  ✓ Already configured: $shell_config"
         return
     fi
 
@@ -140,53 +144,39 @@ add_to_fish_path() {
     {
         echo ""
         echo "# DevEx CLI"
-        echo "set -gx PATH \$PATH $INSTALL_DIR/bin"
+        printf "set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR/bin"
     } >> "$shell_config"
 }
 
 configure_path() {
     local os="$1"
-    local rc_found=0
-    local shell_config
+    local target_shell="$2"
 
-    for shell_config in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.config/fish/config.fish"; do
-        if [ -f "$shell_config" ]; then
-            rc_found=1
-        fi
-    done
-    if [ "$os" = "darwin" ] && [ -f "$HOME/.bash_profile" ]; then
-        rc_found=1
-    fi
-
-    if [ "$rc_found" -eq 1 ]; then
-        for shell_config in "$HOME/.bashrc" "$HOME/.zshrc"; do
-            if [ -f "$shell_config" ]; then
-                add_to_path "$shell_config"
-            fi
-        done
-        if [ -f "$HOME/.config/fish/config.fish" ]; then
-            add_to_fish_path "$HOME/.config/fish/config.fish"
-        fi
-        if [ "$os" = "darwin" ] && [ -f "$HOME/.bash_profile" ]; then
-            add_to_path "$HOME/.bash_profile"
-        fi
-        return
-    fi
-
-    case "${SHELL##*/}" in
+    case "$target_shell" in
         zsh)
             add_to_path "$HOME/.zshrc"
             ;;
         fish)
             add_to_fish_path "$HOME/.config/fish/config.fish"
             ;;
-        bash|*)
+        bash)
             add_to_path "$HOME/.bashrc"
             if [ "$os" = "darwin" ]; then
                 add_to_path "$HOME/.bash_profile"
             fi
             ;;
+        *)
+            echo "  Shell '${target_shell:-unset}' is unsupported; no shell config was changed."
+            echo "  To select a shell, rerun with --shell bash, --shell zsh or --shell fish."
+            ;;
     esac
+
+    echo "To add DevEx to another shell manually, add the matching line to its config:"
+    echo "  bash: ~/.bashrc (also ~/.bash_profile for macOS login shells); zsh: ~/.zshrc"
+    printf "    export PATH=\"\$PATH\":%q\n" "$INSTALL_DIR/bin"
+    echo "  fish: ~/.config/fish/config.fish"
+    printf "    set -gx PATH \$PATH %q\n" "$INSTALL_DIR/bin"
+    echo "Restart the configured shell to use DevEx."
 }
 
 print_setup_command() {
@@ -204,6 +194,7 @@ main() {
     local non_interactive="${DEVEX_NONINTERACTIVE:-0}"
     local config=""
     local base_url=""
+    local target_shell="${DEVEX_SHELL:-}"
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -251,6 +242,14 @@ main() {
                 base_url="$2"
                 shift 2
                 ;;
+            --shell)
+                if [ $# -lt 2 ] || [ -z "$2" ]; then
+                    echo "Error: --shell requires bash, zsh or fish." >&2
+                    exit 1
+                fi
+                target_shell="$2"
+                shift 2
+                ;;
             --help)
                 usage
                 return
@@ -262,6 +261,16 @@ main() {
                 ;;
         esac
     done
+
+    if [ -n "$target_shell" ]; then
+        case "$target_shell" in
+            bash|zsh|fish) ;;
+            *) echo "Error: Invalid shell '$target_shell'; use bash, zsh or fish (--shell or DEVEX_SHELL)." >&2; exit 1 ;;
+        esac
+    else
+        target_shell="${SHELL:-}"
+        target_shell="${target_shell##*/}"
+    fi
 
     if [ -n "$base_url" ] && [ -z "$requested_version" ]; then
         echo "Error: --base-url requires an explicit --version." >&2
@@ -350,7 +359,7 @@ main() {
 
     echo ""
     echo "Adding DevEx to PATH..."
-    configure_path "$os"
+    configure_path "$os" "$target_shell"
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -389,10 +398,7 @@ main() {
         read -r _ < /dev/tty
         "$INSTALL_DIR/bin/devex" setup ${command_args[@]+"${command_args[@]}"} < /dev/tty
     else
-        echo "Note: You may need to restart your shell or run:"
-        echo "  source ~/.bashrc  (or ~/.zshrc for zsh)"
-        echo ""
-        echo "Then run:"
+        echo "After restarting your shell, run:"
         print_setup_command "$config"
     fi
 }
