@@ -12,6 +12,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/setup"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -103,22 +104,20 @@ Run 'devex setup' to begin the guided installation process.`,
 				return setup.RunAutomatedSetup(ctx, repo, settings)
 			}
 
-			// Initialize plugin bootstrap for setup
-			pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
-			if err != nil {
-				return fmt.Errorf("failed to initialize plugin bootstrap: %w", err)
-			}
-
-			// Initialize plugins
-			if err := pluginBootstrap.Initialize(ctx); err != nil {
-				log.Warn("Failed to initialize some plugins", "error", err)
-				// Continue anyway - plugins might be installed during setup
-			}
-
-			// Run interactive setup using dynamic model
+			// The default model initializes plugins at its plugin step and reuses them
+			// for finalization. Custom flows need their bootstrap before constructing actions.
 			log.Info("Starting interactive setup")
 			var model tea.Model
 			if setupConfig != nil {
+				pluginBootstrap, err := bootstrap.NewPluginBootstrap(viper.GetBool("skip-plugin-download") || viper.GetBool("offline"))
+				if err != nil {
+					return fmt.Errorf("failed to initialize plugin bootstrap: %w", err)
+				}
+				if err := pluginBootstrap.Initialize(ctx); err != nil {
+					log.Warn("Failed to initialize some plugins", "error", err)
+				} else {
+					installers.InitializeWithPluginBootstrap(pluginBootstrap)
+				}
 				// Use dynamic model with custom config
 				model = setup.NewDynamicSetupModel(setupConfig, repo, settings, detectedPlatform, pluginBootstrap)
 			} else {
@@ -126,7 +125,7 @@ Run 'devex setup' to begin the guided installation process.`,
 				model = setup.NewSetupModel(repo, settings, detectedPlatform)
 			}
 
-			p := tea.NewProgram(model, tea.WithAltScreen())
+			p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout()))
 			finalModel, err := p.Run()
 			if err != nil {
 				return fmt.Errorf("setup failed: %w", err)

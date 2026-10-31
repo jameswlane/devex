@@ -3,6 +3,8 @@
 package e2e_test
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"time"
 
@@ -68,5 +70,27 @@ var _ = Describe("Non-interactive uninstall", func() {
 		Expect(err).To(HaveOccurred(), "an unknown application must fail uninstall:\n%s", output)
 		Expect(output).To(ContainSubstring("not-a-devex-application"))
 		Expect(output).NotTo(ContainSubstring("panic"))
+	})
+})
+
+var _ = Describe("Bare devex", func() {
+	It("exits with helpful next steps and no plugin initialization when stdin is closed", func() {
+		home := sandbox.isolatedHome()
+		// Clear CI and opt-out variables: stdin is /dev/null and TERM alone must not start setup.
+		output, err := sandbox.run(home, sandbox.binary, 5*time.Second, interactiveEnvironment)
+		Expect(err).NotTo(HaveOccurred(), "bare devex should print next steps:\n%s", output)
+		Expect(output).To(ContainSubstring("devex setup"))
+		Expect(output).To(ContainSubstring("devex --help"))
+		Expect(output).NotTo(ContainSubstring("\x1b[?1049h"))
+		_, err = os.Stat(filepath.Join(home, ".devex", "plugins"))
+		Expect(os.IsNotExist(err)).To(BeTrue(), "bare devex must not bootstrap plugins")
+		logs, err := filepath.Glob(filepath.Join(home, ".local/share/devex/logs", "*.log"))
+		Expect(err).NotTo(HaveOccurred())
+		for _, path := range logs {
+			contents, err := os.ReadFile(path)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(contents)).NotTo(ContainSubstring("Platform detection cached"))
+			Expect(string(contents)).NotTo(ContainSubstring("Downloading required plugins"))
+		}
 	})
 })

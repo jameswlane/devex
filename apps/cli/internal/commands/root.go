@@ -10,10 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -23,8 +25,24 @@ type rootRuntime struct {
 	pluginBootstrap *bootstrap.PluginBootstrap
 }
 
+type rootOptions struct {
+	runSetup    func(*cobra.Command, []string) error
+	hasTerminal func(*cobra.Command) bool
+}
+
 func NewRootCmd(version string, repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	return newRootCmd(version, repo, settings, rootOptions{})
+}
+
+func newRootCmd(version string, repo types.Repository, settings config.CrossPlatformSettings, options rootOptions) *cobra.Command {
 	runtime := &rootRuntime{}
+	setupCmd := NewSetupCmd(repo, settings)
+	if options.runSetup == nil {
+		options.runSetup = setupCmd.RunE
+	}
+	if options.hasTerminal == nil {
+		options.hasTerminal = hasInteractiveTerminal
+	}
 	cmd := &cobra.Command{
 		Use:   "devex",
 		Short: "DevEx CLI for setting up your development environment",
@@ -50,9 +68,9 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 			}
 
 			// Install resolves applications before initializing plugins so invalid input
-			// fails without downloads; setup initializes plugins in its own flow.
+			// fails without downloads; bare devex and setup own their setup flow.
 			cmdName := cmd.Name()
-			if (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
+			if cmd.Parent() == nil || (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
 				log.Debug("Deferring plugin initialization to command", "command", cmdName)
 				return nil
 			}
@@ -60,26 +78,27 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 			return runtime.initializePluginSystem(cmd.Context())
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Don't auto-run setup during tests
-			if isRunningInTest() {
-				return cmd.Usage()
+			if !interaction.IsInteractiveMode() || !options.hasTerminal(cmd) {
+				return printRootNextSteps(cmd)
 			}
 
-			// If no subcommand is provided, run the guided setup
-			for _, sub := range cmd.Commands() {
-				if sub.Name() == "setup" {
-					sub.SetArgs(args)
-					sub.SetContext(cmd.Context())
-					return sub.Execute()
-				}
+			// Existing tracked applications indicate an environment already managed by DevEx.
+			apps, err := repo.ListApps()
+			if err != nil {
+				return fmt.Errorf("check setup state: %w; run 'devex status' to inspect your environment", err)
 			}
-			return cmd.Usage()
+			if len(apps) > 0 {
+				return printRootNextSteps(cmd)
+			}
+
+			// Invoke the handler directly: Execute on a child restarts the root command.
+			return options.runSetup(cmd, args)
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 
 	// Register other commands
-	cmd.AddCommand(NewSetupCmd(repo, settings))
+	cmd.AddCommand(setupCmd)
 	cmd.AddCommand(NewInstallCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewUninstallCmd(repo, settings))
 	cmd.AddCommand(NewRollbackCmd(repo, settings))
@@ -229,20 +248,22 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-// isRunningInTest detects standard Go test binaries and explicit test env markers.
-func isRunningInTest() bool {
-	if len(os.Args) > 0 {
-		base := filepath.Base(os.Args[0])
-		if strings.HasSuffix(base, ".test") || base == "ginkgo" {
-			return true
-		}
-	}
+// Require both streams to be terminals so redirected stdin or output never starts a TUI.
+func hasInteractiveTerminal(cmd *cobra.Command) bool {
+	input, inputOK := cmd.InOrStdin().(*os.File)
+	output, outputOK := cmd.OutOrStdout().(*os.File)
+	return inputOK && outputOK && term.IsTerminal(int(input.Fd())) && term.IsTerminal(int(output.Fd()))
+}
 
-	if os.Getenv("GO_TEST") == "1" || os.Getenv("TESTING") == "1" {
-		return true
-	}
+func printRootNextSteps(cmd *cobra.Command) error {
+	_, err := fmt.Fprintln(cmd.OutOrStdout(), `DevEx helps set up and manage your development environment.
 
-	return false
+Next steps:
+  devex setup     Start guided setup in an interactive terminal
+  devex install   Install configured applications
+  devex status    Inspect your environment
+  devex --help    Show all commands`)
+	return err
 }
 
 func (r *rootRuntime) initializePluginSystem(ctx context.Context) error {

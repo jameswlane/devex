@@ -101,6 +101,16 @@ cd apps/cli
 task install
 ```
 
+### Bare command behavior
+
+Running `devex` starts guided setup only when stdin and stdout are terminals,
+interactive mode is enabled, and the DevEx datastore has no tracked applications.
+An environment with tracked applications is treated as already set up. Otherwise,
+including `devex </dev/null`, pipes, CI, `TERM=dumb`, or non-interactive configuration,
+it prints short next steps and exits successfully without prompting or downloading
+plugins. Run `devex setup` explicitly to repeat setup; use
+`devex install --non-interactive` for automated installation.
+
 ### Basic Usage
 ```bash
 # Install development environment
