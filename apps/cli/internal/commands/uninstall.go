@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -146,11 +148,11 @@ func clearUninstallRecords(repo types.Repository, name string) error {
 	return nil
 }
 
-func uninstallFailuresError(failures []string) error {
+func uninstallFailuresError(failures []error) error {
 	if len(failures) == 0 {
 		return nil
 	}
-	return fmt.Errorf("uninstall failed: %s", strings.Join(failures, "; "))
+	return fmt.Errorf("uninstall failed: %w", errors.Join(failures...))
 }
 
 func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer) error {
@@ -173,11 +175,11 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	log.Info("Starting uninstall process")
 
 	var appsToUninstall []types.AppConfig
-	var failures []string
+	var failures []error
 	resolveTrackedApp := func(tracked types.AppConfig) {
 		app, err := resolveUninstallApp(repo, settings, tracked.Name)
 		if err != nil {
-			failures = append(failures, err.Error())
+			failures = append(failures, err)
 			return
 		}
 		appsToUninstall = append(appsToUninstall, app)
@@ -225,7 +227,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 					knownCategory = configured.Category
 				}
 				if strings.EqualFold(knownCategory, category) {
-					failures = append(failures, err.Error())
+					failures = append(failures, err)
 				} else if knownCategory == "" {
 					fmt.Printf("%s Skipping %s: category is unknown: %v. Restore its definition or select it with --app.\n", yellow("⚠️"), tracked.Name, err)
 				}
@@ -242,7 +244,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 				app, err := resolveUninstallApp(repo, settings, name)
 				if err != nil {
 					fmt.Printf("%s %v\n", yellow("⚠️"), err)
-					failures = append(failures, err.Error())
+					failures = append(failures, err)
 					continue
 				}
 				appsToUninstall = append(appsToUninstall, app)
@@ -284,7 +286,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 
 		if !summary.CanProceed && !force {
 			fmt.Printf("\n%s Cannot proceed due to %d critical conflicts. Use --force to override.\n", red("❌"), summary.CriticalCount)
-			failures = append(failures, fmt.Sprintf("critical conflicts prevented uninstalling %d application(s)", summary.CriticalCount))
+			failures = append(failures, fmt.Errorf("critical conflicts prevented uninstalling %d application(s)", summary.CriticalCount))
 			return uninstallFailuresError(failures)
 		}
 
@@ -301,12 +303,17 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			if err := ctx.Err(); err != nil {
 				return err
 			}
+			if err := validateCurlpipeRemoval(app); err != nil {
+				fmt.Fprintf(out, "Would not remove %s: %v\n", app.Name, err)
+				failures = append(failures, err)
+				continue
+			}
 			command := strings.TrimSpace(app.UninstallCommand)
 			if command == "" {
 				command = strings.TrimSpace(app.InstallCommand)
 			}
 			if command == "" || app.InstallMethod == "" {
-				failures = append(failures, fmt.Sprintf("%s: cannot preview uninstall without an install method and uninstall or install command", app.Name))
+				failures = append(failures, fmt.Errorf("%s: cannot preview uninstall without an install method and uninstall or install command", app.Name))
 				continue
 			}
 			fmt.Fprintf(out, "Would uninstall %s via %s: %s\n", app.Name, app.InstallMethod, command)
@@ -345,27 +352,34 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	for i, app := range appsToUninstall {
 		fmt.Printf("[%d/%d] %s (%s)\n", i+1, len(appsToUninstall), app.Name, app.InstallMethod)
 
-		removeCommand := strings.TrimSpace(app.UninstallCommand)
-		if removeCommand == "" {
-			removeCommand = strings.TrimSpace(app.InstallCommand)
+		if err := validateCurlpipeRemoval(app); err != nil {
+			fmt.Printf("  %s Not removed: %v\n", yellow("⚠️"), err)
+			failures = append(failures, err)
+			continue
 		}
-		if removeCommand == "" {
+		if app.InstallMethod != "curlpipe" && strings.TrimSpace(app.UninstallCommand) == "" && strings.TrimSpace(app.InstallCommand) == "" {
 			fmt.Printf("  %s No uninstall or install command is configured\n", red("❌"))
-			failures = append(failures, fmt.Sprintf("%s: no uninstall or install command is configured", app.Name))
+			failures = append(failures, fmt.Errorf("%s: no uninstall or install command is configured", app.Name))
 			continue
 		}
 
 		installer := getUninstallInstaller(ctx, app.InstallMethod)
-		if installer == nil {
+		if installer == nil && app.InstallMethod != "curlpipe" {
 			fmt.Printf("  %s Invalid install method: %s\n", red("❌"), app.InstallMethod)
-			failures = append(failures, fmt.Sprintf("%s: invalid install method %q", app.Name, app.InstallMethod))
+			failures = append(failures, fmt.Errorf("%s: invalid install method %q", app.Name, app.InstallMethod))
 			continue
 		}
 
-		installed, err := installer.IsInstalled(app.InstallCommand)
+		// Curlpipe has no reliable installed-state probe. Only a successful
+		// explicit uninstall command permits clearing its records and files.
+		installed := true
+		var err error
+		if app.InstallMethod != "curlpipe" {
+			installed, err = installer.IsInstalled(app.InstallCommand)
+		}
 		if err != nil {
 			fmt.Printf("  %s Failed to check installation status: %v\n", red("❌"), err)
-			failures = append(failures, fmt.Sprintf("%s: failed to check installation status: %v", app.Name, err))
+			failures = append(failures, fmt.Errorf("%s: failed to check installation status: %w", app.Name, err))
 			continue
 		}
 
@@ -373,7 +387,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			fmt.Printf("  %s Not installed (skipping)\n", yellow("⚠️"))
 			skipped++
 			if err := clearUninstallRecords(repo, app.Name); err != nil {
-				failures = append(failures, fmt.Sprintf("%s: failed to clear stale installation records: %v", app.Name, err))
+				failures = append(failures, fmt.Errorf("%s: failed to clear stale installation records: %w", app.Name, err))
 			}
 			continue
 		}
@@ -394,9 +408,14 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
-		if err := installer.Uninstall(removeCommand, repo); err != nil {
-			fmt.Printf("  %s Failed to uninstall: %v\n", red("❌"), err)
-			failures = append(failures, fmt.Sprintf("%s: %v", app.Name, err))
+		if err := uninstallConfiguredApplication(ctx, app, installer, repo); err != nil {
+			var manual *sdk.ManualRemovalRequiredError
+			if errors.As(err, &manual) {
+				fmt.Printf("  %s Not removed: %v\n", yellow("⚠️"), err)
+			} else {
+				fmt.Printf("  %s Failed to uninstall: %v\n", red("❌"), err)
+			}
+			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			continue
 		}
 
@@ -429,7 +448,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 
 		if err := clearUninstallRecords(repo, app.Name); err != nil {
 			fmt.Printf("  %s Failed to update installation records: %v\n", red("❌"), err)
-			failures = append(failures, fmt.Sprintf("%s: uninstalled but failed to update installation records: %v", app.Name, err))
+			failures = append(failures, fmt.Errorf("%s: uninstalled but failed to update installation records: %w", app.Name, err))
 		}
 
 		fmt.Println()

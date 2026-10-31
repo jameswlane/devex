@@ -13,15 +13,15 @@ import (
 
 var uninstallApplication = func(cmd *cobra.Command, app types.CrossPlatformApp, repo types.Repository) error {
 	osConfig := app.GetOSConfig()
+	legacy := app.ToLegacyAppConfig()
+	if err := validateCurlpipeRemoval(legacy); err != nil {
+		return err
+	}
 	installer := installers.GetInstaller(cmd.Context(), osConfig.InstallMethod)
-	if installer == nil {
+	if installer == nil && osConfig.InstallMethod != "curlpipe" {
 		return fmt.Errorf("install method %q is not supported on this platform", osConfig.InstallMethod)
 	}
-	command := osConfig.UninstallCommand
-	if command == "" {
-		command = osConfig.InstallCommand
-	}
-	return installer.Uninstall(command, repo)
+	return uninstallConfiguredApplication(cmd.Context(), legacy, installer, repo)
 }
 
 func removeInstalledApplication(cmd *cobra.Command, name string, settings config.CrossPlatformSettings, repo types.Repository, force, dryRun bool, provider pluginBootstrapProvider) (bool, error) {

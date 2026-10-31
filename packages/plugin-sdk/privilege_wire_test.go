@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,6 +12,21 @@ import (
 )
 
 var _ = Describe("Executable authorization diagnostics", func() {
+	It("round trips manual-removal errors without losing the native failure", func() {
+		original := &ManualRemovalRequiredError{Applications: []string{"neovim"}}
+		var diagnostic bytes.Buffer
+		writeExecutionError(&diagnostic, fmt.Errorf("remove failed: %w", original))
+		native := exec.CommandContext(context.Background(), "sh", "-c", "exit 1").Run()
+		Expect(native).To(HaveOccurred())
+		err := decodeExecutionError(diagnostic.String(), native)
+		var manual *ManualRemovalRequiredError
+		Expect(errors.As(err, &manual)).To(BeTrue())
+		Expect(manual.Applications).To(Equal([]string{"neovim"}))
+		Expect(err).To(MatchError(And(ContainSubstring("neovim"), ContainSubstring("documentation"))))
+		Expect(errors.Is(err, native)).To(BeTrue())
+		Expect(ExitStatus(err)).To(Equal(1))
+		Expect(decodeExecutionError(manualRemovalDiagnosticPrefix+"{}", native)).To(BeIdenticalTo(native))
+	})
 	It("round trips typed authorization while retaining the process exit error", func() {
 		original := &AuthorizationError{Kind: AuthorizationDenied, Reason: "permission rejected", NativeExitCode: 23}
 		var diagnostic bytes.Buffer
