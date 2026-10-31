@@ -101,7 +101,7 @@ var _ = Describe("Operation privilege contract", func() {
 		adapter := sdk.UnixSudoAdapter{LookPath: func(string) (string, error) { return "/usr/bin/sudo", nil }}
 		cmd, err := adapter.Prepare(context.Background(), plan)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(cmd.Args).To(Equal([]string{"/usr/bin/sudo", "-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "builder", "argument with spaces", "$(touch /bad)"}))
+		Expect(cmd.Args).To(Equal([]string{"/usr/bin/sudo", "-n", "-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "builder", "argument with spaces", "$(touch /bad)"}))
 	})
 	It("refuses root user operations without an original non-root identity", func() {
 		resolver.Elevated = true
@@ -153,7 +153,7 @@ var _ = Describe("Operation privilege contract", func() {
 			Authorize: func(context.Context, string) error { return nil },
 		}).Prepare(context.Background(), plan)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(cmd.Args).To(Equal([]string{"/usr/bin/sudo", "--", "install"}))
+		Expect(cmd.Args).To(Equal([]string{"/usr/bin/sudo", "-n", "--", "install"}))
 		native := exec.CommandContext(context.Background(), "sh", "-c", "exit 42").Run()
 		Expect(sdk.ExitStatus(native)).To(Equal(42))
 		var auth *sdk.AuthorizationError

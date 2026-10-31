@@ -56,7 +56,7 @@ var _ = Describe("Elevated CLI user operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(output).To(Equal("recorded"))
 		Expect(commands.name).To(Equal("/fake/sudo"))
-		Expect(commands.args).To(Equal([]string{"-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "printf", "%s", "hello; $(false)"}))
+		Expect(commands.args).To(Equal([]string{"-n", "-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "printf", "%s", "hello; $(false)"}))
 	})
 	It("runs system hooks elevated for the resolved invoking account and preserves shell variables", func() {
 		script := `usermod -aG docker "$DEVEX_INVOKING_USER"; echo "${VERSION_CODENAME}"`
@@ -84,7 +84,7 @@ var _ = Describe("Elevated CLI user operations", func() {
 	It("copies configuration with switched argv instead of writing as root", func() {
 		Expect(utils.CopyUserFileWithContext(context.Background(), "/source with spaces", "/Users/alice/config")).To(Succeed())
 		Expect(commands.name).To(Equal("/fake/sudo"))
-		Expect(commands.args).To(Equal([]string{"-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "cp", "--", "/source with spaces", "/Users/alice/config"}))
+		Expect(commands.args).To(Equal([]string{"-n", "-H", "-u", "alice", "--", "env", "HOME=/Users/alice", "USER=alice", "LOGNAME=alice", "cp", "--", "/source with spaces", "/Users/alice/config"}))
 	})
 	It("fails hooks and configuration copies closed as plain root before execution", func() {
 		resolver := sdk.NewPrivilegeResolver()

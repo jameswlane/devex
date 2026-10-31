@@ -3,85 +3,81 @@ package setup
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
-	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
-// startInstallation begins the installation process for all selected applications
+// foregroundInstallation lets Bubble Tea release its terminal while the nested installer runs.
+type foregroundInstallation struct{ run func() }
+
+func (f *foregroundInstallation) Run() error        { f.run(); return nil }
+func (*foregroundInstallation) SetStdin(io.Reader)  {}
+func (*foregroundInstallation) SetStdout(io.Writer) {}
+func (*foregroundInstallation) SetStderr(io.Writer) {}
+
 func (m *SetupModel) startInstallation() tea.Cmd {
-	return func() tea.Msg {
-		// Convert selections to CrossPlatformApp objects
-		apps := m.buildAppList()
+	return tea.Exec(&foregroundInstallation{run: func() { m.installSelectedApps() }}, func(error) tea.Msg { return InstallCompleteMsg{} })
+}
 
-		log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
+func (m *SetupModel) installSelectedApps() {
+	// Convert selections to CrossPlatformApp objects
+	apps := m.buildAppList()
 
-		// Add debug logging for each app being installed
-		for i, app := range apps {
-			log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+	log.Info("Starting streaming installer with selected apps", "appCount", len(apps))
+
+	// Add debug logging for each app being installed
+	for i, app := range apps {
+		log.Info("App to install", "index", i, "name", app.Name, "description", app.Description)
+	}
+
+	fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
+
+	// Start streaming installation with enhanced panic protection
+	log.Info("Starting streaming installer with enhanced panic protection")
+
+	// Use synchronous execution to prevent race conditions
+	defer func() {
+		// Ensure any panics in the installation are recovered
+		if r := recover(); r != nil {
+			log.Error("Panic in installation process", fmt.Errorf("panic: %v", r))
+			m.installation.addError(fmt.Sprintf("installation failed: %v", r))
+			fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
+			fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
+			fmt.Printf("Error: %v\n", r)
+			// Cannot return from defer function - the panic recovery is for logging only
 		}
+	}()
 
-		fmt.Printf("\n🚀 Starting installation of %d applications...\n", len(apps))
+	// Use the command context while Bubble Tea has released the terminal.
+	ctx := m.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
 
-		// Start streaming installation with enhanced panic protection
-		log.Info("Starting streaming installer with enhanced panic protection")
+	if err := tui.StartInstallation(ctx, apps, m.repo, m.settings); err != nil {
+		log.Error("Streaming installer failed", err)
+		fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
 
-		// Use synchronous execution to prevent race conditions
-		defer func() {
-			// Ensure any panics in the installation are recovered
-			if r := recover(); r != nil {
-				log.Error("Panic in installation process", fmt.Errorf("panic: %v", r))
-				fmt.Printf("\n❌ Installation failed due to an unexpected error.\n")
-				fmt.Printf("Please check the logs for details: %s\n", log.GetLogFile())
-				fmt.Printf("Error: %v\n", r)
-				// Cannot return from defer function - the panic recovery is for logging only
-			}
-		}()
+		m.installation.addError(err.Error())
+		return
+	}
 
-		// Get context from Bubble Tea program
-		ctx := context.Background() // Default context if GetContext is not available
+	// Installation completed successfully - now finalize shell setup
+	log.Info("Installation completed successfully, running shell configuration finalization")
 
-		if err := tui.StartInstallation(ctx, apps, m.repo, m.settings); err != nil {
-			log.Error("Streaming installer failed", err)
-			fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
-
-			// Fallback to direct installer if TUI fails
-			log.Info("Falling back to direct installer")
-			fmt.Printf("Attempting direct installation as fallback...\n")
-
-			var errors []string
-			for _, app := range apps {
-				if err := installers.InstallCrossPlatformApp(ctx, app, m.settings, m.repo); err != nil {
-					errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
-				}
-			}
-			if len(errors) > 0 {
-				err := fmt.Errorf("installation failures: %s", strings.Join(errors, "; "))
-				log.Error("Direct installer also failed", err)
-				fmt.Printf("\n❌ Both installation methods failed: %v\n", err)
-				fmt.Printf("Check logs for details: %s\n", log.GetLogFile())
-				return InstallCompleteMsg{} // Signal completion even on failure
-			}
-		}
-
-		// Installation completed successfully - now finalize shell setup
-		log.Info("Installation completed successfully, running shell configuration finalization")
-
-		// Run shell finalization (same as automated setup)
-		if err := m.finalizeSetup(ctx); err != nil {
-			log.Warn("Shell setup had issues during TUI installation", "error", err)
-			m.recordShellConfigurationFailure(m.getSelectedShell(), err)
-			// Don't fail the entire setup for shell config issues
-		}
-
-		return InstallCompleteMsg{} // Signal successful completion
+	// Run shell finalization (same as automated setup)
+	if err := m.finalizeSetup(ctx); err != nil {
+		log.Warn("Shell setup had issues during TUI installation", "error", err)
+		m.recordShellConfigurationFailure(m.getSelectedShell(), err)
+		// Don't fail the entire setup for shell config issues
 	}
 }
 

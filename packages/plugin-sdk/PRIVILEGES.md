@@ -8,7 +8,7 @@ and uses the account home and group, ignoring caller-supplied home paths.
 
 User scope is for builds, Homebrew, YAY/AUR, hooks and personal configuration.
 It requires a non-root account. An elevated Unix invocation resolves `SUDO_USER`
-and uses `sudo -H -u USER -- env HOME=... USER=... LOGNAME=... COMMAND`.
+and uses `sudo -n -H -u USER -- env HOME=... USER=... LOGNAME=... COMMAND`.
 Plain root without an original non-root account fails closed, including install
 hooks, configuration copies and their previews; run DevEx as the intended user
 or preserve SUDO_USER through sudo. doas/DOAS_USER and pkexec/PKEXEC_UID are not
@@ -19,6 +19,10 @@ falling back to the account home when unset. This supports isolated configuratio
 and plugin storage without changing the resolved username, UID or GID. Elevated
 invocations and explicitly selected accounts always use the account database home.
 System scope runs directly when already elevated; otherwise it needs an adapter.
+Unix sudo execution is non-interactive (`sudo -n`), including the exact target
+when a policy disallows the preliminary `sudo -n true` probe. Interactive hosts
+must authorize with `sudo -v` while they own the foreground terminal, before
+starting privileged work; automation must arrange credentials in advance.
 YAY remains a user process and manages its own package-manager elevation.
 
 Bootstrap and offline previews use the same resolved home for `.devex/plugins`;

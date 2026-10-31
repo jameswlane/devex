@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -39,8 +40,17 @@ func ExecInstallHookWithContext(ctx context.Context, command types.InstallComman
 		return "", fmt.Errorf("resolve install hook invoking user: %w", err)
 	}
 	if privilege.Scope == sdk.ScopeUser {
-		return ExecAsUserWithContext(ctx, ExpandUserPlaceholders(command.Shell, *userPlan.IntendedUser))
+		return ExecAsUserWithContext(ctx, ExpandUserPlaceholders(NonInteractiveSudoShell(command.Shell), *userPlan.IntendedUser))
 	}
 	privilege.User = userPlan.IntendedUser
-	return ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", command.Shell)
+	return ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
+}
+
+// NonInteractiveSudoShell prevents catalog shell hooks and pipelines from prompting
+// after the setup UI has taken ownership of the terminal.
+func NonInteractiveSudoShell(command string) string {
+	if !strings.Contains(command, "sudo ") {
+		return command
+	}
+	return "sudo() { command sudo -n \"$@\"; }; export -f sudo\n" + command
 }

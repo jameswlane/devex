@@ -34,7 +34,7 @@ var _ = Describe("Privilege dispatch integration", func() {
 		DeferCleanup(func() { NewPrivilegeResolver, DefaultPrivilegeAdapter = originalResolver, originalAdapter })
 		home = GinkgoT().TempDir()
 		sudo = filepath.Join(home, "sudo")
-		script := "#!/bin/sh\ncase \"$1\" in\n-H) shift; shift; shift; shift; exec \"$@\";;\n-n) echo probe >> \"$SUDO_TEST_LOG\"; exit 1;;\n--) shift; echo target >> \"$SUDO_TEST_LOG\"; exec \"$@\";;\n*) exit 99;;\nesac\n"
+		script := "#!/bin/sh\nif [ \"$1\" = -n ] && [ \"$2\" != true ]; then shift; fi\ncase \"$1\" in\n-H) shift; shift; shift; shift; exec \"$@\";;\n-n) echo probe >> \"$SUDO_TEST_LOG\"; exit 1;;\n--) shift; echo target >> \"$SUDO_TEST_LOG\"; exec \"$@\";;\n*) exit 99;;\nesac\n"
 		Expect(os.WriteFile(sudo, []byte(script), 0755)).To(Succeed())
 		GinkgoT().Setenv("SUDO_TEST_LOG", filepath.Join(home, "sudo.log"))
 		GinkgoT().Setenv("PATH", home+string(os.PathListSeparator)+os.Getenv("PATH"))
