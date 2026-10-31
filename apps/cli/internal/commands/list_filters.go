@@ -26,12 +26,21 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 	for _, app := range allApps {
 		known[app.Name] = true
 	}
+	var installedApps []InstalledApp
 	for name := range installedAppsCache {
 		if known[name] {
 			continue
 		}
 		data, err := repo.Get("installed-app-definition:" + normalizeInstallLookup(name))
 		if err != nil || data == "" {
+			installedApps = append(installedApps, InstalledApp{
+				Name:              name,
+				Description:       "No application definition available",
+				Category:          "unknown",
+				Method:            "unknown",
+				Status:            "Installed",
+				MissingDefinition: true,
+			})
 			continue
 		}
 		var app types.CrossPlatformApp
@@ -40,8 +49,6 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 		}
 		allApps = append(allApps, app)
 	}
-
-	var installedApps []InstalledApp
 
 	// Convert to InstalledApp format with method detection
 	for _, app := range allApps {

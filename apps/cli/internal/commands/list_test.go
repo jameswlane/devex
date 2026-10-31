@@ -13,6 +13,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,6 +103,109 @@ var _ = Describe("List Command", func() {
 	})
 
 	Describe("Integration Tests", func() {
+		Context("tracked applications without definitions", func() {
+			BeforeEach(func() {
+				viper.Reset()
+				DeferCleanup(viper.Reset)
+				mockRepo = mocks.NewMockRepository()
+				settings = config.CrossPlatformSettings{}
+				Expect(mockRepo.AddApp("mise")).To(Succeed())
+				Expect(mockRepo.AddApp("mise-rust")).To(Succeed())
+				// An empty saved definition is also unavailable.
+				Expect(mockRepo.Set("installed-app-definition:mise-rust", "")).To(Succeed())
+			})
+
+			DescribeTable("shows every tracked name with a note in human-readable output",
+				func(verbose bool) {
+					cmd := commands.NewListCmd(mockRepo, settings)
+					cmd.SetOut(buf)
+					cmd.SetArgs([]string{"installed", fmt.Sprintf("--verbose=%t", verbose)})
+
+					Expect(cmd.Execute()).To(Succeed())
+					Expect(buf.String()).To(MatchRegexp(`mise\s`))
+					Expect(buf.String()).To(ContainSubstring("mise-rust"))
+					Expect(buf.String()).To(ContainSubstring("unknown"))
+					Expect(buf.String()).To(ContainSubstring("No application definition available"))
+					Expect(buf.String()).NotTo(ContainSubstring("No installed applications found"))
+				},
+				Entry("default list", false),
+				Entry("verbose table", true),
+			)
+
+			DescribeTable("marks missing definitions in structured output",
+				func(format string) {
+					cmd := commands.NewListCmd(mockRepo, settings)
+					cmd.SetOut(buf)
+					cmd.SetArgs([]string{"installed", "--format", format})
+
+					Expect(cmd.Execute()).To(Succeed())
+					var rows []map[string]interface{}
+					if format == "json" {
+						Expect(json.Unmarshal(buf.Bytes(), &rows)).To(Succeed())
+					} else {
+						Expect(yaml.Unmarshal(buf.Bytes(), &rows)).To(Succeed())
+					}
+					Expect(rows).To(HaveLen(2))
+					nameKey, categoryKey, methodKey := "Name", "Category", "Method"
+					if format == "yaml" {
+						nameKey, categoryKey, methodKey = "name", "category", "method"
+					}
+					Expect(rows[0]).To(HaveKeyWithValue(nameKey, "mise"))
+					Expect(rows[1]).To(HaveKeyWithValue(nameKey, "mise-rust"))
+					for _, row := range rows {
+						Expect(row).To(HaveKeyWithValue(categoryKey, "unknown"))
+						Expect(row).To(HaveKeyWithValue(methodKey, "unknown"))
+						Expect(row).To(HaveKeyWithValue("missing_definition", true))
+					}
+				},
+				Entry("JSON", "json"),
+				Entry("YAML", "yaml"),
+			)
+
+			It("keeps catalog and saved definitions alongside name-only records", func() {
+				settings.Terminal.Development = []types.CrossPlatformApp{{
+					Name: "mise", Category: "development",
+					AllPlatforms: types.OSConfig{InstallMethod: "curlpipe"},
+				}}
+				saved := types.CrossPlatformApp{
+					Name: "mise-rust", Category: "languages",
+					AllPlatforms: types.OSConfig{InstallMethod: "mise"},
+				}
+				data, err := json.Marshal(saved)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mockRepo.Set("installed-app-definition:mise-rust", string(data))).To(Succeed())
+				Expect(mockRepo.AddApp("orphan")).To(Succeed())
+
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"installed", "--format", "json"})
+				Expect(cmd.Execute()).To(Succeed())
+				var rows []commands.InstalledApp
+				Expect(json.Unmarshal(buf.Bytes(), &rows)).To(Succeed())
+				Expect(rows).To(HaveLen(3))
+				Expect(rows[0].Name).To(Equal("mise"))
+				Expect(rows[0].Method).To(Equal("curlpipe"))
+				Expect(rows[0].Category).To(Equal("development"))
+				Expect(rows[0].MissingDefinition).To(BeFalse())
+				Expect(rows[1].Name).To(Equal("mise-rust"))
+				Expect(rows[1].Method).To(Equal("mise"))
+				Expect(rows[1].Category).To(Equal("languages"))
+				Expect(rows[1].MissingDefinition).To(BeFalse())
+				Expect(rows[2].Name).To(Equal("orphan"))
+				Expect(rows[2].MissingDefinition).To(BeTrue())
+			})
+
+			It("applies category, method, and search filters to name-only records", func() {
+				cmd := commands.NewListCmd(mockRepo, settings)
+				cmd.SetOut(buf)
+				cmd.SetArgs([]string{"installed", "--category", "unknown", "--method", "unknown", "--search", "rust"})
+
+				Expect(cmd.Execute()).To(Succeed())
+				Expect(buf.String()).To(ContainSubstring("Installed Applications (1)"))
+				Expect(buf.String()).To(ContainSubstring("mise-rust (unknown)"))
+			})
+		})
+
 		Context("list installed command", func() {
 			It("should execute installed command successfully", func() {
 				cmd := commands.NewListCmd(mockRepo, settings)
