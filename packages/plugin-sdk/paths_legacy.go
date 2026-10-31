@@ -381,7 +381,7 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 	}
 	tempName := filepath.Base(temp.Name())
 	defer func() { _ = temp.Close(); _ = dst.Remove(tempName) }()
-	if _, err := io.Copy(temp, input); err != nil {
+	if _, err := io.Copy(temp, migrationReader{ctx: ctx, reader: input}); err != nil {
 		return err
 	}
 	if err := temp.Chmod(info.Mode().Perm()); err != nil {
@@ -396,11 +396,25 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 		return err
 	}
 	// Link publishes without overwriting a destination created by another process.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := dst.Link(tempName, filepath.Base(destination)); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return nil
 		}
 		return err
+	}
+	published, err := dst.Lstat(filepath.Base(destination))
+	if err != nil {
+		return err
+	}
+	staged, err := temp.Stat()
+	if err != nil {
+		return err
+	}
+	if !published.Mode().IsRegular() || !os.SameFile(published, staged) {
+		return fmt.Errorf("migration temporary file was replaced before publication: %s", destination)
 	}
 	directory, err := dst.Open(".")
 	if err != nil {
@@ -423,4 +437,16 @@ func moveLegacy(ctx context.Context, source, destination string, dry bool, out i
 	}
 	_, _ = fmt.Fprintf(out, "Moved %s -> %s\n", source, destination)
 	return nil
+}
+
+type migrationReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r migrationReader) Read(buffer []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return r.reader.Read(buffer)
 }
