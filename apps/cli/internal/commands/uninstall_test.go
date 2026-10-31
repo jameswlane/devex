@@ -3,11 +3,13 @@ package commands_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -225,6 +227,83 @@ var _ = Describe("Uninstall Command", func() {
 	})
 
 	Describe("Uninstall execution", func() {
+		It("preserves a typed manual-removal result returned by an installer", func() {
+			Expect(os.WriteFile(testApp.ConfigFiles[0].Destination, []byte("config"), 0600)).To(Succeed())
+			Expect(os.WriteFile(testApp.CleanupFiles[0], []byte("data"), 0600)).To(Succeed())
+			manual := &sdk.ManualRemovalRequiredError{Applications: []string{testApp.Name}}
+			installer := &recordingInstaller{uninstallErrors: map[string]error{testApp.UninstallCommand: manual}}
+			useRecordingInstaller(installer)
+			cmd := commands.NewUninstallCmd(mockRepo, settings)
+			cmd.SetArgs([]string{"--app", testApp.Name, "--force"})
+
+			err := cmd.Execute()
+			Expect(errors.Is(err, manual)).To(BeTrue())
+			_, err = mockRepo.GetApp(testApp.Name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(testApp.ConfigFiles[0].Destination).To(BeAnExistingFile())
+			Expect(testApp.CleanupFiles[0]).To(BeAnExistingFile())
+		})
+
+		DescribeTable("handles curlpipe removal without discarding files or records prematurely",
+			func(removal string, succeeds bool, manualRequired bool) {
+				GinkgoT().Setenv("HOME", filepath.Join(tempDir, "home"))
+				binary := filepath.Join(tempDir, "binary with spaces")
+				Expect(os.WriteFile(binary, []byte("installed"), 0600)).To(Succeed())
+				Expect(os.WriteFile(testApp.ConfigFiles[0].Destination, []byte("config"), 0600)).To(Succeed())
+				Expect(os.WriteFile(testApp.CleanupFiles[0], []byte("data"), 0600)).To(Succeed())
+				definition := types.CrossPlatformApp{Name: testApp.Name, AllPlatforms: types.OSConfig{
+					InstallMethod: "curlpipe", InstallCommand: "https://example.com/install.sh",
+					UninstallCommand: removal, ConfigFiles: testApp.ConfigFiles, CleanupFiles: testApp.CleanupFiles,
+				}}
+				if succeeds {
+					// Verify shell quoting, environment expansion and flags are preserved.
+					GinkgoT().Setenv("DEVEX_TEST_REMOVAL_BINARY", binary)
+					definition.AllPlatforms.UninstallCommand = `rm -f -- "$DEVEX_TEST_REMOVAL_BINARY"`
+				}
+				data, err := json.Marshal(definition)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mockRepo.Set("installed-app-definition:test-app", string(data))).To(Succeed())
+				installer := &recordingInstaller{}
+				useRecordingInstaller(installer)
+				cmd := commands.NewUninstallCmd(mockRepo, settings)
+				cmd.SetArgs([]string{"--app", testApp.Name, "--force"})
+
+				err = cmd.Execute()
+				if succeeds {
+					Expect(err).NotTo(HaveOccurred())
+					_, err = mockRepo.GetApp(testApp.Name)
+					Expect(err).To(HaveOccurred())
+					stored, err := mockRepo.Get("installed-app-definition:test-app")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(stored).To(BeEmpty())
+					Expect(binary).NotTo(BeAnExistingFile())
+					Expect(testApp.ConfigFiles[0].Destination).NotTo(BeAnExistingFile())
+					Expect(testApp.CleanupFiles[0]).NotTo(BeAnExistingFile())
+				} else {
+					Expect(err).To(HaveOccurred())
+					if manualRequired {
+						var manual *sdk.ManualRemovalRequiredError
+						Expect(errors.As(err, &manual)).To(BeTrue())
+						Expect(manual.Applications).To(Equal([]string{testApp.Name}))
+						Expect(err).To(MatchError(ContainSubstring("documentation")))
+					}
+					_, err = mockRepo.GetApp(testApp.Name)
+					Expect(err).NotTo(HaveOccurred())
+					stored, err := mockRepo.Get("installed-app-definition:test-app")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(stored).To(Equal(string(data)))
+					Expect(binary).To(BeAnExistingFile())
+					Expect(testApp.ConfigFiles[0].Destination).To(BeAnExistingFile())
+					Expect(testApp.CleanupFiles[0]).To(BeAnExistingFile())
+				}
+				Expect(installer.uninstallCommands).To(BeEmpty())
+			},
+			Entry("missing uninstall command", "", false, true),
+			Entry("whitespace uninstall command", "  ", false, true),
+			Entry("failing uninstall command", "exit 17", false, false),
+			Entry("successful uninstall command", "configured", true, false),
+		)
+
 		It("executes a stored inline definition with the install-command fallback and clears its records", func() {
 			definition := types.CrossPlatformApp{
 				Name: "inline-app",

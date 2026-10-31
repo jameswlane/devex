@@ -1,10 +1,13 @@
 package main_test
 
 import (
+	"errors"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	main "github.com/jameswlane/devex/packages/package-manager-curlpipe"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 var _ = Describe("Curlpipe Package Manager", func() {
@@ -34,7 +37,12 @@ var _ = Describe("Curlpipe Package Manager", func() {
 			})
 
 			It("should route remove command correctly", func() {
-				Skip("Integration test - requires package removal handling")
+				err := plugin.Execute("remove", []string{"neovim", "lazydocker"})
+				var manual *sdk.ManualRemovalRequiredError
+				Expect(errors.As(err, &manual)).To(BeTrue())
+				Expect(manual.Applications).To(Equal([]string{"neovim", "lazydocker"}))
+				Expect(err).To(MatchError(And(ContainSubstring("neovim"), ContainSubstring("lazydocker"), ContainSubstring("documentation"))))
+				Expect(sdk.ExitStatus(err)).NotTo(BeZero())
 			})
 		})
 
@@ -118,7 +126,8 @@ var _ = Describe("Curlpipe Package Manager", func() {
 
 		Context("application name validation", func() {
 			It("should validate application names", func() {
-				Skip("Integration test - requires app name validation")
+				err := plugin.Execute("remove", []string{"neovim; echo unsafe"})
+				Expect(err).To(MatchError(ContainSubstring("invalid application name")))
 			})
 		})
 	})

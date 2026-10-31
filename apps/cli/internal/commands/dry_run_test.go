@@ -178,6 +178,19 @@ var _ = Describe("Mutation-free command previews", func() {
 		assertUnchanged(before)
 	})
 
+	It("previews manual removal for curlpipe apps without an uninstall command", func() {
+		data, err := json.Marshal(types.CrossPlatformApp{Name: "preview-app", AllPlatforms: types.OSConfig{
+			InstallMethod: "curlpipe", InstallCommand: "https://example.com/install.sh",
+		}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(repo.Repository.Set("installed-app-definition:preview-app", string(data))).To(Succeed())
+		before := snapshotPreviewHome(home)
+		Expect(execute("uninstall", "--dry-run", "--app", "preview-app")).To(MatchError(ContainSubstring("manual removal required")))
+		Expect(out.String()).To(ContainSubstring("Would not remove preview-app"))
+		Expect(out.String()).NotTo(ContainSubstring("Would uninstall preview-app"))
+		assertUnchanged(before)
+	})
+
 	It("previews rollback before confirmation, package installation, file restoration and service restart", func() {
 		backup := filepath.Join(home, ".devex", "backups", "nginx_20261030_120000")
 		Expect(os.MkdirAll(backup, 0o700)).To(Succeed())

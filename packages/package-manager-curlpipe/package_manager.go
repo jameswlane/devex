@@ -29,7 +29,6 @@ func (p *CurlpipePlugin) Execute(command string, args []string) error {
 		p.EnsureAvailable()
 		return p.handleInstall(ctx, args)
 	case "remove":
-		p.EnsureAvailable()
 		return p.handleRemove(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
@@ -127,11 +126,7 @@ func (p *CurlpipePlugin) handleRemove(ctx context.Context, args []string) error 
 		}
 	}
 
-	p.logger.Printf("Note: Curl pipe installations typically don't provide uninstall scripts\n")
-	p.logger.Printf("The following applications cannot be automatically uninstalled: %s\n", strings.Join(args, ", "))
-	p.logger.Printf("Manual removal may be required - check application documentation.\n")
-
-	return nil
+	return &sdk.ManualRemovalRequiredError{Applications: args}
 }
 
 // handleValidateURL validates URLs for installation
