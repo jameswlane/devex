@@ -66,9 +66,13 @@ Authorization Services prompt in an interactive console session. The adapter pas
 the command and arguments as AppleScript arguments and applies `quoted form` to
 each one; it authorizes only the selected command and does not enable developer
 mode, disable Gatekeeper, or change any other security setting as a side effect.
-Stdin, stdout and stderr are attached to `osascript`; AppleScript returns the
-target's standard output after the command finishes rather than streaming it
-incrementally.
+AppleScript wraps completion in a structured status result. Positive target
+statuses implement `NativeExitStatus`; authorization classification uses the
+AppleScript error number, never target or `osascript` diagnostic text. Stdin is
+attached to `osascript` but is not forwarded to `do shell script`. Target stdout
+is written after completion rather than streamed incrementally. Successful target
+stderr is not returned by this script and therefore is not forwarded; failure
+text is returned as the AppleScript error message and written to stderr.
 
 Authorization cancellation (`-128`), denial (`-60005`) and Authorization Services
 cancellation (`-60006`) return typed `AuthorizationDenied` with the native status.
@@ -80,16 +84,21 @@ the native prompt are not a supported elevation path.
 
 **Status: NOT RUN — no macOS host is available in the development environment.**
 
-On an interactive macOS arm64 host, build a small helper in this module that calls
-`ExecOperationWithContext` with `ScopeSystem` and `/usr/bin/true`, then prints the
-returned error, its `AuthorizationError.Kind`, and `ExitStatus`. Run it as a
-non-root user and cancel the native administrator prompt. Verify that the helper
-reports `AuthorizationDenied`, preserves status `-128`, and that `/usr/bin/true`
-never runs. Repeat with `/usr/bin/id -un` and approve the prompt to verify the
-privileged command outputs `root`; before and after both runs, verify that
-`DevToolsSecurity -status` and `spctl --status` are unchanged. Also run a
-`ScopeUser` helper for `/usr/bin/whoami` and verify that it outputs the invoking
-user without displaying an authorization prompt.
+On an interactive macOS arm64 host, run the gated spec as a non-root user:
+
+```sh
+DEVEX_MACOS_AUTH_SMOKE=1 go test -v . -ginkgo.focus 'macOS native denial smoke'
+```
+
+Cancel the native administrator prompt. The spec invokes a marker-producing
+`/bin/sh` target and verifies that the marker does not exist, the error is
+`AuthorizationDenied`, `AuthorizationError.NativeExitCode` is `-128`, and
+`ExitStatus(err)` is `1`. Without `DEVEX_MACOS_AUTH_SMOKE=1`, the spec skips and
+does not display a prompt. Before and after the run, verify that
+`DevToolsSecurity -status` and `spctl --status` are unchanged. Separately approve
+a `ScopeSystem` request for `/usr/bin/id -un` to verify privileged output is
+`root`, and run a `ScopeUser` request for `/usr/bin/whoami` to verify that it
+outputs the invoking user without displaying an authorization prompt.
 
 ## Windows scope and elevation
 

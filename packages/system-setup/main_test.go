@@ -72,6 +72,31 @@ var _ = Describe("macOS operation authorization", func() {
 		Expect(adapter.plans[1].Args).To(Equal([]string{"Finder"}))
 	})
 
+	It("applies only the selected user operation without authorization or security mutations", func() {
+		Expect(plugin.configureMacOS(context.Background(), []string{"--apply", "finder-hidden-files"})).To(Succeed())
+		Expect(adapter.plans).To(HaveLen(2))
+		for _, plan := range adapter.plans {
+			Expect(plan.Privilege.Scope).To(Equal(sdk.ScopeUser))
+			Expect(plan.Elevate).To(BeFalse())
+			Expect(plan.SwitchUser).To(BeFalse())
+			Expect(plan.Name).NotTo(BeElementOf("DevToolsSecurity", "spctl"))
+		}
+		Expect(adapter.plans[0].Name).To(Equal("defaults"))
+		Expect(adapter.plans[1].Name).To(Equal("killall"))
+	})
+
+	It("requires an explicit operation instead of applying every missing setting", func() {
+		Expect(plugin.configureMacOS(context.Background(), []string{"--apply"})).To(MatchError(ContainSubstring("select at least one macOS operation")))
+		Expect(adapter.plans).To(BeEmpty())
+	})
+
+	It("authorizes only the selected system operation", func() {
+		Expect(plugin.configureMacOS(context.Background(), []string{"--apply", "developer-mode"})).To(Succeed())
+		Expect(adapter.plans).To(HaveLen(1))
+		Expect(adapter.plans[0].Name).To(Equal("DevToolsSecurity"))
+		Expect(adapter.plans[0].Elevate).To(BeTrue())
+	})
+
 	It("requests system authorization only for developer mode", func() {
 		Expect(plugin.applyDeveloperMode(context.Background())).To(Succeed())
 		Expect(adapter.plans).To(HaveLen(1))

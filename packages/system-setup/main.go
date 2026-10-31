@@ -21,6 +21,7 @@ type SystemSetupPlugin struct {
 
 // SystemConfig represents a system configuration item
 type SystemConfig struct {
+	ID          string
 	Name        string
 	Description string
 	Check       func() bool
@@ -159,22 +160,29 @@ func (p *SystemSetupPlugin) configureLinux(ctx context.Context, args []string) e
 }
 
 func (p *SystemSetupPlugin) configureMacOS(ctx context.Context, args []string) error {
+	selected, apply, err := selectMacOSOperations(args)
+	if err != nil {
+		return err
+	}
 	fmt.Println("\nConfiguring macOS system settings...")
 
 	configs := []SystemConfig{
 		{
+			ID:          "finder-hidden-files",
 			Name:        "Show hidden files in Finder",
 			Description: "Make hidden files visible in Finder",
 			Check:       p.checkFinderHiddenFiles,
 			Apply:       func() error { return p.applyFinderHiddenFiles(ctx) },
 		},
 		{
+			ID:          "developer-mode",
 			Name:        "Enable developer mode",
 			Description: "Enable developer mode for debugging",
 			Check:       p.checkDeveloperMode,
 			Apply:       func() error { return p.applyDeveloperMode(ctx) },
 		},
 		{
+			ID:          "disable-gatekeeper",
 			Name:        "Disable Gatekeeper for development",
 			Description: "Allow unsigned applications during development",
 			Check:       p.checkGatekeeper,
@@ -182,16 +190,15 @@ func (p *SystemSetupPlugin) configureMacOS(ctx context.Context, args []string) e
 		},
 	}
 
-	// Check and optionally apply each configuration
 	for _, config := range configs {
-		fmt.Printf("\n%s:\n", config.Name)
+		fmt.Printf("\n%s (%s):\n", config.Name, config.ID)
 		fmt.Printf("  %s\n", config.Description)
 
 		if config.Check() {
 			fmt.Println("  ✓ Already configured")
 		} else {
 			fmt.Println("  ✗ Not configured")
-			if len(args) > 0 && args[0] == "--apply" {
+			if apply && selected[config.ID] {
 				if err := config.Apply(); err != nil {
 					return fmt.Errorf("apply %s: %w", config.Name, err)
 				}
@@ -200,11 +207,38 @@ func (p *SystemSetupPlugin) configureMacOS(ctx context.Context, args []string) e
 		}
 	}
 
-	if len(args) == 0 || args[0] != "--apply" {
-		fmt.Println("\nTo apply these configurations, run: system-setup configure --apply")
+	if !apply {
+		fmt.Println("\nTo apply one configuration, run: system-setup apply <finder-hidden-files|developer-mode|disable-gatekeeper>")
 	}
 
 	return nil
+}
+
+func selectMacOSOperations(args []string) (map[string]bool, bool, error) {
+	valid := map[string]bool{
+		"finder-hidden-files": true,
+		"developer-mode":      true,
+		"disable-gatekeeper":  true,
+	}
+	selected := make(map[string]bool)
+	apply := false
+	for _, arg := range args {
+		if arg == "--apply" {
+			apply = true
+			continue
+		}
+		if !valid[arg] {
+			return nil, false, fmt.Errorf("unknown macOS operation %q; choose finder-hidden-files, developer-mode, or disable-gatekeeper", arg)
+		}
+		selected[arg] = true
+	}
+	if apply && len(selected) == 0 {
+		return nil, false, fmt.Errorf("select at least one macOS operation: finder-hidden-files, developer-mode, or disable-gatekeeper")
+	}
+	if !apply && len(selected) > 0 {
+		return nil, false, fmt.Errorf("applying a macOS operation requires --apply or the apply command")
+	}
+	return selected, apply, nil
 }
 
 func (p *SystemSetupPlugin) configureWindows(ctx context.Context, args []string) error {
@@ -260,8 +294,7 @@ func (p *SystemSetupPlugin) configureWindows(ctx context.Context, args []string)
 func (p *SystemSetupPlugin) handleApply(ctx context.Context, args []string) error {
 	fmt.Println("Applying system configuration changes...")
 
-	// Call configure with --apply flag
-	return p.handleConfigure(ctx, []string{"--apply"})
+	return p.handleConfigure(ctx, append([]string{"--apply"}, args...))
 }
 
 func (p *SystemSetupPlugin) handleValidate(ctx context.Context, args []string) error {
