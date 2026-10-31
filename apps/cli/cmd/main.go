@@ -88,7 +88,8 @@ func main() {
 
 	// Execute the command (fixed: removed duplicate execution)
 	if err := rootCmd.Execute(); err != nil {
-		log.Error("Error executing root command", err)
+		// Cobra already printed the error and usage hint to stderr; keep this record file-only.
+		log.ErrorToFile("Error executing root command", err)
 		if closeErr := log.Close(); closeErr != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", closeErr)
 		}
@@ -127,10 +128,13 @@ func isDebugMode() bool {
 func handleError(context string, err error) {
 	if err != nil {
 		log.Error("Error occurred", err, "context", context)
-		_ = log.Close()
+		closeErr := log.Close()
 		_, err := fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
 		if err != nil {
 			return
+		}
+		if closeErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", closeErr)
 		}
 		Exit(1)
 	}
