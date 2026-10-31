@@ -118,6 +118,25 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 		Expect(runShellSetup(context.Background(), filepath.Join(GinkgoT().TempDir(), "missing"), "bash")).To(MatchError(ContainSubstring("tool-shell setup failed")))
 	})
 
+	It("quotes the recovery input so a single quote cannot break out of it", func(ctx SpecContext) {
+		shell := `bash'; echo injected; '`
+		model := &SetupModel{}
+		model.recordShellConfigurationFailure(shell, errors.New("retry configuration"))
+		_, recovery, found := strings.Cut(model.installation.getErrors()[0], "Recover: ")
+		Expect(found).To(BeTrue())
+		printfPart, _, found := strings.Cut(recovery, " | ")
+		Expect(found).To(BeTrue())
+
+		output, err := exec.CommandContext(ctx, "sh", "-c", printfPart).CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		expected, err := json.Marshal(sdk.PluginSetupInput{
+			Command:    "setup",
+			Parameters: map[string]interface{}{"selected_shell": shell},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(output)).To(Equal(string(expected) + "\n"))
+	})
+
 	It("includes the reason and selected-shell recovery command in both final summaries", func() {
 		model := &SetupModel{step: StepComplete, system: SystemInfo{shells: []string{"bash"}}}
 		model.recordShellConfigurationFailure("bash", errors.New("permission denied"))

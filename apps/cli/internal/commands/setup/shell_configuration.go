@@ -84,5 +84,10 @@ func (m *SetupModel) recordShellConfigurationFailure(shell string, err error) {
 		m.installation.addError(fmt.Sprintf("Shell configuration failed: %v", err))
 		return
 	}
-	m.installation.addError(fmt.Sprintf("Shell configuration failed: %v\n  Recover: printf '%%s\\n' '%s' | \"$HOME/.devex/plugins/devex-plugin-tool-shell\" setup", err, input))
+	m.installation.addError(fmt.Sprintf("Shell configuration failed: %v\n  Recover: printf '%%s\\n' %s | \"$HOME/.devex/plugins/devex-plugin-tool-shell\" setup", err, singleQuote(string(input))))
+}
+
+// singleQuote quotes s for a POSIX shell so it cannot break out of the quotes.
+func singleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
