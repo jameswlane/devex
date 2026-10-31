@@ -44,7 +44,7 @@ var _ = Describe("macOS authorization adapter", func() {
 		}}
 
 		Expect(adapter.Run(context.Background(), plan, streams)).To(Succeed())
-		Expect(gotArgs).To(HaveLen(7))
+		Expect(gotArgs).To(HaveLen(6))
 		Expect(gotArgs[0]).To(Equal("-e"))
 		Expect(gotArgs[1]).To(ContainSubstring("on error errorMessage number errorNumber"))
 		Expect(gotArgs[2:]).To(Equal([]string{"--", plan.Name, plan.Args[0], plan.Args[1]}))

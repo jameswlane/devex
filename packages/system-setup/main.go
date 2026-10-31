@@ -17,6 +17,7 @@ var version = "dev" // Set by goreleaser
 // SystemSetupPlugin implements the System setup plugin
 type SystemSetupPlugin struct {
 	*sdk.BasePlugin
+	macOSCheckCommand func(string, ...string) (string, error)
 }
 
 // SystemConfig represents a system configuration item
@@ -443,8 +444,15 @@ func (p *SystemSetupPlugin) applyDevDirectories() error {
 }
 
 // Helper functions for macOS
+func (p *SystemSetupPlugin) runMacOSCheck(command string, args ...string) (string, error) {
+	if p.macOSCheckCommand != nil {
+		return p.macOSCheckCommand(command, args...)
+	}
+	return sdk.RunCommand(command, args...)
+}
+
 func (p *SystemSetupPlugin) checkFinderHiddenFiles() bool {
-	output, err := sdk.RunCommand("defaults", "read", "com.apple.finder", "AppleShowAllFiles")
+	output, err := p.runMacOSCheck("defaults", "read", "com.apple.finder", "AppleShowAllFiles")
 	if err != nil {
 		return false
 	}
@@ -462,7 +470,7 @@ func (p *SystemSetupPlugin) applyFinderHiddenFiles(ctx context.Context) error {
 }
 
 func (p *SystemSetupPlugin) checkDeveloperMode() bool {
-	output, err := sdk.RunCommand("DevToolsSecurity", "-status")
+	output, err := p.runMacOSCheck("DevToolsSecurity", "-status")
 	if err != nil {
 		return false
 	}
@@ -477,7 +485,7 @@ func (p *SystemSetupPlugin) applyDeveloperMode(ctx context.Context) error {
 }
 
 func (p *SystemSetupPlugin) checkGatekeeper() bool {
-	output, err := sdk.RunCommand("spctl", "--status")
+	output, err := p.runMacOSCheck("spctl", "--status")
 	if err != nil {
 		return false
 	}

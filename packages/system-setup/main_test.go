@@ -36,6 +36,22 @@ var _ = Describe("macOS operation authorization", func() {
 
 	BeforeEach(func() {
 		plugin = NewSystemSetupPlugin()
+		plugin.macOSCheckCommand = func(command string, args ...string) (string, error) {
+			switch command {
+			case "defaults":
+				Expect(args).To(Equal([]string{"read", "com.apple.finder", "AppleShowAllFiles"}))
+				return "NO", nil
+			case "DevToolsSecurity":
+				Expect(args).To(Equal([]string{"-status"}))
+				return "Developer mode is currently disabled", nil
+			case "spctl":
+				Expect(args).To(Equal([]string{"--status"}))
+				return "assessments enabled", nil
+			default:
+				Fail("unexpected macOS check command: " + command)
+				return "", errors.New("unexpected macOS check command")
+			}
+		}
 		adapter = &recordingPrivilegeAdapter{}
 		oldAdapter = sdk.DefaultPrivilegeAdapter
 		oldResolver = sdk.NewPrivilegeResolver
