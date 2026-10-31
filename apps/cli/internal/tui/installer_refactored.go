@@ -18,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	securitypkg "github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
 
 // RefactoredStreamingInstaller handles installation with modular components
@@ -255,6 +256,17 @@ func (rsi *RefactoredStreamingInstaller) executeCurlPipeInstall(ctx context.Cont
 // executeCommands executes a list of commands
 func (rsi *RefactoredStreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand) error {
 	for _, cmd := range commands {
+		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
+			return err
+		}
+		if cmd.Scope == "system" {
+			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
+			rsi.sendLog("INFO", output)
+			if err != nil {
+				return fmt.Errorf("install hook failed: %w", err)
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

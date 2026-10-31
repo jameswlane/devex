@@ -3,6 +3,7 @@ package installers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -129,7 +130,7 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 		// Simple command parsing - split on spaces and filter out common flags
 		parts := strings.Fields(command)
 		for _, part := range parts {
-			if !strings.HasPrefix(part, "-") && part != "install" && part != "sudo" {
+			if (p.method == "brew" && part == "--cask") || (!strings.HasPrefix(part, "-") && part != "install" && part != "sudo") {
 				args = append(args, part)
 			}
 		}
@@ -151,7 +152,7 @@ func (p *PluginBasedInstaller) Uninstall(command string, repo types.Repository) 
 	if command != "" {
 		parts := strings.Fields(command)
 		for _, part := range parts {
-			if !strings.HasPrefix(part, "-") && part != "remove" && part != "sudo" {
+			if (p.method == "brew" && part == "--cask") || (!strings.HasPrefix(part, "-") && part != "remove" && part != "sudo") {
 				args = append(args, part)
 			}
 		}
@@ -279,10 +280,15 @@ func runInstallCommands(ctx context.Context, commands []types.InstallCommand) er
 	log.Info("Starting runInstallCommands", "commands", len(commands))
 
 	for _, cmd := range commands {
+		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
+			return err
+		}
 		if cmd.Shell != "" {
-			processedCommand := utils.ExpandUserPlaceholders(cmd.Shell, *plan.IntendedUser)
-			log.Info("Executing shell command", "command", processedCommand)
-			output, err := utils.ExecAsUserWithContext(ctx, processedCommand)
+			log.Info("Executing shell command", "command", cmd.Shell)
+			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
+			if output != "" {
+				fmt.Fprint(os.Stdout, output)
+			}
 			if err != nil {
 				log.Error("Failed to execute shell command", err, "output", output)
 				return fmt.Errorf("failed to execute shell command: %w", err)

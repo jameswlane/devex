@@ -28,13 +28,8 @@ applications:
     install_method: snap
     install_command: code
   # Containerization
+  # Resolve Docker and its platform-specific setup from the application catalog.
   - name: docker
-    category: container
-    description: Container platform
-    default: true
-    install_method: apt
-    install_command: docker.io
-    dependencies: []
   # Database Systems
   - name: postgresql
     category: database
