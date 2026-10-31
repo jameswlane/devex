@@ -419,7 +419,7 @@ Uninstall applications from the system without removing them from your DevEx con
 ```bash
 devex uninstall --app docker --force
 devex uninstall --apps "git,docker,node" --force
-devex uninstall --category development --force
+devex uninstall --category "Development Tools" --force
 ```
 
 DevEx uses the application definition saved at install time for inline applications. For older installations that only recorded an application name, it restores the install method, dependencies, and cleanup metadata from the current application catalog, including inline definitions passed with `--config`. Pass the original configuration when uninstalling older inline applications if no definition was saved. Saved definitions take precedence over current configuration.
@@ -428,7 +428,7 @@ Applications installed outside DevEx can be uninstalled only when their names ex
 
 The command processes all requested applications and returns a nonzero exit code if any application cannot be resolved or uninstalled. In automation, use `--force` to suppress confirmation prompts and check the exit status.
 
-Category selection skips applications known to belong to another category. If a tracked application's definition cannot be resolved and its category is unknown, the command reports an error because it cannot safely exclude that application.
+Category names match case-insensitively against resolved application definitions, so use the full category name, such as "Development Tools". Category selection skips applications known to belong to another category. If a tracked application's definition cannot be resolved and its category is unknown, the command warns and leaves it installed without failing the category operation. Restore its saved definition or pass its original configuration to resolve it, or select it explicitly with `--app` to diagnose the error. Resolution failures for applications known to belong to the requested category still return a nonzero exit code.
 
 Currently, `--cascade` allows noncritical dependency conflicts but does not add dependent applications to the removal list. Select dependents explicitly with `--apps` when removing them. `--remove-orphans` runs the package manager's orphan cleanup after at least one successful removal.
 

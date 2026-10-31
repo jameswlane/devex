@@ -62,7 +62,7 @@ Safety features:
   devex uninstall --apps "git,docker,node"
 
   # Uninstall by category
-  devex uninstall --category development
+  devex uninstall --category "Development Tools"
 
   # Force uninstall without confirmation
   devex uninstall --app mysql --force
@@ -81,7 +81,7 @@ Safety features:
 
 	cmd.Flags().StringVar(&appName, "app", "", "Name of the application to uninstall")
 	cmd.Flags().StringSliceVar(&apps, "apps", []string{}, "List of applications to uninstall (comma-separated)")
-	cmd.Flags().StringVar(&category, "category", "", "Uninstall all applications in a category")
+	cmd.Flags().StringVar(&category, "category", "", "Uninstall all applications in a category (case-insensitive)")
 	cmd.Flags().BoolVar(&all, "all", false, "Uninstall all applications (requires confirmation)")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompts")
 	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep configuration files")
@@ -211,16 +211,22 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			return fmt.Errorf("failed to list installed apps: %w", err)
 		}
 		for _, tracked := range installedApps {
-			if tracked.Category != "" && tracked.Category != category {
-				continue
-			}
 			app, err := resolveUninstallApp(repo, settings, tracked.Name)
 			if err != nil {
-				// An unresolved definition has no reliable category, so its failure remains actionable.
-				failures = append(failures, err.Error())
+				// Legacy tracking rows contain only a name. Use current metadata, if
+				// available, to decide whether this failure belongs to the selection.
+				knownCategory := tracked.Category
+				if configured, lookupErr := settings.GetApplicationByName(tracked.Name); lookupErr == nil && configured != nil {
+					knownCategory = configured.Category
+				}
+				if strings.EqualFold(knownCategory, category) {
+					failures = append(failures, err.Error())
+				} else if knownCategory == "" {
+					fmt.Printf("%s Skipping %s: category is unknown: %v. Restore its definition or select it with --app.\n", yellow("⚠️"), tracked.Name, err)
+				}
 				continue
 			}
-			if app.Category == category {
+			if strings.EqualFold(app.Category, category) {
 				appsToUninstall = append(appsToUninstall, app)
 			}
 		}

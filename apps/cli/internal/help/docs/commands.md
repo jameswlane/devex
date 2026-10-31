@@ -86,7 +86,7 @@ devex uninstall [apps...] [flags]
 
 **Options:**
 - `--all` - Remove all installed applications
-- `--category <name>` - Remove specific category
+- `--category <name>` - Remove specific category (case-insensitive)
 - `--purge` - Remove configuration files too
 - `--keep-config` - Keep configuration entries
 - `--force` - Skip dependency checks
@@ -100,7 +100,7 @@ devex uninstall docker
 devex uninstall docker --purge
 
 # Remove entire category
-devex uninstall --category development
+devex uninstall --category "Development Tools"
 
 # Force removal without dependency checks
 devex uninstall --all --force
