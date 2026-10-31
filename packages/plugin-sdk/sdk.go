@@ -594,6 +594,7 @@ type Downloader struct {
 	publicKeyPath    string
 	logger           Logger
 	strategy         DownloadStrategy
+	retryBackoff     RetryBackoffFunc
 }
 
 // DownloaderConfig configures the plugin downloader
@@ -621,6 +622,7 @@ func NewDownloader(registryURL, pluginDir string) *Downloader {
 		publicKeyPath:    "",
 		logger:           NewDefaultLogger(false), // Default logger
 		strategy:         ContinueOnError,         // Default to continue on error
+		retryBackoff:     defaultRetryBackoff,
 	}
 }
 
@@ -635,6 +637,7 @@ func NewSecureDownloader(config DownloaderConfig) *Downloader {
 		publicKeyPath:    config.PublicKeyPath,
 		logger:           NewDefaultLogger(false), // Default logger
 		strategy:         config.Strategy,
+		retryBackoff:     defaultRetryBackoff,
 	}
 }
 
@@ -655,6 +658,14 @@ func (d *Downloader) SetSilent(silent bool) {
 // SetStrategy sets the download strategy
 func (d *Downloader) SetStrategy(strategy DownloadStrategy) {
 	d.strategy = strategy
+}
+
+// SetRetryBackoff overrides the retry wait strategy. A nil function restores the default.
+func (d *Downloader) SetRetryBackoff(backoff RetryBackoffFunc) {
+	if backoff == nil {
+		backoff = defaultRetryBackoff
+	}
+	d.retryBackoff = backoff
 }
 
 // GetAvailablePlugins returns available plugins from registry with caching
@@ -737,12 +748,7 @@ func (d *Downloader) fetchPluginDirect(ctx context.Context, pluginName string) (
 	client := &http.Client{Timeout: 30 * time.Second}
 	pluginURL := fmt.Sprintf("%s/api/v1/plugins/%s", d.registryURL, pluginName)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", pluginURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, pluginURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch plugin: %w", err)
 	}
@@ -794,6 +800,11 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 				d.logger.Warning("Failed to download plugin %s: %v", pluginName, err)
 			}
 
+			var unavailableErr *RegistryUnavailableError
+			if errors.As(err, &unavailableErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return downloadErr
+			}
+
 			// Check strategy and critical status
 			switch d.strategy {
 			case FailOnError:
@@ -825,11 +836,7 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 	if multiErr.HasErrors() {
 		switch d.strategy {
 		case ContinueOnError:
-			// Log errors but don't fail
-			if d.logger != nil {
-				d.logger.Warning("Some plugins failed to download: %v", multiErr)
-			}
-			return nil
+			return multiErr
 		case RequireCritical:
 			// Check if any critical plugins failed
 			for _, err := range multiErr.Errors {
@@ -880,15 +887,8 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 
 	// Fetch fresh registry
 	client := &http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.registryURL+"/api/v1/registry", nil)
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, d.registryURL+"/api/v1/registry")
 	if err != nil {
-		return nil, err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
 		// Return cached registry if available
 		if cachedRegistry != nil {
 			if d.logger != nil {
@@ -1003,12 +1003,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 
 	// Create HTTP client with timeout
 	client := &http.Client{Timeout: 5 * time.Minute}
-	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := client.Do(req)
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, downloadURL)
 	if err != nil {
 		return fmt.Errorf("failed to download plugin from registry proxy: %w", err)
 	}

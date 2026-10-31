@@ -191,6 +191,26 @@ var _ = Describe("PluginBootstrap", func() {
 		})
 	})
 
+	Describe("Required plugin failures", func() {
+		It("returns the original download failure when a command needs the plugin", func() {
+			GinkgoT().Setenv("DEVEX_PLUGIN_REGISTRY_URL", "http://127.0.0.1:1")
+			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
+			pluginBootstrap, err := bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pluginBootstrap.Initialize(ctx)).To(Succeed())
+			requiredPlugins := pluginBootstrap.GetPlatform().GetRequiredPlugins()
+			Expect(requiredPlugins).NotTo(BeEmpty())
+
+			for _, pluginName := range requiredPlugins {
+				err = pluginBootstrap.ExecutePluginWithContext(ctx, pluginName, nil)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(pluginName))
+				Expect(err.Error()).To(ContainSubstring("failed to download plugin"))
+				Expect(err.Error()).To(ContainSubstring("plugin registry is unreachable"))
+			}
+		})
+	})
+
 	Describe("Platform Detection", func() {
 		BeforeEach(func() {
 			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
