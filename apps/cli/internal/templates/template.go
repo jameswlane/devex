@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -79,6 +81,7 @@ type DesktopTemplate struct {
 type TemplateManager struct {
 	builtinTemplatesDir string
 	userTemplatesDir    string
+	paths               devexpaths.Dirs
 }
 
 // NewTemplateManager creates a new template manager
@@ -88,7 +91,8 @@ func NewTemplateManager(homeDir string) *TemplateManager {
 
 	return &TemplateManager{
 		builtinTemplatesDir: builtinDir,
-		userTemplatesDir:    filepath.Join(homeDir, ".devex", "templates"),
+		userTemplatesDir:    filepath.Join(devexpaths.ForHome(homeDir).Config, "templates"),
+		paths:               devexpaths.ForHome(homeDir),
 	}
 }
 
@@ -146,7 +150,7 @@ func (tm *TemplateManager) GetAvailableTemplates() ([]Template, error) {
 	}
 
 	// Load user templates and allow them to override built-in ones
-	userTemplates, err := tm.loadTemplatesFromDir(tm.userTemplatesDir)
+	userTemplates, err := tm.loadTemplatesFromDir(tm.readTemplatesDir())
 	if err != nil {
 		// User templates directory might not exist, that's okay
 		fmt.Printf("Note: No user templates found (%v)\n", err)
@@ -181,7 +185,7 @@ func (tm *TemplateManager) ListTemplatesSources() (map[string]string, error) {
 	}
 
 	// Load user templates and mark overrides
-	userTemplates, err := tm.loadTemplatesFromDir(tm.userTemplatesDir)
+	userTemplates, err := tm.loadTemplatesFromDir(tm.readTemplatesDir())
 	if err == nil {
 		for _, template := range userTemplates {
 			if _, exists := sources[template.Metadata.Name]; exists {
@@ -402,3 +406,5 @@ func isCanonicalTemplateData(data []byte) bool {
 	}
 	return spec.SchemaVersion == TemplateSchemaVersion
 }
+
+func (tm *TemplateManager) readTemplatesDir() string { return tm.paths.ReadPath(tm.userTemplatesDir) }

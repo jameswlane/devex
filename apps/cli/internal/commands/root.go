@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -62,7 +64,7 @@ DevEx supports multiple platforms and package managers:
   • macOS: Homebrew, Mac App Store
   • Windows: winget, Chocolatey, Scoop
 
-All installations are configurable via YAML files in ~/.local/share/devex/config/`,
+All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 		Version: version,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := initializeConfig(cmd); err != nil {
@@ -89,7 +91,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 				return nil
 			}
 
-			if cmdName == "self-update" {
+			if cmdName == "self-update" || cmdName == "paths" || cmdName == "help" {
 				return nil
 			}
 			return runtime.initializePluginSystem(cmd.Context())
@@ -120,6 +122,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	}
 
 	cmd.AddCommand(NewSelfUpdateCmd(version, nil))
+	cmd.AddCommand(newPathsCmd())
 
 	// Register other commands
 	cmd.AddCommand(setupCmd)
@@ -148,7 +151,7 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 	// Define persistent flags (available to all subcommands)
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
 	cmd.PersistentFlags().Bool("dry-run", false, "Show what would be done without executing")
-	cmd.PersistentFlags().String("config", "", "Config file (default: ~/.devex/config.yaml)")
+	cmd.PersistentFlags().String("config", "", "Config file (default: $DEVEX_CONFIG_DIR/config.yaml)")
 	cmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
 	cmd.PersistentFlags().Bool("skip-plugin-download", false, "Skip automatic plugin downloads")
 	cmd.PersistentFlags().Bool("non-interactive", false, "Run without interactive prompts")
@@ -202,15 +205,15 @@ func loadCLIConfig(cfgFile string) error {
 		viper.SetConfigFile(cfgFile)
 	} else {
 		// Look for config in standard locations
-		home, err := os.UserHomeDir()
+		home, err := devexHomeDir()
 		if err != nil {
 			return err
 		}
 
 		// Search config in home directory with name "config" (without extension)
-		viper.AddConfigPath(".")                                              // Current directory
-		viper.AddConfigPath(filepath.Join(home, ".devex"))                    // User override
-		viper.AddConfigPath(filepath.Join(home, ".local/share/devex/config")) // Default location
+		viper.AddConfigPath(".")                                                                                                            // Current directory
+		viper.AddConfigPath(filepath.Dir(devexpaths.ForHome(home).ReadPath(filepath.Join(devexpaths.ForHome(home).Config, "config.yaml")))) // User override
+		viper.AddConfigPath(devexpaths.ForHome(home).Defaults())                                                                            // Default location
 		viper.SetConfigName("config")
 		viper.SetConfigType("yaml")
 	}

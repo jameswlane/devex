@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -123,7 +124,7 @@ system, and desktop settings) from your current setup.`,
 			}
 
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)
@@ -230,7 +231,7 @@ This command supports multiple installation sources:
 			templateRef := args[0]
 
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)
@@ -328,7 +329,7 @@ find specific templates.`,
   devex template custom list --tag golang`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)
@@ -438,7 +439,7 @@ statistics.`,
 			templateID := args[0]
 
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)
@@ -506,7 +507,7 @@ has been modified and you want to publish a new version.`,
 			}
 
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)
@@ -555,7 +556,7 @@ The operation can be undone using the 'devex undo' command if needed.`,
 			templateID := args[0]
 
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)
@@ -622,7 +623,7 @@ package contains all template files and manifest data.`,
 			templateID := args[0]
 
 			// Initialize managers
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			configDir := settings.GetConfigDir()
 
 			versionManager := version.NewVersionManager(baseDir)

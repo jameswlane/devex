@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -248,7 +250,7 @@ func (m RemoveModel) View() string {
 // removeAppFromConfig removes an application from the user's configuration
 func (m *RemoveModel) removeAppFromConfig(app types.AppConfig, createBackup bool) error {
 	// Create undo operation before modification
-	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+	baseDir := devexpaths.ForHome(m.settings.HomeDir).Config
 	undoManager := undo.NewUndoManager(baseDir)
 
 	metadata := map[string]interface{}{

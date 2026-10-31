@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/fs"
@@ -18,12 +20,12 @@ func LoadConfigs(homeDir string, files []string) (*viper.Viper, error) {
 	v := viper.New()
 
 	// Default configuration path
-	defaultConfigPath := filepath.Join(homeDir, ".local/share/devex/config")
-	overrideConfigPath := filepath.Join(homeDir, ".devex/config")
+	defaultConfigPath := devexpaths.ForHome(homeDir).Defaults()
+	overrideConfigPath := devexpaths.ForHome(homeDir).ReadPath(filepath.Join(devexpaths.ForHome(homeDir).Config, "config"))
 
 	// Load default configurations
 	for _, file := range files {
-		defaultPath := filepath.Join(defaultConfigPath, file)
+		defaultPath := devexpaths.ForHome(homeDir).ReadPath(filepath.Join(defaultConfigPath, file))
 		if err := mergeConfigFile(v, defaultPath); err != nil {
 			log.Warn("Failed to load default config; skipping", "file", file, "error", err)
 		}
@@ -31,7 +33,7 @@ func LoadConfigs(homeDir string, files []string) (*viper.Viper, error) {
 
 	// Apply overrides
 	for _, file := range files {
-		overridePath := filepath.Join(overrideConfigPath, file)
+		overridePath := devexpaths.ForHome(homeDir).ReadPath(filepath.Join(overrideConfigPath, file))
 		if _, err := fs.Stat(overridePath); err == nil {
 			log.Info("Applying override", "file", overridePath)
 			if err := mergeConfigFile(v, overridePath); err != nil {

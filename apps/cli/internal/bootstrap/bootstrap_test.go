@@ -73,7 +73,7 @@ var _ = Describe("PluginBootstrap", func() {
 		It("reports an installed plugin without asking the registry", func() {
 			pb, err := bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
-			plugin := filepath.Join(tempHomeDir, ".devex", "plugins", "devex-plugin-package-manager-apt")
+			plugin := filepath.Join(sdk.PathsForHome(tempHomeDir).Plugins(), "devex-plugin-package-manager-apt")
 			Expect(os.MkdirAll(filepath.Dir(plugin), 0o750)).To(Succeed())
 			Expect(os.WriteFile(plugin, []byte("#!/bin/sh\n"), 0o755)).To(Succeed())
 			Expect(pb.IsPluginAvailable(ctx, "package-manager-apt")).To(BeTrue())
@@ -82,7 +82,7 @@ var _ = Describe("PluginBootstrap", func() {
 		It("ignores a plugin file that is not executable", func() {
 			pb, err := bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
-			plugin := filepath.Join(tempHomeDir, ".devex", "plugins", "devex-plugin-package-manager-apt")
+			plugin := filepath.Join(sdk.PathsForHome(tempHomeDir).Plugins(), "devex-plugin-package-manager-apt")
 			Expect(os.MkdirAll(filepath.Dir(plugin), 0o750)).To(Succeed())
 			Expect(os.WriteFile(plugin, []byte("#!/bin/sh\n"), 0o644)).To(Succeed())
 			Expect(pb.IsPluginAvailable(ctx, "package-manager-apt")).To(BeFalse())
@@ -100,7 +100,7 @@ var _ = Describe("PluginBootstrap", func() {
 			sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
 			b, err := bootstrap.NewPluginBootstrap(false)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(b.GetManager().GetPluginDir()).To(Equal(filepath.Join(tempHomeDir, ".devex", "plugins")))
+			Expect(b.GetManager().GetPluginDir()).To(Equal(sdk.PathsForHome(tempHomeDir).Plugins()))
 			Expect(b.GetManager().GetPluginDir()).To(BeADirectory())
 		})
 		It("uses the original account home under sudo and prepares user-owned storage", func() {
@@ -122,7 +122,7 @@ var _ = Describe("PluginBootstrap", func() {
 			GinkgoT().Setenv("HOME", "/root")
 			b, err := bootstrap.NewPluginBootstrap(false)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(b.GetManager().GetPluginDir()).To(Equal(filepath.Join(tempHomeDir, ".devex", "plugins")))
+			Expect(b.GetManager().GetPluginDir()).To(Equal(sdk.PathsForHome(tempHomeDir).Plugins()))
 			Expect(b.GetManager().GetPluginDir()).To(BeADirectory())
 		})
 		Context("when skipDownload is false", func() {
@@ -132,7 +132,7 @@ var _ = Describe("PluginBootstrap", func() {
 				Expect(bootstrap).NotTo(BeNil())
 
 				// Verify plugin directory was created
-				pluginDir := filepath.Join(tempHomeDir, ".devex", "plugins")
+				pluginDir := sdk.PathsForHome(tempHomeDir).Plugins()
 				Expect(pluginDir).To(BeADirectory())
 			})
 		})
@@ -167,7 +167,7 @@ var _ = Describe("PluginBootstrap", func() {
 
 	Describe("Initialize", func() {
 		BeforeEach(func() {
-			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
+			Expect(os.MkdirAll(sdk.PathsForHome(tempHomeDir).Plugins(), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true) // Skip download for tests
 			Expect(err).NotTo(HaveOccurred())
@@ -259,7 +259,7 @@ var _ = Describe("PluginBootstrap", func() {
 
 	Describe("Platform Detection", func() {
 		BeforeEach(func() {
-			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
+			Expect(os.MkdirAll(sdk.PathsForHome(tempHomeDir).Plugins(), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
@@ -295,7 +295,7 @@ var _ = Describe("PluginBootstrap", func() {
 		var mockRootCmd *cobra.Command
 
 		BeforeEach(func() {
-			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
+			Expect(os.MkdirAll(sdk.PathsForHome(tempHomeDir).Plugins(), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())
@@ -343,7 +343,7 @@ var _ = Describe("PluginBootstrap", func() {
 	Describe("Error Handling", func() {
 		It("should handle plugin directory creation errors gracefully", func() {
 			// Create a file where the plugin directory should be
-			pluginDirPath := filepath.Join(tempHomeDir, ".devex", "plugins")
+			pluginDirPath := sdk.PathsForHome(tempHomeDir).Plugins()
 			parentDir := filepath.Dir(pluginDirPath)
 			err := os.MkdirAll(parentDir, 0755)
 			Expect(err).NotTo(HaveOccurred())
@@ -358,7 +358,7 @@ var _ = Describe("PluginBootstrap", func() {
 		})
 
 		It("should initialize with an empty plugin directory", func() {
-			Expect(os.MkdirAll(filepath.Join(tempHomeDir, ".devex", "plugins"), 0755)).To(Succeed())
+			Expect(os.MkdirAll(sdk.PathsForHome(tempHomeDir).Plugins(), 0755)).To(Succeed())
 			var err error
 			pluginBootstrap, err = bootstrap.NewPluginBootstrap(true)
 			Expect(err).NotTo(HaveOccurred())

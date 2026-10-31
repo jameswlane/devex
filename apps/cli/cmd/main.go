@@ -8,8 +8,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -34,11 +37,26 @@ func main() {
 		return
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	dirs, err := devexpaths.Resolve()
+	if err != nil {
+		handleError("resolving directories", err)
+		return
+	}
+	dryRun := migrationDryRun(os.Args[1:])
+	if err := dirs.Migrate(ctx, dryRun, os.Stderr); err != nil {
+		handleError("migrating legacy files", err)
+		return
+	}
+
 	// Determine debug mode from command line arguments or environment
 	debugMode := isDebugMode()
 
 	// Initialize the logger based on debug mode with improved error reporting
-	if err := log.InitFileLogger(debugMode); err != nil {
+	if dryRun {
+		log.InitDefaultLogger(os.Stderr)
+	} else if err := log.InitFileLogger(debugMode); err != nil {
 		// Fallback to stderr logging if file logging fails
 		log.InitDefaultLogger(os.Stderr)
 		_, err := fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
@@ -69,8 +87,6 @@ func main() {
 	}
 
 	// Validate dependencies quietly; report failures on stderr since logs go to a file
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
 		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
 	}
@@ -83,7 +99,16 @@ func main() {
 	log.Info("DevEx CLI started", "version", version, "platform", fmt.Sprintf("%s/%s", plat.OS, plat.Architecture))
 
 	// Initialize a database with proper directory creation
-	repo, db, err := initializeDatabase(ctx, homeDir)
+	var repo types.Repository
+	var db *datastore.SQLite
+	if dryRun {
+		db, err = datastore.NewSQLiteContext(ctx, ":memory:")
+		if err == nil {
+			repo = repository.NewRepository(db)
+		}
+	} else {
+		repo, db, err = initializeDatabase(ctx, homeDir)
+	}
 	if err != nil {
 		handleError("initializing database", err)
 		return
@@ -165,15 +190,34 @@ func exitCode(err error) int {
 }
 
 func initializeDatabase(ctx context.Context, homeDir string) (types.Repository, *datastore.SQLite, error) {
-	devexDir := filepath.Join(homeDir, ".devex")
+	devexDir := devexpaths.ForHome(homeDir).State
 	if err := os.MkdirAll(devexDir, 0750); err != nil {
 		return nil, nil, fmt.Errorf("create datastore directory %q: %w; check directory permissions", devexDir, err)
 	}
 
-	dbPath := filepath.Join(devexDir, "datastore.db")
+	dbPath := devexpaths.ForHome(homeDir).ReadPath(filepath.Join(devexDir, "datastore.db"))
 	sqlite, err := datastore.NewSQLiteContext(ctx, dbPath)
 	if err != nil {
 		return nil, nil, err
 	}
 	return repository.NewRepository(sqlite), sqlite, nil
+}
+
+// migrationDryRun is evaluated before Cobra startup to keep migration/log/database
+// initialization side-effect free. Stop at --, just as flag parsing does.
+func migrationDryRun(args []string) bool {
+	dry, _ := strconv.ParseBool(os.Getenv("DEVEX_DRY_RUN"))
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--dry-run" {
+			dry = true
+		}
+		if strings.HasPrefix(arg, "--dry-run=") {
+			value := strings.TrimPrefix(arg, "--dry-run=")
+			dry, _ = strconv.ParseBool(value)
+		}
+	}
+	return dry
 }

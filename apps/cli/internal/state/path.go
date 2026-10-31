@@ -2,8 +2,9 @@ package state
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/spf13/viper"
 )
@@ -15,14 +16,14 @@ const (
 )
 
 func DefaultDBPath(homeDir string) string {
-	return filepath.Join(homeDir, ".devex", "state.db")
+	return devexpaths.ForHome(homeDir).ReadPath(filepath.Join(devexpaths.ForHome(homeDir).State, "state.db"))
 }
 
 func ConfiguredDBPath() (string, error) {
 	if path := viper.GetString(DBPathConfigKey); path != "" {
 		return path, nil
 	}
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to determine user home directory: %w", err)
 	}

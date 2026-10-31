@@ -42,8 +42,7 @@ var _ = Describe("CacheManager", func() {
 	Describe("NewCacheManager", func() {
 		Context("when creating a new cache manager", func() {
 			It("should create all required directories", func() {
-				devexDir := filepath.Join(tempDir, ".devex")
-				cacheDir := filepath.Join(devexDir, "cache")
+				cacheDir := filepath.Join(tempDir, ".cache", "devex")
 				Expect(cacheDir).To(BeADirectory())
 				Expect(filepath.Join(cacheDir, "downloads")).To(BeADirectory())
 				Expect(filepath.Join(cacheDir, "metadata")).To(BeADirectory())
@@ -52,7 +51,7 @@ var _ = Describe("CacheManager", func() {
 			})
 
 			It("should create an index file", func() {
-				indexFile := filepath.Join(tempDir, ".devex", "cache", "index.json")
+				indexFile := filepath.Join(tempDir, ".cache", "devex", "index.json")
 				Expect(indexFile).To(BeAnExistingFile())
 			})
 		})

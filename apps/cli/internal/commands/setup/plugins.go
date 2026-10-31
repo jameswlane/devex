@@ -107,7 +107,7 @@ func (m *SetupModel) initializePlugins(ctx context.Context) (*bootstrap.PluginBo
 	m.pluginOnce.Do(func() {
 		m.pluginBootstrap, m.pluginError = bootstrap.NewPluginBootstrap(viper.GetBool("skip-plugin-download") || viper.GetBool("offline"))
 		if m.pluginError != nil {
-			m.pluginError = fmt.Errorf("create setup plugin system: %w; check permissions on ~/.devex/plugins", m.pluginError)
+			m.pluginError = fmt.Errorf("create setup plugin system: %w; check permissions on $DEVEX_DATA_DIR/plugins", m.pluginError)
 			return
 		}
 		m.pluginError = m.pluginBootstrap.Initialize(ctx)

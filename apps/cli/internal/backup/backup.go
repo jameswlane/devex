@@ -12,12 +12,13 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	BackupsDir       = "backups"
 	MaxBackups       = 50
 	BackupTimeFormat = "20060102-150405"
 	MetadataFile     = ".backup-metadata.json"
@@ -55,9 +56,15 @@ type BackupOptions struct {
 }
 
 func NewBackupManager(baseDir string) *BackupManager {
+	dirs, err := devexpaths.Resolve()
+	backups := filepath.Join(baseDir, "backups")
+	if err == nil && (baseDir == dirs.Config || baseDir == dirs.State) {
+		backups = dirs.Backups()
+		baseDir = dirs.Config
+	}
 	return &BackupManager{
 		baseDir:    baseDir,
-		backupsDir: filepath.Join(baseDir, BackupsDir),
+		backupsDir: backups,
 	}
 }
 
@@ -143,7 +150,7 @@ func (bm *BackupManager) CreateBackup(options BackupOptions) (*BackupMetadata, e
 }
 
 func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error {
-	backupDir := filepath.Join(bm.backupsDir, backupID)
+	backupDir := bm.readPath(filepath.Join(bm.backupsDir, backupID))
 	if _, err := os.Stat(backupDir); os.IsNotExist(err) {
 		return fmt.Errorf("backup %s not found in directory %s", backupID, bm.backupsDir)
 	}
@@ -194,7 +201,7 @@ func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error 
 }
 
 func (bm *BackupManager) ListBackups(filter string, limit int) ([]*BackupMetadata, error) {
-	metadataPath := filepath.Join(bm.backupsDir, MetadataFile)
+	metadataPath := bm.readPath(filepath.Join(bm.backupsDir, MetadataFile))
 	if _, err := os.Stat(metadataPath); os.IsNotExist(err) {
 		return []*BackupMetadata{}, nil
 	}
@@ -228,7 +235,7 @@ func (bm *BackupManager) ListBackups(filter string, limit int) ([]*BackupMetadat
 }
 
 func (bm *BackupManager) GetBackup(backupID string) (*BackupMetadata, error) {
-	backupDir := filepath.Join(bm.backupsDir, backupID)
+	backupDir := bm.readPath(filepath.Join(bm.backupsDir, backupID))
 	return bm.loadMetadata(backupDir)
 }
 
@@ -784,4 +791,11 @@ func BackupBeforeOperation(baseDir string, operation string) (*BackupMetadata, e
 		Compress:    true,
 		MaxBackups:  MaxBackups,
 	})
+}
+
+func (bm *BackupManager) readPath(path string) string {
+	if dirs, err := devexpaths.Resolve(); err == nil {
+		return dirs.ReadPath(path)
+	}
+	return path
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -84,7 +85,13 @@ func (m *SetupModel) recordShellConfigurationFailure(shell string, err error) {
 		m.installation.addError(fmt.Sprintf("Shell configuration failed: %v", err))
 		return
 	}
-	m.installation.addError(fmt.Sprintf("Shell configuration failed: %v\n  Recover: printf '%%s\\n' %s | \"$HOME/.devex/plugins/devex-plugin-tool-shell\" setup", err, singleQuote(string(input))))
+	dirs, resolveErr := sdk.ResolvePaths()
+	if resolveErr != nil {
+		m.installation.addError(fmt.Sprintf("Shell configuration failed: %v; resolve plugin directory: %v", err, resolveErr))
+		return
+	}
+	plugin := filepath.Join(dirs.Plugins(), "devex-plugin-tool-shell")
+	m.installation.addError(fmt.Sprintf("Shell configuration failed: %v\n  Recover: printf '%%s\\n' %s | %s setup", err, singleQuote(string(input)), singleQuote(plugin)))
 }
 
 // singleQuote quotes s for a POSIX shell so it cannot break out of the quotes.

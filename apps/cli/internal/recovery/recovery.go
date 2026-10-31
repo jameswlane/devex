@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
@@ -18,6 +20,8 @@ type RecoveryManager struct {
 	backupManager *backup.BackupManager
 	undoManager   *undo.UndoManager
 	baseDir       string
+	cacheDir      string
+	logsDir       string
 }
 
 // RecoveryOption represents a recovery option
@@ -92,10 +96,19 @@ type RecoveryResult struct {
 
 // NewRecoveryManager creates a new recovery manager
 func NewRecoveryManager(baseDir string) *RecoveryManager {
+	cacheDir := filepath.Join(baseDir, "cache")
+	logsDir := filepath.Join(baseDir, "logs")
+	dirs, err := devexpaths.Resolve()
+	if err == nil && baseDir == dirs.Config {
+		cacheDir = dirs.Cache
+		logsDir = dirs.Logs()
+	}
 	return &RecoveryManager{
 		backupManager: backup.NewBackupManager(baseDir),
 		undoManager:   undo.NewUndoManager(baseDir),
 		baseDir:       baseDir,
+		cacheDir:      cacheDir,
+		logsDir:       logsDir,
 	}
 }
 
@@ -471,7 +484,7 @@ func (rm *RecoveryManager) generateManualRecoveryOptions(ctx RecoveryContext, er
 			{
 				ID:          "manual-intervention",
 				Title:       "Check Logs",
-				Description: "Check DevEx logs in ~/.devex/logs/ for detailed error information",
+				Description: "Check DevEx logs in $DEVEX_STATE_DIR/logs/ for detailed error information",
 			},
 			{
 				ID:          "manual-intervention",
@@ -566,7 +579,7 @@ func (rm *RecoveryManager) executeConfigReset(step RecoveryStep, ctx RecoveryCon
 
 // executeCacheCleanup executes cache cleanup
 func (rm *RecoveryManager) executeCacheCleanup(step RecoveryStep, ctx RecoveryContext, result *RecoveryResult) error {
-	cacheDir := filepath.Join(rm.baseDir, "cache")
+	cacheDir := rm.cacheDir
 
 	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
 		result.Metadata["cache_cleaned"] = 0
@@ -640,7 +653,7 @@ func formatTimeAgo(t time.Time) string {
 
 // SaveRecoveryLog saves a recovery session log
 func (rm *RecoveryManager) SaveRecoveryLog(ctx RecoveryContext, options []RecoveryOption, result *RecoveryResult) error {
-	logDir := filepath.Join(rm.baseDir, "logs", "recovery")
+	logDir := filepath.Join(rm.logsDir, "recovery")
 	if err := os.MkdirAll(logDir, 0750); err != nil {
 		return fmt.Errorf("failed to create recovery log directory: %w", err)
 	}

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -803,12 +805,12 @@ func newConfigInheritanceCmd(settings config.CrossPlatformSettings) *cobra.Comma
 		Long: `Display how configuration files are inherited from defaults to user overrides.
 
 This shows the environment-aware configuration inheritance system where:
-- Default configs are loaded from ~/.local/share/devex/config/
-- Default environment configs from ~/.local/share/devex/config/environments/{env}/
-- Team configs are applied from ~/.devex/team/ (or $DEVEX_TEAM_CONFIG_DIR)
-- Team environment configs from ~/.devex/team/environments/{env}/
-- User configs are applied from ~/.devex/config/
-- User environment configs from ~/.devex/config/environments/{env}/
+- Default configs are loaded from $DEVEX_DATA_DIR/config/
+- Default environment configs from $DEVEX_DATA_DIR/config/environments/{env}/
+- Team configs are applied from $DEVEX_CONFIG_DIR/team/ (or $DEVEX_TEAM_CONFIG_DIR)
+- Team environment configs from $DEVEX_CONFIG_DIR/team/environments/{env}/
+- User configs are applied from $DEVEX_CONFIG_DIR/config/
+- User environment configs from $DEVEX_CONFIG_DIR/config/environments/{env}/
 - Each tier overrides the previous with environment-specific configs having higher priority`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return showConfigInheritance(settings)
@@ -901,7 +903,7 @@ Team configurations provide a middle layer in the inheritance hierarchy:
 - User configs (highest priority) - personal overrides
 
 Team configs can be stored in:
-- ~/.devex/team/ (default)
+- $DEVEX_CONFIG_DIR/team/ (default)
 - Custom location via DEVEX_TEAM_CONFIG_DIR environment variable
 
 Examples:
@@ -1187,9 +1189,9 @@ Environment-specific configurations provide targeted overrides for different dep
 - Custom environments (test, integration, etc.)
 
 Environment configs are stored in environments/{env}/ subdirectories within each tier:
-- ~/.local/share/devex/config/environments/{env}/
-- ~/.devex/team/environments/{env}/
-- ~/.devex/config/environments/{env}/
+- $DEVEX_DATA_DIR/config/environments/{env}/
+- $DEVEX_CONFIG_DIR/team/environments/{env}/
+- $DEVEX_CONFIG_DIR/config/environments/{env}/
 
 Examples:
   # Show current environment and configs
@@ -2173,7 +2175,7 @@ Examples:
 			}
 
 			// Fallback to original implementation
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			manager := backup.NewBackupManager(baseDir)
 
 			backupMetadata, err := manager.CreateBackup(backup.BackupOptions{
@@ -2234,7 +2236,7 @@ Examples:
   # List last 5 backups
   devex config backup list --limit 5`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			manager := backup.NewBackupManager(baseDir)
 
 			backups, err := manager.ListBackups(filter, limit)
@@ -2317,7 +2319,7 @@ Examples:
 			}
 
 			backupID := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			manager := backup.NewBackupManager(baseDir)
 
 			// Get backup info
@@ -2388,7 +2390,7 @@ Examples:
 			}
 
 			backupID := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			manager := backup.NewBackupManager(baseDir)
 
 			// Confirm deletion
@@ -2436,7 +2438,7 @@ Examples:
 				return fmt.Errorf("two backup IDs required")
 			}
 
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			manager := backup.NewBackupManager(baseDir)
 
 			comparison, err := manager.CompareBackups(args[0], args[1])
@@ -2540,7 +2542,7 @@ func newConfigVersionShowCmd(settings config.CrossPlatformSettings) *cobra.Comma
 
 Shows version number, timestamp, description, changes, and hash.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			vm := version.NewVersionManager(baseDir)
 
 			currentVersion, err := vm.GetCurrentVersion()
@@ -2609,7 +2611,7 @@ func newConfigVersionListCmd(settings config.CrossPlatformSettings) *cobra.Comma
 
 Shows version history with timestamps and descriptions.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			vm := version.NewVersionManager(baseDir)
 
 			versions, err := vm.ListVersions()
@@ -2695,7 +2697,7 @@ Creates automatic backups before migration and validates compatibility.`,
 			}
 
 			targetVersion := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			vm := version.NewVersionManager(baseDir)
 
 			// Check compatibility first
@@ -2775,7 +2777,7 @@ This restores configuration from the backup created when the target version was 
 			}
 
 			targetVersion := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			vm := version.NewVersionManager(baseDir)
 
 			// Confirm rollback
@@ -2828,7 +2830,7 @@ Shows potential issues, warnings, and required actions for migration.`,
 			}
 
 			targetVersion := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			vm := version.NewVersionManager(baseDir)
 
 			report, err := vm.CheckCompatibility(targetVersion)
@@ -2907,7 +2909,7 @@ func newConfigVersionUpdateCmd(settings config.CrossPlatformSettings) *cobra.Com
 
 This creates a backup and updates the version history with the current state.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			vm := version.NewVersionManager(baseDir)
 
 			if description == "" {
@@ -2977,7 +2979,7 @@ func newConfigUndoListCmd(settings config.CrossPlatformSettings) *cobra.Command 
 
 Shows operation details, timestamps, and potential risks of undoing each operation.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			undoManager := undo.NewUndoManager(baseDir)
 
 			if limit == 0 {
@@ -3059,7 +3061,7 @@ func newConfigUndoLastCmd(settings config.CrossPlatformSettings) *cobra.Command 
 
 This is a quick way to rollback the last change you made.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			undoManager := undo.NewUndoManager(baseDir)
 
 			// Check if there are operations to undo
@@ -3159,7 +3161,7 @@ Use 'devex config undo list' to see available operation IDs.`,
 			}
 
 			operationID := args[0]
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			undoManager := undo.NewUndoManager(baseDir)
 
 			// Get operation details
@@ -3236,7 +3238,7 @@ func newConfigUndoStatusCmd(settings config.CrossPlatformSettings) *cobra.Comman
 
 Shows available operations, recent activity, and system health.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			undoManager := undo.NewUndoManager(baseDir)
 
 			summary, err := undoManager.GetUndoSummary()

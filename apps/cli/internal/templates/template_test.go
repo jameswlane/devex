@@ -586,7 +586,7 @@ lifecycle:
 			Expect(err).ToNot(HaveOccurred())
 
 			// Verify file was created
-			userTemplatesDir := filepath.Join(tempDir, ".devex", "templates")
+			userTemplatesDir := filepath.Join(tempDir, ".config", "devex", "templates")
 			templateFile := filepath.Join(userTemplatesDir, "custom-test.yaml")
 			Expect(templateFile).To(BeAnExistingFile())
 

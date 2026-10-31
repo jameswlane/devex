@@ -3,9 +3,9 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -49,7 +49,7 @@ Examples:
   # Show undo system status
   devex undo --status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+			baseDir := devexpaths.ForHome(settings.HomeDir).Config
 			undoManager := undo.NewUndoManager(baseDir)
 
 			// Handle list flag

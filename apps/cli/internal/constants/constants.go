@@ -26,12 +26,7 @@ const (
 )
 
 // Configuration paths and directories
-const (
-	DefaultConfigDir  = ".local/share/devex/config"
-	OverrideConfigDir = ".devex"
-	LogsDir           = ".local/share/devex/logs"
-	BackupsDir        = ".devex/backups"
-)
+const ()
 
 // Application categories for organization
 const (

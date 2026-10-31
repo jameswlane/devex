@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -214,7 +215,7 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 	}
 
 	// Create undo operation before modification
-	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+	baseDir := devexpaths.ForHome(m.settings.HomeDir).Config
 	undoManager := undo.NewUndoManager(baseDir)
 
 	metadata := map[string]interface{}{

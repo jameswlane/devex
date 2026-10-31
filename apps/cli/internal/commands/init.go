@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -696,7 +698,7 @@ func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) er
 	}
 
 	// Create undo operation before initialization
-	baseDir := filepath.Join(os.Getenv("HOME"), ".devex")
+	baseDir := devexpaths.ForHome(settings.HomeDir).Config
 	undoManager := undo.NewUndoManager(baseDir)
 
 	metadata := map[string]interface{}{

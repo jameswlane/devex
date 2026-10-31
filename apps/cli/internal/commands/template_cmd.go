@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"text/tabwriter"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -86,7 +87,7 @@ func newTemplateValidateCmd() *cobra.Command {
 		Short: "Validate a template schema",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			homeDir, err := os.UserHomeDir()
+			homeDir, err := devexHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to determine user home directory: %w", err)
 			}
@@ -145,7 +146,7 @@ func newTemplatePlanCmd(settings config.CrossPlatformSettings, getPluginBootstra
 		Short: "Build and display a template execution plan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			homeDir, err := os.UserHomeDir()
+			homeDir, err := devexHomeDir()
 			if err != nil {
 				return fmt.Errorf("failed to determine user home directory: %w", err)
 			}
@@ -502,17 +503,17 @@ all discovered templates in the version tracking system.`,
 }
 
 func templateVersionBaseDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to determine user home directory: %w", err)
 	}
-	return filepath.Join(homeDir, ".devex"), nil
+	return devexpaths.ForHome(homeDir).Config, nil
 }
 
 // Display functions
 
 func mergeCanonicalTemplateVersions(templateVersions map[string]*templates.TemplateVersion) error {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return fmt.Errorf("failed to determine user home directory: %w", err)
 	}
@@ -531,7 +532,7 @@ func mergeCanonicalTemplateVersions(templateVersions map[string]*templates.Templ
 }
 
 func loadCanonicalTemplateSpecForInfo(idOrPath string) (*templates.TemplateSpec, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := devexHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine user home directory: %w", err)
 	}
