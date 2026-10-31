@@ -66,6 +66,11 @@ All installations are configurable via YAML files in ~/.local/share/devex/config
 			if err := initializeConfig(cmd); err != nil {
 				return err
 			}
+			// Even offline bootstrap can create plugin state or execute local plugins.
+			// Preview commands resolve their plans without initializing the runtime.
+			if viper.GetBool("dry-run") {
+				return nil
+			}
 
 			// Install resolves applications before initializing plugins so invalid input
 			// fails without downloads; bare devex and setup own their setup flow.

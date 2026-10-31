@@ -319,7 +319,7 @@ func (bm *BackupManager) ListBackups() ([]BackupEntry, error) {
 }
 
 // RestoreBackup restores an application from backup
-func (bm *BackupManager) RestoreBackup(backupPath string) error {
+func (bm *BackupManager) RestoreBackup(ctx context.Context, backupPath string) error {
 	log.Info("Restoring backup from path", "path", backupPath)
 
 	// Check if backup directory exists
@@ -336,7 +336,7 @@ func (bm *BackupManager) RestoreBackup(backupPath string) error {
 	// Restore config files
 	configDir := filepath.Join(backupPath, "config")
 	if _, err := os.Stat(configDir); err == nil {
-		if err := bm.restoreDirectory(configDir, "config"); err != nil {
+		if err := bm.restoreDirectory(ctx, configDir, "config"); err != nil {
 			log.Warn("Failed to restore config files", "error", err)
 		}
 	}
@@ -344,7 +344,7 @@ func (bm *BackupManager) RestoreBackup(backupPath string) error {
 	// Restore data files
 	dataDir := filepath.Join(backupPath, "data")
 	if _, err := os.Stat(dataDir); err == nil {
-		if err := bm.restoreDirectory(dataDir, "data"); err != nil {
+		if err := bm.restoreDirectory(ctx, dataDir, "data"); err != nil {
 			log.Warn("Failed to restore data files", "error", err)
 		}
 	}
@@ -354,7 +354,7 @@ func (bm *BackupManager) RestoreBackup(backupPath string) error {
 }
 
 // restoreDirectory restores files from a backup directory
-func (bm *BackupManager) restoreDirectory(backupDir, dirType string) error {
+func (bm *BackupManager) restoreDirectory(ctx context.Context, backupDir, dirType string) error {
 	entries, err := os.ReadDir(backupDir)
 	if err != nil {
 		return fmt.Errorf("failed to read backup directory: %w", err)
@@ -378,7 +378,6 @@ func (bm *BackupManager) restoreDirectory(backupDir, dirType string) error {
 		}
 
 		// Copy file back
-		ctx := context.Background()
 		cmd := exec.CommandContext(ctx, "cp", "-rp", srcPath, dstPath)
 		if err := cmd.Run(); err != nil {
 			log.Warn("Failed to restore file", "src", srcPath, "dst", dstPath, "error", err)

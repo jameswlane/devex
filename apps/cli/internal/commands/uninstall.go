@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,7 +76,7 @@ Safety features:
 				apps = []string{appName}
 			}
 
-			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, repo, settings)
+			return runUninstall(cmd.Context(), apps, category, all, force, keepConfig, keepData, removeOrphans, cascade, backup, stopServices, cleanupSystem, repo, settings, cmd.OutOrStdout())
 		},
 	}
 
@@ -152,7 +153,11 @@ func uninstallFailuresError(failures []string) error {
 	return fmt.Errorf("uninstall failed: %s", strings.Join(failures, "; "))
 }
 
-func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings) error {
+func runUninstall(ctx context.Context, apps []string, category string, all bool, force bool, keepConfig bool, keepData bool, removeOrphans bool, cascade bool, backup bool, stopServices bool, cleanupSystem bool, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	dryRun := viper.GetBool("dry-run")
 	_, mergedSettings, _, err := configuredApplications(settings)
 	if err != nil {
 		return fmt.Errorf("failed to load applications from configuration: %w", err)
@@ -192,7 +197,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			resolveTrackedApp(app)
 		}
 
-		if !force && len(appsToUninstall) > 0 {
+		if !dryRun && !force && len(appsToUninstall) > 0 {
 			fmt.Printf("%s You are about to uninstall %d applications:\n", yellow("⚠️"), len(appsToUninstall))
 			for _, app := range appsToUninstall {
 				fmt.Printf("  • %s (%s)\n", app.Name, app.InstallMethod)
@@ -281,6 +286,50 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			fmt.Printf("\n%s All conflicts can be resolved automatically or are non-critical.\n", green("✅"))
 		}
 		fmt.Println()
+	}
+
+	// Gate the entire execution loop, including installer lookup, stale-record
+	// deletion, backups, services, file cleanup and orphan removal.
+	if dryRun {
+		for _, app := range appsToUninstall {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			command := strings.TrimSpace(app.UninstallCommand)
+			if command == "" {
+				command = strings.TrimSpace(app.InstallCommand)
+			}
+			if command == "" || app.InstallMethod == "" {
+				failures = append(failures, fmt.Sprintf("%s: cannot preview uninstall without an install method and uninstall or install command", app.Name))
+				continue
+			}
+			fmt.Fprintf(out, "Would uninstall %s via %s: %s\n", app.Name, app.InstallMethod, command)
+			if backup {
+				fmt.Fprintf(out, "  Would create a backup of %s\n", app.Name)
+			}
+			if stopServices {
+				fmt.Fprintf(out, "  Would stop and disable services: %s\n", strings.Join(getAppServicesForUninstall(&app), ", "))
+			}
+			if !keepConfig {
+				for _, file := range app.ConfigFiles {
+					fmt.Fprintf(out, "  Would remove configuration: %s\n", file.Destination)
+				}
+			}
+			if !keepData {
+				for _, file := range app.CleanupFiles {
+					fmt.Fprintf(out, "  Would remove data: %s\n", file)
+				}
+			}
+			if cleanupSystem {
+				fmt.Fprintf(out, "  Would clean system files and refresh icon cache for %s\n", app.Name)
+			}
+			fmt.Fprintf(out, "  Would clear installation records for %s (including stale records if absent)\n", app.Name)
+		}
+		if removeOrphans {
+			fmt.Fprintln(out, "Would remove orphaned dependencies after successful removals; exact packages are unavailable until execution")
+		}
+		fmt.Fprintln(out, "Package status, plugin-specific commands and privileges are unavailable without executing the installer; no plugins were bootstrapped")
+		return uninstallFailuresError(failures)
 	}
 
 	fmt.Printf("%s Uninstalling %d application(s):\n\n", cyan("📦"), len(appsToUninstall))

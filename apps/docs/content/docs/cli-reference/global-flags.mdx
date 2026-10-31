@@ -21,9 +21,40 @@ These flags are available for all DevEx commands and provide consistent behavior
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--verbose` | `-v` | `bool` | `false` | Enable verbose output with detailed information |
-| `--dry-run` | `-n` | `bool` | `false` | Show what would be done without executing |
+| `--dry-run` | | `bool` | `false` | Show the supported command's plan without executing it |
 | `--help` | `-h` | `bool` | `false` | Show help information for the command |
 | `--version` | | `bool` | `false` | Show DevEx version information |
+
+### Preview guarantees and limits
+
+For `uninstall`, `--dry-run` resolves saved application definitions and performs
+read-only conflict discovery, then prints the planned package removal, backups,
+service changes, file cleanup, installation-record changes, and orphan cleanup.
+It skips confirmation prompts and returns before installer lookup or execution.
+The command does not create backups, remove files, update the installation
+database, or bootstrap plugins. `--all`, `--category`, `--apps`, and `--app` use
+the same gate, including when combined with `--force`.
+
+For `rollback`, `--dry-run` reads the available backups and application
+configuration, then prints the reinstall command, privilege plan, requested
+restores, and service restarts. It returns before confirmation, package
+installation, file restoration, or service changes. Missing backups, missing
+application definitions, and unsupported rollback installation methods produce
+errors instead of executing a partial plan.
+
+Root command initialization also skips plugin bootstrap when dry-run is enabled
+by a flag, `DEVEX_DRY_RUN`, or the CLI configuration. These previews do not
+download plugins or execute local plugin binaries. Uninstall cannot report exact
+plugin-specific commands, package status, or privilege requirements without the
+installer; rollback does not verify package availability or backup contents.
+Orphan packages can only be determined after successful removal.
+
+These guarantees cover the command execution stage. Process startup currently
+initializes logging and the datastore before command flags are resolved, so a
+dry-run invocation can still create startup files. The remaining preview audit
+includes startup initialization, `undo`, `recover`, interactive and automated
+`setup`, direct plugin dispatch, and an SDK preview capability contract. Do not
+assume that the global flag prevents every side effect in those paths yet.
 
 ### Configuration Flags
 
