@@ -39,6 +39,7 @@ var _ = Describe("PluginBootstrap", func() {
 
 		originalResolver := sdk.NewPrivilegeResolver
 		resolver := originalResolver()
+		resolver.Elevated = false
 		account, err := resolver.CurrentUser()
 		Expect(err).NotTo(HaveOccurred())
 		copyAccount := *account
@@ -83,6 +84,19 @@ var _ = Describe("PluginBootstrap", func() {
 	})
 
 	Describe("NewPluginBootstrap", func() {
+		It("uses an overridden HOME for the current non-elevated account", func() {
+			resolver := sdk.NewPrivilegeResolver()
+			account, err := resolver.CurrentUser()
+			Expect(err).NotTo(HaveOccurred())
+			copyAccount := *account
+			copyAccount.HomeDir = "/unused-account-home"
+			resolver.CurrentUser = func() (*user.User, error) { return &copyAccount, nil }
+			sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
+			b, err := bootstrap.NewPluginBootstrap(false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(b.GetManager().GetPluginDir()).To(Equal(filepath.Join(tempHomeDir, ".devex", "plugins")))
+			Expect(b.GetManager().GetPluginDir()).To(BeADirectory())
+		})
 		It("uses the original account home under sudo and prepares user-owned storage", func() {
 			resolver := sdk.NewPrivilegeResolver()
 			account, err := resolver.CurrentUser()
@@ -127,6 +141,7 @@ var _ = Describe("PluginBootstrap", func() {
 
 		Context("when home directory is not accessible", func() {
 			BeforeEach(func() {
+				GinkgoT().Setenv("HOME", "/nonexistent/directory")
 				resolver := sdk.NewPrivilegeResolver()
 				account, err := resolver.CurrentUser()
 				Expect(err).NotTo(HaveOccurred())

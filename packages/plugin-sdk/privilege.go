@@ -21,7 +21,8 @@ const (
 	ScopeSystem OperationScope = "system"
 )
 
-// UserIdentity is resolved from the account database, never from a guessed home path.
+// UserIdentity uses account database identity and the current user's home environment
+// only when no elevated or explicit account selection is involved.
 type UserIdentity struct {
 	Username string `json:"username"`
 	UID      string `json:"uid"`
@@ -102,7 +103,8 @@ type PrivilegeResolver struct {
 // a Windows token-elevation detector). Configure before concurrent operations.
 var NewPrivilegeResolver = defaultPrivilegeResolver
 
-// ResolveUser selects the real account behind sudo; USER and HOME are not authority.
+// ResolveUser selects identity from the account database, including the account
+// behind sudo. Only an implicit, non-elevated current user may override their home.
 func (r PrivilegeResolver) ResolveUser(requested *UserIdentity) (*UserIdentity, error) {
 	current, err := r.CurrentUser()
 	if err != nil {
@@ -127,7 +129,17 @@ func (r PrivilegeResolver) ResolveUser(requested *UserIdentity) (*UserIdentity, 
 	if !r.Elevated && account.Uid != current.Uid {
 		return nil, authorizationRequired("run as the intended user; changing another user's identity requires an adapter", nil)
 	}
-	return &UserIdentity{Username: account.Username, UID: account.Uid, GID: account.Gid, HomeDir: account.HomeDir}, nil
+	home := account.HomeDir
+	if !r.Elevated && requested == nil && r.Getenv != nil {
+		key := "HOME"
+		if runtime.GOOS == "windows" {
+			key = "USERPROFILE"
+		}
+		if value := r.Getenv(key); value != "" {
+			home = value
+		}
+	}
+	return &UserIdentity{Username: account.Username, UID: account.Uid, GID: account.Gid, HomeDir: home}, nil
 }
 
 // ExecutionRequest carries argv and explicit per-operation authority.

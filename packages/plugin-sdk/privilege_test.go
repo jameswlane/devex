@@ -42,6 +42,39 @@ var _ = Describe("Operation privilege contract", func() {
 	planUser := func() (sdk.ExecutionPlan, error) {
 		return resolver.Plan(sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "builder", Args: []string{"argument with spaces", "$(touch /bad)"}})
 	}
+	It("honors the current non-elevated account's HOME without trusting environment identity", func() {
+		resolver.Getenv = func(key string) string {
+			switch key {
+			case "HOME", "USERPROFILE":
+				return "/tmp/isolated-home"
+			case "USER", "SUDO_USER":
+				return "root"
+			default:
+				return ""
+			}
+		}
+		identity, err := resolver.ResolveUser(nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(identity.HomeDir).To(Equal("/tmp/isolated-home"))
+		Expect(identity.Username).To(Equal("alice"))
+		Expect(identity.UID).To(Equal("1000"))
+		Expect(account.HomeDir).To(Equal("/Users/alice"), "resolution must not mutate the cached account")
+	})
+	It("keeps the account home for elevated and explicitly selected users", func() {
+		resolver.Getenv = func(key string) string {
+			if key == "HOME" || key == "USERPROFILE" {
+				return "/tmp/untrusted-home"
+			}
+			return ""
+		}
+		identity, err := resolver.ResolveUser(&sdk.UserIdentity{Username: "alice", UID: "1000", HomeDir: "/tmp/supplied-home"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(identity.HomeDir).To(Equal("/Users/alice"))
+		resolver.Elevated = true
+		identity, err = resolver.ResolveUser(nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(identity.HomeDir).To(Equal("/Users/alice"))
+	})
 	It("runs a non-root user operation without sudo and keeps argv intact", func() {
 		plan, err := planUser()
 		Expect(err).NotTo(HaveOccurred())

@@ -27,7 +27,17 @@ var _ = Describe("Install privilege previews", func() {
 		Expect(err).NotTo(HaveOccurred())
 		copyAccount := *account
 		copyAccount.HomeDir = home
-		resolver.CurrentUser = func() (*user.User, error) { return &copyAccount, nil }
+		resolver.Elevated = true
+		resolver.CurrentUser = func() (*user.User, error) {
+			return &user.User{Username: "root", Uid: "0", HomeDir: "/root"}, nil
+		}
+		resolver.LookupUser = func(string) (*user.User, error) { return &copyAccount, nil }
+		resolver.Getenv = func(key string) string {
+			if key == "SUDO_USER" {
+				return account.Username
+			}
+			return os.Getenv(key)
+		}
 		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver { return resolver }
 		DeferCleanup(func() { sdk.NewPrivilegeResolver = original })
 		pluginDir := filepath.Join(home, ".devex", "plugins")

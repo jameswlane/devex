@@ -14,11 +14,15 @@ hooks, configuration copies and their previews; run DevEx as the intended user
 or preserve SUDO_USER through sudo. doas/DOAS_USER and pkexec/PKEXEC_UID are not
 automatically resolved; those hosts must supply an explicit intended account.
 A non-elevated invocation runs directly and cannot select another account.
+For the implicit current account, it honors `HOME` (`USERPROFILE` on Windows),
+falling back to the account home when unset. This supports isolated configuration
+and plugin storage without changing the resolved username, UID or GID. Elevated
+invocations and explicitly selected accounts always use the account database home.
 System scope runs directly when already elevated; otherwise it needs an adapter.
 YAY remains a user process and manages its own package-manager elevation.
 
-Bootstrap and offline previews use the same resolved account home for
-`.devex/plugins`, including when HOME points at `/root`. Elevated downloads
+Bootstrap and offline previews use the same resolved home for `.devex/plugins`;
+under sudo this is the account home even when HOME points at `/root`. Elevated downloads
 assign the resolved UID/GID to plugin storage directories, published executables,
 install records and cache files. Ownership failures for installed artifacts fail
 the download; registry-cache writes remain best effort. Existing verified plugin
