@@ -1,5 +1,6 @@
 {
 	"$schema": "https://openapi.vercel.sh/vercel.json",
+	"ignoreCommand": "npx -y turbo-ignore @devex/registry",
 	"rewrites": [
 		{
 			"source": "/v1/registry.json",
