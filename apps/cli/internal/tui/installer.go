@@ -21,6 +21,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
@@ -802,6 +803,20 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		si.recordFailedInstallation(app.Name, startTime, err)
 		return fmt.Errorf("installation failed: %w", err)
 	}
+
+	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
+	result := configfiles.Apply(ctx, app.Name, osConfig.ConfigFiles, false, func(message string) {
+		level := "INFO"
+		if strings.HasPrefix(message, "Warning:") {
+			level = "WARN"
+		}
+		si.sendLog(level, message)
+	})
+	si.postInstallMutex.Lock()
+	for _, warning := range result.Warnings {
+		si.postInstallWarnings = append(si.postInstallWarnings, errors.New(warning))
+	}
+	si.postInstallMutex.Unlock()
 
 	// Handle post-install commands
 	if len(osConfig.PostInstall) > 0 {
