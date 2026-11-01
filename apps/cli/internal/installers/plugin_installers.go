@@ -2,6 +2,7 @@ package installers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -317,8 +319,15 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	defer func() { finishAudit(result) }()
 	log.Info("Installing app", "app", app.Name)
 
+	// Resolve the same configured policy used by the interactive installer.
+	validator, err := settings.GetCommandValidator()
+	if err != nil {
+		return err
+	}
+	policy := utils.InstallHookPolicy{Validator: validator, AppName: app.Name}
+
 	// Execute pre-install commands
-	if err := state.AuditStep(ctx, "pre-install", len(app.PreInstall) > 0, func() error { return runInstallCommands(ctx, app.PreInstall) }); err != nil {
+	if err := state.AuditStep(ctx, "pre-install", len(app.PreInstall) > 0, func() error { return runInstallCommands(ctx, app.PreInstall, policy) }); err != nil {
 		return fmt.Errorf("failed to execute pre-install commands: %w", err)
 	}
 
@@ -327,11 +336,25 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 		return fmt.Errorf("failed to execute install command: %w", err)
 	}
 
-	if err := state.AuditStep(ctx, "config-files", len(app.ConfigFiles) > 0, func() error { return ApplyConfigFiles(ctx, app.ConfigFiles) }); err != nil {
-		return fmt.Errorf("failed to copy config files: %w", err)
-	}
+	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
+	// Config-file problems are warnings: the audit step records them as a failed
+	// step, but they don't fail the install.
+	_ = state.AuditStep(ctx, "config-files", len(app.ConfigFiles) > 0, func() error {
+		result := configfiles.Apply(ctx, app.Name, app.ConfigFiles, false, func(message string) {
+			if strings.HasPrefix(message, "Warning:") {
+				log.Warn(message)
+			} else {
+				log.Info(message)
+			}
+		})
+		if len(result.Warnings) > 0 {
+			return errors.New(strings.Join(result.Warnings, "; "))
+		}
+		return nil
+	})
+
 	// Execute post-install commands
-	if err := state.AuditStep(ctx, "post-install", len(app.PostInstall) > 0, func() error { return runInstallCommands(ctx, app.PostInstall) }); err != nil {
+	if err := state.AuditStep(ctx, "post-install", len(app.PostInstall) > 0, func() error { return runInstallCommands(ctx, app.PostInstall, policy) }); err != nil {
 		return fmt.Errorf("failed to execute post-install commands: %w", err)
 	}
 
@@ -339,7 +362,7 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	return nil
 }
 
-func runInstallCommands(ctx context.Context, commands []types.InstallCommand) error {
+func runInstallCommands(ctx context.Context, commands []types.InstallCommand, policies ...utils.InstallHookPolicy) error {
 	if len(commands) == 0 {
 		return nil
 	}
@@ -358,7 +381,7 @@ func runInstallCommands(ctx context.Context, commands []types.InstallCommand) er
 		}
 		if cmd.Shell != "" {
 			log.Info("Executing shell command", "command", cmd.Shell)
-			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
+			output, err := utils.ExecInstallHookWithContext(ctx, cmd, policies...)
 			if output != "" {
 				fmt.Fprint(os.Stdout, output)
 			}
@@ -414,14 +437,4 @@ func (p *PluginBasedInstaller) context() context.Context {
 		return context.Background()
 	}
 	return p.ctx
-}
-
-// ApplyConfigFiles shares the hook copy policy and intended-user path expansion.
-func ApplyConfigFiles(ctx context.Context, files []types.ConfigFile) error {
-	commands := make([]types.InstallCommand, 0, len(files))
-	for _, file := range files {
-		file := file
-		commands = append(commands, types.InstallCommand{Copy: &types.CopyCommand{Source: file.Source, Destination: file.Destination}})
-	}
-	return runInstallCommands(ctx, commands)
 }

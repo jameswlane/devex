@@ -87,7 +87,9 @@ var _ = Describe("Plain installation audit", func() {
 		fs.UseOsFs()
 		DeferCleanup(func() { fs.SetFs(oldFS) })
 		dir := GinkgoT().TempDir()
-		source, destination := filepath.Join(dir, "source"), filepath.Join(dir, "destination")
+		// config_files destinations must be inside $HOME (the suite's temporary HOME).
+		source := filepath.Join(dir, "source")
+		destination := filepath.Join(os.Getenv("HOME"), ".config", "audit-config", "destination")
 		Expect(os.WriteFile(source, []byte("configuration"), 0o600)).To(Succeed())
 		app := types.CrossPlatformApp{Name: "audit-config", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "audit-package", ConfigFiles: []types.ConfigFile{{Source: source, Destination: destination}}}}
 		Expect(runPlainInstall(context.Background(), &bytes.Buffer{}, []types.CrossPlatformApp{app}, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)).To(Succeed())

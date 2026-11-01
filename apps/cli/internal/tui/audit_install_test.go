@@ -108,7 +108,9 @@ var _ = Describe("TUI installation audit", func() {
 		fs.UseOsFs()
 		DeferCleanup(func() { fs.SetFs(oldFS) })
 		dir := GinkgoT().TempDir()
-		source, destination := filepath.Join(dir, "source"), filepath.Join(dir, "destination")
+		// config_files destinations must be inside $HOME (the suite's temporary HOME).
+		source := filepath.Join(dir, "source")
+		destination := filepath.Join(os.Getenv("HOME"), ".config", "audit-config", "destination")
 		Expect(os.WriteFile(source, []byte("configuration"), 0o600)).To(Succeed())
 		app := types.CrossPlatformApp{Name: "audit-app", AllPlatforms: types.OSConfig{InstallMethod: "generic", InstallCommand: "audit-tool", ConfigFiles: []types.ConfigFile{{Source: source, Destination: destination}}, PostInstall: []types.InstallCommand{{Shell: "audit-hook"}}}}
 		installer := NewStreamingInstaller(nil, &MockRepository{}, context.Background(), config.CrossPlatformSettings{})
