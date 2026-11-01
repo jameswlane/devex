@@ -52,7 +52,14 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 	case StepShell:
 		m.step = StepTheme
 	case StepTheme:
-		m.step = StepGitConfig
+		// Skip the Git step when git already has a global name and email;
+		// 'p' from Confirmation still opens it, pre-filled, to change them.
+		m.loadExistingGitIdentity()
+		if m.hasCompleteExistingIdentity() {
+			m.step = StepConfirmation
+		} else {
+			m.step = StepGitConfig
+		}
 	case StepGitConfig:
 		// Only proceed if both fields are filled and email is valid
 		fullName := strings.TrimSpace(m.git.gitFullName)

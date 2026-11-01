@@ -18,9 +18,12 @@ type InstallQuitMsg struct{}
 
 // PluginInstallMsg represents a plugin installation progress update
 type PluginInstallMsg struct {
-	Status   string
-	Progress float64
-	Error    error
+	PluginName      string
+	Status          string
+	Progress        float64
+	Error           error
+	BytesDownloaded int64
+	TotalBytes      int64
 }
 
 // PluginStatusUpdateMsg represents a status update for an individual plugin

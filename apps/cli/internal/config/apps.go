@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/common"
@@ -230,22 +232,15 @@ func toInstallCommandSlice(input any) []types.InstallCommand {
 			continue
 		}
 
-		command, ok := cmd["command"].(string)
-		if !ok {
-			log.Warn("Command is not a string, skipping", "command", cmd["command"])
+		var command types.InstallCommand
+		data, err := yaml.Marshal(cmd)
+		if err != nil {
 			continue
 		}
-
-		shell, ok := cmd["shell"].(string)
-		if !ok {
-			log.Warn("Shell is not a string, skipping", "shell", cmd["shell"])
+		if err := yaml.Unmarshal(data, &command); err != nil {
 			continue
 		}
-
-		result = append(result, types.InstallCommand{
-			Command: command,
-			Shell:   shell,
-		})
+		result = append(result, command)
 	}
 
 	log.Info("Converted to install command slice", "count", len(result))

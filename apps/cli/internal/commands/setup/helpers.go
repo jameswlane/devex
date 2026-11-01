@@ -7,6 +7,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -134,22 +135,13 @@ func getProgrammingLanguageNames(settings config.CrossPlatformSettings) []string
 	return languageNames
 }
 
-// getDesktopAppNames returns a list of desktop application names from settings
+// getDesktopAppNames returns filtered desktop application names from settings
 func getDesktopAppNames(settings config.CrossPlatformSettings) []string {
-	// For now, return applications from DesktopApps category if it exists
-	// In the future, this should be filtered by desktop environment
-	allApps := settings.GetAllApps()
-	// Pre-allocate slice with known capacity to avoid reallocations
-	desktopAppNames := make([]string, 0, len(allApps))
-
-	// Filter apps that are typically desktop applications
-	// You can refine this logic based on your application categories
-	for _, app := range allApps {
-		// Add all apps that have GUI or desktop-related categories
-		// This is a simple heuristic - adjust based on your needs
+	apps := getAvailableDesktopApps(settings, platform.DetectPlatform())
+	desktopAppNames := make([]string, 0, len(apps))
+	for _, app := range apps {
 		desktopAppNames = append(desktopAppNames, app.Name)
 	}
-
 	log.Debug("Loaded desktop applications", "count", len(desktopAppNames))
 	return desktopAppNames
 }

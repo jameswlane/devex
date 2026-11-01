@@ -2,49 +2,101 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
+
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
-// ProgressRunner provides a unified interface for running different operations with TUI progress tracking
+// progressQuitTimeout bounds how long Quit waits for the TUI to restore the
+// terminal before forcing it down with Kill. Tests shorten it.
+var progressQuitTimeout = 5 * time.Second
+
+// isInteractiveTerminal reports whether stdin and stdout are both terminals.
+// The progress TUI takes over the screen, so it only runs when both are.
+var isInteractiveTerminal = func() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) //nolint:gosec // fd values fit in int
+}
+
+// newProgressProgram builds the Bubble Tea program for the progress TUI.
+// Tests replace it to run without a real terminal.
+var newProgressProgram = func(model tea.Model) *tea.Program {
+	return tea.NewProgram(model, tea.WithAltScreen())
+}
+
+// ProgressRunner provides a unified interface for running different operations with TUI progress tracking.
+//
+// The TUI is started by the Run* methods and must be stopped with Quit, which
+// blocks until Bubble Tea has restored the terminal (raw mode, alt screen,
+// cursor). Without that wait the process can exit while the terminal is still
+// in raw mode, leaving the user's shell unusable.
 type ProgressRunner struct {
 	manager *progresspkg.ProgressManager
 	program *tea.Program
 	model   *ProgressModel
+
+	startOnce sync.Once
+	quitOnce  sync.Once
+	started   atomic.Bool
+	done      chan struct{}
 }
 
-// NewProgressRunner creates a new progress runner
+// NewProgressRunner creates a new progress runner. When stdin or stdout is not
+// a terminal, the runner is headless: operations still run, but no TUI starts.
 func NewProgressRunner(ctx context.Context, settings config.CrossPlatformSettings) *ProgressRunner {
 	manager := progresspkg.NewProgressManager(ctx, nil) // Program will be set later
 	model := NewProgressModel(manager)
-
-	program := tea.NewProgram(model, tea.WithAltScreen())
 
 	// Update the manager with the program for live updates
 	manager.GetTracker().AddListener(model)
 
 	runner := &ProgressRunner{
 		manager: manager,
-		program: program,
 		model:   model,
+		done:    make(chan struct{}),
+	}
+	if isInteractiveTerminal() {
+		runner.program = newProgressProgram(model)
 	}
 
 	return runner
 }
 
+// start launches the TUI once. It is a no-op for headless runners.
+func (pr *ProgressRunner) start() {
+	if pr.program == nil {
+		return
+	}
+	pr.startOnce.Do(func() {
+		pr.started.Store(true)
+		go func() {
+			defer close(pr.done)
+			if _, err := pr.program.Run(); err != nil && !errors.Is(err, tea.ErrProgramKilled) {
+				log.Warn("Progress display stopped with an error", "error", err)
+			}
+		}()
+	})
+}
+
+// Done is closed once the TUI has exited and restored the terminal. It never
+// closes for a runner whose TUI was not started.
+func (pr *ProgressRunner) Done() <-chan struct{} {
+	return pr.done
+}
+
 // RunInstallation runs application installation with progress tracking
 func (pr *ProgressRunner) RunInstallation(apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
-	// Start the TUI
-	go func() {
-		if _, err := pr.program.Run(); err != nil {
-			// TODO: Handle TUI error - could log or send to error channel
-			return
-		}
-	}()
+	pr.start()
 
 	// Create installer with progress tracking
 	installer := NewStreamingInstaller(pr.program, repo, context.Background(), settings)
@@ -56,13 +108,7 @@ func (pr *ProgressRunner) RunInstallation(apps []types.CrossPlatformApp, repo ty
 
 // RunCacheOperation runs cache operations with progress tracking
 func (pr *ProgressRunner) RunCacheOperation(operation string, args ...interface{}) error {
-	// Start the TUI
-	go func() {
-		if _, err := pr.program.Run(); err != nil {
-			// TODO: Handle TUI error - could log or send to error channel
-			return
-		}
-	}()
+	pr.start()
 
 	switch operation {
 	case "cleanup":
@@ -78,13 +124,7 @@ func (pr *ProgressRunner) RunCacheOperation(operation string, args ...interface{
 
 // RunConfigOperation runs configuration operations with progress tracking
 func (pr *ProgressRunner) RunConfigOperation(operation string, args ...interface{}) error {
-	// Start the TUI
-	go func() {
-		if _, err := pr.program.Run(); err != nil {
-			// TODO: Handle TUI error - could log or send to error channel
-			return
-		}
-	}()
+	pr.start()
 
 	switch operation {
 	case "backup":
@@ -102,13 +142,7 @@ func (pr *ProgressRunner) RunConfigOperation(operation string, args ...interface
 
 // RunTemplateOperation runs template operations with progress tracking
 func (pr *ProgressRunner) RunTemplateOperation(operation string, args ...interface{}) error {
-	// Start the TUI
-	go func() {
-		if _, err := pr.program.Run(); err != nil {
-			// TODO: Handle TUI error - could log or send to error channel
-			return
-		}
-	}()
+	pr.start()
 
 	switch operation {
 	case "download":
@@ -122,27 +156,33 @@ func (pr *ProgressRunner) RunTemplateOperation(operation string, args ...interfa
 	}
 }
 
-// RunStatusCheck runs system status checks with progress tracking
-func (pr *ProgressRunner) RunStatusCheck(checks []string) error {
-	// Start the TUI
-	go func() {
-		if _, err := pr.program.Run(); err != nil {
-			// TODO: Handle TUI error - could log or send to error channel
-			return
-		}
-	}()
-
-	return pr.runStatusChecks(checks)
-}
-
-// Quit gracefully shuts down the progress runner
+// Quit stops the TUI and waits for it to restore the terminal. If the TUI does
+// not exit within progressQuitTimeout it is killed, which also restores the
+// terminal. Quit is safe to call more than once and on headless runners.
 func (pr *ProgressRunner) Quit() {
-	if pr.program != nil {
-		pr.program.Quit()
-	}
-	if pr.model != nil {
-		pr.model.CleanupChannels()
-	}
+	pr.quitOnce.Do(func() {
+		if pr.program != nil && pr.started.Load() {
+			// Program.Quit blocks until the event loop takes the message. Send it
+			// from a goroutine so the timeout below starts now and Kill can still
+			// run if the loop is stuck; Kill cancels the program, which also
+			// releases the pending send.
+			go pr.program.Quit()
+			select {
+			case <-pr.done:
+			case <-time.After(progressQuitTimeout):
+				log.Warn("Progress display did not exit in time; forcing shutdown", "timeout", progressQuitTimeout)
+				pr.program.Kill()
+				select {
+				case <-pr.done:
+				case <-time.After(progressQuitTimeout):
+					log.Warn("Progress display did not shut down after kill")
+				}
+			}
+		}
+		if pr.model != nil {
+			pr.model.CleanupChannels()
+		}
+	})
 }
 
 // Private methods for specific operations
@@ -654,106 +694,6 @@ func (pr *ProgressRunner) runTemplateUpdate(args ...interface{}) error {
 	return nil
 }
 
-func (pr *ProgressRunner) runStatusChecks(checks []string) error {
-	op := pr.manager.GetTracker().StartOperation(
-		"status-check",
-		"System Status Check",
-		"Running comprehensive system status checks",
-		progresspkg.OperationStatus,
-	)
-
-	// Enhanced status checking with detailed phases
-	steps := []progresspkg.ProgressStep{
-		{Name: "Initializing", Description: "Initializing status checker", Weight: 0.5},
-		{Name: "Discovery", Description: "Discovering applications", Weight: 1.0},
-		{Name: "Validation", Description: "Validating installations", Weight: 2.0},
-		{Name: "Dependencies", Description: "Checking dependencies", Weight: 1.5},
-		{Name: "Services", Description: "Checking system services", Weight: 1.5},
-		{Name: "Configuration", Description: "Validating configurations", Weight: 1.0},
-		{Name: "Health", Description: "Running health checks", Weight: 1.5},
-		{Name: "Reporting", Description: "Generating status report", Weight: 1.0},
-	}
-
-	stepper := op.NewSteppedOperation(steps)
-
-	// Phase 1: Initializing
-	stepper.NextStep()
-	op.SetDetails("Initializing status checker...")
-	stepper.SetStepProgress(1.0)
-
-	// Phase 2: Discovery
-	stepper.NextStep()
-	op.SetDetails("Discovering applications to check...")
-	for i := 0; i <= 100; i += 25 {
-		stepper.SetStepProgress(float64(i) / 100.0)
-		op.SetDetails(fmt.Sprintf("Discovering applications... %d%%", i))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 3: Validation
-	stepper.NextStep()
-	op.SetDetails("Validating application installations...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Validating %s installation...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 4: Dependencies
-	stepper.NextStep()
-	op.SetDetails("Checking application dependencies...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Checking %s dependencies...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 5: Services
-	stepper.NextStep()
-	op.SetDetails("Checking system services...")
-	serviceChecks := []string{"docker", "mysql", "postgresql", "redis", "nginx"}
-	for i, service := range serviceChecks {
-		progress := float64(i) / float64(len(serviceChecks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Checking %s service status...", service))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 6: Configuration
-	stepper.NextStep()
-	op.SetDetails("Validating application configurations...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Validating %s configuration...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 7: Health
-	stepper.NextStep()
-	op.SetDetails("Running health checks...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Running %s health check...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 8: Reporting
-	stepper.NextStep()
-	op.SetDetails("Generating status report...")
-	for i := 0; i <= 100; i += 20 {
-		stepper.SetStepProgress(float64(i) / 100.0)
-		op.SetDetails(fmt.Sprintf("Generating report... %d%%", i))
-	}
-	stepper.SetStepProgress(1.0)
-
-	op.Complete()
-	return nil
-}
-
 // Convenience functions for common operations
 
 // StartInstallation is a convenience function for application installation with progress
@@ -775,11 +715,4 @@ func StartConfigBackup(settings config.CrossPlatformSettings) error {
 	runner := NewProgressRunner(context.Background(), settings)
 	defer runner.Quit()
 	return runner.RunConfigOperation("backup")
-}
-
-// StartStatusCheck is a convenience function for status checking with progress
-func StartStatusCheck(checks []string, settings config.CrossPlatformSettings) error {
-	runner := NewProgressRunner(context.Background(), settings)
-	defer runner.Quit()
-	return runner.RunStatusCheck(checks)
 }

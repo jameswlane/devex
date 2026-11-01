@@ -716,6 +716,20 @@ func (d *Downloader) DownloadValidatedPluginWithContext(ctx context.Context, plu
 }
 
 func (d *Downloader) downloadPlugin(ctx context.Context, pluginName string, validate bool) error {
+	err := d.downloadPluginAttempt(ctx, pluginName, validate)
+	var mismatch *pluginChecksumMismatchError
+	if !errors.As(err, &mismatch) {
+		return err
+	}
+	if d.logger != nil {
+		d.logger.Warning("Plugin %s checksum mismatch (expected %.12s, actual %.12s); retrying once with fresh registry metadata", pluginName, mismatch.expected, mismatch.actual)
+	}
+	// fetchPluginDirect bypasses the registry cache. Verify the new download
+	// against that fresh metadata, and never retry a second checksum mismatch.
+	return d.downloadPluginAttempt(ctx, pluginName, validate)
+}
+
+func (d *Downloader) downloadPluginAttempt(ctx context.Context, pluginName string, validate bool) error {
 	// Fetch plugin metadata directly from the API
 	metadata, err := d.fetchPluginDirect(ctx, pluginName)
 	if err != nil {
@@ -783,6 +797,7 @@ func (d *Downloader) DownloadRequiredPluginsWithContext(ctx context.Context, req
 
 // DownloadRequiredPluginsWithContextAndOptions downloads plugins with full control
 func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Context, requiredPlugins []string, criticalPlugins []string) error {
+	progress := pluginProgressFromContext(ctx)
 	if d.logger != nil {
 		d.logger.Printf("Downloading %d required plugins...\n", len(requiredPlugins))
 	}
@@ -797,8 +812,10 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 	downloadedCount := 0
 
 	for _, pluginName := range requiredPlugins {
+		reportPluginProgress(progress, PluginProgressEvent{PluginName: pluginName, Stage: PluginProgressDownloading})
 		if err := d.DownloadPluginWithContext(ctx, pluginName); err != nil {
 			downloadErr := &DownloadError{Plugin: pluginName, Err: err}
+			reportPluginProgress(progress, PluginProgressEvent{PluginName: pluginName, Stage: PluginProgressError, Err: downloadErr})
 			multiErr.Add(downloadErr)
 
 			if d.logger != nil {
@@ -826,6 +843,7 @@ func (d *Downloader) DownloadRequiredPluginsWithContextAndOptions(ctx context.Co
 			}
 		} else {
 			downloadedCount++
+			reportPluginProgress(progress, PluginProgressEvent{PluginName: pluginName, Stage: PluginProgressDone})
 			if d.logger != nil {
 				d.logger.Success("Downloaded plugin %s", pluginName)
 			}
@@ -963,12 +981,22 @@ func (d *Downloader) cacheRegistry(registry *PluginRegistry) {
 // Cross-process locking is omitted because the standard library has no portable flock API.
 var pluginInstallLocks sync.Map
 
+type pluginChecksumMismatchError struct {
+	expected string
+	actual   string
+}
+
+func (e *pluginChecksumMismatchError) Error() string {
+	return fmt.Sprintf("checksum verification failed: expected %s, got %s", e.expected, e.actual)
+}
+
 // downloadAndVerifyPlugin downloads and verifies a plugin binary
 func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName string, version string, binary PlatformBinary) error {
 	return d.downloadAndVerifyPluginValidated(ctx, pluginName, version, binary, false)
 }
 
 func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, pluginName string, version string, binary PlatformBinary, validate bool) error {
+	progress := pluginProgressFromContext(ctx)
 	pluginPath := filepath.Join(d.pluginDir, fmt.Sprintf("devex-plugin-%s", pluginName))
 	if runtime.GOOS == "windows" {
 		pluginPath += ".exe"
@@ -993,6 +1021,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 		if d.logger != nil {
 			d.logger.Printf("Plugin %s is already up to date\n", pluginName)
 		}
+		reportPluginProgress(progress, PluginProgressEvent{PluginName: pluginName, Stage: PluginProgressVerifying})
 		return d.ownExistingInstallFile(root, pluginBase)
 	}
 
@@ -1023,7 +1052,16 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 		if err != nil {
 			return fmt.Errorf("failed to create temp file: %w", err)
 		}
-		if _, err := io.Copy(file, resp.Body); err != nil {
+		total := binary.Size
+		if resp.ContentLength > 0 {
+			total = resp.ContentLength
+		}
+		reportPluginProgress(progress, PluginProgressEvent{PluginName: pluginName, Stage: PluginProgressDownloading, TotalBytes: total})
+		var writer io.Writer = file
+		if progress != nil {
+			writer = &pluginProgressWriter{writer: file, pluginName: pluginName, total: total, progress: progress}
+		}
+		if _, err := io.Copy(writer, resp.Body); err != nil {
 			_ = file.Close()
 			_ = root.Remove(filepath.Base(file.Name()))
 			return fmt.Errorf("failed to read plugin payload: %w", err)
@@ -1060,6 +1098,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 		return fmt.Errorf("download failed: HTTP %d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
 	}
 
+	reportPluginProgress(progress, PluginProgressEvent{PluginName: pluginName, Stage: PluginProgressVerifying})
 	payloadPath := payloadFile.Name()
 	payloadChecksum, err := openFileSHA256(payloadFile)
 	if err != nil {
@@ -1069,7 +1108,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 	// Verify checksum of the downloaded payload (archive or raw binary) if enabled
 	if d.verifyChecksums && binary.Checksum != "" {
 		if payloadChecksum != normalizeChecksum(binary.Checksum) {
-			return fmt.Errorf("checksum verification failed: expected %s, got %s", binary.Checksum, payloadChecksum)
+			return &pluginChecksumMismatchError{expected: normalizeChecksum(binary.Checksum), actual: payloadChecksum}
 		}
 	}
 

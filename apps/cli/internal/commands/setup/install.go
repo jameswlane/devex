@@ -12,6 +12,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore/repository"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -63,6 +64,7 @@ func (m *SetupModel) installSelectedApps() {
 		ctx = context.Background()
 	}
 
+	ctx = shellrc.WithShell(ctx, m.getSelectedShell())
 	if err := tui.StartInstallation(ctx, apps, m.repo, m.settings); err != nil {
 		log.Error("Streaming installer failed", err)
 		fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
@@ -211,6 +213,10 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 
 	if gitName == "" && gitEmail == "" {
 		log.Debug("No Git configuration provided, skipping git setup")
+		return nil
+	}
+	if m.gitIdentityUnchanged() {
+		log.Info("Keeping the existing global Git identity", "name", gitName, "email", gitEmail)
 		return nil
 	}
 

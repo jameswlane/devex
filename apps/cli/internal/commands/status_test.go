@@ -177,6 +177,65 @@ var _ = Describe("Status Command", func() {
 				Expect(output).To(ContainSubstring(`"install_method": "apt"`))
 			})
 
+			It("fills in install details for an app tracked by name only", func() {
+				// Setup records only the application name in the database.
+				Expect(realRepo.AddApp("curl")).To(Succeed())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--app", "curl", "--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring(`"install_method": "apt"`))
+				Expect(output).NotTo(ContainSubstring("Invalid install method"))
+			})
+
+			It("checks every tracked app when no flags are given", func() {
+				Expect(realRepo.AddApp("curl")).To(Succeed())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring(`"name": "curl"`))
+				Expect(output).To(ContainSubstring(`"install_method": "apt"`))
+			})
+
+			It("says there is nothing to check when no flags are given and nothing is tracked", func() {
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring("No applications to check"))
+			})
+
+			It("reports a tracked app missing from the configuration as unknown, not as an error", func() {
+				Expect(realRepo.AddApp("removed-from-config")).To(Succeed())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--all", "--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring(`"status": "unknown"`))
+				Expect(output).To(ContainSubstring("not in the DevEx configuration"))
+			})
+
 			It("reports an unknown app without panicking", func() {
 				app, err := realRepo.GetApp("unknown-app")
 				Expect(err).NotTo(HaveOccurred())
@@ -378,3 +437,21 @@ func captureStatusStdout(fn func()) string {
 	Expect(readPipe.Close()).To(Succeed())
 	return string(output)
 }
+
+var _ = Describe("Status error summary", func() {
+	It("returns nil when no application is in an error state", func() {
+		Expect(commands.StatusErrorSummary([]status.AppStatus{
+			{Name: "git", Status: "healthy"},
+			{Name: "gone", Status: "unknown"},
+			{Name: "bat", Status: "not_installed"},
+		})).To(Succeed())
+	})
+
+	It("counts applications in an error state so the command exits non-zero", func() {
+		err := commands.StatusErrorSummary([]status.AppStatus{
+			{Name: "git", Status: "healthy"},
+			{Name: "docker", Status: "error"},
+		})
+		Expect(err).To(MatchError("1 of 2 application(s) reported errors"))
+	})
+})

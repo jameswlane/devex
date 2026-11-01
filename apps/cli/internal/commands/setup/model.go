@@ -48,11 +48,12 @@ const (
 
 // UISelections groups all user selection states for the setup interface
 type UISelections struct {
-	selectedShell int
-	selectedLangs map[int]bool
-	selectedDBs   map[int]bool
-	selectedApps  map[int]bool
-	selectedTheme int
+	selectedShell       int
+	selectedLangs       map[int]bool
+	selectedDBs         map[int]bool
+	selectedApps        map[int]bool
+	selectedDesktopApps map[string]bool
+	selectedTheme       int
 
 	// skipDefaultApps leaves default (default: true) apps out of the plan.
 	skipDefaultApps bool
@@ -66,6 +67,11 @@ type GitConfiguration struct {
 	gitEmail       string
 	gitInputField  int  // 0 = full name, 1 = email
 	gitInputActive bool // true when editing a field
+
+	// The global git identity found when setup reached the Git step.
+	identityLoaded bool
+	existingName   string
+	existingEmail  string
 }
 
 // InstallationState tracks the current installation progress and errors
@@ -139,9 +145,11 @@ func (is *InstallationState) isInstalling() bool {
 
 // PluginStatus represents the status of a single plugin
 type PluginStatus struct {
-	Name   string
-	Status string // "pending", "downloading", "verifying", "installing", "success", "error"
-	Error  string
+	Name            string
+	Status          string // "pending", "downloading", "verifying", "installing", "success", "error"
+	Error           string
+	BytesDownloaded int64
+	TotalBytes      int64
 }
 
 // PluginState manages plugin installation state
@@ -155,17 +163,20 @@ type PluginState struct {
 	pluginStatuses    []PluginStatus  // Track status of each plugin
 	pluginSpinners    []spinner.Model // Individual spinners for each plugin
 	spinner           spinner.Model   // Spinner for plugin installation
+	pluginCancel      context.CancelFunc
+	pluginEvents      <-chan tea.Msg
 }
 
 // SystemInfo contains detected system information and available options
 type SystemInfo struct {
-	shells           []string
-	languages        []string
-	databases        []string
-	desktopApps      []string
-	themes           []string
-	hasDesktop       bool
-	detectedPlatform platform.DetectionResult
+	shells            []string
+	languages         []string
+	databases         []string
+	desktopApps       []string
+	desktopAppDetails []types.CrossPlatformApp
+	themes            []string
+	hasDesktop        bool
+	detectedPlatform  platform.DetectionResult
 }
 
 // SetupModel represents the state of our guided setup UI
@@ -173,9 +184,12 @@ type SystemInfo struct {
 type SetupModel struct {
 	ctx context.Context
 	// Navigation state
-	step          int
-	cursor        int
-	shellSwitched bool
+	step              int
+	cursor            int
+	shellSwitched     bool
+	width             int
+	height            int
+	desktopAppsOffset int
 
 	// Grouped states for better organization
 	system       SystemInfo
@@ -212,10 +226,14 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 		detectedPlatform.DesktopEnv != "unknown" &&
 		detectedPlatform.DesktopEnv != ""
 
-	// Get available desktop apps if desktop is detected
 	var desktopApps []string
+	var desktopAppDetails []types.CrossPlatformApp
 	if hasDesktop {
-		desktopApps = getDesktopAppNames(settings)
+		desktopAppDetails = getAvailableDesktopApps(settings, detectedPlatform)
+		desktopApps = make([]string, 0, len(desktopAppDetails))
+		for _, app := range desktopAppDetails {
+			desktopApps = append(desktopApps, app.Name)
+		}
 	}
 
 	// Create plugin spinners
@@ -245,23 +263,25 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 		// System information
 		system: SystemInfo{
-			shells:           shells,
-			languages:        getProgrammingLanguageNames(settings),
-			databases:        []string{"PostgreSQL", "MySQL", "Redis", "MongoDB"},
-			desktopApps:      desktopApps,
-			themes:           getAvailableThemeNames(settings),
-			hasDesktop:       hasDesktop,
-			detectedPlatform: detectedPlatform,
+			shells:            shells,
+			languages:         getProgrammingLanguageNames(settings),
+			databases:         []string{"PostgreSQL", "MySQL", "Redis", "MongoDB"},
+			desktopApps:       desktopApps,
+			desktopAppDetails: desktopAppDetails,
+			themes:            getAvailableThemeNames(settings),
+			hasDesktop:        hasDesktop,
+			detectedPlatform:  detectedPlatform,
 		},
 
 		// User selections
 		selections: UISelections{
-			skipDefaultApps: viper.GetBool("no-defaults"),
-			selectedShell:   defaultShellIdx,
-			selectedLangs:   make(map[int]bool),
-			selectedDBs:     make(map[int]bool),
-			selectedApps:    make(map[int]bool),
-			selectedTheme:   0,
+			skipDefaultApps:     viper.GetBool("no-defaults"),
+			selectedShell:       defaultShellIdx,
+			selectedLangs:       make(map[int]bool),
+			selectedDBs:         make(map[int]bool),
+			selectedApps:        make(map[int]bool),
+			selectedDesktopApps: make(map[string]bool),
+			selectedTheme:       0,
 		},
 
 		// Git configuration

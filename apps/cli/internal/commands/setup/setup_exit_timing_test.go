@@ -183,7 +183,7 @@ func TestAutoExitTiming(t *testing.T) {
 		model.selections.selectedDBs = map[int]bool{1: true}
 		model.system.databases = []string{"PostgreSQL", "MySQL", "Redis"}
 
-		model.selections.selectedApps = map[int]bool{0: true}
+		model.selections.selectedDesktopApps = map[string]bool{"VS Code": true}
 		model.system.desktopApps = []string{"VS Code", "Chrome"}
 
 		view := model.View()

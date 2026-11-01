@@ -330,6 +330,9 @@ func runInstallCommands(ctx context.Context, commands []types.InstallCommand) er
 		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
 			return err
 		}
+		if err := utils.ApplyShellActions(ctx, cmd); err != nil {
+			return err
+		}
 		if cmd.Shell != "" {
 			log.Info("Executing shell command", "command", cmd.Shell)
 			output, err := utils.ExecInstallHookWithContext(ctx, cmd)

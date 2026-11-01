@@ -64,7 +64,11 @@ func (m *SetupModel) renderInstallPlan() string {
 		fmt.Fprintf(&b, "  • %s desktop settings from the desktop-%s plugin\n", desktop, desktop)
 	}
 	if name := strings.TrimSpace(m.git.gitFullName); name != "" {
-		fmt.Fprintf(&b, "  • Git identity: %s <%s>\n", name, strings.TrimSpace(m.git.gitEmail))
+		fmt.Fprintf(&b, "  • Git identity: %s <%s>", name, strings.TrimSpace(m.git.gitEmail))
+		if m.gitIdentityUnchanged() {
+			b.WriteString(" (existing, unchanged)")
+		}
+		b.WriteString("\n")
 	}
 	b.WriteString("\n")
 
