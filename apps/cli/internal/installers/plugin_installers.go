@@ -312,8 +312,15 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
 	log.Info("Installing app", "app", app.Name)
 
+	// Resolve the same configured policy used by the interactive installer.
+	validator, err := settings.GetCommandValidator()
+	if err != nil {
+		return err
+	}
+	policy := utils.InstallHookPolicy{Validator: validator, AppName: app.Name}
+
 	// Execute pre-install commands
-	if err := runInstallCommands(ctx, app.PreInstall); err != nil {
+	if err := runInstallCommands(ctx, app.PreInstall, policy); err != nil {
 		return fmt.Errorf("failed to execute pre-install commands: %w", err)
 	}
 
@@ -323,7 +330,7 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	}
 
 	// Execute post-install commands
-	if err := runInstallCommands(ctx, app.PostInstall); err != nil {
+	if err := runInstallCommands(ctx, app.PostInstall, policy); err != nil {
 		return fmt.Errorf("failed to execute post-install commands: %w", err)
 	}
 
@@ -331,7 +338,7 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	return nil
 }
 
-func runInstallCommands(ctx context.Context, commands []types.InstallCommand) error {
+func runInstallCommands(ctx context.Context, commands []types.InstallCommand, policies ...utils.InstallHookPolicy) error {
 	if len(commands) == 0 {
 		return nil
 	}
@@ -350,7 +357,7 @@ func runInstallCommands(ctx context.Context, commands []types.InstallCommand) er
 		}
 		if cmd.Shell != "" {
 			log.Info("Executing shell command", "command", cmd.Shell)
-			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
+			output, err := utils.ExecInstallHookWithContext(ctx, cmd, policies...)
 			if output != "" {
 				fmt.Fprint(os.Stdout, output)
 			}

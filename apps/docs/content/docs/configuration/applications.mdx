@@ -58,6 +58,23 @@ all_platforms:
 
 An OS configuration can also define `dependencies`, `pre_install`, `post_install`, `config_files`, `themes`, `download_url`, `destination`, and alternative installation configurations. Follow a shipped application with the same installer when adding these fields.
 
+## Custom install hooks
+
+`pre_install` and `post_install` accept explicit `shell` scripts. Treat application YAML and any referenced scripts as trusted executable code: command validation is a pattern-based policy, not a shell sandbox. Both interactive and noninteractive installation validate the original script with the configured security level, global overrides, and the application's `app_overrides` before execution. A rejection names the application and points to `security.yaml`; review the hook first and use a narrowly scoped override only for code you trust.
+
+```yaml
+post_install:
+  - shell: |
+      printf '%s\n' "Configuring $USER"
+      mkdir -p "$HOME/.config/example" && printf '%s\n' 'ready'
+```
+
+Each script is passed intact as one argument to `bash -c`. Quotes, pipes, redirections, compound commands, globs, and command substitutions follow Bash rules. Variables expand in Bash at execution time, respecting single quotes and escapes; DevEx does not substitute environment values into script text beforehand. Quote variable expansions when they should remain one argument.
+
+Hooks default to `scope: user`, using the original invoking account (including when DevEx was launched with sudo). The SDK passes the target username separately from the script and supplies that account's environment when switching users. `scope: system` must be explicit and contain only a shell script; it runs elevated, retaining shell variables and exposing the invoking username through `DEVEX_INVOKING_USER`. Quote it as `"$DEVEX_INVOKING_USER"`. Embedded `sudo` calls run noninteractively and require prior authorization.
+
+Use the declarative `shell_init` and `path` actions for shell startup configuration. Their behavior is unchanged; they do not evaluate shell text during installation.
+
 ## Overrides
 
 A higher-priority application with the same case-insensitive `name` replaces the whole lower-priority definition, including its platform blocks. Include every platform you want the override to support. Changing the filename or category does not create a separate application with that name.
