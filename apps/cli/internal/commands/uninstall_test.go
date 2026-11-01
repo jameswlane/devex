@@ -91,9 +91,8 @@ var _ = Describe("Uninstall Command", func() {
 		settings = config.CrossPlatformSettings{}
 
 		// Create temporary directory for tests
-		var err error
-		tempDir, err = os.MkdirTemp("", "devex-uninstall-test")
-		Expect(err).NotTo(HaveOccurred())
+		tempDir = GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", tempDir)
 
 		// Create test app configuration
 		testApp = types.AppConfig{
@@ -277,7 +276,8 @@ var _ = Describe("Uninstall Command", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(stored).To(BeEmpty())
 					Expect(binary).NotTo(BeAnExistingFile())
-					Expect(testApp.ConfigFiles[0].Destination).NotTo(BeAnExistingFile())
+					// Untracked configuration belongs to the user and survives uninstall.
+					Expect(testApp.ConfigFiles[0].Destination).To(BeAnExistingFile())
 					Expect(testApp.CleanupFiles[0]).NotTo(BeAnExistingFile())
 				} else {
 					Expect(err).To(HaveOccurred())
@@ -677,16 +677,15 @@ var _ = Describe("BackupManager", func() {
 	BeforeEach(func() {
 		mockRepo = mocks.NewMockRepository()
 
-		var err error
-		tempDir, err = os.MkdirTemp("", "devex-backup-test")
-		Expect(err).NotTo(HaveOccurred())
+		tempDir = GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", tempDir)
 
 		// Create test app with config and data files
 		configFile := filepath.Join(tempDir, "test-config.conf")
 		dataFile := filepath.Join(tempDir, "test-data.txt")
 
 		// Create test files
-		err = os.WriteFile(configFile, []byte("test config content"), 0644)
+		err := os.WriteFile(configFile, []byte("test config content"), 0644)
 		Expect(err).NotTo(HaveOccurred())
 		err = os.WriteFile(dataFile, []byte("test data content"), 0644)
 		Expect(err).NotTo(HaveOccurred())

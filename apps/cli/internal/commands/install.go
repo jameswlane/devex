@@ -21,6 +21,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -466,6 +467,8 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 				}
 			}
 		}
+		configfiles.Apply(ctx, app.Name, app.GetOSConfig().ConfigFiles, true, func(message string) { fmt.Fprintln(out, message) })
+
 		pluginName := "package-manager-" + app.GetOSConfig().InstallMethod
 		privilege := sdk.PluginOperationPrivilege(plugins[pluginName].PluginInfo, []string{"install"})
 		if privilege == nil {

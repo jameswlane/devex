@@ -58,6 +58,23 @@ all_platforms:
 
 An OS configuration can also define `dependencies`, `pre_install`, `post_install`, `config_files`, `themes`, `download_url`, `destination`, and alternative installation configurations. Follow a shipped application with the same installer when adding these fields.
 
+## Custom install hooks
+
+`pre_install` and `post_install` accept explicit `shell` scripts. Treat application YAML and any referenced scripts as trusted executable code: command validation is a pattern-based policy, not a shell sandbox. Both interactive and noninteractive installation validate the original script with the configured security level, global overrides, and the application's `app_overrides` before execution. A rejection names the application and points to `security.yaml`; review the hook first and use a narrowly scoped override only for code you trust.
+
+```yaml
+post_install:
+  - shell: |
+      printf '%s\n' "Configuring $USER"
+      mkdir -p "$HOME/.config/example" && printf '%s\n' 'ready'
+```
+
+Each script is passed intact as one argument to `bash -c`. Quotes, pipes, redirections, compound commands, globs, and command substitutions follow Bash rules. Variables expand in Bash at execution time, respecting single quotes and escapes; DevEx does not substitute environment values into script text beforehand. Quote variable expansions when they should remain one argument.
+
+Hooks default to `scope: user`, using the original invoking account (including when DevEx was launched with sudo). The SDK passes the target username separately from the script and supplies that account's environment when switching users. `scope: system` must be explicit and contain only a shell script; it runs elevated, retaining shell variables and exposing the invoking username through `DEVEX_INVOKING_USER`. Quote it as `"$DEVEX_INVOKING_USER"`. Embedded `sudo` calls run noninteractively and require prior authorization.
+
+Use the declarative `shell_init` and `path` actions for shell startup configuration. Their behavior is unchanged; they do not evaluate shell text during installation.
+
 ## Overrides
 
 A higher-priority application with the same case-insensitive `name` replaces the whole lower-priority definition, including its platform blocks. Include every platform you want the override to support. Changing the filename or category does not create a separate application with that name.
@@ -74,3 +91,26 @@ The editor opens every nested application YAML file in the default configuration
 ## Migrating legacy applications
 
 `applications.yaml` and the older grouped files such as `terminal.yaml` still load with a deprecation warning. For each entry, create a separate application file and remove the legacy list/category wrapper. Convert flat `install_method` and `install_command` fields to an appropriate platform block or `all_platforms` block. Remove the legacy entry after verifying the new file with `devex config validate` and `devex list available`.
+
+## Application configuration files
+
+Add `config_files` to the selected platform block (or `all_platforms`). Each entry copies one regular file:
+
+```yaml
+linux:
+  install_method: apt
+  install_command: neovim
+  config_files:
+    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
+      destination: ${HOME}/.config/nvim/init.vim
+```
+
+Both plain and TUI installation use this order: pre-install hooks, package installation, **configuration file copies**, then post-install hooks. The TUI also resolves dependencies before installing the package. Post-install hooks can read the copied files.
+
+Paths support `~/`, `$HOME`, `$VAR`, `${VAR}`, and Windows-style `%VAR%` environment variables, including `%LOCALAPPDATA%`. Variables must be set and nonempty. Relative sources resolve from the CLI's working directory. Destinations must be absolute after expansion and stay inside the current `$HOME`; the schema does not grant exceptions for system paths. Traversal segments (`..`), symlinks at the destination, directories in place of files, and symlink escapes outside the home directory are rejected. Missing parent directories are created with user-only access, and copied files use mode `0600`.
+
+An existing destination is moved to a sibling named `<destination>.<UTC timestamp>.devex-bak` before replacement. Backups remain available after uninstall. Successful copies, their content hashes, backup paths, and mapping warnings are recorded per application in `~/.local/state/devex/config-files/<application-name-hash>.json`. Uninstall removes only recorded copies whose contents still match; user edits and untracked files are preserved. `--keep-config` preserves the managed copies as well.
+
+A failed mapping produces a warning with the application name, source, destination, and cause. Installation continues with the remaining mappings and post-install hooks, and the warning is saved in the configuration-stage result. TUI batch results also include these warnings. This policy does not undo a successfully installed package. If the result record cannot be opened, configuration copies are skipped with a warning.
+
+`devex install --dry-run` prints the planned copy, parent-directory creation, and timestamped backup operations without writing files or changing the result record. It reports invalid mappings, but cannot predict every permission error that may occur when the actual installation writes files.

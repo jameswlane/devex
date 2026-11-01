@@ -11,6 +11,7 @@ import (
 
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -152,15 +153,10 @@ func (bm *BackupManager) backupConfigFiles(ctx context.Context, app *types.AppCo
 	}
 
 	for _, configFile := range app.ConfigFiles {
-		srcPath := configFile.Destination
-
-		// Expand home directory if needed
-		if strings.HasPrefix(srcPath, "~/") {
-			homeDir, err := devexHomeDir()
-			if err != nil {
-				continue
-			}
-			srcPath = filepath.Join(homeDir, srcPath[2:])
+		srcPath, err := configfiles.Expand(configFile.Destination)
+		if err != nil {
+			log.Warn("Invalid config file backup mapping", "app", app.Name, "source", configFile.Source, "destination", configFile.Destination, "error", err)
+			continue
 		}
 
 		// Check if file exists

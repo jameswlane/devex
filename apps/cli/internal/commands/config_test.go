@@ -1,6 +1,8 @@
 package commands_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 
@@ -201,6 +203,74 @@ configure_ssh: false`,
 				cmd := commands.NewConfigCmd(mockRepo, *settings)
 				cmd.SetArgs([]string{"validate"})
 				Expect(cmd.Execute()).To(Succeed())
+			})
+
+			It("prints valid JSON with stable categories for --format json and still fails", func() {
+				withProblems := *settings
+				withProblems.ApplicationOverrides = []types.CrossPlatformApp{
+					{Name: "C", Linux: types.OSConfig{InstallMethod: "aptt", InstallCommand: "c"}},
+				}
+				cmd := commands.NewConfigCmd(mockRepo, withProblems)
+				var out bytes.Buffer
+				cmd.SetOut(&out)
+				cmd.SetArgs([]string{"validate", "--format", "json"})
+
+				err := cmd.Execute()
+
+				Expect(err).To(MatchError(ContainSubstring("validation failed")))
+				Expect(json.Valid(out.Bytes())).To(BeTrue(), out.String())
+				var result map[string]any
+				Expect(json.Unmarshal(out.Bytes(), &result)).To(Succeed())
+				Expect(result).To(HaveKeyWithValue("valid", false))
+				Expect(out.String()).To(ContainSubstring(`"category": "install_method_unknown"`))
+				Expect(out.String()).NotTo(ContainSubstring("Validating DevEx Configuration"))
+			})
+
+			It("prints a valid JSON result for the shipped tree", func() {
+				cmd := commands.NewConfigCmd(mockRepo, *settings)
+				var out bytes.Buffer
+				cmd.SetOut(&out)
+				cmd.SetArgs([]string{"validate", "--format", "json"})
+
+				Expect(cmd.Execute()).To(Succeed())
+				Expect(json.Valid(out.Bytes())).To(BeTrue(), out.String())
+				Expect(out.String()).To(ContainSubstring(`"valid": true`))
+			})
+
+			It("rejects unsupported validate formats", func() {
+				cmd := commands.NewConfigCmd(mockRepo, *settings)
+				cmd.SetArgs([]string{"validate", "--format", "xml"})
+				Expect(cmd.Execute()).To(MatchError(ContainSubstring("unsupported output format")))
+			})
+
+			It("prints real JSON for config show --format json", func() {
+				cmd := commands.NewConfigCmd(mockRepo, *settings)
+				cmd.SetArgs([]string{"show", "--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() { err = cmd.Execute() })
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(json.Valid([]byte(output))).To(BeTrue(), output)
+				Expect(output).To(ContainSubstring(`"config_dir"`))
+			})
+
+			It("fails on a dependency cycle and an unknown install method, naming them", func() {
+				withProblems := *settings
+				withProblems.ApplicationOverrides = []types.CrossPlatformApp{
+					{Name: "A", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "a", Dependencies: []string{"B"}}},
+					{Name: "B", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "b", Dependencies: []string{"A"}}},
+					{Name: "C", Linux: types.OSConfig{InstallMethod: "aptt", InstallCommand: "c"}},
+				}
+				cmd := commands.NewConfigCmd(mockRepo, withProblems)
+				cmd.SetArgs([]string{"validate"})
+
+				var err error
+				output := captureStatusStdout(func() { err = cmd.Execute() })
+
+				Expect(err).To(MatchError(ContainSubstring("validation failed")))
+				Expect(output).To(ContainSubstring("dependency cycle: A -> B -> A"))
+				Expect(output).To(ContainSubstring(`unknown install method "aptt"`))
 			})
 
 			It("detects content errors in nested application files", func() {

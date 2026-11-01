@@ -38,8 +38,8 @@ var _ = Describe("APT batching", func() {
 	)
 
 	BeforeEach(func() {
-		// "true" stands in for a pre-install step; the recorder isolates PATH.
-		recorder = sdktest.NewRecorder(GinkgoT(), "apt-get", "true")
+		// Bash stands in for a shell pre-install step; the recorder isolates PATH.
+		recorder = sdktest.NewRecorder(GinkgoT(), "apt-get", "bash")
 		repo = &MockRepository{}
 		installer = &StreamingInstaller{
 			ctx:      context.Background(),
@@ -144,6 +144,7 @@ var _ = Describe("APT batching", func() {
 		}
 		Expect(installs).To(Equal([][]string{{"install", "-y", "bat"}, {"install", "-y", "docker-ce"}}))
 		Expect(aptGetCalls("update")).To(HaveLen(1))
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", "true"}}}))
 	})
 
 	It("leaves install commands that are not plain package names to the per-app path", func() {

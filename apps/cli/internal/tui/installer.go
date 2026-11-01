@@ -21,6 +21,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
@@ -781,10 +782,17 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		}
 	}
 
+	// Resolve the same configured hook policy used by noninteractive installs.
+	validator, err := settings.GetCommandValidator()
+	if err != nil {
+		return err
+	}
+	policy := utils.InstallHookPolicy{Validator: validator, AppName: app.Name}
+
 	// Handle pre-install commands
 	if len(osConfig.PreInstall) > 0 {
 		si.sendLog("INFO", "Executing pre-install commands...")
-		if err := si.executeCommands(ctx, osConfig.PreInstall); err != nil {
+		if err := si.executeCommands(ctx, osConfig.PreInstall, policy); err != nil {
 			si.recordFailedInstallation(app.Name, startTime, err)
 			return fmt.Errorf("pre-install failed: %w", err)
 		}
@@ -803,10 +811,28 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		return fmt.Errorf("installation failed: %w", err)
 	}
 
+	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
+	result := configfiles.Apply(ctx, app.Name, osConfig.ConfigFiles, false, func(message string) {
+		level := "INFO"
+		if strings.HasPrefix(message, "Warning:") {
+			level = "WARN"
+		}
+		si.sendLog(level, message)
+	})
+	si.postInstallMutex.Lock()
+	for _, warning := range result.Warnings {
+		si.postInstallWarnings = append(si.postInstallWarnings, errors.New(warning))
+	}
+	si.postInstallMutex.Unlock()
+
 	// Handle post-install commands
 	if len(osConfig.PostInstall) > 0 {
 		si.sendLog("INFO", "Executing post-install commands...")
-		if err := si.executeCommands(ctx, osConfig.PostInstall); err != nil {
+		if err := si.executeCommands(ctx, osConfig.PostInstall, policy); err != nil {
+			var policyErr *utils.HookPolicyError
+			if errors.As(err, &policyErr) {
+				return fmt.Errorf("post-install failed: %w", err)
+			}
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
@@ -827,7 +853,7 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 
 	// Save to repository with configurable error handling
 	si.repoMutex.Lock()
-	err := si.repo.AddApp(app.Name)
+	err = si.repo.AddApp(app.Name)
 	si.repoMutex.Unlock()
 	if err != nil {
 		// Enhanced error context with specific details
@@ -968,7 +994,7 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	case "yum":
 		installCmd = fmt.Sprintf("sudo -n yum install -y %s", osConfig.InstallCommand)
 	case "pacman":
-		installCmd = fmt.Sprintf("sudo -n pacman -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n pacman -S --needed --noconfirm %s", osConfig.InstallCommand)
 	case "zypper":
 		installCmd = fmt.Sprintf("sudo -n zypper install -y %s", osConfig.InstallCommand)
 	case "brew":
@@ -986,7 +1012,7 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	case "xbps":
 		installCmd = fmt.Sprintf("sudo -n xbps-install -y %s", osConfig.InstallCommand)
 	case "yay":
-		installCmd = fmt.Sprintf("yay -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("yay -S --needed --noconfirm --answerdiff=None --answerclean=None %s", osConfig.InstallCommand)
 	default:
 		// Fallback to the configured install command
 		installCmd = osConfig.InstallCommand
@@ -1198,26 +1224,13 @@ func (si *StreamingInstaller) executeMiseInstall(ctx context.Context, app types.
 }
 
 // executeCommands executes a list of install commands with context cancellation support
-func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand) error {
+func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand, policies ...utils.InstallHookPolicy) error {
 	for _, cmd := range commands {
 		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
 			return err
 		}
 		if err := utils.ApplyShellActions(ctx, cmd); err != nil {
 			return err
-		}
-		if cmd.Scope == "system" {
-			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
-			si.sendLog("INFO", output)
-			if err != nil {
-				if os.Geteuid() != 0 {
-					if authErr := authorizeSudo(ctx, false); authErr != nil {
-						return authErr
-					}
-				}
-				return fmt.Errorf("install hook failed: %w", err)
-			}
-			continue
 		}
 		// Check for context cancellation before each command
 		select {
@@ -1235,11 +1248,19 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 		}
 
 		if cmd.Shell != "" {
-			// Replace placeholders in shell commands
-			processedCommand := utils.ReplacePlaceholders(cmd.Shell, map[string]string{})
-			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", processedCommand))
-			if err := si.executeCommandStream(ctx, processedCommand); err != nil {
-				return err
+			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", cmd.Shell))
+			timeout := si.config.InstallationTimeout
+			if timeout <= 0 {
+				timeout = DefaultInstallerConfig().InstallationTimeout
+			}
+			hookCtx, cancel := context.WithTimeout(ctx, timeout)
+			output, err := utils.ExecInstallHookWithContext(hookCtx, cmd, policies...)
+			cancel()
+			if output != "" {
+				si.sendLog("INFO", output)
+			}
+			if err != nil {
+				return fmt.Errorf("install hook failed: %w", err)
 			}
 		}
 

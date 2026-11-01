@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -460,7 +461,7 @@ func initWithProfile(profileName string, settings config.CrossPlatformSettings, 
 }
 
 func validateConfiguration(settings config.CrossPlatformSettings) error {
-	return validateConfigurationFiles(settings, false, false)
+	return validateConfigurationFiles(context.Background(), os.Stdout, settings, false, false, "table")
 }
 
 func exportInitConfiguration(settings config.CrossPlatformSettings) error {
