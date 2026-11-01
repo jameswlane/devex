@@ -968,7 +968,7 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	case "yum":
 		installCmd = fmt.Sprintf("sudo -n yum install -y %s", osConfig.InstallCommand)
 	case "pacman":
-		installCmd = fmt.Sprintf("sudo -n pacman -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n pacman -S --needed --noconfirm %s", osConfig.InstallCommand)
 	case "zypper":
 		installCmd = fmt.Sprintf("sudo -n zypper install -y %s", osConfig.InstallCommand)
 	case "brew":
