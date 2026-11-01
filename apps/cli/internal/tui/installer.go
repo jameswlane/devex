@@ -227,6 +227,8 @@ type StreamingInstaller struct {
 	config              InstallerConfig                  // Configuration settings
 	performanceAnalyzer *performance.PerformanceAnalyzer // Performance analysis and warnings
 	progressManager     *progresspkg.ProgressManager     // Optional progress manager for enhanced tracking
+	postInstallMutex    sync.Mutex
+	postInstallWarnings []error
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -632,13 +634,13 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 	var failures []error
 	for i, app := range apps {
 		if err := AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
-			return errors.Join(append(failures, err)...)
+			return si.installationResult(append(failures, err)...)
 		}
 		// Check for context cancellation before each app
 		select {
 		case <-ctx.Done():
 			si.sendLog("INFO", "Installation cancelled before starting next app")
-			return errors.Join(append(failures, ctx.Err())...)
+			return si.installationResult(append(failures, ctx.Err())...)
 		default:
 		}
 
@@ -661,10 +663,10 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			}
 			// If the error is due to context cancellation, stop installation entirely
 			if errors.Is(err, ErrSudoAuthorization) {
-				return errors.Join(failures...)
+				return si.installationResult(failures...)
 			}
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-				return errors.Join(failures...)
+				return si.installationResult(failures...)
 			}
 			continue
 		}
@@ -676,6 +678,16 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			})
 		}
 	}
+	return si.installationResult(failures...)
+}
+
+// Surface optional hook failures in the completion summary without marking the
+// successfully installed package as failed or preventing its registration.
+func (si *StreamingInstaller) installationResult(failures ...error) error {
+	si.postInstallMutex.Lock()
+	defer si.postInstallMutex.Unlock()
+	failures = append(failures, si.postInstallWarnings...)
+	si.postInstallWarnings = nil
 	return errors.Join(failures...)
 }
 
@@ -785,6 +797,9 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 				return ctx.Err()
 			}
 			si.sendLog("WARN", fmt.Sprintf("Optional post-install step for %s failed: %v", app.Name, err))
+			si.postInstallMutex.Lock()
+			si.postInstallWarnings = append(si.postInstallWarnings, fmt.Errorf("%s: post-install step failed: %w", app.Name, err))
+			si.postInstallMutex.Unlock()
 		}
 	}
 

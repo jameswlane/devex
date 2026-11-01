@@ -4,20 +4,30 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
 )
+
+type configurationExecutorFunc func(context.Context, string, []string, sdk.OperationIO) error
+
+func (f configurationExecutorFunc) ExecutePluginWithIO(ctx context.Context, name string, args []string, streams sdk.OperationIO) error {
+	return f(ctx, name, args, streams)
+}
 
 func setupRepoRoot() string {
 	_, source, _, ok := runtime.Caller(0)
@@ -49,7 +59,9 @@ var _ = Describe("Setup failure regressions", func() {
 			if info.Name == "tool-git" {
 				calls = [][]string{gitConfigurationArgs("Setup User", "setup@example.com")}
 				GinkgoT().Setenv("GIT_CONFIG_GLOBAL", filepath.Join(GinkgoT().TempDir(), "gitconfig"))
-				Expect(runConfigurationPlugin(ctx, path, calls[0])).To(Succeed())
+				manager := sdk.NewExecutableManager(GinkgoT().TempDir())
+				Expect(manager.InstallPlugin(path, info.Name)).To(Succeed())
+				Expect(runConfigurationPlugin(ctx, manager, info.Name, calls[0])).To(Succeed())
 				for key, value := range map[string]string{"user.name": "Setup User", "user.email": "setup@example.com"} {
 					output, err := exec.CommandContext(ctx, "git", "config", "--global", "--get", key).Output()
 					Expect(err).NotTo(HaveOccurred())
@@ -123,15 +135,55 @@ var _ = Describe("Setup failure regressions", func() {
 		GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
 		Expect(log.InitFileLogger(false)).To(Succeed())
 		DeferCleanup(func() { Expect(log.Close()).To(Succeed()); log.InitTestLogger() })
-		path := filepath.Join(GinkgoT().TempDir(), "plugin")
-		Expect(os.WriteFile(path, []byte("#!/bin/sh\necho 'plugin stdout'\necho 'plugin stderr' >&2\nexit 1\n"), 0755)).To(Succeed())
-		Expect(runConfigurationPlugin(ctx, path, []string{"configure"})).To(MatchError(ContainSubstring("plugin stderr")))
+		nativeErr := errors.New("SDK execution rejected")
+		manager := configurationExecutorFunc(func(callCtx context.Context, name string, args []string, streams sdk.OperationIO) error {
+			Expect(name).To(Equal("desktop-gnome"))
+			Expect(args).To(Equal([]string{"configure"}))
+			Expect(streams.Stdin).To(BeNil())
+			Expect(streams.Stdout).To(BeIdenticalTo(streams.Stderr))
+			if err := callCtx.Err(); err != nil {
+				return err
+			}
+			_, err := io.WriteString(streams.Stdout, "plugin stdout\n"+strings.Repeat("verbose output\n", 400))
+			Expect(err).NotTo(HaveOccurred())
+			_, err = io.WriteString(streams.Stderr, "  plugin stderr\n")
+			Expect(err).NotTo(HaveOccurred())
+			return nativeErr
+		})
+		err := runConfigurationPlugin(ctx, manager, "desktop-gnome", []string{"configure"})
+		Expect(err).To(MatchError(ContainSubstring("plugin stderr")))
+		Expect(errors.Is(err, nativeErr)).To(BeTrue())
+		Expect(err.Error()).NotTo(ContainSubstring("plugin stdout"), "only the output tail belongs in the error")
 		content, err := os.ReadFile(log.GetLogFile())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(content)).To(ContainSubstring("plugin stdout"))
 		Expect(string(content)).To(ContainSubstring("plugin stderr"))
 		cancelled, cancel := context.WithCancel(ctx)
 		cancel()
-		Expect(runConfigurationPlugin(cancelled, path, []string{"configure"})).To(MatchError(ContainSubstring("context canceled")))
+		Expect(runConfigurationPlugin(cancelled, manager, "desktop-gnome", []string{"configure"})).To(MatchError(ContainSubstring("context canceled")))
+	})
+
+	It("counts post-install warnings in the final summary while keeping the app installed", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("XDG_CACHE_HOME", GinkgoT().TempDir())
+		repo := mocks.NewMockRepository()
+		settings := config.CrossPlatformSettings{HomeDir: home}
+		installer := tui.NewStreamingInstaller(nil, repo, ctx, settings)
+		app := types.CrossPlatformApp{Name: "fd-find", AllPlatforms: types.OSConfig{
+			InstallMethod: "generic", InstallCommand: "true", PostInstall: []types.InstallCommand{{Shell: "false"}},
+		}}
+		err := installer.InstallApps(ctx, []types.CrossPlatformApp{app}, settings)
+		Expect(err).To(HaveOccurred())
+		installed, lookupErr := repo.GetApp("fd-find")
+		Expect(lookupErr).NotTo(HaveOccurred())
+		Expect(installed.Name).To(Equal("fd-find"))
+		model := &SetupModel{step: StepComplete}
+		model.recordInstallationErrors(err)
+		for _, summary := range []string{model.View(), captureAutomatedCompletion(model), model.CompletionError().Error()} {
+			Expect(summary).To(ContainSubstring("completed with 1 errors"))
+			Expect(summary).To(ContainSubstring("fd-find: post-install step failed:"))
+		}
+		Expect(installer.InstallApps(ctx, nil, settings)).To(Succeed(), "warnings should be surfaced only once")
 	})
 })

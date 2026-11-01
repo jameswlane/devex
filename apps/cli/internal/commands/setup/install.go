@@ -183,7 +183,7 @@ func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBoots
 	manager := pluginBootstrap.GetManager()
 	installedPlugins := manager.ListPluginsWithContext(ctx)
 
-	plugin, exists := installedPlugins[pluginName]
+	_, exists := installedPlugins[pluginName]
 	if !exists {
 		return fmt.Errorf("%s plugin is not installed; rerun devex setup", pluginName)
 	}
@@ -193,7 +193,7 @@ func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBoots
 
 	// Execute desktop plugin with theme configuration
 	for _, args := range desktopConfigurationArgs(selectedTheme) {
-		if err := runConfigurationPlugin(ctx, plugin.Path, args); err != nil {
+		if err := runConfigurationPlugin(ctx, manager, pluginName, args); err != nil {
 			return fmt.Errorf("failed to configure desktop using %s; check desktop packages and permissions: %w", pluginName, err)
 		}
 	}
@@ -218,7 +218,7 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 	manager := pluginBootstrap.GetManager()
 	installedPlugins := manager.ListPluginsWithContext(ctx)
 
-	plugin, exists := installedPlugins["tool-git"]
+	_, exists := installedPlugins["tool-git"]
 	if !exists {
 		return fmt.Errorf("tool-git plugin is not installed; rerun devex setup")
 	}
@@ -226,7 +226,7 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 	log.Info("Configuring Git using tool-git plugin", "name", gitName, "email", gitEmail)
 
 	// Execute tool-git plugin with user configuration
-	if err := runConfigurationPlugin(ctx, plugin.Path, gitConfigurationArgs(gitName, gitEmail)); err != nil {
+	if err := runConfigurationPlugin(ctx, manager, "tool-git", gitConfigurationArgs(gitName, gitEmail)); err != nil {
 		return fmt.Errorf("failed to configure git using tool-git plugin: %w", err)
 	}
 
