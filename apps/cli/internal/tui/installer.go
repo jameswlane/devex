@@ -23,7 +23,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
-	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -229,6 +228,7 @@ type StreamingInstaller struct {
 	progressManager     *progresspkg.ProgressManager     // Optional progress manager for enhanced tracking
 	postInstallMutex    sync.Mutex
 	postInstallWarnings []error
+	apt                 aptRunState // APT work shared by all apps in one run
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -632,7 +632,21 @@ func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager 
 //   - error: joined per-app failures, cancellation, or authorization errors; nil on success
 func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
 	var failures []error
+
+	// Skip apt apps that are already installed, and update package lists and
+	// install the remaining apt packages once for the whole run.
+	if err := si.prepareAptRun(ctx, apps); err != nil {
+		return si.installationResult(err)
+	}
+
 	for i, app := range apps {
+		if si.apt.has(si.apt.preinstalled, app.Name) {
+			si.sendLog("INFO", fmt.Sprintf("%s is already installed; skipping", app.Name))
+			if si.program != nil {
+				si.program.Send(AppCompleteMsg{AppName: app.Name})
+			}
+			continue
+		}
 		if err := AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
 			return si.installationResult(append(failures, err)...)
 		}
@@ -887,34 +901,15 @@ func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app typ
 
 // executeAptInstall handles APT package installation with GPG key validation
 func (si *StreamingInstaller) executeAptInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
-	// Add APT sources with GPG key validation if needed
-	for _, source := range osConfig.AptSources {
-		si.sendLog("INFO", fmt.Sprintf("Adding APT source: %s", source.SourceName))
-
-		// SECURITY: Validate GPG key with fingerprint if provided
-		if source.KeySource != "" {
-			si.sendLog("INFO", fmt.Sprintf("Adding GPG key from: %s", source.KeySource))
-
-			// Use modern GPG keyring approach (no apt-key)
-			si.sendLog("INFO", "Using modern GPG keyring approach")
-			if err := si.addModernGPGKey(ctx, source.KeySource, source.KeyName, source.RequireDearmor); err != nil {
-				return fmt.Errorf("failed to add GPG key for %s: %w", source.SourceName, err)
-			}
-		}
-
-		// Add the repository source
-		if source.SourceRepo != "" {
-			addSourceCmd := fmt.Sprintf("echo '%s' | sudo -n tee %s > /dev/null",
-				source.SourceRepo, source.SourceName)
-			if err := si.executeCommandStream(ctx, addSourceCmd); err != nil {
-				return fmt.Errorf("failed to add APT source %s: %w", source.SourceName, err)
-			}
-		}
+	if si.apt.has(si.apt.batchInstalled, app.Name) {
+		si.sendLog("INFO", fmt.Sprintf("%s was installed in the batch APT transaction", app.Name))
+		return nil
 	}
 
-	// Update package lists
-	si.sendLog("INFO", "Updating package lists...")
-	if err := si.executeCommandStream(ctx, "sudo -n apt-get update"); err != nil {
+	if err := si.addAptSources(ctx, *osConfig); err != nil {
+		return err
+	}
+	if err := si.ensureAptLists(ctx); err != nil {
 		return err
 	}
 
@@ -1822,42 +1817,9 @@ func expandPath(path string) string {
 }
 
 // checkAndInstallDependencies checks platform-specific dependencies and installs missing ones
-func (si *StreamingInstaller) checkAndInstallDependencies(ctx context.Context, osConfig types.OSConfig) error {
-	// Only check dependencies if there are platform requirements
-	if len(osConfig.PlatformRequirements) == 0 {
-		si.sendLog("INFO", "No platform requirements specified, skipping dependency check")
-		return nil
-	}
-
-	si.sendLog("INFO", "Checking platform-specific dependencies...")
-
-	// Detect current platform
-	platformDetector := platform.NewPlatformDetector()
-	currentPlatform := platformDetector.Detect()
-
-	si.sendLog("INFO", fmt.Sprintf("Detected platform: OS=%s, Distribution=%s", currentPlatform.OS, currentPlatform.Distribution))
-
-	// Create appropriate package manager based on platform
-	// Package manager detection and system updates are now handled by plugins
-	switch currentPlatform.OS {
-	case "linux":
-		switch currentPlatform.Distribution {
-		case "debian", "ubuntu":
-			si.sendLog("INFO", "System updates would be handled by package-manager-apt plugin")
-		default:
-			si.sendLog("WARN", fmt.Sprintf("No package manager support for distribution: %s", currentPlatform.Distribution))
-			return nil
-		}
-	default:
-		si.sendLog("WARN", fmt.Sprintf("No package manager support for OS: %s", currentPlatform.OS))
-		return nil
-	}
-
-	// System updates are now handled by plugins
-	si.sendLog("INFO", "System updates would be handled by package manager plugins")
-
-	// Plugin system handles dependency checking
-	// This functionality has been migrated to the plugin architecture
-	si.sendLog("INFO", "System update is handled by package manager plugins")
+func (si *StreamingInstaller) checkAndInstallDependencies(_ context.Context, _ types.OSConfig) error {
+	// Dependency installation moved to the package-manager plugins. This used to
+	// re-detect the platform and log three placeholder lines for every app; the
+	// hook stays so callers keep a single place to add real dependency checks.
 	return nil
 }
