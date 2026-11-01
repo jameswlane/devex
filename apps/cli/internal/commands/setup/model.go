@@ -59,6 +59,11 @@ type GitConfiguration struct {
 	gitEmail       string
 	gitInputField  int  // 0 = full name, 1 = email
 	gitInputActive bool // true when editing a field
+
+	// The global git identity found when setup reached the Git step.
+	identityLoaded bool
+	existingName   string
+	existingEmail  string
 }
 
 // InstallationState tracks the current installation progress and errors
