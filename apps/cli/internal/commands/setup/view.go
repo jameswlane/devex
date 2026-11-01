@@ -354,7 +354,7 @@ func (m *SetupModel) View() string {
 		if m.installation.hasErrors {
 			s = titleStyle.Render("⚠️  Setup Completed with Issues")
 			s += "\n\n"
-			s += fmt.Sprintf("Setup completed but encountered %d issues:\n\n", len(m.installation.installErrors))
+			s += fmt.Sprintf("Setup completed with %d errors:\n\n", len(m.installation.installErrors))
 
 			errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#EF4444"))
 			for _, err := range m.installation.installErrors {

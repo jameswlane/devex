@@ -108,9 +108,34 @@ func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 		"Java":          "java@latest",
 		"Rust":          "rust@latest",
 		"Elixir":        "elixir@latest",
+		"Erlang":        "erlang@latest",
+	}
+	// Keep the fallback usable without loaded configuration, and honor the
+	// language YAML's mise dependencies when configuration is available.
+	dependencies := map[string][]string{"Elixir": {"erlang"}}
+	for _, language := range m.settings.ProgrammingLanguages {
+		cfg := language.GetOSConfig()
+		if cfg.InstallMethod == "mise" {
+			langMap[language.Name] = cfg.InstallCommand
+			dependencies[language.Name] = cfg.Dependencies
+		}
 	}
 
-	for _, lang := range selectedLangs {
+	seen := make(map[string]bool)
+	var addLanguage func(string)
+	addLanguage = func(lang string) {
+		if seen[lang] {
+			return
+		}
+		seen[lang] = true
+		for _, dependency := range dependencies[lang] {
+			for name := range langMap {
+				if strings.EqualFold(name, dependency) {
+					addLanguage(name)
+					break
+				}
+			}
+		}
 		if packageName, exists := langMap[lang]; exists {
 			app := types.CrossPlatformApp{
 				Name:        fmt.Sprintf("mise-%s", strings.ToLower(strings.ReplaceAll(lang, " ", "-"))),
@@ -130,6 +155,9 @@ func (m *SetupModel) getLanguageApps() []types.CrossPlatformApp {
 			}
 			apps = append(apps, app)
 		}
+	}
+	for _, lang := range selectedLangs {
+		addLanguage(lang)
 	}
 
 	return apps

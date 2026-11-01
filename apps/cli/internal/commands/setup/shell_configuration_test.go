@@ -141,7 +141,7 @@ var _ = Describe("Shell setup plugin contract", Ordered, func() {
 		model := &SetupModel{step: StepComplete, system: SystemInfo{shells: []string{"bash"}}}
 		model.recordShellConfigurationFailure("bash", errors.New("permission denied"))
 		for _, summary := range []string{model.View(), captureAutomatedCompletion(model)} {
-			Expect(summary).To(Or(ContainSubstring("completed with issues"), ContainSubstring("Completed with Issues")))
+			Expect(summary).To(Or(ContainSubstring("completed with 1 errors"), ContainSubstring("Completed with Issues")))
 			Expect(summary).To(ContainSubstring("permission denied"))
 			Expect(summary).To(ContainSubstring(`"selected_shell":"bash"`))
 			dirs, err := sdk.ResolvePaths()

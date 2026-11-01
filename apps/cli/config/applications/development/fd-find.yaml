@@ -37,8 +37,17 @@ linux:
     - os: debian
     - os: ubuntu
   post_install:
-    - shell: mkdir -p $HOME/.local/bin
-    - shell: ln -sf $(which fdfind) $HOME/.local/bin/fd
+    - shell: |
+        target="$(command -v fdfind 2>/dev/null || printf '%s' /usr/bin/fdfind)"
+        link="$HOME/.local/bin/fd"
+        if [ ! -x "$target" ]; then
+          printf '%s\n' "fdfind executable not found: $target" >&2
+          exit 1
+        fi
+        mkdir -p "$HOME/.local/bin" &&
+          if [ "$(readlink "$link" 2>/dev/null)" != "$target" ]; then
+            ln -sfnT "$target" "$link"
+          fi
   alternatives:
     - install_method: dnf
       install_command: fd-find

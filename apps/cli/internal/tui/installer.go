@@ -227,6 +227,8 @@ type StreamingInstaller struct {
 	config              InstallerConfig                  // Configuration settings
 	performanceAnalyzer *performance.PerformanceAnalyzer // Performance analysis and warnings
 	progressManager     *progresspkg.ProgressManager     // Optional progress manager for enhanced tracking
+	postInstallMutex    sync.Mutex
+	postInstallWarnings []error
 }
 
 // SecureString represents a string that should be scrubbed from memory to prevent
@@ -627,17 +629,18 @@ func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager 
 //   - settings: Installation settings including verbosity and dry-run flags
 //
 // Returns:
-//   - error: nil on success, context.Canceled if cancelled, or other error on critical failures
+//   - error: joined per-app failures, cancellation, or authorization errors; nil on success
 func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
+	var failures []error
 	for i, app := range apps {
 		if err := AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
-			return err
+			return si.installationResult(append(failures, err)...)
 		}
 		// Check for context cancellation before each app
 		select {
 		case <-ctx.Done():
 			si.sendLog("INFO", "Installation cancelled before starting next app")
-			return ctx.Err()
+			return si.installationResult(append(failures, ctx.Err())...)
 		default:
 		}
 
@@ -650,6 +653,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		}
 
 		if err := si.InstallApp(ctx, app, settings); err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
 			if si.program != nil {
 				si.program.Send(AppCompleteMsg{
@@ -659,10 +663,10 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			}
 			// If the error is due to context cancellation, stop installation entirely
 			if errors.Is(err, ErrSudoAuthorization) {
-				return err
+				return si.installationResult(failures...)
 			}
 			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-				return ctx.Err()
+				return si.installationResult(failures...)
 			}
 			continue
 		}
@@ -674,7 +678,17 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			})
 		}
 	}
-	return nil
+	return si.installationResult(failures...)
+}
+
+// Surface optional hook failures in the completion summary without marking the
+// successfully installed package as failed or preventing its registration.
+func (si *StreamingInstaller) installationResult(failures ...error) error {
+	si.postInstallMutex.Lock()
+	defer si.postInstallMutex.Unlock()
+	failures = append(failures, si.postInstallWarnings...)
+	si.postInstallWarnings = nil
+	return errors.Join(failures...)
 }
 
 // InstallApp installs a single application with streaming output and comprehensive error handling.
@@ -779,8 +793,13 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	if len(osConfig.PostInstall) > 0 {
 		si.sendLog("INFO", "Executing post-install commands...")
 		if err := si.executeCommands(ctx, osConfig.PostInstall); err != nil {
-			si.recordFailedInstallation(app.Name, startTime, err)
-			return fmt.Errorf("post-install failed: %w", err)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			si.sendLog("WARN", fmt.Sprintf("Optional post-install step for %s failed: %v", app.Name, err))
+			si.postInstallMutex.Lock()
+			si.postInstallWarnings = append(si.postInstallWarnings, fmt.Errorf("%s: post-install step failed: %w", app.Name, err))
+			si.postInstallMutex.Unlock()
 		}
 	}
 
@@ -1633,9 +1652,13 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 			installErr := installer.InstallApps(ctx, apps, settings)
 			result <- installErr
 			if err := installErr; err != nil {
-				installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v", err))
+				count := 1
+				if joined, ok := err.(interface{ Unwrap() []error }); ok {
+					count = len(joined.Unwrap())
+				}
+				installer.sendLog("ERROR", fmt.Sprintf("Installation completed with %d errors: %v (log: %s)", count, err, log.GetLogFile()))
 			} else {
-				installer.sendLog("INFO", "Installation completed successfully")
+				installer.sendLog("INFO", "Application installation finished; setup configuration may follow")
 			}
 
 			// Send quit message to exit TUI - use a timer instead of blocking sleep
