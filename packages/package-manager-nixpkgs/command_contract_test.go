@@ -37,6 +37,8 @@ var _ = Describe("NIXPKGS command contracts", func() {
 
 	BeforeEach(func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "nix-env")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin = main.NewNixpkgsPlugin()
 	})
 

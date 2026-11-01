@@ -51,7 +51,12 @@ func (a windowsPrivilegeAdapter) Run(ctx context.Context, plan ExecutionPlan, st
 	execute := a.execute
 	if execute == nil {
 		execute = func(ctx context.Context, plan ExecutionPlan, streams OperationIO) error {
-			return runPreparedCommand(exec.CommandContext(ctx, plan.Name, plan.Args...), streams)
+			cmd := exec.CommandContext(ctx, plan.Name, plan.Args...)
+			configureOperationCommand(cmd, plan.ExecutionRequest)
+			if plan.Unattended {
+				streams.Stdin = nil
+			}
+			return runPreparedCommand(cmd, streams)
 		}
 	}
 	err = execute(ctx, plan, streams)

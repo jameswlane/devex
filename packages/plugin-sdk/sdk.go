@@ -369,17 +369,30 @@ func ExecCommandWithContext(ctx context.Context, useSudo bool, name string, args
 		if err != nil {
 			return authorizationRequired("sudo is unavailable; install sudo or configure a scoped platform adapter", err)
 		}
-		args = append([]string{"--", name}, args...)
+		if unattendedContext(ctx) {
+			args = append([]string{"-n", "--", name}, args...)
+		} else {
+			args = append([]string{"--", name}, args...)
+		}
 		name = sudo
 	}
 	cmd := NewCommandContext(ctx, name, args...)
-	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
-	return cmd.Run()
+	streams := OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr}
+	unattended := unattendedContext(ctx)
+	configureOperationCommand(cmd, ExecutionRequest{Unattended: unattended})
+	if unattended {
+		streams.Stdin = nil
+	}
+	if unattended && useSudo && !NewPrivilegeResolver().Elevated {
+		return runSudoCommand(ctx, cmd, streams)
+	}
+	return runPreparedCommand(cmd, streams)
 }
 
 // ExecCommandOutputWithContext executes a command and returns output with context support
 func ExecCommandOutputWithContext(ctx context.Context, name string, args ...string) (string, error) {
 	cmd := NewCommandContext(ctx, name, args...)
+	configureOperationCommand(cmd, ExecutionRequest{Unattended: unattendedContext(ctx)})
 	output, err := cmd.Output()
 	return string(output), err
 }
@@ -1367,6 +1380,7 @@ func (em *ExecutableManager) getPluginMetadataWithContext(ctx context.Context, p
 
 	// Execute plugin with --plugin-info flag
 	cmd := NewCommandContext(metadataCtx, pluginPath, "--plugin-info")
+	configureOperationCommand(cmd, ExecutionRequest{Unattended: unattendedContext(metadataCtx)})
 	output, err := cmd.Output()
 	if err != nil {
 		// Return basic metadata if plugin doesn't respond
@@ -1429,7 +1443,13 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
 		err = RunOperation(ctx, ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args}, streams)
 	} else {
-		err = runPreparedCommand(NewCommandContext(ctx, pluginInfo.Path, args...), streams)
+		cmd := NewCommandContext(ctx, pluginInfo.Path, args...)
+		unattended := unattendedContext(ctx)
+		configureOperationCommand(cmd, ExecutionRequest{Unattended: unattended})
+		if unattended {
+			streams.Stdin = nil
+		}
+		err = runPreparedCommand(cmd, streams)
 	}
 	if ctx.Err() != nil {
 		return ctx.Err()

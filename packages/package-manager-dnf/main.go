@@ -28,6 +28,7 @@ func NewDnfPlugin() *DnfPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"dnf", "fedora", "rhel", "linux"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages"},
 			{
 				Name:        "install",
 				Description: "Install packages using DNF",
@@ -72,6 +73,8 @@ func (p *DnfPlugin) Execute(command string, args []string) error {
 		return p.handleInstall(ctx, args)
 	case "remove":
 		return p.handleRemove(ctx, args)
+	case "upgrade":
+		return sdk.ExecCommandWithContext(ctx, true, "dnf", append([]string{"upgrade", "--assumeyes"}, args...)...)
 	case "update":
 		return p.handleUpdate(ctx, args)
 	case "search":
@@ -91,7 +94,7 @@ func (p *DnfPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
+	cmdArgs := append([]string{"install", "--assumeyes"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "dnf", cmdArgs...)
 }
 
@@ -102,13 +105,13 @@ func (p *DnfPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
+	cmdArgs := append([]string{"remove", "--assumeyes"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "dnf", cmdArgs...)
 }
 
 func (p *DnfPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "dnf", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "dnf", "makecache")
 }
 
 func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
@@ -123,7 +126,7 @@ func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
 }
 
 func (p *DnfPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "dnf", "list")
+	return sdk.ExecCommandWithContext(ctx, false, "dnf", "list", "installed")
 }
 
 func main() {

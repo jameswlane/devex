@@ -147,6 +147,10 @@ type ExecutionRequest struct {
 	Privilege OperationPrivilege `json:"privilege"`
 	Name      string             `json:"name"`
 	Args      []string           `json:"args,omitempty"`
+	// Unattended disables stdin and all authorization prompts.
+	Unattended bool `json:"unattended,omitempty"`
+	// Env contains per-operation environment assignments, also preserved across sudo.
+	Env []string `json:"env,omitempty"`
 }
 
 // ExecutionPlan is also an install preview: planning never prompts or runs commands.
@@ -158,9 +162,15 @@ type ExecutionPlan struct {
 }
 
 func (r PrivilegeResolver) Plan(request ExecutionRequest) (ExecutionPlan, error) {
+	request.Unattended = request.Unattended || Unattended()
 	plan := ExecutionPlan{ExecutionRequest: request}
 	if request.Name == "" {
 		return plan, fmt.Errorf("operation requires a command")
+	}
+	for _, entry := range request.Env {
+		if !validEnvironmentAssignment(entry) {
+			return plan, fmt.Errorf("operation environment requires NAME=value assignments")
+		}
 	}
 	if request.Privilege.Scope != ScopeUser && request.Privilege.Scope != ScopeSystem {
 		return plan, fmt.Errorf("operation requires user or system scope")
@@ -209,7 +219,12 @@ func (unavailablePrivilegeAdapter) Run(ctx context.Context, plan ExecutionPlan, 
 	if plan.Elevate || plan.SwitchUser {
 		return authorizationRequired("configure a native platform privilege adapter", nil)
 	}
-	return runPreparedCommand(NewCommandContext(ctx, plan.Name, plan.Args...), streams)
+	cmd := NewCommandContext(ctx, plan.Name, plan.Args...)
+	configureOperationCommand(cmd, plan.ExecutionRequest)
+	if plan.Unattended {
+		streams.Stdin = nil
+	}
+	return runPreparedCommand(cmd, streams)
 }
 
 func runPreparedCommand(cmd *exec.Cmd, streams OperationIO) error {
@@ -238,7 +253,7 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 		if err != nil {
 			return nil, authorizationRequired("sudo is unavailable; install sudo or configure a platform privilege adapter", err)
 		}
-		if plan.Elevate {
+		if plan.Elevate && !plan.Unattended {
 			authorize := a.Authorize
 			if authorize == nil {
 				// Failure of `true` may mean a password is needed or that only the exact
@@ -266,17 +281,33 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 				}
 				return nil, NewAuthorizationDeniedError("authorization adapter rejected the operation", exit.ExitCode(), err)
 			}
-			args = append([]string{"-n", "--", name}, args...)
+		}
+		environment := operationEnvironment(plan.ExecutionRequest)
+		target := append([]string{name}, args...)
+		if plan.Elevate {
+			// sudo parses assignments before the target, retaining command-specific
+			// sudoers matching instead of requiring permission to execute env as root.
+			// Pass only the variables the operation asked for: the elevated target is
+			// a native command that never reads DEVEX_UNATTENDED (sudo -n and closed
+			// stdin already enforce unattended mode), and every extra assignment
+			// needs SETENV under restrictive sudoers rules.
+			target = append(append([]string(nil), plan.Env...), target...)
+			args = append([]string{"-n", "--"}, target...)
 		} else {
 			if plan.IntendedUser == nil || plan.IntendedUser.UID == "0" {
 				return nil, fmt.Errorf("user-scope plan requires a non-root identity")
 			}
 			// sudo -H sets HOME; env also makes account environment explicit and portable.
-			args = append([]string{"-n", "-H", "-u", plan.IntendedUser.Username, "--", "env", "HOME=" + plan.IntendedUser.HomeDir, "USER=" + plan.IntendedUser.Username, "LOGNAME=" + plan.IntendedUser.Username, name}, args...)
+			identityEnvironment := []string{"HOME=" + plan.IntendedUser.HomeDir, "USER=" + plan.IntendedUser.Username, "LOGNAME=" + plan.IntendedUser.Username}
+			environment = append(identityEnvironment, environment...)
+			target = append(append([]string{"env"}, environment...), target...)
+			args = append([]string{"-n", "-H", "-u", plan.IntendedUser.Username, "--"}, target...)
 		}
 		name = sudo
 	}
-	return NewCommandContext(ctx, name, args...), nil
+	cmd := NewCommandContext(ctx, name, args...)
+	configureOperationCommand(cmd, plan.ExecutionRequest)
+	return cmd, nil
 }
 
 func probeSudo(ctx context.Context, sudo string) error {
@@ -288,12 +319,48 @@ func (a UnixSudoAdapter) Run(ctx context.Context, plan ExecutionPlan, streams Op
 	if err != nil {
 		return err
 	}
+	if plan.Unattended {
+		streams.Stdin = nil
+	}
+	if plan.Elevate || plan.SwitchUser {
+		return runSudoCommand(ctx, cmd, streams)
+	}
 	return runPreparedCommand(cmd, streams)
+}
+
+// sudo uses the target exit status too; only its own authorization diagnostic
+// distinguishes a rejected launch from an ordinary package-manager failure.
+func runSudoCommand(ctx context.Context, cmd *exec.Cmd, streams OperationIO) error {
+	var diagnostic diagnosticTail
+	if streams.Stderr == nil {
+		streams.Stderr = io.Discard
+	}
+	streams.Stderr = io.MultiWriter(streams.Stderr, &diagnostic)
+	// Stable sudo diagnostics let us preserve target errors without classifying
+	// every nonzero exit status as an authorization denial.
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	cmd.Env = append(cmd.Env, "LC_ALL=C")
+	err := runPreparedCommand(cmd, streams)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if err != nil {
+		message := strings.ToLower(diagnostic.String())
+		for _, line := range strings.Split(message, "\n") {
+			if strings.HasPrefix(line, "sudo:") && (strings.Contains(line, "password") || strings.Contains(line, "not allowed") || strings.Contains(line, "sudoers") || strings.Contains(line, "terminal is required")) {
+				return NewAuthorizationDeniedError("sudo authorization failed; provision credentials or non-prompting sudo authorization", ExitStatus(err), err)
+			}
+		}
+	}
+	return err
 }
 
 // PrepareOperation is the optional argv-based entry point. Native adapters should
 // use RunOperation, which does not require exec.Cmd support.
 func PrepareOperation(ctx context.Context, request ExecutionRequest) (*exec.Cmd, error) {
+	request.Unattended = request.Unattended || unattendedContext(ctx)
 	plan, err := NewPrivilegeResolver().Plan(request)
 	if err != nil {
 		return nil, err
@@ -307,9 +374,13 @@ func PrepareOperation(ctx context.Context, request ExecutionRequest) (*exec.Cmd,
 
 // RunOperation supports Unix commands and native macOS/UAC process handles alike.
 func RunOperation(ctx context.Context, request ExecutionRequest, streams OperationIO) error {
+	request.Unattended = request.Unattended || unattendedContext(ctx)
 	plan, err := NewPrivilegeResolver().Plan(request)
 	if err != nil {
 		return err
+	}
+	if plan.Unattended {
+		streams.Stdin = nil
 	}
 	return DefaultPrivilegeAdapter.Run(ctx, plan, streams)
 }

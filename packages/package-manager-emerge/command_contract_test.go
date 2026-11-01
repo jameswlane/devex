@@ -22,9 +22,9 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"install", "git", "vim"}, nativeArgv: []string{"--ask=n", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "emerge", pending: "install is a package atom, not an action; omit it and disable confirmation"},
-	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "git", "vim"}, nativeArgv: []string{"--ask=n", "--depclean", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "emerge", pending: "remove is a package atom, not an action; use dependency-aware --depclean"},
-	{command: "update", args: nil, currentArg: []string{"update"}, nativeArgv: []string{"--sync"}, elevated: true, nativeElevated: true, nativeExecutable: "emerge", pending: "update does not refresh repositories; use --sync"},
+	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"--ask=n", "git", "vim"}, nativeArgv: []string{"--ask=n", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "emerge"},
+	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"--ask=n", "--depclean", "git", "vim"}, nativeArgv: []string{"--ask=n", "--depclean", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "emerge"},
+	{command: "update", args: nil, currentArg: []string{"--ask=n", "--sync"}, nativeArgv: []string{"--ask=n", "--sync"}, elevated: true, nativeElevated: true, nativeExecutable: "emerge"},
 	{command: "search", args: []string{"web", "server"}, currentArg: []string{"search", "web server"}, nativeArgv: []string{"--search", "web server"}, elevated: false, nativeElevated: false, nativeExecutable: "emerge", pending: "search requires --search"},
 	{command: "list", args: nil, currentArg: []string{"list"}, nativeArgv: nil, elevated: false, nativeElevated: false, nativeExecutable: "emerge", pending: "emerge has no list action; select a supported installed-package query in a follow-up"},
 }

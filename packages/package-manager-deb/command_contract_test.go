@@ -25,6 +25,8 @@ var _ = Describe("DEB command contracts", func() {
 	var contracts []operationContract
 	BeforeEach(func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "dpkg", "dpkg-deb", "dpkg-query", "apt-get")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin = main.NewDebPlugin()
 		file = filepath.Join(os.Getenv("HOME"), "test package.deb")
 		target = filepath.Join(os.Getenv("HOME"), "extracted files")

@@ -12,6 +12,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -433,8 +434,12 @@ func (m *MockInstaller) IsInstalled(command string) (bool, error) {
 }
 
 func (p *PluginBasedInstaller) context() context.Context {
-	if p.ctx == nil {
-		return context.Background()
+	ctx := p.ctx
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	return p.ctx
+	if !interaction.IsInteractiveMode() {
+		ctx = sdk.WithUnattended(ctx)
+	}
+	return ctx
 }

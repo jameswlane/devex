@@ -21,6 +21,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -333,6 +334,9 @@ func (b *PluginBootstrap) ExecutePlugin(pluginName string, args []string) error 
 
 // ExecutePluginWithContext executes a plugin with cancellation from the caller.
 func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginName string, args []string) error {
+	if !interaction.IsInteractiveMode() {
+		ctx = sdk.WithUnattended(ctx)
+	}
 	if err := validatePluginName(pluginName); err != nil {
 		return fmt.Errorf("invalid plugin name: %w", err)
 	}
@@ -348,6 +352,9 @@ func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginNa
 // ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with
 // caller-owned streams.
 func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams sdk.OperationIO) error {
+	if !interaction.IsInteractiveMode() {
+		ctx = sdk.WithUnattended(ctx)
+	}
 	if err := validatePluginName(pluginName); err != nil {
 		return fmt.Errorf("invalid plugin name: %w", err)
 	}
@@ -558,7 +565,11 @@ func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string)
 }
 
 func (b *PluginBootstrap) installed(cmd *cobra.Command, name string) (sdk.PluginMetadata, error) {
-	metadata, ok := b.manager.ListPluginsWithContext(cmd.Context())[name]
+	ctx := cmd.Context()
+	if !interaction.IsInteractiveMode() {
+		ctx = sdk.WithUnattended(ctx)
+	}
+	metadata, ok := b.manager.ListPluginsWithContext(ctx)[name]
 	if !ok {
 		return metadata, fmt.Errorf("plugin %s is not installed; run 'devex plugin install %s'", name, name)
 	}
@@ -573,7 +584,11 @@ func (b *PluginBootstrap) handleRunPlugin(cmd *cobra.Command, args []string) err
 	if !slices.Contains(getCommandNames(metadata.Commands), args[1]) {
 		return fmt.Errorf("unknown command %q for plugin %s; run 'devex plugin info %s' for available commands", args[1], args[0], args[0])
 	}
-	return b.manager.ExecutePluginWithIO(cmd.Context(), args[0], args[1:], sdk.OperationIO{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()})
+	ctx := cmd.Context()
+	if !interaction.IsInteractiveMode() {
+		ctx = sdk.WithUnattended(ctx)
+	}
+	return b.manager.ExecutePluginWithIO(ctx, args[0], args[1:], sdk.OperationIO{Stdin: cmd.InOrStdin(), Stdout: cmd.OutOrStdout(), Stderr: cmd.ErrOrStderr()})
 }
 
 func (b *PluginBootstrap) handleRemovePlugin(cmd *cobra.Command, args []string) error {

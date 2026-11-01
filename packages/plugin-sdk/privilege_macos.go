@@ -52,7 +52,7 @@ type macOSAuthorizationAdapter struct {
 }
 
 func (a macOSAuthorizationAdapter) Run(ctx context.Context, plan ExecutionPlan, streams OperationIO) error {
-	if !plan.Elevate {
+	if !plan.Elevate || plan.Unattended {
 		return (UnixSudoAdapter{}).Run(ctx, plan, streams)
 	}
 

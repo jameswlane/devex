@@ -11,3 +11,5 @@ func TestSDK(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Plugin SDK Suite")
 }
+
+var _ = BeforeEach(func() { GinkgoT().Setenv("CI", ""); GinkgoT().Setenv("DEVEX_UNATTENDED", "") })

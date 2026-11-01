@@ -40,7 +40,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Expect(installed).To(BeTrue())
 		Expect(executor.name).To(Equal("package-manager-apt"))
 		Expect(executor.args).To(Equal([]string{"is-installed", "git", "curl"}))
-		Expect(executor.ctx).To(BeIdenticalTo(ctx))
+		Expect(executor.ctx.Done()).To(Equal(ctx.Done()))
 	})
 
 	DescribeTable("preserves plugin discovery errors for package-specific probes",

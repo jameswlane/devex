@@ -91,7 +91,7 @@ func (p *EopkgPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
+	cmdArgs := append([]string{"install", "--yes-all"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "eopkg", cmdArgs...)
 }
 
@@ -102,13 +102,13 @@ func (p *EopkgPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
+	cmdArgs := append([]string{"remove", "--yes-all"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "eopkg", cmdArgs...)
 }
 
 func (p *EopkgPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "eopkg", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "eopkg", "update-repo")
 }
 
 func (p *EopkgPlugin) handleSearch(ctx context.Context, args []string) error {

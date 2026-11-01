@@ -16,10 +16,10 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{"install", []string{"git", "vim"}, []sdktest.Call{{Args: []string{"update"}, ElevationRequested: true}, {Args: []string{"add", "--no-cache", "git", "vim"}, ElevationRequested: true}}},
-	{"remove", []string{"git", "vim"}, []sdktest.Call{{Args: []string{"del", "git", "vim"}, ElevationRequested: true}}},
+	{"install", []string{"git", "vim"}, []sdktest.Call{{Args: []string{"update"}, ElevationRequested: true}, {Args: []string{"--no-interactive", "add", "--no-cache", "git", "vim"}, ElevationRequested: true}}},
+	{"remove", []string{"git", "vim"}, []sdktest.Call{{Args: []string{"--no-interactive", "del", "git", "vim"}, ElevationRequested: true}}},
 	{"update", nil, []sdktest.Call{{Args: []string{"update"}, ElevationRequested: true}}},
-	{"upgrade", nil, []sdktest.Call{{Args: []string{"update"}, ElevationRequested: true}, {Args: []string{"upgrade"}, ElevationRequested: true}}},
+	{"upgrade", nil, []sdktest.Call{{Args: []string{"update"}, ElevationRequested: true}, {Args: []string{"--no-interactive", "upgrade"}, ElevationRequested: true}}},
 	{"search", []string{"web", "server"}, []sdktest.Call{{Args: []string{"search", "web server"}}}},
 	{"list", nil, []sdktest.Call{{Args: []string{"list", "--installed"}}}},
 	{"info", []string{"git", "vim"}, []sdktest.Call{{Args: []string{"info", "git"}}, {Args: []string{"info", "vim"}}}},

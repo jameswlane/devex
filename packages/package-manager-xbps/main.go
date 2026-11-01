@@ -91,7 +91,7 @@ func (p *XbpsPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
+	cmdArgs := append([]string{"--yes"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "xbps-install", cmdArgs...)
 }
 
@@ -102,13 +102,13 @@ func (p *XbpsPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "xbps-install", cmdArgs...)
+	cmdArgs := append([]string{"--yes"}, args...)
+	return sdk.ExecCommandWithContext(ctx, true, "xbps-remove", cmdArgs...)
 }
 
 func (p *XbpsPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "xbps-install", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "xbps-install", "--sync")
 }
 
 func (p *XbpsPlugin) handleSearch(ctx context.Context, args []string) error {

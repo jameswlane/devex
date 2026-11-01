@@ -20,28 +20,26 @@ type operationContract struct {
 }
 
 var dnfContracts = []operationContract{
+	{command: "upgrade", currentArg: []string{"upgrade", "--assumeyes"}, nativeArgv: []string{"upgrade", "--assumeyes"}, elevated: true},
 	{
 		command:    "install",
 		args:       []string{"git", "vim"},
-		currentArg: []string{"install", "git", "vim"},
+		currentArg: []string{"install", "--assumeyes", "git", "vim"},
 		nativeArgv: []string{"install", "--assumeyes", "git", "vim"},
 		elevated:   true,
-		pending:    "#189: install omits --assumeyes, so DNF can block for confirmation",
 	},
 	{
 		command:    "remove",
 		args:       []string{"git", "vim"},
-		currentArg: []string{"remove", "git", "vim"},
+		currentArg: []string{"remove", "--assumeyes", "git", "vim"},
 		nativeArgv: []string{"remove", "--assumeyes", "git", "vim"},
 		elevated:   true,
-		pending:    "#190: remove omits --assumeyes, so DNF can block for confirmation",
 	},
 	{
 		command:    "update",
-		currentArg: []string{"update"},
+		currentArg: []string{"makecache"},
 		nativeArgv: []string{"makecache"},
 		elevated:   true,
-		pending:    "#191: update must refresh repository metadata with makecache, not upgrade installed packages",
 	},
 	{
 		command: "search",
@@ -52,9 +50,8 @@ var dnfContracts = []operationContract{
 	},
 	{
 		command:    "list",
-		currentArg: []string{"list"},
+		currentArg: []string{"list", "installed"},
 		nativeArgv: []string{"list", "installed"},
-		pending:    "#192: list advertises installed packages but omits the installed query",
 	},
 }
 

@@ -38,7 +38,7 @@ var _ = Describe("Catalog package arguments", func() {
 				Expect(executor.args).To(Equal(append([]string{"remove"}, want...)))
 			}
 			Expect(executor.name).To(Equal("package-manager-" + method))
-			Expect(executor.ctx).To(BeIdenticalTo(ctx))
+			Expect(executor.ctx.Done()).To(Equal(ctx.Done()))
 		},
 		Entry("plain package", "apt", "git", []string{"git"}),
 		Entry("multiple packages", "apt", "sqlite3 libsqlite3-0", []string{"sqlite3", "libsqlite3-0"}),

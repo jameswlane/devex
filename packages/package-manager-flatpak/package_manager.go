@@ -145,7 +145,7 @@ func (f *FlatpakInstaller) handleInstall(ctx context.Context, args []string) err
 		}
 
 		f.logger.Printf("Installing %s...\n", appID)
-		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", installCmd...); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", unattendedFlatpakArgs(installCmd)...); err != nil {
 			return fmt.Errorf("failed to install %s: %w", appID, err)
 		}
 	}
@@ -173,7 +173,7 @@ func (f *FlatpakInstaller) handleRemove(ctx context.Context, args []string) erro
 		}
 
 		f.logger.Printf("Removing %s...\n", app)
-		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", "uninstall", "-y", app); err != nil {
+		if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", unattendedFlatpakArgs([]string{"uninstall", "-y", app})...); err != nil {
 			return fmt.Errorf("failed to remove %s: %w", app, err)
 		}
 	}
@@ -186,7 +186,7 @@ func (f *FlatpakInstaller) handleRemove(ctx context.Context, args []string) erro
 func (f *FlatpakInstaller) handleUpdate(ctx context.Context, args []string) error {
 	f.logger.Println("Updating all installed applications and runtimes...")
 
-	if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", "update", "-y"); err != nil {
+	if err := sdk.ExecCommandWithContext(ctx, false, "flatpak", unattendedFlatpakArgs([]string{"update", "-y"})...); err != nil {
 		return fmt.Errorf("failed to update applications: %w", err)
 	}
 
@@ -292,4 +292,11 @@ func (f *FlatpakInstaller) isAppInstalled(ctx context.Context, appID string) (bo
 
 	// Check if app ID is in the list
 	return strings.Contains(output, appID), nil
+}
+
+func unattendedFlatpakArgs(args []string) []string {
+	if sdk.Unattended() {
+		return append([]string{args[0], "--noninteractive"}, args[1:]...)
+	}
+	return args
 }

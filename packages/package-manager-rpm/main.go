@@ -91,7 +91,7 @@ func (p *RpmPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
+	cmdArgs := append([]string{"--install"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "rpm", cmdArgs...)
 }
 
@@ -102,13 +102,13 @@ func (p *RpmPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
+	cmdArgs := append([]string{"--erase"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "rpm", cmdArgs...)
 }
 
 func (p *RpmPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "rpm", "update")
+	return fmt.Errorf("rpm does not refresh repositories; use dnf or zypper")
 }
 
 func (p *RpmPlugin) handleSearch(ctx context.Context, args []string) error {
