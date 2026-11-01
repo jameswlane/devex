@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	managed "github.com/jameswlane/devex/packages/plugin-sdk/shellrc"
 )
 
 // handleConfig displays and manages current shell configuration settings
@@ -57,7 +59,7 @@ func (p *ShellPlugin) checkConfigurationStatus(rcFile string) error {
 		return fmt.Errorf("failed to read configuration file: %w", err)
 	}
 
-	if strings.Contains(string(content), "# DevEx Shell Configuration") {
+	if strings.Contains(string(content), managed.Start) || strings.Contains(string(content), "# DevEx Shell Configuration") {
 		fmt.Println("✅ DevEx configurations are present")
 		p.showDevExConfigurationDetails(string(content))
 	} else {

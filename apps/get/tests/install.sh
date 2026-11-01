@@ -73,7 +73,15 @@ test_shell() {
     fi
 
     first_output=$(run_installer "$@")
+    for config in "${configs[@]}"; do
+        if [ -f "$HOME/$config" ]; then cp "$HOME/$config" "$HOME/$(basename "$config").first"; fi
+    done
     output=$(run_installer "$@")
+    for config in "${configs[@]}"; do
+        if [ -f "$HOME/$(basename "$config").first" ]; then
+            cmp "$HOME/$config" "$HOME/$(basename "$config").first" || fail "Second run changed $config"
+        fi
+    done
     [ -x "$INSTALL_DIR/devex" ] || fail "Executable was not installed"
     [ -f "$DEVEX_DATA_DIR/config/example.yaml" ] || fail "Bundled config was not installed in the data directory"
     [ ! -d "$INSTALL_DIR/config" ] || fail "Bundled config was mixed with binaries"
@@ -88,12 +96,12 @@ test_shell() {
             bash:.profile) [ "$test_os" != darwin ] || [ "$existing" != profile ] || expected=yes ;;
         esac
         if [ "$expected" = yes ]; then
-            [ "$(grep -cF "# DevEx CLI" "$HOME/$config" || :)" -eq 1 ] ||
+            [ "$(grep -cF "# >>> devex >>>" "$HOME/$config" || :)" -eq 1 ] ||
                 fail "Expected one PATH entry in $config for $selected on $test_os"
             assert_contains "$first_output" "Adding to $HOME/$config"
             assert_contains "$output" "Already configured: $HOME/$config"
             if [ "$selected" = fish ]; then
-                assert_contains "$(cat "$HOME/$config")" 'set -gx PATH $PATH'
+                assert_contains "$(cat "$HOME/$config")" 'set -gx PATH'
             else
                 assert_contains "$(cat "$HOME/$config")" 'export PATH='
             fi
@@ -140,9 +148,9 @@ test_os=linux current_shell=/bin/fish env_shell=''
 export HOME="$test_dir/fish-manual-home"
 export DEVEX_DATA_DIR="$HOME/data"
 INSTALL_DIR="$HOME/"$'install\twith-tab'
-fish_output=$(run_installer)
-fish_path_line=$(tail -n 1 "$HOME/.config/fish/config.fish")
-assert_contains "$fish_output" "    $fish_path_line"
+run_installer >/dev/null
+fish_path_line=$(grep -F "set -gx PATH" "$HOME/.config/fish/config.fish")
+assert_contains "$(cat "$HOME/.config/fish/config.fish")" "$fish_path_line"
 
 assert_rejected() {
     local output
@@ -205,9 +213,9 @@ for selected in bash zsh fish; do
     export HOME="$test_dir/legacy-$selected"
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$HOME/.config/fish"
-    printf 'export PATH="$PATH:%s/.local/share/devex/bin"\n# keep bash\n' "$HOME" > "$HOME/.bashrc"
+    printf '# DevEx CLI\nexport PATH="$PATH:%s/.local/share/devex/bin"\n# keep bash\n' "$HOME" > "$HOME/.bashrc"
     cp "$HOME/.bashrc" "$HOME/.zshrc"
-    printf 'set -gx PATH $PATH "%s/.local/share/devex/bin"\n# keep fish\n' "$HOME" > "$HOME/.config/fish/config.fish"
+    printf '# DevEx CLI\nset -gx PATH $PATH "%s/.local/share/devex/bin"\n# keep fish\n' "$HOME" > "$HOME/.config/fish/config.fish"
     case "$selected" in
         bash) selected_rc="$HOME/.bashrc"; other_rc="$HOME/.zshrc" ;;
         zsh) selected_rc="$HOME/.zshrc"; other_rc="$HOME/.bashrc" ;;
@@ -217,6 +225,45 @@ for selected in bash zsh fish; do
     PATH="$PATH:$INSTALL_DIR" configure_path linux "$selected" >/dev/null
     if grep -qF '.local/share/devex/bin' "$selected_rc"; then fail 'Legacy PATH entry remains'; fi
     assert_contains "$(cat "$selected_rc")" '# keep'
+    if grep -qF '# DevEx CLI' "$selected_rc"; then fail 'Orphaned installer comment remains'; fi
     cmp "$other_rc" "$HOME/other.before" || fail 'Changed an unselected shell during upgrade'
 done
 echo "Bash installer tests passed ($case_number shell isolation scenarios, plus validation and help)."
+
+# Managed upgrades remove only the legacy PATH action and retain other app init.
+export HOME="$test_dir/managed-upgrade"
+mkdir -p "$HOME"
+INSTALL_DIR="$HOME/.local/share/devex/bin"
+printf '# user settings\n' > "$HOME/.bashrc"
+chmod 600 "$HOME/.bashrc"
+add_to_path "$HOME/.bashrc" >/dev/null
+first_rc=$(cat "$HOME/.bashrc")
+add_to_path "$HOME/.bashrc" >/dev/null
+[ "$(cat "$HOME/.bashrc")" = "$first_rc" ] || fail 'Managed PATH edit was not idempotent'
+# Exercise guards at runtime, including a nested shell.
+path_output=$(PATH=/usr/bin:/bin bash --noprofile --norc -c '. "$1"; . "$1"; bash --noprofile --norc -c '\''. "$1"; printf "%s" "$PATH"'\'' _ "$1"' _ "$HOME/.bashrc")
+[ "${path_output#"$INSTALL_DIR:"}" = /usr/bin:/bin ] || fail 'PATH guard duplicated a directory'
+# Insert another component into the same block before upgrading the installer.
+awk '/# <<< devex <<</ { print "eval \"$(zoxide init bash)\"" } { print }' "$HOME/.bashrc" > "$HOME/with-init"
+cat "$HOME/with-init" > "$HOME/.bashrc"
+INSTALL_DIR="$HOME/.local/bin"
+remove_legacy_path "$HOME/.bashrc" >/dev/null
+if grep -qF '.local/share/devex/bin' "$HOME/.bashrc"; then fail 'Managed legacy PATH remains'; fi
+assert_contains "$(cat "$HOME/.bashrc")" 'eval "$(zoxide init bash)"'
+[ "$(grep -cF '# >>> devex >>>' "$HOME/.bashrc")" -eq 1 ] || fail 'Lost shared block'
+backups=("$HOME/.bashrc".devex-bak-*)
+[ "${#backups[@]}" -eq 1 ] && [ -f "${backups[0]}" ] || fail 'Expected exactly one backup'
+cmp "${backups[0]}" <(printf '# user settings\n') || fail 'Backup lost original settings'
+[[ "$(LC_ALL=C ls -l "$HOME/.bashrc")" == '-rw------- '* ]] || fail 'Atomic edit changed permissions'
+# Removing a block containing only the installer must remove its comments too.
+INSTALL_DIR="$HOME/.local/share/devex/bin"
+add_to_path "$HOME/.zshrc" >/dev/null
+remove_legacy_path "$HOME/.zshrc" >/dev/null
+[ ! -s "$HOME/.zshrc" ] || fail 'Removal left an orphaned managed comment'
+# Existing equivalent home-variable paths must remain byte-identical.
+printf 'export PATH="$HOME/.local/bin:$PATH"' > "$HOME/existing-rc"
+cp "$HOME/existing-rc" "$HOME/existing-before"
+INSTALL_DIR="$HOME/.local/bin"
+add_to_path "$HOME/existing-rc" >/dev/null
+cmp "$HOME/existing-rc" "$HOME/existing-before" || fail 'Duplicated an existing HOME PATH entry'
+echo 'Managed block migration, guards, backups and mode tests passed.'

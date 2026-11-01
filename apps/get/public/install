@@ -141,63 +141,116 @@ latest_cli_version() {
         head -n 1
 }
 
-add_to_path() {
-    local shell_config="$1"
-    local path_line
-    # shellcheck disable=SC2016 # Expand PATH when the shell reads the rc file.
-    printf -v path_line 'export PATH="$PATH":%q' "$INSTALL_DIR"
-
-    if [ -f "$shell_config" ] && grep -qxF "$path_line" "$shell_config"; then
+# Update the single managed block while preserving other DevEx components' lines.
+# Back up an existing file once and replace it atomically with its original mode.
+edit_path_block() {
+    local shell_config="$1" entry="$2" action="$3" temporary input=/dev/null
+    local backups=("$shell_config".devex-bak-*)
+    mkdir -p "$(dirname "$shell_config")" || return 1
+    temporary=$(mktemp "${shell_config}.devex.XXXXXX") || return 1
+    if [ -f "$shell_config" ]; then
+        cp -p "$shell_config" "$temporary" || { rm -f "$temporary"; return 1; }
+        input="$shell_config"
+    fi
+    DEVEX_RC_ENTRY="$entry" DEVEX_RC_ACTION="$action" DEVEX_RC_DIR="$INSTALL_DIR" DEVEX_RC_LEGACY="$HOME/.local/share/devex/bin" \
+    awk '
+        function emit(line) { outside = outside line "\n" }
+        function current_path(line, value, offset, before, after) {
+            if (line ~ /^[[:space:]]*#/ || line !~ /PATH/) return 0
+            value = line
+            gsub(/\$\{HOME\}|\$HOME|~/, ENVIRON["HOME"], value)
+            offset = index(value, ENVIRON["DEVEX_RC_DIR"])
+            if (!offset) return 0
+            before = substr(value, offset - 1, 1)
+            after = substr(value, offset + length(ENVIRON["DEVEX_RC_DIR"]), 1)
+            return before ~ /[:"= ]/ && (after == "" || after ~ /[:"; ]/)
+        }
+        function legacy(line) {
+            return line == "export PATH=\"$PATH:" ENVIRON["DEVEX_RC_LEGACY"] "\"" ||
+                line == "export PATH=\"$PATH\":" ENVIRON["DEVEX_RC_LEGACY"] ||
+                line == "export PATH=\"$PATH:$HOME/.local/share/devex/bin\"" ||
+                line == "set -gx PATH $PATH \"" ENVIRON["DEVEX_RC_LEGACY"] "\""
+        }
+        $0 == "# >>> devex >>>" { if (block) { invalid = 1; exit 1 }; block = 1; next }
+        $0 == "# <<< devex <<<" { if (!block) { invalid = 1; exit 1 }; block = 0; next }
+        block {
+            if ($0 == "# Managed by DevEx. Changes inside this block are overwritten.") next
+            if (ENVIRON["DEVEX_RC_ACTION"] == "remove" && index($0, ENVIRON["DEVEX_RC_LEGACY"])) next
+            if ($0 != "") entries[++count] = $0
+            next
+        }
+        {
+            if (pending != "") {
+                if (!legacy($0)) emit(pending)
+                pending = ""
+            }
+            if ($0 == "# DevEx CLI") { pending = $0; next }
+            if (ENVIRON["DEVEX_RC_ACTION"] == "remove" && legacy($0)) next
+            if (current_path($0)) outside_has_path = 1
+            emit($0)
+        }
+        END {
+            if (block || invalid) exit 1
+            if (pending != "") emit(pending)
+            entry = ENVIRON["DEVEX_RC_ENTRY"]
+            if (entry != "" && !outside_has_path) entries[++count] = entry
+            printf "%s", outside
+            for (i = 1; i <= count; i++) {
+                if (seen[entries[i]]++) continue
+                if (!started++) print "# >>> devex >>>\n# Managed by DevEx. Changes inside this block are overwritten."
+                print entries[i]
+            }
+            if (started) print "# <<< devex <<<"
+        }
+    ' "$input" > "$temporary" || {
+        rm -f "$temporary"
+        echo "Error: malformed DevEx block in $shell_config" >&2
+        return 1
+    }
+    if [ -f "$shell_config" ] && {
+        cmp -s "$shell_config" "$temporary" || [ "$(cat "$shell_config")" = "$(cat "$temporary")" ]
+    }; then
+        rm -f "$temporary"
         echo "  ✓ Already configured: $shell_config"
         return
     fi
-
-    mkdir -p "$(dirname "$shell_config")"
+    if [ -f "$shell_config" ] && [ ! -e "${backups[0]}" ]; then
+        cp -p "$shell_config" "$shell_config.devex-bak-$(date -u +%Y%m%dT%H%M%S)-$$" || {
+            rm -f "$temporary"
+            return 1
+        }
+    fi
+    mv -f "$temporary" "$shell_config" || { rm -f "$temporary"; return 1; }
     echo "  ✓ Adding to $shell_config"
-    {
-        echo ""
-        echo "# DevEx CLI"
-        echo "$path_line"
-    } >> "$shell_config"
+}
+
+add_to_path() {
+    local shell_config="$1" directory="$INSTALL_DIR" entry
+    # Escape characters expanded inside double quotes when the rc file is read.
+    directory=${directory//\\/\\\\}
+    directory=${directory//\"/\\\"}
+    directory=${directory//\$/\\\$}
+    directory=${directory//\`/\\\`}
+    # shellcheck disable=SC2016 # Variables expand when the shell reads its config.
+    printf -v entry 'case ":$PATH:" in *":%s:"*) ;; *) export PATH="%s:$PATH" ;; esac' "$directory" "$directory"
+    edit_path_block "$shell_config" "$entry" add
 }
 
 add_to_fish_path() {
-    local shell_config="$1"
-
-    if [ -f "$shell_config" ] && grep -qF "$INSTALL_DIR" "$shell_config"; then
-        echo "  ✓ Already configured: $shell_config"
-        return
-    fi
-
-    mkdir -p "$(dirname "$shell_config")"
-    echo "  ✓ Adding to $shell_config"
-    {
-        echo ""
-        echo "# DevEx CLI"
-        printf "set -gx PATH \$PATH \"%s\"\n" "$INSTALL_DIR"
-    } >> "$shell_config"
+    local shell_config="$1" directory="$INSTALL_DIR" entry
+    directory=${directory//\\/\\\\}
+    directory=${directory//\"/\\\"}
+    directory=${directory//\$/\\\$}
+    # shellcheck disable=SC2016
+    printf -v entry 'if not contains -- "%s" $PATH; set -gx PATH "%s" $PATH; end' "$directory" "$directory"
+    edit_path_block "$shell_config" "$entry" add
 }
 
-# Remove only installer-generated legacy entries, and only from the selected
-# shell's rc files when switching to the default XDG binary location.
+# Remove the legacy binary directory, including its installer-owned comment.
 remove_legacy_path() {
-    local shell_config="$1" line temporary removed=no
+    local shell_config="$1"
     [ -f "$shell_config" ] || return 0
-    temporary=$(mktemp "${shell_config}.devex.XXXXXX")
-    while IFS= read -r line || [ -n "$line" ]; do
-        # shellcheck disable=SC2016 # Match the literal variables in old rc entries.
-        case "$line" in
-            "export PATH=\"\$PATH:$HOME/.local/share/devex/bin\""|\
-            "export PATH=\"\$PATH\":$HOME/.local/share/devex/bin"|\
-            'export PATH="$PATH:$HOME/.local/share/devex/bin"'|\
-            "set -gx PATH \$PATH \"$HOME/.local/share/devex/bin\"") removed=yes ;;
-            *) printf '%s\n' "$line" >> "$temporary" ;;
-        esac
-    done < "$shell_config"
-    if [ "$removed" = yes ]; then
-        cat "$temporary" > "$shell_config"
-    fi
-    rm -f "$temporary"
+    edit_path_block "$shell_config" "" remove
 }
 
 configure_path() {

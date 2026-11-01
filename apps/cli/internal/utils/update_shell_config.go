@@ -2,9 +2,8 @@ package utils
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/jameswlane/devex/apps/cli/internal/fs"
+	managed "github.com/jameswlane/devex/packages/plugin-sdk/shellrc"
 )
 
 func UpdateShellConfig(shellPath, homeDir string, commands []string) error {
@@ -13,17 +12,6 @@ func UpdateShellConfig(shellPath, homeDir string, commands []string) error {
 		return fmt.Errorf("failed to determine shell RC path: %w", err)
 	}
 
-	existingContent, err := fs.ReadFileIfExists(shellRCPath)
-	if err != nil {
-		return fmt.Errorf("failed to read shell RC file: %w", err)
-	}
-
-	updatedContent := string(existingContent)
-	for _, cmd := range commands {
-		if !strings.Contains(updatedContent, cmd) {
-			updatedContent += "\n" + cmd
-		}
-	}
-
-	return fs.WriteFile(shellRCPath, []byte(updatedContent), 0o644)
+	_, err = managed.Merge(shellRCPath, commands)
+	return err
 }

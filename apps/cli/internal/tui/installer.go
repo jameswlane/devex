@@ -1203,6 +1203,9 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
 			return err
 		}
+		if err := utils.ApplyShellActions(ctx, cmd); err != nil {
+			return err
+		}
 		if cmd.Scope == "system" {
 			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
 			si.sendLog("INFO", output)

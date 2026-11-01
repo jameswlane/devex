@@ -56,6 +56,11 @@ func loadCrossPlatformAppDirectory(dir string) ([]types.CrossPlatformApp, error)
 		if strings.TrimSpace(app.Name) == "" {
 			return nil, fmt.Errorf("application config %s must define name", path)
 		}
+		for _, osConfig := range []types.OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
+			if err := osConfig.ValidateShellActions(); err != nil {
+				return nil, fmt.Errorf("invalid shell actions for %s: %w", app.Name, err)
+			}
+		}
 		apps = append(apps, app)
 	}
 	return apps, nil
@@ -87,6 +92,11 @@ func loadEnvironmentAppDirectory(dir string) ([]types.CrossPlatformApp, error) {
 		}
 		if app.AllPlatforms.InstallMethod == "" && app.Linux.InstallMethod == "" && app.MacOS.InstallMethod == "" && app.Windows.InstallMethod == "" {
 			app = CrossPlatformAppFromLegacy(legacy)
+		}
+		for _, osConfig := range []types.OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
+			if err := osConfig.ValidateShellActions(); err != nil {
+				return nil, fmt.Errorf("invalid shell actions for %s: %w", app.Name, err)
+			}
 		}
 		apps = append(apps, app)
 	}
@@ -212,6 +222,11 @@ func decodeLegacyApplicationNode(node *yaml.Node) ([]types.CrossPlatformApp, err
 			app, err := decodeLegacyApplication(entry)
 			if err != nil {
 				return nil, err
+			}
+			for _, osConfig := range []types.OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
+				if err := osConfig.ValidateShellActions(); err != nil {
+					return nil, fmt.Errorf("invalid shell actions for %s: %w", app.Name, err)
+				}
 			}
 			apps = append(apps, app)
 		}

@@ -31,7 +31,7 @@ macos:
         - shell: tar xzf nvim-macos-arm64.tar.gz
       post_install:
         - shell: sudo mv nvim-macos-arm64 /usr/local/ && rm -f nvim-macos-arm64.tar.gz
-        - shell: echo "export PATH=\$PATH:/usr/local/nvim-macos-arm64/bin" >> ~/.zshrc
+        - path: [/usr/local/nvim-macos-arm64/bin]
     - install_method: curlpipe
       download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-macos-x86_64.tar.gz
       destination: /usr/local
@@ -43,7 +43,7 @@ macos:
         - shell: tar xzf nvim-macos-x86_64.tar.gz
       post_install:
         - shell: sudo mv nvim-macos-x86_64 /usr/local/ && rm -f nvim-macos-x86_64.tar.gz
-        - shell: echo "export PATH=\$PATH:/usr/local/nvim-macos-x86_64/bin" >> ~/.zshrc
+        - path: [/usr/local/nvim-macos-x86_64/bin]
   config_files:
     - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
       destination: ~/.config/nvim/init.vim
@@ -103,8 +103,7 @@ linux:
     - shell: sudo rm -rf /opt/nvim
   post_install:
     - shell: sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz && rm -f nvim-linux-x86_64.tar.gz
-    - shell: echo "export PATH=\$PATH:/opt/nvim-linux-x86_64/bin" >> ~/.bashrc
-    - shell: echo "export PATH=\$PATH:/opt/nvim-linux-x86_64/bin" >> ~/.zshrc
+    - path: [/opt/nvim-linux-x86_64/bin]
     - shell: git clone https://github.com/LazyVim/starter ~/.config/nvim || true
     - shell: rm -rf ~/.config/nvim/.git
     - shell: mkdir -p ~/.config/nvim/plugin/after
@@ -230,8 +229,7 @@ linux:
         - shell: mkdir -p /opt/nvim
       post_install:
         - shell: sudo mv nvim-linux-x86_64.appimage /opt/nvim/nvim
-        - shell: echo "export PATH=\$PATH:/opt/nvim/" >> ~/.bashrc
-        - shell: echo "export PATH=\$PATH:/opt/nvim/" >> ~/.zshrc
+        - path: [/opt/nvim/]
   config_files:
     - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
       destination: ~/.config/nvim/init.vim
