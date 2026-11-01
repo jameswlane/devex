@@ -287,7 +287,11 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 		if plan.Elevate {
 			// sudo parses assignments before the target, retaining command-specific
 			// sudoers matching instead of requiring permission to execute env as root.
-			target = append(environment, target...)
+			// Pass only the variables the operation asked for: the elevated target is
+			// a native command that never reads DEVEX_UNATTENDED (sudo -n and closed
+			// stdin already enforce unattended mode), and every extra assignment
+			// needs SETENV under restrictive sudoers rules.
+			target = append(append([]string(nil), plan.Env...), target...)
 			args = append([]string{"-n", "--"}, target...)
 		} else {
 			if plan.IntendedUser == nil || plan.IntendedUser.UID == "0" {

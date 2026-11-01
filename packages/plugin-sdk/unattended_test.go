@@ -34,10 +34,10 @@ var _ = Describe("Unattended execution contract", func() {
 		recorder := sdktest.NewRecorder(GinkgoT(), "dnf")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		// The elevated native command gets no DEVEX_UNATTENDED assignment: sudo -n
+		// and closed stdin enforce unattended mode, and extra variables would
+		// need SETENV under restrictive sudoers rules.
 		argv := []string{"-n", "--", "dnf", "install", "--assumeyes", "example"}
-		if scoped {
-			argv = []string{"-n", "--", "DEVEX_UNATTENDED=1", "dnf", "install", "--assumeyes", "example"}
-		}
 		recorder.Script("sudo", argv, sdktest.Response{ExitCode: 1, Stderr: "sudo: a password is required\n"})
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
