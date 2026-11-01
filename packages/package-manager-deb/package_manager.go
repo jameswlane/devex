@@ -246,7 +246,7 @@ func (d *DebInstaller) handleIsInstalled(ctx context.Context, args []string) err
 		return fmt.Errorf("no packages specified")
 	}
 
-	allInstalled := true
+	var missing []string
 	for _, pkg := range args {
 		if err := d.validatePackageName(pkg); err != nil {
 			return fmt.Errorf("invalid package name '%s': %w", pkg, err)
@@ -261,12 +261,14 @@ func (d *DebInstaller) handleIsInstalled(ctx context.Context, args []string) err
 			d.logger.Success("Package %s is installed", pkg)
 		} else {
 			d.logger.ErrorMsg("Package %s is not installed", pkg)
-			allInstalled = false
+			missing = append(missing, pkg)
 		}
 	}
 
-	if !allInstalled {
-		return fmt.Errorf("one or more packages are not installed")
+	if len(missing) > 0 {
+		// The query ran and found these absent: report that as NotInstalledError
+		// (exit code 3) so the CLI can tell it from a failed query.
+		return &sdk.NotInstalledError{Packages: missing}
 	}
 	return nil
 }

@@ -210,7 +210,7 @@ var _ = Describe("AppImage operation contracts", func() {
 			} else {
 				var exitErr *exec.ExitError
 				Expect(err).To(BeAssignableToTypeOf(exitErr), string(output))
-				Expect(err.(*exec.ExitError).ExitCode()).To(Equal(1))
+				Expect(err.(*exec.ExitError).ExitCode()).To(Equal(sdk.ExitCodeNotInstalled))
 			}
 			Expect(string(output)).To(ContainSubstring("tool"))
 		})

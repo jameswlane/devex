@@ -6,6 +6,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 type recordingPluginExecutor struct {
@@ -58,6 +60,24 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("apt probe", "apt", "is-installed"),
 		Entry("flatpak probe", "flatpak", "is-installed"),
 		Entry("pip probe", "pip", "is-installed"),
+	)
+
+	DescribeTable("reports a package the plugin found absent as not installed, without an error",
+		func(method string) {
+			executor := &recordingPluginExecutor{err: &sdk.NotInstalledError{Packages: []string{"git"}}}
+			installer := &PluginBasedInstaller{method: method, pluginBootstrap: executor, ctx: context.Background()}
+
+			installed, err := installer.IsInstalled("git")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed).To(BeFalse())
+			Expect(executor.args).To(Equal([]string{"is-installed", "git"}))
+		},
+		Entry("apt", "apt"),
+		Entry("deb", "deb"),
+		Entry("flatpak", "flatpak"),
+		Entry("mise", "mise"),
+		Entry("pip", "pip"),
+		Entry("appimage", "appimage"),
 	)
 
 	DescribeTable("skips the installed probe for plugins without an is-installed operation",

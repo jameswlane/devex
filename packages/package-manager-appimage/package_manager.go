@@ -191,17 +191,14 @@ func (p *AppimagePlugin) handleIsInstalled(args []string) error {
 		return fmt.Errorf("invalid binary name: %w", err)
 	}
 
-	if installed, err := p.isAppImageInstalled(binaryName); err != nil {
-		p.logger.Printf("Error checking if AppImage %s is installed: %v\n", binaryName, err)
-		os.Exit(1)
-	} else if installed {
-		p.logger.Printf("AppImage %s is installed\n", binaryName)
-		os.Exit(0)
-	} else {
-		p.logger.Printf("AppImage %s is not installed\n", binaryName)
-		os.Exit(1)
+	installed, err := p.isAppImageInstalled(binaryName)
+	if err != nil {
+		return fmt.Errorf("failed to check whether AppImage %s is installed: %w", binaryName, err)
 	}
-
+	if !installed {
+		return &sdk.NotInstalledError{Packages: []string{binaryName}}
+	}
+	p.logger.Printf("AppImage %s is installed\n", binaryName)
 	return nil
 }
 

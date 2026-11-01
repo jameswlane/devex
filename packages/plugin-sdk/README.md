@@ -267,6 +267,25 @@ type PackageManager interface {
 }
 ```
 
+#### `is-installed` result contract
+
+`devex status`, uninstall and dependency checks ask a package-manager plugin
+whether specific packages are installed by running
+`devex-plugin-<name> is-installed <pkg>...`. The exit status must distinguish
+three outcomes:
+
+| Outcome | Plugin returns | Exit status | DevEx reports |
+|---|---|---|---|
+| All packages installed | `nil` | `0` | `healthy` (installed) |
+| The query ran and some packages are absent | `&sdk.NotInstalledError{Packages: missing}` | `3` (`sdk.ExitCodeNotInstalled`) | `not_installed` |
+| The query itself failed (manager missing, database locked, bad input) | any other error | non-zero, not `3` | `error`; uninstall keeps its tracking record |
+
+`sdk.HandleArgs` maps a returned `NotInstalledError` to exit status `3` and
+writes a `DEVEX_NOT_INSTALLED={"packages":[...]}` line to stderr. The host
+decodes that line back into `*sdk.NotInstalledError`, so callers check it with
+`errors.As`. Never report a failed query as absence, and don't call `os.Exit`
+from the handler: return the error and let `HandleArgs` choose the status.
+
 ### Desktop Environment Plugins
 ```go
 type DesktopEnvironment interface {

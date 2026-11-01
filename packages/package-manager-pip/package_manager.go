@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -238,14 +239,16 @@ func (p *PipPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 		return fmt.Errorf("invalid package name: %w", err)
 	}
 
-	if err := sdk.ExecCommandWithContext(ctx, false, "pip", "show", packageName); err != nil {
-		p.logger.Printf("Package %s is not installed\n", packageName)
-		os.Exit(1)
-	} else {
-		p.logger.Printf("Package %s is installed\n", packageName)
-		os.Exit(0)
+	// `pip show` exits 1 and prints "Package(s) not found" for an absent
+	// package; any other failure means the query itself failed.
+	output, err := exec.CommandContext(ctx, "pip", "show", packageName).CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(output), "not found") {
+			return &sdk.NotInstalledError{Packages: []string{packageName}}
+		}
+		return fmt.Errorf("failed to check whether %s is installed: %w: %s", packageName, err, strings.TrimSpace(string(output)))
 	}
-
+	p.logger.Printf("Package %s is installed\n", packageName)
 	return nil
 }
 

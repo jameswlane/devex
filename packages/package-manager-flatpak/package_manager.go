@@ -233,7 +233,7 @@ func (f *FlatpakInstaller) handleIsInstalled(ctx context.Context, args []string)
 		return fmt.Errorf("no applications specified")
 	}
 
-	allInstalled := true
+	var missing []string
 	for _, app := range args {
 		if err := f.validateAppID(app); err != nil {
 			return fmt.Errorf("invalid application ID '%s': %w", app, err)
@@ -248,12 +248,14 @@ func (f *FlatpakInstaller) handleIsInstalled(ctx context.Context, args []string)
 			f.logger.Success("Application %s is installed", app)
 		} else {
 			f.logger.ErrorMsg("Application %s is not installed", app)
-			allInstalled = false
+			missing = append(missing, app)
 		}
 	}
 
-	if !allInstalled {
-		return fmt.Errorf("one or more applications are not installed")
+	if len(missing) > 0 {
+		// The query ran and found these absent: report that as NotInstalledError
+		// (exit code 3) so the CLI can tell it from a failed query.
+		return &sdk.NotInstalledError{Packages: missing}
 	}
 	return nil
 }

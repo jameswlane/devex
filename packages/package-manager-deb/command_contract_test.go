@@ -1,11 +1,13 @@
 package main_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	main "github.com/jameswlane/devex/packages/package-manager-deb"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -91,8 +93,9 @@ var _ = Describe("DEB command contracts", func() {
 			recorder.Script(c.executable, c.argv, sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
 			err := plugin.Execute(command, argsFor(command))
 			if command == "is-installed" {
-				// Current defect: all dpkg-query errors are converted into absence.
-				Expect(err).To(MatchError("one or more packages are not installed"))
+				// Current defect (#255): all dpkg-query errors are converted into absence.
+				var missing *sdk.NotInstalledError
+				Expect(errors.As(err, &missing)).To(BeTrue())
 			} else {
 				Expect(err).To(MatchError(ContainSubstring("exit status 42")))
 			}
