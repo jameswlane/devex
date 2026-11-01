@@ -12,52 +12,7 @@ import (
 
 // buildAppList converts user selections into a list of CrossPlatformApp objects ready for installation
 func (m *SetupModel) buildAppList() []types.CrossPlatformApp {
-	var apps []types.CrossPlatformApp
-
-	// Step 1: System update/upgrade - handled separately in installation process
-	// This will be called before installing any apps
-
-	// Step 2: Default terminal apps (all apps with default: true)
-	defaultApps := m.getDefaultApps()
-	apps = append(apps, defaultApps...)
-
-	// Step 3: Setup languages via Mise
-	if len(m.getSelectedLanguages()) > 0 {
-		// First add mise itself
-		if miseApp := m.getMiseApp(); miseApp != nil {
-			apps = append(apps, *miseApp)
-		}
-		// Then add language-specific apps
-		languageApps := m.getLanguageApps()
-		apps = append(apps, languageApps...)
-	}
-
-	// Step 4: Setup databases via Docker
-	if len(m.getSelectedDatabases()) > 0 {
-		// First add Docker itself
-		if dockerApp := m.getDockerApp(); dockerApp != nil {
-			apps = append(apps, *dockerApp)
-		}
-		// Then add database containers
-		databaseApps := m.getDatabaseApps()
-		apps = append(apps, databaseApps...)
-	}
-
-	// Step 5: Desktop apps (if desktop detected and selected)
-	if m.system.hasDesktop {
-		desktopApps := m.getSelectedDesktopApps()
-		for _, appName := range desktopApps {
-			if app := m.getDesktopAppByName(appName); app != nil {
-				apps = append(apps, *app)
-			}
-		}
-	}
-
-	// Step 6: Shell configuration (handled after app installation)
-	// Step 7: Themes and shell files copying (handled after app installation)
-	// Step 8: Git configuration (handled after app installation)
-
-	return apps
+	return planApps(m.installPlan())
 }
 
 // getDefaultApps returns all apps marked as default in configuration
@@ -66,7 +21,8 @@ func (m *SetupModel) getDefaultApps() []types.CrossPlatformApp {
 	var defaultApps []types.CrossPlatformApp
 
 	for _, app := range allApps {
-		if app.Default {
+		// Only offer defaults that can install on this platform.
+		if app.Default && (m.system.detectedPlatform.OS == "" || isCompatibleWithPlatform(app, m.system.detectedPlatform)) {
 			defaultApps = append(defaultApps, app)
 		}
 	}

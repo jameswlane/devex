@@ -272,47 +272,7 @@ func (m *SetupModel) View() string {
 	case StepConfirmation:
 		s = titleStyle.Render("✅ Confirm Installation")
 		s += "\n\n"
-		s += "You've selected the following for installation:\n\n"
-
-		s += "🐚 Shell:\n"
-		s += fmt.Sprintf("  • %s\n", m.getSelectedShell())
-		s += "\n"
-
-		if len(m.getSelectedLanguages()) > 0 {
-			s += "📝 Programming Languages:\n"
-			for _, lang := range m.getSelectedLanguages() {
-				s += fmt.Sprintf("  • %s\n", lang)
-			}
-			s += "\n"
-		}
-
-		if len(m.getSelectedDatabases()) > 0 {
-			s += "🗄️  Databases:\n"
-			for _, db := range m.getSelectedDatabases() {
-				s += fmt.Sprintf("  • %s\n", db)
-			}
-			s += "\n"
-		}
-
-		if len(m.getSelectedDesktopApps()) > 0 {
-			s += "🖥️  Desktop Applications:\n"
-			for _, app := range m.getSelectedDesktopApps() {
-				s += fmt.Sprintf("  • %s\n", app)
-			}
-			s += "\n"
-		}
-
-		if gitName := strings.TrimSpace(m.git.gitFullName); gitName != "" {
-			s += "🔧 Git identity:\n"
-			s += fmt.Sprintf("  • %s <%s>", gitName, strings.TrimSpace(m.git.gitEmail))
-			if m.gitIdentityUnchanged() {
-				s += " (existing, unchanged)"
-			}
-			s += "\n\n"
-		}
-
-		s += "Essential terminal tools will also be installed.\n\n"
-		s += "Press Enter to start installation, 'p' to go back, or 'q' to quit."
+		s += m.renderInstallPlan()
 
 	case StepInstalling:
 		s = titleStyle.Render("⚙️  Installing...")

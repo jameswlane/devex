@@ -79,6 +79,9 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 		// Unknown step, stay at current step
 		return m, nil
 	}
+	if m.step == StepConfirmation {
+		m.refreshInstalledApps()
+	}
 	return m, nil
 }
 

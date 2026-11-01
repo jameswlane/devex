@@ -48,6 +48,12 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "n":
 			return m.nextStep()
 
+		case "d":
+			if m.step == StepConfirmation {
+				m.selections.skipDefaultApps = !m.selections.skipDefaultApps
+				m.refreshInstalledApps()
+			}
+
 		case "p":
 			return m.prevStep()
 		}

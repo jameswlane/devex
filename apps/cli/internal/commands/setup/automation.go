@@ -57,7 +57,8 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// User selections
 		selections: UISelections{
-			selectedShell: defaultShellIdx,
+			skipDefaultApps: viper.GetBool("no-defaults"),
+			selectedShell:   defaultShellIdx,
 			selectedLangs: map[int]bool{
 				DefaultNodeJSIndex: true, // Node.js
 				DefaultPythonIndex: true, // Python

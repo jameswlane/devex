@@ -233,3 +233,37 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	}
 	return nil
 }
+
+// InstalledAptApps reports which apt apps already have all their packages
+// installed, using one dpkg-query call. The installer skips these apps, so
+// setup uses the same check to show them as skipped before installing.
+func InstalledAptApps(ctx context.Context, apps []types.CrossPlatformApp) map[string]bool {
+	var packages []string
+	for _, app := range apps {
+		if isAptApp(app) {
+			packages = append(packages, aptPackages(app.GetOSConfig())...)
+		}
+	}
+	installed := queryInstalledDebPackages(ctx, packages)
+	result := make(map[string]bool)
+	for _, app := range apps {
+		if !isAptApp(app) {
+			continue
+		}
+		pkgs := aptPackages(app.GetOSConfig())
+		if len(pkgs) == 0 {
+			continue
+		}
+		all := true
+		for _, pkg := range pkgs {
+			if !installed[pkg] {
+				all = false
+				break
+			}
+		}
+		if all {
+			result[app.Name] = true
+		}
+	}
+	return result
+}
