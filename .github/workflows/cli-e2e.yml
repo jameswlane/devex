@@ -1,5 +1,4 @@
 name: CLI end-to-end
-
 on:
   pull_request:
     paths:
@@ -59,16 +58,48 @@ on:
         required: false
         type: string
         default: ''
-
 permissions:
   contents: read
-
 concurrency:
-  group: cli-e2e-${{ github.event.pull_request.number || github.ref }}
+  # A released CLI's reusable run must not queue behind a main run waiting for it.
+  group: cli-e2e-${{ inputs.cli_version || github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
+  wait-for-releases:
+    name: Wait for matching plugin releases
+    # Release-triggered reusable calls must not wait on their own GoReleaser run.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && inputs.cli_version == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 21
+    permissions:
+      actions: read
+    steps:
+      - name: Wait for release workflows to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline=$((SECONDS + 20 * 60))
+          quiet_since=$SECONDS
+          while (( SECONDS < deadline )); do
+            runs=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+              --limit 1000 --json status,name)
+            active=$(jq -r '.[] | select(.name == "goreleaser" or .name == "release components" or .name == "Sync Registry Database") | select(.status != "completed") | "\(.name): \(.status)"' <<< "$runs")
+            if [ -n "$active" ]; then
+              echo "Waiting for releases of $GITHUB_SHA:"
+              echo "$active"
+              quiet_since=$SECONDS
+            elif (( SECONDS - quiet_since >= 60 )); then
+              # Allow tag-triggered workflows time to appear after the tagging run.
+              echo "Release workflows for $GITHUB_SHA have been idle for 60 seconds."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Timed out waiting for release workflows for $GITHUB_SHA"
+          exit 1
   e2e:
+    needs: wait-for-releases
+    if: ${{ !cancelled() && (needs.wait-for-releases.result == 'success' || needs.wait-for-releases.result == 'skipped') }}
     name: ${{ matrix.distro }} / ${{ matrix.desktop }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -83,15 +114,13 @@ jobs:
       DEVEX_E2E_DESTRUCTIVE: ${{ format('{0}', inputs.destructive) == 'false' && '0' || '1' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up development tools
         uses: jdx/mise-action@v4
         with:
           install: true
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
       # Without cli_version, scripts/e2e-docker.sh builds the CLI from source.
       - name: Download and verify released CLI
         if: inputs.cli_version != ''
@@ -115,13 +144,11 @@ jobs:
           tar -xzf "$archive" bin/devex
           install -m 0755 bin/devex "$RUNNER_TEMP/devex"
           echo "E2E_DEVEX_BINARY=$RUNNER_TEMP/devex" >> "$GITHUB_ENV"
-
       - name: Run end-to-end suite
         working-directory: apps/cli
         env:
           DISTRO: ${{ matrix.distro }}
         run: ./scripts/e2e-docker.sh
-
       - name: Upload end-to-end artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -129,7 +156,6 @@ jobs:
           name: cli-e2e-${{ matrix.distro }}-${{ matrix.desktop }}
           path: ./apps/cli/artifacts/e2e/**
           if-no-files-found: warn
-
       - name: Publish JUnit summary
         if: always()
         working-directory: apps/cli

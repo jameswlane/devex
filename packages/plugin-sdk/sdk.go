@@ -716,6 +716,20 @@ func (d *Downloader) DownloadValidatedPluginWithContext(ctx context.Context, plu
 }
 
 func (d *Downloader) downloadPlugin(ctx context.Context, pluginName string, validate bool) error {
+	err := d.downloadPluginAttempt(ctx, pluginName, validate)
+	var mismatch *pluginChecksumMismatchError
+	if !errors.As(err, &mismatch) {
+		return err
+	}
+	if d.logger != nil {
+		d.logger.Warning("Plugin %s checksum mismatch (expected %.12s, actual %.12s); retrying once with fresh registry metadata", pluginName, mismatch.expected, mismatch.actual)
+	}
+	// fetchPluginDirect bypasses the registry cache. Verify the new download
+	// against that fresh metadata, and never retry a second checksum mismatch.
+	return d.downloadPluginAttempt(ctx, pluginName, validate)
+}
+
+func (d *Downloader) downloadPluginAttempt(ctx context.Context, pluginName string, validate bool) error {
 	// Fetch plugin metadata directly from the API
 	metadata, err := d.fetchPluginDirect(ctx, pluginName)
 	if err != nil {
@@ -963,6 +977,15 @@ func (d *Downloader) cacheRegistry(registry *PluginRegistry) {
 // Cross-process locking is omitted because the standard library has no portable flock API.
 var pluginInstallLocks sync.Map
 
+type pluginChecksumMismatchError struct {
+	expected string
+	actual   string
+}
+
+func (e *pluginChecksumMismatchError) Error() string {
+	return fmt.Sprintf("checksum verification failed: expected %s, got %s", e.expected, e.actual)
+}
+
 // downloadAndVerifyPlugin downloads and verifies a plugin binary
 func (d *Downloader) downloadAndVerifyPlugin(ctx context.Context, pluginName string, version string, binary PlatformBinary) error {
 	return d.downloadAndVerifyPluginValidated(ctx, pluginName, version, binary, false)
@@ -1069,7 +1092,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 	// Verify checksum of the downloaded payload (archive or raw binary) if enabled
 	if d.verifyChecksums && binary.Checksum != "" {
 		if payloadChecksum != normalizeChecksum(binary.Checksum) {
-			return fmt.Errorf("checksum verification failed: expected %s, got %s", binary.Checksum, payloadChecksum)
+			return &pluginChecksumMismatchError{expected: normalizeChecksum(binary.Checksum), actual: payloadChecksum}
 		}
 	}
 
