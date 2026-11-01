@@ -1,0 +1,184 @@
+package tui
+
+import (
+	"context"
+	"io"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/jameswlane/devex/apps/cli/internal/config"
+)
+
+// blockingReader never returns data, like an idle keyboard.
+type blockingReader struct{ stop chan struct{} }
+
+func (r blockingReader) Read([]byte) (int, error) {
+	<-r.stop
+	return 0, io.EOF
+}
+
+var _ = Describe("ProgressRunner lifecycle", func() {
+	var (
+		originalInteractive func() bool
+		originalNewProgram  func(tea.Model) *tea.Program
+		stopInput           chan struct{}
+	)
+
+	BeforeEach(func() {
+		originalInteractive = isInteractiveTerminal
+		originalNewProgram = newProgressProgram
+		stopInput = make(chan struct{})
+	})
+
+	AfterEach(func() {
+		isInteractiveTerminal = originalInteractive
+		newProgressProgram = originalNewProgram
+		close(stopInput)
+	})
+
+	useTestProgram := func() {
+		isInteractiveTerminal = func() bool { return true }
+		newProgressProgram = func(model tea.Model) *tea.Program {
+			return tea.NewProgram(model,
+				tea.WithInput(blockingReader{stop: stopInput}),
+				tea.WithOutput(io.Discard),
+				tea.WithoutSignalHandler(),
+			)
+		}
+	}
+
+	Context("in an interactive terminal", func() {
+		BeforeEach(useTestProgram)
+
+		It("waits for the TUI to exit before Quit returns", func() {
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+			Expect(runner.RunStatusCheck([]string{"git"})).To(Succeed())
+
+			quitReturned := make(chan struct{})
+			go func() {
+				runner.Quit()
+				close(quitReturned)
+			}()
+
+			Eventually(quitReturned, 3*time.Second).Should(BeClosed())
+			// Done must already be closed when Quit returns: the terminal is restored.
+			Expect(runner.Done()).To(BeClosed())
+		})
+
+		It("is safe to call Quit more than once", func() {
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+			Expect(runner.RunStatusCheck(nil)).To(Succeed())
+
+			runner.Quit()
+			Expect(runner.Quit).NotTo(Panic())
+			Expect(runner.Done()).To(BeClosed())
+		})
+
+		It("returns from Quit when the user already closed the TUI", func() {
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+			Expect(runner.RunStatusCheck(nil)).To(Succeed())
+
+			runner.program.Send(tea.Quit())
+			Eventually(runner.Done(), 3*time.Second).Should(BeClosed())
+
+			quitReturned := make(chan struct{})
+			go func() {
+				runner.Quit()
+				close(quitReturned)
+			}()
+			Eventually(quitReturned, 3*time.Second).Should(BeClosed())
+		})
+	})
+
+	Context("when the TUI event loop is stuck", func() {
+		It("still returns from Quit after the timeout", func() {
+			release := make(chan struct{})
+			entered := make(chan struct{})
+			DeferCleanup(func() { close(release) })
+			originalTimeout := progressQuitTimeout
+			progressQuitTimeout = 100 * time.Millisecond
+			DeferCleanup(func() { progressQuitTimeout = originalTimeout })
+
+			isInteractiveTerminal = func() bool { return true }
+			newProgressProgram = func(tea.Model) *tea.Program {
+				return tea.NewProgram(stuckModel{release: release, entered: entered},
+					tea.WithInput(blockingReader{stop: stopInput}),
+					tea.WithOutput(io.Discard),
+					tea.WithoutSignalHandler(),
+				)
+			}
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+			runner.start()
+			Eventually(entered, 2*time.Second).Should(BeClosed())
+
+			quitReturned := make(chan struct{})
+			go func() {
+				runner.Quit()
+				close(quitReturned)
+			}()
+
+			// Quit waits at most two timeouts (quit, then kill) even though the
+			// loop never takes the quit message.
+			Eventually(quitReturned, 2*time.Second).Should(BeClosed())
+		})
+	})
+
+	Context("when stdin or stdout is not a terminal", func() {
+		BeforeEach(func() {
+			isInteractiveTerminal = func() bool { return false }
+			newProgressProgram = func(tea.Model) *tea.Program {
+				Fail("the TUI must not be created without a terminal")
+				return nil
+			}
+		})
+
+		It("runs the operation without starting a TUI", func() {
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+			Expect(runner.program).To(BeNil())
+			Expect(runner.RunStatusCheck([]string{"git"})).To(Succeed())
+
+			quitReturned := make(chan struct{})
+			go func() {
+				runner.Quit()
+				close(quitReturned)
+			}()
+			Eventually(quitReturned, time.Second).Should(BeClosed())
+			Expect(runner.Done()).NotTo(BeClosed())
+		})
+	})
+
+	Context("when Quit is called without running an operation", func() {
+		BeforeEach(useTestProgram)
+
+		It("returns immediately", func() {
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+
+			quitReturned := make(chan struct{})
+			go func() {
+				runner.Quit()
+				close(quitReturned)
+			}()
+			Eventually(quitReturned, time.Second).Should(BeClosed())
+		})
+	})
+})
+
+// stuckModel blocks inside Update until released, like a hung event loop.
+type stuckModel struct{ release, entered chan struct{} }
+
+type stuckMsg struct{}
+
+func (m stuckModel) Init() tea.Cmd { return func() tea.Msg { return stuckMsg{} } }
+
+func (m stuckModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(stuckMsg); ok {
+		close(m.entered)
+		<-m.release
+	}
+	return m, nil
+}
+
+func (m stuckModel) View() string { return "" }
