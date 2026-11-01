@@ -285,14 +285,16 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 		environment := operationEnvironment(plan.ExecutionRequest)
 		target := append([]string{name}, args...)
 		if plan.Elevate {
-			// sudo parses assignments before the target, retaining command-specific
-			// sudoers matching instead of requiring permission to execute env as root.
-			// Pass only the variables the operation asked for: the elevated target is
-			// a native command that never reads DEVEX_UNATTENDED (sudo -n and closed
-			// stdin already enforce unattended mode), and every extra assignment
-			// needs SETENV under restrictive sudoers rules.
-			target = append(append([]string(nil), plan.Env...), target...)
-			args = append([]string{"-n", "--"}, target...)
+			// sudo reads VAR=value assignments only before "--"; after it, an
+			// assignment is taken as the command ("VAR=value: command not found").
+			// Passing them to sudo keeps command-specific sudoers matching instead
+			// of requiring permission to run env as root. Pass only the variables
+			// the operation asked for: the elevated target is a native command
+			// that never reads DEVEX_UNATTENDED (sudo -n and closed stdin already
+			// enforce unattended mode), and every extra assignment needs SETENV
+			// under restrictive sudoers rules.
+			args = append(append([]string{"-n"}, plan.Env...), "--")
+			args = append(args, target...)
 		} else {
 			if plan.IntendedUser == nil || plan.IntendedUser.UID == "0" {
 				return nil, fmt.Errorf("user-scope plan requires a non-root identity")
