@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -246,7 +248,7 @@ func (d *DebInstaller) handleIsInstalled(ctx context.Context, args []string) err
 		return fmt.Errorf("no packages specified")
 	}
 
-	allInstalled := true
+	var missing []string
 	for _, pkg := range args {
 		if err := d.validatePackageName(pkg); err != nil {
 			return fmt.Errorf("invalid package name '%s': %w", pkg, err)
@@ -259,14 +261,21 @@ func (d *DebInstaller) handleIsInstalled(ctx context.Context, args []string) err
 
 		if installed {
 			d.logger.Success("Package %s is installed", pkg)
-		} else {
-			d.logger.ErrorMsg("Package %s is not installed", pkg)
-			allInstalled = false
+			continue
 		}
+		if strings.HasSuffix(pkg, ".deb") {
+			// A .deb file name never matches a dpkg package name, so a negative
+			// query doesn't prove the package it contains is absent.
+			return fmt.Errorf("cannot confirm whether %s is installed: dpkg-query needs the package name, not a .deb file name", pkg)
+		}
+		d.logger.ErrorMsg("Package %s is not installed", pkg)
+		missing = append(missing, pkg)
 	}
 
-	if !allInstalled {
-		return fmt.Errorf("one or more packages are not installed")
+	if len(missing) > 0 {
+		// The query ran and found these absent: report that as NotInstalledError
+		// (exit code 3) so the CLI can tell it from a failed query.
+		return &sdk.NotInstalledError{Packages: missing}
 	}
 	return nil
 }
@@ -300,12 +309,22 @@ func (d *DebInstaller) isPackageInstalled(packageName string) (bool, error) {
 	ctx := context.Background()
 	output, err := sdk.ExecCommandOutputWithContext(ctx, "dpkg-query", "-W", "-f=${Status}", packageName)
 	if err != nil {
-		// Package not found
-		return false, nil
+		if dpkgPackageAbsent(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("dpkg-query failed for %s: %w", packageName, err)
 	}
 
 	// Check if package is properly installed
 	return strings.Contains(output, "install ok installed"), nil
+}
+
+// dpkgPackageAbsent reports whether a dpkg-query failure means the package is
+// unknown to dpkg. dpkg-query exits 1 when a requested package isn't found and
+// 2 on fatal errors; anything else (including timeouts) is a failed query.
+func dpkgPackageAbsent(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }
 
 // mapKeys returns the keys of a map as a slice

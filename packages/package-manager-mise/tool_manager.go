@@ -197,8 +197,11 @@ func (m *MisePlugin) HandleIsInstalled(ctx context.Context, args []string) error
 
 	// Check if tool is installed
 	output, err := sdk.ExecCommandOutputWithContext(ctx, "mise", "current", tool)
-	if err != nil || strings.TrimSpace(output) == "" {
-		return fmt.Errorf("tool '%s' is not installed", tool)
+	if err != nil {
+		return fmt.Errorf("failed to check whether tool '%s' is installed: %w", tool, err)
+	}
+	if strings.TrimSpace(output) == "" {
+		return &sdk.NotInstalledError{Packages: []string{tool}}
 	}
 
 	m.logger.Success("Tool %s is installed: %s", tool, strings.TrimSpace(output))

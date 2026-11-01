@@ -408,6 +408,7 @@ func PluginOperationPrivilege(info PluginInfo, args []string) *OperationPrivileg
 // the process still exits with its native status rather than a reserved auth code.
 const authorizationDiagnosticPrefix = "DEVEX_AUTHORIZATION_ERROR="
 const manualRemovalDiagnosticPrefix = "DEVEX_MANUAL_REMOVAL_REQUIRED="
+const notInstalledDiagnosticPrefix = "DEVEX_NOT_INSTALLED="
 
 func writeExecutionError(w io.Writer, err error) {
 	_, _ = fmt.Fprintf(w, "Error: %v\n", err)
@@ -423,10 +424,23 @@ func writeExecutionError(w io.Writer, err error) {
 			_, _ = fmt.Fprintf(w, "%s%s\n", authorizationDiagnosticPrefix, data)
 		}
 	}
+	var missing *NotInstalledError
+	if errors.As(err, &missing) {
+		if data, marshalErr := json.Marshal(missing); marshalErr == nil {
+			_, _ = fmt.Fprintf(w, "%s%s\n", notInstalledDiagnosticPrefix, data)
+		}
+	}
 }
 
 func decodeExecutionError(diagnostic string, native error) error {
 	for _, line := range strings.Split(diagnostic, "\n") {
+		if strings.HasPrefix(line, notInstalledDiagnosticPrefix) {
+			var missing NotInstalledError
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, notInstalledDiagnosticPrefix)), &missing); err == nil && len(missing.Packages) > 0 {
+				missing.Err = native
+				return &missing
+			}
+		}
 		if strings.HasPrefix(line, manualRemovalDiagnosticPrefix) {
 			var manual ManualRemovalRequiredError
 			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, manualRemovalDiagnosticPrefix)), &manual); err == nil && len(manual.Applications) > 0 {

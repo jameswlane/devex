@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -233,19 +235,31 @@ func (p *PipPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 		return fmt.Errorf("no package specified")
 	}
 
-	packageName := args[0]
-	if err := p.validatePackageName(packageName); err != nil {
-		return fmt.Errorf("invalid package name: %w", err)
+	for _, packageName := range args {
+		if err := p.validatePackageName(packageName); err != nil {
+			return fmt.Errorf("invalid package name '%s': %w", packageName, err)
+		}
 	}
 
-	if err := sdk.ExecCommandWithContext(ctx, false, "pip", "show", packageName); err != nil {
-		p.logger.Printf("Package %s is not installed\n", packageName)
-		os.Exit(1)
-	} else {
+	var missing []string
+	for _, packageName := range args {
+		// `pip show` exits 1 and warns "Package(s) not found: NAME" for an absent
+		// package; any other failure means the query itself failed.
+		output, err := exec.CommandContext(ctx, "pip", "show", packageName).CombinedOutput()
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.Contains(string(output), "Package(s) not found:") {
+				missing = append(missing, packageName)
+				continue
+			}
+			return fmt.Errorf("failed to check whether %s is installed: %w: %s", packageName, err, strings.TrimSpace(string(output)))
+		}
 		p.logger.Printf("Package %s is installed\n", packageName)
-		os.Exit(0)
 	}
 
+	if len(missing) > 0 {
+		return &sdk.NotInstalledError{Packages: missing}
+	}
 	return nil
 }
 

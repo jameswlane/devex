@@ -172,10 +172,15 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		}
 		args := append([]string{"is-installed"}, packages...)
 
-		// Plugins currently use the same error exit for an absent package and a
-		// discovery failure. Neither is proof of absence: preserve the error and
-		// tracking until the plugin protocol can distinguish them.
+		// Plugins report an absent package with sdk.NotInstalledError (exit code
+		// sdk.ExitCodeNotInstalled). Any other failure means the query itself
+		// failed, which is not proof of absence: return it as an error so status
+		// shows "error" and uninstall keeps its tracking record.
 		if err := p.executeQuietly(pluginName, args); err != nil {
+			var missing *sdk.NotInstalledError
+			if errors.As(err, &missing) {
+				return false, nil
+			}
 			return false, fmt.Errorf("plugin %s installation check failed: %w", pluginName, err)
 		}
 		return true, nil

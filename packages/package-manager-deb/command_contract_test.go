@@ -1,11 +1,13 @@
 package main_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	main "github.com/jameswlane/devex/packages/package-manager-deb"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -92,14 +94,30 @@ var _ = Describe("DEB command contracts", func() {
 			c := contracts[i]
 			recorder.Script(c.executable, c.argv, sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
 			err := plugin.Execute(command, argsFor(command))
-			if command == "is-installed" {
-				// Current defect: all dpkg-query errors are converted into absence.
-				Expect(err).To(MatchError("one or more packages are not installed"))
-			} else {
-				Expect(err).To(MatchError(ContainSubstring("exit status 42")))
-			}
+			// A failed query is an error, never reported as absence.
+			Expect(err).To(MatchError(ContainSubstring("exit status 42")))
+			var missing *sdk.NotInstalledError
+			Expect(errors.As(err, &missing)).To(BeFalse())
 			assertCalls(c, true)
 		})
+		if command == "is-installed" {
+			It("reports dpkg-query's not-found exit status 1 as not installed", func() {
+				c := contracts[i]
+				recorder.Script(c.executable, c.argv, sdktest.Response{ExitCode: 1, Stderr: "dpkg-query: no packages found matching example\n"})
+				err := plugin.Execute(command, argsFor(command))
+				var missing *sdk.NotInstalledError
+				Expect(errors.As(err, &missing)).To(BeTrue())
+			})
+		}
+		if command == "is-installed" {
+			It("doesn't report a missing .deb file name as not installed", func() {
+				recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", "tool.deb"}, sdktest.Response{ExitCode: 1, Stderr: "dpkg-query: no packages found matching tool.deb\n"})
+				err := plugin.Execute(command, []string{"tool.deb"})
+				Expect(err).To(MatchError(ContainSubstring("cannot confirm whether tool.deb is installed")))
+				var missing *sdk.NotInstalledError
+				Expect(errors.As(err, &missing)).To(BeFalse())
+			})
+		}
 		It("rejects missing arguments for "+command, func() {
 			Expect(plugin.Execute(command, nil)).To(HaveOccurred())
 			for _, exe := range []string{"dpkg", "dpkg-deb", "dpkg-query", "apt-get"} {

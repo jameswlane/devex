@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -191,17 +193,14 @@ func (p *AppimagePlugin) handleIsInstalled(args []string) error {
 		return fmt.Errorf("invalid binary name: %w", err)
 	}
 
-	if installed, err := p.isAppImageInstalled(binaryName); err != nil {
-		p.logger.Printf("Error checking if AppImage %s is installed: %v\n", binaryName, err)
-		os.Exit(1)
-	} else if installed {
-		p.logger.Printf("AppImage %s is installed\n", binaryName)
-		os.Exit(0)
-	} else {
-		p.logger.Printf("AppImage %s is not installed\n", binaryName)
-		os.Exit(1)
+	installed, err := p.isAppImageInstalled(binaryName)
+	if err != nil {
+		return fmt.Errorf("failed to check whether AppImage %s is installed: %w", binaryName, err)
 	}
-
+	if !installed {
+		return &sdk.NotInstalledError{Packages: []string{binaryName}}
+	}
+	p.logger.Printf("AppImage %s is installed\n", binaryName)
 	return nil
 }
 
@@ -228,26 +227,31 @@ func (p *AppimagePlugin) handleValidateURL(args []string) error {
 func (p *AppimagePlugin) isAppImageInstalled(binaryName string) (bool, error) {
 	homeDir := os.Getenv("HOME")
 
-	// Check GUI location
-	guiPath := filepath.Join(homeDir, "Applications", binaryName)
-	if info, err := os.Stat(guiPath); err == nil {
-		// Also verify it's executable
-		mode := info.Mode()
-		if mode&0o111 != 0 {
-			return true, nil
+	// Installed if either location holds an executable. Absent only when both
+	// are confirmed missing or not executable; a stat failure in one location
+	// (e.g. permission denied) is reported only if the other doesn't confirm it.
+	var lookupErr error
+	for _, path := range []string{
+		filepath.Join(homeDir, "Applications", binaryName),
+		filepath.Join(homeDir, ".local", "bin", binaryName),
+	} {
+		info, err := os.Stat(path)
+		switch {
+		case err == nil:
+			if info.Mode()&0o111 != 0 {
+				return true, nil
+			}
+		case errors.Is(err, fs.ErrNotExist):
+		default:
+			if lookupErr == nil {
+				lookupErr = fmt.Errorf("check %s: %w", path, err)
+			}
 		}
 	}
 
-	// Check CLI location
-	cliPath := filepath.Join(homeDir, ".local", "bin", binaryName)
-	if info, err := os.Stat(cliPath); err == nil {
-		// Also verify it's executable
-		mode := info.Mode()
-		if mode&0o111 != 0 {
-			return true, nil
-		}
+	if lookupErr != nil {
+		return false, lookupErr
 	}
-
 	return false, nil
 }
 
