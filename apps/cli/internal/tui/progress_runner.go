@@ -19,8 +19,8 @@ import (
 )
 
 // progressQuitTimeout bounds how long Quit waits for the TUI to restore the
-// terminal before forcing it down with Kill.
-const progressQuitTimeout = 5 * time.Second
+// terminal before forcing it down with Kill. Tests shorten it.
+var progressQuitTimeout = 5 * time.Second
 
 // isInteractiveTerminal reports whether stdin and stdout are both terminals.
 // The progress TUI takes over the screen, so it only runs when both are.
@@ -162,7 +162,11 @@ func (pr *ProgressRunner) RunTemplateOperation(operation string, args ...interfa
 func (pr *ProgressRunner) Quit() {
 	pr.quitOnce.Do(func() {
 		if pr.program != nil && pr.started.Load() {
-			pr.program.Quit()
+			// Program.Quit blocks until the event loop takes the message. Send it
+			// from a goroutine so the timeout below starts now and Kill can still
+			// run if the loop is stuck; Kill cancels the program, which also
+			// releases the pending send.
+			go pr.program.Quit()
 			select {
 			case <-pr.done:
 			case <-time.After(progressQuitTimeout):
