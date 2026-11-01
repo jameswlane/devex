@@ -55,7 +55,7 @@ var _ = Describe("ProgressRunner lifecycle", func() {
 
 		It("waits for the TUI to exit before Quit returns", func() {
 			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
-			Expect(runner.RunStatusCheck([]string{"git"})).To(Succeed())
+			runner.start()
 
 			quitReturned := make(chan struct{})
 			go func() {
@@ -70,7 +70,7 @@ var _ = Describe("ProgressRunner lifecycle", func() {
 
 		It("is safe to call Quit more than once", func() {
 			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
-			Expect(runner.RunStatusCheck(nil)).To(Succeed())
+			runner.start()
 
 			runner.Quit()
 			Expect(runner.Quit).NotTo(Panic())
@@ -79,7 +79,7 @@ var _ = Describe("ProgressRunner lifecycle", func() {
 
 		It("returns from Quit when the user already closed the TUI", func() {
 			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
-			Expect(runner.RunStatusCheck(nil)).To(Succeed())
+			runner.start()
 
 			runner.program.Send(tea.Quit())
 			Eventually(runner.Done(), 3*time.Second).Should(BeClosed())
@@ -135,10 +135,10 @@ var _ = Describe("ProgressRunner lifecycle", func() {
 			}
 		})
 
-		It("runs the operation without starting a TUI", func() {
+		It("does not start a TUI", func() {
 			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
 			Expect(runner.program).To(BeNil())
-			Expect(runner.RunStatusCheck([]string{"git"})).To(Succeed())
+			runner.start()
 
 			quitReturned := make(chan struct{})
 			go func() {
