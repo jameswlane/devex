@@ -12,6 +12,7 @@ var (
 	RemoveFileIfExists      = removeFileIfExists
 	ValidateEnvironmentName = validateEnvironmentName
 	ResolveUninstallApp     = resolveUninstallApp
+	StatusErrorSummary      = statusErrorSummary
 )
 
 func SetUninstallInstallerForTest(getter func(context.Context, string) types.BaseInstaller) func() {

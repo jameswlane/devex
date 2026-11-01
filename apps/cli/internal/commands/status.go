@@ -18,7 +18,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
-	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -78,12 +77,6 @@ Examples:
 				}, settings, getPluginBootstrap)
 			}
 
-			// Use TUI progress unless explicitly disabled
-			if !noTUI {
-				return runStatusWithProgress(repo, settings, apps, all, category, format, verbose, fix)
-			}
-
-			// Fallback to original implementation for --no-tui
 			return runStatus(repo, settings, apps, all, category, format, verbose, fix)
 		},
 	}
@@ -94,7 +87,9 @@ Examples:
 	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json, yaml)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed status information")
 	cmd.Flags().BoolVar(&fix, "fix", false, "Attempt to fix common issues")
-	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "Disable TUI progress display")
+	// --no-tui is kept so existing scripts keep working; status prints plain output either way.
+	cmd.Flags().BoolVar(&noTUI, "no-tui", false, "Accepted for compatibility; status always prints plain output")
+	_ = cmd.Flags().MarkHidden("no-tui")
 	cmd.Flags().StringVar(&templateID, "template", "", "Check a DevEx lifecycle template by ID or path")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
 	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
@@ -109,25 +104,17 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 
 	var appsToCheck []types.AppConfig
 
-	// Determine which applications to check
+	// Determine which applications to check. Without --app or --category,
+	// check every application DevEx has recorded as installed.
 	switch {
-	case all:
-		// Get all installed applications
-		installedApps, err := repo.ListApps()
-		if err != nil {
-			return fmt.Errorf("failed to list installed apps: %w", err)
-		}
-		appsToCheck = installedApps
-
 	case category != "":
-		// Get applications by category
-		installedApps, err := repo.ListApps()
+		installedApps, err := listTrackedApps(repo, settings)
 		if err != nil {
-			return fmt.Errorf("failed to list installed apps: %w", err)
+			return err
 		}
 
 		for _, app := range installedApps {
-			if app.Category == category {
+			if strings.EqualFold(app.Category, category) {
 				appsToCheck = append(appsToCheck, app)
 			}
 		}
@@ -142,7 +129,7 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 
 				// Try to get from database first
 				if installedApp, err := repo.GetApp(name); err == nil && installedApp != nil {
-					appsToCheck = append(appsToCheck, *installedApp)
+					appsToCheck = append(appsToCheck, resolveTrackedApp(settings, *installedApp))
 				} else {
 					// Try to get from configuration
 					if app, err := settings.GetApplicationByName(name); err == nil {
@@ -155,7 +142,11 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 		}
 
 	default:
-		return fmt.Errorf("you must specify --app, --all, or --category")
+		installedApps, err := listTrackedApps(repo, settings)
+		if err != nil {
+			return err
+		}
+		appsToCheck = installedApps
 	}
 
 	if len(appsToCheck) == 0 {
@@ -176,8 +167,58 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 		results = append(results, appStatus)
 	}
 
-	// Output results
-	return outputResults(results, format, verbose)
+	if err := outputResults(results, format, verbose); err != nil {
+		return err
+	}
+
+	// Exit non-zero when any application is in an error state so scripts and
+	// CI can rely on the status command.
+	return statusErrorSummary(results)
+}
+
+// statusErrorSummary returns an error naming how many results are in the
+// "error" state, or nil when there are none.
+func statusErrorSummary(results []status.AppStatus) error {
+	errorCount := 0
+	for _, result := range results {
+		if result.Status == "error" {
+			errorCount++
+		}
+	}
+	if errorCount > 0 {
+		return fmt.Errorf("%d of %d application(s) reported errors", errorCount, len(results))
+	}
+	return nil
+}
+
+// listTrackedApps returns the applications recorded as installed, with their
+// install details filled in from configuration.
+func listTrackedApps(repo types.Repository, settings config.CrossPlatformSettings) ([]types.AppConfig, error) {
+	installedApps, err := repo.ListApps()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list installed apps: %w", err)
+	}
+	for i := range installedApps {
+		installedApps[i] = resolveTrackedApp(settings, installedApps[i])
+	}
+	return installedApps, nil
+}
+
+// resolveTrackedApp fills in install details for an application recorded in
+// the database. The database only stores application names, so the install
+// method, command, and category come from the matching configuration entry.
+// Applications no longer in the configuration are returned unchanged.
+func resolveTrackedApp(settings config.CrossPlatformSettings, app types.AppConfig) types.AppConfig {
+	if app.InstallMethod != "" && app.InstallCommand != "" {
+		return app
+	}
+	configured, err := settings.GetApplicationByName(app.Name)
+	if err != nil || configured == nil {
+		return app
+	}
+	resolved := *configured
+	resolved.Name = app.Name
+	return resolved
 }
 
 func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.CrossPlatformSettings, verbose bool) status.AppStatus {
@@ -189,10 +230,18 @@ func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.C
 	}
 
 	// Check if app is installed
+	// "unknown" means DevEx cannot check the application; "error" is kept for
+	// checks that ran and failed, which make the command exit non-zero.
+	if app.InstallMethod == "" {
+		appStatus.Status = "unknown"
+		appStatus.Issues = append(appStatus.Issues, "Install method unknown: the application is not in the DevEx configuration")
+		return appStatus
+	}
+
 	installer := installers.GetInstaller(ctx, app.InstallMethod)
 	if installer == nil {
-		appStatus.Status = "error"
-		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Invalid install method: %s", app.InstallMethod))
+		appStatus.Status = "unknown"
+		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("No installer available for install method %q; check that its package-manager plugin is installed", app.InstallMethod))
 		return appStatus
 	}
 
@@ -360,7 +409,7 @@ func outputTable(results []status.AppStatus, verbose bool) {
 	for _, result := range results {
 		statusColor := green
 		switch result.Status {
-		case "warning":
+		case "warning", "unknown":
 			statusColor = yellow
 		case "error", "not_installed":
 			statusColor = red
@@ -1024,30 +1073,3 @@ func (m *mockRepositoryForStatus) GetApp(name string) (*types.AppConfig, error) 
 	return nil, fmt.Errorf("not found")
 }
 func (m *mockRepositoryForStatus) GetAll() (map[string]string, error) { return nil, nil }
-
-// runStatusWithProgress runs status checks with TUI progress tracking
-func runStatusWithProgress(repo types.Repository, settings config.CrossPlatformSettings, apps []string, all bool, category string, format string, verbose bool, fix bool) error {
-	runner := tui.NewProgressRunner(context.Background(), settings)
-	defer runner.Quit()
-
-	// Build check list for progress tracking
-	var checkNames []string
-	switch {
-	case all:
-		checkNames = append(checkNames, "all-apps")
-	case category != "":
-		checkNames = append(checkNames, "category-"+category)
-	default:
-		for _, app := range apps {
-			names := strings.Split(app, ",")
-			for _, name := range names {
-				name = strings.TrimSpace(name)
-				if name != "" {
-					checkNames = append(checkNames, name)
-				}
-			}
-		}
-	}
-
-	return runner.RunStatusCheck(checkNames)
-}

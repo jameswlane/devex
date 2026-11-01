@@ -156,13 +156,6 @@ func (pr *ProgressRunner) RunTemplateOperation(operation string, args ...interfa
 	}
 }
 
-// RunStatusCheck runs system status checks with progress tracking
-func (pr *ProgressRunner) RunStatusCheck(checks []string) error {
-	pr.start()
-
-	return pr.runStatusChecks(checks)
-}
-
 // Quit stops the TUI and waits for it to restore the terminal. If the TUI does
 // not exit within progressQuitTimeout it is killed, which also restores the
 // terminal. Quit is safe to call more than once and on headless runners.
@@ -697,106 +690,6 @@ func (pr *ProgressRunner) runTemplateUpdate(args ...interface{}) error {
 	return nil
 }
 
-func (pr *ProgressRunner) runStatusChecks(checks []string) error {
-	op := pr.manager.GetTracker().StartOperation(
-		"status-check",
-		"System Status Check",
-		"Running comprehensive system status checks",
-		progresspkg.OperationStatus,
-	)
-
-	// Enhanced status checking with detailed phases
-	steps := []progresspkg.ProgressStep{
-		{Name: "Initializing", Description: "Initializing status checker", Weight: 0.5},
-		{Name: "Discovery", Description: "Discovering applications", Weight: 1.0},
-		{Name: "Validation", Description: "Validating installations", Weight: 2.0},
-		{Name: "Dependencies", Description: "Checking dependencies", Weight: 1.5},
-		{Name: "Services", Description: "Checking system services", Weight: 1.5},
-		{Name: "Configuration", Description: "Validating configurations", Weight: 1.0},
-		{Name: "Health", Description: "Running health checks", Weight: 1.5},
-		{Name: "Reporting", Description: "Generating status report", Weight: 1.0},
-	}
-
-	stepper := op.NewSteppedOperation(steps)
-
-	// Phase 1: Initializing
-	stepper.NextStep()
-	op.SetDetails("Initializing status checker...")
-	stepper.SetStepProgress(1.0)
-
-	// Phase 2: Discovery
-	stepper.NextStep()
-	op.SetDetails("Discovering applications to check...")
-	for i := 0; i <= 100; i += 25 {
-		stepper.SetStepProgress(float64(i) / 100.0)
-		op.SetDetails(fmt.Sprintf("Discovering applications... %d%%", i))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 3: Validation
-	stepper.NextStep()
-	op.SetDetails("Validating application installations...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Validating %s installation...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 4: Dependencies
-	stepper.NextStep()
-	op.SetDetails("Checking application dependencies...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Checking %s dependencies...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 5: Services
-	stepper.NextStep()
-	op.SetDetails("Checking system services...")
-	serviceChecks := []string{"docker", "mysql", "postgresql", "redis", "nginx"}
-	for i, service := range serviceChecks {
-		progress := float64(i) / float64(len(serviceChecks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Checking %s service status...", service))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 6: Configuration
-	stepper.NextStep()
-	op.SetDetails("Validating application configurations...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Validating %s configuration...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 7: Health
-	stepper.NextStep()
-	op.SetDetails("Running health checks...")
-	for i, check := range checks {
-		progress := float64(i) / float64(len(checks))
-		stepper.SetStepProgress(progress)
-		op.SetDetails(fmt.Sprintf("Running %s health check...", check))
-	}
-	stepper.SetStepProgress(1.0)
-
-	// Phase 8: Reporting
-	stepper.NextStep()
-	op.SetDetails("Generating status report...")
-	for i := 0; i <= 100; i += 20 {
-		stepper.SetStepProgress(float64(i) / 100.0)
-		op.SetDetails(fmt.Sprintf("Generating report... %d%%", i))
-	}
-	stepper.SetStepProgress(1.0)
-
-	op.Complete()
-	return nil
-}
-
 // Convenience functions for common operations
 
 // StartInstallation is a convenience function for application installation with progress
@@ -818,11 +711,4 @@ func StartConfigBackup(settings config.CrossPlatformSettings) error {
 	runner := NewProgressRunner(context.Background(), settings)
 	defer runner.Quit()
 	return runner.RunConfigOperation("backup")
-}
-
-// StartStatusCheck is a convenience function for status checking with progress
-func StartStatusCheck(checks []string, settings config.CrossPlatformSettings) error {
-	runner := NewProgressRunner(context.Background(), settings)
-	defer runner.Quit()
-	return runner.RunStatusCheck(checks)
 }
