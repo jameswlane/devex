@@ -26,6 +26,9 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "ctrl+c", "q":
+			if m.step == StepPluginInstall && m.plugins.pluginCancel != nil {
+				m.plugins.pluginCancel()
+			}
 			return m, tea.Quit
 
 		case "enter":
@@ -50,14 +53,30 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case PluginInstallMsg:
-		m.installation.setStatus(msg.Status)
-		m.installation.setProgress(msg.Progress)
-		if msg.Error != nil {
-			m.installation.addError(msg.Error.Error())
+		for i := range m.plugins.pluginStatuses {
+			status := &m.plugins.pluginStatuses[i]
+			if status.Name != msg.PluginName {
+				continue
+			}
+			status.Status = msg.Status
+			if msg.Status == "downloading" {
+				status.BytesDownloaded = msg.BytesDownloaded
+				status.TotalBytes = msg.TotalBytes
+			}
+			status.Error = ""
+			if msg.Error != nil {
+				status.Error = msg.Error.Error()
+			}
+			break
 		}
-		return m, nil
+		return m, m.waitForNextPluginEvent()
 
 	case PluginInstallCompleteMsg:
+		if m.plugins.pluginCancel != nil {
+			m.plugins.pluginCancel()
+			m.plugins.pluginCancel = nil
+		}
+		m.plugins.pluginEvents = nil
 		// Update model state based on installation results using atomic operations
 		atomic.StoreInt32(&m.plugins.pluginsInstalling, 0)  // Mark installation complete
 		m.plugins.successfulPlugins = msg.SuccessfulPlugins // Store successful plugins
@@ -127,16 +146,11 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		// Update all plugin spinners
-		cmds := make([]tea.Cmd, 0, len(m.plugins.pluginStatuses))
-		for i, status := range m.plugins.pluginStatuses {
-			if status.Status == "downloading" || status.Status == "verifying" || status.Status == "installing" {
-				var cmd tea.Cmd
-				m.plugins.pluginSpinners[i], cmd = m.plugins.pluginSpinners[i].Update(msg)
-				cmds = append(cmds, cmd)
-			}
+		if atomic.LoadInt32(&m.plugins.pluginsInstalling) == 1 {
+			var cmd tea.Cmd
+			m.plugins.spinner, cmd = m.plugins.spinner.Update(msg)
+			return m, cmd
 		}
-		return m, tea.Batch(cmds...)
 	}
 
 	return m, nil
