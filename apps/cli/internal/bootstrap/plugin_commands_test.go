@@ -48,6 +48,10 @@ var _ = Describe("Registered plugin commands", func() {
 		if runtime.GOOS == "windows" {
 			Skip("shell recorder requires a POSIX host")
 		}
+		for _, key := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "DEVEX_UNATTENDED", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE"} {
+			GinkgoT().Setenv(key, "")
+		}
+		GinkgoT().Setenv("TERM", "xterm")
 		home = GinkgoT().TempDir()
 		GinkgoT().Setenv("HOME", home)
 		// Keep the fake home authoritative even when the suite is launched under sudo.

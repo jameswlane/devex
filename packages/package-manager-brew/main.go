@@ -97,7 +97,7 @@ func (p *BrewPlugin) handleInstall(ctx context.Context, args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", cmdArgs...)
+	return p.runBrew(ctx, cmdArgs...)
 }
 
 func (p *BrewPlugin) handleRemove(ctx context.Context, args []string) error {
@@ -107,13 +107,13 @@ func (p *BrewPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", cmdArgs...)
+	cmdArgs := append([]string{"uninstall"}, args...)
+	return p.runBrew(ctx, cmdArgs...)
 }
 
 func (p *BrewPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "brew", "update")
+	return p.runBrew(ctx, "update")
 }
 
 func (p *BrewPlugin) handleSearch(ctx context.Context, args []string) error {
@@ -134,4 +134,9 @@ func (p *BrewPlugin) handleList(ctx context.Context, args []string) error {
 func main() {
 	plugin := NewBrewPlugin()
 	sdk.HandleArgs(plugin, os.Args[1:])
+}
+
+// runBrew disables Homebrew's prompts for DevEx's mutating operations.
+func (p *BrewPlugin) runBrew(ctx context.Context, args ...string) error {
+	return sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "brew", Args: args, Env: []string{"NONINTERACTIVE=1"}}, sdk.OperationIO{Stdout: os.Stdout, Stderr: os.Stderr})
 }

@@ -49,6 +49,8 @@ var _ = Describe("AppImage operation contracts", func() {
 	var logger *recordingLogger
 	BeforeEach(func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "AppImage")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin = NewAppimagePlugin()
 		logger = &recordingLogger{Logger: sdk.NewDefaultLogger(true)}
 		plugin.logger = logger

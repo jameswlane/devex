@@ -22,9 +22,10 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"install", "git", "vim"}, nativeArgv: []string{"--non-interactive", "install", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper", pending: "install omits global --non-interactive"},
-	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "git", "vim"}, nativeArgv: []string{"--non-interactive", "remove", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper", pending: "remove omits global --non-interactive"},
-	{command: "update", args: nil, currentArg: []string{"update"}, nativeArgv: []string{"--non-interactive", "refresh"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper", pending: "update upgrades packages instead of refreshing repositories"},
+	{command: "upgrade", currentArg: []string{"--non-interactive", "update"}, nativeArgv: []string{"--non-interactive", "update"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper"},
+	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"--non-interactive", "install", "git", "vim"}, nativeArgv: []string{"--non-interactive", "install", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper"},
+	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"--non-interactive", "remove", "git", "vim"}, nativeArgv: []string{"--non-interactive", "remove", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper"},
+	{command: "update", args: nil, currentArg: []string{"--non-interactive", "refresh"}, nativeArgv: []string{"--non-interactive", "refresh"}, elevated: true, nativeElevated: true, nativeExecutable: "zypper"},
 	{command: "search", args: []string{"web", "server"}, currentArg: []string{"search", "web server"}, nativeArgv: []string{"search", "web server"}, elevated: false, nativeElevated: false, nativeExecutable: "zypper", pending: ""},
 	{command: "list", args: nil, currentArg: []string{"list"}, nativeArgv: []string{"search", "--installed-only"}, elevated: false, nativeElevated: false, nativeExecutable: "zypper", pending: "list is not a zypper command; use an installed-only query"},
 }

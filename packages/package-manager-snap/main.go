@@ -108,8 +108,8 @@ func (p *SnapPlugin) handleRemove(ctx context.Context, args []string) error {
 
 // handleUpdate runs `snap refresh`. snap refresh itself never prompts, so no
 // extra confirmation flag is added; when not running as root it is invoked
-// through sudo, which may prompt for a password unless passwordless sudo is
-// configured. Every argument (snap names and flags such as --channel=candidate)
+// through sudo; unattended execution uses sudo -n and fails if authorization is
+// unavailable. Every argument (snap names and flags such as --channel=candidate)
 // is forwarded unchanged as a separate argv element, and snap's native error
 // and exit status are returned unmodified.
 func (p *SnapPlugin) handleUpdate(ctx context.Context, args []string) error {

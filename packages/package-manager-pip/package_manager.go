@@ -90,7 +90,7 @@ func (p *PipPlugin) handleInstall(ctx context.Context, args []string) error {
 	}
 
 	cmdArgs = append(cmdArgs, processedArgs...)
-	return sdk.ExecCommandWithContext(ctx, true, "pip", cmdArgs...)
+	return execPip(ctx, cmdArgs...)
 }
 
 // handleRemove removes Python packages
@@ -117,28 +117,28 @@ func (p *PipPlugin) handleRemove(ctx context.Context, args []string) error {
 	p.logger.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	// Build uninstall command
-	cmdArgs := []string{"uninstall"}
+	cmdArgs := []string{"uninstall", "-y"}
 
 	// Process flags
 	var processedArgs []string
 	for _, arg := range args {
 		switch arg {
 		case "--yes", "-y":
-			cmdArgs = append(cmdArgs, "-y")
+			// Removal is always confirmed by DevEx.
 		default:
 			processedArgs = append(processedArgs, arg)
 		}
 	}
 
 	cmdArgs = append(cmdArgs, processedArgs...)
-	return sdk.ExecCommandWithContext(ctx, true, "pip", cmdArgs...)
+	return execPip(ctx, cmdArgs...)
 }
 
 // handleUpdate updates Python packages
 func (p *PipPlugin) handleUpdate(ctx context.Context, args []string) error {
 	// First update pip itself
 	p.logger.Printf("Updating pip...\n")
-	if err := sdk.ExecCommandWithContext(ctx, true, "pip", "install", "--upgrade", "pip"); err != nil {
+	if err := execPip(ctx, "install", "--upgrade", "pip"); err != nil {
 		p.logger.Warning("Failed to update pip: %v", err)
 	}
 
@@ -166,7 +166,7 @@ func (p *PipPlugin) handleUpdate(ctx context.Context, args []string) error {
 		if len(processedArgs) > 0 {
 			p.logger.Printf("Updating packages: %s\n", strings.Join(processedArgs, ", "))
 			cmdArgs := append([]string{"install", "--upgrade"}, processedArgs...)
-			return sdk.ExecCommandWithContext(ctx, true, "pip", cmdArgs...)
+			return execPip(ctx, cmdArgs...)
 		}
 	}
 
@@ -273,7 +273,7 @@ func (p *PipPlugin) updateAllPackages(ctx context.Context) error {
 		if parts := strings.Split(line, "=="); len(parts) >= 1 {
 			packageName := parts[0]
 			p.logger.Printf("Updating %s...\n", packageName)
-			if err := sdk.ExecCommandWithContext(ctx, true, "pip", "install", "--upgrade", packageName); err != nil {
+			if err := execPip(ctx, "install", "--upgrade", packageName); err != nil {
 				p.logger.Warning("Failed to update %s: %v", packageName, err)
 			}
 		}
@@ -281,4 +281,11 @@ func (p *PipPlugin) updateAllPackages(ctx context.Context) error {
 
 	p.logger.Success("Package updates completed")
 	return nil
+}
+
+func execPip(ctx context.Context, args ...string) error {
+	if sdk.Unattended() {
+		args = append([]string{"--no-input"}, args...)
+	}
+	return sdk.ExecCommandWithContext(ctx, true, "pip", args...)
 }
