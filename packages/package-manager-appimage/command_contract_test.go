@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -215,6 +216,21 @@ var _ = Describe("AppImage operation contracts", func() {
 			Expect(string(output)).To(ContainSubstring("tool"))
 		})
 	}
+	It("returns a failed lookup as an error, not as absence", func() {
+		if os.Geteuid() == 0 {
+			Skip("root can traverse any directory")
+		}
+		apps := filepath.Join(home, "Applications")
+		Expect(os.MkdirAll(apps, 0o755)).To(Succeed())
+		Expect(os.Chmod(apps, 0)).To(Succeed())
+		DeferCleanup(func() { Expect(os.Chmod(apps, 0o755)).To(Succeed()) })
+
+		err := plugin.Execute("is-installed", []string{"tool"})
+
+		Expect(err).To(MatchError(ContainSubstring("permission denied")))
+		var missing *sdk.NotInstalledError
+		Expect(errors.As(err, &missing)).To(BeFalse())
+	})
 	It("rejects unknown commands", func() { Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown")) })
 	for _, command := range []string{"install", "remove", "is-installed", "validate-url"} {
 		It("rejects missing arguments for "+command, func() {

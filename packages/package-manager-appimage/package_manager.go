@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -225,23 +227,22 @@ func (p *AppimagePlugin) handleValidateURL(args []string) error {
 func (p *AppimagePlugin) isAppImageInstalled(binaryName string) (bool, error) {
 	homeDir := os.Getenv("HOME")
 
-	// Check GUI location
-	guiPath := filepath.Join(homeDir, "Applications", binaryName)
-	if info, err := os.Stat(guiPath); err == nil {
-		// Also verify it's executable
-		mode := info.Mode()
-		if mode&0o111 != 0 {
-			return true, nil
-		}
-	}
-
-	// Check CLI location
-	cliPath := filepath.Join(homeDir, ".local", "bin", binaryName)
-	if info, err := os.Stat(cliPath); err == nil {
-		// Also verify it's executable
-		mode := info.Mode()
-		if mode&0o111 != 0 {
-			return true, nil
+	// Absent means confirmed missing or not executable in both locations; any
+	// other stat failure (e.g. permission denied) is a failed lookup.
+	for _, path := range []string{
+		filepath.Join(homeDir, "Applications", binaryName),
+		filepath.Join(homeDir, ".local", "bin", binaryName),
+	} {
+		info, err := os.Stat(path)
+		switch {
+		case err == nil:
+			if info.Mode()&0o111 != 0 {
+				return true, nil
+			}
+		case errors.Is(err, fs.ErrNotExist):
+			continue
+		default:
+			return false, fmt.Errorf("check %s: %w", path, err)
 		}
 	}
 

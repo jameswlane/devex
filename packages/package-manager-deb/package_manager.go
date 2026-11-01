@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -302,12 +304,22 @@ func (d *DebInstaller) isPackageInstalled(packageName string) (bool, error) {
 	ctx := context.Background()
 	output, err := sdk.ExecCommandOutputWithContext(ctx, "dpkg-query", "-W", "-f=${Status}", packageName)
 	if err != nil {
-		// Package not found
-		return false, nil
+		if dpkgPackageAbsent(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("dpkg-query failed for %s: %w", packageName, err)
 	}
 
 	// Check if package is properly installed
 	return strings.Contains(output, "install ok installed"), nil
+}
+
+// dpkgPackageAbsent reports whether a dpkg-query failure means the package is
+// unknown to dpkg. dpkg-query exits 1 when a requested package isn't found and
+// 2 on fatal errors; anything else (including timeouts) is a failed query.
+func dpkgPackageAbsent(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }
 
 // mapKeys returns the keys of a map as a slice

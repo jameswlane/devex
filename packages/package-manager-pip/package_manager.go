@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -239,11 +240,12 @@ func (p *PipPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 		return fmt.Errorf("invalid package name: %w", err)
 	}
 
-	// `pip show` exits 1 and prints "Package(s) not found" for an absent
+	// `pip show` exits 1 and warns "Package(s) not found: NAME" for an absent
 	// package; any other failure means the query itself failed.
 	output, err := exec.CommandContext(ctx, "pip", "show", packageName).CombinedOutput()
 	if err != nil {
-		if strings.Contains(string(output), "not found") {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.Contains(string(output), "Package(s) not found:") {
 			return &sdk.NotInstalledError{Packages: []string{packageName}}
 		}
 		return fmt.Errorf("failed to check whether %s is installed: %w: %s", packageName, err, strings.TrimSpace(string(output)))

@@ -92,15 +92,21 @@ var _ = Describe("DEB command contracts", func() {
 			c := contracts[i]
 			recorder.Script(c.executable, c.argv, sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
 			err := plugin.Execute(command, argsFor(command))
-			if command == "is-installed" {
-				// Current defect (#255): all dpkg-query errors are converted into absence.
-				var missing *sdk.NotInstalledError
-				Expect(errors.As(err, &missing)).To(BeTrue())
-			} else {
-				Expect(err).To(MatchError(ContainSubstring("exit status 42")))
-			}
+			// A failed query is an error, never reported as absence.
+			Expect(err).To(MatchError(ContainSubstring("exit status 42")))
+			var missing *sdk.NotInstalledError
+			Expect(errors.As(err, &missing)).To(BeFalse())
 			assertCalls(c, true)
 		})
+		if command == "is-installed" {
+			It("reports dpkg-query's not-found exit status 1 as not installed", func() {
+				c := contracts[i]
+				recorder.Script(c.executable, c.argv, sdktest.Response{ExitCode: 1, Stderr: "dpkg-query: no packages found matching example\n"})
+				err := plugin.Execute(command, argsFor(command))
+				var missing *sdk.NotInstalledError
+				Expect(errors.As(err, &missing)).To(BeTrue())
+			})
+		}
 		It("rejects missing arguments for "+command, func() {
 			Expect(plugin.Execute(command, nil)).To(HaveOccurred())
 			for _, exe := range []string{"dpkg", "dpkg-deb", "dpkg-query", "apt-get"} {
