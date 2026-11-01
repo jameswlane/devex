@@ -13,6 +13,11 @@ import (
 // Update handles Bubble Tea messages and state updates
 func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		return m, nil
+
 	case tea.KeyMsg:
 		// Special handling for git configuration text input
 		if m.step == StepGitConfig && m.git.gitInputActive {

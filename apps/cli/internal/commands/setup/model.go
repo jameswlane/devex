@@ -46,11 +46,12 @@ const (
 
 // UISelections groups all user selection states for the setup interface
 type UISelections struct {
-	selectedShell int
-	selectedLangs map[int]bool
-	selectedDBs   map[int]bool
-	selectedApps  map[int]bool
-	selectedTheme int
+	selectedShell       int
+	selectedLangs       map[int]bool
+	selectedDBs         map[int]bool
+	selectedApps        map[int]bool
+	selectedDesktopApps map[string]bool
+	selectedTheme       int
 }
 
 // GitConfiguration holds Git-specific configuration state
@@ -152,13 +153,14 @@ type PluginState struct {
 
 // SystemInfo contains detected system information and available options
 type SystemInfo struct {
-	shells           []string
-	languages        []string
-	databases        []string
-	desktopApps      []string
-	themes           []string
-	hasDesktop       bool
-	detectedPlatform platform.DetectionResult
+	shells            []string
+	languages         []string
+	databases         []string
+	desktopApps       []string
+	desktopAppDetails []types.CrossPlatformApp
+	themes            []string
+	hasDesktop        bool
+	detectedPlatform  platform.DetectionResult
 }
 
 // SetupModel represents the state of our guided setup UI
@@ -166,9 +168,12 @@ type SystemInfo struct {
 type SetupModel struct {
 	ctx context.Context
 	// Navigation state
-	step          int
-	cursor        int
-	shellSwitched bool
+	step              int
+	cursor            int
+	shellSwitched     bool
+	width             int
+	height            int
+	desktopAppsOffset int
 
 	// Grouped states for better organization
 	system       SystemInfo
@@ -205,10 +210,14 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 		detectedPlatform.DesktopEnv != "unknown" &&
 		detectedPlatform.DesktopEnv != ""
 
-	// Get available desktop apps if desktop is detected
 	var desktopApps []string
+	var desktopAppDetails []types.CrossPlatformApp
 	if hasDesktop {
-		desktopApps = getDesktopAppNames(settings)
+		desktopAppDetails = getAvailableDesktopApps(settings, detectedPlatform)
+		desktopApps = make([]string, 0, len(desktopAppDetails))
+		for _, app := range desktopAppDetails {
+			desktopApps = append(desktopApps, app.Name)
+		}
 	}
 
 	// Create plugin spinners
@@ -238,22 +247,24 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 		// System information
 		system: SystemInfo{
-			shells:           shells,
-			languages:        getProgrammingLanguageNames(settings),
-			databases:        []string{"PostgreSQL", "MySQL", "Redis", "MongoDB"},
-			desktopApps:      desktopApps,
-			themes:           getAvailableThemeNames(settings),
-			hasDesktop:       hasDesktop,
-			detectedPlatform: detectedPlatform,
+			shells:            shells,
+			languages:         getProgrammingLanguageNames(settings),
+			databases:         []string{"PostgreSQL", "MySQL", "Redis", "MongoDB"},
+			desktopApps:       desktopApps,
+			desktopAppDetails: desktopAppDetails,
+			themes:            getAvailableThemeNames(settings),
+			hasDesktop:        hasDesktop,
+			detectedPlatform:  detectedPlatform,
 		},
 
 		// User selections
 		selections: UISelections{
-			selectedShell: defaultShellIdx,
-			selectedLangs: make(map[int]bool),
-			selectedDBs:   make(map[int]bool),
-			selectedApps:  make(map[int]bool),
-			selectedTheme: 0,
+			selectedShell:       defaultShellIdx,
+			selectedLangs:       make(map[int]bool),
+			selectedDBs:         make(map[int]bool),
+			selectedApps:        make(map[int]bool),
+			selectedDesktopApps: make(map[string]bool),
+			selectedTheme:       0,
 		},
 
 		// Git configuration

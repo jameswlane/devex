@@ -2,8 +2,11 @@ package setup
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -146,36 +149,76 @@ func (m *SetupModel) getDesktopAppByName(name string) *types.CrossPlatformApp {
 	return nil
 }
 
-// getAvailableDesktopApps returns non-default desktop apps compatible with the detected desktop environment
-// Performance optimizations:
-// - Called only once during initialization, result cached in model.desktopApps
-// - Single-pass filtering with early termination conditions
-// - Efficient boolean checks before expensive compatibility validation
-func (m *SetupModel) getAvailableDesktopApps() []string {
-	allApps := m.settings.GetAllApps()
-	var desktopApps []string
-
-	// Performance optimization: Single-pass filtering with ordered conditions
-	// (cheapest checks first to enable early termination)
-	for _, app := range allApps {
-		// Include apps that are:
-		// 1. Not default (user should choose) - cheapest check first
-		// 2. Desktop/GUI applications - category-based check
-		// 3. Compatible with current platform - platform detection
-		// 4. Compatible with detected desktop environment - most expensive check last
-		if !app.Default && m.isDesktopApp(app) && m.isCompatibleWithPlatform(app) && m.isCompatibleWithDesktopEnvironment(app) {
-			desktopApps = append(desktopApps, app.Name)
+func getAvailableDesktopApps(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) []types.CrossPlatformApp {
+	var desktopApps []types.CrossPlatformApp
+	for _, app := range settings.GetAllApps() {
+		if !app.Default && isDesktopApp(app) && isCompatibleWithPlatform(app, detectedPlatform) && isCompatibleWithDesktopEnvironment(app, detectedPlatform) {
+			desktopApps = append(desktopApps, app)
 		}
 	}
 
+	sort.SliceStable(desktopApps, func(i, j int) bool {
+		leftCategory := strings.ToLower(desktopAppCategory(desktopApps[i]))
+		rightCategory := strings.ToLower(desktopAppCategory(desktopApps[j]))
+		if leftCategory != rightCategory {
+			return leftCategory < rightCategory
+		}
+		leftName := strings.ToLower(desktopApps[i].Name)
+		rightName := strings.ToLower(desktopApps[j].Name)
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		return desktopApps[i].Name < desktopApps[j].Name
+	})
 	return desktopApps
 }
 
+func (m *SetupModel) getAvailableDesktopApps() []string {
+	availableApps := getAvailableDesktopApps(m.settings, m.system.detectedPlatform)
+	desktopApps := make([]string, 0, len(availableApps))
+	for _, app := range availableApps {
+		desktopApps = append(desktopApps, app.Name)
+	}
+	return desktopApps
+}
+
+func (m *SetupModel) desktopAppEntries() []types.CrossPlatformApp {
+	apps := append([]types.CrossPlatformApp(nil), m.system.desktopAppDetails...)
+	if len(apps) == 0 {
+		apps = make([]types.CrossPlatformApp, 0, len(m.system.desktopApps))
+		for _, name := range m.system.desktopApps {
+			apps = append(apps, types.CrossPlatformApp{Name: name, Category: "Other"})
+		}
+	}
+	sort.SliceStable(apps, func(i, j int) bool {
+		leftCategory := strings.ToLower(desktopAppCategory(apps[i]))
+		rightCategory := strings.ToLower(desktopAppCategory(apps[j]))
+		if leftCategory != rightCategory {
+			return leftCategory < rightCategory
+		}
+		leftName := strings.ToLower(apps[i].Name)
+		rightName := strings.ToLower(apps[j].Name)
+		if leftName != rightName {
+			return leftName < rightName
+		}
+		return apps[i].Name < apps[j].Name
+	})
+	return apps
+}
+
+func desktopAppCategory(app types.CrossPlatformApp) string {
+	if strings.TrimSpace(app.Category) == "" {
+		return "Other"
+	}
+	return app.Category
+}
+
 // isDesktopApp determines if an app is a desktop/GUI application
-func (m *SetupModel) isDesktopApp(app types.CrossPlatformApp) bool {
+func isDesktopApp(app types.CrossPlatformApp) bool {
 	desktopCategories := []string{
 		"Text Editors", "IDEs", "Browsers", "Communication",
-		"Media", "Graphics", "Productivity", "Utility",
+		"Media", "Graphics", "Productivity", "Utility", "Optional Apps",
+		"Terminal Emulators",
 	}
 
 	for _, category := range desktopCategories {
@@ -184,24 +227,20 @@ func (m *SetupModel) isDesktopApp(app types.CrossPlatformApp) bool {
 		}
 	}
 
-	// Also check for known desktop apps by name
 	desktopApps := []string{
 		"Visual Studio Code", "IntelliJ IDEA", "Firefox", "Chrome",
 		"Discord", "Slack", "VLC", "GIMP", "Typora", "Ulauncher",
 	}
-
 	for _, desktopApp := range desktopApps {
 		if app.Name == desktopApp {
 			return true
 		}
 	}
-
 	return false
 }
 
-// isCompatibleWithPlatform checks if an app is available for the current platform
-func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
-	switch m.system.detectedPlatform.OS {
+func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
+	switch detectedPlatform.OS {
 	case "linux":
 		return app.Linux.InstallCommand != ""
 	case "darwin":
@@ -213,20 +252,19 @@ func (m *SetupModel) isCompatibleWithPlatform(app types.CrossPlatformApp) bool {
 	}
 }
 
+func isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
+	if detectedPlatform.DesktopEnv == "unknown" || detectedPlatform.DesktopEnv == "" {
+		return true
+	}
+	if detectedPlatform.OS != "linux" {
+		return true
+	}
+	return app.IsCompatibleWithDesktopEnvironment(detectedPlatform.DesktopEnv)
+}
+
 // isCompatibleWithDesktopEnvironment checks if an app is compatible with the detected desktop environment
 func (m *SetupModel) isCompatibleWithDesktopEnvironment(app types.CrossPlatformApp) bool {
-	// If no desktop environment detected, allow all apps
-	if m.system.detectedPlatform.DesktopEnv == "unknown" || m.system.detectedPlatform.DesktopEnv == "" {
-		return true
-	}
-
-	// For non-Linux systems, all desktop apps are compatible with the OS-level desktop
-	if m.system.detectedPlatform.OS != "linux" {
-		return true
-	}
-
-	// Use the app's built-in desktop environment compatibility check
-	return app.IsCompatibleWithDesktopEnvironment(m.system.detectedPlatform.DesktopEnv)
+	return isCompatibleWithDesktopEnvironment(app, m.system.detectedPlatform)
 }
 
 // getSelectedLanguages returns the list of selected programming languages
@@ -243,9 +281,9 @@ func (m *SetupModel) getSelectedLanguages() []string {
 // getSelectedDesktopApps returns the list of selected desktop applications
 func (m *SetupModel) getSelectedDesktopApps() []string {
 	var selected []string
-	for i, app := range m.system.desktopApps {
-		if m.selections.selectedApps[i] {
-			selected = append(selected, app)
+	for _, app := range m.desktopAppEntries() {
+		if m.selections.selectedDesktopApps[app.Name] {
+			selected = append(selected, app.Name)
 		}
 	}
 	return selected

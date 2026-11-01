@@ -87,7 +87,7 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 	var maxItems int
 	switch m.step {
 	case StepDesktopApps:
-		maxItems = len(m.system.desktopApps)
+		maxItems = len(m.desktopAppEntries())
 	case StepLanguages:
 		maxItems = len(m.system.languages)
 	case StepDatabases:
@@ -112,7 +112,15 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 	switch m.step {
 	case StepDesktopApps:
-		m.selections.selectedApps[m.cursor] = !m.selections.selectedApps[m.cursor]
+		apps := m.desktopAppEntries()
+		if m.cursor < 0 || m.cursor >= len(apps) {
+			return m, nil
+		}
+		if m.selections.selectedDesktopApps == nil {
+			m.selections.selectedDesktopApps = make(map[string]bool)
+		}
+		name := apps[m.cursor].Name
+		m.selections.selectedDesktopApps[name] = !m.selections.selectedDesktopApps[name]
 	case StepLanguages:
 		m.selections.selectedLangs[m.cursor] = !m.selections.selectedLangs[m.cursor]
 	case StepDatabases:
