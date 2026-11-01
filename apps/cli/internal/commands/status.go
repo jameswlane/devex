@@ -61,7 +61,17 @@ Examples:
   devex status --category development
   
   # Get JSON output for automation
-  devex status --app docker --json`,
+  devex status --app docker --format json
+
+Without --app, --all, or --category, status checks every application DevEx
+has recorded as installed.
+
+Exit codes:
+  0  every checked application is healthy, has warnings, or cannot be checked (unknown)
+  1  at least one checked application is not installed or reported an error,
+     or an --app name is not known to DevEx
+
+Warnings go to stderr, so --format json|yaml output on stdout stays parseable.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if templateID != "" {
 				if len(apps) > 0 || all || category != "" || fix {
@@ -103,6 +113,7 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 	ctx := context.Background()
 
 	var appsToCheck []types.AppConfig
+	unknownApps := 0
 
 	// Determine which applications to check. Without --app or --category,
 	// check every application DevEx has recorded as installed.
@@ -135,7 +146,9 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 					if app, err := settings.GetApplicationByName(name); err == nil {
 						appsToCheck = append(appsToCheck, *app)
 					} else {
-						fmt.Printf("Warning: Unknown application '%s': not tracked by DevEx and not found in configuration\n", name)
+						// Warnings go to stderr so JSON/YAML output on stdout stays parseable.
+						fmt.Fprintf(os.Stderr, "Warning: Unknown application '%s': not tracked by DevEx and not found in configuration\n", name)
+						unknownApps++
 					}
 				}
 			}
@@ -150,7 +163,14 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 	}
 
 	if len(appsToCheck) == 0 {
-		fmt.Println("No applications to check")
+		if format == "table" || format == "" {
+			fmt.Println("No applications to check")
+		} else if err := outputResults([]status.AppStatus{}, format, verbose); err != nil {
+			return err
+		}
+		if unknownApps > 0 {
+			return fmt.Errorf("%d requested application(s) are not known to DevEx", unknownApps)
+		}
 		return nil
 	}
 
@@ -173,22 +193,33 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 
 	// Exit non-zero when any application is in an error state so scripts and
 	// CI can rely on the status command.
-	return statusErrorSummary(results)
-}
-
-// statusErrorSummary returns an error naming how many results are in the
-// "error" state, or nil when there are none.
-func statusErrorSummary(results []status.AppStatus) error {
-	errorCount := 0
-	for _, result := range results {
-		if result.Status == "error" {
-			errorCount++
-		}
+	if err := statusErrorSummary(results); err != nil {
+		return err
 	}
-	if errorCount > 0 {
-		return fmt.Errorf("%d of %d application(s) reported errors", errorCount, len(results))
+	if unknownApps > 0 {
+		return fmt.Errorf("%d requested application(s) are not known to DevEx", unknownApps)
 	}
 	return nil
+}
+
+// statusErrorSummary returns an error naming how many results are missing or
+// in the "error" state, or nil when there are none. The command exits 1 when it
+// returns an error.
+func statusErrorSummary(results []status.AppStatus) error {
+	missing, failed := 0, 0
+	for _, result := range results {
+		switch result.Status {
+		case "not_installed":
+			missing++
+		case "error":
+			failed++
+		}
+	}
+	if missing+failed == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d of %d application(s) not installed or in error (%d not installed, %d errors)",
+		missing+failed, len(results), missing, failed)
 }
 
 // listTrackedApps returns the applications recorded as installed, with their

@@ -3,7 +3,10 @@
 package e2e_test
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -42,5 +45,21 @@ var _ = Describe("Canonical configuration layout", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(files)).To(ContainSubstring("applications/development/git.yaml"))
 		Expect(string(files)).To(ContainSubstring("applications/databases/postgresql.yaml"))
+
+		// Scripts rely on `status --format json`: stdout must be valid JSON and the
+		// exit code must match the reported state (0 installed, 1 missing or error).
+		stdout, stderr, err := sandbox.runWithStderr(home, sandbox.binary, time.Minute, nil, "status", "--app", "git", "--format", "json")
+		var results []map[string]any
+		Expect(json.Unmarshal([]byte(stdout), &results)).To(Succeed(), "status JSON must parse:\nstdout: %s\nstderr: %s", stdout, stderr)
+		Expect(results).To(HaveLen(1))
+		Expect(results[0]).To(HaveKeyWithValue("name", "git"))
+		switch results[0]["status"] {
+		case "not_installed", "error":
+			var exitErr *exec.ExitError
+			Expect(errors.As(err, &exitErr)).To(BeTrue(), "a missing or failed app must exit non-zero: %v", err)
+			Expect(exitErr.ExitCode()).To(Equal(1))
+		default:
+			Expect(err).NotTo(HaveOccurred(), "status %v must exit 0:\nstderr: %s", results[0]["status"], stderr)
+		}
 	})
 })

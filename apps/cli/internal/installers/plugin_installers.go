@@ -109,6 +109,11 @@ type pluginExecutor interface {
 	ExecutePluginWithContext(context.Context, string, []string) error
 }
 
+// pluginIOExecutor is implemented by executors that accept caller-owned streams.
+type pluginIOExecutor interface {
+	ExecutePluginWithIO(context.Context, string, []string, sdk.OperationIO) error
+}
+
 // PluginBasedInstaller wraps plugin execution in the BaseInstaller interface
 type PluginBasedInstaller struct {
 	method          string
@@ -166,7 +171,7 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		// Plugins currently use the same error exit for an absent package and a
 		// discovery failure. Neither is proof of absence: preserve the error and
 		// tracking until the plugin protocol can distinguish them.
-		if err := p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args); err != nil {
+		if err := p.executeQuietly(pluginName, args); err != nil {
 			return false, fmt.Errorf("plugin %s installation check failed: %w", pluginName, err)
 		}
 		return true, nil
@@ -177,6 +182,16 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 		// the package was present.
 		return true, nil
 	}
+}
+
+// executeQuietly runs a read-only plugin query with its output on stderr, so
+// commands that print machine-readable results (for example
+// `devex status --format json`) keep stdout clean.
+func (p *PluginBasedInstaller) executeQuietly(pluginName string, args []string) error {
+	if io, ok := p.pluginBootstrap.(pluginIOExecutor); ok {
+		return io.ExecutePluginWithIO(p.context(), pluginName, args, sdk.OperationIO{Stdout: os.Stderr, Stderr: os.Stderr})
+	}
+	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
 }
 
 // catalogPackageArguments normalizes package-manager command prefixes, not shell
