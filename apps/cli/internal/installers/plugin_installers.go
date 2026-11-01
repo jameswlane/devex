@@ -10,6 +10,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
@@ -328,6 +329,15 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	if err := executeInstallCommand(ctx, app, repo); err != nil {
 		return fmt.Errorf("failed to execute install command: %w", err)
 	}
+
+	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
+	configfiles.Apply(ctx, app.Name, app.ConfigFiles, false, func(message string) {
+		if strings.HasPrefix(message, "Warning:") {
+			log.Warn(message)
+		} else {
+			log.Info(message)
+		}
+	})
 
 	// Execute post-install commands
 	if err := runInstallCommands(ctx, app.PostInstall, policy); err != nil {

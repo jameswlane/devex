@@ -58,4 +58,24 @@ var _ = Describe("Install privilege previews", func() {
 		Expect(previewInstallation(context.Background(), apps, nil, &out)).To(Succeed())
 		Expect(out.String()).To(ContainSubstring("scope: unspecified"))
 	})
+	It("previews configuration copies and backups without writes even with unavailable plugin metadata", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		source, destination := filepath.Join(home, "source"), filepath.Join(home, "config")
+		Expect(os.WriteFile(source, []byte("new"), 0600)).To(Succeed())
+		Expect(os.WriteFile(destination, []byte("original"), 0600)).To(Succeed())
+		apps := []types.CrossPlatformApp{{Name: "preview-config", AllPlatforms: types.OSConfig{
+			InstallMethod: "unavailable", ConfigFiles: []types.ConfigFile{{Source: "$HOME/source", Destination: "~/config"}},
+		}}}
+		var out bytes.Buffer
+		Expect(previewInstallation(ctx, apps, nil, &out)).To(Succeed())
+		Expect(out.String()).To(And(ContainSubstring("Copy "+source), ContainSubstring("Back up "+destination), ContainSubstring(".devex-bak")))
+		data, err := os.ReadFile(destination)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(data)).To(Equal("original"))
+		entries, err := os.ReadDir(home)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(entries).To(HaveLen(2))
+	})
+
 })

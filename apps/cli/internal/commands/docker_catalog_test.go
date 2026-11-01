@@ -207,7 +207,8 @@ dpkg() { echo amd64; }
 			definition, err := repo.Get("installed-app-definition:docker")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(definition).To(BeEmpty())
-			Expect(configPath).NotTo(BeAnExistingFile())
+			// Declared but untracked user configuration survives uninstall.
+			Expect(configPath).To(BeAnExistingFile())
 		} else {
 			Expect(configPath).To(BeAnExistingFile())
 		}
