@@ -192,7 +192,9 @@ func edit(path string, entries, known []string, merge bool) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer os.Remove(temp.Name())
+	// After a successful rename the temp name no longer exists; ignoring the
+	// error here only skips cleanup of a file that is already gone.
+	defer func() { _ = os.Remove(temp.Name()) }()
 	if err = temp.Chmod(mode); err == nil {
 		_, err = temp.WriteString(updated)
 	}
