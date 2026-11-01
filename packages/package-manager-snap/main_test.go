@@ -43,15 +43,28 @@ exit 0
 
 		// Create mock sudo script that passes arguments through
 		mockSudo := filepath.Join(tempDir, "sudo")
+		// Skip sudo options (-n, -H, -u USER, -v) up to "--"; with no command left
+		// (an authorization check such as "sudo -n -v") succeed.
 		mockSudoScript := `#!/bin/sh
-case "$1" in
-	--) shift; exec "$@";;
-	*) exec "$@";;
-esac
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--) shift; break;;
+		-u) shift 2;;
+		-*) shift;;
+		*) break;;
+	esac
+done
+[ $# -eq 0 ] && exit 0
+exec "$@"
 `
 		Expect(os.WriteFile(mockSudo, []byte(mockSudoScript), 0755)).To(Succeed())
 
 		GinkgoT().Setenv("PATH", tempDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		// CI runners set CI=true, which enables unattended mode; these specs
+		// cover attended behaviour, so don't inherit it (unattended_test.go
+		// covers unattended mode explicitly).
+		GinkgoT().Setenv("CI", "")
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "")
 		plugin = NewSnapPlugin()
 	})
 
