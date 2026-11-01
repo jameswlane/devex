@@ -88,6 +88,12 @@ func (c *BootstrapCache) setCachedPlugins(plugins []string) {
 	c.pluginsTime = time.Now()
 }
 
+// PluginProgressEvent reports progress for one required plugin.
+type PluginProgressEvent = sdk.PluginProgressEvent
+
+// PluginProgressCallback receives required-plugin progress events.
+type PluginProgressCallback = sdk.PluginProgressCallback
+
 // PluginBootstrap handles the automatic plugin discovery and loading
 type PluginBootstrap struct {
 	detector       *platform.Detector
@@ -199,6 +205,11 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 
 // Initialize performs the complete plugin bootstrap process with caching
 func (b *PluginBootstrap) Initialize(ctx context.Context) error {
+	return b.InitializeWithProgress(ctx, nil)
+}
+
+// InitializeWithProgress performs plugin bootstrap and reports per-plugin download progress.
+func (b *PluginBootstrap) InitializeWithProgress(ctx context.Context, progress sdk.PluginProgressCallback) error {
 	// Try to get cached platform first
 	platform := b.cache.getCachedPlatform()
 	if platform == nil {
@@ -230,7 +241,7 @@ func (b *PluginBootstrap) Initialize(ctx context.Context) error {
 			log.Debug("Using cached required plugins list")
 		}
 
-		if err := b.downloader.DownloadRequiredPluginsWithContext(ctx, requiredPlugins); err != nil {
+		if err := b.downloader.DownloadRequiredPluginsWithContextAndProgress(ctx, requiredPlugins, progress); err != nil {
 			b.recordDownloadErrors(err)
 			var unavailableErr *sdk.RegistryUnavailableError
 			if errors.As(err, &unavailableErr) {

@@ -68,37 +68,23 @@ func (m *SetupModel) View() string {
 	case StepPluginInstall:
 		s = titleStyle.Render("📦 Installing DevEx Plugins")
 		s += "\n\n"
+		completed := 0
+		for _, status := range m.plugins.pluginStatuses {
+			if status.Status == "success" || status.Status == "error" {
+				completed++
+			}
+			s += m.renderPluginStatus(status) + "\n"
+		}
+		s += fmt.Sprintf("\n%d/%d plugins\n", completed, len(m.plugins.pluginStatuses))
 		switch {
 		case atomic.LoadInt32(&m.plugins.pluginsInstalling) == 1:
-			// Show individual plugin statuses with spinners
-			for _, status := range m.plugins.pluginStatuses {
-				s += m.renderPluginStatus(status)
-				s += "\n"
-			}
 			s += "\nThis may take a moment. Please wait..."
-		case atomic.LoadInt32(&m.plugins.pluginsInstalled) == 1:
-			if m.installation.hasErrors {
-				// Plugin registry unavailable but that's ok for development
-				s += selectedStyle.Render("✓ Plugin system initialized")
-				s += "\n\nNote: Plugin registry unavailable - continuing without plugins\n"
-			} else {
-				// Show final status of all plugins
-				for _, status := range m.plugins.pluginStatuses {
-					s += m.renderPluginStatus(status)
-					s += "\n"
-				}
-			}
-			s += "\nPress Enter to continue with setup."
 		case m.installation.hasErrors:
-			// Show plugin statuses with errors
-			for _, status := range m.plugins.pluginStatuses {
-				s += m.renderPluginStatus(status)
-				s += "\n"
-			}
-
 			s += "\n" + errorStyle.Render("⚠️  Some plugins could not be installed")
 			s += "\nDevEx will continue with core functionality."
 			s += "\n\nPress Enter to continue setup, or 'q' to quit."
+		case atomic.LoadInt32(&m.plugins.pluginsInstalled) == 1:
+			s += "\nPress Enter to continue with setup."
 		}
 
 	case StepDesktopApps:

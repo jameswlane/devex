@@ -3,7 +3,6 @@ package setup
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync/atomic"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -53,6 +52,10 @@ func (m *SetupModel) renderPluginStatus(status PluginStatus) string {
 	case "downloading":
 		icon = m.plugins.spinner.View()
 		action = "downloading"
+		if status.TotalBytes > 0 {
+			percent := min(100, max(0, float64(status.BytesDownloaded)/float64(status.TotalBytes)*100))
+			action += fmt.Sprintf(" %.0f%%", percent)
+		}
 		statusStyle = statusStyle.Foreground(lipgloss.Color("#3B82F6"))
 	case "verifying":
 		icon = m.plugins.spinner.View()
@@ -91,26 +94,48 @@ func (m *SetupModel) renderPluginStatus(status PluginStatus) string {
 }
 
 func (m *SetupModel) startPluginInstallation() tea.Cmd {
+	atomic.StoreInt32(&m.plugins.pluginsInstalling, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.plugins.pluginCancel = cancel
+	events := make(chan tea.Msg)
+	m.plugins.pluginEvents = events
 	return tea.Batch(
-		// Mark installation as in progress and start spinners
-		func() tea.Msg {
-			atomic.StoreInt32(&m.plugins.pluginsInstalling, 1)
-			return m.plugins.spinner.Tick
-		},
-		// Start the actual plugin installation immediately
-		m.runPluginInstallation(),
+		m.plugins.spinner.Tick,
+		m.runPluginInstallation(ctx, events),
+		waitForPluginInstallationEvent(events),
 	)
 }
 
+func waitForPluginInstallationEvent(events <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-events
+		if !ok {
+			return nil
+		}
+		return msg
+	}
+}
+
+func (m *SetupModel) waitForNextPluginEvent() tea.Cmd {
+	if m.plugins.pluginEvents == nil {
+		return nil
+	}
+	return waitForPluginInstallationEvent(m.plugins.pluginEvents)
+}
+
 // initializePlugins shares one initialization attempt, including failures, across setup stages.
-func (m *SetupModel) initializePlugins(ctx context.Context) (*bootstrap.PluginBootstrap, error) {
+func (m *SetupModel) initializePlugins(ctx context.Context, callbacks ...bootstrap.PluginProgressCallback) (*bootstrap.PluginBootstrap, error) {
 	m.pluginOnce.Do(func() {
 		m.pluginBootstrap, m.pluginError = bootstrap.NewPluginBootstrap(viper.GetBool("skip-plugin-download") || viper.GetBool("offline"))
 		if m.pluginError != nil {
 			m.pluginError = fmt.Errorf("create setup plugin system: %w; check permissions on $DEVEX_DATA_DIR/plugins", m.pluginError)
 			return
 		}
-		m.pluginError = m.pluginBootstrap.Initialize(ctx)
+		var callback bootstrap.PluginProgressCallback
+		if len(callbacks) > 0 {
+			callback = callbacks[0]
+		}
+		m.pluginError = m.pluginBootstrap.InitializeWithProgress(ctx, callback)
 		if m.pluginError == nil {
 			installers.InitializeWithPluginBootstrap(m.pluginBootstrap)
 		}
@@ -118,172 +143,79 @@ func (m *SetupModel) initializePlugins(ctx context.Context) (*bootstrap.PluginBo
 	return m.pluginBootstrap, m.pluginError
 }
 
-func (m *SetupModel) runPluginInstallation() tea.Cmd {
+// runPluginInstallation captures input on the update loop. Its command reports
+// events only; plugin status changes belong to Update.
+func (m *SetupModel) runPluginInstallation(parent context.Context, events chan<- tea.Msg) tea.Cmd {
+	requiredPlugins := append([]string(nil), m.plugins.requiredPlugins...)
+	timeout := m.plugins.timeout
 	return func() tea.Msg {
-		// Pre-allocate error collection with bounds checking for memory safety
-		allErrors := make([]error, 0, MaxErrorMessages)
-
-		// Create context with configurable timeout for plugin installation.
-		ctx, cancel := context.WithTimeout(context.Background(), m.plugins.timeout)
+		defer close(events)
+		ctx, cancel := context.WithTimeout(parent, timeout)
 		defer cancel()
-
-		log.Info("Initializing plugin system with required plugins", "plugins", m.plugins.requiredPlugins, "timeout", m.plugins.timeout.String())
-
-		// Update plugin statuses to show downloading
-		for i := range m.plugins.requiredPlugins {
-			if i < len(m.plugins.pluginStatuses) {
-				m.plugins.pluginStatuses[i].Status = "downloading"
+		send := func(msg tea.Msg) {
+			select {
+			case events <- msg:
+			case <-parent.Done():
 			}
 		}
-
-		// Initialize plugins and collect any errors
-		pluginBootstrap, err := m.initializePlugins(ctx)
-		if err != nil {
-			log.Error("Failed to bootstrap plugins", err)
-			allErrors = addErrorSafe(allErrors, fmt.Errorf("plugin initialization failed: %w", err))
-
-			// Check for context cancellation/timeout
-			if ctx.Err() != nil {
-				timeoutErr := fmt.Errorf("plugin installation timed out after %v. This may indicate network issues or system resource constraints. Try increasing DEVEX_PLUGIN_TIMEOUT or check your network connection: %w", m.plugins.timeout, ctx.Err())
-				allErrors = addErrorSafe(allErrors, timeoutErr)
+		allErrors := make([]error, 0, MaxErrorMessages)
+		pluginBootstrap, initErr := m.initializePlugins(ctx, func(event bootstrap.PluginProgressEvent) {
+			status := string(event.Stage)
+			if event.Stage == "done" {
+				status = "success"
 			}
-			// Continue to verify what plugins were installed despite errors
+			send(PluginInstallMsg{
+				PluginName: event.PluginName, Status: status, Error: event.Err,
+				BytesDownloaded: event.BytesDownloaded, TotalBytes: event.TotalBytes,
+			})
+		})
+		if initErr != nil {
+			allErrors = addErrorSafe(allErrors, fmt.Errorf("plugin initialization failed: %w", initErr))
 		}
 
-		if pluginBootstrap == nil {
-			return PluginInstallCompleteMsg{Errors: allErrors, TotalCount: len(m.plugins.requiredPlugins)}
-		}
-
-		// Don't immediately update plugin statuses - let the simulation complete first
-		// The final status updates will be sent after the delay
-		var finalSuccessfulPlugins []string
-		if err == nil {
-			// If bootstrap succeeded, plugins are considered successful
-			finalSuccessfulPlugins = append(finalSuccessfulPlugins, m.plugins.requiredPlugins...)
-			log.Info("Plugin system initialized successfully", "plugins", len(finalSuccessfulPlugins))
-		} else {
-			log.Warn("Plugin system initialization had issues", "error", err)
-		}
-
-		// The Initialize function already downloads required plugins based on platform detection
-		// Only perform validation if we have a working plugin system (not in skip-download mode)
-		var validationSummary *ValidationSummary
-
-		// Check if we're in a mode where plugins should be validated
-		// Skip validation if we know the registry is unavailable
-		skipValidation := false
-		if len(allErrors) > 0 {
-			// Check if all errors are registry-related
-			for _, err := range allErrors {
-				if strings.Contains(err.Error(), "registry") || strings.Contains(err.Error(), "404") {
-					skipValidation = true
-					break
-				}
-			}
-		}
-
-		if !skipValidation && len(m.plugins.requiredPlugins) > 0 {
-			// Perform enhanced plugin validation with security and performance improvements
-			validatorConfig := PluginValidatorConfig{
-				VerifyChecksums:     true,  // Enable checksum verification
-				VerifySignatures:    false, // Enable in Phase 2
-				Concurrency:         4,     // Reasonable parallel verification limit
-				FailOnCritical:      false, // Don't fail early for missing plugins in dev
+		results := make(map[string]PluginValidationResult)
+		if pluginBootstrap != nil && ctx.Err() == nil {
+			validator := NewPluginValidator(pluginBootstrap, PluginValidatorConfig{
+				VerifyChecksums: true, Concurrency: 4,
 				CriticalPlugins:     []string{"tool-shell", "desktop-gnome", "desktop-kde", "tool-git"},
-				VerificationTimeout: PluginVerifyTimeout, // Per-plugin timeout
-			}
-
-			validator := NewPluginValidator(pluginBootstrap, validatorConfig)
-			validationSummary = validator.ValidatePlugins(ctx, m.plugins.requiredPlugins)
-		} else {
-			// Create a dummy validation summary for skipped validation
-			validationSummary = &ValidationSummary{
-				TotalPlugins:   len(m.plugins.requiredPlugins),
-				ValidPlugins:   0,
-				InvalidPlugins: 0,
-				ValidationTime: 0,
-				Results:        []PluginValidationResult{},
-				Errors:         []error{},
-			}
-			log.Info("Skipping plugin validation - registry unavailable")
-		}
-
-		log.Info("Plugin validation completed",
-			"totalPlugins", validationSummary.TotalPlugins,
-			"validPlugins", validationSummary.ValidPlugins,
-			"invalidPlugins", validationSummary.InvalidPlugins,
-			"validationTime", validationSummary.ValidationTime,
-		)
-
-		// Add validation errors to the error collection, but be graceful about plugin availability
-		if validationSummary.InvalidPlugins > 0 && validationSummary.ValidPlugins == 0 {
-			// If all plugins failed validation and none succeeded, it's likely a registry/network issue
-			// Log as warning instead of hard error
-			log.Warn("Plugin validation failed - likely due to registry unavailability",
-				"invalidPlugins", validationSummary.InvalidPlugins,
-				"validPlugins", validationSummary.ValidPlugins,
-			)
-			// Don't add these as hard errors that would fail the setup
-		} else {
-			// Add validation errors to the error collection for genuine plugin issues
-			for _, err := range validationSummary.Errors {
-				allErrors = addErrorSafe(allErrors, err)
+				VerificationTimeout: PluginVerifyTimeout,
+			})
+			for _, result := range validator.ValidatePlugins(ctx, requiredPlugins).Results {
+				results[result.PluginName] = result
 			}
 		}
 
-		// Log detailed results for debugging
-		for _, result := range validationSummary.Results {
-			if result.IsValid {
-				log.Info("Plugin validated successfully",
-					"name", result.PluginName,
-					"checksumValid", result.ChecksumValid,
-					"validationTime", result.ValidationTime,
-				)
-			} else {
-				log.Warn("Plugin validation failed",
-					"name", result.PluginName,
-					"error", result.Error,
-					"validationTime", result.ValidationTime,
-				)
-			}
-		}
-
-		// Extract successful plugin names from validation results
 		var successfulPlugins []string
-		for _, result := range validationSummary.Results {
-			if result.IsValid {
-				successfulPlugins = append(successfulPlugins, result.PluginName)
-			}
-		}
-
-		// Update final plugin statuses immediately
-		if err == nil && len(allErrors) == 0 {
-			// Mark all plugins as successful if no errors
-			for i := range m.plugins.requiredPlugins {
-				if i < len(m.plugins.pluginStatuses) {
-					m.plugins.pluginStatuses[i].Status = "success"
+		for _, name := range requiredPlugins {
+			pluginErr := initErr
+			if pluginBootstrap != nil {
+				if downloadErr := pluginBootstrap.PluginDownloadError(name); downloadErr != nil {
+					pluginErr = downloadErr
 				}
 			}
-		} else {
-			// Mark plugins based on actual validation results
-			for i := range m.plugins.requiredPlugins {
-				if i < len(m.plugins.pluginStatuses) {
-					if validationSummary != nil && validationSummary.InvalidPlugins > 0 {
-						// Show as warning if plugins just aren't available (registry issue)
-						m.plugins.pluginStatuses[i].Status = "error"
-						m.plugins.pluginStatuses[i].Error = "Registry unavailable"
-					} else {
-						m.plugins.pluginStatuses[i].Status = "success"
-					}
+			result, validated := results[name]
+			if pluginErr == nil && (!validated || !result.IsValid) {
+				pluginErr = result.Error
+				if pluginErr == nil {
+					pluginErr = ctx.Err()
+				}
+				if pluginErr == nil {
+					pluginErr = fmt.Errorf("plugin %s is unavailable", name)
 				}
 			}
+			if pluginErr != nil {
+				send(PluginInstallMsg{PluginName: name, Status: "error", Error: pluginErr})
+				allErrors = addErrorSafe(allErrors, pluginErr)
+			} else {
+				send(PluginInstallMsg{PluginName: name, Status: "success"})
+				successfulPlugins = append(successfulPlugins, name)
+			}
 		}
-
-		return PluginInstallCompleteMsg{
-			Errors:            allErrors,
-			SuccessCount:      validationSummary.ValidPlugins,
-			TotalCount:        len(m.plugins.requiredPlugins),
-			SuccessfulPlugins: finalSuccessfulPlugins,
-		}
+		log.Info("Plugin installation completed", "installed", len(successfulPlugins), "total", len(requiredPlugins))
+		send(PluginInstallCompleteMsg{
+			Errors: allErrors, SuccessCount: len(successfulPlugins),
+			TotalCount: len(requiredPlugins), SuccessfulPlugins: successfulPlugins,
+		})
+		return nil
 	}
 }

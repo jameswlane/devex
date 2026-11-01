@@ -132,9 +132,11 @@ func (is *InstallationState) isInstalling() bool {
 
 // PluginStatus represents the status of a single plugin
 type PluginStatus struct {
-	Name   string
-	Status string // "pending", "downloading", "verifying", "installing", "success", "error"
-	Error  string
+	Name            string
+	Status          string // "pending", "downloading", "verifying", "installing", "success", "error"
+	Error           string
+	BytesDownloaded int64
+	TotalBytes      int64
 }
 
 // PluginState manages plugin installation state
@@ -148,6 +150,8 @@ type PluginState struct {
 	pluginStatuses    []PluginStatus  // Track status of each plugin
 	pluginSpinners    []spinner.Model // Individual spinners for each plugin
 	spinner           spinner.Model   // Spinner for plugin installation
+	pluginCancel      context.CancelFunc
+	pluginEvents      <-chan tea.Msg
 }
 
 // SystemInfo contains detected system information and available options
