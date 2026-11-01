@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -219,7 +220,7 @@ func (a *APTInstaller) handleInstall(ctx context.Context, args []string) error {
 
 	// Update package lists first
 	a.getLogger().Println("Updating package lists...")
-	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
+	if err := a.execMutation("update", "update"); err != nil {
 		a.getLogger().Warning("Failed to update package lists: %v", err)
 	}
 
@@ -230,7 +231,7 @@ func (a *APTInstaller) handleInstall(ctx context.Context, args []string) error {
 
 	// Install packages
 	cmdArgs := append([]string{"install", "-y"}, args...)
-	if err := a.ExecManagerCommand("install", true, cmdArgs...); err != nil {
+	if err := a.execMutation("install", cmdArgs...); err != nil {
 		return fmt.Errorf("failed to install packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
@@ -282,7 +283,7 @@ func (a *APTInstaller) handleRemove(ctx context.Context, args []string) error {
 
 	// Remove packages
 	cmdArgs := append([]string{"remove", "-y"}, packagesToRemove...)
-	if err := a.ExecManagerCommand("remove", true, cmdArgs...); err != nil {
+	if err := a.execMutation("remove", cmdArgs...); err != nil {
 		return fmt.Errorf("failed to remove packages [%s]: %w", strings.Join(args, ", "), err)
 	}
 
@@ -293,7 +294,7 @@ func (a *APTInstaller) handleRemove(ctx context.Context, args []string) error {
 // handleUpdate updates package lists
 func (a *APTInstaller) handleUpdate(ctx context.Context, args []string) error {
 	a.getLogger().Println("Updating package lists...")
-	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
+	if err := a.execMutation("update", "update"); err != nil {
 		return fmt.Errorf("failed to update package lists: %w", err)
 	}
 	a.getLogger().Success("Package lists updated successfully")
@@ -305,12 +306,12 @@ func (a *APTInstaller) handleUpgrade(ctx context.Context, args []string) error {
 	a.getLogger().Println("Upgrading installed packages...")
 
 	// Update first
-	if err := a.ExecManagerCommand("update", true, "update"); err != nil {
+	if err := a.execMutation("update", "update"); err != nil {
 		return fmt.Errorf("failed to update package lists: %w", err)
 	}
 
 	// Then upgrade
-	if err := a.ExecManagerCommand("upgrade", true, "upgrade", "-y"); err != nil {
+	if err := a.execMutation("upgrade", "upgrade", "-y"); err != nil {
 		return fmt.Errorf("failed to upgrade packages: %w", err)
 	}
 
@@ -469,4 +470,13 @@ func (a *APTInstaller) validatePackagesParallel(packages []string) error {
 	}
 
 	return firstError
+}
+
+func (a *APTInstaller) execMutation(operation string, args ...string) error {
+	if !sdk.Unattended() {
+		return a.ExecManagerCommand(operation, true, args...)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), a.GetTimeout(operation))
+	defer cancel()
+	return sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, Name: "apt-get", Args: args, Unattended: true, Env: []string{"DEBIAN_FRONTEND=noninteractive"}}, sdk.OperationIO{Stdout: os.Stdout, Stderr: os.Stderr})
 }

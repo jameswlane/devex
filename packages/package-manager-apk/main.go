@@ -125,7 +125,7 @@ func (p *APKPlugin) handleInstall(ctx context.Context, args []string) error {
 	}
 
 	// Install packages
-	cmdArgs := append([]string{"add", "--no-cache"}, args...)
+	cmdArgs := append([]string{"--no-interactive", "add", "--no-cache"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "apk", cmdArgs...)
 }
 
@@ -136,7 +136,7 @@ func (p *APKPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"del"}, args...)
+	cmdArgs := append([]string{"--no-interactive", "del"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "apk", cmdArgs...)
 }
 
@@ -154,7 +154,7 @@ func (p *APKPlugin) handleUpgrade(ctx context.Context, args []string) error {
 	}
 
 	// Then upgrade
-	return sdk.ExecCommandWithContext(ctx, true, "apk", "upgrade")
+	return sdk.ExecCommandWithContext(ctx, true, "apk", "--no-interactive", "upgrade")
 }
 
 func (p *APKPlugin) handleSearch(ctx context.Context, args []string) error {

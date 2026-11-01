@@ -91,7 +91,7 @@ func (p *EmergePlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
+	cmdArgs := append([]string{"--ask=n"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "emerge", cmdArgs...)
 }
 
@@ -102,13 +102,13 @@ func (p *EmergePlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
+	cmdArgs := append([]string{"--ask=n", "--depclean"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "emerge", cmdArgs...)
 }
 
 func (p *EmergePlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "emerge", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "emerge", "--ask=n", "--sync")
 }
 
 func (p *EmergePlugin) handleSearch(ctx context.Context, args []string) error {

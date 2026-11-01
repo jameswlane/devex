@@ -30,6 +30,7 @@ func NewRunsCmd() *cobra.Command {
 	cmd.AddCommand(newRunsShowCmd())
 	cmd.AddCommand(newRunsResourcesCmd())
 	cmd.AddCommand(newRunsOperationsCmd())
+	cmd.AddCommand(newRunsAuditCmd())
 	return cmd
 }
 
@@ -298,4 +299,47 @@ func formatStateNotFound(kind string, id string, err error) error {
 		return fmt.Errorf("%s '%s' not found", kind, id)
 	}
 	return err
+}
+
+// newRunsAuditCmd exports immutable installation events in database sequence order.
+func newRunsAuditCmd() *cobra.Command {
+	var filter state.AuditFilter
+	var format string
+	var status string
+	cmd := &cobra.Command{
+		Use: "audit", Short: "Query installation audit start/result events",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if format != "json" {
+				return fmt.Errorf("unsupported audit format %q (use json)", format)
+			}
+			filter.Status = state.OperationStatus(status)
+			switch filter.Status {
+			case "", state.OperationStatusRunning, state.OperationStatusSucceeded, state.OperationStatusFailed, state.OperationStatusCanceled, state.OperationStatusSkipped:
+			default:
+				return fmt.Errorf("invalid audit status %q", status)
+			}
+			path, err := state.ConfiguredDBPath()
+			if err != nil {
+				return err
+			}
+			store, err := state.OpenBoltStore(path, 0o600)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+			events, err := store.ListAudit(filter)
+			if err != nil {
+				return err
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(events)
+		},
+	}
+	cmd.Flags().StringVar(&format, "format", "json", "Output format (json; schema_version 1)")
+	cmd.Flags().StringVar(&filter.RunID, "run-id", "", "Filter by installation run ID")
+	cmd.Flags().StringVar(&filter.Target, "app", "", "Filter by exact application name")
+	cmd.Flags().StringVar(&filter.Mode, "mode", "", "Filter by plain or tui")
+	cmd.Flags().StringVar(&filter.Event, "event", "", "Filter by start or result")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by running, succeeded, failed, canceled, or skipped")
+	return cmd
 }

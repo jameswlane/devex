@@ -22,9 +22,9 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"install", "git", "vim"}, nativeArgv: []string{"--yes", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "xbps-install", pending: "install is treated as a package name; omit it and pass --yes"},
-	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "git", "vim"}, nativeArgv: []string{"--yes", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "xbps-remove", pending: "removal must use xbps-remove --yes, not xbps-install remove"},
-	{command: "update", args: nil, currentArg: []string{"update"}, nativeArgv: []string{"--sync"}, elevated: true, nativeElevated: true, nativeExecutable: "xbps-install", pending: "repository refresh requires --sync, not an update package atom"},
+	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"--yes", "git", "vim"}, nativeArgv: []string{"--yes", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "xbps-install"},
+	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"--yes", "git", "vim"}, nativeArgv: []string{"--yes", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "xbps-remove"},
+	{command: "update", args: nil, currentArg: []string{"--sync"}, nativeArgv: []string{"--sync"}, elevated: true, nativeElevated: true, nativeExecutable: "xbps-install"},
 	{command: "search", args: []string{"web", "server"}, currentArg: []string{"search", "web server"}, nativeArgv: []string{"--repository", "--search", "web server"}, elevated: false, nativeElevated: false, nativeExecutable: "xbps-query", pending: "search must use xbps-query --repository --search"},
 	{command: "list", args: nil, currentArg: []string{"list"}, nativeArgv: []string{"--list-pkgs"}, elevated: false, nativeElevated: false, nativeExecutable: "xbps-query", pending: "installed query must use xbps-query --list-pkgs"},
 }
@@ -56,14 +56,14 @@ var _ = Describe("XBPS command contracts", func() {
 		contract := contract
 		It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls("xbps-install")).To(Equal([]sdktest.Call{{
+			Expect(recorder.Calls(contractExecutable(contract))).To(Equal([]sdktest.Call{{
 				Args:               contract.currentArg,
 				ElevationRequested: contract.elevated,
 			}}))
 		})
 
 		It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
-			recorder.Script("xbps-install", contract.currentArg, sdktest.Response{
+			recorder.Script(contractExecutable(contract), contract.currentArg, sdktest.Response{
 				ExitCode: 42,
 				Stderr:   "xbps failed\n",
 			})
@@ -102,3 +102,10 @@ var _ = Describe("XBPS command contracts", func() {
 		})
 	}
 })
+
+func contractExecutable(contract operationContract) string {
+	if contract.command == "remove" {
+		return "xbps-remove"
+	}
+	return "xbps-install"
+}

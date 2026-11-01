@@ -62,5 +62,5 @@ func (p *PipPlugin) installFromRequirements(ctx context.Context, files []string)
 	}
 
 	p.logger.Printf("Installing from %s...\n", requirementsFile)
-	return sdk.ExecCommandWithContext(ctx, true, "pip", "install", "-r", requirementsFile)
+	return execPip(ctx, "install", "-r", requirementsFile)
 }

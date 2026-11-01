@@ -22,9 +22,9 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"install", "git", "vim"}, nativeArgv: []string{"install", "--yes-all", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg", pending: "install omits non-interactive --yes-all"},
-	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "git", "vim"}, nativeArgv: []string{"remove", "--yes-all", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg", pending: "remove omits non-interactive --yes-all"},
-	{command: "update", args: nil, currentArg: []string{"update"}, nativeArgv: []string{"update-repo"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg", pending: "repository refresh requires update-repo, not update"},
+	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"install", "--yes-all", "git", "vim"}, nativeArgv: []string{"install", "--yes-all", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg"},
+	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "--yes-all", "git", "vim"}, nativeArgv: []string{"remove", "--yes-all", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg"},
+	{command: "update", args: nil, currentArg: []string{"update-repo"}, nativeArgv: []string{"update-repo"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg"},
 	{command: "search", args: []string{"web", "server"}, currentArg: []string{"search", "web server"}, nativeArgv: []string{"search", "web server"}, elevated: false, nativeElevated: false, nativeExecutable: "eopkg", pending: ""},
 	{command: "list", args: nil, currentArg: []string{"list"}, nativeArgv: []string{"list-installed"}, elevated: false, nativeElevated: false, nativeExecutable: "eopkg", pending: "installed query requires list-installed, not list"},
 }

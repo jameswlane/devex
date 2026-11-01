@@ -1,11 +1,10 @@
 package main
 
-// Build timestamp: 2025-09-03 17:41:19
-
 import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -43,8 +42,8 @@ func NewYayPlugin() *YayPlugin {
 			{
 				Name:        "update",
 				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Synchronize repositories and upgrade all packages",
+				Usage:       "Perform a full system and AUR upgrade",
 			},
 			{
 				Name:        "search",
@@ -58,6 +57,12 @@ func NewYayPlugin() *YayPlugin {
 				Description: "List packages",
 				Usage:       "List installed packages",
 			},
+			{
+				Name:        "is-installed",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeUser},
+				Description: "Check whether packages are installed",
+				Usage:       "Returns the native query status for one or more packages",
+			},
 		},
 	}
 
@@ -68,8 +73,6 @@ func NewYayPlugin() *YayPlugin {
 
 // Execute handles command execution
 func (p *YayPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
-
 	ctx := context.Background()
 
 	switch command {
@@ -83,52 +86,95 @@ func (p *YayPlugin) Execute(command string, args []string) error {
 		return p.handleSearch(ctx, args)
 	case "list":
 		return p.handleList(ctx, args)
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func (p *YayPlugin) handleInstall(ctx context.Context, args []string) error {
+func validateOperands(args []string, missing string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+		return fmt.Errorf("%s", missing)
 	}
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == "" || strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("invalid operand %q: provide package names or search terms, not yay options", arg)
+		}
+	}
+	return nil
+}
 
-	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
-
-	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", cmdArgs...)
+func (p *YayPlugin) handleInstall(ctx context.Context, args []string) error {
+	if err := validateOperands(args, "no packages specified"); err != nil {
+		return err
+	}
+	return p.runYay(ctx, true, append([]string{"-S", "--needed", "--noconfirm", "--answerdiff=None", "--answerclean=None"}, args...)...)
 }
 
 func (p *YayPlugin) handleRemove(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validateOperands(args, "no packages specified"); err != nil {
+		return err
 	}
-
-	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", cmdArgs...)
+	return p.runYay(ctx, false, append([]string{"-R", "--noconfirm"}, args...)...)
 }
 
 func (p *YayPlugin) handleUpdate(ctx context.Context, args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", "update")
+	if len(args) != 0 {
+		return fmt.Errorf("update takes no arguments; it synchronizes and upgrades all packages")
+	}
+	// Arch does not support partial upgrades: never refresh with -Sy alone.
+	return p.runYay(ctx, true, "-Syu", "--noconfirm")
 }
 
 func (p *YayPlugin) handleSearch(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
+	if err := validateOperands(args, "no search term specified"); err != nil {
+		return err
 	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", "search", searchTerm)
+	return p.runYay(ctx, false, append([]string{"-Ss"}, args...)...)
 }
 
 func (p *YayPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "yay", "list")
+	if len(args) != 0 {
+		return fmt.Errorf("list takes no arguments; use is-installed to query packages")
+	}
+	return p.runYay(ctx, false, "-Q")
+}
+
+func (p *YayPlugin) handleIsInstalled(ctx context.Context, args []string) error {
+	if err := validateOperands(args, "no packages specified"); err != nil {
+		return err
+	}
+	return p.runYay(ctx, false, append([]string{"-Q"}, args...)...)
+}
+
+func (p *YayPlugin) runYay(ctx context.Context, builds bool, args ...string) error {
+	// Resolve the invoking account even in an elevated DevEx process, then pin
+	// every command to it. The SDK adapter switches identity before running yay.
+	identity, err := sdk.NewPrivilegeResolver().ResolveUser(nil)
+	if err != nil {
+		return fmt.Errorf("resolve yay build user: %w", err)
+	}
+	if identity.UID == "0" {
+		return sdk.NewAuthorizationRequiredError("yay must never run as root; run DevEx as a regular user or preserve the invoking account with SUDO_USER", nil)
+	}
+	privilege := sdk.OperationPrivilege{Scope: sdk.ScopeUser, User: identity}
+	if _, err := exec.LookPath("yay"); err != nil {
+		return fmt.Errorf("yay is unavailable: install yay from a trusted Arch source as a regular user, then retry: %w", err)
+	}
+	if builds {
+		if _, err := exec.LookPath("git"); err != nil {
+			return fmt.Errorf("git is required for AUR builds; install prerequisites with sudo pacman -S --needed git base-devel: %w", err)
+		}
+		if err := sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: privilege, Name: "pacman", Args: []string{"-Q", "base-devel"}}, sdk.OperationIO{}); err != nil {
+			return fmt.Errorf("cannot verify base-devel for AUR builds; install prerequisites with sudo pacman -S --needed git base-devel: %w", err)
+		}
+	}
+	// yay alone authorizes its native pacman step through sudo. Never elevate yay.
+	if err := sdk.ExecOperationWithContext(ctx, privilege, "yay", args...); err != nil {
+		return fmt.Errorf("yay %s failed; check the output above and sudo access for yay's pacman step: %w", args[0], err)
+	}
+	return nil
 }
 
 func main() {

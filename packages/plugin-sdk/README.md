@@ -437,3 +437,54 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 </div>
 
 Operation privileges and platform adapter extension points are documented in [PRIVILEGES.md](PRIVILEGES.md).
+
+## Unattended execution
+
+The host sets `DEVEX_UNATTENDED=1` on plugin processes when non-interactive mode
+is selected, including `--non-interactive`, its Viper configuration/environment
+aliases, and CI detection. Plugins call `sdk.Unattended()` to read this contract;
+`CI=true` also enables it when a plugin is invoked directly. An unset variable
+keeps existing interactive behavior. No positional arguments or metadata fields
+are required, so existing plugin entry points remain compatible.
+
+Go hosts can use `sdk.WithUnattended(ctx)` with every `ExecutePlugin*` entry point,
+or set `ExecutionRequest.Unattended` for a scoped operation. The SDK supplies EOF
+on stdin even if the caller supplied a terminal or reader, passes the environment
+contract to child plugins, and uses `sudo -n` for elevation. macOS unattended
+operations also use non-prompting sudo instead of an authorization dialog;
+Windows requires an already-authorized administrator process. Missing elevation
+credentials return an `AuthorizationError` promptly, preserving the native exit
+status. Package-manager failures remain ordinary command failures. Provision
+sudo authorization before unattended runs; no password is read from stdin.
+`ExecutionRequest.Env` supplies per-operation environment assignments, including
+across identity/elevation boundaries, without changing host process globals.
+
+Mutating operations confirm transactions by default when the manager supports a
+safe confirmation option. Native mappings are:
+
+| Manager | Confirmation / input behavior |
+| --- | --- |
+| DNF | `install/remove/upgrade --assumeyes`; repository refresh uses `makecache` |
+| Zypper | Global `--non-interactive` before `install`, `remove`, `refresh`, or `update` |
+| APK | `--no-interactive` on add, delete, and upgrade, overriding interactive configuration |
+| emerge | `--ask=n` on package mutations and repository synchronization |
+| eopkg | `--yes-all` on install/remove |
+| XBPS | `xbps-install --yes` and `xbps-remove --yes` |
+| RPM | Native `--install` / `--erase` do not ask for confirmation; repository refresh is unsupported |
+| Snap | Native install/remove/refresh do not prompt; the SDK handles sudo |
+| Flatpak | `-y` on install/uninstall/update; unattended mode also adds `--noninteractive` to package mutations |
+| Homebrew | `NONINTERACTIVE=1` for mutating operations, preserving user scope |
+| APT | Existing `-y` on install/remove/upgrade; unattended mode sets `DEBIAN_FRONTEND=noninteractive` |
+| pip | `uninstall -y`; unattended mutations also use `--no-input` to reject credential prompts |
+| mise | Install/uninstall/upgrade require no transaction confirmation; stdin is closed in unattended mode |
+
+DEB/dpkg, AppImage, Docker, curlpipe and Nix inherit the same closed-input SDK
+contract. Native tools and installer scripts must fail on EOF if they still need
+input; unattended mode does not grant new authority or accept licenses/trust
+configuration. Use the normal caller context to bound commands that do not obey
+EOF. Pacman and yay's native argv/confirmation work is tracked separately in
+[PR #286](https://github.com/jameswlane/devex/pull/286) and
+[PR #287](https://github.com/jameswlane/devex/pull/287).
+
+Tests use `sdktest.NewRecorder` and `sdktest.CloseStdin` to run exact native argv
+contracts without native package managers or the real home directory.

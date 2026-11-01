@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -507,13 +508,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 }
 
 func cleanupConfigFiles(app *types.AppConfig) error {
-	// Clean up configuration files listed in the app config
-	for _, configFile := range app.ConfigFiles {
-		if err := removeFileIfExists(configFile.Destination); err != nil {
-			return fmt.Errorf("failed to remove config file %s: %w", configFile.Destination, err)
-		}
-	}
-	return nil
+	return configfiles.Cleanup(app.Name)
 }
 
 func cleanupDataFiles(app *types.AppConfig) error {

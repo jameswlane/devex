@@ -28,6 +28,7 @@ func NewZypperPlugin() *ZypperPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"zypper", "opensuse", "suse", "linux"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages"},
 			{
 				Name:        "install",
 				Description: "Install packages using Zypper",
@@ -72,6 +73,8 @@ func (p *ZypperPlugin) Execute(command string, args []string) error {
 		return p.handleInstall(ctx, args)
 	case "remove":
 		return p.handleRemove(ctx, args)
+	case "upgrade":
+		return sdk.ExecCommandWithContext(ctx, true, "zypper", append([]string{"--non-interactive", "update"}, args...)...)
 	case "update":
 		return p.handleUpdate(ctx, args)
 	case "search":
@@ -91,7 +94,7 @@ func (p *ZypperPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
+	cmdArgs := append([]string{"--non-interactive", "install"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "zypper", cmdArgs...)
 }
 
@@ -102,13 +105,13 @@ func (p *ZypperPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
+	cmdArgs := append([]string{"--non-interactive", "remove"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "zypper", cmdArgs...)
 }
 
 func (p *ZypperPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "zypper", "update")
+	return sdk.ExecCommandWithContext(ctx, true, "zypper", "--non-interactive", "refresh")
 }
 
 func (p *ZypperPlugin) handleSearch(ctx context.Context, args []string) error {

@@ -21,10 +21,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -630,7 +632,28 @@ func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager 
 //
 // Returns:
 //   - error: joined per-app failures, cancellation, or authorization errors; nil on success
-func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
+func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) (result error) {
+	ctx = state.WithInstallationAudit(ctx, "tui", struct {
+		Apps     []types.CrossPlatformApp
+		Settings config.CrossPlatformSettings
+	}{apps, settings})
+	contexts := make(map[string]context.Context)
+	ctx = state.WithAuditApplications(ctx, contexts)
+	finishes := make(map[string]func(error))
+	complete := func(name string, err error) {
+		if finish := finishes[name]; finish != nil {
+			finish(err)
+			delete(finishes, name)
+		}
+	}
+	for _, app := range apps {
+		contexts[app.Name], finishes[app.Name] = state.BeginApplication(ctx, app.Name, "tui", app)
+	}
+	defer func() {
+		for _, app := range apps {
+			complete(app.Name, result)
+		}
+	}()
 	var failures []error
 
 	// Skip apt apps that are already installed, and update package lists and
@@ -641,6 +664,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 
 	for i, app := range apps {
 		if si.apt.has(si.apt.preinstalled, app.Name) {
+			complete(app.Name, nil)
 			si.sendLog("INFO", fmt.Sprintf("%s is already installed; skipping", app.Name))
 			if si.program != nil {
 				si.program.Send(AppCompleteMsg{AppName: app.Name})
@@ -666,7 +690,9 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			})
 		}
 
-		if err := si.InstallApp(ctx, app, settings); err != nil {
+		installErr := si.InstallApp(state.WithAuditApplication(ctx, app.Name), app, settings)
+		complete(app.Name, installErr)
+		if err := installErr; err != nil {
 			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
 			if si.program != nil {
@@ -725,7 +751,12 @@ func (si *StreamingInstaller) installationResult(failures ...error) error {
 //
 // Returns:
 //   - error: nil on success, or detailed error indicating which phase failed
-func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings) error {
+func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings) (result error) {
+	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "tui", app)
+	defer func() { finishAudit(result) }()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	si.sendLog("INFO", fmt.Sprintf("Starting installation of %s", app.Name))
 
 	startTime := time.Now()
@@ -776,18 +807,22 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	// Handle theme selection if app has themes
 	if len(osConfig.Themes) > 0 {
 		si.sendLog("INFO", fmt.Sprintf("App %s has %d themes available, prompting user for selection", app.Name, len(osConfig.Themes)))
-		if err := si.handleThemeSelection(ctx, app.Name, osConfig.Themes); err != nil {
+		if err := state.AuditStep(ctx, "theme-selection", true, func() error { return si.handleThemeSelection(ctx, app.Name, osConfig.Themes) }); err != nil {
 			return fmt.Errorf("theme selection failed: %w", err)
 		}
 	}
 
+	// Resolve the same configured hook policy used by noninteractive installs.
+	validator, err := settings.GetCommandValidator()
+	if err != nil {
+		return err
+	}
+	policy := utils.InstallHookPolicy{Validator: validator, AppName: app.Name}
+
 	// Handle pre-install commands
-	if len(osConfig.PreInstall) > 0 {
-		si.sendLog("INFO", "Executing pre-install commands...")
-		if err := si.executeCommands(ctx, osConfig.PreInstall); err != nil {
-			si.recordFailedInstallation(app.Name, startTime, err)
-			return fmt.Errorf("pre-install failed: %w", err)
-		}
+	if err := state.AuditStep(ctx, "pre-install", len(osConfig.PreInstall) > 0, func() error { return si.executeCommands(ctx, osConfig.PreInstall, policy) }); err != nil {
+		si.recordFailedInstallation(app.Name, startTime, err)
+		return fmt.Errorf("pre-install failed: %w", err)
 	}
 
 	// Check and install platform dependencies before main installation
@@ -798,23 +833,46 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 
 	// Execute main installation command
 	si.sendLog("INFO", fmt.Sprintf("Installing %s using %s...", app.Name, osConfig.InstallMethod))
-	if err := si.executeInstallCommand(ctx, app, &osConfig); err != nil {
+	if err := state.AuditStep(ctx, "install", true, func() error { return si.executeInstallCommand(ctx, app, &osConfig) }); err != nil {
 		si.recordFailedInstallation(app.Name, startTime, err)
 		return fmt.Errorf("installation failed: %w", err)
 	}
 
-	// Handle post-install commands
-	if len(osConfig.PostInstall) > 0 {
-		si.sendLog("INFO", "Executing post-install commands...")
-		if err := si.executeCommands(ctx, osConfig.PostInstall); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
+	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
+	// Config-file problems are warnings: recorded as a failed audit step and in the
+	// completion summary, without failing the install.
+	_ = state.AuditStep(ctx, "config-files", len(osConfig.ConfigFiles) > 0, func() error {
+		result := configfiles.Apply(ctx, app.Name, osConfig.ConfigFiles, false, func(message string) {
+			level := "INFO"
+			if strings.HasPrefix(message, "Warning:") {
+				level = "WARN"
 			}
-			si.sendLog("WARN", fmt.Sprintf("Optional post-install step for %s failed: %v", app.Name, err))
-			si.postInstallMutex.Lock()
-			si.postInstallWarnings = append(si.postInstallWarnings, fmt.Errorf("%s: post-install step failed: %w", app.Name, err))
-			si.postInstallMutex.Unlock()
+			si.sendLog(level, message)
+		})
+		si.postInstallMutex.Lock()
+		for _, warning := range result.Warnings {
+			si.postInstallWarnings = append(si.postInstallWarnings, errors.New(warning))
 		}
+		si.postInstallMutex.Unlock()
+		if len(result.Warnings) > 0 {
+			return errors.New(strings.Join(result.Warnings, "; "))
+		}
+		return nil
+	})
+
+	// Optional hooks retain their failed audit result even when registration continues.
+	if err := state.AuditStep(ctx, "post-install", len(osConfig.PostInstall) > 0, func() error { return si.executeCommands(ctx, osConfig.PostInstall, policy) }); err != nil {
+		var policyErr *utils.HookPolicyError
+		if errors.As(err, &policyErr) {
+			return fmt.Errorf("post-install failed: %w", err)
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		si.sendLog("WARN", fmt.Sprintf("Optional post-install step for %s failed: %v", app.Name, err))
+		si.postInstallMutex.Lock()
+		si.postInstallWarnings = append(si.postInstallWarnings, fmt.Errorf("%s: post-install step failed: %w", app.Name, err))
+		si.postInstallMutex.Unlock()
 	}
 
 	// Apply selected theme if user made a choice and themes are available
@@ -826,9 +884,11 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	}
 
 	// Save to repository with configurable error handling
-	si.repoMutex.Lock()
-	err := si.repo.AddApp(app.Name)
-	si.repoMutex.Unlock()
+	err = state.AuditStep(ctx, "registration", true, func() error {
+		si.repoMutex.Lock()
+		defer si.repoMutex.Unlock()
+		return si.repo.AddApp(app.Name)
+	})
 	if err != nil {
 		// Enhanced error context with specific details
 		osConfig := app.GetOSConfig()
@@ -968,7 +1028,7 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	case "yum":
 		installCmd = fmt.Sprintf("sudo -n yum install -y %s", osConfig.InstallCommand)
 	case "pacman":
-		installCmd = fmt.Sprintf("sudo -n pacman -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("sudo -n pacman -S --needed --noconfirm %s", osConfig.InstallCommand)
 	case "zypper":
 		installCmd = fmt.Sprintf("sudo -n zypper install -y %s", osConfig.InstallCommand)
 	case "brew":
@@ -986,7 +1046,7 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	case "xbps":
 		installCmd = fmt.Sprintf("sudo -n xbps-install -y %s", osConfig.InstallCommand)
 	case "yay":
-		installCmd = fmt.Sprintf("yay -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("yay -S --needed --noconfirm --answerdiff=None --answerclean=None %s", osConfig.InstallCommand)
 	default:
 		// Fallback to the configured install command
 		installCmd = osConfig.InstallCommand
@@ -1198,26 +1258,13 @@ func (si *StreamingInstaller) executeMiseInstall(ctx context.Context, app types.
 }
 
 // executeCommands executes a list of install commands with context cancellation support
-func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand) error {
+func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []types.InstallCommand, policies ...utils.InstallHookPolicy) error {
 	for _, cmd := range commands {
 		if _, err := utils.InstallHookPrivilege(cmd); err != nil {
 			return err
 		}
 		if err := utils.ApplyShellActions(ctx, cmd); err != nil {
 			return err
-		}
-		if cmd.Scope == "system" {
-			output, err := utils.ExecInstallHookWithContext(ctx, cmd)
-			si.sendLog("INFO", output)
-			if err != nil {
-				if os.Geteuid() != 0 {
-					if authErr := authorizeSudo(ctx, false); authErr != nil {
-						return authErr
-					}
-				}
-				return fmt.Errorf("install hook failed: %w", err)
-			}
-			continue
 		}
 		// Check for context cancellation before each command
 		select {
@@ -1235,11 +1282,19 @@ func (si *StreamingInstaller) executeCommands(ctx context.Context, commands []ty
 		}
 
 		if cmd.Shell != "" {
-			// Replace placeholders in shell commands
-			processedCommand := utils.ReplacePlaceholders(cmd.Shell, map[string]string{})
-			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", processedCommand))
-			if err := si.executeCommandStream(ctx, processedCommand); err != nil {
-				return err
+			si.sendLog("INFO", fmt.Sprintf("Executing shell: %s", cmd.Shell))
+			timeout := si.config.InstallationTimeout
+			if timeout <= 0 {
+				timeout = DefaultInstallerConfig().InstallationTimeout
+			}
+			hookCtx, cancel := context.WithTimeout(ctx, timeout)
+			output, err := utils.ExecInstallHookWithContext(hookCtx, cmd, policies...)
+			cancel()
+			if output != "" {
+				si.sendLog("INFO", output)
+			}
+			if err != nil {
+				return fmt.Errorf("install hook failed: %w", err)
 			}
 		}
 
@@ -1604,7 +1659,18 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 		}
 	}()
 
+	ctx = state.WithInstallationAudit(ctx, "tui", struct {
+		Apps     []types.CrossPlatformApp
+		Settings config.CrossPlatformSettings
+	}{apps, settings})
+	recordUnstarted := func(err error) {
+		for _, app := range apps {
+			_, finish := state.BeginApplication(ctx, app.Name, "tui", app)
+			finish(err)
+		}
+	}
 	if err := AuthorizeInstallation(ctx, apps, true); err != nil {
+		recordUnstarted(err)
 		return err
 	}
 
@@ -1643,6 +1709,7 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 		case <-ctx.Done():
 			// Installation was cancelled
 			installer.sendLog("INFO", "Installation cancelled by user")
+			recordUnstarted(ctx.Err())
 			result <- ctx.Err()
 			return
 		case <-time.After(installer.config.InitializationDelay):
@@ -1768,22 +1835,20 @@ func (si *StreamingInstaller) applySelectedTheme(ctx context.Context, appName st
 	si.sendLog("INFO", fmt.Sprintf("Applying theme '%s' for %s", selectedTheme.Name, appName))
 
 	// Apply theme files by copying them to their destinations
-	for _, configFile := range selectedTheme.Files {
+	for index, configFile := range selectedTheme.Files {
 		si.sendLog("INFO", fmt.Sprintf("Copying theme file from %s to %s", configFile.Source, configFile.Destination))
 
 		// Expand tilde in paths
 		source := expandPath(configFile.Source)
 		destination := expandPath(configFile.Destination)
 
-		// Create destination directory if it doesn't exist
-		if err := si.createDirectoryForFile(ctx, destination); err != nil {
-			si.sendLog("WARN", fmt.Sprintf("Failed to create directory for %s: %v", destination, err))
-			continue
-		}
-
-		// Copy the theme file
-		copyCmd := fmt.Sprintf("cp '%s' '%s'", source, destination)
-		if err := si.executeCommandStream(ctx, copyCmd); err != nil {
+		err := state.AuditStep(ctx, fmt.Sprintf("theme-file-%d", index), true, func() error {
+			if err := si.createDirectoryForFile(ctx, destination); err != nil {
+				return err
+			}
+			return si.executeCommandStream(ctx, fmt.Sprintf("cp '%s' '%s'", source, destination))
+		})
+		if err != nil {
 			si.sendLog("WARN", fmt.Sprintf("Failed to copy theme file from %s to %s: %v", source, destination, err))
 		} else {
 			si.sendLog("INFO", fmt.Sprintf("Successfully copied theme file to %s", destination))

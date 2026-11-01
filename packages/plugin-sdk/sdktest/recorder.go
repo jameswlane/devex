@@ -71,6 +71,8 @@ func NewRecorder(t TestingT, commands ...string) *Recorder {
 
 	t.Setenv("HOME", filepath.Join(root, "home"))
 	t.Setenv("PATH", recorder.binDir)
+	t.Setenv(sdk.UnattendedEnv, "")
+	t.Setenv("CI", "")
 	t.Setenv("USER", "devex-test-user")
 	t.Setenv("LOGNAME", "devex-test-user")
 	t.Setenv("DEVEX_SDKTEST_LOG_DIR", recorder.logDir)
@@ -162,6 +164,11 @@ func (r *Recorder) Reset() {
 	r.t.Helper()
 
 	for command := range r.responses {
+		for _, key := range []string{sdk.UnattendedEnv, "NONINTERACTIVE", "DEBIAN_FRONTEND"} {
+			if err := os.Remove(filepath.Join(r.logDir, command+".env."+key)); err != nil && !os.IsNotExist(err) {
+				r.t.Fatalf("reset environment for %q: %v", command, err)
+			}
+		}
 		if err := os.WriteFile(filepath.Join(r.logDir, command), nil, 0o600); err != nil {
 			r.t.Fatalf("reset calls for %q: %v", command, err)
 		}
@@ -239,7 +246,15 @@ func (r *Recorder) writeSudoDispatch(script *strings.Builder) {
 if [ "$#" -eq 2 ] && [ "$1" = '-n' ] && [ "$2" = 'true' ]; then exit 0; fi
 if [ "${1-}" = '-n' ]; then shift; fi
 if [ "$#" -eq 1 ] && [ "$1" = '-v' ]; then exit 0; fi
+if [ "${1-}" = '-H' ]; then
+ shift
+ if [ "${1-}" = '-u' ]; then shift; shift; fi
+fi
 if [ "${1-}" = '--' ]; then shift; fi
+if [ "${1-}" = 'env' ]; then shift; fi
+while [ "$#" -gt 0 ]; do
+ case "$1" in *=*) export "$1"; shift ;; *) break ;; esac
+done
 case "${1-}" in
 `)
 	commands := make([]string, 0, len(r.responses))
@@ -265,6 +280,9 @@ func (r *Recorder) writeCommand(command string) {
 	script.WriteString("#!/bin/sh\n{\n  printf '%s\\0' \"${DEVEX_SDKTEST_ELEVATED:-0}\" \"$#\" \"$@\"\n} >> ")
 	script.WriteString(shellQuote(filepath.Join(r.logDir, command)))
 	script.WriteString("\n")
+	for _, key := range []string{sdk.UnattendedEnv, "NONINTERACTIVE", "DEBIAN_FRONTEND"} {
+		fmt.Fprintf(&script, "printf '%%s\\0' \"${%s-}\" >> %s\n", key, shellQuote(filepath.Join(r.logDir, command+".env."+key)))
+	}
 
 	for _, scripted := range r.responses[command] {
 		fmt.Fprintf(&script, "if [ \"$#\" -eq %d ]", len(scripted.args))
@@ -310,4 +328,34 @@ func equalArgs(left, right []string) bool {
 		}
 	}
 	return true
+}
+
+// CloseStdin replaces the test process's stdin with the null device until cleanup.
+func CloseStdin(t TestingT) {
+	t.Helper()
+	input, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatalf("open null stdin: %v", err)
+	}
+	original := os.Stdin
+	os.Stdin = input
+	t.Cleanup(func() { os.Stdin = original; _ = input.Close() })
+}
+
+// Environment returns each invocation's value of a recorded execution variable.
+// Recorder captures DEVEX_UNATTENDED, NONINTERACTIVE, and DEBIAN_FRONTEND.
+func (r *Recorder) Environment(command, key string) []string {
+	r.t.Helper()
+	if key != sdk.UnattendedEnv && key != "NONINTERACTIVE" && key != "DEBIAN_FRONTEND" {
+		r.t.Fatalf("unrecorded environment key %q", key)
+	}
+	data, err := os.ReadFile(filepath.Join(r.logDir, command+".env."+key))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		r.t.Fatalf("read environment: %v", err)
+	}
+	values := strings.Split(string(data), "\x00")
+	return values[:len(values)-1]
 }
