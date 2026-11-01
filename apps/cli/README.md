@@ -316,6 +316,18 @@ git commit -m "feat!: redesign configuration system"
 5. Commit with conventional commits: `git commit -m "feat: your feature"`
 6. Push and create a Pull Request
 
+## Agent skill
+
+`internal/agentskills/devex/SKILL.md` is the canonical [Agent Skill](https://agentskills.io)
+for coding agents using DevEx. It's tested against the real Cobra tree
+(`internal/agentskills`): every `devex ...` example must resolve to a real
+command with valid flags and arguments, installs and removals must be previewed
+with `--dry-run`, and examples must never use `--force` or `sudo`.
+
+**When you add, rename or remove a command or flag, or change help text the
+skill relies on, update `SKILL.md` in the same pull request.** `task test` fails
+if an example no longer matches the CLI.
+
 ## CLI self-update
 
 Run `devex self-update --check` to check for a release or `devex self-update` to

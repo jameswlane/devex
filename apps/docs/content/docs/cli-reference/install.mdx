@@ -500,6 +500,15 @@ devex config edit applications && devex install
   </Tab>
 </Tabs>
 
+## Using DevEx from coding agents
+
+DevEx ships an [Agent Skill](https://agentskills.io) for coding agents at
+[`apps/cli/internal/agentskills/devex/SKILL.md`](https://github.com/jameswlane/devex/blob/main/apps/cli/internal/agentskills/devex/SKILL.md).
+It teaches the safe workflow: discover with `devex list available --format json`,
+preview with `devex install APP --dry-run`, get the user's approval, then run
+`devex install APP --non-interactive`. Removals follow the same preview-then-approve
+pattern. Every command in the skill is tested against the CLI's real command tree.
+
 ## Related Commands
 
 - [`devex setup`](/docs/cli-reference/setup) - Interactive setup wizard
