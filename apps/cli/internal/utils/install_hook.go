@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
+
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -12,6 +14,9 @@ import (
 // InstallHookPrivilege keeps legacy hooks in user scope and rejects typos before
 // execution. Explicit system hooks use the same adapter as package operations.
 func InstallHookPrivilege(command types.InstallCommand) (sdk.OperationPrivilege, error) {
+	if err := command.Validate(); err != nil {
+		return sdk.OperationPrivilege{}, err
+	}
 	scope := sdk.OperationScope(command.Scope)
 	if scope == "" {
 		scope = sdk.ScopeUser
@@ -19,7 +24,7 @@ func InstallHookPrivilege(command types.InstallCommand) (sdk.OperationPrivilege,
 	if scope != sdk.ScopeUser && scope != sdk.ScopeSystem {
 		return sdk.OperationPrivilege{}, fmt.Errorf("invalid install hook scope %q: use user or system", command.Scope)
 	}
-	if scope == sdk.ScopeSystem && (command.Shell == "" || command.Copy != nil || command.Command != "" || command.Sleep != 0) {
+	if scope == sdk.ScopeSystem && (command.Shell == "" || command.Copy != nil || command.Command != "" || command.Sleep != 0 || len(command.ShellInit) > 0 || len(command.Path) > 0) {
 		return sdk.OperationPrivilege{}, fmt.Errorf("system install hooks require a shell command only; use separate user hooks for copies, commands or delays")
 	}
 	return sdk.OperationPrivilege{Scope: scope}, nil
@@ -53,4 +58,13 @@ func NonInteractiveSudoShell(command string) string {
 		return command
 	}
 	return "sudo() { command sudo -n \"$@\"; }; export -f sudo\n" + command
+}
+
+// ApplyShellActions executes only declarative actions; shell text is never evaluated here.
+func ApplyShellActions(ctx context.Context, command types.InstallCommand) error {
+	if len(command.ShellInit) == 0 && len(command.Path) == 0 {
+		return nil
+	}
+	_, err := shellrc.ApplyActions(ctx, command.ShellInit, command.Path)
+	return err
 }

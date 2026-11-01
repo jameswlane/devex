@@ -10,7 +10,10 @@ macos:
   uninstall_command: zoxide
   official_support: true
   post_install:
-    - shell: echo 'eval "$(zoxide init zsh)"' >> ~/.zshrc
+    - shell_init:
+        bash: 'eval "$(zoxide init bash)"'
+        zsh: 'eval "$(zoxide init zsh)"'
+        fish: 'zoxide init fish | source'
   alternatives:
     - install_method: macports
       install_command: zoxide
@@ -39,8 +42,10 @@ linux:
     - os: debian
     - os: ubuntu
   post_install:
-    - shell: echo 'eval "$(zoxide init bash)"' >> ~/.bashrc
-    - shell: echo 'eval "$(zoxide init zsh)"' >> ~/.zshrc
+    - shell_init:
+        bash: 'eval "$(zoxide init bash)"'
+        zsh: 'eval "$(zoxide init zsh)"'
+        fish: 'zoxide init fish | source'
   alternatives:
     - install_method: dnf
       install_command: zoxide

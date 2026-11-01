@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -167,6 +168,7 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	// Display the planned installation to the user
 	printAutomatedSetupPlan(model)
 
+	ctx = shellrc.WithShell(ctx, model.getSelectedShell())
 	if err := tui.AuthorizeInstallation(ctx, apps, false); err != nil {
 		return err
 	}

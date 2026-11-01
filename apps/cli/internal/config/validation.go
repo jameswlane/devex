@@ -235,6 +235,9 @@ func (v *ConfigValidator) validateCrossPlatformApp(app types.CrossPlatformApp, f
 
 // validateOSConfig validates an OS-specific configuration
 func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, filename string) {
+	if err := osConfig.ValidateShellActions(); err != nil {
+		v.addError(filename, platform+".post_install", err.Error(), nil)
+	}
 	if osConfig.InstallMethod == "" {
 		v.addError(filename, platform+".install_method", "Install method is required", nil)
 	}

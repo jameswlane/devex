@@ -45,6 +45,9 @@ type AppConfig struct {
 
 // Validate checks the validity of the AppConfig structure.
 func (a *AppConfig) Validate() error {
+	if err := (OSConfig{PreInstall: a.PreInstall, PostInstall: a.PostInstall}).ValidateShellActions(); err != nil {
+		return err
+	}
 	if a.Name == "" {
 		return fmt.Errorf("app name is required")
 	}
@@ -132,6 +135,8 @@ func (f *Font) Validate() error {
 
 // InstallCommand defines a command to execute during installation.
 type InstallCommand struct {
+	ShellInit map[string]string `mapstructure:"shell_init" yaml:"shell_init,omitempty"`
+	Path      []string          `mapstructure:"path" yaml:"path,omitempty"`
 	// Scope defaults to user; system explicitly requests the SDK elevation policy.
 	Scope             string       `mapstructure:"scope" yaml:"scope,omitempty"`
 	Shell             string       `mapstructure:"shell" yaml:"shell"`
@@ -546,6 +551,11 @@ func (app *CrossPlatformApp) GetBestOSConfig() OSConfig {
 
 // Validate checks if the CrossPlatformApp configuration is valid
 func (app *CrossPlatformApp) Validate() error {
+	for _, config := range []OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
+		if err := config.ValidateShellActions(); err != nil {
+			return err
+		}
+	}
 	if app.Name == "" {
 		return fmt.Errorf("app name is required")
 	}
