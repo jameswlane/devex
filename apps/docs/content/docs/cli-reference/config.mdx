@@ -149,6 +149,34 @@ It also checks the effective application set, which is the same layered set the 
 
 `devex config validate` exits non-zero when any error is found, so it can gate CI or scripts before an install runs.
 
+#### JSON output
+
+`devex config validate --format json` writes one JSON object to stdout, and exits non-zero when `errors > 0`:
+
+```json
+{
+  "valid": false,
+  "errors": 1,
+  "warnings": 0,
+  "diagnostics": [
+    {
+      "severity": "error",
+      "category": "install_method_unknown",
+      "file": "bat",
+      "field": "linux.install_method",
+      "message": "unknown install method \"aptt\"; supported methods: apk, apt, …"
+    }
+  ]
+}
+```
+
+- `diagnostics` is always an array (empty when valid).
+- `severity` is `error` or `warning`.
+- `category` is one of `file_missing`, `file_invalid_yaml`, `schema`, `install_method_unknown` or `dependency_cycle`. Categories are stable: new ones may be added, existing ones won't be renamed.
+- `file` is the configuration file, or the application name for application-set checks; `field` is the path inside it.
+
+`devex config show --format json` writes the configuration summary as JSON, using the same keys as `--format yaml`.
+
 ```bash
 devex config validate [flags]
 ```
