@@ -986,7 +986,7 @@ func (si *StreamingInstaller) executePackageManagerInstall(ctx context.Context, 
 	case "xbps":
 		installCmd = fmt.Sprintf("sudo -n xbps-install -y %s", osConfig.InstallCommand)
 	case "yay":
-		installCmd = fmt.Sprintf("yay -S --noconfirm %s", osConfig.InstallCommand)
+		installCmd = fmt.Sprintf("yay -S --needed --noconfirm --answerdiff=None --answerclean=None %s", osConfig.InstallCommand)
 	default:
 		// Fallback to the configured install command
 		installCmd = osConfig.InstallCommand
