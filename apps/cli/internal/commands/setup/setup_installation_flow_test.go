@@ -126,8 +126,8 @@ func TestSetupModel_InstallationSynchronization(t *testing.T) {
 			settings: settings,
 			step:     StepDesktopApps,
 			selections: UISelections{
-				selectedApps:  map[int]bool{0: true},
-				selectedTheme: 0,
+				selectedDesktopApps: map[string]bool{},
+				selectedTheme:       0,
 			},
 			system: SystemInfo{
 				themes: []string{"Tokyo Night"},

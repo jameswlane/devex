@@ -107,27 +107,7 @@ func (m *SetupModel) View() string {
 			newModel, _ := m.nextStep()
 			return newModel.View()
 		}
-		s = titleStyle.Render("🖥️  Select Desktop Applications")
-		s += "\n\n"
-		s += subtitleStyle.Render("Choose additional desktop applications (optional):")
-		s += "\n\n"
-
-		for i, app := range m.system.desktopApps {
-			cursor := " "
-			if m.cursor == i {
-				cursor = cursorStyle.Render(">")
-			}
-
-			selected := " "
-			if m.selections.selectedApps[i] {
-				selected = selectedStyle.Render("✓")
-			}
-
-			s += fmt.Sprintf("%s [%s] %s\n", cursor, selected, app)
-		}
-
-		s += "\n\n"
-		s += "Use ↑/↓ to navigate, Space to select/deselect, Enter to continue"
+		return m.renderDesktopApps()
 
 	case StepLanguages:
 		s = titleStyle.Render("📝 Select Programming Languages")
@@ -406,6 +386,120 @@ func (m *SetupModel) View() string {
 	}
 
 	return s
+}
+
+const (
+	defaultDesktopAppsHeight = 24
+	desktopAppsViewOverhead  = 9
+)
+
+type desktopAppViewRow struct {
+	appIndex int
+	category string
+}
+
+func (m *SetupModel) renderDesktopApps() string {
+	apps := m.desktopAppEntries()
+	rows := make([]desktopAppViewRow, 0, len(apps))
+	for i, app := range apps {
+		category := desktopAppCategory(app)
+		if i == 0 || !strings.EqualFold(category, desktopAppCategory(apps[i-1])) {
+			rows = append(rows, desktopAppViewRow{appIndex: -1, category: category})
+		}
+		rows = append(rows, desktopAppViewRow{appIndex: i})
+	}
+
+	height := m.height
+	if height <= 0 {
+		height = defaultDesktopAppsHeight
+	}
+	visibleCount := height - desktopAppsViewOverhead
+	if visibleCount < 1 {
+		visibleCount = 1
+	}
+	if visibleCount > len(rows) {
+		visibleCount = len(rows)
+	}
+
+	cursorRow := 0
+	for i, row := range rows {
+		if row.appIndex == m.cursor {
+			cursorRow = i
+			break
+		}
+	}
+	maxOffset := len(rows) - visibleCount
+	if m.desktopAppsOffset > maxOffset {
+		m.desktopAppsOffset = maxOffset
+	}
+	if m.desktopAppsOffset < 0 {
+		m.desktopAppsOffset = 0
+	}
+	if cursorRow < m.desktopAppsOffset {
+		m.desktopAppsOffset = cursorRow
+	}
+	if cursorRow >= m.desktopAppsOffset+visibleCount {
+		m.desktopAppsOffset = cursorRow - visibleCount + 1
+	}
+
+	end := m.desktopAppsOffset + visibleCount
+	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#10B981")).Bold(true)
+	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
+	categoryStyle := lipgloss.NewStyle().Bold(true)
+
+	desktop := m.system.detectedPlatform.DesktopEnv
+	if desktop == "" || desktop == "unknown" || desktop == "none" {
+		desktop = "your desktop"
+	} else {
+		desktop = strings.ToUpper(desktop)
+	}
+	lines := []string{
+		titleStyle.Render("🖥️  Select Desktop Applications"),
+		"",
+		subtitleStyle.Render(fmt.Sprintf("Optional GUI applications for %s. Default apps are installed automatically.", desktop)),
+		"",
+	}
+	for _, row := range rows[m.desktopAppsOffset:end] {
+		if row.appIndex == -1 {
+			lines = append(lines, categoryStyle.Render(row.category))
+			continue
+		}
+		app := apps[row.appIndex]
+		cursor := " "
+		if m.cursor == row.appIndex {
+			cursor = cursorStyle.Render(">")
+		}
+		selected := " "
+		if m.selections.selectedDesktopApps[app.Name] {
+			selected = selectedStyle.Render("✓")
+		}
+		lines = append(lines, fmt.Sprintf("%s [%s] %s", cursor, selected, app.Name))
+	}
+
+	var scrollIndicators []string
+	if m.desktopAppsOffset > 0 {
+		scrollIndicators = append(scrollIndicators, "↑ more")
+	}
+	if end < len(rows) {
+		scrollIndicators = append(scrollIndicators, "↓ more")
+	}
+	if len(scrollIndicators) > 0 {
+		lines = append(lines, strings.Join(scrollIndicators, " "))
+	}
+
+	description := ""
+	if m.cursor >= 0 && m.cursor < len(apps) {
+		description = apps[m.cursor].Description
+	}
+	lines = append(lines,
+		"",
+		description,
+		"",
+		"Use ↑/↓ to navigate, Space to select/deselect, Enter to continue",
+	)
+	return strings.Join(lines, "\n")
 }
 
 // renderProgressBar renders a terminal progress bar
