@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -30,13 +31,43 @@ func InstallHookPrivilege(command types.InstallCommand) (sdk.OperationPrivilege,
 	return sdk.OperationPrivilege{Scope: scope}, nil
 }
 
+// InstallHookPolicy applies the configured validator and application overrides to
+// the original script, before adding execution wrappers or resolving privileges.
+type InstallHookPolicy struct {
+	Validator *security.CommandValidator
+	AppName   string
+}
+
+// HookPolicyError identifies a rejected script, separately from an optional hook's
+// runtime failure. Callers must surface policy rejections to the user.
+type HookPolicyError struct {
+	AppName string
+	Err     error
+}
+
+func (e *HookPolicyError) Error() string {
+	return fmt.Sprintf("install hook policy rejected shell for app %q: %v; review the hook and security.yaml level or app_overrides before retrying", e.AppName, e.Err)
+}
+
+func (e *HookPolicyError) Unwrap() error { return e.Err }
+
 // ExecInstallHookWithContext resolves the invoking account before elevation and
-// passes its name as an argv environment assignment, never interpolated shell
-// text. System scripts retain shell variables such as VERSION_CODENAME.
-func ExecInstallHookWithContext(ctx context.Context, command types.InstallCommand) (string, error) {
+// passes identity through the SDK, never interpolated shell text. Bash expands
+// variables in the target account environment; the script stays one argv value.
+func ExecInstallHookWithContext(ctx context.Context, command types.InstallCommand, policies ...InstallHookPolicy) (string, error) {
 	privilege, err := InstallHookPrivilege(command)
 	if err != nil {
 		return "", err
+	}
+	policy := InstallHookPolicy{}
+	if len(policies) > 0 {
+		policy = policies[0]
+	}
+	if policy.Validator == nil {
+		policy.Validator = security.NewCommandValidator(security.SecurityLevelModerate)
+	}
+	if err := policy.Validator.ValidateCommandForApp(command.Shell, policy.AppName); err != nil {
+		return "", &HookPolicyError{AppName: policy.AppName, Err: err}
 	}
 	userPlan, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{
 		Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "install-hook",
@@ -45,7 +76,8 @@ func ExecInstallHookWithContext(ctx context.Context, command types.InstallComman
 		return "", fmt.Errorf("resolve install hook invoking user: %w", err)
 	}
 	if privilege.Scope == sdk.ScopeUser {
-		return ExecAsUserWithContext(ctx, ExpandUserPlaceholders(NonInteractiveSudoShell(command.Shell), *userPlan.IntendedUser))
+		privilege.User = userPlan.IntendedUser
+		return ExecOperationWithContext(ctx, privilege, "bash", "-c", NonInteractiveSudoShell(command.Shell))
 	}
 	privilege.User = userPlan.IntendedUser
 	return ExecOperationWithContext(ctx, privilege, "env", "DEVEX_INVOKING_USER="+userPlan.IntendedUser.Username, "bash", "-c", NonInteractiveSudoShell(command.Shell))
