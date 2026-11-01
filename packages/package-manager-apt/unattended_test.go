@@ -31,3 +31,17 @@ var _ = Describe("Unattended APT execution", func() {
 		Expect(recorder.Environment("apt-get", "DEBIAN_FRONTEND")).To(Equal([]string{"noninteractive", "noninteractive", "noninteractive", "noninteractive", "noninteractive", "noninteractive"}))
 	})
 })
+
+var _ = Describe("Elevated APT environment", func() {
+	It("passes DEBIAN_FRONTEND to sudo before --, so sudo doesn't run it as the command", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "apt", "apt-get")
+		sdktest.CloseStdin(GinkgoT())
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		plugin := main.NewAPTPlugin()
+
+		Expect(plugin.Execute("update", nil)).To(Succeed())
+
+		Expect(recorder.Calls("sudo")).To(ContainElement(sdktest.Call{Args: []string{"-n", "DEBIAN_FRONTEND=noninteractive", "--", "apt-get", "update"}}))
+		Expect(recorder.Environment("apt-get", "DEBIAN_FRONTEND")).To(Equal([]string{"noninteractive"}))
+	})
+})
