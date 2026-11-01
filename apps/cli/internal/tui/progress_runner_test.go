@@ -93,6 +93,39 @@ var _ = Describe("ProgressRunner lifecycle", func() {
 		})
 	})
 
+	Context("when the TUI event loop is stuck", func() {
+		It("still returns from Quit after the timeout", func() {
+			release := make(chan struct{})
+			entered := make(chan struct{})
+			DeferCleanup(func() { close(release) })
+			originalTimeout := progressQuitTimeout
+			progressQuitTimeout = 100 * time.Millisecond
+			DeferCleanup(func() { progressQuitTimeout = originalTimeout })
+
+			isInteractiveTerminal = func() bool { return true }
+			newProgressProgram = func(tea.Model) *tea.Program {
+				return tea.NewProgram(stuckModel{release: release, entered: entered},
+					tea.WithInput(blockingReader{stop: stopInput}),
+					tea.WithOutput(io.Discard),
+					tea.WithoutSignalHandler(),
+				)
+			}
+			runner := NewProgressRunner(context.Background(), config.CrossPlatformSettings{})
+			runner.start()
+			Eventually(entered, 2*time.Second).Should(BeClosed())
+
+			quitReturned := make(chan struct{})
+			go func() {
+				runner.Quit()
+				close(quitReturned)
+			}()
+
+			// Quit waits at most two timeouts (quit, then kill) even though the
+			// loop never takes the quit message.
+			Eventually(quitReturned, 2*time.Second).Should(BeClosed())
+		})
+	})
+
 	Context("when stdin or stdout is not a terminal", func() {
 		BeforeEach(func() {
 			isInteractiveTerminal = func() bool { return false }
@@ -132,3 +165,20 @@ var _ = Describe("ProgressRunner lifecycle", func() {
 		})
 	})
 })
+
+// stuckModel blocks inside Update until released, like a hung event loop.
+type stuckModel struct{ release, entered chan struct{} }
+
+type stuckMsg struct{}
+
+func (m stuckModel) Init() tea.Cmd { return func() tea.Msg { return stuckMsg{} } }
+
+func (m stuckModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if _, ok := msg.(stuckMsg); ok {
+		close(m.entered)
+		<-m.release
+	}
+	return m, nil
+}
+
+func (m stuckModel) View() string { return "" }
