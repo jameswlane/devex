@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spf13/viper"
+
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
@@ -51,6 +53,11 @@ type UISelections struct {
 	selectedDBs   map[int]bool
 	selectedApps  map[int]bool
 	selectedTheme int
+
+	// skipDefaultApps leaves default (default: true) apps out of the plan.
+	skipDefaultApps bool
+	// alreadyInstalled holds planned apps found installed on the Confirmation screen.
+	alreadyInstalled map[string]bool
 }
 
 // GitConfiguration holds Git-specific configuration state
@@ -249,11 +256,12 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 		// User selections
 		selections: UISelections{
-			selectedShell: defaultShellIdx,
-			selectedLangs: make(map[int]bool),
-			selectedDBs:   make(map[int]bool),
-			selectedApps:  make(map[int]bool),
-			selectedTheme: 0,
+			skipDefaultApps: viper.GetBool("no-defaults"),
+			selectedShell:   defaultShellIdx,
+			selectedLangs:   make(map[int]bool),
+			selectedDBs:     make(map[int]bool),
+			selectedApps:    make(map[int]bool),
+			selectedTheme:   0,
 		},
 
 		// Git configuration

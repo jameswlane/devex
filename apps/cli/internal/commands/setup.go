@@ -150,11 +150,13 @@ Run 'devex setup' to begin the guided installation process.`,
 
 	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	cmd.Flags().Bool("non-interactive", false, "Run in non-interactive mode (automated)")
+	cmd.Flags().Bool("no-defaults", false, "Skip the default tools; install only what you select")
 	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
 	cmd.Flags().StringP("config", "c", "", "Path to custom setup configuration file (YAML)")
 
 	_ = viper.BindPFlag("verbose", cmd.Flags().Lookup("verbose"))
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
+	_ = viper.BindPFlag("no-defaults", cmd.Flags().Lookup("no-defaults"))
 	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))
 	_ = viper.BindPFlag("config", cmd.Flags().Lookup("config"))
 
