@@ -11,6 +11,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
@@ -266,7 +267,9 @@ func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.
 }
 
 // InstallCrossPlatformApp installs a cross-platform application using the appropriate OS-specific configuration
-func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) error {
+func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) (result error) {
+	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
+	defer func() { finishAudit(result) }()
 	log.Info("Installing cross-platform app", "app", app.Name)
 
 	// Validate that the app is supported on the current platform
@@ -309,21 +312,26 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 }
 
 // InstallApp installs a single application
-func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
+func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) (result error) {
+	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
+	defer func() { finishAudit(result) }()
 	log.Info("Installing app", "app", app.Name)
 
 	// Execute pre-install commands
-	if err := runInstallCommands(ctx, app.PreInstall); err != nil {
+	if err := state.AuditStep(ctx, "pre-install", len(app.PreInstall) > 0, func() error { return runInstallCommands(ctx, app.PreInstall) }); err != nil {
 		return fmt.Errorf("failed to execute pre-install commands: %w", err)
 	}
 
 	// Execute the actual install command
-	if err := executeInstallCommand(ctx, app, repo); err != nil {
+	if err := state.AuditStep(ctx, "install", true, func() error { return executeInstallCommand(ctx, app, repo) }); err != nil {
 		return fmt.Errorf("failed to execute install command: %w", err)
 	}
 
+	if err := state.AuditStep(ctx, "config-files", len(app.ConfigFiles) > 0, func() error { return ApplyConfigFiles(ctx, app.ConfigFiles) }); err != nil {
+		return fmt.Errorf("failed to copy config files: %w", err)
+	}
 	// Execute post-install commands
-	if err := runInstallCommands(ctx, app.PostInstall); err != nil {
+	if err := state.AuditStep(ctx, "post-install", len(app.PostInstall) > 0, func() error { return runInstallCommands(ctx, app.PostInstall) }); err != nil {
 		return fmt.Errorf("failed to execute post-install commands: %w", err)
 	}
 
@@ -406,4 +414,14 @@ func (p *PluginBasedInstaller) context() context.Context {
 		return context.Background()
 	}
 	return p.ctx
+}
+
+// ApplyConfigFiles shares the hook copy policy and intended-user path expansion.
+func ApplyConfigFiles(ctx context.Context, files []types.ConfigFile) error {
+	commands := make([]types.InstallCommand, 0, len(files))
+	for _, file := range files {
+		file := file
+		commands = append(commands, types.InstallCommand{Copy: &types.CopyCommand{Source: file.Source, Destination: file.Destination}})
+	}
+	return runInstallCommands(ctx, commands)
 }

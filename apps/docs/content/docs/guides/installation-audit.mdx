@@ -1,0 +1,118 @@
+---
+title: Installation audit events
+description: Query structured installation histories, configure retention, and verify both installation modes.
+---
+
+DevEx records application attempts and their `pre-install`, `install`,
+`config-files`, `post-install`, and `registration` stages in both plain and TUI
+installations. Each operation has an immutable `start` event and a `result` event.
+Unconfigured stages and stages not reached after a failure are recorded as
+`skipped`. The TUI also records shared APT package transactions as `install-batch`
+events, including failed batches followed by successful per-application retries.
+APT source/update operations and optional TUI theme selection/file copies have
+additional stage events.
+
+Events extend the existing operation record model in the local bbolt state
+database; template runs and managed resources remain available through the other
+`devex runs` subcommands. On Linux the default database is
+`$XDG_STATE_HOME/devex/state.db`, falling back to
+`$HOME/.local/state/devex/state.db`. Existing legacy state follows the shared
+DevEx directory migration policy. Run `devex paths` to inspect your directories.
+The state directory is created with mode `0700` and the database with `0600`.
+
+## Configuration
+
+In your DevEx CLI configuration:
+
+```yaml
+audit:
+  max_entries: 10000
+state:
+  db_path: /absolute/path/to/state.db
+```
+
+`audit.max_entries` defaults to **10,000 events**. Set
+`DEVEX_AUDIT_MAX_ENTRIES` to override it through the environment. Zero retains all
+events; a negative value falls back to the default. Retention deletes the oldest
+audit events atomically on the next successful append. It does not delete
+template runs, operations, or managed resources. A small limit can leave only one
+half of an operation's start/result pair. Lowering the limit takes effect on the
+next installation event, rather than on a query. Deletion bounds the number of
+retained events; bbolt may reuse freed pages without shrinking the database file.
+
+`state.db_path` also accepts `DEVEX_STATE_DB` or `DEVEX_STATE_DB_PATH` through the
+existing state configuration. Keep a database override outside your home only
+when its directory permissions suit your installation history.
+
+## Query and export
+
+```bash
+devex install git --non-interactive
+devex runs audit --format json > installation-audit.json
+devex runs audit --format json --app git --event result
+devex runs audit --format json --mode tui --status failed
+devex runs audit --format json --run-id <installation-run-id>
+```
+
+The export is a JSON array, oldest event first, ordered by persistent `sequence`.
+No matches produce `[]`. `--app`, `--run-id`, `--mode`, `--event`, and `--status`
+filters combine with AND and use exact matches. Audit export supports `json`;
+unsupported formats and invalid statuses return an error. Query failures return a
+nonzero exit status rather than reporting an empty successful export.
+
+Schema version **1** contains these stable fields:
+
+| Field | Meaning |
+| --- | --- |
+| `schema_version`, `sequence` | Event schema and database insertion order |
+| `id`, `run_id`, `step_id` | Operation identity, shared installation identity, lifecycle stage |
+| `event`, `status`, `error` | `start`/`result`, outcome, and redacted error when present |
+| `actor`, `target`, `mode` | Invoking user, application name, and `plain`/`tui` |
+| `tool_version` | CLI build version (`dev` in an unversioned build) |
+| `plan_id`, `policy_id` | SHA-256 of the resolved apps/settings and `installation-v1` lifecycle policy |
+| `timestamp`, `started_at`, `completed_at` | UTC event, operation start, and optional completion timestamps |
+
+Start events have `status: running`. Results use `succeeded`, `failed`,
+`canceled`, or `skipped`. Join a pair by `id`; join all applications in an
+installation by `run_id`. The plan fingerprint changes when the resolved plan
+changes, including private configuration, without storing that configuration.
+Raw commands, configuration contents, and command output are not audit fields.
+Errors and string metadata redact token/password/secret/API-key assignments,
+Bearer/Basic credentials, URLs, and matching secret environment values. Values
+identified as secrets in the resolved plan are also removed from unlabeled error
+echoes. The actor follows the SDK invoking-account policy, including `SUDO_USER`
+when elevated.
+
+## Failures and cancellation
+
+An installation failure preserves its failed stage and application result; later
+stages are skipped. Cancellation and timeouts preserve canceled results even
+after the install context is canceled. In the TUI, an optional post-install hook
+can fail while package installation and registration succeed: inspect stage
+results alongside the application result. Registration failures retain their own
+failed result even when the configured installer policy treats them as warnings.
+
+An audit write failure (including a locked or unwritable database) logs
+`Installation audit write failed` and **does not fail the installation**. Review
+the ordinary DevEx log when diagnosing gaps. A process crash, forced kill, or
+write failure can leave an unmatched start event; do not interpret it as success.
+Dry-run previews do not record installation events because they do not attempt
+installation. Audit events are local operational history, not a tamper-proof
+remote ledger.
+
+## Reproducible isolated verification
+
+From a checkout, run this in `apps/cli`:
+
+```bash
+mise exec -- go test ./internal/state ./internal/commands ./internal/tui \
+  -run 'TestAudit|TestCommands|TestTui' \
+  -ginkgo.focus='Installation audit persistence|Plain installation audit|TUI installation audit' \
+  -ginkgo.v
+```
+
+The Ginkgo scenarios use temporary homes and state directories plus the SDK's
+`sdktest.Recorder` for native commands. They verify successful, failed, and canceled
+installations in both modes, correlated start/result pairs for every lifecycle
+stage, JSON export, redaction, retention across database reopen, and non-fatal
+write failures. They perform no package-manager operations on your system.

@@ -17,4 +17,7 @@ func TestInstallers(t *testing.T) {
 // Set up test logging suppression for all tests in this suite
 var _ = BeforeEach(func() {
 	testhelper.SuppressLogs()
+	GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+	GinkgoT().Setenv("XDG_STATE_HOME", GinkgoT().TempDir())
+	GinkgoT().Setenv("DEVEX_STATE_DIR", "")
 })
