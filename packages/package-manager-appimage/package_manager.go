@@ -227,8 +227,10 @@ func (p *AppimagePlugin) handleValidateURL(args []string) error {
 func (p *AppimagePlugin) isAppImageInstalled(binaryName string) (bool, error) {
 	homeDir := os.Getenv("HOME")
 
-	// Absent means confirmed missing or not executable in both locations; any
-	// other stat failure (e.g. permission denied) is a failed lookup.
+	// Installed if either location holds an executable. Absent only when both
+	// are confirmed missing or not executable; a stat failure in one location
+	// (e.g. permission denied) is reported only if the other doesn't confirm it.
+	var lookupErr error
 	for _, path := range []string{
 		filepath.Join(homeDir, "Applications", binaryName),
 		filepath.Join(homeDir, ".local", "bin", binaryName),
@@ -240,12 +242,16 @@ func (p *AppimagePlugin) isAppImageInstalled(binaryName string) (bool, error) {
 				return true, nil
 			}
 		case errors.Is(err, fs.ErrNotExist):
-			continue
 		default:
-			return false, fmt.Errorf("check %s: %w", path, err)
+			if lookupErr == nil {
+				lookupErr = fmt.Errorf("check %s: %w", path, err)
+			}
 		}
 	}
 
+	if lookupErr != nil {
+		return false, lookupErr
+	}
 	return false, nil
 }
 

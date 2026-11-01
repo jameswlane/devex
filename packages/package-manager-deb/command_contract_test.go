@@ -107,6 +107,15 @@ var _ = Describe("DEB command contracts", func() {
 				Expect(errors.As(err, &missing)).To(BeTrue())
 			})
 		}
+		if command == "is-installed" {
+			It("doesn't report a missing .deb file name as not installed", func() {
+				recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", "tool.deb"}, sdktest.Response{ExitCode: 1, Stderr: "dpkg-query: no packages found matching tool.deb\n"})
+				err := plugin.Execute(command, []string{"tool.deb"})
+				Expect(err).To(MatchError(ContainSubstring("cannot confirm whether tool.deb is installed")))
+				var missing *sdk.NotInstalledError
+				Expect(errors.As(err, &missing)).To(BeFalse())
+			})
+		}
 		It("rejects missing arguments for "+command, func() {
 			Expect(plugin.Execute(command, nil)).To(HaveOccurred())
 			for _, exe := range []string{"dpkg", "dpkg-deb", "dpkg-query", "apt-get"} {

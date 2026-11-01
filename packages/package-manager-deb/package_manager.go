@@ -261,10 +261,15 @@ func (d *DebInstaller) handleIsInstalled(ctx context.Context, args []string) err
 
 		if installed {
 			d.logger.Success("Package %s is installed", pkg)
-		} else {
-			d.logger.ErrorMsg("Package %s is not installed", pkg)
-			missing = append(missing, pkg)
+			continue
 		}
+		if strings.HasSuffix(pkg, ".deb") {
+			// A .deb file name never matches a dpkg package name, so a negative
+			// query doesn't prove the package it contains is absent.
+			return fmt.Errorf("cannot confirm whether %s is installed: dpkg-query needs the package name, not a .deb file name", pkg)
+		}
+		d.logger.ErrorMsg("Package %s is not installed", pkg)
+		missing = append(missing, pkg)
 	}
 
 	if len(missing) > 0 {
