@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
@@ -139,9 +138,8 @@ Run 'devex setup' to begin the guided installation process.`,
 
 			// Check if setup was successful
 			if m, ok := finalModel.(*setup.SetupModel); ok {
-				if m.HasErrors() {
-					log.Warn("Setup completed with errors")
-					os.Exit(1)
+				if err := m.CompletionError(); err != nil {
+					return err
 				}
 			}
 

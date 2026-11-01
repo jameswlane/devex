@@ -1,5 +1,5 @@
 name: Elixir
-description: ''
+description: A functional programming language for scalable and maintainable applications on Erlang/OTP
 category: Programming Languages
 install_method: mise
 install_command: elixir@latest

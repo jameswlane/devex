@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -66,17 +67,18 @@ func (m *SetupModel) installSelectedApps() {
 		log.Error("Streaming installer failed", err)
 		fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
 
-		m.installation.addError(err.Error())
-		return
+		m.recordInstallationErrors(err)
+		if ctx.Err() != nil || errors.Is(err, tui.ErrSudoAuthorization) {
+			return
+		}
 	}
 
-	// Installation completed successfully - now finalize shell setup
-	log.Info("Installation completed successfully, running shell configuration finalization")
+	log.Info("Running setup configuration finalization")
 
 	// Run shell finalization (same as automated setup)
 	if err := m.finalizeSetup(ctx); err != nil {
 		log.Warn("Shell setup had issues during TUI installation", "error", err)
-		m.recordShellConfigurationFailure(m.getSelectedShell(), err)
+		m.installation.addError(fmt.Sprintf("Setup finalization: %v", err))
 		// Don't fail the entire setup for shell config issues
 	}
 }
@@ -111,19 +113,23 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 	// 2. Desktop theme configuration using desktop plugin based on detected environment
 	if err := m.handleDesktopConfiguration(ctx, pluginBootstrap); err != nil {
 		log.Warn("Desktop configuration failed", "error", err)
+		m.installation.addError(fmt.Sprintf("Desktop configuration: %v", err))
 		// Don't fail the entire setup for desktop config issues
 	}
 
 	// 3. Git configuration using tool-git plugin (conditional on git config presence)
 	if err := m.handleGitConfiguration(ctx, pluginBootstrap); err != nil {
 		log.Warn("Git configuration failed", "error", err)
+		m.installation.addError(fmt.Sprintf("Git configuration: %v", err))
 		// Don't fail the entire setup for git config issues
 	}
 
 	// Save selected theme preference (using internal implementation)
-	if err := m.saveThemePreference(); err != nil {
-		log.Error("Failed to save theme preference", err)
-		return err
+	if m.getSelectedTheme() != "" {
+		if err := m.saveThemePreference(); err != nil {
+			log.Error("Failed to save theme preference", err)
+			return err
+		}
 	}
 
 	return nil
@@ -177,22 +183,19 @@ func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBoots
 	manager := pluginBootstrap.GetManager()
 	installedPlugins := manager.ListPluginsWithContext(ctx)
 
-	if _, exists := installedPlugins[pluginName]; !exists {
-		log.Warn("Desktop plugin not available, skipping desktop configuration", "plugin", pluginName)
-		return nil
+	plugin, exists := installedPlugins[pluginName]
+	if !exists {
+		return fmt.Errorf("%s plugin is not installed; rerun devex setup", pluginName)
 	}
 
 	// Get selected theme if any
 	selectedTheme := m.getSelectedTheme()
 
 	// Execute desktop plugin with theme configuration
-	args := []string{"configure"}
-	if selectedTheme != "" {
-		args = append(args, "--theme", selectedTheme)
-	}
-
-	if err := pluginBootstrap.ExecutePlugin(pluginName, args); err != nil { //nolint:contextcheck
-		return fmt.Errorf("failed to configure desktop using %s plugin. This may be due to missing desktop environment packages, insufficient permissions, or unsupported desktop configuration. Please ensure your desktop environment is fully installed and you have appropriate permissions: %w", pluginName, err)
+	for _, args := range desktopConfigurationArgs(selectedTheme) {
+		if err := runConfigurationPlugin(ctx, plugin.Path, args); err != nil {
+			return fmt.Errorf("failed to configure desktop using %s; check desktop packages and permissions: %w", pluginName, err)
+		}
 	}
 
 	log.Info("Desktop configuration completed successfully", "plugin", pluginName, "theme", selectedTheme)
@@ -215,23 +218,15 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 	manager := pluginBootstrap.GetManager()
 	installedPlugins := manager.ListPluginsWithContext(ctx)
 
-	if _, exists := installedPlugins["tool-git"]; !exists {
-		log.Warn("tool-git plugin not available, skipping git configuration")
-		return nil
+	plugin, exists := installedPlugins["tool-git"]
+	if !exists {
+		return fmt.Errorf("tool-git plugin is not installed; rerun devex setup")
 	}
 
 	log.Info("Configuring Git using tool-git plugin", "name", gitName, "email", gitEmail)
 
 	// Execute tool-git plugin with user configuration
-	args := []string{"configure"}
-	if gitName != "" {
-		args = append(args, "--name", gitName)
-	}
-	if gitEmail != "" {
-		args = append(args, "--email", gitEmail)
-	}
-
-	if err := pluginBootstrap.ExecutePlugin("tool-git", args); err != nil { //nolint:contextcheck
+	if err := runConfigurationPlugin(ctx, plugin.Path, gitConfigurationArgs(gitName, gitEmail)); err != nil {
 		return fmt.Errorf("failed to configure git using tool-git plugin: %w", err)
 	}
 

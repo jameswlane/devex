@@ -294,9 +294,9 @@ func TestStreamingInstaller_CommandValidationIntegration(t *testing.T) {
 
 	settings := config.CrossPlatformSettings{}
 
-	// Should succeed overall (InstallApps continues despite individual failures)
+	// Individual failures are returned after the remaining apps are attempted.
 	err := installer.InstallApps(context.Background(), dangerousApps, settings)
-	assert.NoError(t, err)
+	assert.ErrorContains(t, err, "dangerous-app")
 
 	// Verify app was not added to repository
 	installedApps, err := mockRepo.GetApps()
@@ -519,7 +519,7 @@ func TestStreamingInstaller_MultipleAppsWithErrors(t *testing.T) {
 
 	// Should continue with other apps even if one fails
 	err := installer.InstallApps(context.Background(), apps, settings)
-	assert.NoError(t, err)
+	assert.ErrorContains(t, err, "bad-app")
 
 	// Verify good apps were installed, bad app was not
 	installedApps, err := mockRepo.GetApps()

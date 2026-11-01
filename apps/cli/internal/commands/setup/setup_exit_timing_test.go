@@ -96,7 +96,7 @@ func TestAutoExitTiming(t *testing.T) {
 		view := model.View()
 
 		assert.Contains(t, view, "⚠️  Setup Completed with Issues", "Should show warning message when errors exist")
-		assert.Contains(t, view, "Setup completed but encountered 2 issues:",
+		assert.Contains(t, view, "Setup completed with 2 errors:",
 			"Should show error count when errors exist")
 		assert.Contains(t, view, "Failed to install package X", "Should show first error message")
 		assert.Contains(t, view, "Service Y not available", "Should show second error message")

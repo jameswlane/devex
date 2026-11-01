@@ -30,8 +30,8 @@ windows:
       official_support: true
 linux:
   install_method: apt
-  install_command: tldr
-  uninstall_command: tldr
+  install_command: tealdeer
+  uninstall_command: tealdeer
   official_support: true
   platform_requirements:
     - os: debian

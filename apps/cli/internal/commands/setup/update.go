@@ -100,6 +100,7 @@ func (m *SetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case InstallCompleteMsg:
 		m.step = StepComplete
+		m.logCompletion()
 		// Brief delay to show completion message, then quit automatically
 		return m, tea.Sequence(
 			tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {

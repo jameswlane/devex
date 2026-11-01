@@ -113,7 +113,7 @@ func printAutomatedSetupCompletion(model *SetupModel) {
 	selectedShell := model.getSelectedShell()
 
 	if model.installation.hasInstallErrors() {
-		fmt.Printf("\n⚠️  Automated setup completed with issues:\n")
+		fmt.Printf("\n⚠️  Automated setup completed with %d errors:\n", len(model.installation.getErrors()))
 		for _, issue := range model.installation.getErrors() {
 			fmt.Printf("  • %s\n", issue)
 		}
@@ -184,22 +184,20 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 		}
 	}
 
-	if len(errors) > 0 {
-		err := fmt.Errorf("automated installation failed: %s", strings.Join(errors, "; "))
-		log.Error("Automated installation failed", err)
-		fmt.Printf("⚠️  Installation failed: %v\n", err)
-		return err
+	for _, failure := range errors {
+		model.installation.addError(failure)
 	}
 
 	// Handle shell configuration and switching
 	if err := model.finalizeSetup(ctx); err != nil {
 		log.Warn("Shell setup had issues", "error", err)
-		model.recordShellConfigurationFailure(model.getSelectedShell(), err)
+		model.installation.addError(fmt.Sprintf("Setup finalization: %v", err))
 		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
 	}
 
 	// Display completion message and next steps
 	printAutomatedSetupCompletion(model)
+	model.logCompletion()
 
-	return nil
+	return model.CompletionError()
 }
