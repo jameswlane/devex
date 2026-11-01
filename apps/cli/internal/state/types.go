@@ -37,6 +37,7 @@ const (
 	OperationStatusSucceeded OperationStatus = "succeeded"
 	OperationStatusFailed    OperationStatus = "failed"
 	OperationStatusSkipped   OperationStatus = "skipped"
+	OperationStatusCanceled  OperationStatus = "canceled"
 )
 
 type TemplateRun struct {

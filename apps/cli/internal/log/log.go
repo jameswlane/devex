@@ -56,6 +56,9 @@ func InitDefaultLogger(w io.Writer) {
 	logger = New(w)
 }
 
+// CLIVersion returns the build version initialized by the CLI entry point.
+func CLIVersion() string { return cliVersion }
+
 // SetCLIVersion sets the CLI version for inclusion in system information
 func SetCLIVersion(version string) {
 	if version != "" {

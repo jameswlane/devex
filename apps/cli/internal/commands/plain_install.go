@@ -12,6 +12,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -37,6 +38,10 @@ func initializeApplicationInstallers(ctx context.Context, provider pluginBootstr
 }
 
 func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) error {
+	ctx = state.WithInstallationAudit(ctx, "plain", struct {
+		Apps     []types.CrossPlatformApp
+		Settings config.CrossPlatformSettings
+	}{apps, settings})
 	var bootstrapErr error
 	if len(apps) > 0 {
 		bootstrapErr = prepareApplicationInstallers(ctx, provider)
@@ -44,28 +49,30 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 	installed := 0
 	var failures []string
 	for _, app := range apps {
+		appCtx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
 		fmt.Fprintf(out, "installing %s...\n", app.Name)
 		err := bootstrapErr
 		if err == nil {
 			err = ctx.Err()
 		}
 		if err == nil {
-			err = installApplication(ctx, app, settings, repo)
+			err = installApplication(appCtx, app, settings, repo)
 		}
 		if err == nil {
-			// Match the TUI's AddApp record, while allowing repeated installs.
-			if existing, lookupErr := repo.GetApp(app.Name); lookupErr != nil || existing == nil {
-				err = repo.AddApp(app.Name)
-			}
+			err = state.AuditStep(appCtx, "registration", true, func() error {
+				if existing, lookupErr := repo.GetApp(app.Name); lookupErr != nil || existing == nil {
+					if err := repo.AddApp(app.Name); err != nil {
+						return err
+					}
+				}
+				data, err := json.Marshal(app)
+				if err != nil {
+					return err
+				}
+				return repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data))
+			})
 		}
-		if err == nil {
-			data, marshalErr := json.Marshal(app)
-			if marshalErr != nil {
-				err = marshalErr
-			} else {
-				err = repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data))
-			}
-		}
+		finishAudit(err)
 		if err != nil {
 			fmt.Fprintf(out, "failed %s: %v\n", app.Name, err)
 			failures = append(failures, app.Name)

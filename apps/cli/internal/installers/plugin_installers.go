@@ -2,6 +2,7 @@ package installers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
@@ -267,7 +269,9 @@ func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.
 }
 
 // InstallCrossPlatformApp installs a cross-platform application using the appropriate OS-specific configuration
-func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) error {
+func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) (result error) {
+	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
+	defer func() { finishAudit(result) }()
 	log.Info("Installing cross-platform app", "app", app.Name)
 
 	// Validate that the app is supported on the current platform
@@ -310,7 +314,9 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 }
 
 // InstallApp installs a single application
-func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) error {
+func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossPlatformSettings, repo types.Repository) (result error) {
+	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
+	defer func() { finishAudit(result) }()
 	log.Info("Installing app", "app", app.Name)
 
 	// Resolve the same configured policy used by the interactive installer.
@@ -321,26 +327,34 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	policy := utils.InstallHookPolicy{Validator: validator, AppName: app.Name}
 
 	// Execute pre-install commands
-	if err := runInstallCommands(ctx, app.PreInstall, policy); err != nil {
+	if err := state.AuditStep(ctx, "pre-install", len(app.PreInstall) > 0, func() error { return runInstallCommands(ctx, app.PreInstall, policy) }); err != nil {
 		return fmt.Errorf("failed to execute pre-install commands: %w", err)
 	}
 
 	// Execute the actual install command
-	if err := executeInstallCommand(ctx, app, repo); err != nil {
+	if err := state.AuditStep(ctx, "install", true, func() error { return executeInstallCommand(ctx, app, repo) }); err != nil {
 		return fmt.Errorf("failed to execute install command: %w", err)
 	}
 
 	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
-	configfiles.Apply(ctx, app.Name, app.ConfigFiles, false, func(message string) {
-		if strings.HasPrefix(message, "Warning:") {
-			log.Warn(message)
-		} else {
-			log.Info(message)
+	// Config-file problems are warnings: the audit step records them as a failed
+	// step, but they don't fail the install.
+	_ = state.AuditStep(ctx, "config-files", len(app.ConfigFiles) > 0, func() error {
+		result := configfiles.Apply(ctx, app.Name, app.ConfigFiles, false, func(message string) {
+			if strings.HasPrefix(message, "Warning:") {
+				log.Warn(message)
+			} else {
+				log.Info(message)
+			}
+		})
+		if len(result.Warnings) > 0 {
+			return errors.New(strings.Join(result.Warnings, "; "))
 		}
+		return nil
 	})
 
 	// Execute post-install commands
-	if err := runInstallCommands(ctx, app.PostInstall, policy); err != nil {
+	if err := state.AuditStep(ctx, "post-install", len(app.PostInstall) > 0, func() error { return runInstallCommands(ctx, app.PostInstall, policy) }); err != nil {
 		return fmt.Errorf("failed to execute post-install commands: %w", err)
 	}
 

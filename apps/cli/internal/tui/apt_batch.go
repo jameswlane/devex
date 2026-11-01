@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -195,7 +196,7 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	var batchApps []types.CrossPlatformApp
 	var batchPackages []string
 	for _, app := range toBatch {
-		if err := si.addAptSources(ctx, app.GetOSConfig()); err != nil {
+		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.GetOSConfig()) }); err != nil {
 			// The app's own install reports this error.
 			si.sendLog("WARN", fmt.Sprintf("Leaving %s out of the batch install: %v", app.Name, err))
 			continue
@@ -211,7 +212,11 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 		return nil
 	}
 
-	if err := si.ensureAptLists(ctx); err != nil {
+	targets := make([]string, 0, len(batchApps))
+	for _, app := range batchApps {
+		targets = append(targets, app.Name)
+	}
+	if err := state.AuditTargetsStep(ctx, targets, "apt-update", func() error { return si.ensureAptLists(ctx) }); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -221,7 +226,7 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 
 	si.sendLog("INFO", fmt.Sprintf("Installing %d APT packages for %d apps in one transaction...", len(batchPackages), len(batchApps)))
 	command := "sudo -n apt-get install -y " + strings.Join(batchPackages, " ")
-	if err := si.executeCommandStream(ctx, command); err != nil {
+	if err := state.AuditTargetsStep(ctx, targets, "install-batch", func() error { return si.executeCommandStream(ctx, command) }); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
