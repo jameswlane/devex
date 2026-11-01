@@ -145,6 +145,16 @@ var _ = Describe("Operation privilege contract", func() {
 		var exit *exec.ExitError
 		Expect(errors.As(err, &exit)).To(BeTrue())
 	})
+	It("puts requested environment assignments before -- so sudo doesn't run them as the command", func() {
+		plan, err := resolver.Plan(sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, Name: "apt-get", Args: []string{"update"}, Env: []string{"DEBIAN_FRONTEND=noninteractive"}})
+		Expect(err).NotTo(HaveOccurred())
+		cmd, err := (sdk.UnixSudoAdapter{
+			LookPath:  func(string) (string, error) { return "/usr/bin/sudo", nil },
+			Authorize: func(context.Context, string) error { return nil },
+		}).Prepare(context.Background(), plan)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cmd.Args).To(Equal([]string{"/usr/bin/sudo", "-n", "DEBIAN_FRONTEND=noninteractive", "--", "apt-get", "update"}))
+	})
 	It("keeps command failure distinct from successful authorization", func() {
 		plan, err := resolver.Plan(sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem}, Name: "install"})
 		Expect(err).NotTo(HaveOccurred())

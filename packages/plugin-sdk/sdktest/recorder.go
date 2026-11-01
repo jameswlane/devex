@@ -250,11 +250,18 @@ if [ "${1-}" = '-H' ]; then
  shift
  if [ "${1-}" = '-u' ]; then shift; shift; fi
 fi
-if [ "${1-}" = '--' ]; then shift; fi
-if [ "${1-}" = 'env' ]; then shift; fi
+# Like sudo, VAR=value assignments count only before "--".
 while [ "$#" -gt 0 ]; do
  case "$1" in *=*) export "$1"; shift ;; *) break ;; esac
 done
+if [ "${1-}" = '--' ]; then shift; fi
+if [ "${1-}" = 'env' ]; then
+ shift
+ while [ "$#" -gt 0 ]; do
+  case "$1" in *=*) export "$1"; shift ;; *) break ;; esac
+ done
+fi
+case "${1-}" in *=*) printf 'sudo: %s: command not found\n' "$1" >&2; exit 1 ;; esac
 case "${1-}" in
 `)
 	commands := make([]string, 0, len(r.responses))
