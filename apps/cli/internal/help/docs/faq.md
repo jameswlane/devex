@@ -400,3 +400,12 @@ Start a discussion: https://github.com/jameswlane/devex/discussions
 ---
 
 *Don't see your question here? Check the [full documentation](overview) or ask in our [community discussions](https://github.com/jameswlane/devex/discussions).*
+
+## Can coding agents use DevEx?
+
+Yes. DevEx ships an Agent Skill (`apps/cli/internal/agentskills/devex/SKILL.md`
+in the source tree) that teaches agents to discover applications, preview with
+`--dry-run`, ask the user for approval, and only then run
+`devex install APP --non-interactive`. It never runs `sudo` or `--force` on the
+user's behalf.
+
