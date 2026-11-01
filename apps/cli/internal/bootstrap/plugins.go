@@ -345,6 +345,21 @@ func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginNa
 	return b.manager.ExecutePluginWithContext(ctx, pluginName, args)
 }
 
+// ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with
+// caller-owned streams.
+func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams sdk.OperationIO) error {
+	if err := validatePluginName(pluginName); err != nil {
+		return fmt.Errorf("invalid plugin name: %w", err)
+	}
+	if _, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]; !installed {
+		if err := b.PluginDownloadError(pluginName); err != nil {
+			return fmt.Errorf("required plugin %s is unavailable: %w", pluginName, err)
+		}
+	}
+
+	return b.manager.ExecutePluginWithIO(ctx, pluginName, args, streams)
+}
+
 // GetPlatform returns the detected platform
 func (b *PluginBootstrap) GetPlatform() *platform.Platform {
 	return b.platform

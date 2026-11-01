@@ -117,7 +117,7 @@ var _ = Describe("Status Command", func() {
 				cmd.SetArgs([]string{"--app", "nonexistent", "--format", "json"})
 
 				err := cmd.Execute()
-				Expect(err).NotTo(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("1 requested application(s) are not known to DevEx")))
 			})
 		})
 
@@ -193,6 +193,21 @@ var _ = Describe("Status Command", func() {
 				Expect(output).NotTo(ContainSubstring("Invalid install method"))
 			})
 
+			It("prints an empty JSON list for an unknown app and keeps stdout parseable", func() {
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--app", "unknown-app", "--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).To(HaveOccurred())
+				var results []map[string]any
+				Expect(json.Unmarshal([]byte(output), &results)).To(Succeed(), "stdout: %q", output)
+				Expect(results).To(BeEmpty())
+			})
+
 			It("checks every tracked app when no flags are given", func() {
 				Expect(realRepo.AddApp("curl")).To(Succeed())
 				cmd := commands.NewStatusCmd(realRepo, realSettings)
@@ -247,8 +262,9 @@ var _ = Describe("Status Command", func() {
 					err = cmd.Execute()
 				})
 
-				Expect(err).NotTo(HaveOccurred())
-				Expect(output).To(ContainSubstring("Unknown application 'unknown-app'"))
+				// The warning goes to stderr; the command fails so scripts notice.
+				Expect(err).To(MatchError(ContainSubstring("not known to DevEx")))
+				Expect(output).NotTo(ContainSubstring("Unknown application"))
 				Expect(output).To(ContainSubstring("No applications to check"))
 			})
 		})
@@ -258,8 +274,9 @@ var _ = Describe("Status Command", func() {
 				cmd := commands.NewStatusCmd(mockRepo, mockSettings)
 				cmd.SetArgs([]string{"--app", "git,curl", "--format", "json"})
 
+				// git is checked; curl is not in this catalog, so the command fails.
 				err := cmd.Execute()
-				Expect(err).NotTo(HaveOccurred())
+				Expect(err).To(MatchError(ContainSubstring("1 requested application(s) are not known to DevEx")))
 			})
 		})
 
@@ -439,19 +456,20 @@ func captureStatusStdout(fn func()) string {
 }
 
 var _ = Describe("Status error summary", func() {
-	It("returns nil when no application is in an error state", func() {
+	It("returns nil when every application is healthy, warned, or unknown", func() {
 		Expect(commands.StatusErrorSummary([]status.AppStatus{
 			{Name: "git", Status: "healthy"},
+			{Name: "fzf", Status: "warning"},
 			{Name: "gone", Status: "unknown"},
-			{Name: "bat", Status: "not_installed"},
 		})).To(Succeed())
 	})
 
-	It("counts applications in an error state so the command exits non-zero", func() {
+	It("counts missing and failed applications so the command exits non-zero", func() {
 		err := commands.StatusErrorSummary([]status.AppStatus{
 			{Name: "git", Status: "healthy"},
+			{Name: "bat", Status: "not_installed"},
 			{Name: "docker", Status: "error"},
 		})
-		Expect(err).To(MatchError("1 of 2 application(s) reported errors"))
+		Expect(err).To(MatchError("2 of 3 application(s) not installed or in error (1 not installed, 1 errors)"))
 	})
 })
