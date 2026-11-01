@@ -203,6 +203,24 @@ configure_ssh: false`,
 				Expect(cmd.Execute()).To(Succeed())
 			})
 
+			It("fails on a dependency cycle and an unknown install method, naming them", func() {
+				withProblems := *settings
+				withProblems.ApplicationOverrides = []types.CrossPlatformApp{
+					{Name: "A", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "a", Dependencies: []string{"B"}}},
+					{Name: "B", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "b", Dependencies: []string{"A"}}},
+					{Name: "C", Linux: types.OSConfig{InstallMethod: "aptt", InstallCommand: "c"}},
+				}
+				cmd := commands.NewConfigCmd(mockRepo, withProblems)
+				cmd.SetArgs([]string{"validate"})
+
+				var err error
+				output := captureStatusStdout(func() { err = cmd.Execute() })
+
+				Expect(err).To(MatchError(ContainSubstring("validation failed")))
+				Expect(output).To(ContainSubstring("dependency cycle: A -> B -> A"))
+				Expect(output).To(ContainSubstring(`unknown install method "aptt"`))
+			})
+
 			It("detects content errors in nested application files", func() {
 				path := filepath.Join(configDir, "applications", "development", "git.yaml")
 				content := []byte("description: Missing name\nlinux:\n  install_method: apt\n  install_command: git\n")
