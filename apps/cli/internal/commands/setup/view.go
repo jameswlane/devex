@@ -316,6 +316,15 @@ func (m *SetupModel) View() string {
 			s += "\n"
 		}
 
+		if gitName := strings.TrimSpace(m.git.gitFullName); gitName != "" {
+			s += "🔧 Git identity:\n"
+			s += fmt.Sprintf("  • %s <%s>", gitName, strings.TrimSpace(m.git.gitEmail))
+			if m.gitIdentityUnchanged() {
+				s += " (existing, unchanged)"
+			}
+			s += "\n\n"
+		}
+
 		s += "Essential terminal tools will also be installed.\n\n"
 		s += "Press Enter to start installation, 'p' to go back, or 'q' to quit."
 

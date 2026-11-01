@@ -213,6 +213,10 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 		log.Debug("No Git configuration provided, skipping git setup")
 		return nil
 	}
+	if m.gitIdentityUnchanged() {
+		log.Info("Keeping the existing global Git identity", "name", gitName, "email", gitEmail)
+		return nil
+	}
 
 	// Check if tool-git plugin is available
 	manager := pluginBootstrap.GetManager()
