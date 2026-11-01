@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
@@ -30,28 +32,28 @@ import (
 
 // ConfigInfo represents configuration file information
 type ConfigInfo struct {
-	Path         string    `yaml:"path"`
-	Size         int64     `yaml:"size"`
-	ModTime      time.Time `yaml:"modified"`
-	Exists       bool      `yaml:"exists"`
-	Valid        bool      `yaml:"valid"`
-	ErrorMessage string    `yaml:"error,omitempty"`
+	Path         string    `yaml:"path" json:"path"`
+	Size         int64     `yaml:"size" json:"size"`
+	ModTime      time.Time `yaml:"modified" json:"modified"`
+	Exists       bool      `yaml:"exists" json:"exists"`
+	Valid        bool      `yaml:"valid" json:"valid"`
+	ErrorMessage string    `yaml:"error,omitempty" json:"error,omitempty"`
 }
 
 // ConfigSummary represents a summary of all configuration files
 type ConfigSummary struct {
-	ConfigDir        string     `yaml:"config_dir"`
-	Applications     ConfigInfo `yaml:"applications"`
-	Environment      ConfigInfo `yaml:"environment"`
-	System           ConfigInfo `yaml:"system"`
-	Desktop          ConfigInfo `yaml:"desktop"`
-	Dotfiles         ConfigInfo `yaml:"dotfiles"`
-	Security         ConfigInfo `yaml:"security"`
-	InitMetadata     ConfigInfo `yaml:"init_metadata"`
-	Backups          []string   `yaml:"backups"`
-	TotalSize        int64      `yaml:"total_size"`
-	LastModified     time.Time  `yaml:"last_modified"`
-	ValidationErrors []string   `yaml:"validation_errors,omitempty"`
+	ConfigDir        string     `yaml:"config_dir" json:"config_dir"`
+	Applications     ConfigInfo `yaml:"applications" json:"applications"`
+	Environment      ConfigInfo `yaml:"environment" json:"environment"`
+	System           ConfigInfo `yaml:"system" json:"system"`
+	Desktop          ConfigInfo `yaml:"desktop" json:"desktop"`
+	Dotfiles         ConfigInfo `yaml:"dotfiles" json:"dotfiles"`
+	Security         ConfigInfo `yaml:"security" json:"security"`
+	InitMetadata     ConfigInfo `yaml:"init_metadata" json:"init_metadata"`
+	Backups          []string   `yaml:"backups" json:"backups"`
+	TotalSize        int64      `yaml:"total_size" json:"total_size"`
+	LastModified     time.Time  `yaml:"last_modified" json:"last_modified"`
+	ValidationErrors []string   `yaml:"validation_errors,omitempty" json:"validation_errors,omitempty"`
 }
 
 // NewConfigCmd creates a new config command
@@ -187,6 +189,7 @@ func newConfigValidateCmd(settings config.CrossPlatformSettings) *cobra.Command 
 	var (
 		fix    bool
 		strict bool
+		format string
 	)
 
 	cmd := &cobra.Command{
@@ -203,7 +206,10 @@ Checks for:
   • Dependency cycles between applications, with the cycle path
   • File permissions and accessibility
 
-Exits non-zero when any error is found.
+Exits non-zero when any error is found. With --format json, stdout is a JSON
+object {valid, errors, warnings, diagnostics[]} where each diagnostic has a
+stable category (file_missing, file_invalid_yaml, schema,
+install_method_unknown, dependency_cycle), file, field and message.
 
 Examples:
   # Basic validation
@@ -215,12 +221,19 @@ Examples:
   # Validate and attempt to fix common issues
   devex config validate --fix`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return validateConfigurationFiles(settings, fix, strict)
+			if format != "table" && format != "json" {
+				return fmt.Errorf("unsupported output format %q: use table or json", format)
+			}
+			return validateConfigurationFiles(cmd.Context(), cmd.OutOrStdout(), settings, fix, strict, format)
 		},
 	}
 
 	cmd.Flags().BoolVar(&fix, "fix", false, "Attempt to fix common validation issues")
 	cmd.Flags().BoolVar(&strict, "strict", false, "Perform strict validation checks")
+	cmd.Flags().StringVarP(&format, "format", "f", "table", "Output format (table, json)")
+	// A failed validation is a result, not a usage error: keep stdout to the report
+	// (and valid JSON with --format json).
+	cmd.SilenceUsage = true
 
 	return cmd
 }
@@ -470,18 +483,11 @@ func outputConfigTable(summary *ConfigSummary, detailed bool) error {
 
 // outputJSON displays the configuration summary as JSON
 func outputJSON(summary *ConfigSummary) error {
-	data, err := yaml.Marshal(summary)
-	if err != nil {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(summary); err != nil {
 		return fmt.Errorf("failed to marshal summary: %w", err)
 	}
-
-	// Convert YAML to JSON for better formatting
-	var jsonData interface{}
-	if err := yaml.Unmarshal(data, &jsonData); err != nil {
-		return fmt.Errorf("failed to convert to JSON: %w", err)
-	}
-
-	fmt.Printf("%+v\n", jsonData)
 	return nil
 }
 
@@ -591,22 +597,14 @@ func yamlFilesInDirectory(dir string) ([]string, error) {
 }
 
 // validateConfigurationFiles validates all configuration files
-func validateConfigurationFiles(settings config.CrossPlatformSettings, fix, strict bool) error {
-	green := color.New(color.FgGreen).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-
-	fmt.Printf("%s Validating DevEx Configuration...\n\n", yellow("🔍"))
-
+func validateConfigurationFiles(ctx context.Context, out io.Writer, settings config.CrossPlatformSettings, fix, strict bool, format string) error {
 	summary, err := buildConfigSummary(settings)
 	if err != nil {
 		return fmt.Errorf("failed to build config summary: %w", err)
 	}
 
-	errors := 0
-	warnings := 0
-
-	// Validate individual files
+	// File presence and YAML syntax.
+	result := agentapi.ValidationResult{Valid: true, Diagnostics: []agentapi.Diagnostic{}}
 	configs := []struct {
 		name     string
 		info     ConfigInfo
@@ -620,91 +618,107 @@ func validateConfigurationFiles(settings config.CrossPlatformSettings, fix, stri
 		{"security.yaml", summary.Security, false},
 		{"devex.yaml", summary.InitMetadata, false},
 	}
-
 	for _, cfg := range configs {
-		fmt.Printf("Checking %s... ", cfg.name)
-
-		if !cfg.info.Exists {
-			if cfg.required {
-				fmt.Printf("%s\n", red("❌ Missing (required)"))
-				errors++
-			} else {
-				fmt.Printf("%s\n", yellow("⚠️ Missing (optional)"))
-				warnings++
-			}
-			continue
-		}
-
-		if !cfg.info.Valid {
-			fmt.Printf("%s\n", red("❌ Invalid YAML"))
-			fmt.Printf("  Error: %s\n", cfg.info.ErrorMessage)
-			errors++
-			continue
-		}
-
-		fmt.Printf("%s\n", green("✅ Valid YAML"))
-	}
-
-	hasCanonicalConfig := false
-	for _, directory := range config.ConfigDirectories {
-		info, err := os.Stat(filepath.Join(settings.GetConfigDir(), directory))
-		if err == nil && info.IsDir() {
-			hasCanonicalConfig = true
-			break
+		switch {
+		case !cfg.info.Exists && cfg.required:
+			result.Add(agentapi.Diagnostic{Severity: agentapi.SeverityError, Category: agentapi.CategoryFileMissing, File: cfg.name, Message: "Missing (required)"})
+		case !cfg.info.Exists:
+			result.Add(agentapi.Diagnostic{Severity: agentapi.SeverityWarning, Category: agentapi.CategoryFileMissing, File: cfg.name, Message: "Missing (optional)"})
+		case !cfg.info.Valid:
+			result.Add(agentapi.Diagnostic{Severity: agentapi.SeverityError, Category: agentapi.CategoryFileInvalidYAML, File: cfg.name, Message: cfg.info.ErrorMessage})
 		}
 	}
-	if hasCanonicalConfig {
-		validator := config.NewConfigValidator(settings.HomeDir, strict)
-		_ = validator.ValidateDirectoryStructure(settings.GetConfigDir())
-		for _, validationError := range validator.GetErrors() {
-			fmt.Printf("  Error: %s\n", validationError.Error())
-		}
-		for _, warning := range validator.GetWarnings() {
-			fmt.Printf("  Warning: %s\n", warning.Error())
-		}
-		errors += len(validator.GetErrors())
-		warnings += len(validator.GetWarnings())
+
+	// Schema, install methods and dependency cycles.
+	semantic, err := agentapi.ValidateConfig(ctx, settings, strict)
+	if err != nil {
+		return err
+	}
+	for _, d := range semantic.Diagnostics {
+		result.Add(d)
 	}
 
-	// Semantic checks over the effective application set (the same apps the
-	// installer sees, after layering): unknown install methods and dependency
-	// cycles. These are errors in every mode because installs would fail.
-	fmt.Printf("Checking application references... ")
-	graphErrors := config.ValidateApplicationGraph(settings.GetAllApps())
-	if len(graphErrors) == 0 {
-		fmt.Printf("%s\n", green("✅ No unknown install methods or dependency cycles"))
+	if format == "json" {
+		encoder := json.NewEncoder(out)
+		encoder.SetIndent("", "  ")
+		if err := encoder.Encode(result); err != nil {
+			return fmt.Errorf("failed to encode validation result: %w", err)
+		}
 	} else {
-		fmt.Printf("%s\n", red(fmt.Sprintf("❌ %d problem(s)", len(graphErrors))))
-		for _, graphError := range graphErrors {
-			fmt.Printf("  Error: %s\n", graphError.Error())
-		}
-		errors += len(graphErrors)
+		renderValidationTable(out, configs, result, fix)
 	}
 
-	// Summary
-	fmt.Println()
-	if errors == 0 && warnings == 0 {
-		fmt.Printf("%s All configuration files are valid!\n", green("🎉"))
-	} else {
-		if errors > 0 {
-			fmt.Printf("%s Found %d error(s)\n", red("❌"), errors)
-		}
-		if warnings > 0 {
-			fmt.Printf("%s Found %d warning(s)\n", yellow("⚠️"), warnings)
-		}
-
-		if fix && errors > 0 {
-			fmt.Printf("\n%s Attempting to fix issues...\n", yellow("🔧"))
-			// TODO: Implement auto-fix logic
-			fmt.Printf("%s Auto-fix not yet implemented\n", yellow("ℹ️"))
-		}
+	if result.Errors > 0 {
+		return fmt.Errorf("validation failed with %d errors", result.Errors)
 	}
-
-	if errors > 0 {
-		return fmt.Errorf("validation failed with %d errors", errors)
-	}
-
 	return nil
+}
+
+// renderValidationTable prints the human-readable validation report.
+func renderValidationTable(out io.Writer, configs []struct {
+	name     string
+	info     ConfigInfo
+	required bool
+}, result agentapi.ValidationResult, fix bool) {
+	green := color.New(color.FgGreen).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+
+	_, _ = fmt.Fprintf(out, "%s Validating DevEx Configuration...\n\n", yellow("🔍"))
+	for _, cfg := range configs {
+		_, _ = fmt.Fprintf(out, "Checking %s... ", cfg.name)
+		switch {
+		case !cfg.info.Exists && cfg.required:
+			_, _ = fmt.Fprintf(out, "%s\n", red("❌ Missing (required)"))
+		case !cfg.info.Exists:
+			_, _ = fmt.Fprintf(out, "%s\n", yellow("⚠️ Missing (optional)"))
+		case !cfg.info.Valid:
+			_, _ = fmt.Fprintf(out, "%s\n", red("❌ Invalid YAML"))
+			_, _ = fmt.Fprintf(out, "  Error: %s\n", cfg.info.ErrorMessage)
+		default:
+			_, _ = fmt.Fprintf(out, "%s\n", green("✅ Valid YAML"))
+		}
+	}
+
+	var graph []agentapi.Diagnostic
+	for _, d := range result.Diagnostics {
+		switch d.Category {
+		case agentapi.CategorySchema:
+			label := "Error"
+			if d.Severity == agentapi.SeverityWarning {
+				label = "Warning"
+			}
+			_, _ = fmt.Fprintf(out, "  %s: %s in %s.%s\n", label, d.Message, d.File, d.Field)
+		case agentapi.CategoryInstallMethodUnknown, agentapi.CategoryDependencyCycle:
+			graph = append(graph, d)
+		}
+	}
+
+	_, _ = fmt.Fprintf(out, "Checking application references... ")
+	if len(graph) == 0 {
+		_, _ = fmt.Fprintf(out, "%s\n", green("✅ No unknown install methods or dependency cycles"))
+	} else {
+		_, _ = fmt.Fprintf(out, "%s\n", red(fmt.Sprintf("❌ %d problem(s)", len(graph))))
+		for _, d := range graph {
+			_, _ = fmt.Fprintf(out, "  Error: %s in %s.%s\n", d.Message, d.File, d.Field)
+		}
+	}
+
+	_, _ = fmt.Fprintln(out)
+	if result.Errors == 0 && result.Warnings == 0 {
+		_, _ = fmt.Fprintf(out, "%s All configuration files are valid!\n", green("🎉"))
+		return
+	}
+	if result.Errors > 0 {
+		_, _ = fmt.Fprintf(out, "%s Found %d error(s)\n", red("❌"), result.Errors)
+	}
+	if result.Warnings > 0 {
+		_, _ = fmt.Fprintf(out, "%s Found %d warning(s)\n", yellow("⚠️"), result.Warnings)
+	}
+	if fix && result.Errors > 0 {
+		_, _ = fmt.Fprintf(out, "\n%s Attempting to fix issues...\n", yellow("🔧"))
+		_, _ = fmt.Fprintf(out, "%s Auto-fix not yet implemented\n", yellow("ℹ️"))
+	}
 }
 
 // compareConfigurations compares current config with a backup
