@@ -142,6 +142,13 @@ devex config edit all
 
 Recursively validate canonical configuration files for YAML syntax, required fields, and platform configuration errors. Legacy monolithic files remain supported.
 
+It also checks the effective application set, which is the same layered set the installer uses:
+
+- **Unknown install methods** are errors, including in `alternatives`. Methods with a DevEx plugin (`apt`, `dnf`, `pacman`, `brew`, `flatpak`, `mise`, …) are accepted whether or not the plugin is downloaded, so offline configurations stay valid. Recognised methods that don't have a plugin yet (`winget`, `scoop`, `cargo`, `npm`, …) are also accepted: those entries are well-formed but can't be installed until a plugin exists.
+- **Dependency cycles** between applications are errors, reported with the full path (for example `dependency cycle: A -> B -> A`) per platform. A dependency that names another application, by name or by its single-word install command, is a reference. Anything else (`curl`, `apt`, …) is treated as a native package and not reported.
+
+`devex config validate` exits non-zero when any error is found, so it can gate CI or scripts before an install runs.
+
 ```bash
 devex config validate [flags]
 ```

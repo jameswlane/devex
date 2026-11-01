@@ -198,8 +198,12 @@ Checks for:
   • YAML syntax errors
   • Required fields and structure
   • Valid application configurations
-  • Dependency consistency
+  • Unknown install methods (methods that are recognised but have no plugin
+    yet, such as winget, are accepted; plugins don't need to be downloaded)
+  • Dependency cycles between applications, with the cycle path
   • File permissions and accessibility
+
+Exits non-zero when any error is found.
 
 Examples:
   # Basic validation
@@ -660,6 +664,21 @@ func validateConfigurationFiles(settings config.CrossPlatformSettings, fix, stri
 		}
 		errors += len(validator.GetErrors())
 		warnings += len(validator.GetWarnings())
+	}
+
+	// Semantic checks over the effective application set (the same apps the
+	// installer sees, after layering): unknown install methods and dependency
+	// cycles. These are errors in every mode because installs would fail.
+	fmt.Printf("Checking application references... ")
+	graphErrors := config.ValidateApplicationGraph(settings.GetAllApps())
+	if len(graphErrors) == 0 {
+		fmt.Printf("%s\n", green("✅ No unknown install methods or dependency cycles"))
+	} else {
+		fmt.Printf("%s\n", red(fmt.Sprintf("❌ %d problem(s)", len(graphErrors))))
+		for _, graphError := range graphErrors {
+			fmt.Printf("  Error: %s\n", graphError.Error())
+		}
+		errors += len(graphErrors)
 	}
 
 	// Summary
