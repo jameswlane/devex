@@ -153,35 +153,32 @@ var _ = Describe("AppImage operation contracts", func() {
 		Expect(plugin.Execute("validate-url", []string{url, url + "?version=2"})).To(Succeed())
 		Expect(transport.calls).To(Equal([]string{"HEAD " + url, "HEAD " + url + "?version=2"}))
 	})
-	It("records the current warning-only URL validation failure behavior", func() {
+	// The swallowed list, remove and validate-url failures below are #255's
+	// pending contracts. These specs assert only the observable effects that hold
+	// whether or not the error is returned, not the current success result.
+	It("probes an inaccessible URL with one HEAD request", func() {
 		transport.status = http.StatusForbidden
-		Expect(plugin.Execute("validate-url", []string{url})).To(Succeed())
+		_ = plugin.Execute("validate-url", []string{url})
 		Expect(transport.calls).To(Equal([]string{"HEAD " + url}))
 	})
-	It("records warning-only directory read failures from list", func() {
-		writeBinary(".", "Applications", 0600)
-		Expect(plugin.Execute("list", nil)).To(Succeed())
-		Expect(logger.output.String()).To(ContainSubstring("Error reading directory"))
-	})
-	PIt("propagates list errors: directory read failures currently return success", func() {
+	PIt("propagates list errors: #255 - directory read failures return success", func() {
 		writeBinary(".", "Applications", 0600)
 		Expect(plugin.Execute("list", nil)).To(HaveOccurred())
 	})
-	It("records warning-only filesystem failures from remove", func() {
+	It("leaves a non-empty installed path in place when removal fails", func() {
 		path := filepath.Join(home, "Applications", "tool")
 		Expect(os.MkdirAll(path, 0755)).To(Succeed())
 		Expect(os.WriteFile(filepath.Join(path, "child"), []byte("fixture"), 0600)).To(Succeed())
-		Expect(plugin.Execute("remove", []string{"tool"})).To(Succeed())
-		_, err := os.Stat(path)
-		Expect(err).NotTo(HaveOccurred())
+		_ = plugin.Execute("remove", []string{"tool"})
+		Expect(filepath.Join(path, "child")).To(BeAnExistingFile())
 	})
-	PIt("propagates remove errors: failed removal of an installed path currently returns success", func() {
+	PIt("propagates remove errors: #255 - failed removal of an installed path returns success", func() {
 		path := filepath.Join(home, "Applications", "tool")
 		Expect(os.MkdirAll(path, 0755)).To(Succeed())
 		Expect(os.WriteFile(filepath.Join(path, "child"), []byte("fixture"), 0600)).To(Succeed())
 		Expect(plugin.Execute("remove", []string{"tool"})).To(HaveOccurred())
 	})
-	PIt("propagates validate-url errors: inaccessible URLs currently return success", func() {
+	PIt("propagates validate-url errors: #255 - inaccessible URLs return success", func() {
 		transport.status = http.StatusForbidden
 		Expect(plugin.Execute("validate-url", []string{url})).To(HaveOccurred())
 	})

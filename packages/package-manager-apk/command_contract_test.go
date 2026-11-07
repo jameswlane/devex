@@ -47,16 +47,15 @@ var _ = Describe("APK command contracts", func() {
 		It(fmt.Sprintf("records native failure behavior for %s", c.command), func() {
 			recorder.Script("apk", c.calls[len(c.calls)-1].Args, sdktest.Response{ExitCode: 42, Stderr: "apk failed\n"})
 			err := plugin.Execute(c.command, c.args)
-			if c.command == "info" {
-				// Defect: info logs native failures and returns success; retain the behavior without fixing production here.
-				Expect(err).To(Succeed())
-			} else {
+			// info swallows native failures (#255). That result is the pending
+			// contract below, so only its native calls are asserted here.
+			if c.command != "info" {
 				Expect(err).To(MatchError("exit status 42"))
 			}
 			Expect(recorder.Calls("apk")).To(Equal(c.calls))
 		})
 	}
-	PIt("propagates info failures: info currently logs the error and returns nil", func() {
+	PIt("propagates info failures: #255 - info logs the native error and returns nil", func() {
 		recorder.Script("apk", []string{"info", "git"}, sdktest.Response{ExitCode: 42})
 		Expect(plugin.Execute("info", []string{"git"})).To(MatchError("exit status 42"))
 	})

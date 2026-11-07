@@ -10,6 +10,13 @@ import (
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 )
 
+// trackingIssue is the filed issue for every pending contract below.
+const trackingIssue = "#249"
+
+// operationContract describes one advertised command. currentArg and elevated
+// are asserted only for active contracts. Pending contracts leave them unset:
+// their current argv and elevation are the tracked defect, so they are not
+// pinned as passing expectations.
 type operationContract struct {
 	command          string
 	args             []string
@@ -26,7 +33,7 @@ var contracts = []operationContract{
 	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "--yes-all", "git", "vim"}, nativeArgv: []string{"remove", "--yes-all", "git", "vim"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg"},
 	{command: "update", args: nil, currentArg: []string{"update-repo"}, nativeArgv: []string{"update-repo"}, elevated: true, nativeElevated: true, nativeExecutable: "eopkg"},
 	{command: "search", args: []string{"web", "server"}, currentArg: []string{"search", "web server"}, nativeArgv: []string{"search", "web server"}, elevated: false, nativeElevated: false, nativeExecutable: "eopkg", pending: ""},
-	{command: "list", args: nil, currentArg: []string{"list"}, nativeArgv: []string{"list-installed"}, elevated: false, nativeElevated: false, nativeExecutable: "eopkg", pending: "installed query requires list-installed, not list"},
+	{command: "list", args: nil, nativeArgv: []string{"list-installed"}, nativeElevated: false, nativeExecutable: "eopkg", pending: "installed query requires list-installed, not list"},
 }
 
 var _ = Describe("EOPKG command contracts", func() {
@@ -54,22 +61,6 @@ var _ = Describe("EOPKG command contracts", func() {
 
 	for _, contract := range contracts {
 		contract := contract
-		It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
-			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls("eopkg")).To(Equal([]sdktest.Call{{
-				Args:               contract.currentArg,
-				ElevationRequested: contract.elevated,
-			}}))
-		})
-
-		It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
-			recorder.Script("eopkg", contract.currentArg, sdktest.Response{
-				ExitCode: 42,
-				Stderr:   "eopkg failed\n",
-			})
-			Expect(plugin.Execute(contract.command, contract.args)).To(MatchError("exit status 42"))
-		})
-
 		assertNativeArgv := func() {
 			if len(contract.nativeArgv) == 0 {
 				Expect(plugin.Execute(contract.command, contract.args)).To(HaveOccurred())
@@ -83,9 +74,35 @@ var _ = Describe("EOPKG command contracts", func() {
 			}}))
 		}
 		if contract.pending == "" {
+			It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
+				Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
+				Expect(recorder.Calls("eopkg")).To(Equal([]sdktest.Call{{
+					Args:               contract.currentArg,
+					ElevationRequested: contract.elevated,
+				}}))
+			})
+
+			It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
+				recorder.Script("eopkg", contract.currentArg, sdktest.Response{
+					ExitCode: 42,
+					Stderr:   "eopkg failed\n",
+				})
+				Expect(plugin.Execute(contract.command, contract.args)).To(MatchError("exit status 42"))
+			})
+
 			It(fmt.Sprintf("uses the required native argv for %s", contract.command), assertNativeArgv)
 		} else {
-			PIt(fmt.Sprintf("uses the required native argv for %s: %s", contract.command, contract.pending), assertNativeArgv)
+			It(fmt.Sprintf("dispatches %s to a handler that surfaces native failures", contract.command), func() {
+				recorder.Fallback("eopkg", sdktest.Response{ExitCode: 42, Stderr: "eopkg failed\n"})
+				err := plugin.Execute(contract.command, contract.args)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("unknown command"))
+				if contract.nativeArgv != nil {
+					Expect(err).To(MatchError(ContainSubstring("exit status 42")))
+				}
+			})
+
+			PIt(fmt.Sprintf("uses the required native argv for %s: %s - %s", contract.command, trackingIssue, contract.pending), assertNativeArgv)
 		}
 	}
 

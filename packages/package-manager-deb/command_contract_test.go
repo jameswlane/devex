@@ -146,7 +146,7 @@ var _ = Describe("DEB command contracts", func() {
 		}))
 		Expect(recorder.Calls("dpkg")).To(Equal([]sdktest.Call{{Args: []string{"-i", file}, ElevationRequested: true}}))
 	})
-	PIt("propagates installed-query failures: dpkg-query exit 42 currently becomes package absence", func() {
+	PIt("propagates installed-query failures: #255 - dpkg-query exit 42 becomes package absence", func() {
 		recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", "git"}, sdktest.Response{ExitCode: 42})
 		Expect(plugin.Execute("is-installed", []string{"git"})).To(MatchError(ContainSubstring("exit status 42")))
 	})
