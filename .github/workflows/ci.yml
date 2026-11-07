@@ -5,11 +5,13 @@ on:
     paths:
       - 'apps/**'
       - 'packages/**'
+      - 'scripts/ci/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'apps/**'
       - 'packages/**'
+      - 'scripts/ci/**'
       - '.github/workflows/ci.yml'
 permissions:
   contents: read
@@ -40,8 +42,11 @@ jobs:
           filters: |
             cli:
               - 'apps/cli/**'
+              # The CLI builds against the local SDK through a replace directive.
+              - 'packages/plugin-sdk/**'
             sdk:
               - 'packages/plugin-sdk/**'
+              - 'scripts/ci/**'
               - '.github/workflows/ci.yml'
             plugins:
               - 'packages/**'
@@ -52,6 +57,9 @@ jobs:
               - 'apps/registry/**'
             docs:
               - 'apps/docs/**'
+      - name: Test plugin matrix selection
+        if: steps.changes.outputs.sdk == 'true'
+        run: node --test scripts/ci/*.test.mjs
       - name: Detect changed plugins
         if: steps.changes.outputs.plugins == 'true' || steps.changes.outputs.sdk == 'true'
         id: plugins
@@ -64,39 +72,18 @@ jobs:
             changed_files=$(git diff --name-only HEAD~1 HEAD)
           fi
 
-          changed_plugins=()
-          # Shared execution changes must exercise all current recorder adopters.
-          if [ "${{ steps.changes.outputs.sdk }}" = "true" ]; then
-            changed_plugins+=(
-              "package-manager-dnf" "package-manager-pacman"
-              "package-manager-apk" "package-manager-appimage" "package-manager-deb"
-              "package-manager-emerge" "package-manager-eopkg"
-              "package-manager-nixflake" "package-manager-nixpkgs"
-              "package-manager-rpm" "package-manager-xbps" "package-manager-zypper"
-            )
-          fi
-
-          while IFS= read -r file; do
-            if [[ $file == packages/* ]]; then
-              plugin_dir=${file#packages/}
-              plugin_dir=${plugin_dir%%/*}
-              # Skip plugin-sdk and ensure plugin has main.go or package.json
-              if [ "$plugin_dir" != "plugin-sdk" ] && \
-                 { [ -f "packages/$plugin_dir/main.go" ] || [ -f "packages/$plugin_dir/package.json" ]; }; then
-                changed_plugins+=("$plugin_dir")
-              fi
-            fi
-          done <<< "$changed_files"
-
-          # Convert to JSON array for matrix
-          if [ ${#changed_plugins[@]} -gt 0 ]; then
-            plugins_json=$(printf '%s\n' "${changed_plugins[@]}" | jq -R . | jq -s -c unique)
-            echo "matrix=$plugins_json" >> "$GITHUB_OUTPUT"
-            echo "Changed plugins: ${changed_plugins[*]}"
-          else
-            echo "matrix=[]" >> "$GITHUB_OUTPUT"
-            echo "No plugins changed"
-          fi
+          # Shared SDK changes select every recorder adopter (any plugin whose
+          # tests import sdktest); see scripts/ci/plugin-matrix.mjs.
+          plugins_json=$(printf '%s\n' "$changed_files" | node scripts/ci/plugin-matrix.mjs --sdk "${{ steps.changes.outputs.sdk }}")
+          echo "matrix=$plugins_json" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Plugin test matrix"
+            echo "SDK changed: ${{ steps.changes.outputs.sdk }}"
+            echo '```json'
+            echo "$plugins_json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "Selected plugins: $plugins_json"
   test-cli:
     name: Test CLI
     runs-on: ubuntu-latest
@@ -212,46 +199,10 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Test plugin ${{ matrix.plugin }}
-        run: |
-          cd packages/${{ matrix.plugin }}
-
-          echo "::group::Updating dependencies for ${{ matrix.plugin }}"
-          if [ -f "go.mod" ]; then
-            go mod tidy
-            go mod download
-          fi
-          echo "::endgroup::"
-
-          echo "::group::Linting ${{ matrix.plugin }}"
-          if [ -f "go.mod" ]; then
-            golangci-lint run || echo "Linting failed for ${{ matrix.plugin }}"
-          fi
-          echo "::endgroup::"
-
-          echo "::group::Building ${{ matrix.plugin }}"
-          if [ -f "main.go" ]; then
-            go build -v -o devex-plugin-${{ matrix.plugin }} .
-            echo "::endgroup::"
-
-            echo "::group::Testing plugin functionality"
-            ./devex-plugin-${{ matrix.plugin }} --plugin-info || echo "Plugin info command not available"
-            echo "::endgroup::"
-          elif [ -f "package.json" ]; then
-            echo "Node.js plugin detected"
-            if command -v npm &> /dev/null; then
-              npm install || echo "npm install failed"
-              npm test || echo "npm test failed"
-            fi
-            echo "::endgroup::"
-          fi
-
-          echo "::group::Running tests"
-          if [ -f "go.mod" ] && ls ./*_test.go >/dev/null 2>&1; then
-            go test -v ./...
-          else
-            echo "No tests found for ${{ matrix.plugin }}"
-          fi
-          echo "::endgroup::"
+        env:
+          # Pass the matrix value as data, never as script text.
+          PLUGIN_NAME: ${{ matrix.plugin }}
+        run: bash scripts/ci/test-plugin.sh "$PLUGIN_NAME"
   test-js:
     name: Test JS
     runs-on: ubuntu-latest
