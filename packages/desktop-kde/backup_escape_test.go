@@ -74,7 +74,7 @@ var _ = Describe("KDE restore containment for symlinks leaving HOME", func() {
 		Expect(os.Symlink(outside, filepath.Join(home, ".config"))).To(Succeed())
 		writeTarGz(archive, map[string]string{".config/kdeglobals": "overwrite"})
 
-		Expect(restore()).NotTo(Succeed())
+		Expect(restore()).To(MatchError(ContainSubstring("path escapes from parent")))
 		Expect(filepath.Join(outside, "kdeglobals")).NotTo(BeAnExistingFile())
 	})
 })

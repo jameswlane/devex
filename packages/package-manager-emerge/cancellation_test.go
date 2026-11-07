@@ -48,8 +48,10 @@ var _ = Describe("native cancellation", func() {
 		}
 		root := GinkgoT().TempDir()
 		binary := filepath.Join(root, "plugin")
-		build := exec.Command("go", "build", "-o", binary, ".")
+		buildCtx, cancelBuild := context.WithTimeout(context.Background(), 2*time.Minute)
+		build := exec.CommandContext(buildCtx, "go", "build", "-o", binary, ".")
 		output, err := build.CombinedOutput()
+		cancelBuild()
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		bin := filepath.Join(root, "bin")
 		Expect(os.Mkdir(bin, 0o700)).To(Succeed())

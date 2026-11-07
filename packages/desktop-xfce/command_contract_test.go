@@ -464,6 +464,24 @@ var _ = Describe("XFCE command contracts", func() {
 		Expect(recorder.Calls("xfconf-query")).To(Equal([]sdktest.Call{{Args: []string{"-c", "xfwm4", "-p", "/a", "-n", "-t", "int", "-s", "1"}}}))
 	})
 
+	DescribeTable("accepts one UTF-8 byte order mark at the start of the file",
+		func(content string) {
+			backup := fixture("backup.xml", content)
+			sdktest.ProvideStdin(GinkgoT(), "y\n")
+			Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+			Expect(recorder.Calls("xfconf-query")).To(Equal([]sdktest.Call{{Args: []string{"-c", "xfwm4", "-p", "/a", "-n", "-t", "int", "-s", "1"}}}))
+		},
+		Entry("before an XML declaration", "\ufeff<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"+validBackupXML+"\n"),
+		Entry("directly before the root", "\ufeff"+validBackupXML),
+	)
+
+	It("preserves a literal byte order mark inside a restored setting", func() {
+		backup := fixture("backup.xml", "\ufeff"+`<xfce-config><channel name="xfwm4"><property name="/a" type="string" value="before`+"\ufeff"+`after"/></channel></xfce-config>`)
+		sdktest.ProvideStdin(GinkgoT(), "y\n")
+		Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+		Expect(recorder.Calls("xfconf-query")).To(Equal([]sdktest.Call{{Args: []string{"-c", "xfwm4", "-p", "/a", "-n", "-t", "string", "-s", "before\ufeffafter"}}}))
+	})
+
 	DescribeTable("rejects malformed or empty backups before restoring anything",
 		func(content, message string) {
 			backup := fixture("backup.xml", content)
@@ -476,6 +494,10 @@ var _ = Describe("XFCE command contracts", func() {
 		Entry("empty file", "", "not an XFCE settings backup: EOF"),
 		Entry("not XML", "theme=Default\n", "not an XFCE settings backup: unexpected content before the root element"),
 		Entry("text before the root", "garbage\n"+validBackupXML, "not an XFCE settings backup: unexpected content before the root element"),
+		Entry("byte order mark after whitespace", "\n\ufeff"+validBackupXML, "not an XFCE settings backup: unexpected content before the root element"),
+		Entry("two byte order marks", "\ufeff\ufeff"+validBackupXML, "not an XFCE settings backup: unexpected content before the root element"),
+		Entry("text before a byte order mark", "x\ufeff"+validBackupXML, "not an XFCE settings backup: unexpected content before the root element"),
+		Entry("byte order mark after the declaration", "\ufeff<?xml version=\"1.0\"?>\ufeff"+validBackupXML, "not an XFCE settings backup: unexpected content before the root element"),
 		Entry("processing instruction before the root", "<?devex x?>"+validBackupXML, "not an XFCE settings backup: unexpected processing instruction before the root element"),
 		Entry("truncated markup after the root", validBackupXML+"<", "invalid trailing XML: XML syntax error"),
 		Entry("truncated XML", "<xfce-config><channel name=\"xfwm4\">", "not an XFCE settings backup: XML syntax error"),

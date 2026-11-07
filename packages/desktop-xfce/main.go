@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -317,7 +319,8 @@ func (p *XFCEPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of XFCE settings
 func (p *XFCEPlugin) handleBackup(args []string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), xfceOperationTimeout)
+	// Each subprocess has its own deadline; the operation is only cancellable.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	return p.handleBackupContext(ctx, args)
 }
@@ -354,8 +357,8 @@ func (p *XFCEPlugin) handleBackupContext(ctx context.Context, args []string) err
 	captured := 0
 	for _, channel := range channels {
 		props, err := xfconfQuery(ctx, "-c", channel, "-l")
-		if ctx.Err() != nil {
-			return fmt.Errorf("backup interrupted: %w", ctx.Err())
+		if stop := xfceInterruption(ctx, err); stop != nil {
+			return fmt.Errorf("backup interrupted listing channel %s: %w", channel, stop)
 		}
 		if readable.record(err) != nil {
 			fmt.Printf("Warning: Failed to list channel %s: %v\n", channel, err)
@@ -365,8 +368,8 @@ func (p *XFCEPlugin) handleBackupContext(ctx context.Context, args []string) err
 		entry := xfceChannel{Name: channel}
 		for _, prop := range parsePropertyListing(string(props)) {
 			property, err := readXFCEProperty(ctx, channel, prop)
-			if ctx.Err() != nil {
-				return fmt.Errorf("backup interrupted: %w", ctx.Err())
+			if stop := xfceInterruption(ctx, err); stop != nil {
+				return fmt.Errorf("backup interrupted reading %s%s: %w", channel, prop, stop)
 			}
 			if err != nil {
 				fmt.Printf("Warning: Skipping %s%s: %v\n", channel, prop, err)
@@ -404,7 +407,8 @@ func (p *XFCEPlugin) handleBackupContext(ctx context.Context, args []string) err
 
 // handleRestore restores XFCE settings from backup
 func (p *XFCEPlugin) handleRestore(args []string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), xfceOperationTimeout)
+	// Each subprocess has its own deadline; the operation is only cancellable.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	return p.handleRestoreContext(ctx, args)
 }
@@ -453,8 +457,8 @@ func (p *XFCEPlugin) handleRestoreContext(ctx context.Context, args []string) er
 			}
 			total++
 			if err := restoreXFCEProperty(ctx, channel.Name, property); err != nil {
-				if ctx.Err() != nil {
-					return fmt.Errorf("restore interrupted: %w", err)
+				if stop := xfceInterruption(ctx, err); stop != nil {
+					return fmt.Errorf("restore interrupted at %s%s: %w", channel.Name, property.Name, stop)
 				}
 				fmt.Printf("✗ Failed to restore %s%s: %v\n", channel.Name, property.Name, err)
 				failures = append(failures, channel.Name+property.Name)

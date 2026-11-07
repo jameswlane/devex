@@ -321,7 +321,8 @@ a type, and ambiguous multiline values are skipped with a warning.
 The behavior follows the upstream [4.20.0 query implementation](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconf-query/main.c)
 and [native XML backend](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconfd/xfconf-backend-perchannel-xml.c).
 
-`restore` validates the whole file first and rejects malformed XML, unsupported
+`restore` validates the whole file first (one leading UTF-8 byte order mark is
+accepted) and rejects malformed XML, unsupported
 formats or types, invalid channel or property names, duplicates and backups with
 no properties. Each property is then set with
 `xfconf-query -c <channel> -p <property> -n -t <type> -s <value>` (arrays pass
@@ -334,8 +335,10 @@ explicitly support this representation. Untyped values use
 `xfconf-query -c <channel> -p <property> -s <value>`, which keeps the existing
 property's type and fails if the property no longer exists. If a property fails,
 the rest are still restored and the command fails, naming the failed properties.
-Backup and restore subprocesses share a 30-second operation timeout; cancellation
-fails the operation and stops further queries or writes. Native errors include
+Each backup and restore subprocess (`xfconf-query` or `gdbus`) has its own
+30-second timeout, so large configurations are not limited by one shared
+deadline. A timed-out subprocess, or interrupting the command, fails the whole
+operation: backup writes no file and restore makes no further writes. Native errors include
 nonempty stderr and retain their exit status.
 
 ## Troubleshooting

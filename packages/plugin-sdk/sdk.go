@@ -541,13 +541,15 @@ func HandleArgs(plugin Plugin, args []string) {
 		}
 		fmt.Print(string(output))
 	default:
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-		defer stop()
 		var err error
 		if contextual, ok := plugin.(interface {
 			ExecuteContext(context.Context, string, []string) error
 		}); ok {
+			// Only context-aware plugins can observe cancellation; legacy Execute
+			// keeps the default SIGINT/SIGTERM behavior of terminating the process.
+			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			err = contextual.ExecuteContext(ctx, command, args[1:])
+			stop()
 		} else {
 			err = plugin.Execute(command, args[1:])
 		}

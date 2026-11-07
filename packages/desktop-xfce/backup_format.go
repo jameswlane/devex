@@ -62,7 +62,21 @@ type xfceValue struct {
 // xfconfScalarTypes are the value types xfconf-query accepts for -t.
 var xfconfScalarTypes = []string{"string", "int", "uint", "bool", "double", "uchar", "char", "int16", "uint16", "int64", "uint64"}
 
-const xfceOperationTimeout = 30 * time.Second
+// xfceCommandTimeout bounds each xfconf-query or gdbus subprocess separately,
+// so a large backup or restore is not limited by one shared deadline. A
+// variable only so tests can shorten it.
+var xfceCommandTimeout = 30 * time.Second
+
+// xfceInterruption returns the error to abort with when a command hit its own
+// deadline or was cancelled, or the caller's context is done; otherwise nil.
+// Either is fatal for backup and restore, even when the caller's context is
+// still live, so a stalled xfconfd never yields partial results or writes.
+func xfceInterruption(ctx context.Context, err error) error {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return err
+	}
+	return ctx.Err()
+}
 
 func xfconfQuery(ctx context.Context, args ...string) ([]byte, error) {
 	return runXFCECommand(ctx, xfconfEnvironment(os.Environ()), "xfconf-query", args...)
@@ -102,6 +116,8 @@ func xfceCommand(ctx context.Context, name string, args ...string) ([]byte, erro
 }
 
 func runXFCECommand(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, xfceCommandTimeout)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = env
 	// Bound pipe draining as well, including children that inherit stdout/stderr.
@@ -244,6 +260,9 @@ func splitTyped(line string) (string, string, bool) {
 // parseXFCEBackup decodes and validates a backup before any setting is written.
 func parseXFCEBackup(content []byte) (xfceBackup, error) {
 	var backup xfceBackup
+	// Editors may save a UTF-8 byte order mark; encoding/xml rejects it as text
+	// before the root. Strip exactly one, and only at byte zero.
+	content = bytes.TrimPrefix(content, []byte("\xef\xbb\xbf"))
 	decoder := xml.NewDecoder(bytes.NewReader(content))
 	// Only an XML declaration, comments and whitespace may precede the root;
 	// Decode alone would silently skip stray text.

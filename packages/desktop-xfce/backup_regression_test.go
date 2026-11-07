@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -223,36 +224,114 @@ var _ = Describe("XFCE backup and restore regressions", func() {
 		Entry("every property fails", "/theme\n", true),
 		Entry("every property undecodable", "/theme\n", false),
 	)
-	It("fails a blocked property query promptly even after capturing another property", func() {
+	// fakeXFCE installs a shell script as name on PATH; it logs each argv to
+	// the returned file, so tests can prove which commands never ran.
+	fakeXFCE := func(name, body string) string {
 		bin := GinkgoT().TempDir()
-		// A real blocked subprocess exercises CommandContext rather than a mock error.
-		script := "#!/bin/sh\ncase \"$*\" in\n'-l') printf 'Channels:\\n  xfwm4\\n';;\n'-c xfwm4 -l') printf '/good\\n/blocked\\n';;\n*'/good -v') printf '[string] good\\n';;\n*'/good') printf 'good\\n';;\n*) exec /bin/sleep 10;;\nesac\n"
-		Expect(os.WriteFile(filepath.Join(bin, "xfconf-query"), []byte(script), 0700)).To(Succeed())
+		calls := filepath.Join(bin, "calls")
+		GinkgoT().Setenv("XFCE_TEST_CALLS", calls)
+		Expect(os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\nprintf '%s %s\\n' \"${0##*/}\" \"$*\" >> \"$XFCE_TEST_CALLS\"\n"+body), 0700)).To(Succeed())
 		GinkgoT().Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
+		return calls
+	}
+	commandLog := func(calls string) string {
+		data, err := os.ReadFile(calls)
+		Expect(err).NotTo(HaveOccurred())
+		return string(data)
+	}
+	commandTimeout := func(timeout time.Duration) {
+		previous := xfceCommandTimeout
+		xfceCommandTimeout = timeout
+		DeferCleanup(func() { xfceCommandTimeout = previous })
+	}
+	const backupScript = "case \"$*\" in\n'-l') printf 'Channels:\\n  xfwm4\\n';;\n'-c xfwm4 -l') printf '/good\\n/blocked\\n/after\\n';;\n*'/good -v') printf '[string] good\\n';;\n*'/good') printf 'good\\n';;\n*'/after -v') printf '[string] after\\n';;\n*'/after') printf 'after\\n';;\n*) exec /bin/sleep 10;;\nesac\n"
+
+	It("gives each subprocess its own timeout rather than one for the whole backup", func() {
+		commandTimeout(600 * time.Millisecond)
+		// Six queries at 200ms each exceed one 600ms budget; each alone fits.
+		calls := fakeXFCE("xfconf-query", "/bin/sleep 0.2\ncase \"$*\" in\n'-l') printf 'Channels:\\n  xfwm4\\n';;\n'-c xfwm4 -l') printf '/a\\n/b\\n';;\n*' -v') printf '[string] v\\n';;\n*) printf 'v\\n';;\nesac\n")
 		start := time.Now()
-		err := plugin.handleBackupContext(ctx, []string{dir})
-		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue())
-		Expect(time.Since(start)).To(BeNumerically("<", 2*time.Second))
+		Expect(plugin.handleBackup([]string{dir})).To(Succeed())
+		Expect(time.Since(start)).To(BeNumerically(">", 600*time.Millisecond))
+		Expect(strings.Count(commandLog(calls), "\n")).To(Equal(6))
+		Expect(readBackup(dir)).To(And(ContainSubstring(`name="/a" type="string" value="v"`), ContainSubstring(`name="/b" type="string" value="v"`)))
+	})
+	It("aborts the backup when one query exceeds its timeout after an earlier property succeeded", func() {
+		commandTimeout(200 * time.Millisecond)
+		calls := fakeXFCE("xfconf-query", backupScript)
+		start := time.Now()
+		var err error
+		output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.handleBackup([]string{dir}) })
+		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue(), "%v", err)
+		Expect(err).To(MatchError(ContainSubstring("backup interrupted reading xfwm4/blocked")))
+		Expect(time.Since(start)).To(BeNumerically("<", 3*time.Second))
+		Expect(output).NotTo(ContainSubstring("Warning"))
+		log := commandLog(calls)
+		Expect(log).To(ContainSubstring("-c xfwm4 -p /good -v\n"))
+		Expect(log).To(HaveSuffix("xfconf-query -c xfwm4 -p /blocked\n"))
+		Expect(log).NotTo(ContainSubstring("/after"))
 		Expect(filepath.Glob(filepath.Join(dir, "xfce-settings-*.xml"))).To(BeEmpty())
 	})
-	It("stops further writes when a running restore command times out", func() {
-		bin := GinkgoT().TempDir()
-		calls := filepath.Join(dir, "calls")
-		GinkgoT().Setenv("XFCE_TEST_CALLS", calls)
-		Expect(os.WriteFile(filepath.Join(bin, "xfconf-query"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$XFCE_TEST_CALLS\"\nexec /bin/sleep 10\n"), 0700)).To(Succeed())
-		GinkgoT().Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	It("aborts the backup when listing a channel exceeds its timeout", func() {
+		commandTimeout(200 * time.Millisecond)
+		calls := fakeXFCE("xfconf-query", "case \"$*\" in\n'-l') printf 'Channels:\\n  xfwm4\\n  xsettings\\n';;\n*) exec /bin/sleep 10;;\nesac\n")
+		err := plugin.handleBackup([]string{dir})
+		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue(), "%v", err)
+		Expect(err).To(MatchError(ContainSubstring("backup interrupted listing channel xfwm4")))
+		Expect(commandLog(calls)).NotTo(ContainSubstring("xsettings"))
+		Expect(filepath.Glob(filepath.Join(dir, "xfce-settings-*.xml"))).To(BeEmpty())
+	})
+	It("returns promptly when a timed-out command leaves a child holding its output", func() {
+		commandTimeout(200 * time.Millisecond)
+		// No exec: killing sh leaves sleep holding stdout; WaitDelay bounds the wait.
+		fakeXFCE("xfconf-query", "/bin/sleep 5\n")
+		start := time.Now()
+		_, err := xfconfQuery(context.Background(), "-l")
+		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue(), "%v", err)
+		Expect(time.Since(start)).To(BeNumerically("<", 3*time.Second))
+	})
+	It("keeps caller cancellation of a running backup fatal", func() {
+		fakeXFCE("xfconf-query", backupScript)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		time.AfterFunc(200*time.Millisecond, cancel)
+		start := time.Now()
+		err := plugin.handleBackupContext(ctx, []string{dir})
+		Expect(errors.Is(err, context.Canceled)).To(BeTrue(), "%v", err)
+		Expect(time.Since(start)).To(BeNumerically("<", 3*time.Second))
+		Expect(filepath.Glob(filepath.Join(dir, "xfce-settings-*.xml"))).To(BeEmpty())
+	})
+	DescribeTable("stops further writes when a restore command exceeds its timeout",
+		func(name, content, expected string) {
+			commandTimeout(200 * time.Millisecond)
+			calls := fakeXFCE(name, "exec /bin/sleep 10\n")
+			path := filepath.Join(dir, "restore.xml")
+			Expect(os.WriteFile(path, []byte(content), 0600)).To(Succeed())
+			sdktest.ProvideStdin(GinkgoT(), "y\n")
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.handleRestore([]string{path}) })
+			Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue(), "%v", err)
+			Expect(output).NotTo(ContainSubstring("Failed to restore"))
+			Expect(commandLog(calls)).To(Equal(expected))
+			if name == "gdbus" {
+				Expect(recorder.Calls("xfconf-query")).To(BeEmpty())
+			}
+		},
+		Entry("xfconf-query", "xfconf-query", backupFixtureXML, "xfconf-query -c xfwm4 -p /general/click_to_focus -n -t bool -s true\n"),
+		Entry("gdbus empty array", "gdbus", `<xfce-config><channel name="xfwm4"><property name="/names" type="array"/><property name="/a" type="int" value="1"/></channel></xfce-config>`,
+			"gdbus call --session --dest org.xfce.Xfconf --object-path /org/xfce/Xfconf --method org.xfce.Xfconf.SetProperty xfwm4 /names <@av []>\n"),
+	)
+	It("keeps caller cancellation of a running restore fatal", func() {
+		calls := fakeXFCE("xfconf-query", "exec /bin/sleep 10\n")
 		path := filepath.Join(dir, "restore.xml")
 		Expect(os.WriteFile(path, []byte(backupFixtureXML), 0600)).To(Succeed())
 		sdktest.ProvideStdin(GinkgoT(), "y\n")
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+		time.AfterFunc(200*time.Millisecond, cancel)
 		err := plugin.handleRestoreContext(ctx, []string{path})
-		Expect(errors.Is(err, context.DeadlineExceeded)).To(BeTrue())
-		data, err := os.ReadFile(calls)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(string(data)).To(Equal("-c xfwm4 -p /general/click_to_focus -n -t bool -s true\n"))
+		Expect(errors.Is(err, context.Canceled)).To(BeTrue(), "%v", err)
+		Expect(commandLog(calls)).To(Equal("xfconf-query -c xfwm4 -p /general/click_to_focus -n -t bool -s true\n"))
 	})
 	It("fails an expired backup before any native call", func() {
 		ctx, cancel := context.WithCancel(context.Background())

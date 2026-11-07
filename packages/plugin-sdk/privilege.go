@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -383,6 +384,16 @@ func PrepareOperation(ctx context.Context, request ExecutionRequest) (*exec.Cmd,
 
 // RunOperation supports Unix commands and native macOS/UAC process handles alike.
 func RunOperation(ctx context.Context, request ExecutionRequest, streams OperationIO) error {
+	// Resolve a relative Dir once, against the caller's directory: adapters apply
+	// Dir both as the process cwd and after sudo resets it, so a relative value
+	// would otherwise be resolved twice or against sudo's directory.
+	if request.Dir != "" && !filepath.IsAbs(request.Dir) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("resolve operation directory %q: %w", request.Dir, err)
+		}
+		request.Dir = filepath.Join(cwd, request.Dir)
+	}
 	request.Unattended = request.Unattended || unattendedContext(ctx)
 	plan, err := NewPrivilegeResolver().Plan(request)
 	if err != nil {
