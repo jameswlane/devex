@@ -90,6 +90,9 @@ var restoreFixtureCalls = []sdktest.Call{
 	{Args: []string{"-c", "xfwm4", "-p", "/general/workspace_names", "-n", "-a", "-t", "string", "-s", "Main", "-t", "string", "-s", `<Work & "Play">`}},
 }
 
+// validBackupXML is a minimal valid backup with one typed property.
+const validBackupXML = `<xfce-config><channel name="xfwm4"><property name="/a" type="int" value="1"/></channel></xfce-config>`
+
 // readBackup returns the single XFCE backup written to dir.
 func readBackup(dir string) string {
 	backups, err := filepath.Glob(filepath.Join(dir, "xfce-settings-*.xml"))
@@ -454,6 +457,13 @@ var _ = Describe("XFCE command contracts", func() {
 		Expect(recorder.Calls("xfconf-query")).To(Equal(restoreFixtureCalls))
 	})
 
+	It("accepts an XML declaration, comments and whitespace around the root", func() {
+		backup := fixture("backup.xml", "<?xml version=\"1.0\"?>\n<!-- XFCE Settings Backup -->\n"+validBackupXML+"\n<!-- end -->\n\n")
+		sdktest.ProvideStdin(GinkgoT(), "y\n")
+		Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+		Expect(recorder.Calls("xfconf-query")).To(Equal([]sdktest.Call{{Args: []string{"-c", "xfwm4", "-p", "/a", "-n", "-t", "int", "-s", "1"}}}))
+	})
+
 	DescribeTable("rejects malformed or empty backups before restoring anything",
 		func(content, message string) {
 			backup := fixture("backup.xml", content)
@@ -464,7 +474,10 @@ var _ = Describe("XFCE command contracts", func() {
 		Entry("trailing text", backupFixtureXML+"garbage", "unexpected content after XFCE backup"),
 		Entry("another root", backupFixtureXML+"<extra/>", "unexpected content after XFCE backup"),
 		Entry("empty file", "", "not an XFCE settings backup: EOF"),
-		Entry("not XML", "theme=Default\n", "not an XFCE settings backup: EOF"),
+		Entry("not XML", "theme=Default\n", "not an XFCE settings backup: unexpected content before the root element"),
+		Entry("text before the root", "garbage\n"+validBackupXML, "not an XFCE settings backup: unexpected content before the root element"),
+		Entry("processing instruction before the root", "<?devex x?>"+validBackupXML, "not an XFCE settings backup: unexpected processing instruction before the root element"),
+		Entry("truncated markup after the root", validBackupXML+"<", "invalid trailing XML: XML syntax error"),
 		Entry("truncated XML", "<xfce-config><channel name=\"xfwm4\">", "not an XFCE settings backup: XML syntax error"),
 		Entry("other root element", "<channel name=\"xfwm4\"/>", "not an XFCE settings backup: expected element type <xfce-config> but have <channel>"),
 		Entry("no properties", "<xfce-config>\n</xfce-config>\n", "no settings to restore; the backup has no properties"),

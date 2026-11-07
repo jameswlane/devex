@@ -65,11 +65,45 @@ var xfconfScalarTypes = []string{"string", "int", "uint", "bool", "double", "uch
 const xfceOperationTimeout = 30 * time.Second
 
 func xfconfQuery(ctx context.Context, args ...string) ([]byte, error) {
-	return xfceCommand(ctx, "xfconf-query", args...)
+	return runXFCECommand(ctx, xfconfEnvironment(os.Environ()), "xfconf-query", args...)
+}
+
+// xfconfEnvironment pins only the numeric locale. xfconf-query calls
+// setlocale(LC_ALL, "") and prints doubles with printf("%f"), which uses the
+// locale's decimal separator, while -s parses them with g_ascii_strtod, which
+// accepts only ".". LC_ALL=C is not used: g_print converts output to the
+// locale charset, which would mangle non-ASCII strings. An LC_ALL override is
+// re-expressed as LANG with no other LC_* variables, which selects the same
+// locale for every other category. Sources: xfconf-query/main.c and
+// common/xfconf-gvaluefuncs.c (xfconf 4.16.0 to master).
+func xfconfEnvironment(environ []string) []string {
+	all := ""
+	for _, entry := range environ {
+		if value, ok := strings.CutPrefix(entry, "LC_ALL="); ok {
+			all = value
+		}
+	}
+	env := make([]string, 0, len(environ)+2)
+	for _, entry := range environ {
+		key, _, _ := strings.Cut(entry, "=")
+		if key == "LC_NUMERIC" || key == "LC_ALL" || (all != "" && (key == "LANG" || strings.HasPrefix(key, "LC_"))) {
+			continue
+		}
+		env = append(env, entry)
+	}
+	if all != "" {
+		env = append(env, "LANG="+all)
+	}
+	return append(env, "LC_NUMERIC=C")
 }
 
 func xfceCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return runXFCECommand(ctx, nil, name, args...)
+}
+
+func runXFCECommand(ctx context.Context, env []string, name string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = env
 	// Bound pipe draining as well, including children that inherit stdout/stderr.
 	cmd.WaitDelay = time.Second
 	output, err := cmd.Output()
@@ -211,10 +245,34 @@ func splitTyped(line string) (string, string, bool) {
 func parseXFCEBackup(content []byte) (xfceBackup, error) {
 	var backup xfceBackup
 	decoder := xml.NewDecoder(bytes.NewReader(content))
-	if err := decoder.Decode(&backup); err != nil {
+	// Only an XML declaration, comments and whitespace may precede the root;
+	// Decode alone would silently skip stray text.
+	var root *xml.StartElement
+	for root == nil {
+		token, err := decoder.Token()
+		if err != nil {
+			return backup, fmt.Errorf("not an XFCE settings backup: %w", err)
+		}
+		switch value := token.(type) {
+		case xml.StartElement:
+			root = &value
+		case xml.Comment:
+		case xml.ProcInst:
+			if value.Target != "xml" {
+				return backup, errors.New("not an XFCE settings backup: unexpected processing instruction before the root element")
+			}
+		case xml.CharData:
+			if strings.TrimSpace(string(value)) != "" {
+				return backup, errors.New("not an XFCE settings backup: unexpected content before the root element")
+			}
+		default:
+			return backup, errors.New("not an XFCE settings backup: unexpected content before the root element")
+		}
+	}
+	if err := decoder.DecodeElement(&backup, root); err != nil {
 		return backup, fmt.Errorf("not an XFCE settings backup: %w", err)
 	}
-	// Decode reads one root element; reject another root or non-whitespace data.
+	// DecodeElement reads one root element; reject another root or non-whitespace data.
 	for {
 		token, err := decoder.Token()
 		if errors.Is(err, io.EOF) {
