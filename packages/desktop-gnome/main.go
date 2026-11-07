@@ -61,6 +61,7 @@ func NewGNOMEPlugin() *GNOMEPlugin {
 				Name:        "install-fonts",
 				Description: "Install and configure fonts",
 				Usage:       "Install development fonts and configure GNOME font settings",
+				Privilege:   &systemScope,
 			},
 			{
 				Name:        "configure-fonts",
@@ -103,7 +104,7 @@ func NewGNOMEPlugin() *GNOMEPlugin {
 // Execute handles command execution
 func (p *GNOMEPlugin) Execute(command string, args []string) error {
 	// Check if GNOME is available
-	if !isGNOMEAvailable() {
+	if !isGNOMEAvailableFor(command) {
 		return fmt.Errorf("GNOME desktop environment is not available on this system")
 	}
 
@@ -135,6 +136,17 @@ func (p *GNOMEPlugin) Execute(command string, args []string) error {
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
+}
+
+// isGNOMEAvailableFor gates a command on GNOME availability. install-fonts only installs
+// distribution font packages and refreshes caches, and its declared system scope
+// means hosts launch it through sudo, which drops desktop session variables. It
+// therefore requires GNOME to be installed rather than a running session.
+func isGNOMEAvailableFor(command string) bool {
+	if command == "install-fonts" {
+		return sdk.CommandExists("gsettings")
+	}
+	return isGNOMEAvailable()
 }
 
 // isGNOMEAvailable checks if GNOME is available

@@ -131,24 +131,29 @@ func (p *CosmicPlugin) handleConfigure(args []string) error {
 	fmt.Println("✓ Created COSMIC configuration directory")
 
 	// Configure panel
-	if err := p.configureCosmicPanel(); err != nil {
+	var batch settingsBatch
+	if err := batch.record(p.configureCosmicPanel()); err != nil {
 		fmt.Printf("Warning: Failed to configure panel: %v\n", err)
 	} else {
 		fmt.Println("✓ Configured COSMIC panel")
 	}
 
 	// Configure desktop settings
-	if err := p.configureCosmicDesktop(); err != nil {
+	if err := batch.record(p.configureCosmicDesktop()); err != nil {
 		fmt.Printf("Warning: Failed to configure desktop: %v\n", err)
 	} else {
 		fmt.Println("✓ Configured COSMIC desktop")
 	}
 
 	// Configure compositor settings
-	if err := p.configureCosmicCompositor(); err != nil {
+	if err := batch.record(p.configureCosmicCompositor()); err != nil {
 		fmt.Printf("Warning: Failed to configure compositor: %v\n", err)
 	} else {
 		fmt.Println("✓ Configured COSMIC compositor")
+	}
+
+	if err := batch.err("cosmic configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("COSMIC configuration complete!")

@@ -29,7 +29,7 @@ supports:
   uninstall: true
   update: true
   search: true
-  list: true
+  list: false
   repository_management: true
   source_compilation: true
 # Priority (lower number = higher priority)

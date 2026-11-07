@@ -17,19 +17,36 @@ Nix package manager plugin for DevEx. Provides functional package management wit
 
 ## 🚀 Quick Start
 
+Run plugin operations through `devex plugin run`; the [Operations](#operations) table lists the native command behind each one. Native manager flags are not passed through.
+
 ```bash
-# Install packages via DevEx
-devex install git firefox code
+# Install and remove packages in your profile
+devex plugin run package-manager-nixpkgs install git
+devex plugin run package-manager-nixpkgs remove git
 
-# Create temporary environment
-devex package-manager nix-shell -p nodejs python3
+# Find available packages by derivation name and list installed ones
+devex plugin run package-manager-nixpkgs search firefox
+devex plugin run package-manager-nixpkgs list
 
-# Search for packages
-devex package-manager nix search nixpkgs "text editor"
-
-# List package generations
-devex package-manager nix-env --list-generations
+# Refresh channels directly; the plugin's update is unsupported
+nix-channel --update
 ```
+
+## Operations
+
+`nix-env` profile management. Every operation acts on the invoking user's profile and never requests elevation. Under sudo the SDK runs them as the invoking user, and it refuses to run them as root without one.
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `nix-env --install <derivation names>` | user |
+| `remove` | `nix-env --uninstall <derivation names>` | user |
+| `update` | Unsupported: nix-env cannot refresh package sources. Refreshing means either `nix-channel --update` or updating flake inputs, and the plugin does not choose a channel or flake policy for the user. Run `nix-channel --update`, or use the nixflake plugin. | n/a (no native call) |
+| `search` | `nix-env --query --available <terms>`; each term is a separate derivation-name selector | user |
+| `list` | `nix-env --query --installed` | user |
+
+Package arguments that are empty or start with `-` are rejected before any native command runs.
+
+The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
 
 ## 🚀 Platform Support
 

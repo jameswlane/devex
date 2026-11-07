@@ -17,19 +17,38 @@ Nix Flakes package manager plugin for DevEx. Provides next-generation Nix packag
 
 ## 🚀 Quick Start
 
+Run plugin operations through `devex plugin run`; the [Operations](#operations) table lists the native command behind each one. Native manager flags are not passed through.
+
 ```bash
-# Install from flake URIs
-devex package-manager nix profile install nixpkgs#firefox
+# Install into your profile (git becomes nixpkgs#git)
+devex plugin run package-manager-nixflake install git nixpkgs#ripgrep
 
-# Create development shell
-devex package-manager nix develop
+# Remove a profile element and list the profile
+devex plugin run package-manager-nixflake remove git
+devex plugin run package-manager-nixflake list
 
-# Run package temporarily
-devex package-manager nix run nixpkgs#hello
+# Update the inputs of the flake in the current directory
+devex plugin run package-manager-nixflake update
 
-# Update flake inputs
-devex package-manager nix flake update
+# Search nixpkgs
+devex plugin run package-manager-nixflake search "text editor"
 ```
+
+## Operations
+
+Nix command-line interface with flakes; requires the `nix-command` and `flakes` experimental features. Every operation acts on the invoking user's profile or flake and never requests elevation. Under sudo the SDK runs them as the invoking user, and it refuses to run them as root without one.
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `nix profile install <installables>`; bare names such as `git` become `nixpkgs#git`, explicit references (`nixpkgs#git`, `github:owner/repo#pkg`, `./path`) pass through | user |
+| `remove` | `nix profile remove <element names>` | user |
+| `update` | `nix flake update` for the flake in the current directory | user |
+| `search` | `nix search nixpkgs <phrase>` (name and description regex) | user |
+| `list` | `nix profile list` | user |
+
+Package arguments that are empty or start with `-` are rejected before any native command runs.
+
+The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
 
 ## 🚀 Platform Support
 

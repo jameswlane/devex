@@ -31,6 +31,14 @@ devex package-manager deb info package.deb
 devex package-manager deb contents package.deb
 ```
 
+## ⚠️ Error Handling
+
+- Native failures keep their exit status. `dpkg-query` exit status 1 means the package is unknown to dpkg and is reported as not installed; any other failure is an error, never absence.
+- `remove` skips only packages dpkg confirms are absent, and validates every name before removing any.
+- `info` and `list-files` report an unknown installed package (exit status 1) differently from a failed query.
+- `verify` fails if dependencies cannot be checked. Missing dependencies are reported as warnings, since `install` can resolve them.
+- `install` checks and installs dependencies on a best-effort basis: failures there are warnings, because `dpkg -i` is the authoritative check. If `dpkg -i` fails, `apt-get install -f -y` runs to repair the dpkg state, and the install failure is still returned, since the repair may remove the package rather than complete it. If the repair also fails, both errors are returned. Downloaded packages are removed on every return path.
+
 ## 🚀 Platform Support
 
 - **Ubuntu**: 18.04+, 20.04+, 22.04+, 24.04+

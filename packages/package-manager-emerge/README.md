@@ -17,19 +17,35 @@ Gentoo Portage emerge package manager plugin for DevEx. Provides source-based pa
 
 ## 🚀 Quick Start
 
+Run plugin operations through `devex plugin run`; the [Operations](#operations) table lists the native command behind each one. Native manager flags are not passed through.
+
 ```bash
-# Install packages via DevEx
-devex install firefox git neovim
+# Install and remove packages
+devex plugin run package-manager-emerge install app-editors/neovim dev-vcs/git
+devex plugin run package-manager-emerge remove app-editors/neovim
 
-# Update Portage tree
-devex package-manager emerge --sync
+# Synchronize Portage repositories
+devex plugin run package-manager-emerge update
 
-# World update (system upgrade)
-devex package-manager emerge -avuDN @world
-
-# Search for packages
-devex package-manager emerge -s "development"
+# Search names and descriptions
+devex plugin run package-manager-emerge search "web server"
 ```
+
+## Operations
+
+Portage commands. Mutating operations run with system privileges; search runs as the invoking user.
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `emerge --ask=n <atoms>` | system |
+| `remove` | `emerge --ask=n --depclean <atoms>` (removes only packages nothing depends on) | system |
+| `update` | `emerge --ask=n --sync` | system |
+| `search` | `emerge --searchdesc <phrase>` (name and description) | user |
+| `list` | Unsupported: emerge has no installed-package query. The alternatives (`qlist -I` from app-portage/portage-utils, `equery list '*'` from app-portage/gentoolkit) need packages Portage does not install by default, so the plugin returns this guidance instead of adding a dependency. | n/a (no native call) |
+
+Package arguments that are empty or start with `-` are rejected before any native command runs.
+
+The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
 
 ## 🚀 Platform Support
 

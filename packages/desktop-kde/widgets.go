@@ -50,7 +50,7 @@ func (wm *WidgetManager) ListWidgets(ctx context.Context, args []string) error {
 	// List installed plasmoids
 	fmt.Println("\nInstalled Plasmoids:")
 	if err := sdk.ExecCommandWithContext(ctx, false, "plasmapkg2", "--list"); err != nil {
-		fmt.Printf("Warning: Failed to list installed plasmoids: %v\n", err)
+		return fmt.Errorf("failed to list installed plasmoids: %w", err)
 	}
 
 	return nil

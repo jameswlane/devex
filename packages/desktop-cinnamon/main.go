@@ -141,12 +141,16 @@ func (p *CinnamonPlugin) handleConfigure(args []string) error {
 		{"org.cinnamon.desktop.sound", "event-sounds", "false"},
 	}
 
+	var batch settingsBatch
 	for _, config := range configs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s.%s to %s\n", config.schema, config.key, config.value)
 		}
+	}
+	if err := batch.err("cinnamon configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Cinnamon configuration complete!")
@@ -203,12 +207,16 @@ func (p *CinnamonPlugin) handleConfigurePanel(args []string) error {
 		{"org.cinnamon", "panel-zone-icon-sizes", "{'left': 24, 'center': 24, 'right': 24}"},
 	}
 
+	var batch settingsBatch
 	for _, config := range panelConfigs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", config.key, config.value)
 		}
+	}
+	if err := batch.err("cinnamon panel configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Panel configuration complete!")

@@ -3,6 +3,7 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"encoding/xml"
 	"fmt"
 	"os"
 	"os/exec"
@@ -146,12 +147,16 @@ func (p *XFCEPlugin) handleConfigure(args []string) error {
 		{"keyboard-layout", "/Default/XkbLayout", "us", "string"},
 	}
 
+	var batch settingsBatch
 	for _, config := range configs {
-		if err := setXFCESetting(config.channel, config.property, config.value, config.dataType); err != nil {
+		if err := batch.record(setXFCESetting(config.channel, config.property, config.value, config.dataType)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.channel, config.property, err)
 		} else {
 			fmt.Printf("✓ Set %s.%s to %s\n", config.channel, config.property, config.value)
 		}
+	}
+	if err := batch.err("xfce configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("XFCE configuration complete!")
@@ -224,12 +229,16 @@ func (p *XFCEPlugin) handleConfigurePanel(args []string) error {
 		{"xfce4-panel", "/panels/panel-1/background-style", "0", "int"},  // None (system style)
 	}
 
+	var batch settingsBatch
 	for _, config := range panelConfigs {
-		if err := setXFCESetting(config.channel, config.property, config.value, config.dataType); err != nil {
+		if err := batch.record(setXFCESetting(config.channel, config.property, config.value, config.dataType)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.channel, config.property, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", config.property, config.value)
 		}
+	}
+	if err := batch.err("xfce panel configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Panel configuration complete!")
@@ -259,12 +268,16 @@ func (p *XFCEPlugin) handleConfigureWM(args []string) error {
 		{"xfwm4", "/general/zoom_desktop", "true", "bool"},
 	}
 
+	var batch settingsBatch
 	for _, config := range wmConfigs {
-		if err := setXFCESetting(config.channel, config.property, config.value, config.dataType); err != nil {
+		if err := batch.record(setXFCESetting(config.channel, config.property, config.value, config.dataType)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.channel, config.property, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", config.property, config.value)
 		}
+	}
+	if err := batch.err("xfce window manager configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Window manager configuration complete!")
@@ -318,49 +331,46 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 
 	fmt.Printf("Creating backup at: %s\n", backupFile)
 
-	// Use xfconf-query to list all channels and dump their settings
-	cmd := exec.Command("xfconf-query", "-l")
-	channels, err := cmd.Output()
+	// xfconf-query -l prints a translated "Channels:" header, then one channel
+	// per line indented by two spaces.
+	listing, err := xfconfQuery("-l")
 	if err != nil {
 		return fmt.Errorf("failed to list xfconf channels: %w", err)
 	}
-
-	backupContent := fmt.Sprintf("<!-- XFCE Settings Backup - %s -->\n<xfce-config>\n", time.Now().Format(time.RFC3339))
-
-	// Iterate through each channel
-	for _, channel := range strings.Split(strings.TrimSpace(string(channels)), "\n") {
-		if channel == "" {
-			continue
-		}
-
-		// Get all properties for this channel
-		cmd := exec.Command("xfconf-query", "-c", channel, "-l")
-		props, err := cmd.Output()
-		if err != nil {
-			continue
-		}
-
-		backupContent += fmt.Sprintf("  <channel name=\"%s\">\n", channel)
-
-		for _, prop := range strings.Split(strings.TrimSpace(string(props)), "\n") {
-			if prop == "" {
-				continue
-			}
-
-			// Get the value for this property
-			cmd := exec.Command("xfconf-query", "-c", channel, "-p", prop)
-			value, err := cmd.Output()
-			if err != nil {
-				continue
-			}
-
-			backupContent += fmt.Sprintf("    <property name=\"%s\" value=\"%s\"/>\n", prop, strings.TrimSpace(string(value)))
-		}
-
-		backupContent += "  </channel>\n"
+	channels := parseChannelListing(string(listing))
+	if len(channels) == 0 {
+		return fmt.Errorf("failed to back up XFCE settings: xfconf-query -l listed no channels")
 	}
 
-	backupContent += "</xfce-config>\n"
+	backup := xfceBackup{Format: xfceBackupFormat, Version: xfceBackupVersion}
+	var readable settingsBatch
+	for _, channel := range channels {
+		props, err := xfconfQuery("-c", channel, "-l")
+		if readable.record(err) != nil {
+			fmt.Printf("Warning: Failed to list channel %s: %v\n", channel, err)
+			continue
+		}
+
+		entry := xfceChannel{Name: channel}
+		for _, prop := range parsePropertyListing(string(props)) {
+			property, err := readXFCEProperty(channel, prop)
+			if err != nil {
+				fmt.Printf("Warning: Skipping %s%s: %v\n", channel, prop, err)
+				continue
+			}
+			entry.Properties = append(entry.Properties, property)
+		}
+		backup.Channels = append(backup.Channels, entry)
+	}
+	if readable.applied == 0 {
+		return fmt.Errorf("failed to back up XFCE settings: no channel could be read: %w", readable.first)
+	}
+
+	encoded, err := xml.MarshalIndent(backup, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to encode backup: %w", err)
+	}
+	backupContent := fmt.Sprintf("<!-- XFCE Settings Backup - %s -->\n%s\n", time.Now().Format(time.RFC3339), encoded)
 
 	// Write to file
 	if err := os.WriteFile(backupFile, []byte(backupContent), 0644); err != nil {
@@ -395,10 +405,39 @@ func (p *XFCEPlugin) handleRestore(args []string) error {
 		return nil
 	}
 
-	fmt.Println("Note: XFCE backup restoration requires manual configuration.")
-	fmt.Println("Please refer to the backup file for settings to restore manually.")
-	fmt.Printf("Backup file location: %s\n", backupFile)
+	content, err := os.ReadFile(backupFile)
+	if err != nil {
+		return fmt.Errorf("failed to read backup file: %w", err)
+	}
+	backup, err := parseXFCEBackup(content)
+	if err != nil {
+		return fmt.Errorf("invalid backup %s: %w", backupFile, err)
+	}
 
+	// Each property is restored independently; a failed property is reported and
+	// the rest still apply, but the restore fails so a mixed state is never hidden.
+	total := 0
+	var failures []string
+	var firstErr error
+	for _, channel := range backup.Channels {
+		for _, property := range channel.Properties {
+			total++
+			if err := exec.Command("xfconf-query", restoreArgs(channel.Name, property)...).Run(); err != nil {
+				fmt.Printf("✗ Failed to restore %s%s: %v\n", channel.Name, property.Name, err)
+				failures = append(failures, channel.Name+property.Name)
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			fmt.Printf("✓ Restored %s%s\n", channel.Name, property.Name)
+		}
+	}
+	if firstErr != nil {
+		return fmt.Errorf("restored %d of %d properties; failed: %s: %w", total-len(failures), total, strings.Join(failures, ", "), firstErr)
+	}
+
+	fmt.Println("✓ XFCE settings restored successfully!")
 	return nil
 }
 

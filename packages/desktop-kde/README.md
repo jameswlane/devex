@@ -262,6 +262,38 @@ devex desktop-kde configure-system-monitor --update-interval 2000 --show-cpu tru
 - **Plasma 5.18+**: Core features supported
 - **Older Versions**: Limited compatibility
 
+## Failure Behavior
+
+Configure operations apply independent settings best-effort. A failed setting is
+reported as a warning and the remaining settings still apply; the command
+succeeds when at least one setting applied. When every write fails (for example
+when the settings backend or schemas are unavailable), the command fails with
+`<operation> applied no settings: all <n> writes failed: <first native error>`,
+and the plugin exits with that native exit status.
+
+This applies to `configure`, `configure-panel` and `configure-fonts`.
+
+`install-fonts` declares system privilege scope. The selected package manager
+(`apt-get`, `dnf`, `pacman` or `zypper`) runs directly when DevEx is already
+elevated, and otherwise through `sudo -n`; an interactive run first makes a
+non-prompting `sudo -n true` probe, so authorize with `sudo -v` beforehand.
+Unattended runs skip the probe. A sudo authorization failure is reported as an
+`authorization-denied` error, distinct from a package-manager failure, whose exit
+status is preserved. `fc-cache` and `kbuildsycoca5` stay user-scope processes:
+under sudo they run as `SUDO_USER`. Because sudo drops desktop session variables,
+`install-fonts` requires KDE (`kwriteconfig5`) to be installed but not a running
+session.
+
+`list-widgets` fails, with the native exit status, when `plasmapkg2 --list` fails.
+
+`backup` archives existing KDE files relative to HOME
+(`tar czf <backup> -C "$HOME" .config/kdeglobals ...`), expanding the
+`.config/kate*`, `.config/plasma*` and `.local/share/plasma*` patterns. `restore`
+reads the archive in-process and validates every member before writing anything:
+absolute paths, `..` components, members outside `.config` and `.local/share`,
+and links or special files reject the whole archive. Valid members are written to
+the same path beneath HOME. Files outside the backup are left alone.
+
 ## Troubleshooting
 
 ### Common Issues

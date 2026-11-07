@@ -6,9 +6,12 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
+// Configure fields before concurrent calls; inspect them after callers have joined.
 type MockCommandExecutor struct {
+	mu                sync.Mutex
 	Commands          []string        // Stores commands executed
 	FailingCommand    string          // Command that should fail
 	FailingCommands   map[string]bool // Multiple commands that should fail
@@ -23,6 +26,8 @@ func NewMockCommandExecutor() *MockCommandExecutor {
 }
 
 func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Commands = append(m.Commands, command)
 
 	// Check for exact command match first
@@ -991,6 +996,8 @@ func (m *MockCommandExecutor) RunShellCommand(command string) (string, error) {
 }
 
 func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args ...string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	command := fmt.Sprintf("%s %s", name, strings.Join(args, " "))
 	m.Commands = append(m.Commands, command)
 
@@ -1144,6 +1151,8 @@ func (m *MockCommandExecutor) RunCommand(ctx context.Context, name string, args 
 }
 
 func (m *MockCommandExecutor) DownloadFileWithContext(ctx context.Context, url, filepath string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// Simulate a successful or failing file download based on the URL
 	if url == m.FailingCommand {
 		return fmt.Errorf("mock download failed for url: %s", url)
@@ -1162,6 +1171,8 @@ func (m *MockCommandExecutor) DownloadFileWithContext(ctx context.Context, url, 
 
 // ExecuteCommand implements CommandExecutor.ExecuteCommand
 func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Commands = append(m.Commands, command)
 
 	// Check if this command should fail
@@ -1177,6 +1188,8 @@ func (m *MockCommandExecutor) ExecuteCommand(ctx context.Context, command string
 
 // ValidateCommand implements CommandExecutor.ValidateCommand
 func (m *MockCommandExecutor) ValidateCommand(command string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// Basic validation - reject empty commands
 	if strings.TrimSpace(command) == "" {
 		return fmt.Errorf("empty command")

@@ -3,12 +3,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"regexp"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
+
+// systemScope is install-fonts' declared privilege: package installs change the system.
+var systemScope = sdk.OperationPrivilege{Scope: sdk.ScopeSystem}
+
+// userScope keeps per-user cache refreshes with the invoking account, switching
+// back to SUDO_USER when the plugin itself runs elevated.
+var userScope = sdk.OperationPrivilege{Scope: sdk.ScopeUser}
 
 // FontManager handles GNOME font operations
 type FontManager struct{}
@@ -82,12 +88,16 @@ func (fm *FontManager) ConfigureFonts(ctx context.Context, args []string) error 
 	}
 
 	// Apply font settings
+	var batch settingsBatch
 	for _, setting := range fontSettings {
-		if err := setGSettingWithContext(ctx, setting.schema, setting.key, setting.value); err != nil {
+		if err := batch.record(setGSettingWithContext(ctx, setting.schema, setting.key, setting.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s: %v\n", setting.desc, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", setting.desc, setting.value)
 		}
+	}
+	if err := batch.err("gnome font configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("\nFont configuration complete!")
@@ -140,14 +150,18 @@ func (fm *FontManager) installPackages(ctx context.Context, fontPackages []strin
 	}
 
 	fmt.Printf("Installing: %s\n", strings.Join(fontPackages, ", "))
-	return executeCommand(ctx, installCmd[0], installCmd[1:]...)
+	// Distribution packages are system state: the SDK runs the manager directly
+	// when already elevated and through sudo otherwise (sudo -n, without prompts,
+	// when unattended). Authorization failures surface as *sdk.AuthorizationError;
+	// the manager's own exit status is preserved.
+	return sdk.ExecOperationWithContext(ctx, systemScope, installCmd[0], installCmd[1:]...)
 }
 
 // refreshFontCache refreshes the system font cache
 func (fm *FontManager) refreshFontCache(ctx context.Context) error {
 	fmt.Println("Refreshing font cache...")
 	if sdk.CommandExists("fc-cache") {
-		return executeCommand(ctx, "fc-cache", "-f", "-v")
+		return sdk.ExecOperationWithContext(ctx, userScope, "fc-cache", "-f", "-v")
 	}
 	return nil
 }
@@ -213,10 +227,4 @@ func validateFontName(fontName string) error {
 		return fmt.Errorf("font name too long")
 	}
 	return nil
-}
-
-// executeCommand executes system commands with context support and security
-func executeCommand(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
-	return cmd.Run()
 }

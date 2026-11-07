@@ -13,6 +13,13 @@ import (
 
 var version = "dev" // Set by goreleaser
 
+// RPM installs package files and queries the local database only; repository
+// operations belong to a front end such as dnf or zypper.
+const (
+	errUpdateUnsupported = "rpm has no repositories to refresh; use the dnf or zypper plugin to update repositories"
+	errSearchUnsupported = "rpm cannot search repositories; use the dnf or zypper plugin to search, or list to query installed packages"
+)
+
 // RpmPlugin implements the RPM package manager
 type RpmPlugin struct {
 	*sdk.PackageManagerPlugin
@@ -20,6 +27,8 @@ type RpmPlugin struct {
 
 // NewRpmPlugin creates a new RPM plugin
 func NewRpmPlugin() *RpmPlugin {
+	system := &sdk.OperationPrivilege{Scope: sdk.ScopeSystem}
+	user := &sdk.OperationPrivilege{Scope: sdk.ScopeUser}
 	info := sdk.PluginInfo{
 		Name:        "package-manager-rpm",
 		Version:     version,
@@ -30,28 +39,33 @@ func NewRpmPlugin() *RpmPlugin {
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
-				Description: "Install packages using RPM",
-				Usage:       "Install one or more packages with dependency resolution",
+				Description: "Install package files using RPM",
+				Usage:       "Install one or more local or remote .rpm files (rpm --install); dependencies are not resolved",
+				Privilege:   system,
 			},
 			{
 				Name:        "remove",
 				Description: "Remove packages using RPM",
-				Usage:       "Remove one or more packages from the system",
+				Usage:       "Remove one or more installed packages (rpm --erase)",
+				Privilege:   system,
 			},
 			{
 				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Update package repositories (unsupported)",
+				Usage:       "Unsupported: rpm has no repositories; use dnf or zypper",
+				Privilege:   user,
 			},
 			{
 				Name:        "search",
-				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Description: "Search for packages (unsupported)",
+				Usage:       "Unsupported: rpm has no repository search; use dnf or zypper",
+				Privilege:   user,
 			},
 			{
 				Name:        "list",
 				Description: "List packages",
-				Usage:       "List installed packages",
+				Usage:       "List installed packages (rpm --query --all)",
+				Privilege:   user,
 			},
 		},
 	}
@@ -63,9 +77,14 @@ func NewRpmPlugin() *RpmPlugin {
 
 // Execute handles command execution
 func (p *RpmPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
+	return p.ExecuteContext(context.Background(), command, args)
+}
 
-	ctx := context.Background()
+// ExecuteContext runs a native operation with cancellation and per-command scope.
+func (p *RpmPlugin) ExecuteContext(ctx context.Context, command string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	switch command {
 	case "install":
@@ -73,9 +92,9 @@ func (p *RpmPlugin) Execute(command string, args []string) error {
 	case "remove":
 		return p.handleRemove(ctx, args)
 	case "update":
-		return p.handleUpdate(ctx, args)
+		return fmt.Errorf("%s", errUpdateUnsupported)
 	case "search":
-		return p.handleSearch(ctx, args)
+		return fmt.Errorf("%s", errSearchUnsupported)
 	case "list":
 		return p.handleList(ctx, args)
 	default:
@@ -84,46 +103,63 @@ func (p *RpmPlugin) Execute(command string, args []string) error {
 }
 
 func (p *RpmPlugin) handleInstall(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validatePackages(args); err != nil {
+		return err
+	}
+	for _, file := range args {
+		if !strings.HasSuffix(strings.ToLower(file), ".rpm") {
+			return fmt.Errorf("rpm installs package files, not repository packages: %q is not an .rpm file; use the dnf or zypper plugin to install by name", file)
+		}
 	}
 
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
-	// Install packages using the package manager
-	cmdArgs := append([]string{"--install"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "rpm", cmdArgs...)
+	return p.run(ctx, "install", append([]string{"--install"}, args...)...)
 }
 
 func (p *RpmPlugin) handleRemove(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validatePackages(args); err != nil {
+		return err
 	}
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"--erase"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "rpm", cmdArgs...)
-}
-
-func (p *RpmPlugin) handleUpdate(ctx context.Context, args []string) error {
-	fmt.Println("Updating package repositories...")
-	return fmt.Errorf("rpm does not refresh repositories; use dnf or zypper")
-}
-
-func (p *RpmPlugin) handleSearch(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
-	}
-
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommandWithContext(ctx, false, "rpm", "search", searchTerm)
+	return p.run(ctx, "remove", append([]string{"--erase"}, args...)...)
 }
 
 func (p *RpmPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "rpm", "list")
+	if len(args) != 0 {
+		return fmt.Errorf("list takes no arguments")
+	}
+	return p.run(ctx, "list", "--query", "--all")
+}
+
+// run executes rpm with the privilege advertised for operation.
+func (p *RpmPlugin) run(ctx context.Context, operation string, args ...string) error {
+	privilege := sdk.PluginOperationPrivilege(p.Info(), []string{operation})
+	if privilege == nil {
+		return fmt.Errorf("operation %s has no declared privilege", operation)
+	}
+	if !p.IsAvailable() {
+		return fmt.Errorf("rpm is not available on this system; this plugin requires an RPM-based distribution")
+	}
+	err := sdk.ExecOperationWithContext(ctx, *privilege, "rpm", args...)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+func validatePackages(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("no packages specified")
+	}
+	for _, pkg := range args {
+		if strings.TrimSpace(pkg) == "" || strings.HasPrefix(pkg, "-") {
+			return fmt.Errorf("invalid package name: %q", pkg)
+		}
+	}
+	return nil
 }
 
 func main() {

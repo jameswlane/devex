@@ -35,7 +35,7 @@ conflicts: []
 supports:
   install: true
   uninstall: true
-  update: true
+  update: false
   search: true
   list: true
   reproducible_builds: true

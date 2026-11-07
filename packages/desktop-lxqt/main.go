@@ -128,24 +128,29 @@ func (p *LXQtPlugin) handleConfigure(args []string) error {
 	fmt.Println("✓ Created LXQt configuration directory")
 
 	// Configure panel
-	if err := p.configureLXQtPanel(); err != nil {
+	var batch settingsBatch
+	if err := batch.record(p.configureLXQtPanel()); err != nil {
 		fmt.Printf("Warning: Failed to configure panel: %v\n", err)
 	} else {
 		fmt.Println("✓ Configured LXQt panel")
 	}
 
 	// Configure desktop settings
-	if err := p.configureLXQtDesktop(); err != nil {
+	if err := batch.record(p.configureLXQtDesktop()); err != nil {
 		fmt.Printf("Warning: Failed to configure desktop: %v\n", err)
 	} else {
 		fmt.Println("✓ Configured LXQt desktop")
 	}
 
 	// Configure session settings
-	if err := p.configureLXQtSession(); err != nil {
+	if err := batch.record(p.configureLXQtSession()); err != nil {
 		fmt.Printf("Warning: Failed to configure session: %v\n", err)
 	} else {
 		fmt.Println("✓ Configured LXQt session")
+	}
+
+	if err := batch.err("lxqt configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("LXQt configuration complete!")

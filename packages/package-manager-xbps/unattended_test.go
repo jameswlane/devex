@@ -9,14 +9,14 @@ import (
 
 var _ = Describe("Unattended xbps execution", func() {
 	It("completes mutating operations with stdin closed", func() {
-		sdktest.NewRecorder(GinkgoT(), "xbps-install", "xbps-remove")
+		recorder := sdktest.NewRecorder(GinkgoT(), "xbps-install", "xbps-remove")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewXbpsPlugin()
-		for _, command := range []string{"install", "remove", "update"} {
-			err := plugin.Execute(command, []string{"example"})
-
-			Expect(err).To(Succeed())
-		}
+		Expect(plugin.Execute("install", []string{"example"})).To(Succeed())
+		Expect(plugin.Execute("remove", []string{"example"})).To(Succeed())
+		Expect(plugin.Execute("update", nil)).To(Succeed())
+		Expect(recorder.Calls("xbps-install")).To(HaveLen(2))
+		Expect(recorder.Calls("xbps-remove")).To(HaveLen(1))
 	})
 })

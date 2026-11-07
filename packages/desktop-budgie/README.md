@@ -181,6 +181,17 @@ devex desktop-budgie configure-night-light --enabled true --temperature 4000
 - **Budgie 10.4**: Core features supported
 - **Budgie 10.3**: Limited compatibility
 
+## Failure Behavior
+
+Configure operations apply independent settings best-effort. A failed setting is
+reported as a warning and the remaining settings still apply; the command
+succeeds when at least one setting applied. When every write fails (for example
+when the settings backend or schemas are unavailable), the command fails with
+`<operation> applied no settings: all <n> writes failed: <first native error>`,
+and the plugin exits with that native exit status.
+
+This applies to `configure` and `configure-panel`.
+
 ## Troubleshooting
 
 ### Common Issues

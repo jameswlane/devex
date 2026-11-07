@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -201,7 +203,7 @@ var _ = Describe("GNOME command contracts", func() {
 			command: "install-fonts",
 			routes: func() {
 				Expect(plugin.Execute("install-fonts", nil)).To(Succeed())
-				// argv only: elevation is the pending defect contract below, not intended behavior.
+				// argv only here: elevation is pinned by the install-fonts privilege specs.
 				Expect(argvOf(recorder.Calls("apt-get"))).To(Equal([][]string{append([]string{"install", "-y"}, defaultGNOMEFonts...)}))
 				Expect(recorder.Calls("fc-cache")).To(Equal([]sdktest.Call{{Args: []string{"-f", "-v"}}}))
 
@@ -372,10 +374,126 @@ var _ = Describe("GNOME command contracts", func() {
 		It("reports native failures from "+contract.command, contract.fails)
 	}
 
-	PIt("requests elevation for system font package installs: #296 - install-fonts runs the system package manager without sudo or a declared privilege scope", func() {
-		Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
-		Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{{Args: []string{"install", "-y", "fonts-hack"}, ElevationRequested: true}}))
+	// #296: install-fonts declares system scope and installs packages through the
+	// SDK privilege path, while font-cache refreshes stay with the invoking user.
+	Describe("install-fonts privilege", func() {
+		install := []string{"install", "-y", "fonts-hack"}
+		elevated := sdktest.Call{Args: install, ElevationRequested: true}
+
+		It("declares system scope for install-fonts only", func() {
+			Expect(sdk.PluginOperationPrivilege(plugin.Info(), []string{"install-fonts"})).To(Equal(&sdk.OperationPrivilege{Scope: sdk.ScopeSystem}))
+			Expect(sdk.PluginOperationPrivilege(plugin.Info(), []string{"configure-fonts"})).To(BeNil())
+		})
+
+		It("requests elevation for system font package installs", func() {
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{elevated}))
+			// Interactive: a non-prompting authorization probe, then sudo -n for the manager.
+			Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{
+				{Args: []string{"-n", "true"}},
+				{Args: append([]string{"-n", "--", "apt-get"}, install...)},
+			}))
+			Expect(recorder.Calls("fc-cache")).To(Equal([]sdktest.Call{{Args: []string{"-f", "-v"}}}), "fc-cache stays a user-scope process")
+		})
+
+		It("uses sudo -n without an authorization probe when unattended", func() {
+			GinkgoT().Setenv(sdk.UnattendedEnv, "1")
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{{Args: append([]string{"-n", "--", "apt-get"}, install...)}}))
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{elevated}))
+			Expect(recorder.Calls("fc-cache")).To(Equal([]sdktest.Call{{Args: []string{"-f", "-v"}}}), "fc-cache stays a user-scope process")
+		})
+
+		It("runs the manager unchanged when already elevated and refreshes caches as SUDO_USER", func() {
+			base := sdk.NewPrivilegeResolver
+			DeferCleanup(func() { sdk.NewPrivilegeResolver = base })
+			sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
+				resolver := base()
+				resolver.Elevated = true
+				return resolver
+			}
+			GinkgoT().Setenv("SUDO_USER", "devex-test-user")
+			// sudo's env_reset drops desktop session variables from an elevated launch.
+			GinkgoT().Setenv("XDG_CURRENT_DESKTOP", "")
+			home := os.Getenv("HOME")
+
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{{Args: install}}))
+			Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{
+				{Args: append([]string{"-n", "-H", "-u", "devex-test-user", "--", "env", "HOME=" + home, "USER=devex-test-user", "LOGNAME=devex-test-user", "fc-cache"}, []string{"-f", "-v"}...)},
+			}))
+		})
+
+		It("reports sudo authorization failures distinctly", func() {
+			recorder.Script("sudo", append([]string{"-n", "--", "apt-get"}, install...), sdktest.Response{ExitCode: 1, Stderr: "sudo: a password is required\n"})
+			err := plugin.Execute("install-fonts", []string{"hack"})
+			Expect(err).To(MatchError(HavePrefix("failed to install fonts: authorization-denied: ")))
+			var auth *sdk.AuthorizationError
+			Expect(errors.As(err, &auth)).To(BeTrue())
+			Expect(auth.Kind).To(Equal(sdk.AuthorizationDenied))
+			Expect(auth.NativeExitCode).To(Equal(1))
+			Expect(recorder.Calls("apt-get")).To(BeEmpty())
+			Expect(recorder.Calls("fc-cache")).To(BeEmpty())
+		})
+
+		It("preserves the package manager's exit status", func() {
+			fail("apt-get", install...)
+			err := plugin.Execute("install-fonts", []string{"hack"})
+			Expect(err).To(MatchError("failed to install fonts: exit status 42"))
+			var auth *sdk.AuthorizationError
+			Expect(errors.As(err, &auth)).To(BeFalse())
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(recorder.Calls("fc-cache")).To(BeEmpty())
+		})
+
+		It("does not need session variables but still needs the desktop installed", func() {
+			GinkgoT().Setenv("XDG_CURRENT_DESKTOP", "")
+			GinkgoT().Setenv("DESKTOP_SESSION", "")
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{elevated}))
+
+			recorder.Reset()
+			removeFake("gsettings")
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(MatchError("GNOME desktop environment is not available on this system"))
+			noNativeCalls()
+		})
 	})
+
+	// Complete-failure policy (#157, #303): a configure operation's settings are
+	// independent and best-effort, so failed keys are warned about and the rest
+	// still apply; the operation fails only when no setting applied at all.
+	DescribeTable("fails when every settings write fails",
+		func(command, operation string, calls func() []sdktest.Call) {
+			recorder.Fallback("gsettings", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).To(MatchError(HavePrefix(fmt.Sprintf("%s applied no settings: all %d writes failed: exit status 42", operation, len(calls())))))
+			// The native failure is wrapped, so the plugin exits with its status.
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(output).NotTo(ContainSubstring("configuration complete!"))
+			Expect(recorder.Calls("gsettings")).To(Equal(calls()))
+		},
+		Entry("configure", "configure", "gnome configuration", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-dock", "configure-dock", "gnome dock configuration", func() []sdktest.Call { return dockCalls }),
+		Entry("configure-fonts", "configure-fonts", "gnome font configuration", func() []sdktest.Call { return fontCalls("JetBrains Mono 10") }),
+	)
+
+	DescribeTable("succeeds when a single settings write applies",
+		func(command string, calls func() []sdktest.Call) {
+			all := calls()
+			for _, call := range all[:len(all)-1] {
+				recorder.Script("gsettings", call.Args, sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			}
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("onfiguration complete!"))
+			Expect(recorder.Calls("gsettings")).To(Equal(all))
+		},
+		Entry("configure", "configure", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-dock", "configure-dock", func() []sdktest.Call { return dockCalls }),
+		Entry("configure-fonts", "configure-fonts", func() []sdktest.Call { return fontCalls("JetBrains Mono 10") }),
+	)
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

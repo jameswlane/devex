@@ -274,6 +274,51 @@ devex desktop-xfce configure-mime-types --image "ristretto" --text "mousepad"
 - **XFCE 4.14+**: Core features supported
 - **XFCE 4.12+**: Basic feature support (legacy)
 
+## Failure Behavior
+
+Configure operations apply independent settings best-effort. A failed setting is
+reported as a warning and the remaining settings still apply; the command
+succeeds when at least one setting applied. When every write fails (for example
+when the settings backend or schemas are unavailable), the command fails with
+`<operation> applied no settings: all <n> writes failed: <first native error>`,
+and the plugin exits with that native exit status.
+
+This applies to `configure`, `configure-panel` and `configure-wm`.
+
+`backup` parses `xfconf-query -l` as upstream prints it: the first line is a
+translated `Channels:` header and is skipped whatever its language, and the
+indented channel names are trimmed. An unreadable channel or property is reported
+and skipped; when no channel can be read, no file is written and the command
+fails.
+
+Backups are XML shaped like xfconf's own channel files:
+
+```xml
+<xfce-config format="devex-xfce-backup" version="2">
+  <channel name="xfwm4">
+    <property name="/general/theme" type="string" value="Default"></property>
+    <property name="/general/workspace_names" type="array">
+      <value type="string" value="Main"></value>
+    </property>
+  </channel>
+</xfce-config>
+```
+
+Types come from `xfconf-query -c <channel> -p <property> -v`, which prints
+`[type] value` from xfconf 4.20. A type is recorded only when that read is exactly
+the plain read with the type prefix added. Older xfconf prints no types, so those
+values are recorded without `type`; a multi-line untyped value, such as an older
+xfconf array, cannot be restored faithfully and is skipped with a warning.
+
+`restore` validates the whole file first and rejects malformed XML, unsupported
+formats or types, invalid channel or property names, duplicates and backups with
+no properties. Each property is then set with
+`xfconf-query -c <channel> -p <property> -n -t <type> -s <value>` (arrays pass
+`-a` and one `-t`/`-s` pair per item). Untyped values use
+`xfconf-query -c <channel> -p <property> -s <value>`, which keeps the existing
+property's type and fails if the property no longer exists. If a property fails,
+the rest are still restored and the command fails, naming the failed properties.
+
 ## Troubleshooting
 
 ### Common Issues

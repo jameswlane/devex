@@ -9,14 +9,13 @@ import (
 
 var _ = Describe("Unattended eopkg execution", func() {
 	It("completes mutating operations with stdin closed", func() {
-		sdktest.NewRecorder(GinkgoT(), "eopkg")
+		recorder := sdktest.NewRecorder(GinkgoT(), "eopkg")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewEopkgPlugin()
-		for _, command := range []string{"install", "remove", "update"} {
-			err := plugin.Execute(command, []string{"example"})
-
-			Expect(err).To(Succeed())
-		}
+		Expect(plugin.Execute("install", []string{"example"})).To(Succeed())
+		Expect(plugin.Execute("remove", []string{"example"})).To(Succeed())
+		Expect(plugin.Execute("update", nil)).To(Succeed())
+		Expect(recorder.Calls("eopkg")).To(HaveLen(3))
 	})
 })

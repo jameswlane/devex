@@ -258,6 +258,28 @@ devex desktop-gnome configure-software --auto-updates false --third-party true
 - **GNOME 40-41**: Core features supported
 - **GNOME 3.38+**: Legacy feature support
 
+## Failure Behavior
+
+Configure operations apply independent settings best-effort. A failed setting is
+reported as a warning and the remaining settings still apply; the command
+succeeds when at least one setting applied. When every write fails (for example
+when the settings backend or schemas are unavailable), the command fails with
+`<operation> applied no settings: all <n> writes failed: <first native error>`,
+and the plugin exits with that native exit status.
+
+This applies to `configure`, `configure-dock` and `configure-fonts`. When every
+`configure-dock` write fails, the error also suggests installing Dash-to-dock.
+
+`install-fonts` declares system privilege scope. The selected package manager
+(`apt-get`, `dnf`, `pacman` or `zypper`) runs directly when DevEx is already
+elevated, and otherwise through `sudo -n`; an interactive run first makes a
+non-prompting `sudo -n true` probe, so authorize with `sudo -v` beforehand.
+Unattended runs skip the probe. A sudo authorization failure is reported as an
+`authorization-denied` error, distinct from a package-manager failure, whose exit
+status is preserved. `fc-cache` stays a user-scope process: under sudo it runs as
+`SUDO_USER`. Because sudo drops desktop session variables, `install-fonts`
+requires GNOME (`gsettings`) to be installed but not a running session.
+
 ## Troubleshooting
 
 ### Common Issues

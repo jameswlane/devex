@@ -51,6 +51,12 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 
 	var debFiles []string
 	tempFiles := make(map[string]bool)
+	// Remove downloaded packages on every return path, including failures.
+	defer func() {
+		for f := range tempFiles {
+			d.cleanupTempFile(f)
+		}
+	}()
 
 	// Process each argument - could be a file path or URL
 	for _, arg := range args {
@@ -59,10 +65,6 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 			d.logger.Printf("Downloading package from: %s\n", arg)
 			localPath, err := d.downloadDebFile(ctx, arg)
 			if err != nil {
-				// Clean up any temp files
-				for f := range tempFiles {
-					d.cleanupTempFile(f)
-				}
 				return fmt.Errorf("failed to download %s: %w", arg, err)
 			}
 			debFiles = append(debFiles, localPath)
@@ -76,7 +78,9 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Verify all packages before installation
+	// Dependency checking and installation are best-effort: their failures are
+	// warnings because dpkg -i below is the authoritative check. If a
+	// dependency is still unmet, dpkg -i fails and that error is returned.
 	d.logger.Println("Verifying packages...")
 	missingDeps := make(map[string]bool)
 	for _, debFile := range debFiles {
@@ -95,8 +99,7 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 		d.logger.Printf("Installing missing dependencies: %v\n", mapKeys(missingDeps))
 		depList := mapKeys(missingDeps)
 		if err := d.installDependencies(ctx, depList); err != nil {
-			d.logger.Warning("Failed to install some dependencies: %v", err)
-			// Continue anyway, dpkg will handle it
+			d.logger.Warning("Failed to install some dependencies (continuing; dpkg -i reports any that remain unmet): %v", err)
 		}
 	}
 
@@ -104,18 +107,18 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 	for _, debFile := range debFiles {
 		d.logger.Printf("Installing package: %s\n", debFile)
 		if err := sdk.ExecCommandWithContext(ctx, true, "dpkg", "-i", debFile); err != nil {
-			// Try to fix broken dependencies
+			// Repair the dpkg state so the system is not left with a broken
+			// package. The install still failed: apt-get -f may resolve the
+			// problem by removing the package, so a successful repair does not
+			// prove it was installed.
+			installErr := fmt.Errorf("failed to install %s: %w", debFile, err)
 			d.logger.Warning("Installation failed, attempting to fix dependencies...")
 			if fixErr := sdk.ExecCommandWithContext(ctx, true, "apt-get", "install", "-f", "-y"); fixErr != nil {
 				d.logger.ErrorMsg("Failed to fix dependencies: %v", fixErr)
+				return errors.Join(installErr, fmt.Errorf("dependency repair with apt-get install -f failed: %w", fixErr))
 			}
-			return fmt.Errorf("failed to install %s: %w", debFile, err)
+			return installErr
 		}
-	}
-
-	// Clean up temporary files
-	for f := range tempFiles {
-		d.cleanupTempFile(f)
 	}
 
 	d.logger.Success("Successfully installed %d package(s)", len(debFiles))
@@ -128,15 +131,22 @@ func (d *DebInstaller) handleRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("no packages specified")
 	}
 
-	d.logger.Printf("Removing packages: %s\n", strings.Join(args, ", "))
-
+	// Validate every name before removing anything.
 	for _, pkg := range args {
 		if err := d.validatePackageName(pkg); err != nil {
 			return fmt.Errorf("invalid package name '%s': %w", pkg, err)
 		}
+	}
 
-		// Check if the package is installed
-		if installed, _ := d.isPackageInstalled(pkg); !installed {
+	d.logger.Printf("Removing packages: %s\n", strings.Join(args, ", "))
+
+	for _, pkg := range args {
+		// Skip only packages dpkg confirms are absent; a failed query is an error.
+		installed, err := d.isPackageInstalled(pkg)
+		if err != nil {
+			return fmt.Errorf("failed to check installation status of %s: %w", pkg, err)
+		}
+		if !installed {
 			d.logger.Printf("Package %s is not installed, skipping\n", pkg)
 			continue
 		}
@@ -168,7 +178,7 @@ func (d *DebInstaller) handleInfo(ctx context.Context, args []string) error {
 		} else {
 			// Try as an installed package
 			if err := sdk.ExecCommandWithContext(ctx, false, "dpkg", "-s", debFile); err != nil {
-				return fmt.Errorf("package %s not found (neither as file nor installed package)", debFile)
+				return installedQueryError(debFile, err)
 			}
 		}
 
@@ -197,7 +207,7 @@ func (d *DebInstaller) handleListFiles(ctx context.Context, args []string) error
 		} else {
 			// Try as an installed package
 			if err := sdk.ExecCommandWithContext(ctx, false, "dpkg", "-L", debFile); err != nil {
-				return fmt.Errorf("package %s not found (neither as file nor installed package)", debFile)
+				return installedQueryError(debFile, err)
 			}
 		}
 
@@ -228,11 +238,13 @@ func (d *DebInstaller) handleVerify(ctx context.Context, args []string) error {
 			return err
 		}
 
-		// Check dependencies
+		// Check dependencies. A check that could not run fails verification;
+		// missing dependencies are reported, since install can resolve them.
 		deps, err := d.getMissingDependencies(debFile)
 		if err != nil {
-			d.logger.Warning("Failed to check dependencies: %v", err)
-		} else if len(deps) > 0 {
+			return fmt.Errorf("failed to check dependencies for %s: %w", debFile, err)
+		}
+		if len(deps) > 0 {
 			d.logger.Warning("Missing dependencies: %s", strings.Join(deps, ", "))
 		} else {
 			d.logger.Success("All dependencies are satisfied")
@@ -325,6 +337,15 @@ func (d *DebInstaller) isPackageInstalled(packageName string) (bool, error) {
 func dpkgPackageAbsent(err error) bool {
 	var exitErr *exec.ExitError
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
+}
+
+// installedQueryError describes a failed dpkg query for an installed package,
+// keeping the native error so callers can inspect its exit status.
+func installedQueryError(pkg string, err error) error {
+	if dpkgPackageAbsent(err) {
+		return fmt.Errorf("package %s not found (neither as file nor installed package): %w", pkg, err)
+	}
+	return fmt.Errorf("failed to query installed package %s: %w", pkg, err)
 }
 
 // mapKeys returns the keys of a map as a slice

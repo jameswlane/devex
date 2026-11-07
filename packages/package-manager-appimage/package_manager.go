@@ -105,81 +105,96 @@ func (p *AppimagePlugin) handleRemove(args []string) error {
 
 	p.logger.Printf("Removing AppImages: %s\n", strings.Join(args, ", "))
 
+	// Remove every requested AppImage, then report every failure so a later
+	// success cannot hide an earlier partial removal.
+	var failures []error
 	for _, binaryName := range args {
-		// Check if installed
-		if installed, err := p.isAppImageInstalled(binaryName); err != nil {
-			p.logger.Warning("Failed to check installation status: %v", err)
-		} else if !installed {
-			p.logger.Printf("AppImage %s is not installed, skipping\n", binaryName)
-			continue
-		}
-
-		// Remove from both possible locations
-		guiPath := filepath.Join(os.Getenv("HOME"), "Applications", binaryName)
-		cliPath := filepath.Join(os.Getenv("HOME"), ".local", "bin", binaryName)
-		desktopPath := filepath.Join(os.Getenv("HOME"), ".local", "share", "applications", binaryName+".desktop")
-
-		removed := false
-
-		// Try GUI location
-		if _, err := os.Stat(guiPath); err == nil {
-			if err := os.Remove(guiPath); err != nil {
-				p.logger.Warning("Failed to remove from GUI location: %v", err)
-			} else {
-				removed = true
-			}
-		}
-
-		// Try CLI location
-		if _, err := os.Stat(cliPath); err == nil {
-			if err := os.Remove(cliPath); err != nil {
-				p.logger.Warning("Failed to remove from CLI location: %v", err)
-			} else {
-				removed = true
-			}
-		}
-
-		// Remove desktop entry
-		if _, err := os.Stat(desktopPath); err == nil {
-			if err := os.Remove(desktopPath); err != nil {
-				p.logger.Warning("Failed to remove desktop entry: %v", err)
-			}
-		}
-
-		if removed {
-			p.logger.Success("AppImage %s removed successfully", binaryName)
-		} else {
-			p.logger.Printf("⚠️ AppImage %s not found\n", binaryName)
+		if err := p.removeAppImage(binaryName); err != nil {
+			failures = append(failures, fmt.Errorf("failed to remove AppImage %s: %w", binaryName, err))
 		}
 	}
 
+	return errors.Join(failures...)
+}
+
+// removeAppImage removes one AppImage from both install locations and its
+// desktop entry. Each failed removal is logged as it happens and returned.
+func (p *AppimagePlugin) removeAppImage(binaryName string) error {
+	installed, lookupErr := p.isAppImageInstalled(binaryName)
+	if lookupErr != nil {
+		// The status is unknown, so still try to remove both locations.
+		p.logger.Warning("Failed to check installation status: %v", lookupErr)
+	} else if !installed {
+		p.logger.Printf("AppImage %s is not installed, skipping\n", binaryName)
+		return nil
+	}
+
+	homeDir := os.Getenv("HOME")
+	targets := []struct {
+		label string
+		path  string
+	}{
+		{"from GUI location", filepath.Join(homeDir, "Applications", binaryName)},
+		{"from CLI location", filepath.Join(homeDir, ".local", "bin", binaryName)},
+		{"desktop entry", filepath.Join(homeDir, ".local", "share", "applications", binaryName+".desktop")},
+	}
+
+	var failures []error
+	removed := false
+	for i, target := range targets {
+		err := os.Remove(target.path)
+		switch {
+		case err == nil:
+			// Only the two binary locations count as removing the AppImage.
+			if i < 2 {
+				removed = true
+			}
+		case errors.Is(err, fs.ErrNotExist):
+		default:
+			p.logger.Warning("Failed to remove %s: %v", target.label, err)
+			failures = append(failures, err)
+		}
+	}
+
+	if len(failures) > 0 {
+		return errors.Join(failures...)
+	}
+	if !removed && lookupErr != nil {
+		return fmt.Errorf("could not confirm removal: %w", lookupErr)
+	}
+	if removed {
+		p.logger.Success("AppImage %s removed successfully", binaryName)
+	} else {
+		p.logger.Printf("⚠️ AppImage %s not found\n", binaryName)
+	}
 	return nil
 }
 
-// handleList lists installed AppImages
+// handleList lists installed AppImages. Each directory is listed even if the
+// other cannot be read; any read failure is returned after both are shown.
 func (p *AppimagePlugin) handleList(args []string) error {
 	homeDir := os.Getenv("HOME")
-	guiDir := filepath.Join(homeDir, "Applications")
-	cliDir := filepath.Join(homeDir, ".local", "bin")
+	locations := []struct {
+		heading string
+		dir     string
+	}{
+		{"🖥️ GUI Applications (~/Applications):\n", filepath.Join(homeDir, "Applications")},
+		{"⚙️ CLI Tools (~/.local/bin):\n", filepath.Join(homeDir, ".local", "bin")},
+	}
 
 	p.logger.Printf("Installed AppImages:\n")
-	p.logger.Printf("\n")
 
-	// List GUI AppImages
-	p.logger.Printf("🖥️ GUI Applications (~/Applications):\n")
-	if err := p.listAppImagesInDir(guiDir); err != nil {
-		p.logger.Printf("  (Error reading directory: %v)\n", err)
+	var failures []error
+	for _, location := range locations {
+		p.logger.Printf("\n")
+		p.logger.Printf("%s", location.heading)
+		if err := p.listAppImagesInDir(location.dir); err != nil {
+			p.logger.Printf("  (Error reading directory: %v)\n", err)
+			failures = append(failures, fmt.Errorf("failed to list AppImages in %s: %w", location.dir, err))
+		}
 	}
 
-	p.logger.Printf("\n")
-
-	// List CLI AppImages
-	p.logger.Printf("⚙️ CLI Tools (~/.local/bin):\n")
-	if err := p.listAppImagesInDir(cliDir); err != nil {
-		p.logger.Printf("  (Error reading directory: %v)\n", err)
-	}
-
-	return nil
+	return errors.Join(failures...)
 }
 
 // handleIsInstalled checks if an AppImage is installed
@@ -210,17 +225,20 @@ func (p *AppimagePlugin) handleValidateURL(args []string) error {
 		return fmt.Errorf("no URL specified")
 	}
 
+	// Check every URL, then report every inaccessible one.
+	var failures []error
 	for _, downloadURL := range args {
 		p.logger.Printf("Validating URL: %s\n", downloadURL)
 
 		if err := p.validateURLAccessibility(downloadURL); err != nil {
 			p.logger.Printf("❌ %s: %v\n", downloadURL, err)
+			failures = append(failures, fmt.Errorf("URL validation failed for %s: %w", downloadURL, err))
 		} else {
 			p.logger.Printf("✅ %s: URL is accessible\n", downloadURL)
 		}
 	}
 
-	return nil
+	return errors.Join(failures...)
 }
 
 // isAppImageInstalled checks if an AppImage is installed in either location
@@ -258,11 +276,17 @@ func (p *AppimagePlugin) isAppImageInstalled(binaryName string) (bool, error) {
 // listAppImagesInDir lists AppImages in a given directory
 func (p *AppimagePlugin) listAppImagesInDir(dir string) error {
 	files, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A location that was never created holds no AppImages.
+		p.logger.Printf("  (No AppImages found)\n")
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 
 	count := 0
+	var failures []error
 	for _, file := range files {
 		if file.IsDir() {
 			continue
@@ -270,7 +294,12 @@ func (p *AppimagePlugin) listAppImagesInDir(dir string) error {
 
 		// Check if file is executable
 		info, err := file.Info()
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // removed while listing
+		}
 		if err != nil {
+			// Keep listing the rest; the failure is returned below.
+			failures = append(failures, fmt.Errorf("inspect %s: %w", filepath.Join(dir, file.Name()), err))
 			continue
 		}
 
@@ -280,11 +309,11 @@ func (p *AppimagePlugin) listAppImagesInDir(dir string) error {
 		}
 	}
 
-	if count == 0 {
+	if count == 0 && len(failures) == 0 {
 		p.logger.Printf("  (No AppImages found)\n")
 	}
 
-	return nil
+	return errors.Join(failures...)
 }
 
 // formatFileSize formats file size in human-readable format

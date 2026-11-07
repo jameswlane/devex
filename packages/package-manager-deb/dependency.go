@@ -14,7 +14,7 @@ func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) 
 	ctx := context.Background()
 	output, err := sdk.ExecCommandOutputWithContext(ctx, "dpkg-deb", "-f", debFile, "Depends")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read Depends field: %w", err)
 	}
 
 	if strings.TrimSpace(output) == "" {
@@ -39,7 +39,11 @@ func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) 
 			anyInstalled := false
 			for _, part := range parts {
 				part = strings.TrimSpace(part)
-				if installed, _ := d.isPackageInstalled(part); installed {
+				installed, err := d.isPackageInstalled(part)
+				if err != nil {
+					return nil, err
+				}
+				if installed {
 					anyInstalled = true
 					break
 				}
@@ -51,8 +55,15 @@ func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) 
 			continue
 		}
 
-		// Check if dependency is installed
-		if installed, _ := d.isPackageInstalled(dep); !installed && dep != "" {
+		if dep == "" {
+			continue
+		}
+		// Check if dependency is installed; a failed query is an error, not absence.
+		installed, err := d.isPackageInstalled(dep)
+		if err != nil {
+			return nil, err
+		}
+		if !installed {
 			missing = append(missing, dep)
 		}
 	}
@@ -76,6 +87,7 @@ func (d *DebInstaller) installDependencies(ctx context.Context, deps []string) e
 	// Update package lists first
 	d.logger.Println("Updating package lists...")
 	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update"); err != nil {
+		// Best-effort: apt-get install below fails if stale lists matter.
 		d.logger.Warning("Failed to update package lists: %v", err)
 	}
 

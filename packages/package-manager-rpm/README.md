@@ -17,19 +17,32 @@ Red Hat Package Manager (RPM) plugin for DevEx. Provides low-level package manag
 
 ## 🚀 Quick Start
 
+Run plugin operations through `devex plugin run`; the [Operations](#operations) table lists the native command behind each one. Native manager flags are not passed through.
+
 ```bash
-# Install RPM packages directly
-devex package-manager rpm install package.rpm
+# Install package files (dependencies are not resolved)
+devex plugin run package-manager-rpm install ./example-1.0-1.x86_64.rpm
 
-# Query installed packages
-devex package-manager rpm -qa
-
-# Verify package integrity
-devex package-manager rpm -V package-name
-
-# Extract package contents
-devex package-manager rpm -ql package-name
+# Remove a package and list installed packages
+devex plugin run package-manager-rpm remove example
+devex plugin run package-manager-rpm list
 ```
+
+## Operations
+
+Low-level RPM operations on package files and the local database. RPM has no repositories, so repository operations are rejected with guidance to use the dnf or zypper plugin.
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `rpm --install <files>`; arguments must be local or remote `.rpm` files, and dependencies are not resolved | system |
+| `remove` | `rpm --erase <packages>` | system |
+| `update` | Unsupported: rpm has no repositories to refresh | n/a (no native call) |
+| `search` | Unsupported: rpm has no repository search; use `list` for installed packages | n/a (no native call) |
+| `list` | `rpm --query --all` | user |
+
+Package arguments that are empty or start with `-` are rejected before any native command runs.
+
+The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
 
 ## 🚀 Platform Support
 

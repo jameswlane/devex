@@ -13,6 +13,10 @@ import (
 
 var version = "dev" // Set by goreleaser
 
+// errListUnsupported explains why list never runs a native command: emerge has
+// no installed-package listing, and the alternatives need extra packages.
+const errListUnsupported = "emerge cannot list installed packages; install app-portage/portage-utils and run 'qlist -I', or app-portage/gentoolkit and run \"equery list '*'\""
+
 // EmergePlugin implements the Emerge package manager
 type EmergePlugin struct {
 	*sdk.PackageManagerPlugin
@@ -20,6 +24,8 @@ type EmergePlugin struct {
 
 // NewEmergePlugin creates a new Emerge plugin
 func NewEmergePlugin() *EmergePlugin {
+	system := &sdk.OperationPrivilege{Scope: sdk.ScopeSystem}
+	user := &sdk.OperationPrivilege{Scope: sdk.ScopeUser}
 	info := sdk.PluginInfo{
 		Name:        "package-manager-emerge",
 		Version:     version,
@@ -31,27 +37,32 @@ func NewEmergePlugin() *EmergePlugin {
 			{
 				Name:        "install",
 				Description: "Install packages using Emerge",
-				Usage:       "Install one or more packages with dependency resolution",
+				Usage:       "Install one or more packages with dependency resolution (emerge --ask=n)",
+				Privilege:   system,
 			},
 			{
 				Name:        "remove",
 				Description: "Remove packages using Emerge",
-				Usage:       "Remove one or more packages from the system",
+				Usage:       "Remove packages that nothing else depends on (emerge --ask=n --depclean)",
+				Privilege:   system,
 			},
 			{
 				Name:        "update",
 				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Usage:       "Synchronize Portage repositories (emerge --ask=n --sync)",
+				Privilege:   system,
 			},
 			{
 				Name:        "search",
 				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Usage:       "Search for packages by name or description (emerge --searchdesc)",
+				Privilege:   user,
 			},
 			{
 				Name:        "list",
-				Description: "List packages",
-				Usage:       "List installed packages",
+				Description: "List packages (unsupported)",
+				Usage:       "Unsupported: emerge has no installed-package query; use qlist -I or equery list",
+				Privilege:   user,
 			},
 		},
 	}
@@ -63,9 +74,14 @@ func NewEmergePlugin() *EmergePlugin {
 
 // Execute handles command execution
 func (p *EmergePlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
+	return p.ExecuteContext(context.Background(), command, args)
+}
 
-	ctx := context.Background()
+// ExecuteContext runs a native operation with cancellation and per-command scope.
+func (p *EmergePlugin) ExecuteContext(ctx context.Context, command string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	switch command {
 	case "install":
@@ -77,53 +93,94 @@ func (p *EmergePlugin) Execute(command string, args []string) error {
 	case "search":
 		return p.handleSearch(ctx, args)
 	case "list":
-		return p.handleList(ctx, args)
+		return p.handleList(args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
 func (p *EmergePlugin) handleInstall(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validatePackages(args); err != nil {
+		return err
 	}
 
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
-	// Install packages using the package manager
-	cmdArgs := append([]string{"--ask=n"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "emerge", cmdArgs...)
+	return p.run(ctx, "install", append([]string{"--ask=n"}, args...)...)
 }
 
 func (p *EmergePlugin) handleRemove(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validatePackages(args); err != nil {
+		return err
 	}
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"--ask=n", "--depclean"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "emerge", cmdArgs...)
+	return p.run(ctx, "remove", append([]string{"--ask=n", "--depclean"}, args...)...)
 }
 
 func (p *EmergePlugin) handleUpdate(ctx context.Context, args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("update takes no arguments; it synchronizes all Portage repositories")
+	}
 	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "emerge", "--ask=n", "--sync")
+	return p.run(ctx, "update", "--ask=n", "--sync")
 }
 
 func (p *EmergePlugin) handleSearch(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no search term specified")
+	searchTerm, err := searchPhrase(args)
+	if err != nil {
+		return err
 	}
-
-	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommandWithContext(ctx, false, "emerge", "search", searchTerm)
+	return p.run(ctx, "search", "--searchdesc", searchTerm)
 }
 
-func (p *EmergePlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "emerge", "list")
+func (p *EmergePlugin) handleList(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("list takes no arguments")
+	}
+	return fmt.Errorf("%s", errListUnsupported)
+}
+
+// run executes emerge with the privilege advertised for operation.
+func (p *EmergePlugin) run(ctx context.Context, operation string, args ...string) error {
+	privilege := sdk.PluginOperationPrivilege(p.Info(), []string{operation})
+	if privilege == nil {
+		return fmt.Errorf("operation %s has no declared privilege", operation)
+	}
+	if !p.IsAvailable() {
+		return fmt.Errorf("emerge is not available on this system; install sys-apps/portage")
+	}
+	err := sdk.ExecOperationWithContext(ctx, *privilege, "emerge", args...)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+func validatePackages(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("no packages specified")
+	}
+	for _, pkg := range args {
+		if strings.TrimSpace(pkg) == "" || strings.HasPrefix(pkg, "-") {
+			return fmt.Errorf("invalid package name: %q", pkg)
+		}
+	}
+	return nil
+}
+
+func searchPhrase(args []string) (string, error) {
+	searchTerm := strings.TrimSpace(strings.Join(args, " "))
+	if searchTerm == "" {
+		return "", fmt.Errorf("no search term specified")
+	}
+	if strings.HasPrefix(searchTerm, "-") {
+		return "", fmt.Errorf("search term must not start with '-'")
+	}
+	return searchTerm, nil
 }
 
 func main() {

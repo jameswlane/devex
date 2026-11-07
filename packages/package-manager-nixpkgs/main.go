@@ -13,6 +13,11 @@ import (
 
 var version = "dev" // Set by goreleaser
 
+// errUpdateUnsupported explains why update never runs a native command:
+// nix-env has no refresh action, and choosing between nix-channel and flake
+// inputs would silently pick a channel or flake policy for the user.
+const errUpdateUnsupported = "nix-env cannot refresh package sources; run 'nix-channel --update' for channels, or use the nixflake plugin's update for flakes"
+
 // NixpkgsPlugin implements the Nixpkgs package manager
 type NixpkgsPlugin struct {
 	*sdk.PackageManagerPlugin
@@ -20,6 +25,8 @@ type NixpkgsPlugin struct {
 
 // NewNixpkgsPlugin creates a new Nixpkgs plugin
 func NewNixpkgsPlugin() *NixpkgsPlugin {
+	// Every operation acts on the invoking user's profile and must never elevate.
+	user := &sdk.OperationPrivilege{Scope: sdk.ScopeUser}
 	info := sdk.PluginInfo{
 		Name:        "package-manager-nixpkgs",
 		Version:     version,
@@ -30,28 +37,33 @@ func NewNixpkgsPlugin() *NixpkgsPlugin {
 		Commands: []sdk.PluginCommand{
 			{
 				Name:        "install",
-				Description: "Install packages using Nixpkgs",
-				Usage:       "Install one or more packages with dependency resolution",
+				Description: "Install packages into the user profile",
+				Usage:       "Install packages by derivation name (nix-env --install)",
+				Privilege:   user,
 			},
 			{
 				Name:        "remove",
-				Description: "Remove packages using Nixpkgs",
-				Usage:       "Remove one or more packages from the system",
+				Description: "Remove packages from the user profile",
+				Usage:       "Uninstall packages by derivation name (nix-env --uninstall)",
+				Privilege:   user,
 			},
 			{
 				Name:        "update",
-				Description: "Update package repositories",
-				Usage:       "Update package repository information",
+				Description: "Update package repositories (unsupported)",
+				Usage:       "Unsupported: run nix-channel --update, or use the nixflake plugin for flakes",
+				Privilege:   user,
 			},
 			{
 				Name:        "search",
 				Description: "Search for packages",
-				Usage:       "Search for packages by name or description",
+				Usage:       "List available packages whose derivation name matches each term (nix-env --query --available)",
+				Privilege:   user,
 			},
 			{
 				Name:        "list",
 				Description: "List packages",
-				Usage:       "List installed packages",
+				Usage:       "List packages installed in the user profile (nix-env --query --installed)",
+				Privilege:   user,
 			},
 		},
 	}
@@ -63,9 +75,14 @@ func NewNixpkgsPlugin() *NixpkgsPlugin {
 
 // Execute handles command execution
 func (p *NixpkgsPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
+	return p.ExecuteContext(context.Background(), command, args)
+}
 
-	ctx := context.Background()
+// ExecuteContext runs a native operation with cancellation and per-command scope.
+func (p *NixpkgsPlugin) ExecuteContext(ctx context.Context, command string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	switch command {
 	case "install":
@@ -73,7 +90,7 @@ func (p *NixpkgsPlugin) Execute(command string, args []string) error {
 	case "remove":
 		return p.handleRemove(ctx, args)
 	case "update":
-		return p.handleUpdate(ctx, args)
+		return fmt.Errorf("%s", errUpdateUnsupported)
 	case "search":
 		return p.handleSearch(ctx, args)
 	case "list":
@@ -84,46 +101,74 @@ func (p *NixpkgsPlugin) Execute(command string, args []string) error {
 }
 
 func (p *NixpkgsPlugin) handleInstall(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validatePackages(args); err != nil {
+		return err
 	}
 
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
-	// Install packages using the package manager
-	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "nix-env", cmdArgs...)
+	return p.run(ctx, "install", append([]string{"--install"}, args...)...)
 }
 
 func (p *NixpkgsPlugin) handleRemove(ctx context.Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("no packages specified")
+	if err := validatePackages(args); err != nil {
+		return err
 	}
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
-	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "nix-env", cmdArgs...)
+	return p.run(ctx, "remove", append([]string{"--uninstall"}, args...)...)
 }
 
-func (p *NixpkgsPlugin) handleUpdate(ctx context.Context, args []string) error {
-	fmt.Println("Updating package repositories...")
-	return sdk.ExecCommandWithContext(ctx, true, "nix-env", "update")
-}
-
+// handleSearch passes each term as its own selector: nix-env matches derivation
+// names, which never contain spaces, so a joined phrase could never match.
 func (p *NixpkgsPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
 	}
+	for _, term := range args {
+		if strings.TrimSpace(term) == "" || strings.HasPrefix(term, "-") {
+			return fmt.Errorf("invalid search term: %q", term)
+		}
+	}
+	fmt.Printf("Searching for: %s\n", strings.Join(args, ", "))
 
-	searchTerm := strings.Join(args, " ")
-	fmt.Printf("Searching for: %s\n", searchTerm)
-
-	return sdk.ExecCommandWithContext(ctx, false, "nix-env", "search", searchTerm)
+	return p.run(ctx, "search", append([]string{"--query", "--available"}, args...)...)
 }
 
 func (p *NixpkgsPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "nix-env", "list")
+	if len(args) != 0 {
+		return fmt.Errorf("list takes no arguments")
+	}
+	return p.run(ctx, "list", "--query", "--installed")
+}
+
+// run executes nix-env with the privilege advertised for operation.
+func (p *NixpkgsPlugin) run(ctx context.Context, operation string, args ...string) error {
+	privilege := sdk.PluginOperationPrivilege(p.Info(), []string{operation})
+	if privilege == nil {
+		return fmt.Errorf("operation %s has no declared privilege", operation)
+	}
+	if !p.IsAvailable() {
+		return fmt.Errorf("nix-env is not available on this system; install Nix")
+	}
+	err := sdk.ExecOperationWithContext(ctx, *privilege, "nix-env", args...)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
+}
+
+func validatePackages(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("no packages specified")
+	}
+	for _, pkg := range args {
+		if strings.TrimSpace(pkg) == "" || strings.HasPrefix(pkg, "-") {
+			return fmt.Errorf("invalid package name: %q", pkg)
+		}
+	}
+	return nil
 }
 
 func main() {

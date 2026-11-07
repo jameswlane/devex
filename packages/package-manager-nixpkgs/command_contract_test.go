@@ -1,39 +1,37 @@
 package main_test
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	main "github.com/jameswlane/devex/packages/package-manager-nixpkgs"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 )
 
-// trackingIssue is the filed issue for every pending contract below.
-const trackingIssue = "#251"
-
-// operationContract describes one advertised command. currentArg and elevated
-// are asserted only for active contracts. Pending contracts leave them unset:
-// their current argv and elevation are the tracked defect, so they are not
-// pinned as passing expectations.
+// operationContract pins the exact native argv and elevation of one advertised
+// command that runs nix-env.
 type operationContract struct {
-	command          string
-	args             []string
-	currentArg       []string
-	nativeArgv       []string
-	elevated         bool
-	pending          string
-	nativeElevated   bool
-	nativeExecutable string
+	command    string
+	args       []string
+	nativeArgv []string
+	elevated   bool
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"--install", "git", "vim"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "install is invalid; use --install without sudo for the user profile"},
-	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--uninstall", "git", "vim"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "remove is invalid; use --uninstall without sudo for the user profile"},
-	{command: "update", args: nil, nativeArgv: nil, nativeElevated: false, nativeExecutable: "nix-env", pending: "nix-env cannot refresh repositories; choose channel or flake refresh policy in a follow-up"},
-	{command: "search", args: []string{"web", "server"}, nativeArgv: []string{"--query", "--available", "web server"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "search is invalid; use --query --available"},
-	{command: "list", args: nil, nativeArgv: []string{"--query", "--installed"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "list is invalid; use --query --installed"},
+	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"--install", "git", "vim"}},
+	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--uninstall", "git", "vim"}},
+	{command: "search", args: []string{"firefox", "vim"}, nativeArgv: []string{"--query", "--available", "firefox", "vim"}},
+	{command: "list", nativeArgv: []string{"--query", "--installed"}},
+}
+
+// unsupported maps advertised commands that never run nix-env to the
+// guidance their error must contain.
+var unsupported = map[string]string{
+	"update": "nix-channel --update",
 }
 
 var _ = Describe("NIXPKGS command contracts", func() {
@@ -44,80 +42,98 @@ var _ = Describe("NIXPKGS command contracts", func() {
 
 	BeforeEach(func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "nix-env")
-		sdktest.CloseStdin(GinkgoT())
-		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin = main.NewNixpkgsPlugin()
 	})
 
+	expectNoNativeCalls := func() {
+		GinkgoHelper()
+		Expect(recorder.Calls("nix-env")).To(BeEmpty())
+		Expect(recorder.Calls("sudo")).To(BeEmpty())
+	}
+
 	It("has a contract for every advertised command", func() {
-		advertised := make([]string, 0, len(plugin.Info().Commands))
-		for _, command := range plugin.Info().Commands {
-			advertised = append(advertised, command.Name)
-		}
-		covered := make([]string, 0, len(contracts))
+		covered := make([]string, 0, len(contracts)+len(unsupported))
 		for _, contract := range contracts {
 			covered = append(covered, contract.command)
 		}
-		Expect(covered).To(ConsistOf(advertised))
+		for command := range unsupported {
+			covered = append(covered, command)
+		}
+		Expect(covered).To(ConsistOf(sdktest.CommandNames(plugin.Info())))
 	})
 
 	for _, contract := range contracts {
-		contract := contract
-		assertNativeArgv := func() {
-			if len(contract.nativeArgv) == 0 {
-				Expect(plugin.Execute(contract.command, contract.args)).To(HaveOccurred())
-				Expect(recorder.Calls("nix-env")).To(BeEmpty())
-				return
-			}
+		It(fmt.Sprintf("honors the exact native argv and elevation for %s", contract.command), func() {
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls(contract.nativeExecutable)).To(Equal([]sdktest.Call{{
+			Expect(recorder.Calls("nix-env")).To(Equal([]sdktest.Call{{
 				Args:               contract.nativeArgv,
-				ElevationRequested: contract.nativeElevated,
+				ElevationRequested: contract.elevated,
 			}}))
-		}
-		if contract.pending == "" {
-			It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
-				Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-				Expect(recorder.Calls("nix-env")).To(Equal([]sdktest.Call{{
-					Args:               contract.currentArg,
-					ElevationRequested: contract.elevated,
-				}}))
-			})
+		})
 
-			It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
-				recorder.Script("nix-env", contract.currentArg, sdktest.Response{
-					ExitCode: 42,
-					Stderr:   "nixpkgs failed\n",
-				})
-				Expect(plugin.Execute(contract.command, contract.args)).To(MatchError("exit status 42"))
-			})
+		It(fmt.Sprintf("advertises the execution privilege used by %s", contract.command), func() {
+			privilege := sdk.PluginOperationPrivilege(plugin.Info(), []string{contract.command})
+			Expect(privilege).NotTo(BeNil())
+			scope := sdk.ScopeUser
+			if contract.elevated {
+				scope = sdk.ScopeSystem
+			}
+			Expect(privilege.Scope).To(Equal(scope))
+		})
 
-			It(fmt.Sprintf("uses the required native argv for %s", contract.command), assertNativeArgv)
-		} else {
-			It(fmt.Sprintf("dispatches %s to a handler that surfaces native failures", contract.command), func() {
-				recorder.Fallback("nix-env", sdktest.Response{ExitCode: 42, Stderr: "nixpkgs failed\n"})
-				err := plugin.Execute(contract.command, contract.args)
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).NotTo(ContainSubstring("unknown command"))
-				if contract.nativeArgv != nil {
-					Expect(err).To(MatchError(ContainSubstring("exit status 42")))
-				}
-			})
+		It(fmt.Sprintf("propagates the native exit status from %s", contract.command), func() {
+			recorder.Script("nix-env", contract.nativeArgv, sdktest.Response{ExitCode: 42, Stderr: "nix-env failed\n"})
+			err := plugin.Execute(contract.command, contract.args)
+			Expect(err).To(MatchError(ContainSubstring("exit status 42")))
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(recorder.Calls("nix-env")).To(HaveLen(1))
+		})
 
-			PIt(fmt.Sprintf("uses the required native argv for %s: %s - %s", contract.command, trackingIssue, contract.pending), assertNativeArgv)
-		}
+		It(fmt.Sprintf("does not launch %s after cancellation", contract.command), func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			Expect(plugin.ExecuteContext(ctx, contract.command, contract.args)).To(MatchError(context.Canceled))
+			expectNoNativeCalls()
+		})
 	}
+
+	for command, guidance := range unsupported {
+		It(fmt.Sprintf("rejects unsupported %s with guidance and no native call", command), func() {
+			err := plugin.Execute(command, nil)
+			Expect(err).To(MatchError(ContainSubstring(guidance)))
+			Expect(err.Error()).NotTo(ContainSubstring("unknown command"))
+			expectNoNativeCalls()
+		})
+	}
+
+	DescribeTable("rejects invalid input without invoking nix-env",
+		func(command string, args []string, message string) {
+			Expect(plugin.Execute(command, args)).To(MatchError(ContainSubstring(message)))
+			expectNoNativeCalls()
+		},
+		Entry("install without packages", "install", nil, "no packages specified"),
+		Entry("remove without packages", "remove", nil, "no packages specified"),
+		Entry("install with an option-like package", "install", []string{"--attr"}, "invalid package name"),
+		Entry("remove with a blank package", "remove", []string{""}, "invalid package name"),
+		Entry("search without a term", "search", nil, "no search term specified"),
+		Entry("search with an option-like term", "search", []string{"git", "--json"}, "invalid search term"),
+		Entry("list with arguments", "list", []string{"git"}, "list takes no arguments"),
+	)
+
+	It("never requests elevation for user-profile operations, even when unattended", func() {
+		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
+		for _, contract := range contracts {
+			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
+		}
+		for _, call := range recorder.Calls("nix-env") {
+			Expect(call.ElevationRequested).To(BeFalse(), call.Args[0])
+		}
+		Expect(recorder.Calls("nix-env")).To(HaveLen(len(contracts)))
+		Expect(recorder.Calls("sudo")).To(BeEmpty())
+	})
 
 	It("rejects an unknown command", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
-		Expect(recorder.Calls("nix-env")).To(BeEmpty())
+		expectNoNativeCalls()
 	})
-
-	for _, command := range []string{"install", "remove", "search"} {
-		command := command
-		It(fmt.Sprintf("rejects missing arguments for %s without invoking NIXPKGS", command), func() {
-			Expect(plugin.Execute(command, nil)).To(HaveOccurred())
-			Expect(recorder.Calls("nix-env")).To(BeEmpty())
-		})
-	}
 })

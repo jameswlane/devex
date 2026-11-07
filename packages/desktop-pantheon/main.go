@@ -3,10 +3,12 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -157,12 +159,16 @@ func (p *PantheonPlugin) handleConfigure(args []string) error {
 		{"org.gnome.desktop.session", "idle-delay", "300"},
 	}
 
+	var batch settingsBatch
 	for _, config := range configs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s.%s to %s\n", config.schema, config.key, config.value)
 		}
+	}
+	if err := batch.err("pantheon configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Pantheon configuration complete!")
@@ -229,17 +235,19 @@ func (p *PantheonPlugin) handleConfigureDock(args []string) error {
 		{"net.launchpad.plank.dock.settings", "pinned-only", "false"},
 	}
 
-	hasErrors := false
+	var batch settingsBatch
 	for _, config := range plankConfigs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
-			hasErrors = true
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", config.key, config.value)
 		}
 	}
 
-	if hasErrors {
+	if err := batch.err("pantheon dock configuration"); err != nil {
+		return fmt.Errorf("%w; Plank may not be installed or running, install it with: sudo apt install plank", err)
+	}
+	if batch.failed > 0 {
 		fmt.Println("Note: Some dock settings failed. Plank may not be installed or running.")
 		fmt.Println("Install Plank with: sudo apt install plank")
 	}
@@ -264,17 +272,19 @@ func (p *PantheonPlugin) handleConfigureWingpanel(args []string) error {
 		{"io.elementary.desktop.wingpanel.datetime", "clock-show-weekday", "true"},
 	}
 
-	hasErrors := false
+	var batch settingsBatch
 	for _, config := range wingpanelConfigs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
-			hasErrors = true
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", config.key, config.value)
 		}
 	}
 
-	if hasErrors {
+	if err := batch.err("pantheon wingpanel configuration"); err != nil {
+		return fmt.Errorf("%w; the Wingpanel schemas may not be installed", err)
+	}
+	if batch.failed > 0 {
 		fmt.Println("Note: Some wingpanel settings failed. This is normal on non-elementary systems.")
 	}
 
@@ -331,26 +341,25 @@ func (p *PantheonPlugin) handleBackup(args []string) error {
 
 	fmt.Printf("Creating backup at: %s\n", backupFile)
 
-	// Use dconf to dump Pantheon and related settings
-	schemas := []string{
-		"/org/gnome/desktop/",
-		"/io/elementary/",
-		"/net/launchpad/plank/",
-	}
-
+	// Use dconf to dump Pantheon and related settings. Each schema is
+	// best-effort, but a backup with no readable schema is not written.
 	var allOutput strings.Builder
 	fmt.Fprintf(&allOutput, "# Pantheon Settings Backup - %s\n", time.Now().Format(time.RFC3339))
 
-	for _, schema := range schemas {
+	var dumped settingsBatch
+	for _, schema := range pantheonSchemas {
 		cmd := exec.Command("dconf", "dump", schema)
 		output, err := cmd.Output()
-		if err != nil {
+		if dumped.record(err) != nil {
 			fmt.Printf("Warning: Failed to dump %s: %v\n", schema, err)
 			continue
 		}
 
-		fmt.Fprintf(&allOutput, "\n# Schema: %s\n", schema)
+		fmt.Fprintf(&allOutput, "\n%s%s\n", pantheonSchemaHeader, schema)
 		allOutput.Write(output)
+	}
+	if dumped.applied == 0 {
+		return fmt.Errorf("failed to back up Pantheon settings: no schema could be dumped: %w", dumped.first)
 	}
 
 	// Write to file
@@ -388,12 +397,123 @@ func (p *PantheonPlugin) handleRestore(args []string) error {
 		return nil
 	}
 
-	fmt.Println("Note: Pantheon backup restoration requires manual configuration.")
-	fmt.Println("Please refer to the backup file for settings to restore manually.")
-	fmt.Printf("Backup file location: %s\n", backupFile)
-	fmt.Println("You can use 'dconf load /schema/path/ < backup-file' to restore specific schemas.")
+	content, err := os.ReadFile(backupFile)
+	if err != nil {
+		return fmt.Errorf("failed to read backup file: %w", err)
+	}
+	sections, err := parsePantheonBackup(string(content))
+	if err != nil {
+		return fmt.Errorf("invalid backup %s: %w", backupFile, err)
+	}
 
+	// Each schema is restored independently; a failed schema is reported and the
+	// rest still load, but the restore fails so a mixed state is never hidden.
+	var failures []string
+	var firstErr error
+	for _, section := range sections {
+		if err := dconfLoad(section.schema, section.content); err != nil {
+			fmt.Printf("✗ Failed to restore %s: %v\n", section.schema, err)
+			failures = append(failures, section.schema)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		fmt.Printf("✓ Restored %s\n", section.schema)
+	}
+	if firstErr != nil {
+		return fmt.Errorf("restored %d of %d schemas; failed: %s: %w", len(sections)-len(failures), len(sections), strings.Join(failures, ", "), firstErr)
+	}
+
+	fmt.Println("✓ Pantheon settings restored successfully!")
 	return nil
+}
+
+// pantheonSchemas are the dconf directories handleBackup dumps, in order. A
+// restore loads only these directories.
+var pantheonSchemas = []string{
+	"/org/gnome/desktop/",
+	"/io/elementary/",
+	"/net/launchpad/plank/",
+}
+
+// pantheonSection is one schema's `dconf dump` output from a backup.
+type pantheonSection struct {
+	schema  string
+	content string
+}
+
+const pantheonSchemaHeader = "# Schema: "
+
+// parsePantheonBackup splits a handleBackup file into `# Schema: <dir>` sections.
+// Before the first header only blank lines and `#` comments are allowed. Each
+// section is `dconf dump` keyfile text, so it must start with a [group] line;
+// blank lines that separate sections are dropped. A schema whose dump was empty
+// has nothing to load and is skipped.
+func parsePantheonBackup(content string) ([]pantheonSection, error) {
+	var sections []pantheonSection
+	seen := map[string]bool{}
+	var current *pantheonSection
+	var body []string
+	flush := func() error {
+		if current == nil {
+			return nil
+		}
+		for len(body) > 0 && strings.TrimSpace(body[len(body)-1]) == "" {
+			body = body[:len(body)-1]
+		}
+		for len(body) > 0 && strings.TrimSpace(body[0]) == "" {
+			body = body[1:]
+		}
+		if len(body) > 0 {
+			if first := strings.TrimSpace(body[0]); !strings.HasPrefix(first, "[") || !strings.HasSuffix(first, "]") {
+				return fmt.Errorf("schema %s does not start with a [group] line; recreate the backup with 'devex desktop-pantheon backup'", current.schema)
+			}
+			current.content = strings.Join(body, "\n") + "\n"
+			sections = append(sections, *current)
+		}
+		current, body = nil, nil
+		return nil
+	}
+
+	for number, line := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(line, pantheonSchemaHeader) {
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			schema := strings.TrimSpace(strings.TrimPrefix(line, pantheonSchemaHeader))
+			if !slices.Contains(pantheonSchemas, schema) {
+				return nil, fmt.Errorf("line %d: unsupported schema %q; expected one of %s", number+1, schema, strings.Join(pantheonSchemas, ", "))
+			}
+			if seen[schema] {
+				return nil, fmt.Errorf("line %d: schema %s appears more than once", number+1, schema)
+			}
+			seen[schema] = true
+			current = &pantheonSection{schema: schema}
+			continue
+		}
+		if current == nil {
+			if trimmed := strings.TrimSpace(line); trimmed != "" && !strings.HasPrefix(trimmed, "#") {
+				return nil, fmt.Errorf("line %d: settings appear before the first %q header; this is not a Pantheon backup", number+1, strings.TrimSpace(pantheonSchemaHeader))
+			}
+			continue
+		}
+		body = append(body, line)
+	}
+	if err := flush(); err != nil {
+		return nil, err
+	}
+	if len(sections) == 0 {
+		return nil, fmt.Errorf("no settings to restore; the backup has no non-empty %q sections", strings.TrimSpace(pantheonSchemaHeader))
+	}
+	return sections, nil
+}
+
+// dconfLoad writes one dconf directory's keyfile through `dconf load` stdin.
+func dconfLoad(schema, content string) error {
+	cmd := sdk.NewCommandContext(context.Background(), "dconf", "load", schema)
+	cmd.Stdin = strings.NewReader(content)
+	return cmd.Run()
 }
 
 // setGSetting sets a Pantheon setting using gsettings

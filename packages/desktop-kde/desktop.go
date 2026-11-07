@@ -30,12 +30,16 @@ func (dm *DesktopManager) Configure(ctx context.Context, args []string) error {
 
 	configs := dm.getDefaultConfigurations()
 
+	var batch settingsBatch
 	for _, config := range configs {
-		if err := dm.setKDEConfig(ctx, config); err != nil {
+		if err := batch.record(dm.setKDEConfig(ctx, config)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.Group, config.Key, err)
 		} else {
 			fmt.Printf("✓ Set %s.%s to %s\n", config.Group, config.Key, config.Value)
 		}
+	}
+	if err := batch.err("kde configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("KDE Plasma configuration complete!")
@@ -88,12 +92,16 @@ func (dm *DesktopManager) ConfigurePanel(ctx context.Context, args []string) err
 
 	panelConfigs := dm.getPanelConfigurations()
 
+	var batch settingsBatch
 	for _, config := range panelConfigs {
-		if err := dm.setKDEConfig(ctx, config); err != nil {
+		if err := batch.record(dm.setKDEConfig(ctx, config)); err != nil {
 			fmt.Printf("Warning: Failed to set %s: %v\n", config.Desc, err)
 		} else {
 			fmt.Printf("✓ Set %s\n", config.Desc)
 		}
+	}
+	if err := batch.err("kde panel configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Panel configuration complete!")
