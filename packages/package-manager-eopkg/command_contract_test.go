@@ -92,6 +92,15 @@ var _ = Describe("EOPKG command contracts", func() {
 
 			It(fmt.Sprintf("uses the required native argv for %s", contract.command), assertNativeArgv)
 		} else {
+			if contract.nativeArgv != nil {
+				// The argv is the tracked defect, so only the single native call
+				// and the successful result are asserted.
+				It(fmt.Sprintf("dispatches %s to one native call that succeeds when the native command succeeds", contract.command), func() {
+					Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
+					Expect(recorder.Calls("eopkg")).To(HaveLen(1))
+				})
+			}
+
 			It(fmt.Sprintf("dispatches %s to a handler that surfaces native failures", contract.command), func() {
 				recorder.Fallback("eopkg", sdktest.Response{ExitCode: 42, Stderr: "eopkg failed\n"})
 				err := plugin.Execute(contract.command, contract.args)

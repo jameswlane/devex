@@ -59,6 +59,11 @@ var _ = Describe("APK command contracts", func() {
 		recorder.Script("apk", []string{"info", "git"}, sdktest.Response{ExitCode: 42})
 		Expect(plugin.Execute("info", []string{"git"})).To(MatchError("exit status 42"))
 	})
+	PIt("propagates a later info failure after earlier packages succeed: #255 - info logs the native error and returns nil", func() {
+		recorder.Script("apk", []string{"info", "vim"}, sdktest.Response{ExitCode: 42})
+		Expect(plugin.Execute("info", []string{"git", "vim"})).To(MatchError("exit status 42"))
+		Expect(recorder.Calls("apk")).To(Equal([]sdktest.Call{{Args: []string{"info", "git"}}, {Args: []string{"info", "vim"}}}))
+	})
 
 	It("stops upgrade when repository refresh fails", func() {
 		recorder.Script("apk", []string{"update"}, sdktest.Response{ExitCode: 42})
