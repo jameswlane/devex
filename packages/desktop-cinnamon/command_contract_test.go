@@ -26,6 +26,7 @@ type desktopContract struct {
 
 var cinnamonFakes = []string{"gsettings", "dconf", "cinnamon"}
 
+// gset is the recorded call for `gsettings set schema key value`.
 func gset(schema, key, value string) sdktest.Call {
 	return sdktest.Call{Args: []string{"set", schema, key, value}}
 }

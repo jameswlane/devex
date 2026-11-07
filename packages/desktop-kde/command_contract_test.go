@@ -1,9 +1,12 @@
 package main
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,6 +25,73 @@ func argvOf(calls []sdktest.Call) [][]string {
 	return argv
 }
 
+// Host archive tools, resolved at package initialization before any recorder
+// replaces PATH; only the relative-archive restore spec uses them.
+var (
+	hostTar, hostTarErr   = exec.LookPath("tar")
+	hostGzip, hostGzipErr = exec.LookPath("gzip")
+)
+
+// useHostTar replaces the current spec's tar fake with a wrapper that runs the
+// host tar with a PATH containing only gzip (needed for -z) and with host
+// TAR_OPTIONS/GZIP defaults cleared. Every other fake and the isolated
+// environment stay in place, and the recorder's bin directory is discarded with
+// the spec, so later specs get a fresh fake.
+func useHostTar(tar, gzip string) {
+	fake, err := exec.LookPath("tar")
+	Expect(err).NotTo(HaveOccurred())
+	tools := GinkgoT().TempDir()
+	Expect(os.Symlink(gzip, filepath.Join(tools, "gzip"))).To(Succeed())
+	GinkgoT().Setenv("DEVEX_TEST_ARCHIVE_TOOLS", tools)
+	GinkgoT().Setenv("DEVEX_TEST_TAR", tar)
+	wrapper := "#!/bin/sh\nPATH=\"$DEVEX_TEST_ARCHIVE_TOOLS\" TAR_OPTIONS= GZIP= exec \"$DEVEX_TEST_TAR\" \"$@\"\n"
+	Expect(os.WriteFile(fake, []byte(wrapper), 0o700)).To(Succeed())
+}
+
+// writeTarGz writes a gzip-compressed tar archive whose members are the given
+// relative paths and contents, with parent directories created first.
+func writeTarGz(path string, members map[string]string) {
+	file, err := os.Create(path)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { Expect(file.Close()).To(Succeed()) }()
+	compressed := gzip.NewWriter(file)
+	archive := tar.NewWriter(compressed)
+	names := make([]string, 0, len(members))
+	for name := range members {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	written := map[string]bool{}
+	for _, name := range names {
+		for dir := filepath.Dir(name); dir != "."; dir = filepath.Dir(dir) {
+			if !written[dir] {
+				written[dir] = true
+				Expect(archive.WriteHeader(&tar.Header{Name: dir + "/", Typeflag: tar.TypeDir, Mode: 0o700})).To(Succeed())
+			}
+		}
+		Expect(archive.WriteHeader(&tar.Header{Name: name, Typeflag: tar.TypeReg, Mode: 0o600, Size: int64(len(members[name]))})).To(Succeed())
+		_, err := archive.Write([]byte(members[name]))
+		Expect(err).NotTo(HaveOccurred())
+	}
+	Expect(archive.Close()).To(Succeed())
+	Expect(compressed.Close()).To(Succeed())
+}
+
+// filesUnder lists regular files beneath root as sorted slash-separated relative paths.
+func filesUnder(root string) []string {
+	var files []string
+	Expect(filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		files = append(files, filepath.ToSlash(relative))
+		return err
+	})).To(Succeed())
+	sort.Strings(files)
+	return files
+}
+
 type desktopContract struct {
 	command string
 	routes  func()
@@ -34,6 +104,7 @@ var kdeFakes = []string{
 	"apt-get", "dnf", "pacman", "zypper", "fc-cache", "kbuildsycoca5", "tar",
 }
 
+// kwrite is the recorded call for kwriteconfig5 writing value to key in group of file.
 func kwrite(file, group, key, value string) sdktest.Call {
 	return sdktest.Call{Args: []string{"--file", file, "--group", group, "--key", key, value}}
 }
@@ -426,9 +497,9 @@ var _ = Describe("KDE command contracts", func() {
 		{
 			command: "restore",
 			routes: func() {
-				// Coverage limit: the fake tar extracts nothing, so this pins the extraction
-				// argv and temp-directory cleanup only; copying extracted files into HOME is
-				// not exercised (round-trip coverage belongs with #298).
+				// Fake tar extracts nothing: this pins the extraction argv and temp-directory
+				// cleanup. Copying extracted files into HOME is covered by the
+				// relative-archive restore spec; the create-backup -> restore round trip is #298.
 				backup := fixture("kde.tar.gz", "archive")
 				sdktest.ProvideStdin(GinkgoT(), "y\n")
 				Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
@@ -489,6 +560,34 @@ var _ = Describe("KDE command contracts", func() {
 		It("routes "+contract.command+" with its current native dispatch", contract.routes)
 		It("reports native failures from "+contract.command, contract.fails)
 	}
+
+	// Restore from a valid relative-path archive, extracted by the host tar. This is
+	// not the create-backup -> restore round trip, which #298 tracks: backup writes
+	// absolute member paths today.
+	It("restores a relative-path archive into HOME with exact contents", func() {
+		Expect(hostTarErr).NotTo(HaveOccurred(), "host tar is required for the archive fixture")
+		Expect(hostGzipErr).NotTo(HaveOccurred(), "host gzip is required for the archive fixture")
+		useHostTar(hostTar, hostGzip)
+
+		content := "[General]\nColorScheme=BreezeDark\n\n[KDE]\nwidgetStyle=Breeze\n"
+		backup := filepath.Join(fixtures, "kde-settings.tar.gz")
+		writeTarGz(backup, map[string]string{".config/kdeglobals": content})
+		sdktest.ProvideStdin(GinkgoT(), "y\n")
+
+		Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+
+		home := os.Getenv("HOME")
+		Expect(os.ReadFile(filepath.Join(home, ".config", "kdeglobals"))).To(BeEquivalentTo(content))
+		Expect(filesUnder(home)).To(Equal([]string{".config/kdeglobals"}))
+		leftovers, err := filepath.Glob(filepath.Join(os.TempDir(), "kde-restore-*"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(leftovers).To(BeEmpty())
+		for _, fake := range append([]string{"sudo"}, kdeFakes...) {
+			if fake != "tar" {
+				Expect(recorder.Calls(fake)).To(BeEmpty(), fake)
+			}
+		}
+	})
 
 	PIt("requests elevation for system font package installs: #296 - install-fonts runs the system package manager without sudo or a declared privilege scope", func() {
 		Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())

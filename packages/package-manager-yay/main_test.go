@@ -31,6 +31,8 @@ var nativeContracts = []nativeContract{
 	{"is-installed", "is-installed", []string{"example", "other"}, []string{"-Q", "example", "other"}, false},
 }
 
+// nativeEntries builds the native-argv table entries from nativeContracts, so the
+// table and the advertised-command coverage check share one source.
 func nativeEntries() []TableEntry {
 	entries := make([]TableEntry, 0, len(nativeContracts))
 	for _, contract := range nativeContracts {

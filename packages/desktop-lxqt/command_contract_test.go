@@ -171,11 +171,11 @@ var _ = Describe("LXQt command contracts", func() {
 				Expect(recorder.Calls("tar")[0].Args[1]).To(HavePrefix(os.Getenv("HOME")))
 			},
 			fails: func() {
-				// Learn today's archive argv, then fail exactly that invocation.
-				Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
-				archive := recorder.Calls("tar")[0].Args
-				recorder.Script("tar", archive, sdktest.Response{ExitCode: 42, Stderr: "tar failed\n"})
+				// The archive argv embeds today's date; the routes spec pins it, so any tar
+				// invocation fails here.
+				recorder.Fallback("tar", sdktest.Response{ExitCode: 42, Stderr: "tar failed\n"})
 				Expect(plugin.Execute("backup", []string{fixtures})).To(MatchError("failed to create backup: exit status 42"))
+				Expect(recorder.Calls("tar")).To(HaveLen(1))
 			},
 		},
 		{

@@ -12,6 +12,13 @@ export const SDKTEST_IMPORT =
 const SDK_DIR = "plugin-sdk";
 const SKIPPED_DIRS = new Set(["node_modules", "dist", "vendor", "testdata"]);
 
+/**
+ * Reports whether packages/<name> is a plugin module CI tests: not the SDK,
+ * and it has a main.go or package.json.
+ * @param {string} root Repository root.
+ * @param {string} name Directory name under packages/.
+ * @returns {boolean}
+ */
 function isPlugin(root, name) {
 	const dir = path.join(root, "packages", name);
 	return (
@@ -21,6 +28,12 @@ function isPlugin(root, name) {
 	);
 }
 
+/**
+ * Reports whether any Go test file beneath dir imports sdktest. Hidden
+ * directories and node_modules, dist, vendor, and testdata are skipped.
+ * @param {string} dir Directory to search recursively.
+ * @returns {boolean}
+ */
 function importsSdktest(dir) {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		if (entry.name.startsWith(".") || SKIPPED_DIRS.has(entry.name)) continue;
@@ -38,7 +51,11 @@ function importsSdktest(dir) {
 	return false;
 }
 
-// recorderAdopters lists plugin directories whose Go tests import sdktest.
+/**
+ * Lists plugin directories whose Go tests import sdktest, sorted by name.
+ * @param {string} root Repository root.
+ * @returns {string[]}
+ */
 export function recorderAdopters(root) {
 	const packages = path.join(root, "packages");
 	return fs
@@ -49,7 +66,12 @@ export function recorderAdopters(root) {
 		.sort();
 }
 
-// selectPlugins returns the sorted, unique plugin directories to test.
+/**
+ * Returns the sorted, unique plugin directories to test: every changed plugin,
+ * plus every recorder adopter when the SDK changed.
+ * @param {{root: string, changedFiles: string[], sdkChanged: boolean}} options
+ * @returns {string[]}
+ */
 export function selectPlugins({ root, changedFiles, sdkChanged }) {
 	const selected = new Set(sdkChanged ? recorderAdopters(root) : []);
 	for (const file of changedFiles) {
@@ -59,6 +81,10 @@ export function selectPlugins({ root, changedFiles, sdkChanged }) {
 	return [...selected].sort();
 }
 
+/**
+ * Reads changed paths from stdin and prints the JSON plugin matrix. Exits 2
+ * unless --sdk is given exactly "true" or "false".
+ */
 function main() {
 	const args = process.argv.slice(2);
 	const flag = args.indexOf("--sdk");

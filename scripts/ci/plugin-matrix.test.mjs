@@ -20,6 +20,11 @@ const script = path.join(repo, "scripts/ci/plugin-matrix.mjs");
 const adopterTest = `package main\n\nimport (\n\t${SDKTEST_IMPORT}\n)\n`;
 
 let root;
+/**
+ * Writes a fixture file beneath the temporary repository root.
+ * @param {string} file Path relative to the fixture root.
+ * @param {string} [content]
+ */
 function write(file, content = "") {
 	const target = path.join(root, file);
 	fs.mkdirSync(path.dirname(target), { recursive: true });

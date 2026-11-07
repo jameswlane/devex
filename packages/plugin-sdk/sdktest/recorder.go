@@ -209,6 +209,8 @@ func (r *Recorder) Stdin(command string, args []string) []string {
 	return nil
 }
 
+// stdinLog is the file holding NUL-terminated stdin payloads for the index-th
+// CaptureStdin registration of command.
 func (r *Recorder) stdinLog(command string, index int) string {
 	return filepath.Join(r.logDir, fmt.Sprintf("%s.stdin.%d", command, index))
 }
@@ -383,6 +385,11 @@ esac
 `)
 }
 
+// writeCommand regenerates the fake executable for command. The script logs each
+// invocation (elevation marker, argc, NUL-separated argv) and the recorded
+// environment variables, copies stdin for opted-in argv, then answers with the
+// first exact Script match, the fallback, or success; sudo instead dispatches to
+// registered fakes.
 func (r *Recorder) writeCommand(command string) {
 	r.t.Helper()
 
@@ -413,6 +420,8 @@ func (r *Recorder) writeCommand(command string) {
 	r.writeExecutable(command, script.String())
 }
 
+// writeArgvMatch opens a shell if-block that matches exactly args (count and each
+// value, shell-quoted); the caller writes the body and the closing fi.
 func writeArgvMatch(script *strings.Builder, args []string) {
 	fmt.Fprintf(script, "if [ \"$#\" -eq %d ]", len(args))
 	for i, arg := range args {
@@ -421,6 +430,8 @@ func writeArgvMatch(script *strings.Builder, args []string) {
 	script.WriteString("; then\n")
 }
 
+// writeResponse emits shell that prints the response's stdout and stderr verbatim
+// and exits with its status, each line prefixed by indent.
 func writeResponse(script *strings.Builder, indent string, response Response) {
 	if response.Stdout != "" {
 		fmt.Fprintf(script, "%sprintf '%%s' %s\n", indent, shellQuote(response.Stdout))
@@ -443,6 +454,7 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
 }
 
+// equalArgs reports whether two argv slices have the same elements in order.
 func equalArgs(left, right []string) bool {
 	if len(left) != len(right) {
 		return false

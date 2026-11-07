@@ -199,7 +199,10 @@ jobs:
           cache: true
           github_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Test plugin ${{ matrix.plugin }}
-        run: bash scripts/ci/test-plugin.sh "${{ matrix.plugin }}"
+        env:
+          # Pass the matrix value as data, never as script text.
+          PLUGIN_NAME: ${{ matrix.plugin }}
+        run: bash scripts/ci/test-plugin.sh "$PLUGIN_NAME"
   test-js:
     name: Test JS
     runs-on: ubuntu-latest

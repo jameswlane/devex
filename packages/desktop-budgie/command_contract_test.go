@@ -26,6 +26,7 @@ type desktopContract struct {
 
 var budgieFakes = []string{"gsettings", "dconf", "budgie-panel"}
 
+// gset is the recorded call for `gsettings set schema key value`.
 func gset(schema, key, value string) sdktest.Call {
 	return sdktest.Call{Args: []string{"set", schema, key, value}}
 }
@@ -227,6 +228,12 @@ var _ = Describe("Budgie command contracts", func() {
 		It("routes "+contract.command+" with its current native dispatch", contract.routes)
 		It("reports native failures from "+contract.command, contract.fails)
 	}
+
+	PIt("fails configure when every settings write fails: #303 - handleConfigure prints a warning per key and returns nil", func() {
+		recorder.Fallback("gsettings", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+		Expect(plugin.Execute("configure", nil)).To(MatchError(ContainSubstring("exit status 42")))
+		Expect(recorder.Calls("gsettings")).To(Equal(configureCalls))
+	})
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

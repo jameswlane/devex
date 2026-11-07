@@ -29,6 +29,7 @@ type desktopContract struct {
 
 var gnomeFakes = []string{"gsettings", "dconf", "gnome-extensions", "apt-get", "dnf", "pacman", "zypper", "fc-cache"}
 
+// gset is the recorded call for `gsettings set schema key value`.
 func gset(schema, key, value string) sdktest.Call {
 	return sdktest.Call{Args: []string{"set", schema, key, value}}
 }

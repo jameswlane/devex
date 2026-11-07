@@ -25,6 +25,7 @@ type desktopContract struct {
 
 var pantheonFakes = []string{"gsettings", "dconf"}
 
+// gset is the recorded call for `gsettings set schema key value`.
 func gset(schema, key, value string) sdktest.Call {
 	return sdktest.Call{Args: []string{"set", schema, key, value}}
 }
@@ -265,10 +266,14 @@ var _ = Describe("Pantheon command contracts", func() {
 	}
 
 	PIt("restores each backed-up schema with dconf load: #300 - the advertised restore only prints manual instructions and reports success", func() {
-		backup := fixture("backup.conf", "\n# Schema: /io/elementary/\n[files/preferences]\ndefault-viewmode='list'\n")
+		section := "[files/preferences]\ndefault-viewmode='list'\n"
+		backup := fixture("backup.conf", "\n# Schema: /io/elementary/\n"+section)
 		sdktest.ProvideStdin(GinkgoT(), "y\n")
+		recorder.CaptureStdin("dconf", []string{"load", "/io/elementary/"})
 		Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
 		Expect(recorder.Calls("dconf")).To(Equal([]sdktest.Call{{Args: []string{"load", "/io/elementary/"}}}))
+		// The schema's own section reaches dconf load, without the schema header.
+		Expect(recorder.Stdin("dconf", []string{"load", "/io/elementary/"})).To(Equal([]string{section}))
 	})
 
 	It("rejects an unknown command without native calls", func() {

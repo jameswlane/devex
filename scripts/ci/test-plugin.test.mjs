@@ -17,13 +17,23 @@ const script = path.join(repo, "scripts/ci/test-plugin.sh");
 
 let root;
 let log;
+/**
+ * Writes a fixture file beneath the temporary repository root.
+ * @param {string} file Path relative to the fixture root.
+ * @param {string} [content]
+ * @param {number} [mode] File permissions.
+ */
 function write(file, content = "", mode = 0o644) {
 	const target = path.join(root, file);
 	fs.mkdirSync(path.dirname(target), { recursive: true });
 	fs.writeFileSync(target, content, { mode });
 }
 
-// fake records "<tool> <argv...>" and exits with $FAKE_<TOOL>_<SUBCOMMAND>_EXIT.
+/**
+ * Installs a fake executable that appends "<tool> <argv...>" to $FAKE_LOG and
+ * exits with $FAKE_<TOOL>_<SUBCOMMAND>_EXIT (default 0).
+ * @param {string} name Executable name, such as "go".
+ */
 function fake(name) {
 	const variable = name.replace(/-/g, "_").toUpperCase();
 	write(
@@ -37,6 +47,13 @@ exit "$code"
 	);
 }
 
+/**
+ * Runs test-plugin.sh for a fixture plugin with only the fakes and system
+ * directories on PATH, returning the process result and recorded tool calls.
+ * @param {string} plugin Plugin directory name passed to the script.
+ * @param {Record<string, string>} [env] Extra environment, such as fake exit codes.
+ * @returns {import("node:child_process").SpawnSyncReturns<string> & {calls: string[]}}
+ */
 function run(plugin, env = {}) {
 	const result = spawnSync("bash", [script, plugin], {
 		encoding: "utf8",
@@ -122,21 +139,99 @@ describe("test-plugin.sh", () => {
 	});
 });
 
+/**
+ * Returns the test-plugins job text from the real CI workflow.
+ * @returns {string}
+ */
+function testPluginsJob() {
+	const workflow = fs.readFileSync(
+		path.join(repo, ".github/workflows/ci.yml"),
+		"utf8",
+	);
+	return workflow.slice(
+		workflow.indexOf("  test-plugins:"),
+		workflow.indexOf("  test-js:"),
+	);
+}
+
+/**
+ * Returns the script text of the job's "Test plugin" step run key.
+ * @param {string} job
+ * @returns {string}
+ */
+function testPluginRun(job) {
+	const match =
+		/- name: Test plugin [^\n]*\n(?:\s+(?!run:)[^\n]*\n)*\s+run: ([^\n]+)\n/.exec(
+			job,
+		);
+	assert.ok(match, "Test plugin step has a single-line run key");
+	return match[1];
+}
+
 describe("CI workflow", () => {
 	it("runs each selected plugin through test-plugin.sh without a root test-file gate", () => {
-		const workflow = fs.readFileSync(
-			path.join(repo, ".github/workflows/ci.yml"),
-			"utf8",
-		);
-		const job = workflow.slice(
-			workflow.indexOf("  test-plugins:"),
-			workflow.indexOf("  test-js:"),
-		);
-		assert.match(
-			job,
-			/run: bash scripts\/ci\/test-plugin\.sh "\$\{\{ matrix\.plugin \}\}"/,
+		const job = testPluginsJob();
+		assert.equal(
+			testPluginRun(job),
+			'bash scripts/ci/test-plugin.sh "$PLUGIN_NAME"',
 		);
 		assert.doesNotMatch(job, /_test\.go/);
 		assert.doesNotMatch(job, /\|\| echo "Linting failed/);
+	});
+
+	it("passes the matrix value through the environment, not run text", () => {
+		const job = testPluginsJob();
+		assert.match(
+			job,
+			/\n\s+env:\n(?:\s+#[^\n]*\n)*\s+PLUGIN_NAME: \$\{\{ matrix\.plugin \}\}\n\s+run: /,
+		);
+		for (const line of job.split("\n").filter((l) => l.includes("${{"))) {
+			assert.match(
+				line.trim(),
+				/^(- name|name|if|plugin|PLUGIN_NAME|github_token): /,
+				`expression only in non-script keys: ${line.trim()}`,
+			);
+		}
+	});
+
+	it("hands shell metacharacters in the plugin name to the script literally", () => {
+		const marker = path.join(root, "injected");
+		const hostile = `nested-only$(touch ${marker})"; touch ${marker}; "`;
+		const result = spawnSync(
+			"bash",
+			["-e", "-c", testPluginRun(testPluginsJob())],
+			{
+				cwd: repo,
+				encoding: "utf8",
+				env: {
+					PATH: `${path.join(root, "bin")}:/usr/bin:/bin`,
+					DEVEX_CI_ROOT: root,
+					FAKE_LOG: log,
+					PLUGIN_NAME: hostile,
+				},
+			},
+		);
+		assert.notEqual(result.status, 0);
+		assert.ok(!fs.existsSync(marker), "no command in the name was executed");
+		assert.ok(!fs.existsSync(log), "no tool ran for an unknown plugin");
+	});
+
+	it("runs the workflow's command for a selected plugin", () => {
+		const result = spawnSync(
+			"bash",
+			["-e", "-c", testPluginRun(testPluginsJob())],
+			{
+				cwd: repo,
+				encoding: "utf8",
+				env: {
+					PATH: `${path.join(root, "bin")}:/usr/bin:/bin`,
+					DEVEX_CI_ROOT: root,
+					FAKE_LOG: log,
+					PLUGIN_NAME: "nested-only",
+				},
+			},
+		);
+		assert.equal(result.status, 0, result.stdout + result.stderr);
+		assert.ok(fs.readFileSync(log, "utf8").includes("go test -v ./..."));
 	});
 });
