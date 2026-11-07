@@ -16,6 +16,29 @@ import (
 
 func TestYay(t *testing.T) { RegisterFailHandler(Fail); RunSpecs(t, "Yay suite") }
 
+type nativeContract struct {
+	name, command string
+	args, argv    []string
+	builds        bool
+}
+
+var nativeContracts = []nativeContract{
+	{"install", "install", []string{"aur/example-bin", "other+pkg"}, []string{"-S", "--needed", "--noconfirm", "--answerdiff=None", "--answerclean=None", "aur/example-bin", "other+pkg"}, true},
+	{"remove", "remove", []string{"example", "other"}, []string{"-R", "--noconfirm", "example", "other"}, false},
+	{"full upgrade", "update", nil, []string{"-Syu", "--noconfirm"}, true},
+	{"search", "search", []string{"development tools", "editor"}, []string{"-Ss", "development tools", "editor"}, false},
+	{"list", "list", nil, []string{"-Q"}, false},
+	{"is-installed", "is-installed", []string{"example", "other"}, []string{"-Q", "example", "other"}, false},
+}
+
+func nativeEntries() []TableEntry {
+	entries := make([]TableEntry, 0, len(nativeContracts))
+	for _, contract := range nativeContracts {
+		entries = append(entries, Entry(contract.name, contract.command, contract.args, contract.argv, contract.builds))
+	}
+	return entries
+}
+
 var _ = Describe("Native yay operations", func() {
 	var recorder *sdktest.Recorder
 	var plugin *YayPlugin
@@ -45,13 +68,16 @@ var _ = Describe("Native yay operations", func() {
 				Expect(recorder.Calls("pacman")).To(BeEmpty())
 			}
 		},
-		Entry("install", "install", []string{"aur/example-bin", "other+pkg"}, []string{"-S", "--needed", "--noconfirm", "--answerdiff=None", "--answerclean=None", "aur/example-bin", "other+pkg"}, true),
-		Entry("remove", "remove", []string{"example", "other"}, []string{"-R", "--noconfirm", "example", "other"}, false),
-		Entry("full upgrade", "update", nil, []string{"-Syu", "--noconfirm"}, true),
-		Entry("search", "search", []string{"development tools", "editor"}, []string{"-Ss", "development tools", "editor"}, false),
-		Entry("list", "list", nil, []string{"-Q"}, false),
-		Entry("is-installed", "is-installed", []string{"example", "other"}, []string{"-Q", "example", "other"}, false),
+		nativeEntries(),
 	)
+
+	It("covers every advertised command in the native argv contracts", func() {
+		covered := make([]string, 0, len(nativeContracts))
+		for _, contract := range nativeContracts {
+			covered = append(covered, contract.command)
+		}
+		Expect(covered).To(ConsistOf(sdktest.CommandNames(plugin.Info())))
+	})
 
 	DescribeTable("rejects missing operands and raw flags before running commands",
 		func(command string, args []string) {
