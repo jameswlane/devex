@@ -1,0 +1,13 @@
+{
+	"version": 2,
+	"elements": [
+		{
+			"active": true,
+			"attrPath": "legacyPackages.x86_64-linux.git",
+			"originalUrl": "flake:nixpkgs",
+			"url": "github:NixOS/nixpkgs/fixture",
+			"outputs": null,
+			"storePaths": ["/nix/store/fixture-git-2.42"]
+		}
+	]
+}

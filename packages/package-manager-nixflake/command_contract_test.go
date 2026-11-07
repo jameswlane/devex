@@ -37,12 +37,13 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 
 	BeforeEach(func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "nix")
+		recorder.Script("nix", []string{"profile", "list", "--json"}, sdktest.Response{Stdout: `{"version":3,"elements":{}}`})
 		plugin = main.NewNixflakePlugin()
 	})
 
 	expectNoNativeCalls := func() {
 		GinkgoHelper()
-		Expect(recorder.Calls("nix")).To(BeEmpty())
+		Expect(operationCalls(recorder, "nix")).To(BeEmpty())
 		Expect(recorder.Calls("sudo")).To(BeEmpty())
 	}
 
@@ -57,7 +58,7 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 	for _, contract := range contracts {
 		It(fmt.Sprintf("honors the exact native argv and elevation for %s", contract.command), func() {
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls("nix")).To(Equal([]sdktest.Call{{
+			Expect(operationCalls(recorder, "nix")).To(Equal([]sdktest.Call{{
 				Args:               contract.nativeArgv,
 				ElevationRequested: contract.elevated,
 			}}))
@@ -78,7 +79,7 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 			err := plugin.Execute(contract.command, contract.args)
 			Expect(err).To(MatchError(ContainSubstring("exit status 42")))
 			Expect(sdk.ExitStatus(err)).To(Equal(42))
-			Expect(recorder.Calls("nix")).To(HaveLen(1))
+			Expect(operationCalls(recorder, "nix")).To(HaveLen(1))
 		})
 
 		It(fmt.Sprintf("does not launch %s after cancellation", contract.command), func() {
@@ -109,10 +110,10 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 		for _, contract := range contracts {
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
 		}
-		for _, call := range recorder.Calls("nix") {
+		for _, call := range operationCalls(recorder, "nix") {
 			Expect(call.ElevationRequested).To(BeFalse(), call.Args[0])
 		}
-		Expect(recorder.Calls("nix")).To(HaveLen(len(contracts)))
+		Expect(operationCalls(recorder, "nix")).To(HaveLen(len(contracts)))
 		Expect(recorder.Calls("sudo")).To(BeEmpty())
 	})
 
@@ -121,3 +122,17 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 		expectNoNativeCalls()
 	})
 })
+
+// Metadata inspection is asserted separately from the mutating operation.
+func operationCalls(recorder *sdktest.Recorder, name string) []sdktest.Call {
+	calls := recorder.Calls(name)
+	var result []sdktest.Call
+	for _, call := range calls {
+		n := len(call.Args)
+		if n >= 3 && call.Args[n-3] == "profile" && call.Args[n-2] == "list" && call.Args[n-1] == "--json" {
+			continue
+		}
+		result = append(result, call)
+	}
+	return result
+}

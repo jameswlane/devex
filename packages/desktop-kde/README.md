@@ -286,13 +286,23 @@ session.
 
 `list-widgets` fails, with the native exit status, when `plasmapkg2 --list` fails.
 
-`backup` archives existing KDE files relative to HOME
-(`tar czf <backup> -C "$HOME" .config/kdeglobals ...`), expanding the
-`.config/kate*`, `.config/plasma*` and `.local/share/plasma*` patterns. `restore`
-reads the archive in-process and validates every member before writing anything:
-absolute paths, `..` components, members outside `.config` and `.local/share`,
-and links or special files reject the whole archive. Valid members are written to
-the same path beneath HOME. Files outside the backup are left alone.
+`backup` archives existing KDE files relative to HOME, expanding the
+`.config/kate*`, `.config/plasma*` and `.local/share/plasma*` patterns. HOME is
+literal; unreadable configuration directories cause an error. Tar dereferences
+selected symlinks and stores shared-inode files as separate regular files, so
+the archive is compatible with restore. A temporary archive must pass restore
+validation and contain configuration files before replacing an existing backup.
+
+`restore` reads the archive in-process, checks the complete gzip stream (including
+its checksum), and validates every member before writing anything. Absolute
+paths, `..` components, members outside `.config` and `.local/share`, and links
+or special files reject the whole archive. Legacy `home/<user>/.config` and
+`home/<user>/.local/share` members normalize to those HOME-relative trees;
+backslashes in Linux filenames remain literal. Each destination is confined to
+its corresponding configuration tree, and redirected backup roots are rejected.
+Regular files replace destinations atomically with a fresh inode and their
+archived permission mode, leaving existing hardlink targets unchanged. Files
+outside the backup are left alone.
 
 ## Troubleshooting
 

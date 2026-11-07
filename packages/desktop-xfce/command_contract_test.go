@@ -24,7 +24,7 @@ type desktopContract struct {
 	fails   func()
 }
 
-var xfceFakes = []string{"xfconf-query"}
+var xfceFakes = []string{"xfconf-query", "gdbus"}
 
 // xset mirrors setXFCESetting: string values carry no explicit type.
 func xset(channel, property, value, dataType string) sdktest.Call {
@@ -34,21 +34,23 @@ func xset(channel, property, value, dataType string) sdktest.Call {
 	return sdktest.Call{Args: []string{"-c", channel, "-p", property, "-s", value}}
 }
 
-// scriptBackupFixture scripts xfconf 4.20 output: a translated channel header,
-// indented channels, unindented properties, and plain plus "-v" typed reads of
-// a string, a bool, an empty string and a two-item array.
+// scriptBackupFixture scripts xfconf 4.20 property output (plain and -v are
+// identical), with native per-channel XML supplying lossless types and values.
 func scriptBackupFixture(recorder *sdktest.Recorder) {
+	nativePath := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "xfce4", "xfconf", "xfce-perchannel-xml", "xfwm4.xml")
+	Expect(os.MkdirAll(filepath.Dir(nativePath), 0700)).To(Succeed())
+	Expect(os.WriteFile(nativePath, []byte(`<channel name="xfwm4" version="1.0"><property name="general" type="empty"><property name="click_to_focus" type="bool" value="true"/><property name="theme" type="string" value="Default"/><property name="title_font" type="string" value=""/><property name="workspace_names" type="array"><value type="string" value="Main"/><value type="string" value="&lt;Work &amp; &quot;Play&quot;&gt;"/></property></property></channel>`), 0600)).To(Succeed())
 	recorder.Script("xfconf-query", []string{"-l"}, sdktest.Response{Stdout: "Channels:\n  xfwm4\n"})
 	recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-l"}, sdktest.Response{Stdout: "/general/click_to_focus\n/general/theme\n/general/title_font\n/general/workspace_names\n"})
-	reads := map[string][2]string{
-		"/general/click_to_focus":  {"true\n", "[bool] true\n"},
-		"/general/theme":           {"Default\n", "[string] Default\n"},
-		"/general/title_font":      {"\n", "[string] \n"},
-		"/general/workspace_names": {"Value is an array with 2 items:\n\nMain\n<Work & \"Play\">\n", "Value is an array with 2 items:\n\n[string] Main\n[string] <Work & \"Play\">\n"},
+	reads := map[string]string{
+		"/general/click_to_focus":  "true\n",
+		"/general/theme":           "Default\n",
+		"/general/title_font":      "\n",
+		"/general/workspace_names": "Value is an array with 2 items:\n\nMain\n<Work & \"Play\">\n",
 	}
 	for prop, read := range reads {
-		recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-p", prop}, sdktest.Response{Stdout: read[0]})
-		recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-p", prop, "-v"}, sdktest.Response{Stdout: read[1]})
+		recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-p", prop}, sdktest.Response{Stdout: read})
+		recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-p", prop, "-v"}, sdktest.Response{Stdout: read})
 	}
 }
 
@@ -109,6 +111,8 @@ var _ = Describe("XFCE command contracts", func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), xfceFakes...)
 		GinkgoT().Setenv("XDG_CURRENT_DESKTOP", "XFCE")
 		fixtures = GinkgoT().TempDir()
+		GinkgoT().Setenv("XDG_CONFIG_HOME", fixtures)
+		GinkgoT().Setenv("XDG_CONFIG_DIRS", fixtures)
 		plugin = NewXFCEPlugin()
 	})
 
@@ -316,7 +320,7 @@ var _ = Describe("XFCE command contracts", func() {
 				sdktest.ProvideStdin(GinkgoT(), "y\n")
 				var err error
 				output = sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute("restore", []string{backup}) })
-				Expect(err).To(MatchError("restored 3 of 4 properties; failed: xfwm4/general/click_to_focus: exit status 42"))
+				Expect(err).To(MatchError("restored 3 of 4 properties; failed: xfwm4/general/click_to_focus: exit status 42: native failure"))
 				Expect(sdk.ExitStatus(err)).To(Equal(42))
 				Expect(output).To(ContainSubstring("✗ Failed to restore xfwm4/general/click_to_focus: exit status 42"))
 				Expect(recorder.Calls("xfconf-query")).To(Equal(restoreFixtureCalls))
@@ -342,10 +346,15 @@ var _ = Describe("XFCE command contracts", func() {
 	DescribeTable("backs up channels from xfconf-query's indented listing",
 		func(listing string) {
 			recorder.Script("xfconf-query", []string{"-l"}, sdktest.Response{Stdout: listing})
+			recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-l"}, sdktest.Response{Stdout: "/theme\n"})
+			recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-p", "/theme"}, sdktest.Response{Stdout: "Default\n"})
+			recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-p", "/theme", "-v"}, sdktest.Response{Stdout: "[string] Default\n"})
 			Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
 			Expect(recorder.Calls("xfconf-query")).To(Equal([]sdktest.Call{
 				{Args: []string{"-l"}},
 				{Args: []string{"-c", "xfwm4", "-l"}},
+				{Args: []string{"-c", "xfwm4", "-p", "/theme"}},
+				{Args: []string{"-c", "xfwm4", "-p", "/theme", "-v"}},
 			}))
 		},
 		Entry("upstream C locale", "Channels:\n  xfwm4\n"),
@@ -398,7 +407,7 @@ var _ = Describe("XFCE command contracts", func() {
 		Expect(content).To(ContainSubstring(`<property name="/general/theme" type="string" value="Default"></property>`))
 	})
 
-	// xfconf before 4.20 prints no types; -v reads equal plain reads.
+	// Upstream xfconf, including 4.20.0, prints no types in property reads.
 	It("records untyped values from xfconf versions that print no types", func() {
 		recorder.Script("xfconf-query", []string{"-l"}, sdktest.Response{Stdout: "Channels:\n  xfwm4\n"})
 		recorder.Script("xfconf-query", []string{"-c", "xfwm4", "-l"}, sdktest.Response{Stdout: "/general/names\n/general/theme\n/general/title\n"})
@@ -467,7 +476,7 @@ var _ = Describe("XFCE command contracts", func() {
 		Entry("relative property", `<xfce-config><channel name="xfwm4"><property name="general/theme" value="1"/></channel></xfce-config>`, `channel xfwm4: invalid property name "general/theme"`),
 		Entry("unknown type", `<xfce-config><channel name="xfwm4"><property name="/a" type="color" value="1"/></channel></xfce-config>`, `channel xfwm4: property /a: unsupported type "color"`),
 		Entry("missing value", `<xfce-config><channel name="xfwm4"><property name="/a" type="int"/></channel></xfce-config>`, "channel xfwm4: property /a: a single value needs a value attribute and no <value> items"),
-		Entry("empty array", `<xfce-config><channel name="xfwm4"><property name="/a" type="array"/></channel></xfce-config>`, "channel xfwm4: property /a: an array needs one or more <value> items and no value attribute"),
+		Entry("array with scalar attribute", `<xfce-config><channel name="xfwm4"><property name="/a" type="array" value=""/></channel></xfce-config>`, "channel xfwm4: property /a: an array must not have a value attribute"),
 		Entry("untyped array item", `<xfce-config><channel name="xfwm4"><property name="/a" type="array"><value value="1"/></property></channel></xfce-config>`, `channel xfwm4: property /a: unsupported array item type ""`),
 		Entry("duplicate property", `<xfce-config><channel name="xfwm4"><property name="/a" value="1"/><property name="/a" value="2"/></channel></xfce-config>`, "channel xfwm4: property /a appears more than once"),
 	)

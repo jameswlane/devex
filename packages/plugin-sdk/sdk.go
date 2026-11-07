@@ -11,11 +11,13 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -539,7 +541,17 @@ func HandleArgs(plugin Plugin, args []string) {
 		}
 		fmt.Print(string(output))
 	default:
-		if err := plugin.Execute(command, args[1:]); err != nil {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		var err error
+		if contextual, ok := plugin.(interface {
+			ExecuteContext(context.Context, string, []string) error
+		}); ok {
+			err = contextual.ExecuteContext(ctx, command, args[1:])
+		} else {
+			err = plugin.Execute(command, args[1:])
+		}
+		if err != nil {
 			writeExecutionError(os.Stderr, err)
 			status := ExitStatus(err)
 			if status < 0 {
@@ -1441,7 +1453,17 @@ func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName
 	streams.Stderr = io.MultiWriter(streams.Stderr, &diagnostic)
 	var err error
 	if privilege := PluginOperationPrivilege(pluginInfo.PluginInfo, args); privilege != nil {
-		err = RunOperation(ctx, ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args}, streams)
+		dir, dirErr := os.Getwd()
+		if dirErr != nil {
+			return dirErr
+		}
+		request := ExecutionRequest{Privilege: *privilege, Name: pluginInfo.Path, Args: args, Dir: dir}
+		// User plugins may need tools installed outside sudo secure_path. This
+		// environment is restored only after dropping to the intended account.
+		if privilege.Scope == ScopeUser {
+			request.Env = []string{"PATH=" + os.Getenv("PATH")}
+		}
+		err = RunOperation(ctx, request, streams)
 	} else {
 		cmd := NewCommandContext(ctx, pluginInfo.Path, args...)
 		unattended := unattendedContext(ctx)

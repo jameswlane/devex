@@ -405,7 +405,7 @@ var _ = Describe("KDE command contracts", func() {
 					removeFake(manager.previous)
 					recorder.Reset()
 					Expect(plugin.Execute("install-fonts", []string{"Oxygen", "custom-font"})).To(Succeed())
-					Expect(argvOf(recorder.Calls(manager.name))).To(Equal([][]string{manager.args}), manager.name)
+					Expect(recorder.Calls(manager.name)).To(Equal([]sdktest.Call{{Args: manager.args, ElevationRequested: true}}), manager.name)
 				}
 			},
 			fails: func() {
@@ -514,6 +514,9 @@ var _ = Describe("KDE command contracts", func() {
 		{
 			command: "backup",
 			routes: func() {
+				Expect(hostTarErr).NotTo(HaveOccurred())
+				Expect(hostGzipErr).NotTo(HaveOccurred())
+				useHostTar(hostTar, hostGzip)
 				homeConfig("kdeglobals", "[General]\n")
 				homeConfig("kwinrc", "[Windows]\n")
 				Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
@@ -522,9 +525,9 @@ var _ = Describe("KDE command contracts", func() {
 				Expect(calls[0].ElevationRequested).To(BeFalse())
 				Expect(calls[0].Args[0]).To(Equal("czf"))
 				Expect(filepath.Dir(calls[0].Args[1])).To(Equal(fixtures))
-				Expect(filepath.Base(calls[0].Args[1])).To(MatchRegexp(`^kde-settings-\d{4}-\d{2}-\d{2}\.tar\.gz$`))
+				Expect(filepath.Base(calls[0].Args[1])).To(MatchRegexp(`^\.kde-backup-.+\.tar\.gz$`))
 				// Only the existing KDE files are archived, relative to HOME.
-				Expect(calls[0].Args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), ".config/kdeglobals", ".config/kwinrc"}))
+				Expect(calls[0].Args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), "--dereference", "--hard-dereference", ".config/kdeglobals", ".config/kwinrc"}))
 
 				recorder.Reset()
 				Expect(plugin.Execute("backup", nil)).To(Succeed())
@@ -709,10 +712,14 @@ var _ = Describe("KDE command contracts", func() {
 
 		Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
 		args := recorder.Calls("tar")[0].Args
-		Expect(args[2:]).To(Equal([]string{"-C", home,
+		Expect(args[2:]).To(Equal([]string{"-C", home, "--dereference", "--hard-dereference",
 			".config/katerc", ".config/kateschemarc", ".config/kdeglobals", ".config/plasma-localerc", ".config/plasmashellrc",
 			".local/share/kactivitymanagerd", ".local/share/plasma"}))
-		Expect(archiveNames(args[1])).NotTo(ContainElement(HavePrefix("/")))
+		backups, err := filepath.Glob(filepath.Join(fixtures, "kde-settings-*.tar.gz"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(backups).To(HaveLen(1))
+		Expect(args[1]).NotTo(BeAnExistingFile(), "the validated temporary archive has been renamed")
+		Expect(archiveNames(backups[0])).NotTo(ContainElement(HavePrefix("/")))
 
 		// Lose and corrupt the configuration, then restore it.
 		Expect(os.RemoveAll(filepath.Join(home, ".local", "share", "plasma"))).To(Succeed())
@@ -720,7 +727,7 @@ var _ = Describe("KDE command contracts", func() {
 		Expect(os.WriteFile(filepath.Join(home, ".config", "kdeglobals"), []byte("corrupt"), 0o600)).To(Succeed())
 		Expect(os.WriteFile(unrelated, []byte("changed"), 0o600)).To(Succeed())
 		sdktest.ProvideStdin(GinkgoT(), "y\n")
-		Expect(plugin.Execute("restore", []string{args[1]})).To(Succeed())
+		Expect(plugin.Execute("restore", []string{backups[0]})).To(Succeed())
 
 		expected := []string{".config/unrelatedrc"}
 		for name, content := range originals {
@@ -831,11 +838,14 @@ var _ = Describe("KDE command contracts", func() {
 	})
 
 	It("archives configuration relative to HOME so restore returns files to their original paths", func() {
+		Expect(hostTarErr).NotTo(HaveOccurred())
+		Expect(hostGzipErr).NotTo(HaveOccurred())
+		useHostTar(hostTar, hostGzip)
 		kdeglobals := homeConfig("kdeglobals", "[General]\n")
 		Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
 		args := recorder.Calls("tar")[0].Args
 		relative := strings.TrimPrefix(kdeglobals, os.Getenv("HOME")+string(filepath.Separator))
-		Expect(args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), relative}))
+		Expect(args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), "--dereference", "--hard-dereference", relative}))
 	})
 
 	// Complete-failure policy (#157, #303): a configure operation's settings are

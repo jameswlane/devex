@@ -1,10 +1,18 @@
 package sdk
 
-import "os/exec"
+import (
+	"context"
+	"os/exec"
+)
 
 // NewCommandContext constructs all subprocesses launched by the SDK. It defaults
-// to exec.CommandContext and may be replaced before concurrent use, for example
+// to exec.CommandContext with graceful Unix cancellation and may be replaced
+// before concurrent use, for example
 // by sdktest to reject commands outside its fake-executable allowlist.
 // A replacement must preserve context cancellation and return a non-nil Cmd;
 // rejected commands carry Cmd.Err so Start, Run, and Output fail before execution.
-var NewCommandContext = exec.CommandContext
+var NewCommandContext = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	configureCancellation(cmd)
+	return cmd
+}

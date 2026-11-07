@@ -120,6 +120,15 @@ var _ = Describe("RPM command contracts", func() {
 		Entry("list with arguments", "list", []string{"git"}, "list takes no arguments"),
 	)
 
+	It("validates remote URL paths while preserving signed queries and fragments", func() {
+		file := "https://example.test/pkg.RPM?token=signed#download"
+		Expect(plugin.Execute("install", []string{file})).To(Succeed())
+		Expect(recorder.Calls("rpm")).To(Equal([]sdktest.Call{{Args: []string{"--install", file}, ElevationRequested: true}}))
+	})
+	It("does not accept an rpm suffix appearing only in a URL query", func() {
+		Expect(plugin.Execute("install", []string{"https://example.test/archive.txt?name=package.rpm"})).To(MatchError(ContainSubstring("is not an .rpm file")))
+		expectNoNativeCalls()
+	})
 	It("rejects an unknown command", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()

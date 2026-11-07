@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -148,9 +149,27 @@ func (bm *BackupManager) createConfigBackup(ctx context.Context, backupFile stri
 		return fmt.Errorf("no KDE configuration files found to backup")
 	}
 
-	args := append([]string{"czf", backupFile, "-C", homeDir}, members...)
+	// Publish only archives accepted by restore; a failed command or validation
+	// must not destroy the previous backup (including a same-day backup).
+	temporary, err := os.CreateTemp(filepath.Dir(backupFile), ".kde-backup-*.tar.gz")
+	if err != nil {
+		return err
+	}
+	temporaryName := temporary.Name()
+	defer func() { _ = os.Remove(temporaryName) }()
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	// Store symlink targets and duplicate shared inodes as regular file data.
+	args := append([]string{"czf", temporaryName, "-C", homeDir, "--dereference", "--hard-dereference"}, members...)
 	cmd := exec.CommandContext(ctx, "tar", args...)
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	if _, err := readBackupMembers(temporaryName); err != nil {
+		return fmt.Errorf("invalid created backup: %w", err)
+	}
+	return os.Rename(temporaryName, backupFile)
 }
 
 // backupMembers expands backupPatterns beneath homeDir and returns the existing
@@ -159,9 +178,9 @@ func backupMembers(homeDir string) ([]string, error) {
 	seen := map[string]bool{}
 	var members []string
 	for _, pattern := range backupPatterns {
-		matches, err := filepath.Glob(filepath.Join(homeDir, filepath.FromSlash(pattern)))
+		matches, err := expandBackupPattern(homeDir, pattern)
 		if err != nil {
-			return nil, fmt.Errorf("invalid backup pattern %q: %w", pattern, err)
+			return nil, err
 		}
 		for _, match := range matches {
 			relative, err := filepath.Rel(homeDir, match)
@@ -177,6 +196,38 @@ func backupMembers(homeDir string) ([]string, error) {
 	}
 	sort.Strings(members)
 	return members, nil
+}
+
+// expandBackupPattern treats HOME literally and propagates directory read errors.
+// filepath.Glob deliberately suppresses I/O errors, which can hide lost data.
+func expandBackupPattern(homeDir, pattern string) ([]string, error) {
+	parts := strings.Split(filepath.FromSlash(pattern), string(filepath.Separator))
+	for _, part := range parts {
+		if _, err := filepath.Match(part, ""); err != nil {
+			return nil, fmt.Errorf("invalid backup pattern %q: %w", pattern, err)
+		}
+	}
+	matches := []string{homeDir}
+	for _, part := range parts {
+		var next []string
+		for _, parent := range matches {
+			entries, err := os.ReadDir(parent)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("read backup directory %s: %w", parent, err)
+			}
+			for _, entry := range entries {
+				match, _ := filepath.Match(part, entry.Name())
+				if match {
+					next = append(next, filepath.Join(parent, entry.Name()))
+				}
+			}
+		}
+		matches = next
+	}
+	return matches, nil
 }
 
 // backupMember is a validated archive entry; name is a clean HOME-relative path.
@@ -215,15 +266,22 @@ func readBackupMembers(backupFile string) ([]backupMember, error) {
 
 func validateBackupMember(header *tar.Header) (backupMember, error) {
 	name := header.Name
-	if name == "" || strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`) || filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
+	if name == "" || strings.HasPrefix(name, "/") || filepath.IsAbs(name) || filepath.VolumeName(name) != "" {
 		return backupMember{}, fmt.Errorf("archive member %q is an absolute path", name)
 	}
-	for _, part := range strings.FieldsFunc(name, func(r rune) bool { return r == '/' || r == '\\' }) {
+	for _, part := range strings.Split(name, "/") {
 		if part == ".." {
 			return backupMember{}, fmt.Errorf("archive member %q traverses outside HOME", name)
 		}
 	}
-	clean := path.Clean(strings.ReplaceAll(name, `\`, "/"))
+	clean := path.Clean(name)
+	// Older tar invocations stored HOME without its leading slash.
+	parts := strings.Split(clean, "/")
+	if header.Typeflag == tar.TypeDir && parts[0] == "home" && len(parts) <= 2 {
+		clean = "."
+	} else if len(parts) >= 3 && parts[0] == "home" && parts[1] != "" {
+		clean = path.Join(parts[2:]...)
+	}
 	if !withinBackupRoots(clean) && (header.Typeflag != tar.TypeDir || !ancestorOfBackupRoot(clean)) {
 		return backupMember{}, fmt.Errorf("archive member %q is outside the KDE configuration directories (%s)", name, strings.Join(backupRoots, ", "))
 	}
@@ -231,7 +289,7 @@ func validateBackupMember(header *tar.Header) (backupMember, error) {
 	case tar.TypeDir:
 		return backupMember{name: clean, dir: true}, nil
 	case tar.TypeReg:
-		return backupMember{name: clean, mode: header.FileInfo().Mode().Perm() | 0o600}, nil
+		return backupMember{name: clean, mode: header.FileInfo().Mode().Perm()}, nil
 	default:
 		return backupMember{}, fmt.Errorf("archive member %q has unsupported type %q; only regular files and directories are restored", name, string(header.Typeflag))
 	}
@@ -239,6 +297,9 @@ func validateBackupMember(header *tar.Header) (backupMember, error) {
 
 // ancestorOfBackupRoot allows parent directory entries such as ".local".
 func ancestorOfBackupRoot(clean string) bool {
+	if clean == "." {
+		return true
+	}
 	for _, root := range backupRoots {
 		if strings.HasPrefix(root, clean+"/") {
 			return true
@@ -263,11 +324,18 @@ func restoreBackupMembers(backupFile, homeDir string, members []backupMember) (i
 	if homeDir == "" {
 		return 0, fmt.Errorf("HOME is not set")
 	}
-	root, err := os.OpenRoot(homeDir)
+	home, err := os.OpenRoot(homeDir)
 	if err != nil {
 		return 0, err
 	}
-	defer func() { _ = root.Close() }()
+	defer func() { _ = home.Close() }()
+	roots := map[string]*os.Root{}
+	defer func() {
+		for _, root := range roots {
+			_ = root.Close()
+		}
+	}()
+
 	index, restored := 0, 0
 	err = walkBackup(backupFile, func(header *tar.Header, content io.Reader) error {
 		if index >= len(members) {
@@ -276,10 +344,33 @@ func restoreBackupMembers(backupFile, homeDir string, members []backupMember) (i
 		member := members[index]
 		index++
 		current, err := validateBackupMember(header)
-		if err != nil || current.name != member.name || current.dir != member.dir {
+		if err != nil || current != member {
 			return fmt.Errorf("archive changed during restore")
 		}
-		target := filepath.FromSlash(member.name)
+		// Ancestor entries are metadata only; open each allowed tree separately.
+		if ancestorOfBackupRoot(member.name) {
+			return nil
+		}
+		var tree string
+		for _, candidate := range backupRoots {
+			if member.name == candidate || strings.HasPrefix(member.name, candidate+"/") {
+				tree = candidate
+				break
+			}
+		}
+		root := roots[tree]
+		if root == nil {
+			root, err = openBackupRoot(home, tree)
+			if err != nil {
+				return err
+			}
+			roots[tree] = root
+		}
+		target := strings.TrimPrefix(strings.TrimPrefix(member.name, tree), "/")
+		if target == "" {
+			target = "."
+		}
+
 		if member.dir {
 			return root.MkdirAll(target, 0o755)
 		}
@@ -298,16 +389,62 @@ func restoreBackupMembers(backupFile, homeDir string, members []backupMember) (i
 	return restored, err
 }
 
+// openBackupRoot pins each directory component and refuses redirected roots.
+// SameFile also detects a component replaced between Lstat and OpenRoot.
+func openBackupRoot(home *os.Root, tree string) (*os.Root, error) {
+	current, err := home.OpenRoot(".")
+	if err != nil {
+		return nil, err
+	}
+	for _, component := range strings.Split(tree, "/") {
+		if err := current.Mkdir(component, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+			_ = current.Close()
+			return nil, err
+		}
+		info, err := current.Lstat(component)
+		if err != nil {
+			_ = current.Close()
+			return nil, err
+		}
+		if !info.IsDir() {
+			_ = current.Close()
+			return nil, fmt.Errorf("backup root %s is not a directory (path escapes from parent)", tree)
+		}
+		next, err := current.OpenRoot(component)
+		_ = current.Close()
+		if err != nil {
+			return nil, err
+		}
+		pinned, err := next.Stat(".")
+		if err != nil || !os.SameFile(info, pinned) {
+			_ = next.Close()
+			return nil, fmt.Errorf("backup root %s changed during restore", tree)
+		}
+		current = next
+	}
+	return current, nil
+}
+
 func writeBackupFile(root *os.Root, target string, content io.Reader, mode os.FileMode) error {
-	file, err := root.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	// O_EXCL creates a fresh inode, so existing hardlinks cannot be mutated.
+	temporary := filepath.Join(filepath.Dir(target), ".kde-restore-"+rand.Text())
+	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return err
 	}
+	defer func() { _ = root.Remove(temporary) }()
 	if _, err := io.Copy(file, content); err != nil {
 		_ = file.Close()
 		return err
 	}
-	return file.Close()
+	if err := file.Chmod(mode); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return root.Rename(temporary, target)
 }
 
 // walkBackup visits each member of a gzip-compressed tar archive in order.
@@ -322,7 +459,20 @@ func walkBackup(backupFile string, visit func(*tar.Header, io.Reader) error) err
 		return fmt.Errorf("not a gzip-compressed tar archive: %w", err)
 	}
 	defer func() { _ = compressed.Close() }()
-	archive := tar.NewReader(compressed)
+	// Read through the gzip trailer before invoking any visitor. A disk spool
+	// bounds memory while ensuring checksum failures occur before restore writes.
+	spool, err := os.CreateTemp("", "kde-archive-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = spool.Close(); _ = os.Remove(spool.Name()) }()
+	if _, err := io.Copy(spool, compressed); err != nil {
+		return fmt.Errorf("invalid gzip archive: %w", err)
+	}
+	if _, err := spool.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	archive := tar.NewReader(spool)
 	for {
 		header, err := archive.Next()
 		if errors.Is(err, io.EOF) {

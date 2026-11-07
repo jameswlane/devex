@@ -288,8 +288,8 @@ This applies to `configure`, `configure-panel` and `configure-wm`.
 `backup` parses `xfconf-query -l` as upstream prints it: the first line is a
 translated `Channels:` header and is skipped whatever its language, and the
 indented channel names are trimmed. An unreadable channel or property is reported
-and skipped; when no channel can be read, no file is written and the command
-fails.
+and skipped; a successful backup must capture at least one property. Otherwise
+no file is written, preserving any existing backup for that date.
 
 Backups are XML shaped like xfconf's own channel files:
 
@@ -304,20 +304,39 @@ Backups are XML shaped like xfconf's own channel files:
 </xfce-config>
 ```
 
-Types come from `xfconf-query -c <channel> -p <property> -v`, which prints
-`[type] value` from xfconf 4.20. A type is recorded only when that read is exactly
-the plain read with the type prefix added. Older xfconf prints no types, so those
-values are recorded without `type`; a multi-line untyped value, such as an older
-xfconf array, cannot be restored faithfully and is skipped with a warning.
+Xfconf 4.20.0 prints identical plain and verbose property reads, without type
+prefixes, including for arrays. The plugin recovers types and complete values
+from native `xfce4/xfconf/xfce-perchannel-xml/<channel>.xml` files, searching
+`XDG_CONFIG_HOME` (default `~/.config`) before `XDG_CONFIG_DIRS` (default
+`/etc/xdg`). Nested properties, mixed types, embedded newlines and empty arrays
+are preserved. Native XML reflects persisted settings, so its values must match
+the live CLI read before its types are used. Array checks include the localized
+header's item count and the exact rendered body, preserving embedded newlines.
+Stale or unverifiable native values are skipped with a warning to let xfconfd
+flush settings and retry; they are never silently saved in place of live values.
+If native data is unavailable, compatible
+`[type] value` reads remain supported; equal single-line reads are saved without
+a type, and ambiguous multiline values are skipped with a warning.
+
+The behavior follows the upstream [4.20.0 query implementation](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconf-query/main.c)
+and [native XML backend](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconfd/xfconf-backend-perchannel-xml.c).
 
 `restore` validates the whole file first and rejects malformed XML, unsupported
 formats or types, invalid channel or property names, duplicates and backups with
 no properties. Each property is then set with
 `xfconf-query -c <channel> -p <property> -n -t <type> -s <value>` (arrays pass
-`-a` and one `-t`/`-s` pair per item). Untyped values use
+`-a` and one `-t`/`-s` pair per item, even for one item). Empty arrays use
+`gdbus call --session` to invoke `org.xfce.Xfconf.SetProperty` with an empty
+variant array (`<@av []>`); `gdbus` must be installed for these restores.
+The upstream [D-Bus interface](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/common/xfconf-dbus.xml.in)
+and [value conversion](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/common/xfconf-gvaluefuncs.c)
+explicitly support this representation. Untyped values use
 `xfconf-query -c <channel> -p <property> -s <value>`, which keeps the existing
 property's type and fails if the property no longer exists. If a property fails,
 the rest are still restored and the command fails, naming the failed properties.
+Backup and restore subprocesses share a 30-second operation timeout; cancellation
+fails the operation and stops further queries or writes. Native errors include
+nonempty stderr and retain their exit status.
 
 ## Troubleshooting
 

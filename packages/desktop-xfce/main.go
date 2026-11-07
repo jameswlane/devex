@@ -3,6 +3,7 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -316,6 +317,12 @@ func (p *XFCEPlugin) handleApplyTheme(args []string) error {
 
 // handleBackup creates a backup of XFCE settings
 func (p *XFCEPlugin) handleBackup(args []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), xfceOperationTimeout)
+	defer cancel()
+	return p.handleBackupContext(ctx, args)
+}
+
+func (p *XFCEPlugin) handleBackupContext(ctx context.Context, args []string) error {
 	backupDir := filepath.Join(sdk.PathsForHome("").Backups(), "xfce")
 	if len(args) > 0 {
 		backupDir = args[0]
@@ -333,7 +340,7 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 
 	// xfconf-query -l prints a translated "Channels:" header, then one channel
 	// per line indented by two spaces.
-	listing, err := xfconfQuery("-l")
+	listing, err := xfconfQuery(ctx, "-l")
 	if err != nil {
 		return fmt.Errorf("failed to list xfconf channels: %w", err)
 	}
@@ -344,8 +351,12 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 
 	backup := xfceBackup{Format: xfceBackupFormat, Version: xfceBackupVersion}
 	var readable settingsBatch
+	captured := 0
 	for _, channel := range channels {
-		props, err := xfconfQuery("-c", channel, "-l")
+		props, err := xfconfQuery(ctx, "-c", channel, "-l")
+		if ctx.Err() != nil {
+			return fmt.Errorf("backup interrupted: %w", ctx.Err())
+		}
 		if readable.record(err) != nil {
 			fmt.Printf("Warning: Failed to list channel %s: %v\n", channel, err)
 			continue
@@ -353,12 +364,16 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 
 		entry := xfceChannel{Name: channel}
 		for _, prop := range parsePropertyListing(string(props)) {
-			property, err := readXFCEProperty(channel, prop)
+			property, err := readXFCEProperty(ctx, channel, prop)
+			if ctx.Err() != nil {
+				return fmt.Errorf("backup interrupted: %w", ctx.Err())
+			}
 			if err != nil {
 				fmt.Printf("Warning: Skipping %s%s: %v\n", channel, prop, err)
 				continue
 			}
 			entry.Properties = append(entry.Properties, property)
+			captured++
 		}
 		backup.Channels = append(backup.Channels, entry)
 	}
@@ -366,6 +381,12 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 		return fmt.Errorf("failed to back up XFCE settings: no channel could be read: %w", readable.first)
 	}
 
+	if captured == 0 {
+		return fmt.Errorf("failed to back up XFCE settings: no properties could be captured")
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("backup interrupted: %w", err)
+	}
 	encoded, err := xml.MarshalIndent(backup, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to encode backup: %w", err)
@@ -383,6 +404,12 @@ func (p *XFCEPlugin) handleBackup(args []string) error {
 
 // handleRestore restores XFCE settings from backup
 func (p *XFCEPlugin) handleRestore(args []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), xfceOperationTimeout)
+	defer cancel()
+	return p.handleRestoreContext(ctx, args)
+}
+
+func (p *XFCEPlugin) handleRestoreContext(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("please provide path to backup file")
 	}
@@ -421,8 +448,14 @@ func (p *XFCEPlugin) handleRestore(args []string) error {
 	var firstErr error
 	for _, channel := range backup.Channels {
 		for _, property := range channel.Properties {
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("restore interrupted: %w", err)
+			}
 			total++
-			if err := exec.Command("xfconf-query", restoreArgs(channel.Name, property)...).Run(); err != nil {
+			if err := restoreXFCEProperty(ctx, channel.Name, property); err != nil {
+				if ctx.Err() != nil {
+					return fmt.Errorf("restore interrupted: %w", err)
+				}
 				fmt.Printf("✗ Failed to restore %s%s: %v\n", channel.Name, property.Name, err)
 				failures = append(failures, channel.Name+property.Name)
 				if firstErr == nil {

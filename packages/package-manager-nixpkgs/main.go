@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -149,10 +151,19 @@ func (p *NixpkgsPlugin) run(ctx context.Context, operation string, args ...strin
 	if privilege == nil {
 		return fmt.Errorf("operation %s has no declared privilege", operation)
 	}
-	if !p.IsAvailable() {
+	native, lookupErr := exec.LookPath("nix-env")
+	if lookupErr != nil {
 		return fmt.Errorf("nix-env is not available on this system; install Nix")
 	}
-	err := sdk.ExecOperationWithContext(ctx, *privilege, "nix-env", args...)
+	native, err := filepath.Abs(native)
+	if err != nil {
+		return err
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	err = sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: *privilege, Name: native, Args: args, Dir: dir}, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

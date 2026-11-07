@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -215,6 +216,7 @@ var _ = Describe("Pantheon command contracts", func() {
 			},
 			fails: func() {
 				// Each schema dump is best-effort; a failed schema is reported and omitted.
+				recorder.Script("dconf", []string{"dump", "/org/gnome/desktop/"}, sdktest.Response{Stdout: "[interface]\nclock-show-seconds=true\n"})
 				fail("dconf", "dump", "/io/elementary/")
 				output := sdktest.CaptureStdout(GinkgoT(), func() {
 					Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
@@ -336,6 +338,14 @@ var _ = Describe("Pantheon command contracts", func() {
 		)
 	})
 
+	It("rejects successful but empty dumps without replacing an existing backup", func() {
+		existing := filepath.Join(fixtures, "pantheon-settings-"+time.Now().Format("2006-01-02")+".conf")
+		Expect(os.WriteFile(existing, []byte("previous backup"), 0600)).To(Succeed())
+		err := plugin.Execute("backup", []string{fixtures})
+		Expect(err).To(MatchError(ContainSubstring("no settings to restore")))
+		Expect(recorder.Calls("dconf")).To(Equal(dumps))
+		Expect(os.ReadFile(existing)).To(BeEquivalentTo("previous backup"))
+	})
 	It("fails backup without writing a file when no schema can be dumped", func() {
 		recorder.Fallback("dconf", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
 		err := plugin.Execute("backup", []string{fixtures})

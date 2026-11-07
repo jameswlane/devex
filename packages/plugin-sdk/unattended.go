@@ -37,6 +37,7 @@ func operationEnvironment(request ExecutionRequest) []string {
 }
 
 func configureOperationCommand(cmd *exec.Cmd, request ExecutionRequest) {
+	cmd.Dir = request.Dir
 	if environment := operationEnvironment(request); len(environment) > 0 {
 		cmd.Env = append(os.Environ(), environment...)
 	}

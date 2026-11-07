@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 
@@ -107,7 +108,15 @@ func (p *RpmPlugin) handleInstall(ctx context.Context, args []string) error {
 		return err
 	}
 	for _, file := range args {
-		if !strings.HasSuffix(strings.ToLower(file), ".rpm") {
+		operandPath := file
+		if strings.Contains(file, "://") {
+			remote, err := url.Parse(file)
+			if err != nil {
+				return fmt.Errorf("invalid RPM URL %q: %w", file, err)
+			}
+			operandPath = remote.Path
+		}
+		if !strings.HasSuffix(strings.ToLower(operandPath), ".rpm") {
 			return fmt.Errorf("rpm installs package files, not repository packages: %q is not an .rpm file; use the dnf or zypper plugin to install by name", file)
 		}
 	}

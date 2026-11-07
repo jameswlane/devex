@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -60,12 +61,13 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 			err := plugin.Execute(contract.command, contract.args)
 			Expect(err).To(MatchError("nix is not available on this system; install Nix and enable the nix-command and flakes experimental features"), contract.command)
 		}
-		Expect(recorder.Calls("sudo")).To(BeEmpty())
+		Expect(operationCalls(recorder, "sudo")).To(BeEmpty())
 	})
 
 	Context("with the default sudo adapter", func() {
 		BeforeEach(func() {
 			recorder = sdktest.NewRecorder(GinkgoT(), "nix")
+			recorder.Script("nix", []string{"profile", "list", "--json"}, sdktest.Response{Stdout: `{"version":3,"elements":{}}`})
 			plugin = main.NewNixflakePlugin()
 		})
 
@@ -81,7 +83,7 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 				err := plugin.Execute(contract.command, contract.args)
 				expectAuthorization(err, sdk.AuthorizationDenied)
 				Expect(sdk.ExitStatus(err)).To(Equal(1))
-				Expect(recorder.Calls(executable)).To(BeEmpty())
+				Expect(operationCalls(recorder, executable)).To(BeEmpty())
 			})
 
 			It(fmt.Sprintf("keeps a native exit 42 from %s distinct from authorization", contract.command), func() {
@@ -90,15 +92,15 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 				var auth *sdk.AuthorizationError
 				Expect(errors.As(err, &auth)).To(BeFalse())
 				Expect(sdk.ExitStatus(err)).To(Equal(42))
-				Expect(recorder.Calls(executable)).To(Equal([]sdktest.Call{{Args: contract.nativeArgv, ElevationRequested: true}}))
+				Expect(operationCalls(recorder, executable)).To(Equal([]sdktest.Call{{Args: contract.nativeArgv, ElevationRequested: true}}))
 			})
 
 			It(fmt.Sprintf("requires authorization for %s when sudo is unavailable", contract.command), func() {
 				sdk.DefaultPrivilegeAdapter = sdk.UnixSudoAdapter{LookPath: func(string) (string, error) { return "", exec.ErrNotFound }}
 				err := plugin.Execute(contract.command, contract.args)
 				expectAuthorization(err, sdk.AuthorizationRequired)
-				Expect(recorder.Calls(executable)).To(BeEmpty())
-				Expect(recorder.Calls("sudo")).To(BeEmpty())
+				Expect(operationCalls(recorder, executable)).To(BeEmpty())
+				Expect(operationCalls(recorder, "sudo")).To(BeEmpty())
 			})
 		}
 	})
@@ -108,6 +110,7 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 
 		BeforeEach(func() {
 			recorder = sdktest.NewRecorder(GinkgoT(), "nix")
+			recorder.Script("nix", []string{"profile", "list", "--json"}, sdktest.Response{Stdout: `{"version":3,"elements":{}}`})
 			plugin = main.NewNixflakePlugin()
 			home = GinkgoT().TempDir()
 			GinkgoT().Setenv("SUDO_USER", "builder")
@@ -119,19 +122,23 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 			if contract.elevated {
 				It(fmt.Sprintf("runs %s directly without requesting another elevation", contract.command), func() {
 					Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-					Expect(recorder.Calls(executable)).To(Equal([]sdktest.Call{{Args: contract.nativeArgv}}))
-					Expect(recorder.Calls("sudo")).To(BeEmpty())
+					Expect(operationCalls(recorder, executable)).To(Equal([]sdktest.Call{{Args: contract.nativeArgv}}))
+					Expect(operationCalls(recorder, "sudo")).To(BeEmpty())
 				})
 				continue
 			}
 
 			It(fmt.Sprintf("runs %s as the invoking user instead of root", contract.command), func() {
-				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder", executable}, contract.nativeArgv...)
+				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder", "/bin/sh", "-c", `cd -- "$1" && shift && exec "$@"`, "devex-cwd", mustGetwd(), mustNative(executable)}, contract.nativeArgv...)
 				// Answer at the sudo boundary so the spec proves the identity switch, not root execution.
 				recorder.Script("sudo", switchArgv, sdktest.Response{})
+				if contract.command == "remove" {
+					metadataArgv := append(append([]string(nil), switchArgv[:len(switchArgv)-len(contract.nativeArgv)]...), "profile", "list", "--json")
+					recorder.Script("sudo", metadataArgv, sdktest.Response{Stdout: `{"version":3,"elements":{}}`})
+				}
 				Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-				Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{{Args: switchArgv}}))
-				Expect(recorder.Calls(executable)).To(BeEmpty())
+				Expect(operationCalls(recorder, "sudo")).To(Equal([]sdktest.Call{{Args: switchArgv}}))
+				Expect(operationCalls(recorder, executable)).To(BeEmpty())
 			})
 
 			It(fmt.Sprintf("rejects %s as root without an invoking user before native execution", contract.command), func() {
@@ -139,9 +146,24 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 				err := plugin.Execute(contract.command, contract.args)
 				expectAuthorization(err, sdk.AuthorizationRequired)
 				Expect(err.Error()).To(ContainSubstring("user-scope operations cannot run as root"))
-				Expect(recorder.Calls(executable)).To(BeEmpty())
-				Expect(recorder.Calls("sudo")).To(BeEmpty())
+				Expect(operationCalls(recorder, executable)).To(BeEmpty())
+				Expect(operationCalls(recorder, "sudo")).To(BeEmpty())
 			})
 		}
 	})
 })
+
+func mustGetwd() string {
+	GinkgoHelper()
+	dir, err := os.Getwd()
+	Expect(err).NotTo(HaveOccurred())
+	return dir
+}
+func mustNative(name string) string {
+	GinkgoHelper()
+	path, err := exec.LookPath(name)
+	Expect(err).NotTo(HaveOccurred())
+	abs, err := filepath.Abs(path)
+	Expect(err).NotTo(HaveOccurred())
+	return abs
+}

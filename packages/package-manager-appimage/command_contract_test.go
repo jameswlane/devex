@@ -279,9 +279,22 @@ var _ = Describe("AppImage operation contracts", func() {
 		Expect(errors.Is(err, fs.ErrPermission)).To(BeTrue())
 		Expect(logger.output.String()).To(ContainSubstring("Warning: Failed to check installation status: "))
 	})
+	It("removes an orphan desktop entry when neither executable exists", func() {
+		desktop := writeBinary(filepath.Join(".local", "share", "applications"), "tool.desktop", 0644)
+		Expect(plugin.Execute("remove", []string{"tool"})).To(Succeed())
+		Expect(desktop).NotTo(BeAnExistingFile())
+		Expect(logger.output.String()).To(ContainSubstring("AppImage tool removed successfully"))
+	})
+	It("reports an orphan desktop entry removal failure", func() {
+		desktop := filepath.Join(home, ".local", "share", "applications", "tool.desktop")
+		nonEmptyDir(desktop)
+		err := plugin.Execute("remove", []string{"tool"})
+		Expect(errors.Is(err, syscall.ENOTEMPTY)).To(BeTrue())
+		Expect(filepath.Join(desktop, "child")).To(BeAnExistingFile())
+	})
 	It("skips AppImages that are confirmed absent", func() {
 		Expect(plugin.Execute("remove", []string{"tool"})).To(Succeed())
-		Expect(logger.output.String()).To(ContainSubstring("AppImage tool is not installed, skipping"))
+		Expect(logger.output.String()).To(ContainSubstring("AppImage tool is not installed, checking desktop entry"))
 	})
 
 	for _, fixture := range []struct {

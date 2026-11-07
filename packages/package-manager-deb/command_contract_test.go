@@ -329,6 +329,42 @@ var _ = Describe("DEB command contracts", func() {
 		Expect(output).To(ContainSubstring("Missing dependencies: libexample"))
 	})
 
+	for _, cleanupFails := range []bool{false, true} {
+		It(fmt.Sprintf("preserves partial-download errors when cleanup failure is %t", cleanupFails), func() {
+			tmp := GinkgoT().TempDir()
+			GinkgoT().Setenv("TMPDIR", tmp)
+			cause := errors.New("fixture network failure")
+			previous := http.DefaultTransport
+			DeferCleanup(func() { http.DefaultTransport = previous })
+			var partial string
+			http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				entries, err := os.ReadDir(tmp)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(entries).To(HaveLen(1))
+				partial = filepath.Join(tmp, entries[0].Name())
+				if cleanupFails {
+					// A nonempty directory at the partial file's path makes Remove fail.
+					Expect(os.Remove(partial)).To(Succeed())
+					Expect(os.Mkdir(partial, 0700)).To(Succeed())
+					Expect(os.WriteFile(filepath.Join(partial, "child"), []byte("fixture"), 0600)).To(Succeed())
+				}
+				return nil, cause
+			})
+			err := plugin.Execute("install", []string{"https://example.test/tool.deb"})
+			Expect(errors.Is(err, cause)).To(BeTrue())
+			if cleanupFails {
+				Expect(err).To(MatchError(ContainSubstring("failed to remove partial download " + partial)))
+				var removal *os.PathError
+				Expect(errors.As(err, &removal)).To(BeTrue())
+				Expect(removal.Op).To(Equal("remove"))
+				Expect(removal.Path).To(Equal(partial))
+			} else {
+				Expect(os.ReadDir(tmp)).To(BeEmpty())
+				Expect(err.Error()).NotTo(ContainSubstring("failed to remove partial download"))
+			}
+			Expect(recorder.Calls("dpkg")).To(BeEmpty())
+		})
+	}
 	It("skips absent packages without requesting elevation", func() {
 		recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", "git"}, sdktest.Response{ExitCode: 1})
 		Expect(plugin.Execute("remove", []string{"git"})).To(Succeed())

@@ -146,7 +146,9 @@ func (r PrivilegeResolver) ResolveUser(requested *UserIdentity) (*UserIdentity, 
 type ExecutionRequest struct {
 	Privilege OperationPrivilege `json:"privilege"`
 	Name      string             `json:"name"`
-	Args      []string           `json:"args,omitempty"`
+	// Dir is the caller directory, preserved after switching to a user account.
+	Dir  string   `json:"dir,omitempty"`
+	Args []string `json:"args,omitempty"`
 	// Unattended disables stdin and all authorization prompts.
 	Unattended bool `json:"unattended,omitempty"`
 	// Env contains per-operation environment assignments, also preserved across sudo.
@@ -298,6 +300,11 @@ func (a UnixSudoAdapter) Prepare(ctx context.Context, plan ExecutionPlan) (*exec
 		} else {
 			if plan.IntendedUser == nil || plan.IntendedUser.UID == "0" {
 				return nil, fmt.Errorf("user-scope plan requires a non-root identity")
+			}
+			// Restore the caller directory after sudoers applies its own cwd.
+			// All values are positional shell arguments; none are evaluated as code.
+			if plan.Dir != "" {
+				target = append([]string{"/bin/sh", "-c", `cd -- "$1" && shift && exec "$@"`, "devex-cwd", plan.Dir}, target...)
 			}
 			// sudo -H sets HOME; env also makes account environment explicit and portable.
 			identityEnvironment := []string{"HOME=" + plan.IntendedUser.HomeDir, "USER=" + plan.IntendedUser.Username, "LOGNAME=" + plan.IntendedUser.Username}

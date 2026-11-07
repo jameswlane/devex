@@ -125,8 +125,7 @@ func (p *AppimagePlugin) removeAppImage(binaryName string) error {
 		// The status is unknown, so still try to remove both locations.
 		p.logger.Warning("Failed to check installation status: %v", lookupErr)
 	} else if !installed {
-		p.logger.Printf("AppImage %s is not installed, skipping\n", binaryName)
-		return nil
+		p.logger.Printf("AppImage %s is not installed, checking desktop entry\n", binaryName)
 	}
 
 	homeDir := os.Getenv("HOME")
@@ -140,14 +139,19 @@ func (p *AppimagePlugin) removeAppImage(binaryName string) error {
 	}
 
 	var failures []error
-	removed := false
+	removed, entryRemoved := false, false
 	for i, target := range targets {
+		if i < 2 && !installed && lookupErr == nil {
+			continue // Preserve binary handling, but still clean an orphan desktop entry.
+		}
 		err := os.Remove(target.path)
 		switch {
 		case err == nil:
 			// Only the two binary locations count as removing the AppImage.
 			if i < 2 {
 				removed = true
+			} else {
+				entryRemoved = true
 			}
 		case errors.Is(err, fs.ErrNotExist):
 		default:
@@ -162,7 +166,7 @@ func (p *AppimagePlugin) removeAppImage(binaryName string) error {
 	if !removed && lookupErr != nil {
 		return fmt.Errorf("could not confirm removal: %w", lookupErr)
 	}
-	if removed {
+	if removed || entryRemoved {
 		p.logger.Success("AppImage %s removed successfully", binaryName)
 	} else {
 		p.logger.Printf("⚠️ AppImage %s not found\n", binaryName)

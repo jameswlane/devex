@@ -2,13 +2,19 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // XFCE backups are XML in the shape of xfconf's own per-channel files:
@@ -22,13 +28,8 @@ import (
 //	  </channel>
 //	</xfce-config>
 //
-// type is the xfconf type name, so a restore can recreate a missing property
-// with `-n -t <type>`. xfconf-query only reports types from 4.20 (`-p <prop>
-// -v` prints "[type] value"); with older xfconf a scalar is recorded without a
-// type and restored without -t, which keeps the existing property's type and
-// fails, reported, if the property no longer exists. Values that cannot be
-// recorded faithfully (an untyped multi-line value, such as an array printed by
-// older xfconf) are skipped with a warning at backup time.
+// Native XML supplies types and values missing from xfconf-query property reads.
+// Older backups without types retain the existing property's type on restore.
 const (
 	xfceBackupFormat  = "devex-xfce-backup"
 	xfceBackupVersion = 2
@@ -61,8 +62,28 @@ type xfceValue struct {
 // xfconfScalarTypes are the value types xfconf-query accepts for -t.
 var xfconfScalarTypes = []string{"string", "int", "uint", "bool", "double", "uchar", "char", "int16", "uint16", "int64", "uint64"}
 
-func xfconfQuery(args ...string) ([]byte, error) {
-	return exec.Command("xfconf-query", args...).Output()
+const xfceOperationTimeout = 30 * time.Second
+
+func xfconfQuery(ctx context.Context, args ...string) ([]byte, error) {
+	return xfceCommand(ctx, "xfconf-query", args...)
+}
+
+func xfceCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	// Bound pipe draining as well, including children that inherit stdout/stderr.
+	cmd.WaitDelay = time.Second
+	output, err := cmd.Output()
+	if err == nil {
+		return output, nil
+	}
+	if ctx.Err() != nil {
+		err = errors.Join(ctx.Err(), err)
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && len(bytes.TrimSpace(exit.Stderr)) > 0 {
+		return output, fmt.Errorf("%w: %s", err, bytes.TrimSpace(exit.Stderr))
+	}
+	return output, err
 }
 
 // parseChannelListing reads `xfconf-query -l`: the first line is the header,
@@ -93,16 +114,50 @@ func parsePropertyListing(output string) []string {
 }
 
 // readXFCEProperty reads a property's value and, where xfconf reports it, type.
-func readXFCEProperty(channel, property string) (xfceProperty, error) {
-	plain, err := xfconfQuery("-c", channel, "-p", property)
+func readXFCEProperty(ctx context.Context, channel, property string) (xfceProperty, error) {
+	plain, err := xfconfQuery(ctx, "-c", channel, "-p", property)
 	if err != nil {
 		return xfceProperty{}, err
 	}
-	verbose, err := xfconfQuery("-c", channel, "-p", property, "-v")
+	verbose, err := xfconfQuery(ctx, "-c", channel, "-p", property, "-v")
 	if err != nil {
 		return xfceProperty{}, err
+	}
+	// Even equal scalar reads can hide a typed-looking string or an empty array.
+	if string(plain) == string(verbose) {
+		if native, nativeErr := readNativeXFCEProperty(channel, property); nativeErr == nil {
+			if !nativeXFCEPropertyMatches(native, string(plain)) {
+				return xfceProperty{}, errors.New("native xfconf XML does not match the current value; allow xfconfd to flush settings and retry backup")
+			}
+			return native, nil
+		}
 	}
 	return decodeXFCEProperty(property, string(plain), string(verbose))
+}
+
+// The translated array header contains one decimal item count. Check it as
+// well as the exact rendered body: embedded newlines mean body lines alone
+// cannot establish an array's shape. Reject headers we cannot verify safely.
+var xfceArrayCount = regexp.MustCompile(`[0-9]+`)
+
+func nativeXFCEPropertyMatches(property xfceProperty, output string) bool {
+	if property.Type != "array" {
+		return property.Value != nil && output == *property.Value+"\n"
+	}
+	header, body, found := strings.Cut(output, "\n\n")
+	if !found || strings.Contains(header, "\n") {
+		return false
+	}
+	counts := xfceArrayCount.FindAllString(header, -1)
+	if len(counts) != 1 || counts[0] != strconv.Itoa(len(property.Values)) {
+		return false
+	}
+	var rendered strings.Builder
+	for _, value := range property.Values {
+		rendered.WriteString(value.Value)
+		rendered.WriteByte('\n')
+	}
+	return body == rendered.String()
 }
 
 // decodeXFCEProperty compares plain and verbose reads. A typed read is
@@ -215,8 +270,8 @@ func validateXFCEProperty(property xfceProperty) error {
 	}
 	switch {
 	case property.Type == "array":
-		if property.Value != nil || len(property.Values) == 0 {
-			return fmt.Errorf("property %s: an array needs one or more <value> items and no value attribute", property.Name)
+		if property.Value != nil {
+			return fmt.Errorf("property %s: an array must not have a value attribute", property.Name)
 		}
 		for _, item := range property.Values {
 			if !slices.Contains(xfconfScalarTypes, item.Type) {
@@ -254,4 +309,82 @@ func restoreArgs(channel string, property xfceProperty) []string {
 	default:
 		return append(args, "-n", "-t", property.Type, "-s", *property.Value)
 	}
+}
+
+// Native per-channel XML uses nested relative property names. Search user
+// overrides before system defaults, as xfconfd does; recover both values and
+// types, since CLI line splitting cannot preserve embedded newlines in arrays.
+// Source: xfconf 4.20.0 xfconfd/xfconf-backend-perchannel-xml.c.
+func readNativeXFCEProperty(channel, name string) (xfceProperty, error) {
+	if filepath.Base(channel) != channel || channel == "." || channel == ".." {
+		return xfceProperty{}, errors.New("invalid native channel name")
+	}
+	config := os.Getenv("XDG_CONFIG_HOME")
+	if config == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return xfceProperty{}, err
+		}
+		config = filepath.Join(home, ".config")
+	}
+	dirs := os.Getenv("XDG_CONFIG_DIRS")
+	if dirs == "" {
+		dirs = "/etc/xdg"
+	}
+	type nativeProperty struct {
+		Name     string           `xml:"name,attr"`
+		Type     string           `xml:"type,attr"`
+		Value    *string          `xml:"value,attr"`
+		Values   []xfceValue      `xml:"value"`
+		Children []nativeProperty `xml:"property"`
+	}
+	for _, dir := range append([]string{config}, filepath.SplitList(dirs)...) {
+		var native struct {
+			XMLName    xml.Name         `xml:"channel"`
+			Name       string           `xml:"name,attr"`
+			Properties []nativeProperty `xml:"property"`
+		}
+		data, err := os.ReadFile(filepath.Join(dir, "xfce4", "xfconf", "xfce-perchannel-xml", channel+".xml"))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return xfceProperty{}, err
+		}
+		if err := xml.Unmarshal(data, &native); err != nil {
+			return xfceProperty{}, err
+		}
+		if native.Name != channel {
+			return xfceProperty{}, errors.New("native channel name mismatch")
+		}
+		var find func([]nativeProperty, string) (xfceProperty, bool)
+		find = func(properties []nativeProperty, parent string) (xfceProperty, bool) {
+			for _, prop := range properties {
+				path := parent + "/" + prop.Name
+				if path == name && prop.Type != "empty" {
+					return xfceProperty{Name: name, Type: prop.Type, Value: prop.Value, Values: prop.Values}, true
+				}
+				if result, ok := find(prop.Children, path); ok {
+					return result, true
+				}
+			}
+			return xfceProperty{}, false
+		}
+		if result, ok := find(native.Properties, ""); ok {
+			return result, validateXFCEProperty(result)
+		}
+	}
+	return xfceProperty{}, errors.New("property absent from native xfconf XML")
+}
+
+// xfconf-query treats a missing -s as a read, even with -n -a. Xfconf's
+// SetProperty(s,s,v) accepts an empty av; its GVariant conversion explicitly
+// preserves zero children (common/xfconf-gvaluefuncs.c, xfconf 4.20.0).
+func restoreXFCEProperty(ctx context.Context, channel string, property xfceProperty) error {
+	if property.Type == "array" && len(property.Values) == 0 {
+		_, err := xfceCommand(ctx, "gdbus", "call", "--session", "--dest", "org.xfce.Xfconf", "--object-path", "/org/xfce/Xfconf", "--method", "org.xfce.Xfconf.SetProperty", channel, property.Name, "<@av []>")
+		return err
+	}
+	_, err := xfconfQuery(ctx, restoreArgs(channel, property)...)
+	return err
 }

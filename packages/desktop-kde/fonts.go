@@ -161,8 +161,19 @@ func (fm *FontManager) mapFontNames(args []string) []string {
 
 // installPackages installs font packages using appropriate package manager
 func (fm *FontManager) installPackages(ctx context.Context, fontPackages []string) error {
+	for _, pkg := range fontPackages {
+		if strings.HasPrefix(pkg, "-") {
+			return fmt.Errorf("font package argument %q must not start with '-'", pkg)
+		}
+	}
 	var installCmd []string
 	if sdk.CommandExists("apt-get") {
+		// apt interprets a trailing '-' as removal, even after '--'.
+		for _, pkg := range fontPackages {
+			if strings.HasSuffix(pkg, "-") {
+				return fmt.Errorf("apt font package argument %q must not end with '-'", pkg)
+			}
+		}
 		installCmd = append([]string{"apt-get", "install", "-y"}, fontPackages...)
 	} else if sdk.CommandExists("dnf") {
 		installCmd = append([]string{"dnf", "install", "-y"}, fontPackages...)

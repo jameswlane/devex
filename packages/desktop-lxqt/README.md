@@ -276,8 +276,8 @@ Configure operations apply independent settings best-effort. A failed setting is
 reported as a warning and the remaining settings still apply; the command
 succeeds when at least one setting applied. When every write fails (for example
 when the settings backend or schemas are unavailable), the command fails with
-`<operation> applied no settings: all <n> writes failed: <first native error>`,
-and the plugin exits with that native exit status.
+`<operation> applied no settings: all <n> writes failed: <first filesystem error>`,
+and the plugin exits with status 1.
 
 This applies to `configure`, which writes the panel, desktop and session files
 independently; it fails only when none of the three could be written.

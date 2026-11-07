@@ -362,6 +362,10 @@ func (p *PantheonPlugin) handleBackup(args []string) error {
 		return fmt.Errorf("failed to back up Pantheon settings: no schema could be dumped: %w", dumped.first)
 	}
 
+	if _, err := parsePantheonBackup(allOutput.String()); err != nil {
+		return fmt.Errorf("failed to back up Pantheon settings: %w", err)
+	}
+
 	// Write to file
 	if err := os.WriteFile(backupFile, []byte(allOutput.String()), 0644); err != nil {
 		return fmt.Errorf("failed to write backup file: %w", err)

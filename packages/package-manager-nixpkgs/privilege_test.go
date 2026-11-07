@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -135,7 +136,7 @@ var _ = Describe("NIXPKGS execution boundary", func() {
 			}
 
 			It(fmt.Sprintf("runs %s as the invoking user instead of root", contract.command), func() {
-				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder", executable}, contract.nativeArgv...)
+				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder", "/bin/sh", "-c", `cd -- "$1" && shift && exec "$@"`, "devex-cwd", mustGetwd(), mustNative(executable)}, contract.nativeArgv...)
 				// Answer at the sudo boundary so the spec proves the identity switch, not root execution.
 				recorder.Script("sudo", switchArgv, sdktest.Response{})
 				Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
@@ -154,3 +155,18 @@ var _ = Describe("NIXPKGS execution boundary", func() {
 		}
 	})
 })
+
+func mustGetwd() string {
+	GinkgoHelper()
+	dir, err := os.Getwd()
+	Expect(err).NotTo(HaveOccurred())
+	return dir
+}
+func mustNative(name string) string {
+	GinkgoHelper()
+	path, err := exec.LookPath(name)
+	Expect(err).NotTo(HaveOccurred())
+	abs, err := filepath.Abs(path)
+	Expect(err).NotTo(HaveOccurred())
+	return abs
+}

@@ -70,3 +70,23 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 **[DevEx CLI](../../cli)** • **[Plugin Registry](https://registry.devex.sh)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+
+Removal resolves bare names from `nix profile list --json`. Nix 2.8 does not
+support that flag, so its specific unsupported-flag error triggers a retry with
+`nix profile list`. The legacy parser validates every row before resolving
+selectors; native, authorization, and malformed-metadata failures stop removal.
+The plain-output fixture in `testdata/profile-2.8.txt` follows the
+[Nix 2.8 profile listing example](https://github.com/NixOS/nix/blob/2.8.0/src/nix/profile-list.md).
+
+Indexed manifest
+versions 1 and 2 use the complete attribute path (escaped for the legacy regex
+selector); named manifest version 3 uses the element name. Missing or ambiguous
+legacy names fail before removal. Explicit legacy indexes, full attribute paths,
+and store paths remain available. Unknown manifest versions fail with guidance
+instead of guessing a selector.
+
+This follows the [Nix 2.18 removal interface](https://nix.dev/manual/nix/2.18/command-ref/new-cli/nix3-profile-remove)
+and [Nix 2.24 removal interface](https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-profile-remove).
+The fixtures in `testdata/profile-2.18.json` and `testdata/profile-2.24.json`
+model the corresponding manifest formats from the versioned Nix implementation.

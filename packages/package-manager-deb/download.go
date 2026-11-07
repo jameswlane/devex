@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 )
 
 // downloadDebFile downloads a .deb file from a URL
-func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (string, error) {
+func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (downloaded string, downloadErr error) {
 	// Validate URL
 	if err := d.validateURL(url); err != nil {
 		return "", fmt.Errorf("invalid URL: %w", err)
@@ -23,27 +24,31 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (string,
 	if err != nil {
 		return "", fmt.Errorf("failed to create temporary file: %w", err)
 	}
-	defer func() { _ = tmpFile.Close() }()
+	defer func() {
+		_ = tmpFile.Close()
+		if downloadErr != nil {
+			if cleanupErr := os.Remove(tmpFile.Name()); cleanupErr != nil {
+				downloadErr = errors.Join(downloadErr, fmt.Errorf("failed to remove partial download %s: %w", tmpFile.Name(), cleanupErr))
+			}
+		}
+	}()
 
 	d.logger.Debug("Downloading to temporary file: %s", tmpFile.Name())
 
 	// Download the file with proper context propagation
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to download: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("download failed with status: %s", resp.Status)
 	}
 
@@ -56,7 +61,6 @@ func (d *DebInstaller) downloadDebFile(ctx context.Context, url string) (string,
 	// Copy the response body to the file
 	_, err = io.Copy(tmpFile, resp.Body)
 	if err != nil {
-		_ = os.Remove(tmpFile.Name())
 		return "", fmt.Errorf("failed to save file: %w", err)
 	}
 
