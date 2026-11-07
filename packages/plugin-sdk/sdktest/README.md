@@ -39,7 +39,7 @@ For each plugin:
 2. Assert exact argv, including installed-package queries and non-interactive flags, plus the operation's current elevation behavior.
 3. Script a nonzero exit for every operation and assert that the error reaches the caller.
 4. Assert that an unknown command returns an error and records no native call, and that input validation failures do not invoke the manager.
-5. If the current implementation has incorrect native argv, leave production code unchanged and use `PIt` with the exact defect and filed issue number in the pending reason. Do not mark missing coverage or environment-dependent failures pending.
+5. If the current implementation has incorrect native argv, leave production code unchanged and use `PIt` with the exact defect and filed issue number in the pending reason, in the form `<expected behavior>: #<issue> - <current defect>`. Do not also pin the incorrect argv, elevation or swallowed error as a passing expectation: for a pending operation, assert only what stays true after the fix, such as dispatch to a handler and that a native failure (`Fallback` with a nonzero exit) reaches the caller. Do not mark missing coverage or environment-dependent failures pending.
 
 ## Desktop plugins
 
@@ -60,4 +60,4 @@ These specs never install packages or fonts, download anything, or modify the re
 
 These are unit-level dispatch contracts, not native lifecycle tests. Keep real manager or desktop lifecycle coverage in separately tagged integration/sandbox suites that use disposable environments, real executables, and assertions about resulting system state; contract suites must remain fast and require neither a live desktop session nor host package changes. Run all adopter contract suites whenever shared SDK execution behavior changes.
 
-The DNF metadata-refresh contract remains pending on #191 (`dnf makecache`). Pacman's update contract provisionally asserts a safe no-op, one of the options in #195, while that issue decides and documents an Arch-safe refresh versus full-upgrade policy. It deliberately prescribes neither a standalone `-Sy` refresh that can enable partial upgrades nor a `-Syu` upgrade under the current repository-refresh description. Resolve #195 before unpending or replacing that contract; production manager changes remain outside this harness patch. Search contracts preserve today's single joined phrase/regex rather than deciding a new multi-term search policy.
+Pending manager contracts cite their tracking issues: emerge #248, eopkg #249, nixflake #250, nixpkgs #251, RPM #252, XBPS #253, Zypper #254, and APK/AppImage/DEB #255. DNF's metadata-refresh (`dnf makecache`) and separate `upgrade` contracts from #191 are active. Pacman's update contract asserts the full-system upgrade (`-Syu --noconfirm`) that its command description documents (#195, closed). Search contracts preserve today's single joined phrase/regex rather than deciding a new multi-term search policy.

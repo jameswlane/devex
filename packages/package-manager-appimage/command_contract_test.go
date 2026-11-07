@@ -26,6 +26,10 @@ type recordingLogger struct {
 
 func (l *recordingLogger) Printf(format string, args ...any) { fmt.Fprintf(&l.output, format, args...) }
 
+func (l *recordingLogger) Warning(format string, args ...any) {
+	fmt.Fprintf(&l.output, "Warning: "+format+"\n", args...)
+}
+
 type recordingTransport struct {
 	calls     []string
 	status    int
@@ -153,35 +157,49 @@ var _ = Describe("AppImage operation contracts", func() {
 		Expect(plugin.Execute("validate-url", []string{url, url + "?version=2"})).To(Succeed())
 		Expect(transport.calls).To(Equal([]string{"HEAD " + url, "HEAD " + url + "?version=2"}))
 	})
-	It("records the current warning-only URL validation failure behavior", func() {
+	// The swallowed list, remove and validate-url failures below are #255's
+	// pending contracts. The active specs check diagnostics and observable effects
+	// without asserting the swallowed success itself.
+	It("probes an inaccessible URL with one HEAD request and does not report it accessible", func() {
 		transport.status = http.StatusForbidden
-		Expect(plugin.Execute("validate-url", []string{url})).To(Succeed())
+		_ = plugin.Execute("validate-url", []string{url})
 		Expect(transport.calls).To(Equal([]string{"HEAD " + url}))
+		Expect(logger.output.String()).NotTo(ContainSubstring("URL is accessible"))
 	})
-	It("records warning-only directory read failures from list", func() {
-		writeBinary(".", "Applications", 0600)
-		Expect(plugin.Execute("list", nil)).To(Succeed())
-		Expect(logger.output.String()).To(ContainSubstring("Error reading directory"))
+	It("reports an unreadable GUI directory while still listing CLI tools", func() {
+		guiDir := writeBinary(".", "Applications", 0600)
+		writeBinary(filepath.Join(".local", "bin"), "cli-tool", 0755)
+		if err := plugin.Execute("list", nil); err != nil {
+			Expect(err).To(MatchError(ContainSubstring(guiDir)))
+			return
+		}
+		output := logger.output.String()
+		Expect(output).To(ContainSubstring("GUI Applications (~/Applications):\n  (Error reading directory: "))
+		Expect(output).To(ContainSubstring(guiDir))
+		Expect(output).To(ContainSubstring("CLI Tools (~/.local/bin):\n  cli-tool ("))
+		Expect(strings.Count(output, "(Error reading directory:")).To(Equal(1))
 	})
-	PIt("propagates list errors: directory read failures currently return success", func() {
+	PIt("propagates list errors: #255 - directory read failures return success", func() {
 		writeBinary(".", "Applications", 0600)
 		Expect(plugin.Execute("list", nil)).To(HaveOccurred())
 	})
-	It("records warning-only filesystem failures from remove", func() {
+	It("reports a failed removal of a non-empty installed path and leaves it in place", func() {
+		// A 0755 directory counts as installed, so remove reaches os.Remove, which
+		// fails because the directory is not empty.
 		path := filepath.Join(home, "Applications", "tool")
 		Expect(os.MkdirAll(path, 0755)).To(Succeed())
 		Expect(os.WriteFile(filepath.Join(path, "child"), []byte("fixture"), 0600)).To(Succeed())
-		Expect(plugin.Execute("remove", []string{"tool"})).To(Succeed())
-		_, err := os.Stat(path)
-		Expect(err).NotTo(HaveOccurred())
+		_ = plugin.Execute("remove", []string{"tool"})
+		Expect(logger.output.String()).To(ContainSubstring("Warning: Failed to remove from GUI location: remove " + path + ": "))
+		Expect(filepath.Join(path, "child")).To(BeAnExistingFile())
 	})
-	PIt("propagates remove errors: failed removal of an installed path currently returns success", func() {
+	PIt("propagates remove errors: #255 - failed removal of an installed path returns success", func() {
 		path := filepath.Join(home, "Applications", "tool")
 		Expect(os.MkdirAll(path, 0755)).To(Succeed())
 		Expect(os.WriteFile(filepath.Join(path, "child"), []byte("fixture"), 0600)).To(Succeed())
 		Expect(plugin.Execute("remove", []string{"tool"})).To(HaveOccurred())
 	})
-	PIt("propagates validate-url errors: inaccessible URLs currently return success", func() {
+	PIt("propagates validate-url errors: #255 - inaccessible URLs return success", func() {
 		transport.status = http.StatusForbidden
 		Expect(plugin.Execute("validate-url", []string{url})).To(HaveOccurred())
 	})

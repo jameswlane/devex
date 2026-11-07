@@ -10,6 +10,13 @@ import (
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 )
 
+// trackingIssue is the filed issue for every pending contract below.
+const trackingIssue = "#251"
+
+// operationContract describes one advertised command. currentArg and elevated
+// are asserted only for active contracts. Pending contracts leave them unset:
+// their current argv and elevation are the tracked defect, so they are not
+// pinned as passing expectations.
 type operationContract struct {
 	command          string
 	args             []string
@@ -22,11 +29,11 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"git", "vim"}, currentArg: []string{"install", "git", "vim"}, nativeArgv: []string{"--install", "git", "vim"}, elevated: true, nativeElevated: false, nativeExecutable: "nix-env", pending: "install is invalid; use --install without sudo for the user profile"},
-	{command: "remove", args: []string{"git", "vim"}, currentArg: []string{"remove", "git", "vim"}, nativeArgv: []string{"--uninstall", "git", "vim"}, elevated: true, nativeElevated: false, nativeExecutable: "nix-env", pending: "remove is invalid; use --uninstall without sudo for the user profile"},
-	{command: "update", args: nil, currentArg: []string{"update"}, nativeArgv: nil, elevated: true, nativeElevated: false, nativeExecutable: "nix-env", pending: "nix-env cannot refresh repositories; choose channel or flake refresh policy in a follow-up"},
-	{command: "search", args: []string{"web", "server"}, currentArg: []string{"search", "web server"}, nativeArgv: []string{"--query", "--available", "web server"}, elevated: false, nativeElevated: false, nativeExecutable: "nix-env", pending: "search is invalid; use --query --available"},
-	{command: "list", args: nil, currentArg: []string{"list"}, nativeArgv: []string{"--query", "--installed"}, elevated: false, nativeElevated: false, nativeExecutable: "nix-env", pending: "list is invalid; use --query --installed"},
+	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"--install", "git", "vim"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "install is invalid; use --install without sudo for the user profile"},
+	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--uninstall", "git", "vim"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "remove is invalid; use --uninstall without sudo for the user profile"},
+	{command: "update", args: nil, nativeArgv: nil, nativeElevated: false, nativeExecutable: "nix-env", pending: "nix-env cannot refresh repositories; choose channel or flake refresh policy in a follow-up"},
+	{command: "search", args: []string{"web", "server"}, nativeArgv: []string{"--query", "--available", "web server"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "search is invalid; use --query --available"},
+	{command: "list", args: nil, nativeArgv: []string{"--query", "--installed"}, nativeElevated: false, nativeExecutable: "nix-env", pending: "list is invalid; use --query --installed"},
 }
 
 var _ = Describe("NIXPKGS command contracts", func() {
@@ -56,22 +63,6 @@ var _ = Describe("NIXPKGS command contracts", func() {
 
 	for _, contract := range contracts {
 		contract := contract
-		It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
-			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls("nix-env")).To(Equal([]sdktest.Call{{
-				Args:               contract.currentArg,
-				ElevationRequested: contract.elevated,
-			}}))
-		})
-
-		It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
-			recorder.Script("nix-env", contract.currentArg, sdktest.Response{
-				ExitCode: 42,
-				Stderr:   "nixpkgs failed\n",
-			})
-			Expect(plugin.Execute(contract.command, contract.args)).To(MatchError("exit status 42"))
-		})
-
 		assertNativeArgv := func() {
 			if len(contract.nativeArgv) == 0 {
 				Expect(plugin.Execute(contract.command, contract.args)).To(HaveOccurred())
@@ -85,9 +76,35 @@ var _ = Describe("NIXPKGS command contracts", func() {
 			}}))
 		}
 		if contract.pending == "" {
+			It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
+				Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
+				Expect(recorder.Calls("nix-env")).To(Equal([]sdktest.Call{{
+					Args:               contract.currentArg,
+					ElevationRequested: contract.elevated,
+				}}))
+			})
+
+			It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
+				recorder.Script("nix-env", contract.currentArg, sdktest.Response{
+					ExitCode: 42,
+					Stderr:   "nixpkgs failed\n",
+				})
+				Expect(plugin.Execute(contract.command, contract.args)).To(MatchError("exit status 42"))
+			})
+
 			It(fmt.Sprintf("uses the required native argv for %s", contract.command), assertNativeArgv)
 		} else {
-			PIt(fmt.Sprintf("uses the required native argv for %s: %s", contract.command, contract.pending), assertNativeArgv)
+			It(fmt.Sprintf("dispatches %s to a handler that surfaces native failures", contract.command), func() {
+				recorder.Fallback("nix-env", sdktest.Response{ExitCode: 42, Stderr: "nixpkgs failed\n"})
+				err := plugin.Execute(contract.command, contract.args)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).NotTo(ContainSubstring("unknown command"))
+				if contract.nativeArgv != nil {
+					Expect(err).To(MatchError(ContainSubstring("exit status 42")))
+				}
+			})
+
+			PIt(fmt.Sprintf("uses the required native argv for %s: %s - %s", contract.command, trackingIssue, contract.pending), assertNativeArgv)
 		}
 	}
 
