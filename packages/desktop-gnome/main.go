@@ -32,7 +32,7 @@ func NewGNOMEPlugin() *GNOMEPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"desktop", "gnome", "linux", "gtk"},
 		Commands: []sdk.PluginCommand{
-			{Name: "describe", Description: "Preview configure commands, or describe install-extensions --extensions FILE"},
+			{Name: "describe", Description: "Preview configure commands, or describe install-extensions --extensions FILE or install-fonts [font...]"},
 			{
 				Name:        "configure",
 				Description: "Configure GNOME desktop settings",
@@ -108,8 +108,11 @@ func (p *GNOMEPlugin) Execute(command string, args []string) error {
 		if len(args) > 0 && args[0] == "install-extensions" {
 			return p.extensions.Describe(context.Background(), args[1:])
 		}
+		if len(args) > 0 && args[0] == "install-fonts" {
+			return p.fonts.Describe(args[1:])
+		}
 		if len(args) > 0 {
-			return fmt.Errorf("unknown describe operation")
+			return fmt.Errorf("usage: describe [install-extensions --extensions FILE | install-fonts [font...]]")
 		}
 		return p.desktop.Describe()
 	}

@@ -39,7 +39,7 @@ func gset(schema, key, value string) sdktest.Call {
 }
 
 var defaultGNOMEFonts = []string{
-	"fonts-firacode", "fonts-jetbrains-mono", "fonts-hack", "fonts-source-code-pro",
+	"fonts-firacode", "fonts-jetbrains-mono", "fonts-hack",
 	"fonts-inconsolata", "fonts-cascadia-code", "fonts-ubuntu", "fonts-liberation",
 }
 
@@ -221,9 +221,9 @@ var _ = Describe("GNOME command contracts", func() {
 					name string
 					args []string
 				}{
-					{"dnf", []string{"install", "-y", "fonts-hack", "custom-font"}},
-					{"pacman", []string{"-S", "--noconfirm", "fonts-hack", "custom-font"}},
-					{"zypper", []string{"install", "-y", "fonts-hack", "custom-font"}},
+					{"dnf", []string{"install", "-y", "source-foundry-hack-fonts", "custom-font"}},
+					{"pacman", []string{"-S", "--noconfirm", "ttf-hack", "custom-font"}},
+					{"zypper", []string{"install", "-y", "hack-fonts", "custom-font"}},
 				} {
 					previous := map[string]string{"dnf": "apt-get", "pacman": "dnf", "zypper": "pacman"}[manager.name]
 					removeFake(previous)
@@ -240,7 +240,7 @@ var _ = Describe("GNOME command contracts", func() {
 				// A failed cache refresh is reported without failing the installation.
 				recorder.Reset()
 				fail("fc-cache", "-f", "-v")
-				output := sdktest.CaptureStdout(GinkgoT(), func() {
+				output := captureFontStderr(func() {
 					Expect(plugin.Execute("install-fonts", []string{"firacode"})).To(Succeed())
 				})
 				Expect(output).To(ContainSubstring("Warning: Failed to refresh font cache: exit status 42"))

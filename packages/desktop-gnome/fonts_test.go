@@ -24,27 +24,31 @@ var _ = Describe("GNOME Font Manager", func() {
 			It("should map firacode and jetbrains correctly", func() {
 				input := []string{"firacode", "jetbrains"}
 				expected := []string{"fonts-firacode", "fonts-jetbrains-mono"}
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(Equal(expected))
 			})
 
 			It("should preserve unknown font names", func() {
 				input := []string{"custom-font"}
 				expected := []string{"custom-font"}
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(Equal(expected))
 			})
 
 			It("should handle mixed case input", func() {
 				input := []string{"FiraCode", "HACK"}
 				expected := []string{"fonts-firacode", "fonts-hack"}
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(Equal(expected))
 			})
 
 			It("should handle empty input", func() {
 				var input []string
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(BeEmpty())
 			})
 		})
