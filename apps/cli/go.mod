@@ -11,9 +11,10 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v1.0.0
 	github.com/fatih/color v1.19.0
+	github.com/google/uuid v1.6.0
 	github.com/jameswlane/devex/packages/plugin-sdk v0.0.5
 	github.com/muesli/reflow v0.3.0
-	github.com/onsi/ginkgo/v2 v2.33.1
+	github.com/onsi/ginkgo/v2 v2.34.0
 	github.com/onsi/gomega v1.44.0
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/spf13/afero v1.15.0
@@ -26,7 +27,7 @@ require (
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
@@ -58,7 +59,6 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20261016150608-1facf8f91b50 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
