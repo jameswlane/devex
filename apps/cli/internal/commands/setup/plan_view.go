@@ -58,11 +58,10 @@ func (m *SetupModel) renderInstallPlan() string {
 	}
 	fmt.Fprintf(&b, "  • Shell: %s\n", m.getSelectedShell())
 	if theme := m.getSelectedTheme(); theme != "" {
-		fmt.Fprintf(&b, "  • Theme: %s\n", theme)
+		fmt.Fprintf(&b, "  • Theme preference (saved only): %s\n", theme)
 	}
-	if desktop := m.system.detectedPlatform.DesktopEnv; m.system.hasDesktop && desktop != "" && desktop != "unknown" {
-		fmt.Fprintf(&b, "  • %s desktop settings from the desktop-%s plugin\n", desktop, desktop)
-	}
+	b.WriteString(m.renderDesktopPreview())
+
 	if name := strings.TrimSpace(m.git.gitFullName); name != "" {
 		fmt.Fprintf(&b, "  • Git identity: %s <%s>", name, strings.TrimSpace(m.git.gitEmail))
 		if m.gitIdentityUnchanged() {

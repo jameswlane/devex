@@ -55,7 +55,7 @@ var _ = Describe("Setup failure regressions", func() {
 			for _, command := range info.Commands {
 				commands = append(commands, command.Name)
 			}
-			calls := desktopConfigurationArgs("dark")
+			calls := desktopConfigurationArgs("accepted-hash")
 			if info.Name == "tool-git" {
 				calls = [][]string{gitConfigurationArgs("Setup User", "setup@example.com")}
 				GinkgoT().Setenv("GIT_CONFIG_GLOBAL", filepath.Join(GinkgoT().TempDir(), "gitconfig"))
@@ -72,7 +72,7 @@ var _ = Describe("Setup failure regressions", func() {
 				Expect(commands).To(ContainElement(args[0]), "%s does not declare %s", info.Name, args[0])
 			}
 		}
-		Expect(desktopConfigurationArgs("dark")).To(Equal([][]string{{"configure"}, {"apply-theme", "dark"}}))
+		Expect(desktopConfigurationArgs("accepted-hash")).To(Equal([][]string{{"configure", "--expected-plan", "accepted-hash"}}))
 	}, SpecTimeout(2*time.Minute))
 
 	It("installs Erlang before Elixir even when Erlang was not selected", func() {

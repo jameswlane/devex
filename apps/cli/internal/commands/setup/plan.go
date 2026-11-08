@@ -80,5 +80,10 @@ var installedAppsCheck = tui.InstalledAptApps
 // refreshInstalledApps records which planned apps are already installed so the
 // Confirmation screen can show them as skipped, matching what the installer does.
 func (m *SetupModel) refreshInstalledApps() {
+	ctx := m.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.refreshDesktopPreview(ctx)
 	m.selections.alreadyInstalled = installedAppsCheck(context.Background(), planApps(m.installPlan()))
 }

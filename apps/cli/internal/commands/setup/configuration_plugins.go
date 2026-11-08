@@ -45,12 +45,8 @@ func gitConfigurationArgs(name, email string) []string {
 	return args
 }
 
-func desktopConfigurationArgs(theme string) [][]string {
-	commands := [][]string{{"configure"}}
-	if theme != "" {
-		commands = append(commands, []string{"apply-theme", theme})
-	}
-	return commands
+func desktopConfigurationArgs(acceptedHash string) [][]string {
+	return [][]string{{"configure", "--expected-plan", acceptedHash}}
 }
 
 // Capture plugin output while setup owns the terminal, including plugin errors.

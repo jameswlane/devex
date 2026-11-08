@@ -32,6 +32,7 @@ func NewGNOMEPlugin() *GNOMEPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"desktop", "gnome", "linux", "gtk"},
 		Commands: []sdk.PluginCommand{
+			{Name: "describe", Description: "Preview exact configure commands as JSON without changing settings"},
 			{
 				Name:        "configure",
 				Description: "Configure GNOME desktop settings",
@@ -103,6 +104,10 @@ func NewGNOMEPlugin() *GNOMEPlugin {
 
 // Execute handles command execution
 func (p *GNOMEPlugin) Execute(command string, args []string) error {
+	if command == "describe" {
+		return p.desktop.Describe()
+	}
+
 	// Check if GNOME is available
 	if !isGNOMEAvailableFor(command) {
 		return fmt.Errorf("GNOME desktop environment is not available on this system")

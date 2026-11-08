@@ -31,6 +31,7 @@ func NewKDEPlugin() *KDEPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"desktop", "kde", "plasma", "linux", "qt"},
 		Commands: []sdk.PluginCommand{
+			{Name: "describe", Description: "Preview exact configure commands as JSON without changing settings"},
 			{
 				Name:        "configure",
 				Description: "Configure KDE Plasma desktop settings",
@@ -122,6 +123,10 @@ func NewKDEPlugin() *KDEPlugin {
 
 // Execute handles command execution
 func (p *KDEPlugin) Execute(command string, args []string) error {
+	if command == "describe" {
+		return p.desktop.Describe()
+	}
+
 	// Check if KDE is available
 	if !isKDEAvailableFor(command) {
 		return fmt.Errorf("KDE Plasma desktop environment is not available on this system")

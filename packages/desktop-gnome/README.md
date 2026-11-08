@@ -466,3 +466,11 @@ This plugin is part of the DevEx project and is licensed under the [Apache Licen
 - **GNOME Shell**: https://wiki.gnome.org/Projects/GnomeShell
 - **Issue Tracker**: https://github.com/jameswlane/devex/issues
 - **Community Discussions**: https://github.com/jameswlane/devex/discussions
+
+## Preview desktop settings
+
+Run `devex plugin run desktop-gnome describe` to print the exact
+`configure` commands as JSON without changing settings or requiring a desktop
+session. Setup displays this plan disabled by default and requires opt-in.
+Setup passes `configure --expected-plan HASH` to reject settings that differ
+from the accepted preview.

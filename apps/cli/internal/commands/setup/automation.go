@@ -7,10 +7,12 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -161,13 +163,26 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 		return err
 	}
 
+	if viper.GetBool("dry-run") {
+		model.ctx = ctx
+		model.system.detectedPlatform = platform.DetectPlatform()
+		model.system.hasDesktop = true
+		// Construction in offline mode only discovers installed plugins. Do not
+		// initialize, prepare directories, or download plugins for a preview.
+		model.pluginBootstrap, _ = bootstrap.NewPluginBootstrap(true)
+		model.refreshDesktopPreview(ctx)
+	}
+
 	// Convert default selections to CrossPlatformApp objects
 	apps := model.buildAppList()
 
 	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
 
 	// Display the planned installation to the user
-	printAutomatedSetupPlan(model)
+	fmt.Println(model.renderInstallPlan())
+	if viper.GetBool("dry-run") {
+		return nil
+	}
 
 	ctx = shellrc.WithShell(ctx, model.getSelectedShell())
 	if err := tui.AuthorizeInstallation(ctx, apps, false); err != nil {

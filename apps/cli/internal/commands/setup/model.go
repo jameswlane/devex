@@ -57,6 +57,9 @@ type UISelections struct {
 
 	// skipDefaultApps leaves default (default: true) apps out of the plan.
 	skipDefaultApps bool
+	desktopSettings bool
+	desktopPreview  string
+	desktopPlugin   string
 	// alreadyInstalled holds planned apps found installed on the Confirmation screen.
 	alreadyInstalled map[string]bool
 }
