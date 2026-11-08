@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"sort"
 	"strings"
 
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
@@ -19,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
@@ -96,6 +96,17 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			format, _ := cmd.Flags().GetString("format")
+			if format == "json" {
+				if !viper.GetBool("dry-run") || templateID != "" {
+					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
+				}
+				plan, err := agentapi.PlanInstall(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+				return writeAPIJSON(cmd, plan, err)
+			}
+			if format != "table" {
+				return fmt.Errorf("unsupported format %q", format)
+			}
 
 			// Get configuration from Viper (respects hierarchy)
 			verbose := viper.GetBool("verbose")
@@ -119,6 +130,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 
+	cmd.Flags().String("format", "table", "Output format (table, json; JSON requires --dry-run)")
 	// Define command-specific flags
 	cmd.Flags().StringSlice("categories", nil, "Install apps from specific categories")
 	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
@@ -172,31 +184,9 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 
-	configured, merged, present, err := configuredApplications(ctx, settings)
+	appsToInstall, settings, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: apps, Categories: categories})
 	if err != nil {
 		return err
-	}
-	settings = merged
-	var appsToInstall []types.CrossPlatformApp
-	switch {
-	case len(apps) > 0:
-		log.Info("Specific app installation requested", "apps", apps)
-		appsToInstall, err = resolveAppsByName(settings, apps)
-	case len(categories) > 0:
-		log.Info("Category-based installation requested", "categories", categories)
-		appsToInstall, err = resolveAppsByCategory(settings, categories)
-	case present:
-		appsToInstall = configured
-	default:
-		appsToInstall = settings.GetDefaultApps()
-	}
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "App resolution failed")
-		return err
-	}
-	if len(appsToInstall) == 0 && !present {
-		return fmt.Errorf("no applications matched the install request")
 	}
 
 	// Handle dry run
@@ -326,98 +316,13 @@ func resolveTemplateInstallPluginExecutor(getPluginBootstrap pluginBootstrapProv
 	return nil, fmt.Errorf("plugin runtime is unavailable for template install")
 }
 
-func resolveAppsByName(settings config.CrossPlatformSettings, requested []string) ([]types.CrossPlatformApp, error) {
-	apps := settings.GetAllApps()
-	byName := make(map[string]types.CrossPlatformApp, len(apps))
-	for _, app := range apps {
-		if !app.IsSupported() {
-			continue
-		}
-		byName[normalizeInstallLookup(app.Name)] = app
-		osConfig := app.GetOSConfig()
-		if osConfig.InstallCommand != "" {
-			byName[normalizeInstallLookup(osConfig.InstallCommand)] = app
-		}
-	}
-
-	resolved := make([]types.CrossPlatformApp, 0, len(requested))
-	var unknown []string
-	for _, name := range requested {
-		app, ok := byName[normalizeInstallLookup(name)]
-		if !ok {
-			unknown = append(unknown, name)
-			continue
-		}
-		resolved = append(resolved, app)
-	}
-	if len(unknown) > 0 {
-		return nil, fmt.Errorf("applications not found: %s", strings.Join(unknown, ", "))
-	}
-	return dedupeApps(resolved), nil
+func resolveAppsByName(s config.CrossPlatformSettings, names []string) ([]types.CrossPlatformApp, error) {
+	return agentapi.ResolveAppsByName(s, names)
 }
-
-func resolveAppsByCategory(settings config.CrossPlatformSettings, categories []string) ([]types.CrossPlatformApp, error) {
-	requested := make(map[string]bool, len(categories))
-	requestedLabels := make(map[string]string, len(categories))
-	for _, category := range categories {
-		normalized := normalizeInstallLookup(category)
-		requested[normalized] = true
-		requestedLabels[normalized] = category
-	}
-
-	var resolved []types.CrossPlatformApp
-	available := make(map[string]bool)
-	matched := make(map[string]bool, len(requested))
-	for _, app := range settings.GetAllApps() {
-		if app.Category != "" {
-			available[app.Category] = true
-		}
-		normalizedCategory := normalizeInstallLookup(app.Category)
-		if requested[normalizedCategory] {
-			matched[normalizedCategory] = true
-		}
-		if requested[normalizedCategory] && app.IsSupported() {
-			resolved = append(resolved, app)
-		}
-	}
-	if len(matched) != len(requested) {
-		unknown := make([]string, 0, len(requested)-len(matched))
-		for category := range requested {
-			if !matched[category] {
-				unknown = append(unknown, requestedLabels[category])
-			}
-		}
-		sort.Strings(unknown)
-		return nil, fmt.Errorf("unknown categories: %s", strings.Join(unknown, ", "))
-	}
-	if len(resolved) == 0 {
-		categoryNames := make([]string, 0, len(available))
-		for category := range available {
-			categoryNames = append(categoryNames, category)
-		}
-		sort.Strings(categoryNames)
-		return nil, fmt.Errorf("no supported applications found for categories %s; available categories: %s", strings.Join(categories, ","), strings.Join(categoryNames, ", "))
-	}
-	return dedupeApps(resolved), nil
+func resolveAppsByCategory(s config.CrossPlatformSettings, categories []string) ([]types.CrossPlatformApp, error) {
+	return agentapi.ResolveAppsByCategory(s, categories)
 }
-
-func dedupeApps(apps []types.CrossPlatformApp) []types.CrossPlatformApp {
-	seen := make(map[string]bool, len(apps))
-	deduped := make([]types.CrossPlatformApp, 0, len(apps))
-	for _, app := range apps {
-		key := normalizeInstallLookup(app.Name)
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		deduped = append(deduped, app)
-	}
-	return deduped
-}
-
-func normalizeInstallLookup(value string) string {
-	return strings.ToLower(strings.TrimSpace(value))
-}
+func normalizeInstallLookup(value string) string { return strings.ToLower(strings.TrimSpace(value)) }
 
 // validateInstallInputs validates the installation inputs
 func validateInstallInputs(apps []string, categories []string) error {

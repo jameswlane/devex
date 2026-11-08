@@ -1,0 +1,26 @@
+{
+	"apps": [
+		{
+			"name": "base",
+			"method": "apt",
+			"plugin": "package-manager-apt",
+			"dependencies": [],
+			"effects": ["package_install"],
+			"privileges": "unknown",
+			"unknown_effects": true
+		},
+		{
+			"name": "app",
+			"method": "apt",
+			"plugin": "package-manager-apt",
+			"dependencies": ["base"],
+			"effects": ["package_install"],
+			"privileges": "unknown",
+			"unknown_effects": true
+		}
+	],
+	"dependency_order": ["base", "app"],
+	"warnings": [
+		"Plugin effects and required privileges are unknown; no plugins or hooks were executed."
+	]
+}

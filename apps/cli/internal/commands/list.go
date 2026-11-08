@@ -1,12 +1,14 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -17,7 +19,7 @@ func init() {
 
 // NewListCmd creates the list command with comprehensive subcommand support
 func NewListCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
-	cmd := &cobra.Command{
+	cmd := &cobra.Command{SilenceUsage: true,
 		Use:       "list [installed|available|categories]",
 		Short:     "List applications in your DevEx configuration",
 		ValidArgs: []string{"installed", "available", "categories"},
@@ -54,7 +56,37 @@ Examples:
 
 // runListCommandWithError handles the main execution logic for list commands and returns errors
 func runListCommandWithError(cmd *cobra.Command, args []string, repo types.Repository, settings config.CrossPlatformSettings) error {
+	if cmd.Context() == nil {
+		cmd.SetContext(context.Background())
+	}
 	options := parseListFlags(cmd)
+	if options.Format == "json" {
+		kind := ""
+		if len(args) > 0 {
+			kind = args[0]
+		}
+		result, err := agentapi.List(cmd.Context(), repo, settings, agentapi.ListRequest{Kind: kind, Options: options})
+		if err != nil {
+			return writeAPIJSON(cmd, nil, err)
+		}
+		switch kind {
+		case "installed":
+			return outputInstalledJSON(result.Installed, cmd.OutOrStdout())
+		case "available":
+			return outputAvailableJSON(result.Available, cmd.OutOrStdout())
+		case "categories":
+			return outputCategoriesJSON(result.Categories, cmd.OutOrStdout())
+		}
+	}
+
+	_, merged, _, err := configuredApplications(cmd.Context(), settings)
+	if err != nil {
+		if options.Format == "json" {
+			return writeAPIJSON(cmd, nil, err)
+		}
+		return err
+	}
+	settings = merged
 	return executeListCommand(cmd, args, repo, settings, options)
 }
 

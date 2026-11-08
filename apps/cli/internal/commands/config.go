@@ -89,6 +89,7 @@ Examples:
 
 	// Add subcommands
 	cmd.AddCommand(newConfigShowCmd(settings))
+	cmd.AddCommand(newConfigEffectiveCmd(settings))
 	cmd.AddCommand(newConfigEditCmd(settings))
 	cmd.AddCommand(newConfigValidateCmd(settings))
 	cmd.AddCommand(newConfigDiffCmd(settings))
@@ -129,7 +130,7 @@ for all configuration files in your DevEx setup.`,
 
 			switch format {
 			case "json":
-				return outputJSON(summary)
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(summary)
 			case "yaml":
 				return outputYAML(summary)
 			default:

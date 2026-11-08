@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore"
@@ -60,7 +62,7 @@ func main() {
 		}
 		return
 	}
-	dryRun := migrationDryRun(os.Args[1:])
+	dryRun := migrationDryRun(os.Args[1:]) || readCommand(os.Args[1:])
 	if err := migrateLegacy(ctx, dirs, dryRun, os.Args[1:], os.Stderr); err != nil {
 		handleError("migrating legacy files", err)
 		return
@@ -174,6 +176,15 @@ func isDebugMode() bool {
 
 func handleError(context string, err error) {
 	if err != nil {
+		if jsonOutputRequested(os.Args[1:]) {
+			safe := agentapi.APIError(err)
+			_ = json.NewEncoder(os.Stdout).Encode(struct {
+				Error *agentapi.Error `json:"error"`
+			}{safe})
+			_, _ = fmt.Fprintln(os.Stderr, safe.Message)
+			Exit(exitCode(err))
+			return
+		}
 		log.Error("Error occurred", err, "context", context)
 		closeErr := log.Close()
 		_, writeErr := fmt.Fprintf(os.Stderr, "Error %s: %v\n", context, err)
@@ -304,4 +315,49 @@ func configurationValidationCommand(args []string) bool {
 		}
 	}
 	return len(words) >= 2 && words[0] == "config" && words[1] == "validate"
+}
+
+func readCommand(args []string) bool {
+	var words []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
+			i++
+			continue
+		}
+		if arg == "--fix" || strings.HasPrefix(arg, "--template") {
+			return false
+		}
+		if !strings.HasPrefix(arg, "-") {
+			words = append(words, arg)
+		}
+	}
+	if len(words) == 0 {
+		return false
+	}
+	switch words[0] {
+	case "list", "platform", "status":
+		return true
+	case "config":
+		return len(words) > 1 && (words[1] == "effective" || words[1] == "show")
+	}
+	return false
+}
+
+func jsonOutputRequested(args []string) bool {
+	for i, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--format=json" || arg == "-f=json" {
+			return true
+		}
+		if (arg == "--format" || arg == "-f") && i+1 < len(args) && args[i+1] == "json" {
+			return true
+		}
+	}
+	return false
 }

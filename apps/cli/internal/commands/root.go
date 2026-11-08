@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -68,11 +69,14 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 		Version: version,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := initializeConfig(cmd); err != nil {
+				if f := cmd.Flags().Lookup("format"); f != nil && f.Value.String() == "json" {
+					return writeAPIJSON(cmd, nil, agentapi.APIError(err))
+				}
 				return err
 			}
 			// Even offline bootstrap can create plugin state or execute local plugins.
 			// Preview commands resolve their plans without initializing the runtime.
-			if viper.GetBool("dry-run") {
+			if viper.GetBool("dry-run") || readAPICommand(cmd) {
 				return nil
 			}
 
@@ -142,6 +146,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
+	cmd.AddCommand(NewPlatformCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
@@ -327,4 +332,18 @@ func (r *rootRuntime) initializePluginSystem(ctx context.Context) error {
 
 func (r *rootRuntime) getPluginBootstrap() *bootstrap.PluginBootstrap {
 	return r.pluginBootstrap
+}
+
+func readAPICommand(cmd *cobra.Command) bool {
+	switch cmd.Name() {
+	case "list", "platform":
+		return true
+	case "status":
+		fix, _ := cmd.Flags().GetBool("fix")
+		template, _ := cmd.Flags().GetString("template")
+		return !fix && template == ""
+	case "effective", "show", "validate":
+		return cmd.Parent() != nil && cmd.Parent().Name() == "config"
+	}
+	return false
 }
