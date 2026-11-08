@@ -227,7 +227,7 @@ devex desktop-pantheon backup
 devex desktop-pantheon backup --dock --panel --applications --shortcuts
 
 # Restore from backup
-devex desktop-pantheon restore /path/to/pantheon-backup.tar.gz
+devex desktop-pantheon restore /path/to/pantheon-settings-2024-01-15.conf
 
 # Export elementary settings
 devex desktop-pantheon export-settings --format "gsettings" --output elementary-settings.sh
@@ -292,6 +292,31 @@ devex desktop-pantheon developer-mode --enable-debugging true --show-inspector f
 - **Pantheon 6+**: Full feature support with latest design updates
 - **Pantheon 5+**: Core features supported
 - **Older Versions**: Basic functionality only
+
+## Failure Behavior
+
+Configure operations apply independent settings best-effort. A failed setting is
+reported as a warning and the remaining settings still apply; the command
+succeeds when at least one setting applied. When every write fails (for example
+when the settings backend or schemas are unavailable), the command fails with
+`<operation> applied no settings: all <n> writes failed: <first native error>`,
+and the plugin exits with that native exit status.
+
+This applies to `configure`, `configure-dock` and `configure-wingpanel`. When
+every dock or Wingpanel write fails, the error also suggests that Plank or the
+Wingpanel schemas may be missing.
+
+`backup` dumps `/org/gnome/desktop/`, `/io/elementary/` and `/net/launchpad/plank/`
+into one file, each under a `# Schema: <dir>` header. A schema that cannot be
+dumped is reported and omitted; when none can be dumped, no file is written and
+the command fails.
+
+`restore` loads each non-empty section with `dconf load <dir>`, passing the
+section on stdin. It rejects, before loading anything, a backup that is empty,
+has settings before the first header, names a directory it did not back up,
+repeats a schema, or has a section that does not start with a `[group]` line.
+If a schema fails to load, the remaining schemas are still loaded and the command
+fails, naming the failed schemas.
 
 ## Troubleshooting
 

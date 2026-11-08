@@ -31,6 +31,13 @@ devex package-manager appimage list
 devex package-manager appimage integrate app.AppImage
 ```
 
+## ⚠️ Error Handling
+
+- `list` shows both `~/Applications` and `~/.local/bin` even if one cannot be read, then fails with every read error. A directory that does not exist is listed as empty.
+- `remove` attempts every requested AppImage and logs each failed removal, then fails if any binary or desktop entry could not be removed. Only AppImages confirmed absent are skipped.
+- `validate-url` checks every URL, then fails with every inaccessible one.
+- Filesystem errors stay wrapped, so callers can match them with `errors.Is` and `errors.As`.
+
 ## 🚀 Platform Support
 
 - **Universal Linux**: All distributions with glibc 2.17+ (2012+)

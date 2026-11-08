@@ -151,12 +151,16 @@ func (p *MATEPlugin) handleConfigure(args []string) error {
 		{"org.mate.background", "primary-color", "#58589191"},
 	}
 
+	var batch settingsBatch
 	for _, config := range configs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s.%s to %s\n", config.schema, config.key, config.value)
 		}
+	}
+	if err := batch.err("mate configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("MATE configuration complete!")
@@ -217,8 +221,9 @@ func (p *MATEPlugin) handleConfigurePanel(args []string) error {
 		{"org.mate.panel.general", "confirm-panel-removal", "true"},
 	}
 
+	var batch settingsBatch
 	for _, config := range panelConfigs {
-		if err := setGSetting(config.schema, config.key, config.value); err != nil {
+		if err := batch.record(setGSetting(config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s to %s\n", config.key, config.value)
@@ -226,10 +231,13 @@ func (p *MATEPlugin) handleConfigurePanel(args []string) error {
 	}
 
 	// Configure default panel layout
-	if err := setGSetting("org.mate.panel", "default-layout", "default"); err != nil {
+	if err := batch.record(setGSetting("org.mate.panel", "default-layout", "default")); err != nil {
 		fmt.Printf("Warning: Failed to set default panel layout: %v\n", err)
 	} else {
 		fmt.Println("✓ Set default panel layout")
+	}
+	if err := batch.err("mate panel configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("Panel configuration complete!")

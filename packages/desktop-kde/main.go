@@ -75,6 +75,7 @@ func NewKDEPlugin() *KDEPlugin {
 				Name:        "install-fonts",
 				Description: "Install and configure fonts",
 				Usage:       "Install development fonts and configure KDE font settings",
+				Privilege:   &systemScope,
 			},
 			{
 				Name:        "configure-fonts",
@@ -122,7 +123,7 @@ func NewKDEPlugin() *KDEPlugin {
 // Execute handles command execution
 func (p *KDEPlugin) Execute(command string, args []string) error {
 	// Check if KDE is available
-	if !isKDEAvailable() {
+	if !isKDEAvailableFor(command) {
 		return fmt.Errorf("KDE Plasma desktop environment is not available on this system")
 	}
 
@@ -162,6 +163,17 @@ func (p *KDEPlugin) Execute(command string, args []string) error {
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
+}
+
+// isKDEAvailableFor gates a command on KDE availability. install-fonts only installs
+// distribution font packages and refreshes caches, and its declared system scope
+// means hosts launch it through sudo, which drops desktop session variables. It
+// therefore requires KDE to be installed rather than a running session.
+func isKDEAvailableFor(command string) bool {
+	if command == "install-fonts" {
+		return sdk.CommandExists("kwriteconfig5")
+	}
+	return isKDEAvailable()
 }
 
 // isKDEAvailable checks if KDE is available

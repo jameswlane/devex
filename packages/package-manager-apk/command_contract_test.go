@@ -1,7 +1,9 @@
 package main_test
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
 
 	main "github.com/jameswlane/devex/packages/package-manager-apk"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
@@ -47,22 +49,42 @@ var _ = Describe("APK command contracts", func() {
 		It(fmt.Sprintf("records native failure behavior for %s", c.command), func() {
 			recorder.Script("apk", c.calls[len(c.calls)-1].Args, sdktest.Response{ExitCode: 42, Stderr: "apk failed\n"})
 			err := plugin.Execute(c.command, c.args)
-			// info swallows native failures (#255). That result is the pending
-			// contract below, so only its native calls are asserted here.
-			if c.command != "info" {
+			Expect(exitCode(err)).To(Equal(42))
+			if c.command == "info" {
+				Expect(err).To(MatchError("failed to get info for vim: exit status 42"))
+			} else {
 				Expect(err).To(MatchError("exit status 42"))
 			}
 			Expect(recorder.Calls("apk")).To(Equal(c.calls))
 		})
 	}
-	PIt("propagates info failures: #255 - info logs the native error and returns nil", func() {
+	It("propagates info failures with the native exit status", func() {
 		recorder.Script("apk", []string{"info", "git"}, sdktest.Response{ExitCode: 42})
-		Expect(plugin.Execute("info", []string{"git"})).To(MatchError("exit status 42"))
+		err := plugin.Execute("info", []string{"git"})
+		Expect(err).To(MatchError("failed to get info for git: exit status 42"))
+		Expect(exitCode(err)).To(Equal(42))
 	})
-	PIt("propagates a later info failure after earlier packages succeed: #255 - info logs the native error and returns nil", func() {
+	It("propagates a later info failure after earlier packages succeed", func() {
 		recorder.Script("apk", []string{"info", "vim"}, sdktest.Response{ExitCode: 42})
-		Expect(plugin.Execute("info", []string{"git", "vim"})).To(MatchError("exit status 42"))
+		err := plugin.Execute("info", []string{"git", "vim"})
+		Expect(err).To(MatchError("failed to get info for vim: exit status 42"))
+		Expect(exitCode(err)).To(Equal(42))
 		Expect(recorder.Calls("apk")).To(Equal([]sdktest.Call{{Args: []string{"info", "git"}}, {Args: []string{"info", "vim"}}}))
+	})
+	It("still queries later packages after an earlier info failure and reports it", func() {
+		recorder.Script("apk", []string{"info", "git"}, sdktest.Response{ExitCode: 42})
+		err := plugin.Execute("info", []string{"git", "vim"})
+		Expect(err).To(MatchError("failed to get info for git: exit status 42"))
+		Expect(exitCode(err)).To(Equal(42))
+		Expect(recorder.Calls("apk")).To(Equal([]sdktest.Call{{Args: []string{"info", "git"}}, {Args: []string{"info", "vim"}}}))
+	})
+	It("reports every failed package when multiple info queries fail", func() {
+		recorder.Script("apk", []string{"info", "git"}, sdktest.Response{ExitCode: 42})
+		recorder.Script("apk", []string{"info", "vim"}, sdktest.Response{ExitCode: 7})
+		err := plugin.Execute("info", []string{"git", "curl", "vim"})
+		Expect(err).To(MatchError("failed to get info for git: exit status 42\nfailed to get info for vim: exit status 7"))
+		Expect(exitCode(err)).To(Equal(42))
+		Expect(recorder.Calls("apk")).To(Equal([]sdktest.Call{{Args: []string{"info", "git"}}, {Args: []string{"info", "curl"}}, {Args: []string{"info", "vim"}}}))
 	})
 
 	It("stops upgrade when repository refresh fails", func() {
@@ -70,9 +92,22 @@ var _ = Describe("APK command contracts", func() {
 		Expect(plugin.Execute("upgrade", nil)).To(MatchError("failed to update repositories: exit status 42"))
 		Expect(recorder.Calls("apk")).To(Equal([]sdktest.Call{{Args: []string{"update"}, ElevationRequested: true}}))
 	})
-	It("continues installation after a failed refresh (current warning-only policy)", func() {
+	It("recovers from a failed refresh when apk add --no-cache succeeds (documented warning-only policy)", func() {
 		recorder.Script("apk", []string{"update"}, sdktest.Response{ExitCode: 42})
-		Expect(plugin.Execute("install", []string{"git", "vim"})).To(Succeed())
+		recorder.Script("apk", contracts[0].calls[1].Args, sdktest.Response{Stdout: "OK: git vim installed\n"})
+		output := sdktest.CaptureStdout(GinkgoT(), func() {
+			Expect(plugin.Execute("install", []string{"git", "vim"})).To(Succeed())
+		})
+		Expect(output).To(ContainSubstring("Warning: failed to update repositories (continuing; apk add --no-cache refreshes indexes itself): exit status 42\n"))
+		Expect(output).To(ContainSubstring("OK: git vim installed\n"))
+		Expect(recorder.Calls("apk")).To(Equal(contracts[0].calls))
+	})
+	It("returns the unrecovered add failure after a failed refresh", func() {
+		recorder.Script("apk", []string{"update"}, sdktest.Response{ExitCode: 42})
+		recorder.Script("apk", contracts[0].calls[1].Args, sdktest.Response{ExitCode: 7})
+		err := plugin.Execute("install", []string{"git", "vim"})
+		Expect(err).To(MatchError("exit status 7"))
+		Expect(exitCode(err)).To(Equal(7))
 		Expect(recorder.Calls("apk")).To(Equal(contracts[0].calls))
 	})
 	It("forwards explicit installed and available list filters", func() {
@@ -90,3 +125,11 @@ var _ = Describe("APK command contracts", func() {
 		})
 	}
 })
+
+func exitCode(err error) int {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return -1
+	}
+	return exitErr.ExitCode()
+}

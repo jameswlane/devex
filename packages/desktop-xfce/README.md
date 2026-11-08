@@ -274,6 +274,73 @@ devex desktop-xfce configure-mime-types --image "ristretto" --text "mousepad"
 - **XFCE 4.14+**: Core features supported
 - **XFCE 4.12+**: Basic feature support (legacy)
 
+## Failure Behavior
+
+Configure operations apply independent settings best-effort. A failed setting is
+reported as a warning and the remaining settings still apply; the command
+succeeds when at least one setting applied. When every write fails (for example
+when the settings backend or schemas are unavailable), the command fails with
+`<operation> applied no settings: all <n> writes failed: <first native error>`,
+and the plugin exits with that native exit status.
+
+This applies to `configure`, `configure-panel` and `configure-wm`.
+
+`backup` parses `xfconf-query -l` as upstream prints it: the first line is a
+translated `Channels:` header and is skipped whatever its language, and the
+indented channel names are trimmed. An unreadable channel or property is reported
+and skipped; a successful backup must capture at least one property. Otherwise
+no file is written, preserving any existing backup for that date.
+
+Backups are XML shaped like xfconf's own channel files:
+
+```xml
+<xfce-config format="devex-xfce-backup" version="2">
+  <channel name="xfwm4">
+    <property name="/general/theme" type="string" value="Default"></property>
+    <property name="/general/workspace_names" type="array">
+      <value type="string" value="Main"></value>
+    </property>
+  </channel>
+</xfce-config>
+```
+
+Xfconf 4.20.0 prints identical plain and verbose property reads, without type
+prefixes, including for arrays. The plugin recovers types and complete values
+from native `xfce4/xfconf/xfce-perchannel-xml/<channel>.xml` files, searching
+`XDG_CONFIG_HOME` (default `~/.config`) before `XDG_CONFIG_DIRS` (default
+`/etc/xdg`). Nested properties, mixed types, embedded newlines and empty arrays
+are preserved. Native XML reflects persisted settings, so its values must match
+the live CLI read before its types are used. Array checks include the localized
+header's item count and the exact rendered body, preserving embedded newlines.
+Stale or unverifiable native values are skipped with a warning to let xfconfd
+flush settings and retry; they are never silently saved in place of live values.
+If native data is unavailable, compatible
+`[type] value` reads remain supported; equal single-line reads are saved without
+a type, and ambiguous multiline values are skipped with a warning.
+
+The behavior follows the upstream [4.20.0 query implementation](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconf-query/main.c)
+and [native XML backend](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/xfconfd/xfconf-backend-perchannel-xml.c).
+
+`restore` validates the whole file first (one leading UTF-8 byte order mark is
+accepted) and rejects malformed XML, unsupported
+formats or types, invalid channel or property names, duplicates and backups with
+no properties. Each property is then set with
+`xfconf-query -c <channel> -p <property> -n -t <type> -s <value>` (arrays pass
+`-a` and one `-t`/`-s` pair per item, even for one item). Empty arrays use
+`gdbus call --session` to invoke `org.xfce.Xfconf.SetProperty` with an empty
+variant array (`<@av []>`); `gdbus` must be installed for these restores.
+The upstream [D-Bus interface](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/common/xfconf-dbus.xml.in)
+and [value conversion](https://github.com/xfce-mirror/xfconf/blob/xfconf-4.20.0/common/xfconf-gvaluefuncs.c)
+explicitly support this representation. Untyped values use
+`xfconf-query -c <channel> -p <property> -s <value>`, which keeps the existing
+property's type and fails if the property no longer exists. If a property fails,
+the rest are still restored and the command fails, naming the failed properties.
+Each backup and restore subprocess (`xfconf-query` or `gdbus`) has its own
+30-second timeout, so large configurations are not limited by one shared
+deadline. A timed-out subprocess, or interrupting the command, fails the whole
+operation: backup writes no file and restore makes no further writes. Native errors include
+nonempty stderr and retain their exit status.
+
 ## Troubleshooting
 
 ### Common Issues

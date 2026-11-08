@@ -1,6 +1,7 @@
 package sdk_test
 
 import (
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -8,6 +9,9 @@ import (
 )
 
 func TestSDK(t *testing.T) {
+	if kind := os.Getenv(signalFixtureEnv); kind != "" {
+		runSignalFixture(kind)
+	}
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Plugin SDK Suite")
 }

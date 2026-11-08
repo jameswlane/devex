@@ -21,12 +21,16 @@ func (dm *DesktopManager) Configure(ctx context.Context, args []string) error {
 
 	configs := dm.getDefaultConfigurations()
 
+	var batch settingsBatch
 	for _, config := range configs {
-		if err := setGSettingWithContext(ctx, config.schema, config.key, config.value); err != nil {
+		if err := batch.record(setGSettingWithContext(ctx, config.schema, config.key, config.value)); err != nil {
 			fmt.Printf("Warning: Failed to set %s.%s: %v\n", config.schema, config.key, err)
 		} else {
 			fmt.Printf("✓ Set %s.%s to %s\n", config.schema, config.key, config.value)
 		}
+	}
+	if err := batch.err("gnome configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("GNOME configuration complete!")
@@ -75,17 +79,18 @@ func (dm *DesktopManager) ConfigureDock(ctx context.Context, args []string) erro
 	// Check if dash-to-dock extension is available
 	dashToDockConfigs := dm.getDashToDockConfigurations()
 
-	hasErrors := false
+	var batch settingsBatch
 	for _, config := range dashToDockConfigs {
-		if err := setGSettingWithContext(ctx, config.schema, config.key, config.value); err != nil {
-			// Dash-to-dock might not be installed
-			hasErrors = true
-		} else {
+		// A failure usually means Dash-to-dock is not installed; it is summarized below.
+		if batch.record(setGSettingWithContext(ctx, config.schema, config.key, config.value)) == nil {
 			fmt.Printf("✓ Set %s to %s\n", config.key, config.value)
 		}
 	}
 
-	if hasErrors {
+	if err := batch.err("gnome dock configuration"); err != nil {
+		return fmt.Errorf("%w; the Dash-to-dock extension may not be installed, run 'devex desktop-gnome install-extensions'", err)
+	}
+	if batch.failed > 0 {
 		fmt.Println("Note: Some dock settings failed. Dash-to-dock extension may not be installed.")
 		fmt.Println("Run 'devex desktop-gnome install-extensions' to install recommended extensions.")
 	}

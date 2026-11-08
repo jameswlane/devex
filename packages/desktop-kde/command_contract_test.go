@@ -3,6 +3,10 @@ package main
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,25 +30,26 @@ func argvOf(calls []sdktest.Call) [][]string {
 }
 
 // Host archive tools, resolved at package initialization before any recorder
-// replaces PATH; only the relative-archive restore spec uses them.
+// replaces PATH; only the create-backup to restore round trip uses them.
 var (
 	hostTar, hostTarErr   = exec.LookPath("tar")
 	hostGzip, hostGzipErr = exec.LookPath("gzip")
 )
 
-// useHostTar replaces the current spec's tar fake with a wrapper that runs the
-// host tar with a PATH containing only gzip (needed for -z) and with host
-// TAR_OPTIONS/GZIP defaults cleared. Every other fake and the isolated
-// environment stay in place, and the recorder's bin directory is discarded with
-// the spec, so later specs get a fresh fake.
+// useHostTar wraps the current spec's tar fake: the fake still records argv,
+// then the host tar runs with a PATH containing only gzip (needed for -z) and
+// with host TAR_OPTIONS/GZIP defaults cleared. Every other fake and the
+// isolated environment stay in place, and the recorder's bin directory is
+// discarded with the spec, so later specs get a fresh fake.
 func useHostTar(tar, gzip string) {
 	fake, err := exec.LookPath("tar")
 	Expect(err).NotTo(HaveOccurred())
+	Expect(os.Rename(fake, fake+".recorder")).To(Succeed())
 	tools := GinkgoT().TempDir()
 	Expect(os.Symlink(gzip, filepath.Join(tools, "gzip"))).To(Succeed())
 	GinkgoT().Setenv("DEVEX_TEST_ARCHIVE_TOOLS", tools)
 	GinkgoT().Setenv("DEVEX_TEST_TAR", tar)
-	wrapper := "#!/bin/sh\nPATH=\"$DEVEX_TEST_ARCHIVE_TOOLS\" TAR_OPTIONS= GZIP= exec \"$DEVEX_TEST_TAR\" \"$@\"\n"
+	wrapper := "#!/bin/sh\n\"$0.recorder\" \"$@\" || exit $?\nPATH=\"$DEVEX_TEST_ARCHIVE_TOOLS\" TAR_OPTIONS= GZIP= exec \"$DEVEX_TEST_TAR\" \"$@\"\n"
 	Expect(os.WriteFile(fake, []byte(wrapper), 0o700)).To(Succeed())
 }
 
@@ -75,6 +80,53 @@ func writeTarGz(path string, members map[string]string) {
 	}
 	Expect(archive.Close()).To(Succeed())
 	Expect(compressed.Close()).To(Succeed())
+}
+
+type tarEntry struct {
+	header  tar.Header
+	content string
+}
+
+// writeTarEntries writes entries in order, unlike writeTarGz, so a spec can
+// place an unsafe member after a valid one.
+func writeTarEntries(path string, entries []tarEntry) {
+	file, err := os.Create(path)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { Expect(file.Close()).To(Succeed()) }()
+	compressed := gzip.NewWriter(file)
+	archive := tar.NewWriter(compressed)
+	for _, entry := range entries {
+		header := entry.header
+		if header.Typeflag == tar.TypeReg {
+			header.Size = int64(len(entry.content))
+		}
+		Expect(archive.WriteHeader(&header)).To(Succeed())
+		if header.Typeflag == tar.TypeReg {
+			_, err := archive.Write([]byte(entry.content))
+			Expect(err).NotTo(HaveOccurred())
+		}
+	}
+	Expect(archive.Close()).To(Succeed())
+	Expect(compressed.Close()).To(Succeed())
+}
+
+// archiveNames lists the member names of a gzip-compressed tar archive.
+func archiveNames(path string) []string {
+	file, err := os.Open(path)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { Expect(file.Close()).To(Succeed()) }()
+	compressed, err := gzip.NewReader(file)
+	Expect(err).NotTo(HaveOccurred())
+	archive := tar.NewReader(compressed)
+	var names []string
+	for {
+		header, err := archive.Next()
+		if err == io.EOF {
+			return names
+		}
+		Expect(err).NotTo(HaveOccurred())
+		names = append(names, header.Name)
+	}
 }
 
 // filesUnder lists regular files beneath root as sorted slash-separated relative paths.
@@ -266,9 +318,9 @@ var _ = Describe("KDE command contracts", func() {
 				Expect(recorder.Calls("plasmapkg2")).To(Equal([]sdktest.Call{{Args: []string{"--list"}}}))
 			},
 			fails: func() {
-				// Native list failures are the pending defect contract below.
 				removeFake("plasmapkg2")
 				Expect(plugin.Execute("list-widgets", nil)).To(MatchError("plasmapkg2 tool not found"))
+				// A failed native listing is covered by the plasmapkg2 --list failure spec.
 			},
 		},
 		{
@@ -336,7 +388,7 @@ var _ = Describe("KDE command contracts", func() {
 			command: "install-fonts",
 			routes: func() {
 				Expect(plugin.Execute("install-fonts", nil)).To(Succeed())
-				// argv only: elevation is the pending defect contract below, not intended behavior.
+				// argv only here: elevation is pinned by the install-fonts privilege specs.
 				Expect(argvOf(recorder.Calls("apt-get"))).To(Equal([][]string{append([]string{"install", "-y"}, defaultKDEFonts...)}))
 				Expect(recorder.Calls("fc-cache")).To(Equal([]sdktest.Call{{Args: []string{"-f", "-v"}}}))
 				Expect(recorder.Calls("kbuildsycoca5")).To(Equal([]sdktest.Call{{Args: []string{"--noincremental"}}}))
@@ -353,7 +405,7 @@ var _ = Describe("KDE command contracts", func() {
 					removeFake(manager.previous)
 					recorder.Reset()
 					Expect(plugin.Execute("install-fonts", []string{"Oxygen", "custom-font"})).To(Succeed())
-					Expect(argvOf(recorder.Calls(manager.name))).To(Equal([][]string{manager.args}), manager.name)
+					Expect(recorder.Calls(manager.name)).To(Equal([]sdktest.Call{{Args: manager.args, ElevationRequested: true}}), manager.name)
 				}
 			},
 			fails: func() {
@@ -462,6 +514,9 @@ var _ = Describe("KDE command contracts", func() {
 		{
 			command: "backup",
 			routes: func() {
+				Expect(hostTarErr).NotTo(HaveOccurred())
+				Expect(hostGzipErr).NotTo(HaveOccurred())
+				useHostTar(hostTar, hostGzip)
 				homeConfig("kdeglobals", "[General]\n")
 				homeConfig("kwinrc", "[Windows]\n")
 				Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
@@ -470,16 +525,9 @@ var _ = Describe("KDE command contracts", func() {
 				Expect(calls[0].ElevationRequested).To(BeFalse())
 				Expect(calls[0].Args[0]).To(Equal("czf"))
 				Expect(filepath.Dir(calls[0].Args[1])).To(Equal(fixtures))
-				Expect(filepath.Base(calls[0].Args[1])).To(MatchRegexp(`^kde-settings-\d{4}-\d{2}-\d{2}\.tar\.gz$`))
-				// Only the existing KDE files are archived. Their path form (absolute today)
-				// is #298's pending contract, so it is not pinned here.
-				members := []string{}
-				for _, member := range calls[0].Args[2:] {
-					if member != "-C" && member != os.Getenv("HOME") {
-						members = append(members, filepath.Base(member))
-					}
-				}
-				Expect(members).To(ConsistOf("kdeglobals", "kwinrc"))
+				Expect(filepath.Base(calls[0].Args[1])).To(MatchRegexp(`^\.kde-backup-.+\.tar\.gz$`))
+				// Only the existing KDE files are archived, relative to HOME.
+				Expect(calls[0].Args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), "--dereference", "--hard-dereference", ".config/kdeglobals", ".config/kwinrc"}))
 
 				recorder.Reset()
 				Expect(plugin.Execute("backup", nil)).To(Succeed())
@@ -497,27 +545,21 @@ var _ = Describe("KDE command contracts", func() {
 		{
 			command: "restore",
 			routes: func() {
-				// Fake tar extracts nothing: this pins the extraction argv and temp-directory
-				// cleanup. Copying extracted files into HOME is covered by the
-				// relative-archive restore spec; the create-backup -> restore round trip is #298.
-				backup := fixture("kde.tar.gz", "archive")
+				// Restore validates and extracts the archive in-process: no native tool runs.
+				content := "[General]\nColorScheme=BreezeDark\n"
+				backup := filepath.Join(fixtures, "kde.tar.gz")
+				writeTarGz(backup, map[string]string{".config/kdeglobals": content})
 				sdktest.ProvideStdin(GinkgoT(), "y\n")
 				Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
-				calls := recorder.Calls("tar")
-				Expect(calls).To(HaveLen(1))
-				Expect(calls[0].Args[:3]).To(Equal([]string{"xzf", backup, "-C"}))
-				extracted := calls[0].Args[3]
-				Expect(extracted).To(HavePrefix(filepath.Join(os.TempDir(), "kde-restore-")))
-				Expect(extracted).NotTo(BeADirectory(), "temporary extraction directory is removed")
+				Expect(os.ReadFile(filepath.Join(os.Getenv("HOME"), ".config", "kdeglobals"))).To(BeEquivalentTo(content))
+				noNativeCalls()
 			},
 			fails: func() {
 				backup := fixture("kde.tar.gz", "archive")
 				sdktest.ProvideStdin(GinkgoT(), "y\n")
-				recorder.Fallback("tar", sdktest.Response{ExitCode: 42})
-				Expect(plugin.Execute("restore", []string{backup})).To(MatchError("failed to extract backup: exit status 42"))
-				leftovers, err := filepath.Glob(filepath.Join(os.TempDir(), "kde-restore-*"))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(leftovers).To(BeEmpty())
+				Expect(plugin.Execute("restore", []string{backup})).To(MatchError(HavePrefix("failed to read backup: not a gzip-compressed tar archive: ")))
+				Expect(filesUnder(os.Getenv("HOME"))).To(BeEmpty())
+				noNativeCalls()
 			},
 		},
 		{
@@ -561,51 +603,286 @@ var _ = Describe("KDE command contracts", func() {
 		It("reports native failures from "+contract.command, contract.fails)
 	}
 
-	// Restore from a valid relative-path archive, extracted by the host tar. This is
-	// not the create-backup -> restore round trip, which #298 tracks: backup writes
-	// absolute member paths today.
+	// Restore from a valid relative-path archive returns each member to the same
+	// path beneath HOME with exact contents.
 	It("restores a relative-path archive into HOME with exact contents", func() {
-		Expect(hostTarErr).NotTo(HaveOccurred(), "host tar is required for the archive fixture")
-		Expect(hostGzipErr).NotTo(HaveOccurred(), "host gzip is required for the archive fixture")
-		useHostTar(hostTar, hostGzip)
-
 		content := "[General]\nColorScheme=BreezeDark\n\n[KDE]\nwidgetStyle=Breeze\n"
+		applets := "[Containments][1]\nplugin=org.kde.panel\n"
 		backup := filepath.Join(fixtures, "kde-settings.tar.gz")
-		writeTarGz(backup, map[string]string{".config/kdeglobals": content})
+		writeTarGz(backup, map[string]string{
+			".config/kdeglobals": content,
+			".local/share/plasma/look-and-feel/devex/metadata.json": applets,
+		})
+		home := os.Getenv("HOME")
+		// Restore overwrites an existing file in place.
+		Expect(os.WriteFile(filepath.Join(home, ".config", "kdeglobals"), []byte("stale"), 0o600)).To(Succeed())
 		sdktest.ProvideStdin(GinkgoT(), "y\n")
 
-		Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+		output := sdktest.CaptureStdout(GinkgoT(), func() {
+			Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+		})
 
-		home := os.Getenv("HOME")
+		Expect(output).To(ContainSubstring("Restored 2 files."))
 		Expect(os.ReadFile(filepath.Join(home, ".config", "kdeglobals"))).To(BeEquivalentTo(content))
-		Expect(filesUnder(home)).To(Equal([]string{".config/kdeglobals"}))
-		leftovers, err := filepath.Glob(filepath.Join(os.TempDir(), "kde-restore-*"))
-		Expect(err).NotTo(HaveOccurred())
-		Expect(leftovers).To(BeEmpty())
-		for _, fake := range append([]string{"sudo"}, kdeFakes...) {
-			if fake != "tar" {
-				Expect(recorder.Calls(fake)).To(BeEmpty(), fake)
-			}
+		Expect(os.ReadFile(filepath.Join(home, ".local", "share", "plasma", "look-and-feel", "devex", "metadata.json"))).To(BeEquivalentTo(applets))
+		Expect(filesUnder(home)).To(Equal([]string{".config/kdeglobals", ".local/share/plasma/look-and-feel/devex/metadata.json"}))
+		noNativeCalls()
+	})
+
+	It("does not restore through an existing symlink outside HOME", func() {
+		outside := GinkgoT().TempDir()
+		sentinel := filepath.Join(outside, "kdeglobals")
+		Expect(os.WriteFile(sentinel, []byte("unchanged"), 0600)).To(Succeed())
+		Expect(os.Symlink(outside, filepath.Join(os.Getenv("HOME"), ".config", "redirect"))).To(Succeed())
+		backup := filepath.Join(fixtures, "redirect.tar.gz")
+		writeTarGz(backup, map[string]string{".config/redirect/kdeglobals": "overwrite"})
+		sdktest.ProvideStdin(GinkgoT(), "y\n")
+		Expect(plugin.Execute("restore", []string{backup})).To(MatchError(ContainSubstring("path escapes from parent")))
+		Expect(os.ReadFile(sentinel)).To(BeEquivalentTo("unchanged"))
+		noNativeCalls()
+	})
+
+	It("does not launch tar for a cancelled backup", func() {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		Expect(os.WriteFile(filepath.Join(os.Getenv("HOME"), ".config", "kdeglobals"), []byte("fixture"), 0600)).To(Succeed())
+		err := NewBackupManager().CreateBackup(ctx, []string{fixtures})
+		Expect(errors.Is(err, context.Canceled)).To(BeTrue())
+		Expect(recorder.Calls("tar")).To(BeEmpty())
+	})
+
+	// #298: members that are absolute, traverse with "..", leave the KDE
+	// configuration trees or are links are rejected before anything is written,
+	// even when a valid member precedes them.
+	DescribeTable("rejects unsafe archive members before writing",
+		func(bad tar.Header, message string) {
+			backup := filepath.Join(fixtures, "unsafe.tar.gz")
+			writeTarEntries(backup, []tarEntry{
+				{header: tar.Header{Name: ".config/kdeglobals", Typeflag: tar.TypeReg, Mode: 0o600}, content: "[General]\n"},
+				{header: bad, content: "payload"},
+			})
+			sdktest.ProvideStdin(GinkgoT(), "y\n")
+			Expect(plugin.Execute("restore", []string{backup})).To(MatchError("failed to read backup: " + message))
+			Expect(filesUnder(os.Getenv("HOME"))).To(BeEmpty())
+			home := os.Getenv("HOME")
+			Expect(filepath.Join(filepath.Dir(home), "devex-evil")).NotTo(BeAnExistingFile())
+			Expect(filepath.Join(filepath.Dir(filepath.Dir(home)), "devex-evil")).NotTo(BeAnExistingFile())
+			noNativeCalls()
+		},
+		Entry("absolute path", tar.Header{Name: "/etc/devex-evil", Typeflag: tar.TypeReg, Mode: 0o600}, `archive member "/etc/devex-evil" is an absolute path`),
+		Entry("parent traversal", tar.Header{Name: "../devex-evil", Typeflag: tar.TypeReg, Mode: 0o600}, `archive member "../devex-evil" traverses outside HOME`),
+		Entry("nested traversal", tar.Header{Name: ".config/../../devex-evil", Typeflag: tar.TypeReg, Mode: 0o600}, `archive member ".config/../../devex-evil" traverses outside HOME`),
+		Entry("traversal that stays inside", tar.Header{Name: ".config/x/../kwinrc", Typeflag: tar.TypeReg, Mode: 0o600}, `archive member ".config/x/../kwinrc" traverses outside HOME`),
+		Entry("outside the KDE trees", tar.Header{Name: ".bashrc", Typeflag: tar.TypeReg, Mode: 0o600}, `archive member ".bashrc" is outside the KDE configuration directories (.config, .local/share)`),
+		Entry("symbolic link", tar.Header{Name: ".config/plasmarc", Typeflag: tar.TypeSymlink, Linkname: "/etc/passwd", Mode: 0o777}, `archive member ".config/plasmarc" has unsupported type "2"; only regular files and directories are restored`),
+		Entry("hard link", tar.Header{Name: ".config/plasmarc", Typeflag: tar.TypeLink, Linkname: ".config/kdeglobals", Mode: 0o600}, `archive member ".config/plasmarc" has unsupported type "1"; only regular files and directories are restored`),
+	)
+
+	It("rejects an archive without configuration files", func() {
+		backup := filepath.Join(fixtures, "empty.tar.gz")
+		writeTarEntries(backup, []tarEntry{{header: tar.Header{Name: ".config/", Typeflag: tar.TypeDir, Mode: 0o700}}})
+		sdktest.ProvideStdin(GinkgoT(), "y\n")
+		Expect(plugin.Execute("restore", []string{backup})).To(MatchError("failed to read backup: backup contains no KDE configuration files"))
+		Expect(filesUnder(os.Getenv("HOME"))).To(BeEmpty())
+	})
+
+	// #298: a real backup created by the host tar restores every file to its
+	// original HOME-relative path with identical bytes.
+	It("round-trips create-backup to restore with the host tar", func() {
+		Expect(hostTarErr).NotTo(HaveOccurred(), "host tar is required for the round trip")
+		Expect(hostGzipErr).NotTo(HaveOccurred(), "host gzip is required for the round trip")
+		useHostTar(hostTar, hostGzip)
+		home := os.Getenv("HOME")
+		originals := map[string]string{
+			".config/kdeglobals":      "[General]\nColorScheme=BreezeDark\n",
+			".config/katerc":          "[General]\nShow Full Path in Title=true\n",
+			".config/kateschemarc":    "[Normal]\n",
+			".config/plasmashellrc":   "[PlasmaViews]\npanelVisibility=0\n",
+			".config/plasma-localerc": "[Formats]\nLANG=en_US.UTF-8\n",
+			".local/share/plasma/look-and-feel/devex/metadata.json": "{\"KPlugin\": {}}\n",
+			".local/share/kactivitymanagerd/resources/database":     "binary\x00data\n",
 		}
+		for name, content := range originals {
+			path := filepath.Join(home, filepath.FromSlash(name))
+			Expect(os.MkdirAll(filepath.Dir(path), 0o700)).To(Succeed())
+			Expect(os.WriteFile(path, []byte(content), 0o600)).To(Succeed())
+		}
+		unrelated := filepath.Join(home, ".config", "unrelatedrc")
+		Expect(os.WriteFile(unrelated, []byte("keep"), 0o600)).To(Succeed())
+
+		Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
+		args := recorder.Calls("tar")[0].Args
+		Expect(args[2:]).To(Equal([]string{"-C", home, "--dereference", "--hard-dereference",
+			".config/katerc", ".config/kateschemarc", ".config/kdeglobals", ".config/plasma-localerc", ".config/plasmashellrc",
+			".local/share/kactivitymanagerd", ".local/share/plasma"}))
+		backups, err := filepath.Glob(filepath.Join(fixtures, "kde-settings-*.tar.gz"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(backups).To(HaveLen(1))
+		Expect(args[1]).NotTo(BeAnExistingFile(), "the validated temporary archive has been renamed")
+		Expect(archiveNames(backups[0])).NotTo(ContainElement(HavePrefix("/")))
+
+		// Lose and corrupt the configuration, then restore it.
+		Expect(os.RemoveAll(filepath.Join(home, ".local", "share", "plasma"))).To(Succeed())
+		Expect(os.Remove(filepath.Join(home, ".config", "katerc"))).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(home, ".config", "kdeglobals"), []byte("corrupt"), 0o600)).To(Succeed())
+		Expect(os.WriteFile(unrelated, []byte("changed"), 0o600)).To(Succeed())
+		sdktest.ProvideStdin(GinkgoT(), "y\n")
+		Expect(plugin.Execute("restore", []string{backups[0]})).To(Succeed())
+
+		expected := []string{".config/unrelatedrc"}
+		for name, content := range originals {
+			expected = append(expected, name)
+			Expect(os.ReadFile(filepath.Join(home, filepath.FromSlash(name)))).To(BeEquivalentTo(content), name)
+		}
+		Expect(filesUnder(home)).To(ConsistOf(expected))
+		Expect(os.ReadFile(unrelated)).To(BeEquivalentTo("changed"), "files outside the backup are untouched")
+		Expect(recorder.Calls("tar")).To(HaveLen(1), "restore extracts in-process")
 	})
 
-	PIt("requests elevation for system font package installs: #296 - install-fonts runs the system package manager without sudo or a declared privilege scope", func() {
-		Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
-		Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{{Args: []string{"install", "-y", "fonts-hack"}, ElevationRequested: true}}))
+	// #296: install-fonts declares system scope and installs packages through the
+	// SDK privilege path, while font-cache refreshes stay with the invoking user.
+	Describe("install-fonts privilege", func() {
+		install := []string{"install", "-y", "fonts-hack"}
+		elevated := sdktest.Call{Args: install, ElevationRequested: true}
+
+		It("declares system scope for install-fonts only", func() {
+			Expect(sdk.PluginOperationPrivilege(plugin.Info(), []string{"install-fonts"})).To(Equal(&sdk.OperationPrivilege{Scope: sdk.ScopeSystem}))
+			Expect(sdk.PluginOperationPrivilege(plugin.Info(), []string{"configure-fonts"})).To(BeNil())
+		})
+
+		It("requests elevation for system font package installs", func() {
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{elevated}))
+			// Interactive: a non-prompting authorization probe, then sudo -n for the manager.
+			Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{
+				{Args: []string{"-n", "true"}},
+				{Args: append([]string{"-n", "--", "apt-get"}, install...)},
+			}))
+			Expect(recorder.Calls("fc-cache")).To(Equal([]sdktest.Call{{Args: []string{"-f", "-v"}}}), "fc-cache stays a user-scope process")
+			Expect(recorder.Calls("kbuildsycoca5")).To(Equal([]sdktest.Call{{Args: []string{"--noincremental"}}}), "kbuildsycoca5 stays a user-scope process")
+		})
+
+		It("uses sudo -n without an authorization probe when unattended", func() {
+			GinkgoT().Setenv(sdk.UnattendedEnv, "1")
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{{Args: append([]string{"-n", "--", "apt-get"}, install...)}}))
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{elevated}))
+			Expect(recorder.Calls("fc-cache")).To(Equal([]sdktest.Call{{Args: []string{"-f", "-v"}}}), "fc-cache stays a user-scope process")
+			Expect(recorder.Calls("kbuildsycoca5")).To(Equal([]sdktest.Call{{Args: []string{"--noincremental"}}}), "kbuildsycoca5 stays a user-scope process")
+		})
+
+		It("runs the manager unchanged when already elevated and refreshes caches as SUDO_USER", func() {
+			base := sdk.NewPrivilegeResolver
+			DeferCleanup(func() { sdk.NewPrivilegeResolver = base })
+			sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
+				resolver := base()
+				resolver.Elevated = true
+				return resolver
+			}
+			GinkgoT().Setenv("SUDO_USER", "devex-test-user")
+			// sudo's env_reset drops desktop session variables from an elevated launch.
+			GinkgoT().Setenv("XDG_CURRENT_DESKTOP", "")
+			home := os.Getenv("HOME")
+
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{{Args: install}}))
+			Expect(recorder.Calls("sudo")).To(Equal([]sdktest.Call{
+				{Args: append([]string{"-n", "-H", "-u", "devex-test-user", "--", "env", "HOME=" + home, "USER=devex-test-user", "LOGNAME=devex-test-user", "fc-cache"}, []string{"-f", "-v"}...)},
+				{Args: append([]string{"-n", "-H", "-u", "devex-test-user", "--", "env", "HOME=" + home, "USER=devex-test-user", "LOGNAME=devex-test-user", "kbuildsycoca5"}, []string{"--noincremental"}...)},
+			}))
+		})
+
+		It("reports sudo authorization failures distinctly", func() {
+			recorder.Script("sudo", append([]string{"-n", "--", "apt-get"}, install...), sdktest.Response{ExitCode: 1, Stderr: "sudo: a password is required\n"})
+			err := plugin.Execute("install-fonts", []string{"hack"})
+			Expect(err).To(MatchError(HavePrefix("failed to install fonts: authorization-denied: ")))
+			var auth *sdk.AuthorizationError
+			Expect(errors.As(err, &auth)).To(BeTrue())
+			Expect(auth.Kind).To(Equal(sdk.AuthorizationDenied))
+			Expect(auth.NativeExitCode).To(Equal(1))
+			Expect(recorder.Calls("apt-get")).To(BeEmpty())
+			Expect(recorder.Calls("fc-cache")).To(BeEmpty())
+			Expect(recorder.Calls("kbuildsycoca5")).To(BeEmpty())
+		})
+
+		It("preserves the package manager's exit status", func() {
+			fail("apt-get", install...)
+			err := plugin.Execute("install-fonts", []string{"hack"})
+			Expect(err).To(MatchError("failed to install fonts: exit status 42"))
+			var auth *sdk.AuthorizationError
+			Expect(errors.As(err, &auth)).To(BeFalse())
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(recorder.Calls("fc-cache")).To(BeEmpty())
+			Expect(recorder.Calls("kbuildsycoca5")).To(BeEmpty())
+		})
+
+		It("does not need session variables but still needs the desktop installed", func() {
+			GinkgoT().Setenv("XDG_CURRENT_DESKTOP", "")
+			GinkgoT().Setenv("DESKTOP_SESSION", "")
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(Succeed())
+			Expect(recorder.Calls("apt-get")).To(Equal([]sdktest.Call{elevated}))
+
+			recorder.Reset()
+			removeFake("kwriteconfig5")
+			Expect(plugin.Execute("install-fonts", []string{"hack"})).To(MatchError("KDE Plasma desktop environment is not available on this system"))
+			noNativeCalls()
+		})
 	})
 
-	PIt("propagates plasmapkg2 --list failures: #299 - list-widgets prints a warning and reports success when its only native call fails", func() {
+	It("propagates plasmapkg2 --list failures", func() {
 		fail("plasmapkg2", "--list")
-		Expect(plugin.Execute("list-widgets", nil)).To(MatchError(ContainSubstring("exit status 42")))
+		err := plugin.Execute("list-widgets", nil)
+		Expect(err).To(MatchError("failed to list installed plasmoids: exit status 42"))
+		Expect(sdk.ExitStatus(err)).To(Equal(42))
+		Expect(recorder.Calls("plasmapkg2")).To(Equal([]sdktest.Call{{Args: []string{"--list"}}}))
 	})
 
-	PIt("archives configuration relative to HOME so restore returns files to their original paths: #298 - backup stores absolute paths that restore rewrites beneath HOME", func() {
+	It("archives configuration relative to HOME so restore returns files to their original paths", func() {
+		Expect(hostTarErr).NotTo(HaveOccurred())
+		Expect(hostGzipErr).NotTo(HaveOccurred())
+		useHostTar(hostTar, hostGzip)
 		kdeglobals := homeConfig("kdeglobals", "[General]\n")
 		Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
 		args := recorder.Calls("tar")[0].Args
 		relative := strings.TrimPrefix(kdeglobals, os.Getenv("HOME")+string(filepath.Separator))
-		Expect(args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), relative}))
+		Expect(args[2:]).To(Equal([]string{"-C", os.Getenv("HOME"), "--dereference", "--hard-dereference", relative}))
 	})
+
+	// Complete-failure policy (#157, #303): a configure operation's settings are
+	// independent and best-effort, so failed keys are warned about and the rest
+	// still apply; the operation fails only when no setting applied at all.
+	DescribeTable("fails when every settings write fails",
+		func(command, operation string, calls func() []sdktest.Call) {
+			recorder.Fallback("kwriteconfig5", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).To(MatchError(HavePrefix(fmt.Sprintf("%s applied no settings: all %d writes failed: exit status 42", operation, len(calls())))))
+			// The native failure is wrapped, so the plugin exits with its status.
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(output).NotTo(ContainSubstring("configuration complete!"))
+			Expect(recorder.Calls("kwriteconfig5")).To(Equal(calls()))
+		},
+		Entry("configure", "configure", "kde configuration", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-panel", "configure-panel", "kde panel configuration", func() []sdktest.Call { return panelCalls }),
+		Entry("configure-fonts", "configure-fonts", "kde font configuration", func() []sdktest.Call { return fontCalls("JetBrains Mono,10,-1,5,50,0,0,0,0,0") }),
+	)
+
+	DescribeTable("succeeds when a single settings write applies",
+		func(command string, calls func() []sdktest.Call) {
+			all := calls()
+			for _, call := range all[:len(all)-1] {
+				recorder.Script("kwriteconfig5", call.Args, sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			}
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("onfiguration complete!"))
+			Expect(recorder.Calls("kwriteconfig5")).To(Equal(all))
+		},
+		Entry("configure", "configure", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-panel", "configure-panel", func() []sdktest.Call { return panelCalls }),
+		Entry("configure-fonts", "configure-fonts", func() []sdktest.Call { return fontCalls("JetBrains Mono,10,-1,5,50,0,0,0,0,0") }),
+	)
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

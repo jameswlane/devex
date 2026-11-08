@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -207,6 +209,42 @@ var _ = Describe("LXQt command contracts", func() {
 		It("routes "+contract.command+" with its current dispatch", contract.routes)
 		It("reports failures from "+contract.command, contract.fails)
 	}
+
+	// Complete-failure policy (#157): configure writes its sections independently
+	// and best-effort, failing only when no section could be written.
+	Describe("configure section writes", func() {
+		sections := []string{"panel.conf", "desktop.conf", "session.conf"}
+		// A directory where a section file belongs makes that write fail.
+		blockSection := func(name string) {
+			Expect(os.MkdirAll(filepath.Join(filepath.Join(configDir, "lxqt"), name), 0o700)).To(Succeed())
+		}
+
+		It("fails when every section write fails", func() {
+			for _, section := range sections {
+				blockSection(section)
+			}
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute("configure", nil) })
+			Expect(err).To(MatchError(HavePrefix("lxqt configuration applied no settings: all 3 writes failed: open " + filepath.Join(filepath.Join(configDir, "lxqt"), sections[0]))))
+			Expect(errors.Is(err, syscall.EISDIR)).To(BeTrue())
+			Expect(output).To(ContainSubstring("Warning: Failed to configure panel"))
+			Expect(output).NotTo(ContainSubstring("configuration complete!"))
+			noNativeCalls()
+		})
+
+		It("succeeds with a warning when only some sections are written", func() {
+			blockSection(sections[0])
+			blockSection(sections[1])
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute("configure", nil) })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("Warning: Failed to configure panel"))
+			Expect(output).To(ContainSubstring("Warning: Failed to configure desktop"))
+			Expect(output).To(ContainSubstring("configuration complete!"))
+			Expect(filepath.Join(filepath.Join(configDir, "lxqt"), sections[2])).To(BeARegularFile())
+			noNativeCalls()
+		})
+	})
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

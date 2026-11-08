@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -214,6 +216,7 @@ var _ = Describe("Pantheon command contracts", func() {
 			},
 			fails: func() {
 				// Each schema dump is best-effort; a failed schema is reported and omitted.
+				recorder.Script("dconf", []string{"dump", "/org/gnome/desktop/"}, sdktest.Response{Stdout: "[interface]\nclock-show-seconds=true\n"})
 				fail("dconf", "dump", "/io/elementary/")
 				output := sdktest.CaptureStdout(GinkgoT(), func() {
 					Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
@@ -232,8 +235,7 @@ var _ = Describe("Pantheon command contracts", func() {
 		{
 			command: "restore",
 			routes: func() {
-				// Dispatch and confirmation only: what restore does after confirming is the
-				// #300 pending contract, so the current no-op is not pinned here.
+				// Dispatch and confirmation; the restore specs below pin the dconf payloads.
 				backup := fixture("backup.conf", "# Schema: /io/elementary/\n[files/preferences]\n")
 				sdktest.ProvideStdin(GinkgoT(), "y\n")
 				output := sdktest.CaptureStdout(GinkgoT(), func() {
@@ -265,16 +267,129 @@ var _ = Describe("Pantheon command contracts", func() {
 		It("reports native failures from "+contract.command, contract.fails)
 	}
 
-	PIt("restores each backed-up schema with dconf load: #300 - the advertised restore only prints manual instructions and reports success", func() {
-		section := "[files/preferences]\ndefault-viewmode='list'\n"
-		backup := fixture("backup.conf", "\n# Schema: /io/elementary/\n"+section)
-		sdktest.ProvideStdin(GinkgoT(), "y\n")
-		recorder.CaptureStdin("dconf", []string{"load", "/io/elementary/"})
-		Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
-		Expect(recorder.Calls("dconf")).To(Equal([]sdktest.Call{{Args: []string{"load", "/io/elementary/"}}}))
-		// The schema's own section reaches dconf load, without the schema header.
-		Expect(recorder.Stdin("dconf", []string{"load", "/io/elementary/"})).To(Equal([]string{section}))
+	// #300: restore loads each backed-up schema with `dconf load <schema>`, its
+	// section on stdin.
+	Describe("restore", func() {
+		load := func(schema string) sdktest.Call { return sdktest.Call{Args: []string{"load", schema}} }
+		capture := func() {
+			for _, schema := range []string{"/org/gnome/desktop/", "/io/elementary/", "/net/launchpad/plank/"} {
+				recorder.CaptureStdin("dconf", load(schema).Args)
+			}
+		}
+
+		It("restores each backed-up schema with dconf load", func() {
+			section := "[files/preferences]\ndefault-viewmode='list'\n"
+			backup := fixture("backup.conf", "\n# Schema: /io/elementary/\n"+section)
+			sdktest.ProvideStdin(GinkgoT(), "y\n")
+			capture()
+			Expect(plugin.Execute("restore", []string{backup})).To(Succeed())
+			Expect(recorder.Calls("dconf")).To(Equal([]sdktest.Call{load("/io/elementary/")}))
+			// The schema's own section reaches dconf load, without the schema header.
+			Expect(recorder.Stdin("dconf", load("/io/elementary/").Args)).To(Equal([]string{section}))
+		})
+
+		It("round-trips a backup: every dumped schema is loaded with its exact dump", func() {
+			desktop := "[interface]\ngtk-theme='elementary'\n\n[wm/preferences]\nbutton-layout='close:maximize'\n"
+			plank := "[dock/settings]\nicon-size=48\n"
+			recorder.Script("dconf", []string{"dump", "/org/gnome/desktop/"}, sdktest.Response{Stdout: desktop})
+			recorder.Script("dconf", []string{"dump", "/net/launchpad/plank/"}, sdktest.Response{Stdout: plank})
+			// /io/elementary/ dumps nothing, so restore has nothing to load for it.
+			Expect(plugin.Execute("backup", []string{fixtures})).To(Succeed())
+			backups, err := filepath.Glob(filepath.Join(fixtures, "pantheon-settings-*.conf"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(backups).To(HaveLen(1))
+
+			recorder.Reset()
+			capture()
+			sdktest.ProvideStdin(GinkgoT(), "y\n")
+			Expect(plugin.Execute("restore", backups)).To(Succeed())
+			Expect(recorder.Calls("dconf")).To(Equal([]sdktest.Call{load("/org/gnome/desktop/"), load("/net/launchpad/plank/")}))
+			Expect(recorder.Stdin("dconf", load("/org/gnome/desktop/").Args)).To(Equal([]string{desktop}))
+			Expect(recorder.Stdin("dconf", load("/net/launchpad/plank/").Args)).To(Equal([]string{plank}))
+		})
+
+		It("reports a partial restore and still loads the remaining schemas", func() {
+			backup := fixture("backup.conf", "# Schema: /org/gnome/desktop/\n[interface]\ngtk-theme='elementary'\n\n# Schema: /io/elementary/\n[files/preferences]\nsidebar-width=200\n\n# Schema: /net/launchpad/plank/\n[dock/settings]\nicon-size=48\n")
+			fail("dconf", "load", "/io/elementary/")
+			sdktest.ProvideStdin(GinkgoT(), "y\n")
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute("restore", []string{backup}) })
+			Expect(err).To(MatchError("restored 2 of 3 schemas; failed: /io/elementary/: exit status 42"))
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(output).To(ContainSubstring("✗ Failed to restore /io/elementary/: exit status 42"))
+			Expect(output).NotTo(ContainSubstring("restored successfully"))
+			Expect(recorder.Calls("dconf")).To(Equal([]sdktest.Call{load("/org/gnome/desktop/"), load("/io/elementary/"), load("/net/launchpad/plank/")}))
+		})
+
+		DescribeTable("rejects malformed or empty backups before loading anything",
+			func(content, message string) {
+				backup := fixture("backup.conf", content)
+				sdktest.ProvideStdin(GinkgoT(), "y\n")
+				Expect(plugin.Execute("restore", []string{backup})).To(MatchError("invalid backup " + backup + ": " + message))
+				noNativeCalls()
+			},
+			Entry("empty file", "", `no settings to restore; the backup has no non-empty "# Schema:" sections`),
+			Entry("header comment only", "# Pantheon Settings Backup - 2026-11-07T00:00:00Z\n", `no settings to restore; the backup has no non-empty "# Schema:" sections`),
+			Entry("only empty schema dumps", "# Schema: /io/elementary/\n\n# Schema: /net/launchpad/plank/\n", `no settings to restore; the backup has no non-empty "# Schema:" sections`),
+			Entry("settings before any schema", "[org/gnome/desktop/interface]\ngtk-theme='x'\n", `line 1: settings appear before the first "# Schema:" header; this is not a Pantheon backup`),
+			Entry("unsupported schema", "# Schema: /\n[org]\nkey=1\n", `line 1: unsupported schema "/"; expected one of /org/gnome/desktop/, /io/elementary/, /net/launchpad/plank/`),
+			Entry("duplicate schema", "# Schema: /io/elementary/\n[a]\nk=1\n# Schema: /io/elementary/\n[b]\nk=2\n", "line 4: schema /io/elementary/ appears more than once"),
+			Entry("section without a group", "# Schema: /io/elementary/\nsidebar-width=200\n", "schema /io/elementary/ does not start with a [group] line; recreate the backup with 'devex desktop-pantheon backup'"),
+		)
 	})
+
+	It("rejects successful but empty dumps without replacing an existing backup", func() {
+		existing := filepath.Join(fixtures, "pantheon-settings-"+time.Now().Format("2006-01-02")+".conf")
+		Expect(os.WriteFile(existing, []byte("previous backup"), 0600)).To(Succeed())
+		err := plugin.Execute("backup", []string{fixtures})
+		Expect(err).To(MatchError(ContainSubstring("no settings to restore")))
+		Expect(recorder.Calls("dconf")).To(Equal(dumps))
+		Expect(os.ReadFile(existing)).To(BeEquivalentTo("previous backup"))
+	})
+	It("fails backup without writing a file when no schema can be dumped", func() {
+		recorder.Fallback("dconf", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+		err := plugin.Execute("backup", []string{fixtures})
+		Expect(err).To(MatchError("failed to back up Pantheon settings: no schema could be dumped: exit status 42"))
+		Expect(sdk.ExitStatus(err)).To(Equal(42))
+		Expect(recorder.Calls("dconf")).To(Equal(dumps))
+		Expect(filepath.Glob(filepath.Join(fixtures, "pantheon-settings-*"))).To(BeEmpty())
+	})
+
+	// Complete-failure policy (#157, #303): a configure operation's settings are
+	// independent and best-effort, so failed keys are warned about and the rest
+	// still apply; the operation fails only when no setting applied at all.
+	DescribeTable("fails when every settings write fails",
+		func(command, operation string, calls func() []sdktest.Call) {
+			recorder.Fallback("gsettings", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).To(MatchError(HavePrefix(fmt.Sprintf("%s applied no settings: all %d writes failed: exit status 42", operation, len(calls())))))
+			// The native failure is wrapped, so the plugin exits with its status.
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(output).NotTo(ContainSubstring("configuration complete!"))
+			Expect(recorder.Calls("gsettings")).To(Equal(calls()))
+		},
+		Entry("configure", "configure", "pantheon configuration", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-dock", "configure-dock", "pantheon dock configuration", func() []sdktest.Call { return dockCalls }),
+		Entry("configure-wingpanel", "configure-wingpanel", "pantheon wingpanel configuration", func() []sdktest.Call { return wingpanelCalls }),
+	)
+
+	DescribeTable("succeeds when a single settings write applies",
+		func(command string, calls func() []sdktest.Call) {
+			all := calls()
+			for _, call := range all[:len(all)-1] {
+				recorder.Script("gsettings", call.Args, sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			}
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("onfiguration complete!"))
+			Expect(recorder.Calls("gsettings")).To(Equal(all))
+		},
+		Entry("configure", "configure", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-dock", "configure-dock", func() []sdktest.Call { return dockCalls }),
+		Entry("configure-wingpanel", "configure-wingpanel", func() []sdktest.Call { return wingpanelCalls }),
+	)
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

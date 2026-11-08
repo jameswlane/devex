@@ -229,11 +229,38 @@ var _ = Describe("Budgie command contracts", func() {
 		It("reports native failures from "+contract.command, contract.fails)
 	}
 
-	PIt("fails configure when every settings write fails: #303 - handleConfigure prints a warning per key and returns nil", func() {
-		recorder.Fallback("gsettings", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
-		Expect(plugin.Execute("configure", nil)).To(MatchError(ContainSubstring("exit status 42")))
-		Expect(recorder.Calls("gsettings")).To(Equal(configureCalls))
-	})
+	// #303: configure operations are best-effort per key but fail when no key applied.
+	DescribeTable("fails when every settings write fails",
+		func(command, message string, calls func() []sdktest.Call) {
+			recorder.Fallback("gsettings", sdktest.Response{ExitCode: 42, Stderr: "native failure\n"})
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).To(MatchError(message))
+			// The native failure is wrapped, so the plugin exits with its status.
+			Expect(sdk.ExitStatus(err)).To(Equal(42))
+			Expect(output).To(ContainSubstring("Warning: Failed to set com.solus-project.budgie-panel.dark-theme: exit status 42"))
+			Expect(output).NotTo(ContainSubstring("complete!"))
+			Expect(recorder.Calls("gsettings")).To(Equal(calls()))
+		},
+		Entry("configure", "configure", "budgie configuration applied no settings: all 14 writes failed: exit status 42", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-panel", "configure-panel", "budgie panel configuration applied no settings: all 3 writes failed: exit status 42", func() []sdktest.Call { return panelCalls }),
+	)
+
+	DescribeTable("succeeds when a single settings write applies",
+		func(command string, calls func() []sdktest.Call) {
+			all := calls()
+			for _, call := range all[:len(all)-1] {
+				fail("gsettings", call.Args...)
+			}
+			var err error
+			output := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute(command, nil) })
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).To(ContainSubstring("complete!"))
+			Expect(recorder.Calls("gsettings")).To(Equal(all))
+		},
+		Entry("configure", "configure", func() []sdktest.Call { return configureCalls }),
+		Entry("configure-panel", "configure-panel", func() []sdktest.Call { return panelCalls }),
+	)
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

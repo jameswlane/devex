@@ -17,19 +17,36 @@ Solus eopkg package manager plugin for DevEx. Provides modern package management
 
 ## 🚀 Quick Start
 
+Run plugin operations through `devex plugin run`; the [Operations](#operations) table lists the native command behind each one. Native manager flags are not passed through.
+
 ```bash
-# Install packages via DevEx
-devex install firefox thunderbird libreoffice
+# Install and remove packages
+devex plugin run package-manager-eopkg install git neovim
+devex plugin run package-manager-eopkg remove neovim
 
-# Update repository
-devex package-manager eopkg update-repo
+# Refresh repository indexes
+devex plugin run package-manager-eopkg update
 
-# Upgrade system
-devex package-manager eopkg upgrade
-
-# Search packages
-devex package-manager eopkg search "media player"
+# Search and list installed packages
+devex plugin run package-manager-eopkg search "media player"
+devex plugin run package-manager-eopkg list
 ```
+
+## Operations
+
+Solus commands. Mutating operations run with system privileges; queries run as the invoking user.
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `eopkg install --yes-all <packages>` | system |
+| `remove` | `eopkg remove --yes-all <packages>` | system |
+| `update` | `eopkg update-repo` (refreshes repository indexes only) | system |
+| `search` | `eopkg search <phrase>` | user |
+| `list` | `eopkg list-installed` | user |
+
+Package arguments that are empty or start with `-` are rejected before any native command runs.
+
+The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
 
 ## 🚀 Platform Support
 

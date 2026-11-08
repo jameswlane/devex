@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -118,10 +119,13 @@ func (p *APKPlugin) handleInstall(ctx context.Context, args []string) error {
 
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
-	// Update repositories first
+	// Refresh repositories first. A failed refresh is a warning only: the
+	// following `apk add --no-cache` fetches the repository indexes itself,
+	// so a transient refresh failure can still recover. If it cannot, apk add
+	// fails and that unrecovered error is returned.
 	fmt.Println("Updating package repositories...")
 	if err := sdk.ExecCommandWithContext(ctx, true, "apk", "update"); err != nil {
-		fmt.Printf("Warning: failed to update repositories: %v\n", err)
+		fmt.Printf("Warning: failed to update repositories (continuing; apk add --no-cache refreshes indexes itself): %v\n", err)
 	}
 
 	// Install packages
@@ -184,17 +188,21 @@ func (p *APKPlugin) handleInfo(ctx context.Context, args []string) error {
 		return fmt.Errorf("no package specified")
 	}
 
+	// Query every package so one failure does not hide information for the
+	// rest, then report every failure. Native errors stay wrapped so callers
+	// can inspect the exit status.
+	var failures []error
 	for _, pkg := range args {
 		fmt.Printf("Package information for: %s\n", pkg)
 		if err := sdk.ExecCommandWithContext(ctx, false, "apk", "info", pkg); err != nil {
-			fmt.Printf("Failed to get info for %s: %v\n", pkg, err)
+			failures = append(failures, fmt.Errorf("failed to get info for %s: %w", pkg, err))
 		}
 		if len(args) > 1 {
 			fmt.Println("---")
 		}
 	}
 
-	return nil
+	return errors.Join(failures...)
 }
 
 func main() {

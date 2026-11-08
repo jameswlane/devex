@@ -17,19 +17,36 @@ X Binary Package System (XBPS) plugin for DevEx. Provides fast, reliable package
 
 ## 🚀 Quick Start
 
+Run plugin operations through `devex plugin run`; the [Operations](#operations) table lists the native command behind each one. Native manager flags are not passed through.
+
 ```bash
-# Install packages via DevEx
-devex install firefox git code
+# Install and remove packages
+devex plugin run package-manager-xbps install git neovim
+devex plugin run package-manager-xbps remove neovim
 
-# Update repository index
-devex package-manager xbps-install -S
+# Synchronize repository indexes
+devex plugin run package-manager-xbps update
 
-# Upgrade all packages
-devex package-manager xbps-install -Su
-
-# Search for packages
-devex package-manager xbps-query -Rs "text editor"
+# Search repositories and list installed packages
+devex plugin run package-manager-xbps search "web server"
+devex plugin run package-manager-xbps list
 ```
+
+## Operations
+
+Void Linux XBPS tools. Mutating operations run with system privileges; queries run as the invoking user.
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `xbps-install --yes <packages>` | system |
+| `remove` | `xbps-remove --yes <packages>` | system |
+| `update` | `xbps-install --sync` (synchronizes repository indexes only) | system |
+| `search` | `xbps-query -R --search <phrase>` | user |
+| `list` | `xbps-query --list-pkgs` | user |
+
+Package arguments that are empty or start with `-` are rejected before any native command runs.
+
+The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
 
 ## 🚀 Platform Support
 

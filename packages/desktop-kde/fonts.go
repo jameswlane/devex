@@ -10,6 +10,13 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
+// systemScope is install-fonts' declared privilege: package installs change the system.
+var systemScope = sdk.OperationPrivilege{Scope: sdk.ScopeSystem}
+
+// userScope keeps per-user cache refreshes with the invoking account, switching
+// back to SUDO_USER when the plugin itself runs elevated.
+var userScope = sdk.OperationPrivilege{Scope: sdk.ScopeUser}
+
 // FontManager handles KDE font operations
 type FontManager struct{}
 
@@ -87,8 +94,9 @@ func (fm *FontManager) ConfigureFonts(ctx context.Context, args []string) error 
 	}
 
 	// Apply font settings using kwriteconfig5
+	var batch settingsBatch
 	for _, config := range fontConfigs {
-		if err := fm.setKDEConfig(ctx, config); err != nil {
+		if err := batch.record(fm.setKDEConfig(ctx, config)); err != nil {
 			fmt.Printf("Warning: Failed to set %s: %v\n", config.Desc, err)
 		} else {
 			fmt.Printf("✓ Set %s\n", config.Desc)
@@ -96,8 +104,9 @@ func (fm *FontManager) ConfigureFonts(ctx context.Context, args []string) error 
 	}
 
 	// Configure font rendering
-	if err := fm.configureFontRendering(ctx); err != nil {
-		fmt.Printf("Warning: Failed to configure font rendering: %v\n", err)
+	fm.configureFontRendering(ctx, &batch)
+	if err := batch.err("kde font configuration"); err != nil {
+		return err
 	}
 
 	fmt.Println("\nFont configuration complete!")
@@ -152,8 +161,19 @@ func (fm *FontManager) mapFontNames(args []string) []string {
 
 // installPackages installs font packages using appropriate package manager
 func (fm *FontManager) installPackages(ctx context.Context, fontPackages []string) error {
+	for _, pkg := range fontPackages {
+		if strings.HasPrefix(pkg, "-") {
+			return fmt.Errorf("font package argument %q must not start with '-'", pkg)
+		}
+	}
 	var installCmd []string
 	if sdk.CommandExists("apt-get") {
+		// apt interprets a trailing '-' as removal, even after '--'.
+		for _, pkg := range fontPackages {
+			if strings.HasSuffix(pkg, "-") {
+				return fmt.Errorf("apt font package argument %q must not end with '-'", pkg)
+			}
+		}
 		installCmd = append([]string{"apt-get", "install", "-y"}, fontPackages...)
 	} else if sdk.CommandExists("dnf") {
 		installCmd = append([]string{"dnf", "install", "-y"}, fontPackages...)
@@ -166,14 +186,18 @@ func (fm *FontManager) installPackages(ctx context.Context, fontPackages []strin
 	}
 
 	fmt.Printf("Installing: %s\n", strings.Join(fontPackages, ", "))
-	return executeCommand(ctx, installCmd[0], installCmd[1:]...)
+	// Distribution packages are system state: the SDK runs the manager directly
+	// when already elevated and through sudo otherwise (sudo -n, without prompts,
+	// when unattended). Authorization failures surface as *sdk.AuthorizationError;
+	// the manager's own exit status is preserved.
+	return sdk.ExecOperationWithContext(ctx, systemScope, installCmd[0], installCmd[1:]...)
 }
 
 // refreshFontCache refreshes the system font cache
 func (fm *FontManager) refreshFontCache(ctx context.Context) error {
 	fmt.Println("Refreshing font cache...")
 	if sdk.CommandExists("fc-cache") {
-		return executeCommand(ctx, "fc-cache", "-f", "-v")
+		return sdk.ExecOperationWithContext(ctx, userScope, "fc-cache", "-f", "-v")
 	}
 	return nil
 }
@@ -182,7 +206,7 @@ func (fm *FontManager) refreshFontCache(ctx context.Context) error {
 func (fm *FontManager) updateKDECache(ctx context.Context) error {
 	if sdk.CommandExists("kbuildsycoca5") {
 		fmt.Println("Updating KDE system configuration cache...")
-		return executeCommand(ctx, "kbuildsycoca5", "--noincremental")
+		return sdk.ExecOperationWithContext(ctx, userScope, "kbuildsycoca5", "--noincremental")
 	}
 	return nil
 }
@@ -244,8 +268,9 @@ func (fm *FontManager) setKDEConfig(ctx context.Context, config KDEConfig) error
 		config.Value)
 }
 
-// configureFontRendering configures KDE font rendering settings
-func (fm *FontManager) configureFontRendering(ctx context.Context) error {
+// configureFontRendering configures KDE font rendering settings, recording
+// each write in the font configuration's batch.
+func (fm *FontManager) configureFontRendering(ctx context.Context, batch *settingsBatch) {
 	fmt.Println("\nConfiguring font rendering...")
 	renderingConfigs := []KDEConfig{
 		{
@@ -272,12 +297,10 @@ func (fm *FontManager) configureFontRendering(ctx context.Context) error {
 	}
 
 	for _, config := range renderingConfigs {
-		if err := fm.setKDEConfig(ctx, config); err != nil {
+		if err := batch.record(fm.setKDEConfig(ctx, config)); err != nil {
 			fmt.Printf("Warning: Failed to set %s: %v\n", config.Desc, err)
 		}
 	}
-
-	return nil
 }
 
 // validateFontName validates font name arguments to prevent injection

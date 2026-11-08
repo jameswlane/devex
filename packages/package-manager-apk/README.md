@@ -31,6 +31,13 @@ devex package-manager apk upgrade
 devex package-manager apk search "text editor"
 ```
 
+## ⚠️ Error Handling
+
+- Unrecovered native `apk` failures are returned with their exit status and are never reported as success. The only recoverable failure is the repository refresh during `install`, described below.
+- `info` queries every requested package, prints what it can, and then fails with every package that could not be queried.
+- `install` refreshes repositories first. A failed refresh is a warning only, because the following `apk add --no-cache` fetches the repository indexes itself and can still recover. If it cannot, the `apk add` failure is returned.
+- `upgrade` stops if the repository refresh fails.
+
 ## 🚀 Platform Support
 
 - **Alpine Linux**: 3.15+, 3.16+, 3.17+, 3.18+, 3.19+, 3.20+
