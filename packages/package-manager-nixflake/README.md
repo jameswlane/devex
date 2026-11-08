@@ -90,3 +90,14 @@ This follows the [Nix 2.18 removal interface](https://nix.dev/manual/nix/2.18/co
 and [Nix 2.24 removal interface](https://nix.dev/manual/nix/2.24/command-ref/new-cli/nix3-profile-remove).
 The fixtures in `testdata/profile-2.18.json` and `testdata/profile-2.24.json`
 model the corresponding manifest formats from the versioned Nix implementation.
+
+## Experimental limitations
+
+`upgrade` runs `nix profile upgrade --all` for named profiles, or
+`nix profile upgrade '.*'` for legacy indexed profiles, while `update`
+continues to update inputs of the flake in the working directory.
+`is-installed` reads `nix profile list --json`, accepting indexed profile
+versions 1/2 and named version 3. It matches profile names and full or final
+attribute path components. Older Nix releases without JSON profile queries
+return an operational error rather than incorrectly reporting absence. This
+plugin remains experimental pending support for those older query formats.

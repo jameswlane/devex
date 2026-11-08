@@ -30,6 +30,8 @@ func NewXbpsPlugin() *XbpsPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"xbps", "void", "linux"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages", Privilege: system},
+			{Name: "is-installed", Description: "Check whether every package is installed", Privilege: user},
 			{
 				Name:        "install",
 				Description: "Install packages using XBPS",
@@ -80,6 +82,10 @@ func (p *XbpsPlugin) ExecuteContext(ctx context.Context, command string, args []
 	}
 
 	switch command {
+	case "upgrade":
+		return p.run(ctx, "upgrade", "xbps-install", append([]string{"--yes", "--update"}, args...)...)
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":

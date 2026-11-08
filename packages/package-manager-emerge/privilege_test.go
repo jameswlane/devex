@@ -63,15 +63,6 @@ var _ = Describe("EMERGE execution boundary", func() {
 		Expect(recorder.Calls("sudo")).To(BeEmpty())
 	})
 
-	It("still explains unsupported operations when the native tool is missing", func() {
-		recorder = sdktest.NewRecorder(GinkgoT())
-		plugin = main.NewEmergePlugin()
-		for command, guidance := range unsupported {
-			Expect(plugin.Execute(command, nil)).To(MatchError(ContainSubstring(guidance)), command)
-		}
-		Expect(recorder.Calls("sudo")).To(BeEmpty())
-	})
-
 	Context("with the default sudo adapter", func() {
 		BeforeEach(func() {
 			recorder = sdktest.NewRecorder(GinkgoT(), "emerge")

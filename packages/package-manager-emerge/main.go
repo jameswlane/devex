@@ -13,10 +13,6 @@ import (
 
 var version = "dev" // Set by goreleaser
 
-// errListUnsupported explains why list never runs a native command: emerge has
-// no installed-package listing, and the alternatives need extra packages.
-const errListUnsupported = "emerge cannot list installed packages; install app-portage/portage-utils and run 'qlist -I', or app-portage/gentoolkit and run \"equery list '*'\""
-
 // EmergePlugin implements the Emerge package manager
 type EmergePlugin struct {
 	*sdk.PackageManagerPlugin
@@ -34,6 +30,8 @@ func NewEmergePlugin() *EmergePlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"emerge", "portage", "gentoo", "linux"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages", Privilege: system},
+			{Name: "is-installed", Description: "Check whether every package is installed", Privilege: user},
 			{
 				Name:        "install",
 				Description: "Install packages using Emerge",
@@ -60,8 +58,8 @@ func NewEmergePlugin() *EmergePlugin {
 			},
 			{
 				Name:        "list",
-				Description: "List packages (unsupported)",
-				Usage:       "Unsupported: emerge has no installed-package query; use qlist -I or equery list",
+				Description: "List installed packages",
+				Usage:       "List installed packages using portageq match / with an empty atom",
 				Privilege:   user,
 			},
 		},
@@ -84,6 +82,13 @@ func (p *EmergePlugin) ExecuteContext(ctx context.Context, command string, args 
 	}
 
 	switch command {
+	case "upgrade":
+		if len(args) != 0 {
+			return fmt.Errorf("upgrade takes no arguments")
+		}
+		return p.run(ctx, "upgrade", "--ask=n", "--update", "--deep", "--newuse", "@world")
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":
@@ -93,7 +98,7 @@ func (p *EmergePlugin) ExecuteContext(ctx context.Context, command string, args 
 	case "search":
 		return p.handleSearch(ctx, args)
 	case "list":
-		return p.handleList(args)
+		return p.handleList(ctx, args)
 	default:
 		return fmt.Errorf("unknown command: %s", command)
 	}
@@ -137,11 +142,11 @@ func (p *EmergePlugin) handleSearch(ctx context.Context, args []string) error {
 	return p.run(ctx, "search", "--searchdesc", searchTerm)
 }
 
-func (p *EmergePlugin) handleList(args []string) error {
+func (p *EmergePlugin) handleList(ctx context.Context, args []string) error {
 	if len(args) != 0 {
 		return fmt.Errorf("list takes no arguments")
 	}
-	return fmt.Errorf("%s", errListUnsupported)
+	return sdk.ExecOperationWithContext(ctx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "portageq", "match", "/", "")
 }
 
 // run executes emerge with the privilege advertised for operation.

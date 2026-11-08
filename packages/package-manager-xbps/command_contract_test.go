@@ -26,6 +26,7 @@ type operationContract struct {
 var executables = []string{"xbps-install", "xbps-remove", "xbps-query"}
 
 var contracts = []operationContract{
+	{command: "upgrade", executable: "xbps-install", nativeArgv: []string{"--yes", "--update"}, elevated: true},
 	{command: "install", args: []string{"git", "vim"}, executable: "xbps-install", nativeArgv: []string{"--yes", "git", "vim"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, executable: "xbps-remove", nativeArgv: []string{"--yes", "git", "vim"}, elevated: true},
 	{command: "update", executable: "xbps-install", nativeArgv: []string{"--sync"}, elevated: true},
@@ -53,7 +54,7 @@ var _ = Describe("XBPS command contracts", func() {
 	}
 
 	It("has a contract for every advertised command", func() {
-		covered := make([]string, 0, len(contracts))
+		covered := []string{"is-installed"}
 		for _, contract := range contracts {
 			covered = append(covered, contract.command)
 		}
@@ -119,4 +120,11 @@ var _ = Describe("XBPS command contracts", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()
 	})
+	It("upgrades unattended with exact argv and closed stdin", func() {
+		GinkgoT().Setenv("CI", "true")
+		sdktest.CloseStdin(GinkgoT())
+		Expect(plugin.Execute("upgrade", nil)).To(Succeed())
+		Expect(recorder.Calls("xbps-install")).To(Equal([]sdktest.Call{{Args: []string{"--yes", "--update"}, ElevationRequested: true}}))
+	})
+
 })

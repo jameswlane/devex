@@ -49,3 +49,5 @@ tags:
   - flakes
   - reproducible
   - declarative
+# Incomplete contracts are documented in README.md.
+status: experimental

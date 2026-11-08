@@ -41,6 +41,8 @@ func NewNixflakePlugin() *NixflakePlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"nix", "flake", "functional"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages", Privilege: user},
+			{Name: "is-installed", Description: "Check whether every package is installed", Privilege: user},
 			{
 				Name:        "install",
 				Description: "Install packages into the user profile",
@@ -91,6 +93,13 @@ func (p *NixflakePlugin) ExecuteContext(ctx context.Context, command string, arg
 	}
 
 	switch command {
+	case "upgrade":
+		if len(args) != 0 {
+			return fmt.Errorf("upgrade takes no arguments")
+		}
+		return p.handleUpgrade(ctx)
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":
@@ -369,4 +378,31 @@ func plainProfileElements(data string) ([]profileElement, error) {
 		elements = append(elements, profileElement{AttrPath: fields[1][original+1:]})
 	}
 	return elements, nil
+}
+
+// handleUpgrade selects the native selector syntax from the profile format.
+func (p *NixflakePlugin) handleUpgrade(ctx context.Context) error {
+	var metadata, diagnostic bytes.Buffer
+	err := p.runWithIO(ctx, "upgrade", sdk.OperationIO{Stdout: &metadata, Stderr: &diagnostic}, "profile", "list", "--json")
+	if unsupportedProfileJSON(err, diagnostic.String()) {
+		return p.run(ctx, "upgrade", "profile", "upgrade", ".*")
+	}
+	_, _ = io.Copy(os.Stderr, &diagnostic)
+	if err != nil {
+		return err
+	}
+	if _, err := removalSelectors(metadata.Bytes(), nil); err != nil {
+		return err
+	}
+	var profile struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(metadata.Bytes(), &profile); err != nil {
+		return err
+	}
+	selector := ".*"
+	if profile.Version == 3 {
+		selector = "--all"
+	}
+	return p.run(ctx, "upgrade", "profile", "upgrade", selector)
 }

@@ -132,7 +132,7 @@ var _ = Describe("NIXFLAKE execution boundary", func() {
 				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder", "/bin/sh", "-c", `cd -- "$1" && shift && exec "$@"`, "devex-cwd", mustGetwd(), mustNative(executable)}, contract.nativeArgv...)
 				// Answer at the sudo boundary so the spec proves the identity switch, not root execution.
 				recorder.Script("sudo", switchArgv, sdktest.Response{})
-				if contract.command == "remove" {
+				if contract.command == "remove" || contract.command == "upgrade" {
 					metadataArgv := append(append([]string(nil), switchArgv[:len(switchArgv)-len(contract.nativeArgv)]...), "profile", "list", "--json")
 					recorder.Script("sudo", metadataArgv, sdktest.Response{Stdout: `{"version":3,"elements":{}}`})
 				}
