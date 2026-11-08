@@ -52,8 +52,9 @@ func NewInstallCmdWithPluginProvider(repo types.Repository, settings config.Cros
 	)
 
 	cmd := &cobra.Command{
-		Use:   "install [apps...]",
-		Short: "Install development applications",
+		Annotations: map[string]string{catalogAnnotation: catalogRequired},
+		Use:         "install [apps...]",
+		Short:       "Install development applications",
 		Long: `Install applications with cross-platform package manager support.
 
 The install command automates the installation of your development environment with:

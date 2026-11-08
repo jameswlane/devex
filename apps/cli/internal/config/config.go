@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/catalog"
 	"github.com/jameswlane/devex/apps/cli/internal/fs"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
@@ -26,6 +27,7 @@ import (
 
 // CrossPlatformSettings represents the new configuration structure
 type CrossPlatformSettings struct {
+	Catalog *catalog.Result `mapstructure:"-"`
 	// ApplicationOverrides contains the merged runtime application catalog.
 	ApplicationOverrides []types.CrossPlatformApp   `mapstructure:"-"`
 	DebugMode            bool                       `mapstructure:"debug_mode"`
@@ -163,6 +165,9 @@ type SecurityOverrideField struct {
 // GetAllApps returns all applications from the cross-platform configuration
 func (s *CrossPlatformSettings) GetAllApps() []types.CrossPlatformApp {
 	if s.ApplicationOverrides != nil {
+		if s.Catalog != nil && s.Catalog.Source != "" {
+			return mergeApplications(s.Catalog.Apps, s.ApplicationOverrides)
+		}
 		return append([]types.CrossPlatformApp(nil), s.ApplicationOverrides...)
 	}
 	groups := [][]types.CrossPlatformApp{
@@ -207,6 +212,9 @@ func (s *CrossPlatformSettings) GetAllApps() []types.CrossPlatformApp {
 	apps := make([]types.CrossPlatformApp, 0, total)
 	for _, group := range groups {
 		apps = append(apps, group...)
+	}
+	if s.Catalog != nil && s.Catalog.Source != "" {
+		return mergeApplications(s.Catalog.Apps, apps)
 	}
 	return apps
 }

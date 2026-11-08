@@ -38,6 +38,11 @@ Examples:
   devex list available --search docker   # Search for Docker-related apps
   devex list categories                   # Show all categories`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && (args[0] == "available" || args[0] == "categories") {
+				if err := loadCommandCatalog(cmd, settings); err != nil {
+					return err
+				}
+			}
 			return runListCommandWithError(cmd, args, repo, settings)
 		},
 	}

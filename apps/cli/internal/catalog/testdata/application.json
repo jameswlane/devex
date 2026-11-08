@@ -1,0 +1,39 @@
+{
+	"name": "git",
+	"description": "A distributed version control system",
+	"category": "Dependency",
+	"official": false,
+	"default": false,
+	"platforms": {
+		"linux": {
+			"installMethod": "apt",
+			"installCommand": "git",
+			"officialSupport": false,
+			"alternatives": []
+		},
+		"macos": null,
+		"windows": null
+	},
+	"tags": [],
+	"desktopEnvironments": [],
+	"githubUrl": "https://github.com/jameswlane/devex",
+	"githubPath": "https://github.com/jameswlane/devex/tree/main/apps/web/app/generated/tools.json",
+	"id": "fixture-git",
+	"version": "latest",
+	"latestVersion": null,
+	"supportsLinux": true,
+	"supportsMacOS": false,
+	"supportsWindows": false,
+	"lastSynced": "2026-11-08T00:00:00.000Z",
+	"downloadCount": 0,
+	"lastDownload": null,
+	"binaries": {},
+	"installMethods": {},
+	"dependencies": [],
+	"author": null,
+	"license": null,
+	"homepage": null,
+	"repository": null,
+	"createdAt": "2026-11-08T00:00:00.000Z",
+	"updatedAt": "2026-11-08T00:00:00.000Z"
+}
