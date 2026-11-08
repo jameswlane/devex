@@ -1,7 +1,9 @@
 package main_test
 
 import (
+	"errors"
 	"fmt"
+	"os/exec"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -62,7 +64,7 @@ var _ = Describe("DNF command contracts", func() {
 	)
 
 	BeforeEach(func() {
-		recorder = sdktest.NewRecorder(GinkgoT(), "dnf")
+		recorder = sdktest.NewRecorder(GinkgoT(), "dnf", "rpm")
 		plugin = main.NewDnfPlugin()
 	})
 
@@ -115,11 +117,75 @@ var _ = Describe("DNF command contracts", func() {
 		Expect(recorder.Calls("dnf")).To(BeEmpty())
 	})
 
+	Describe("remove", func() {
+		for _, unattendedEnv := range []string{"DEVEX_UNATTENDED", "CI"} {
+			It(fmt.Sprintf("uses the exact unattended removal argv with %s", unattendedEnv), func() {
+				GinkgoT().Setenv(unattendedEnv, "true")
+				sdktest.CloseStdin(GinkgoT())
+				Expect(plugin.Execute("remove", []string{"git", "vim"})).To(Succeed())
+				Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
+					Args: []string{"remove", "--assumeyes", "git", "vim"}, ElevationRequested: true,
+				}}))
+				Expect(recorder.Calls("rpm")).To(Equal([]sdktest.Call{
+					{Args: []string{"-q", "--", "git"}},
+					{Args: []string{"-q", "--", "vim"}},
+				}))
+			})
+		}
+
+		It("queries every package without elevation before the elevated transaction", func() {
+			Expect(plugin.Execute("remove", []string{"git", "vim"})).To(Succeed())
+			Expect(recorder.Calls("rpm")).To(Equal([]sdktest.Call{
+				{Args: []string{"-q", "--", "git"}},
+				{Args: []string{"-q", "--", "vim"}},
+			}))
+			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
+				Args: []string{"remove", "--assumeyes", "git", "vim"}, ElevationRequested: true,
+			}}))
+		})
+
+		for _, packages := range [][]string{{"missing"}, {"git", "missing"}, {"missing", "git"}} {
+			It(fmt.Sprintf("rejects missing packages in %v without starting DNF", packages), func() {
+				recorder.Script("rpm", []string{"-q", "--", "missing"}, sdktest.Response{
+					ExitCode: 1, Stdout: "package missing is not installed\n",
+				})
+				// Unmatched DNF calls would succeed, as DNF can for missing packages.
+				err := plugin.Execute("remove", packages)
+				Expect(err).To(MatchError(ContainSubstring(`cannot remove package "missing": not installed`)))
+				Expect(recorder.Calls("dnf")).To(BeEmpty())
+				Expect(recorder.Calls("sudo")).To(BeEmpty())
+			})
+		}
+
+		It("reports RPM query failures and retains their native exit status", func() {
+			recorder.Script("rpm", []string{"-q", "--", "git"}, sdktest.Response{
+				ExitCode: 2, Stderr: "cannot open Packages database\n",
+			})
+			err := plugin.Execute("remove", []string{"git"})
+			Expect(err).To(MatchError(ContainSubstring("RPM query failed")))
+			var exitErr *exec.ExitError
+			Expect(errors.As(err, &exitErr)).To(BeTrue())
+			Expect(exitErr.ExitCode()).To(Equal(2))
+			Expect(recorder.Calls("dnf")).To(BeEmpty())
+		})
+
+		It("returns a native DNF failure unchanged", func() {
+			recorder.Script("dnf", []string{"remove", "--assumeyes", "git"}, sdktest.Response{
+				ExitCode: 42, Stderr: "transaction failed\n",
+			})
+			err := plugin.Execute("remove", []string{"git"})
+			Expect(err).To(BeAssignableToTypeOf(&exec.ExitError{}))
+			Expect(err.(*exec.ExitError).ExitCode()).To(Equal(42))
+			Expect(err).To(MatchError("exit status 42"))
+		})
+	})
+
 	for _, command := range []string{"install", "remove", "search"} {
 		command := command
 		It(fmt.Sprintf("rejects missing arguments for %s without invoking DNF", command), func() {
 			Expect(plugin.Execute(command, nil)).To(HaveOccurred())
 			Expect(recorder.Calls("dnf")).To(BeEmpty())
+			Expect(recorder.Calls("rpm")).To(BeEmpty())
 		})
 	}
 })

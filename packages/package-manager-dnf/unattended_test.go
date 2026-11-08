@@ -9,7 +9,7 @@ import (
 
 var _ = Describe("Unattended dnf execution", func() {
 	It("completes mutating operations with stdin closed", func() {
-		sdktest.NewRecorder(GinkgoT(), "dnf")
+		sdktest.NewRecorder(GinkgoT(), "dnf", "rpm")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewDnfPlugin()

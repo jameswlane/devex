@@ -103,6 +103,15 @@ func (p *DnfPlugin) handleRemove(ctx context.Context, args []string) error {
 		return fmt.Errorf("no packages specified")
 	}
 
+	// DNF can exit successfully when no installed packages match. Check every
+	// package before starting the transaction so mixed requests cannot silently
+	// remove only the installed subset. RPM queries do not require elevation.
+	for _, pkg := range args {
+		if _, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-q", "--", pkg); err != nil {
+			return fmt.Errorf("cannot remove package %q: not installed or RPM query failed: %w", pkg, err)
+		}
+	}
+
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove", "--assumeyes"}, args...)
