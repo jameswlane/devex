@@ -53,8 +53,8 @@ func NewDnfPlugin() *DnfPlugin {
 			},
 			{
 				Name:        "list",
-				Description: "List packages",
-				Usage:       "List installed packages",
+				Description: "List installed packages",
+				Usage:       "List installed packages in DNF's human-readable format",
 			},
 		},
 	}
@@ -181,7 +181,7 @@ func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
 
 // handleList prints installed packages in DNF's human-readable format.
 func (p *DnfPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "dnf", "list", "installed")
+	return sdk.ExecCommandWithContext(ctx, false, "dnf", "list", "--installed")
 }
 
 // main dispatches plugin commands from the command line.

@@ -88,8 +88,8 @@ var dnfContracts = []operationContract{
 	},
 	{
 		command:    "list",
-		currentArg: []string{"list", "installed"},
-		nativeArgv: []string{"list", "installed"},
+		currentArg: []string{"list", "--installed"},
+		nativeArgv: []string{"list", "--installed"},
 	},
 }
 
@@ -248,6 +248,21 @@ var _ = Describe("DNF command contracts", func() {
 			Expect(err).To(MatchError("exit status 42"))
 		})
 	})
+
+	DescribeTable("preserves human-readable installed package output",
+		func(output string) {
+			recorder.Script("dnf", []string{"list", "--installed"}, sdktest.Response{Stdout: output})
+			captured := sdktest.CaptureStdout(GinkgoT(), func() {
+				Expect(plugin.Execute("list", nil)).To(Succeed())
+			})
+			Expect(captured).To(Equal(output))
+			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
+				Args: []string{"list", "--installed"},
+			}}))
+		},
+		Entry("an installed package listing", "Installed Packages\ngit.x86_64 2.49.0-1.fc42 @updates\n"),
+		Entry("an empty listing", ""),
+	)
 
 	for _, command := range []string{"install", "remove", "search"} {
 		command := command
