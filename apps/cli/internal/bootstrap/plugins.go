@@ -285,6 +285,40 @@ func (b *PluginBootstrap) GetAvailablePlugins(ctx context.Context) (map[string]s
 	return b.downloader.GetAvailablePlugins(ctx)
 }
 
+// EnsurePluginWithContext returns an installed plugin, downloading and verifying
+// a missing plugin before rediscovery. Installed plugins never require network access.
+func (b *PluginBootstrap) EnsurePluginWithContext(ctx context.Context, pluginName string) (sdk.PluginMetadata, error) {
+	if err := validatePluginName(pluginName); err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("invalid plugin name: %w", err)
+	}
+	if err := ctx.Err(); err != nil {
+		return sdk.PluginMetadata{}, err
+	}
+	if err := b.manager.DiscoverPluginsWithContext(ctx); err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("discover plugin %s: %w", pluginName, err)
+	}
+	if plugin, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]; installed {
+		return plugin, nil
+	}
+	if viper.GetBool("offline") {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s is not installed and downloads are disabled by --offline; run 'devex plugin install %s' while online, then retry setup", pluginName, pluginName)
+	}
+	if b.skipDownload || viper.GetBool("skip-plugin-download") {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s is not installed and downloads are disabled by skip-plugin-download; retry setup without --skip-plugin-download or run 'devex plugin install %s' first", pluginName, pluginName)
+	}
+	if err := b.downloader.DownloadValidatedPluginWithContext(ctx, pluginName); err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("download required plugin %s (retry with 'devex plugin install %s'): %w", pluginName, pluginName, err)
+	}
+	if err := b.manager.DiscoverPluginsWithContext(ctx); err != nil {
+		return sdk.PluginMetadata{}, fmt.Errorf("rediscover installed plugin %s: %w", pluginName, err)
+	}
+	plugin, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]
+	if !installed {
+		return sdk.PluginMetadata{}, fmt.Errorf("plugin %s was downloaded but could not be discovered; run 'devex plugin info %s' to diagnose the installation", pluginName, pluginName)
+	}
+	return plugin, nil
+}
+
 // IsPluginAvailable checks if a plugin is available for installation
 func (b *PluginBootstrap) IsPluginAvailable(ctx context.Context, pluginName string) bool {
 	if err := validatePluginName(pluginName); err != nil {

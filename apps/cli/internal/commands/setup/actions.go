@@ -315,22 +315,12 @@ func (ae *ActionExecutor) executePluginWithSetup(
 	config map[string]interface{},
 	state *types.SetupState,
 ) error {
-	// Download plugin if not already installed
-	log.Info("Checking plugin", "plugin", pluginName)
-	if err := ae.pluginBootstrap.GetManager().DiscoverPluginsWithContext(ctx); err != nil {
-		log.Warn("Failed to discover plugins", "error", err)
+	if ae.pluginBootstrap == nil {
+		return fmt.Errorf("plugin bootstrap is unavailable; initialize plugins before running setup actions")
 	}
-
-	// Check if plugin is installed
-	plugins := ae.pluginBootstrap.GetManager().ListPluginsWithContext(ctx)
-	pluginInfo, exists := plugins[pluginName]
-	if !exists {
-		// Try to download the plugin
-		log.Info("Downloading plugin", "plugin", pluginName)
-		downloader := ae.pluginBootstrap.GetManager()
-		// TODO: Use downloader to download plugin
-		_ = downloader
-		return fmt.Errorf("plugin %s not installed and auto-download not yet implemented", pluginName)
+	pluginInfo, err := ae.pluginBootstrap.EnsurePluginWithContext(ctx, pluginName)
+	if err != nil {
+		return err
 	}
 
 	// Prepare setup input
