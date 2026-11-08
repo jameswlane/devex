@@ -18,6 +18,7 @@ import (
 
 // DynamicSetupModel is a Bubble Tea model for dynamic setup workflows
 type DynamicSetupModel struct {
+	ctx             context.Context
 	executor        *SetupExecutor
 	actionExecutor  *ActionExecutor
 	textInput       textinput.Model
@@ -45,7 +46,7 @@ func NewDynamicSetupModel(
 	pluginBootstrap *bootstrap.PluginBootstrap,
 ) *DynamicSetupModel {
 	executor := NewSetupExecutor(setupConfig, settings, repo, detectedPlatform)
-	actionExecutor := NewActionExecutor(pluginBootstrap, settings, detectedPlatform)
+	actionExecutor := NewActionExecutor(pluginBootstrap, settings, detectedPlatform, repo)
 
 	ti := textinput.New()
 	ti.Placeholder = "Enter value..."
@@ -56,6 +57,7 @@ func NewDynamicSetupModel(
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("69"))
 
 	model := &DynamicSetupModel{
+		ctx:            context.Background(),
 		executor:       executor,
 		actionExecutor: actionExecutor,
 		textInput:      ti,
@@ -81,7 +83,8 @@ func (m *DynamicSetupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.executing = false
 		if msg.err != nil {
 			m.err = msg.err
-			return m, nil
+			m.quitting = true
+			return m, tea.Quit
 		}
 		// Action completed successfully, move to next step
 		if err := m.executor.NextStep(); err != nil {
@@ -279,11 +282,30 @@ func (m *DynamicSetupModel) handleQuestionSubmit(step *types.SetupStep) (tea.Mod
 	return m, nil
 }
 
+// SetContext supplies the command cancellation context to dynamic actions.
+func (m *DynamicSetupModel) SetContext(ctx context.Context) { m.ctx = ctx }
+
+// CompletionError reports action failures to the setup command.
+func (m *DynamicSetupModel) CompletionError() error { return m.err }
+
 // executeAction executes an action asynchronously
 func (m *DynamicSetupModel) executeAction(step *types.SetupStep) tea.Cmd {
+	// Release the wizard terminal before the shared installation TUI takes over.
+	if step.Action != nil && step.Action.Type == types.ActionTypeInstall {
+		if _, ok := step.Action.Params["install_desktop_apps"]; ok {
+			var actionErr error
+			return tea.Exec(&foregroundInstallation{run: func() {
+				actionErr = m.actionExecutor.Execute(m.ctx, step.Action, m.executor.GetState())
+			}}, func(err error) tea.Msg {
+				if err != nil {
+					return ActionCompleteMsg{err: err}
+				}
+				return ActionCompleteMsg{err: actionErr}
+			})
+		}
+	}
 	return func() tea.Msg {
-		ctx := context.Background()
-		err := m.actionExecutor.Execute(ctx, step.Action, m.executor.GetState())
+		err := m.actionExecutor.Execute(m.ctx, step.Action, m.executor.GetState())
 		return ActionCompleteMsg{err: err}
 	}
 }
