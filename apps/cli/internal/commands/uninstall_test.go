@@ -1,12 +1,14 @@
 package commands_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -141,6 +143,93 @@ var _ = Describe("Uninstall Command", func() {
 			Expect(flags.Lookup("backup")).NotTo(BeNil())
 			Expect(flags.Lookup("stop-services")).NotTo(BeNil())
 			Expect(flags.Lookup("cleanup-system")).NotTo(BeNil())
+		})
+	})
+
+	Describe("forgetting installation records", func() {
+		var output bytes.Buffer
+		BeforeEach(func() {
+			output.Reset()
+			for _, key := range []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "TERM", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE"} {
+				GinkgoT().Setenv(key, "")
+			}
+			Expect(mockRepo.Set("installed-app-definition:test-app", "damaged definition")).To(Succeed())
+			DeferCleanup(commands.SetUninstallInstallerForTest(func(context.Context, string) types.BaseInstaller {
+				Fail("forget must never look up or bootstrap an installer")
+				return nil
+			}))
+		})
+		run := func(repo types.Repository, input string, args ...string) error {
+			cmd := commands.NewUninstallCmd(repo, settings)
+			cmd.SetOut(&output)
+			cmd.SetErr(&output)
+			cmd.SetIn(strings.NewReader(input))
+			cmd.SetArgs(args)
+			return cmd.Execute()
+		}
+		expectRecords := func(present bool) {
+			_, err := mockRepo.GetApp("test-app")
+			if present {
+				Expect(err).NotTo(HaveOccurred())
+			} else {
+				Expect(err).To(HaveOccurred())
+			}
+			definition, err := mockRepo.Get("installed-app-definition:test-app")
+			Expect(err).NotTo(HaveOccurred())
+			if present {
+				Expect(definition).To(Equal("damaged definition"))
+			} else {
+				Expect(definition).To(BeEmpty())
+			}
+		}
+		It("clears a tracked app with a damaged definition without any installer or file cleanup", func() {
+			Expect(os.WriteFile(testApp.CleanupFiles[0], []byte("keep"), 0600)).To(Succeed())
+			Expect(run(mockRepo, "", "--forget", "test-app", "--force")).To(Succeed())
+			expectRecords(false)
+			Expect(testApp.CleanupFiles[0]).To(BeAnExistingFile())
+			Expect(output.String()).To(ContainSubstring("Cleared DevEx records for test-app"))
+		})
+		It("previews both records without mutations or confirmation", func() {
+			viper.Set("dry-run", true)
+			Expect(run(mockRepo, "", "--forget", "test-app")).To(Succeed())
+			expectRecords(true)
+			Expect(output.String()).To(ContainSubstring("Would clear the tracking record and saved definition"))
+			Expect(output.String()).NotTo(ContainSubstring("(y/N)"))
+		})
+		DescribeTable("confirms interactively with a negative default", func(input string, retained bool) {
+			Expect(run(mockRepo, input, "--forget", "test-app")).To(Succeed())
+			expectRecords(retained)
+			Expect(output.String()).To(ContainSubstring("(y/N)"))
+		}, Entry("yes", "y\n", false), Entry("no", "n\n", true), Entry("empty", "\n", true), Entry("EOF", "", true))
+		DescribeTable("skips prompts in unattended mode", func(key string) {
+			GinkgoT().Setenv(key, "true")
+			Expect(run(mockRepo, "", "--forget", "test-app")).To(Succeed())
+			expectRecords(false)
+			Expect(output.String()).NotTo(ContainSubstring("(y/N)"))
+		}, Entry("CI", "CI"), Entry("environment", "DEVEX_NONINTERACTIVE"))
+		It("honors non-interactive configuration", func() {
+			viper.Set("non-interactive", true)
+			Expect(run(mockRepo, "", "--forget", "test-app")).To(Succeed())
+			expectRecords(false)
+		})
+		It("rejects an unknown app without changing tracked records", func() {
+			Expect(run(mockRepo, "", "--forget", "unknown", "--force")).To(MatchError(ContainSubstring("not tracked by DevEx")))
+			expectRecords(true)
+		})
+		It("rejects a blank app name", func() {
+			Expect(run(mockRepo, "", "--forget", " ")).To(MatchError(ContainSubstring("requires an application name")))
+			expectRecords(true)
+		})
+		DescribeTable("rejects removal options", func(flag string) {
+			Expect(run(mockRepo, "", "--forget", "test-app", flag)).To(HaveOccurred())
+			expectRecords(true)
+		}, Entry("selection", "--all"), Entry("cleanup", "--cleanup-system"), Entry("orphans", "--remove-orphans"), Entry("services", "--stop-services"))
+		It("reports tracking deletion errors", func() {
+			Expect(run(&deleteAppErrorRepository{Repository: mockRepo}, "", "--forget", "test-app", "--force")).To(MatchError(ContainSubstring("tracking store unavailable")))
+			expectRecords(true)
+		})
+		It("reports saved-definition persistence errors", func() {
+			Expect(run(&definitionSetErrorRepository{Repository: mockRepo}, "", "--forget", "test-app", "--force")).To(MatchError(ContainSubstring("definition store unavailable")))
 		})
 	})
 

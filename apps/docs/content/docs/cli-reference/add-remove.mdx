@@ -432,6 +432,38 @@ Category names match case-insensitively against resolved application definitions
 
 Currently, `--cascade` allows noncritical dependency conflicts but does not add dependent applications to the removal list. Select dependents explicitly with `--apps` when removing them. `--remove-orphans` runs the package manager's orphan cleanup after at least one successful removal.
 
+### Clear a stuck uninstall record
+
+If you remove an application outside DevEx, `devex uninstall --app <app>`
+clears its tracking record and saved definition when the plugin confirms that
+it is absent. A failed installed-check keeps those records: a query failure
+cannot establish that a package is gone, including partially removed
+multi-package applications.
+
+If the check keeps failing, explicitly forget the application:
+
+```bash
+# Preview exactly which DevEx records will be cleared
+devex uninstall --forget docker --dry-run
+
+# Clear only the tracking record and saved installation definition
+devex uninstall --forget docker
+
+# Skip confirmation
+devex uninstall --forget docker --force
+```
+
+`--forget <app>` never calls or bootstraps a package-manager plugin and never
+runs native removal, stops services, removes dependencies, or deletes
+configuration or user data. It works even if the saved definition is missing
+or damaged. Any packages still present remain installed.
+
+Interactive use asks for confirmation with a default of no. `--force`,
+`--non-interactive`, `DEVEX_NONINTERACTIVE=true`, and CI mode skip that prompt.
+`--dry-run` previews without changing records or prompting. Unknown or
+untracked applications return an error. Use the tracked application name;
+`--forget` cannot be combined with other uninstall selection or cleanup flags.
+
 ## Configuration Impact
 
 Both add and remove commands modify your configuration files:

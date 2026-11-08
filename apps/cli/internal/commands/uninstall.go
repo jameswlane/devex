@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
@@ -65,6 +67,12 @@ Safety features:
 		Example: `  # Uninstall a specific application
   devex uninstall --app curl
 
+  # Preview clearing a stale record without running a package manager
+  devex uninstall --forget curl --dry-run
+
+  # Clear the record and saved definition only
+  devex uninstall --forget curl
+
   # Uninstall multiple applications
   devex uninstall --apps "git,docker,node"
 
@@ -79,7 +87,16 @@ Safety features:
 
   # Uninstall Docker and permanently delete its Linux images, containers and volumes
   devex uninstall --app Docker --remove-docker-data`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if name := viper.GetString("forget"); name != "" || cmd.Flags().Changed("forget") {
+				for _, flag := range []string{"app", "apps", "category", "all", "keep-config", "keep-data", "remove-docker-data", "remove-orphans", "cascade", "backup", "stop-services", "cleanup-system"} {
+					if cmd.Flags().Changed(flag) {
+						return fmt.Errorf("--forget cannot be combined with --%s", flag)
+					}
+				}
+				return forgetUninstallRecord(cmd, repo, name, viper.GetBool("force"))
+			}
 			if removeDockerData && keepData {
 				return fmt.Errorf("--remove-docker-data cannot be combined with --keep-data")
 			}
@@ -92,11 +109,14 @@ Safety features:
 		},
 	}
 
+	cmd.Flags().String("forget", "", "Clear only the tracking record and saved definition for an application; never run a package manager")
+	_ = viper.BindPFlag("forget", cmd.Flags().Lookup("forget"))
 	cmd.Flags().StringVar(&appName, "app", "", "Name of the application to uninstall")
 	cmd.Flags().StringSliceVar(&apps, "apps", []string{}, "List of applications to uninstall (comma-separated)")
 	cmd.Flags().StringVar(&category, "category", "", "Uninstall all applications in a category (case-insensitive)")
 	cmd.Flags().BoolVar(&all, "all", false, "Uninstall all applications (requires confirmation)")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompts")
+	_ = viper.BindPFlag("force", cmd.Flags().Lookup("force"))
 	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep configuration files")
 	cmd.Flags().BoolVar(&removeDockerData, "remove-docker-data", false, "Permanently delete /var/lib/docker and /var/lib/containerd after uninstalling Docker on Linux (data is kept by default)")
 	cmd.Flags().BoolVar(&keepData, "keep-data", false, "Keep user data and databases")
@@ -107,6 +127,51 @@ Safety features:
 	cmd.Flags().BoolVar(&cleanupSystem, "cleanup-system", false, "Clean up system files (service files, desktop files, icons)")
 
 	return cmd
+}
+
+// forgetUninstallRecord intentionally bypasses catalog resolution and all installer
+// operations: even an unreadable saved definition must be recoverable.
+func forgetUninstallRecord(cmd *cobra.Command, repo types.Repository, name string, force bool) error {
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("--forget requires an application name")
+	}
+	app, err := repo.GetApp(name)
+	if err != nil || app == nil {
+		if err != nil && !strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("failed to read installation record for %s: %w", name, err)
+		}
+		return fmt.Errorf("application %q is not tracked by DevEx", name)
+	}
+	// Use the stored spelling for repositories whose lookup is case-insensitive.
+	name = app.Name
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, "Would clear the tracking record and saved definition for %s; packages, services, configuration and data are kept.\n", name)
+	if viper.GetBool("dry-run") {
+		return nil
+	}
+	if !force && interaction.IsInteractiveMode() {
+		fmt.Fprint(out, "Clear these DevEx records? (y/N): ")
+		response, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return fmt.Errorf("failed to read confirmation: %w", err)
+		}
+		if !strings.EqualFold(strings.TrimSpace(response), "y") {
+			fmt.Fprintln(out, "Forget cancelled.")
+			return nil
+		}
+	}
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
+	if err := clearUninstallRecords(repo, name); err != nil {
+		return fmt.Errorf("failed to forget %s: %w", name, err)
+	}
+	fmt.Fprintf(out, "Cleared DevEx records for %s.\n", name)
+	return nil
 }
 
 var (
