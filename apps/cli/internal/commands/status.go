@@ -157,7 +157,7 @@ func runStatus(repo types.Repository, settings config.CrossPlatformSettings, app
 
 	// Resolve applications defined by --config exactly as install does, so
 	// apps installed from a config file can be checked from the same file.
-	if _, merged, ok, err := configuredApplications(settings); err != nil {
+	if _, merged, ok, err := configuredApplications(ctx, settings); err != nil {
 		return err
 	} else if ok {
 		settings = merged
