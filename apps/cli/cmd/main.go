@@ -339,11 +339,11 @@ func readCommand(args []string) bool {
 		return false
 	}
 	switch words[0] {
-	case "list", "platform":
+	case "platform":
 		return true
-	case "status":
-		// Interactive status bootstraps plugins to probe installed state; the
-		// JSON inspection contract reports unavailable plugins as unknown.
+	case "list", "status":
+		// Interactive list and status keep first-run bootstrap and state
+		// creation; only the JSON inspection contract is side-effect free.
 		return jsonOutputRequested(args)
 	case "config":
 		return len(words) > 1 && (words[1] == "effective" || words[1] == "show")

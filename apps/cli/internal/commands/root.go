@@ -336,8 +336,12 @@ func (r *rootRuntime) getPluginBootstrap() *bootstrap.PluginBootstrap {
 
 func readAPICommand(cmd *cobra.Command) bool {
 	switch cmd.Name() {
-	case "list", "platform":
+	case "platform":
 		return true
+	case "list":
+		// Interactive list keeps first-run bootstrap; JSON inspection does not.
+		format, _ := cmd.Flags().GetString("format")
+		return format == "json"
 	case "status":
 		// Interactive status bootstraps plugins to probe installed state; only
 		// the JSON inspection contract reports unavailable plugins as unknown.
