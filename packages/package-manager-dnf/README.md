@@ -29,7 +29,8 @@ DNF package manager plugin for DevEx. Provides comprehensive package management 
   (reported with DNF's stderr), returns an error before any removal starts;
   native DNF failures are returned unchanged. Specifications starting with `-`
   are rejected.
-- **Update**: System updates and package upgrades
+- **Update**: Refresh repository metadata with `dnf makecache`
+- **Upgrade**: Upgrade installed packages with `dnf upgrade --assumeyes`
 - **Search**: Advanced package search with filters
 - **List**: Show installed packages without elevation
 - **Info**: Detailed package information and metadata
@@ -98,3 +99,40 @@ dnf:
 ## 📄 License
 
 Licensed under the [Apache-2.0 License](../../../LICENSE).
+
+## Installed queries and repository commands
+
+The `is-installed <pkg...>` command queries each RPM package name with
+unelevated `rpm -q -- <pkg>`. When packages are absent it returns the SDK
+`NotInstalledError` (exit status 3), including all missing names. Query failures
+remain errors; the CLI uses this command for DNF installation status.
+
+Repository commands accept exactly one argument:
+
+| Command | Argument |
+| --- | --- |
+| `add-repository` | HTTPS URL of a `.repo` file |
+| `enable-repository` | Configured repository ID (no wildcards) |
+| `enable-copr` | `owner/project` or `@group/project` |
+| `import-key` | HTTPS key URL or absolute local key path |
+
+Repository changes and key imports request elevation. The plugin probes
+`dnf --version` without elevation before invoking config-manager: DNF4 uses
+`--add-repo` / `--set-enabled`; DNF5 uses `addrepo --from-repofile=...` /
+`setopt <id>.enabled=1`. Unknown versions and failed probes stop the operation.
+The corresponding config-manager/COPR plugins must already be installed;
+missing plugins and native failures are returned without retrying mutations.
+
+See the [DNF4 config-manager reference](https://dnf-plugins-core.readthedocs.io/en/latest/config_manager.html)
+and [DNF5 config-manager reference](https://dnf5.readthedocs.io/en/stable/dnf5_plugins/config-manager.8.html).
+
+COPR enable uses `dnf copr enable -y <owner/project>`; key import uses
+`rpm --import <source>`. The caller selects a trusted repository or key;
+the plugin does not disable signature checks.
+
+Direct command arguments support `--non-interactive`. The CLI also forwards
+unattended mode through `DEVEX_UNATTENDED`, and `CI=true` is supported by the
+SDK. Install, remove, and upgrade always use `--assumeyes`, and COPR enable
+always uses `-y`.
+
+Fedora container end-to-end install/remove coverage is deferred to #121.

@@ -165,7 +165,7 @@ func (p *PluginBasedInstaller) IsInstalled(command string) (bool, error) {
 
 	pluginName := "package-manager-" + p.method
 	switch p.method {
-	case "apt", "appimage", "deb", "flatpak", "mise", "pip":
+	case "apt", "appimage", "deb", "dnf", "flatpak", "mise", "pip":
 		packages, err := catalogPackageArguments(p.method, command)
 		if err != nil {
 			return false, err
