@@ -163,45 +163,13 @@ func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstr
 	return nil
 }
 
-// handleDesktopConfiguration applies desktop theme and settings using appropriate desktop plugin
-// Detects desktop environment and uses corresponding plugin (desktop-gnome, desktop-kde, etc.)
+// handleDesktopConfiguration applies only the desktop settings explicitly accepted
+// on Confirmation. Theme preferences do not authorize additional plugin effects.
 func (m *SetupModel) handleDesktopConfiguration(ctx context.Context, pluginBootstrap *bootstrap.PluginBootstrap) error {
-	if !m.system.hasDesktop {
-		log.Debug("No desktop environment detected, skipping desktop configuration")
+	if !m.selections.desktopSettings || m.selections.desktopPreview == "" {
 		return nil
 	}
-
-	// Determine desktop plugin based on detected environment
-	desktopEnv := m.system.detectedPlatform.DesktopEnv
-	if desktopEnv == "none" || desktopEnv == "" {
-		log.Debug("Desktop environment not detected or supported, skipping desktop configuration")
-		return nil
-	}
-
-	pluginName := fmt.Sprintf("desktop-%s", strings.ToLower(desktopEnv))
-	log.Info("Configuring desktop using plugin", "plugin", pluginName, "desktop", desktopEnv)
-
-	// Check if desktop plugin is available
-	manager := pluginBootstrap.GetManager()
-	installedPlugins := manager.ListPluginsWithContext(ctx)
-
-	_, exists := installedPlugins[pluginName]
-	if !exists {
-		return fmt.Errorf("%s plugin is not installed; rerun devex setup", pluginName)
-	}
-
-	// Get selected theme if any
-	selectedTheme := m.getSelectedTheme()
-
-	// Execute desktop plugin with theme configuration
-	for _, args := range desktopConfigurationArgs(selectedTheme) {
-		if err := runConfigurationPlugin(ctx, manager, pluginName, args); err != nil {
-			return fmt.Errorf("failed to configure desktop using %s; check desktop packages and permissions: %w", pluginName, err)
-		}
-	}
-
-	log.Info("Desktop configuration completed successfully", "plugin", pluginName, "theme", selectedTheme)
-	return nil
+	return m.applyDesktopPreview(ctx, pluginBootstrap.GetManager())
 }
 
 // handleGitConfiguration sets up Git using tool-git plugin

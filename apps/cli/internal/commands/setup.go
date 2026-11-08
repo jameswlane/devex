@@ -97,6 +97,10 @@ Run 'devex setup' to begin the guided installation process.`,
 				}
 			}
 
+			if viper.GetBool("dry-run") && !viper.IsSet("applications") {
+				return setup.RunAutomatedSetup(ctx, repo, settings)
+			}
+
 			// Check if running in non-interactive mode
 			if !setup.IsInteractiveMode() {
 				log.Info("Running in non-interactive automated mode")

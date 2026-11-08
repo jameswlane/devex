@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -242,6 +244,17 @@ var _ = Describe("KDE command contracts", func() {
 	plasmashell := sdktest.Call{Args: []string{"plasmashell"}}
 
 	contracts := []desktopContract{
+		{command: "describe", routes: func() {
+			output := sdktest.CaptureStdout(GinkgoT(), func() { Expect(plugin.Execute("describe", nil)).To(Succeed()) })
+			var commands [][]string
+			Expect(json.Unmarshal([]byte(output), &commands)).To(Succeed())
+			Expect(commands).NotTo(BeEmpty())
+			noNativeCalls()
+		}, fails: func() {
+			recorder.Fallback("kwriteconfig5", sdktest.Response{ExitCode: 42})
+			Expect(plugin.Execute("describe", nil)).To(Succeed())
+			noNativeCalls()
+		}},
 		{
 			command: "configure",
 			routes: func() {
@@ -883,6 +896,36 @@ var _ = Describe("KDE command contracts", func() {
 		Entry("configure-panel", "configure-panel", func() []sdktest.Call { return panelCalls }),
 		Entry("configure-fonts", "configure-fonts", func() []sdktest.Call { return fontCalls("JetBrains Mono,10,-1,5,50,0,0,0,0,0") }),
 	)
+
+	It("previews exactly the native commands configure runs, with no preview side effects", func() {
+		var err error
+		preview := sdktest.CaptureStdout(GinkgoT(), func() { err = plugin.Execute("describe", nil) })
+		Expect(err).NotTo(HaveOccurred())
+		Expect(recorder.Calls("kwriteconfig5")).To(BeEmpty())
+		var commands [][]string
+		Expect(json.Unmarshal([]byte(preview), &commands)).To(Succeed())
+		canonical, err := json.Marshal(commands)
+		Expect(err).NotTo(HaveOccurred())
+		hash := fmt.Sprintf("%x", sha256.Sum256(canonical))
+		Expect(plugin.Execute("configure", []string{"--expected-plan", hash})).To(Succeed())
+		actual := recorder.Calls("kwriteconfig5")
+		Expect(actual).To(HaveLen(len(commands)))
+		for i, call := range actual {
+			Expect(commands[i][0]).To(Equal("kwriteconfig5"))
+			Expect(call.Args).To(Equal(commands[i][1:]))
+		}
+	})
+
+	It("rejects a stale accepted plan before changing settings", func() {
+		Expect(plugin.Execute("configure", []string{"--expected-plan", "stale"})).To(MatchError(ContainSubstring("plan changed")))
+		Expect(recorder.Calls("kwriteconfig5")).To(BeEmpty())
+	})
+
+	It("describes settings without a desktop session", func() {
+		GinkgoT().Setenv("XDG_CURRENT_DESKTOP", "")
+		Expect(plugin.Execute("describe", nil)).To(Succeed())
+		Expect(recorder.Calls("kwriteconfig5")).To(BeEmpty())
+	})
 
 	It("rejects an unknown command without native calls", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))

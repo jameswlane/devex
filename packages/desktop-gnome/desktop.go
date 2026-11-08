@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,6 +19,9 @@ func NewDesktopManager() *DesktopManager {
 
 // Configure applies comprehensive GNOME configuration
 func (dm *DesktopManager) Configure(ctx context.Context, args []string) error {
+	if err := dm.checkAcceptedPlan(args); err != nil {
+		return err
+	}
 	fmt.Println("Configuring GNOME desktop environment...")
 
 	configs := dm.getDefaultConfigurations()
@@ -141,4 +146,39 @@ func (dm *DesktopManager) getDashToDockConfigurations() []gsettingConfig {
 		{"org.gnome.shell.extensions.dash-to-dock", "autohide", "true"},
 		{"org.gnome.shell.extensions.dash-to-dock", "intellihide", "false"},
 	}
+}
+
+// configurePlan is the exact ordered native argv for configure.
+func (dm *DesktopManager) configurePlan() [][]string {
+	var commands [][]string
+	for _, setting := range dm.getDefaultConfigurations() {
+		commands = append(commands, []string{"gsettings", "set", setting.schema, setting.key, setting.value})
+	}
+	return commands
+}
+
+// Describe needs neither a desktop session nor any installed native tools.
+func (dm *DesktopManager) Describe() error {
+	data, err := json.Marshal(dm.configurePlan())
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+// A caller that previewed settings can refuse a stale or incompatible plan.
+func (dm *DesktopManager) checkAcceptedPlan(args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(dm.configurePlan())
+	if err != nil {
+		return err
+	}
+	expected := fmt.Sprintf("%x", sha256.Sum256(data))
+	if len(args) != 2 || args[0] != "--expected-plan" || args[1] != expected {
+		return fmt.Errorf("desktop settings plan changed; preview and confirm again")
+	}
+	return nil
 }

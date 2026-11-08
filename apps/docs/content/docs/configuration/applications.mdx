@@ -114,3 +114,41 @@ An existing destination is moved to a sibling named `<destination>.<UTC timestam
 A failed mapping produces a warning with the application name, source, destination, and cause. Installation continues with the remaining mappings and post-install hooks, and the warning is saved in the configuration-stage result. TUI batch results also include these warnings. This policy does not undo a successfully installed package. If the result record cannot be opened, configuration copies are skipped with a warning.
 
 `devex install --dry-run` prints the planned copy, parent-directory creation, and timestamped backup operations without writing files or changing the result record. It reports invalid mappings, but cannot predict every permission error that may occur when the actual installation writes files.
+
+## Consent rules for app and plugin authors
+
+Every effect must belong to an explicit user choice or a visible default that
+can be disabled. Confirmation and `--dry-run` must show packages, dependencies,
+package-list updates, shell-file edits, and desktop settings before execution.
+Build the preview and execution from the same plan; do not hide extra tools in
+post-install hooks. Already-installed applications must be skipped and reported.
+
+Post-install hooks must stay within the selected application's scope. Use
+`post_install` declarative `shell_init` and `path` actions for shell integration,
+so DevEx targets the selected shell and backs up its managed changes. Raw
+`>> ~/.zshrc` (and other shell rc appends) fail config validation. Do not use
+other redirects, scripts, or commands to bypass that rule or change unrelated
+applications, global preferences, or another shell's files. General shell
+commands are not sandboxed: reviewers must check their write targets.
+
+Optional aliases, history preferences, and desktop tweaks require an explicit
+choice with visible defaults. GNOME and KDE plugins provide a side-effect-free
+`describe` command: its JSON lists each native command's executable and exact
+arguments for `configure`. Setup displays these settings at Confirmation,
+disabled by default; press `s` to opt in. It passes the accepted plan's SHA-256
+to `configure --expected-plan HASH`; a different plugin plan fails before any
+setting is written. Plugins without a compatible preview are skipped. Automated
+setup leaves desktop settings disabled. Setup saves the selected theme
+preference without implicitly running a desktop plugin's `apply-theme` command.
+
+Keep previews free of writes, package installation, session requirements, and
+native-tool execution. When changing a desktop configure operation, update the
+shared settings table used by both preview and execution. Test that the native
+commands actually recorded during execution match the described commands, that
+preview performs no writes, and that stale accepted plans fail before mutation.
+
+Back up user files and settings before modifying them, preserve existing user
+choices such as Git identity, and record enough information for restoration.
+Report failures honestly, including partial changes; never label an incomplete
+setup successful. Reviewers must verify scope, preview/execution parity,
+reversibility, failure reporting, and regression coverage for every new effect.
