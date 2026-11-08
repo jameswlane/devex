@@ -21,50 +21,35 @@ func (d *DebInstaller) getMissingDependencies(debFile string) ([]string, error) 
 		return nil, nil // No dependencies
 	}
 
-	// Parse dependencies
 	var missing []string
-	deps := strings.Split(output, ",")
-	for _, dep := range deps {
-		// Clean up dependency string
-		dep = strings.TrimSpace(dep)
-		// Remove version constraints if present
-		if idx := strings.IndexAny(dep, " ("); idx > 0 {
-			dep = dep[:idx]
-		}
-
-		// Skip if it's an OR dependency (contains |)
-		if strings.Contains(dep, "|") {
-			parts := strings.Split(dep, "|")
-			// Check if any of the alternatives is installed
-			anyInstalled := false
-			for _, part := range parts {
-				part = strings.TrimSpace(part)
-				installed, err := d.isPackageInstalled(part)
-				if err != nil {
-					return nil, err
-				}
-				if installed {
-					anyInstalled = true
-					break
-				}
+	for _, group := range strings.Split(output, ",") {
+		var first string
+		anyInstalled := false
+		// Split alternatives before removing each member's version constraint.
+		for _, alternative := range strings.Split(group, "|") {
+			name := strings.TrimSpace(alternative)
+			// This best-effort preflight ignores versions and architecture qualifiers;
+			// dpkg -i remains the authoritative dependency check.
+			if idx := strings.IndexAny(name, "( :\t\r\n"); idx >= 0 {
+				name = name[:idx]
 			}
-			if !anyInstalled && len(parts) > 0 {
-				// Use the first alternative
-				missing = append(missing, strings.TrimSpace(parts[0]))
+			if name == "" {
+				continue
 			}
-			continue
+			if first == "" {
+				first = name
+			}
+			installed, err := d.isPackageInstalled(name)
+			if err != nil {
+				return nil, err
+			}
+			if installed {
+				anyInstalled = true
+				break
+			}
 		}
-
-		if dep == "" {
-			continue
-		}
-		// Check if dependency is installed; a failed query is an error, not absence.
-		installed, err := d.isPackageInstalled(dep)
-		if err != nil {
-			return nil, err
-		}
-		if !installed {
-			missing = append(missing, dep)
+		if !anyInstalled && first != "" {
+			missing = append(missing, first)
 		}
 	}
 

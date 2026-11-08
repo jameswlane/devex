@@ -39,6 +39,21 @@ devex package-manager deb contents package.deb
 - `verify` fails if dependencies cannot be checked. Missing dependencies are reported as warnings, since `install` can resolve them.
 - `install` checks and installs dependencies on a best-effort basis: failures there are warnings, because `dpkg -i` is the authoritative check. If `dpkg -i` fails, `apt-get install -f -y` runs to repair the dpkg state, and the install failure is still returned, since the repair may remove the package rather than complete it. If the repair also fails, both errors are returned. Downloaded packages are removed on every return path.
 
+## Dependency preflight policy
+
+The comma-separated `Depends` entries are checked independently. Within each
+entry, `|` alternatives are checked in order, and any installed member satisfies
+that group. When none is installed, the first alternative is passed to
+`apt-get install -y`.
+
+This is a best-effort presence check: version constraints are stripped from each
+alternative, and architecture qualifiers (`:any`, `:native`, or an explicit
+architecture such as `:amd64`) are stripped for both queries and installation.
+For example, `python3:any` is queried and, if missing, installed as `python3`.
+An installed package can therefore satisfy this preflight even when its version
+or architecture does not satisfy the original dependency. `dpkg -i` enforces the
+original constraints, with the existing repair and error handling described above.
+
 ## 🚀 Platform Support
 
 - **Ubuntu**: 18.04+, 20.04+, 22.04+, 24.04+

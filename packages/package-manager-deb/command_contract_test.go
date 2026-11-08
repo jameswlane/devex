@@ -150,6 +150,64 @@ var _ = Describe("DEB command contracts", func() {
 		}))
 		Expect(recorder.Calls("dpkg")).To(Equal([]sdktest.Call{{Args: []string{"-i", file}, ElevationRequested: true}}))
 	})
+	Context("dependency alternatives", func() {
+		DescribeTable("checks normalized alternatives and installs only missing groups",
+			func(depends string, installed, queried, missing []string) {
+				recorder.Script("dpkg-deb", []string{"-f", file, "Depends"}, sdktest.Response{Stdout: depends})
+				recorder.Fallback("dpkg-query", sdktest.Response{ExitCode: 1})
+				for _, name := range installed {
+					recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", name}, sdktest.Response{Stdout: "install ok installed\n"})
+				}
+
+				Expect(plugin.Execute("install", []string{file})).To(Succeed())
+
+				var queries []sdktest.Call
+				for _, name := range queried {
+					queries = append(queries, sdktest.Call{Args: []string{"-W", "-f=${Status}", name}})
+				}
+				Expect(recorder.Calls("dpkg-query")).To(Equal(queries))
+				installs := recorder.Calls("apt-get")
+				if len(missing) > 0 {
+					Expect(installs).To(HaveLen(2))
+					Expect(installs[0]).To(Equal(sdktest.Call{Args: []string{"update"}, ElevationRequested: true}))
+					Expect(installs[1].ElevationRequested).To(BeTrue())
+					Expect(installs[1].Args).To(HaveLen(2 + len(missing)))
+					Expect(installs[1].Args[:2]).To(Equal([]string{"install", "-y"}))
+					// handleInstall deduplicates groups in a map, so operand order is unspecified.
+					Expect(installs[1].Args[2:]).To(ConsistOf(missing))
+				} else {
+					Expect(installs).To(BeEmpty())
+				}
+				Expect(recorder.Calls("dpkg-deb")).To(Equal([]sdktest.Call{{Args: []string{"-f", file, "Depends"}}}))
+				Expect(recorder.Calls("dpkg")).To(Equal([]sdktest.Call{{Args: []string{"-i", file}, ElevationRequested: true}}))
+			},
+			Entry("uses an installed second alternative", "a | b", []string{"b"}, []string{"a", "b"}, nil),
+			Entry("installs the first versioned alternative when none is installed", "a (>= 1) | b", nil, []string{"a", "b"}, []string{"a"}),
+			Entry("normalizes version constraints on later alternatives", "a (>= 1) | b (<< 3)", []string{"b"}, []string{"a", "b"}, nil),
+			Entry("stops at the first installed alternative", "a | b | c", []string{"a"}, []string{"a"}, nil),
+			Entry("checks every alternative before selecting the first", "a|b|c", []string{"c"}, []string{"a", "b", "c"}, nil),
+			Entry("checks comma-separated groups independently and trims whitespace", " a\t(>= 1) | b , c | d , e \n", []string{"b"}, []string{"a", "b", "c", "d", "e"}, []string{"c", "e"}),
+			Entry("strips :any before querying and installing", "python3:any", nil, []string{"python3"}, []string{"python3"}),
+			Entry("accepts an installed unqualified package for :any", "python3:any", []string{"python3"}, []string{"python3"}, nil),
+			Entry("strips :native and explicit architecture qualifiers", "python3:native (>= 3) | python3:amd64", nil, []string{"python3", "python3"}, []string{"python3"}),
+			Entry("skips empty fields without issuing empty queries", " , | , \n", nil, nil, nil),
+		)
+
+		It("returns a failed alternative query instead of treating it as absence", func() {
+			recorder.Script("dpkg-deb", []string{"-f", file, "Depends"}, sdktest.Response{Stdout: "a (>= 1) | b | c"})
+			recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", "a"}, sdktest.Response{ExitCode: 1})
+			recorder.Script("dpkg-query", []string{"-W", "-f=${Status}", "b"}, sdktest.Response{ExitCode: 42})
+			err := plugin.Execute("verify", []string{file})
+			Expect(err).To(MatchError("failed to check dependencies for " + file + ": dpkg-query failed for b: exit status 42"))
+			Expect(exitCode(err)).To(Equal(42))
+			Expect(recorder.Calls("dpkg-query")).To(Equal([]sdktest.Call{
+				{Args: []string{"-W", "-f=${Status}", "a"}},
+				{Args: []string{"-W", "-f=${Status}", "b"}},
+			}))
+			Expect(recorder.Calls("apt-get")).To(BeEmpty())
+			Expect(recorder.Calls("dpkg")).To(BeEmpty())
+		})
+	})
 	queryGit := []string{"-W", "-f=${Status}", "git"}
 	queryVim := []string{"-W", "-f=${Status}", "vim"}
 	It("propagates installed-query failures instead of reporting absence", func() {
