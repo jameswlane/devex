@@ -339,9 +339,12 @@ func readAPICommand(cmd *cobra.Command) bool {
 	case "list", "platform":
 		return true
 	case "status":
+		// Interactive status bootstraps plugins to probe installed state; only
+		// the JSON inspection contract reports unavailable plugins as unknown.
 		fix, _ := cmd.Flags().GetBool("fix")
 		template, _ := cmd.Flags().GetString("template")
-		return !fix && template == ""
+		format, _ := cmd.Flags().GetString("format")
+		return !fix && template == "" && format == "json"
 	case "effective", "show", "validate":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "config"
 	}
