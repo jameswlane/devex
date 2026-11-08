@@ -31,6 +31,16 @@ func installedQueryCall(spec string) sdktest.Call {
 	return sdktest.Call{Args: installedQuery(spec)}
 }
 
+func providesQuery(spec string) []string {
+	return []string{"repoquery", "--installed", "--quiet", "--cacheonly", "--whatprovides", spec}
+}
+
+// unmatchedCalls are the queries made for a specification that matches
+// neither an installed package nor an installed provide.
+func unmatchedCalls(spec string) []sdktest.Call {
+	return []sdktest.Call{installedQueryCall(spec), {Args: providesQuery(spec)}}
+}
+
 // scriptInstalled makes each spec resolve to one installed package.
 func scriptInstalled(recorder *sdktest.Recorder, specs ...string) {
 	for _, spec := range specs {
@@ -175,16 +185,30 @@ var _ = Describe("DNF command contracts", func() {
 			}))
 		})
 
+		It("accepts a specification that only an installed package provides", func() {
+			recorder.Script("dnf", providesQuery("/usr/bin/vim"), sdktest.Response{
+				Stdout: "vim-enhanced-2:9.1.0-1.fc42.x86_64\n",
+			})
+			Expect(plugin.Execute("remove", []string{"/usr/bin/vim"})).To(Succeed())
+			Expect(recorder.Calls("dnf")).To(Equal(append(unmatchedCalls("/usr/bin/vim"),
+				sdktest.Call{Args: []string{"remove", "--assumeyes", "/usr/bin/vim"}, ElevationRequested: true},
+			)))
+		})
+
 		DescribeTable("rejects a specification that matches nothing, stopping at the first miss",
 			func(packages []string, queried []string) {
 				scriptInstalled(recorder, "git")
-				// The unscripted "missing" query returns no output, as DNF does
-				// when no installed package matches.
+				// Unscripted "missing" queries return no output, as DNF does when
+				// neither a package nor a provide matches.
 				err := plugin.Execute("remove", packages)
 				Expect(err).To(MatchError(`cannot remove package "missing": no installed package matches`))
-				calls := make([]sdktest.Call, 0, len(queried))
+				calls := make([]sdktest.Call, 0, len(queried)+1)
 				for _, spec := range queried {
-					calls = append(calls, installedQueryCall(spec))
+					if spec == "missing" {
+						calls = append(calls, unmatchedCalls(spec)...)
+					} else {
+						calls = append(calls, installedQueryCall(spec))
+					}
 				}
 				Expect(recorder.Calls("dnf")).To(Equal(calls))
 				Expect(recorder.Calls("sudo")).To(BeEmpty())
