@@ -1,0 +1,178 @@
+---
+title: Read and planning JSON APIs
+description: Typed, read-only discovery, status, configuration and installation planning contracts.
+---
+
+The CLI adapters call `apps/cli/internal/agentapi` directly. A future adapter
+can call the same services without invoking Cobra or parsing terminal output.
+MCP transport is outside this API's scope.
+
+```sh
+devex list available --search git --format json
+devex list installed --format json
+devex status --app git --format json
+devex platform --format json
+devex config show --format json
+devex config effective --format json
+devex config validate --format json
+devex install git --dry-run --format json
+```
+
+JSON goes to the Cobra output writer. Diagnostics and plugin query output go
+to stderr. Empty discovery and status results are `[]`. Unknown status names
+return an array containing any known results and exit nonzero. A failed probe
+preserves other results and exits nonzero. Unavailable local plugin runtimes
+produce `unknown` status; inspection never downloads or bootstraps a plugin.
+Read status checks installation presence; lifecycle health checks and repair
+remain explicit operations. `--fix` cannot be combined with JSON inspection.
+
+Other service failures use the error object below. Consumers must check the
+exit status as well as JSON. Validation failures return the validation result
+with diagnostics and a nonzero exit status, rather than the general error
+object. See [configuration validation](/docs/configuration/validation).
+
+## Compatibility
+
+Existing discovery arrays retain their capitalized field names, including
+`missing_definition` for installed entries. Status retains its lower-case
+array fields (`name`, `installed`, `status`, `install_method`, and optional
+issues). `config show` is a file summary, not effective settings. Existing
+fields keep their meaning; consumers should ignore added fields and accept
+new warning and error categories. Arrays have deterministic ordering where
+order is meaningful; plan dependency order puts known dependencies first.
+
+The following JSON Schema describes the new result forms. Legacy discovery,
+status and config-show contracts remain unchanged.
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {"$ref": "#/$defs/plan"},
+    {"$ref": "#/$defs/effective"},
+    {"$ref": "#/$defs/platform"},
+    {"$ref": "#/$defs/error"}
+  ],
+  "$defs": {
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "plan": {
+      "type": "object",
+      "required": ["apps", "dependency_order", "warnings"],
+      "properties": {
+        "apps": {"type": "array", "items": {
+          "type": "object",
+          "required": ["name", "method", "plugin", "dependencies", "effects", "privileges", "unknown_effects"],
+          "properties": {
+            "name": {"type": "string"},
+            "method": {"type": "string"},
+            "plugin": {"type": "string"},
+            "dependencies": {"$ref": "#/$defs/strings"},
+            "effects": {"$ref": "#/$defs/strings"},
+            "privileges": {"type": "string"},
+            "unknown_effects": {"type": "boolean"}
+          }
+        }},
+        "dependency_order": {"$ref": "#/$defs/strings"},
+        "warnings": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "effective": {
+      "type": "object",
+      "required": ["applications", "precedence", "application_source"],
+      "properties": {
+        "applications": {"type": "array", "items": {
+          "type": "object", "required": ["name", "method", "default"],
+          "properties": {
+            "name": {"type": "string"},
+            "method": {"type": "string"},
+            "default": {"type": "boolean"}
+          }, "additionalProperties": false
+        }},
+        "precedence": {"$ref": "#/$defs/strings"},
+        "application_source": {"enum": ["configuration_tiers", "applications_override"]}
+      }, "additionalProperties": false
+    },
+    "platform": {
+      "type": "object",
+      "required": ["os", "architecture", "distribution", "version", "desktop_environment", "package_managers"],
+      "properties": {
+        "os": {"type": "string"}, "architecture": {"type": "string"},
+        "distribution": {"type": "string"}, "version": {"type": "string"},
+        "desktop_environment": {"type": "string"},
+        "package_managers": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "error": {
+      "type": "object", "required": ["error"],
+      "properties": {"error": {
+        "type": "object", "required": ["category", "retryable", "message"],
+        "properties": {
+          "category": {"type": "string"},
+          "retryable": {"type": "boolean"}, "message": {"type": "string"}
+        }
+      }}
+    }
+  }
+}
+```
+
+## Effective configuration
+
+```json
+{
+  "applications": [{"name": "git", "method": "apt", "default": true}],
+  "precedence": ["flags", "environment", "config", "defaults"],
+  "application_source": "applications_override"
+}
+```
+
+The allowlist exposes only application names, resolved methods and default
+selection, along with precedence and aggregate application-source information.
+It does not expose raw Viper maps, environment values, hook bodies, private
+keys, URLs, or configuration paths. `applications_override` indicates that the
+active `applications` selection was merged with the catalog; it does not claim
+that every definition came from that override. Detailed per-field file origins
+are not tracked by the current loader.
+
+## Installation plans
+
+```json
+{
+  "apps": [{
+    "name": "git", "method": "apt", "plugin": "package-manager-apt",
+    "dependencies": [], "effects": ["package_install"],
+    "privileges": "unknown", "unknown_effects": true
+  }],
+  "dependency_order": ["git"],
+  "warnings": ["Plugin effects and required privileges are unknown; no plugins or hooks were executed."]
+}
+```
+
+Planning and execution share application selection: explicit app arguments,
+categories, inline definitions from the selected configuration, then default
+apps. Platform support and method selection use the existing catalog rules.
+Validation delegates to the shared semantic validator.
+
+Effects describe intended package installation, pre/post hooks, configuration
+files, themes, cleanup files and package sources when present. Hook bodies and
+URLs are omitted. Dependencies identify declared prerequisites. Known DevEx
+application dependencies are traversed before their dependents; native package
+prerequisites remain in `dependencies`. This is a descriptive plan: plugin
+internals, script effects, alternative methods selected at execution time, and
+required privileges remain unknown. Plugins are never invoked to construct
+plans. JSON planning currently covers application installation, not lifecycle
+templates (`--template`).
+
+## Errors and cancellation
+
+```json
+{"error":{"category":"cancelled","retryable":false,"message":"cancelled"}}
+```
+
+Stable categories include `invalid_request`, `not_found`, `unsupported`,
+`unavailable`, `partial_failure`, `cancelled`, and `deadline_exceeded`.
+`unavailable` repository errors are retryable; cancellation requires a new
+request. Do not infer retryability from human message text. Context is checked
+before selection, between status probes and dependency visits, and forwarded
+to platform subprocess probes. Read and plan services never run hooks, repair
+status, bootstrap or download plugins, or write configuration/state.

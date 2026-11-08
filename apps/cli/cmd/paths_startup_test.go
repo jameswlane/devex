@@ -63,3 +63,18 @@ var _ = Describe("Startup migration recovery", func() {
 		Expect(devexpaths.ForHome(home).Config).NotTo(BeADirectory())
 	})
 })
+
+var _ = Describe("Read-only startup classification", func() {
+	DescribeTable("keeps JSON status inspection side-effect free while plain status bootstraps",
+		func(args []string, readOnly bool) {
+			Expect(readCommand(args)).To(Equal(readOnly))
+		},
+		Entry("plain status bootstraps plugins", []string{"status", "--all", "--no-tui"}, false),
+		Entry("JSON status is read-only", []string{"status", "--format", "json"}, true),
+		Entry("JSON status with equals form is read-only", []string{"status", "--format=json"}, true),
+		Entry("plain list bootstraps plugins", []string{"list", "available"}, false),
+		Entry("JSON list is read-only", []string{"list", "available", "--format", "json"}, true),
+		Entry("platform is read-only", []string{"platform"}, true),
+		Entry("install is not read-only", []string{"install", "git"}, false),
+	)
+})

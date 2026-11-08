@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
@@ -42,7 +43,7 @@ func NewStatusCmdWithPluginProvider(repo types.Repository, settings config.Cross
 		runRef         string
 	)
 
-	cmd := &cobra.Command{
+	cmd := &cobra.Command{SilenceUsage: true,
 		Use:   "status",
 		Short: "Check the status of installed applications",
 		Long: `Check the installation status and health of applications.
@@ -87,6 +88,48 @@ Warnings go to stderr, so --format json|yaml output on stdout stays parseable.`,
 				}, settings, getPluginBootstrap)
 			}
 
+			if !fix {
+				ctx := cmd.Context()
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				results, err := agentapi.Status(ctx, settings, repo, agentapi.StatusRequest{Names: apps, Category: category}, func(ctx context.Context, app types.AppConfig) (bool, error) {
+					installer := installers.GetInstaller(ctx, app.InstallMethod)
+					if installer == nil {
+						return false, &agentapi.Error{Category: "unsupported", Message: "local plugin runtime unavailable"}
+					}
+					return installer.IsInstalled(app.InstallCommand)
+				})
+				if format == "json" {
+					if len(results) == 0 && err != nil && agentapi.APIError(err).Category != "not_found" {
+						return writeAPIJSON(cmd, nil, err)
+					}
+					encoder := json.NewEncoder(cmd.OutOrStdout())
+					encoder.SetIndent("", "  ")
+					if e := encoder.Encode(results); e != nil {
+						return e
+					}
+					return err
+				}
+				if format == "yaml" {
+					if e := yaml.NewEncoder(cmd.OutOrStdout()).Encode(results); e != nil {
+						return e
+					}
+					return err
+				}
+				if format != "table" && format != "" {
+					return fmt.Errorf("unsupported format %q", format)
+				}
+				if len(results) == 0 {
+					fmt.Fprintln(cmd.OutOrStdout(), "No applications to check")
+				} else {
+					outputTable(results, verbose)
+				}
+				return err
+			}
+			if format == "json" {
+				return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "--fix is not supported with JSON inspection"})
+			}
 			return runStatus(repo, settings, apps, all, category, format, verbose, fix)
 		},
 	}

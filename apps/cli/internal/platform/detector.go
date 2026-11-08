@@ -15,12 +15,12 @@ import (
 
 // Platform represents the detected platform information
 type Platform struct {
-	OS              string   // windows, darwin, linux
-	Distribution    string   // ubuntu, fedora, arch, etc. (Linux only)
-	DesktopEnv      string   // gnome, kde, xfce, etc.
-	Version         string   // OS/distro version
-	Architecture    string   // amd64, arm64, etc.
-	PackageManagers []string // apt, yum, pacman, brew, choco, etc.
+	OS              string   `json:"os"`                  // windows, darwin, linux
+	Distribution    string   `json:"distribution"`        // ubuntu, fedora, arch, etc. (Linux only)
+	DesktopEnv      string   `json:"desktop_environment"` // gnome, kde, xfce, etc.
+	Version         string   `json:"version"`             // OS/distro version
+	Architecture    string   `json:"architecture"`        // amd64, arm64, etc.
+	PackageManagers []string `json:"package_managers"`    // apt, yum, pacman, brew, choco, etc.
 }
 
 // Detector handles platform detection with caching
@@ -36,6 +36,12 @@ func NewDetector() *Detector {
 
 // DetectPlatform detects the current platform and available package managers with caching
 func (d *Detector) DetectPlatform() (*Platform, error) {
+	return d.DetectPlatformContext(context.Background())
+}
+func (d *Detector) DetectPlatformContext(ctx context.Context) (*Platform, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Check if we already have cached platform info
 	d.mu.RLock()
 	if d.cachedPlatform != nil {
@@ -67,23 +73,26 @@ func (d *Detector) DetectPlatform() (*Platform, error) {
 			return nil, fmt.Errorf("failed to detect Linux distro: %w", err)
 		}
 	case "darwin":
-		if err := d.detectMacOSVersion(platform); err != nil {
+		if err := d.detectMacOSVersionContext(ctx, platform); err != nil {
 			return nil, fmt.Errorf("failed to detect macOS version: %w", err)
 		}
 	case "windows":
-		if err := d.detectWindowsVersion(platform); err != nil {
+		if err := d.detectWindowsVersionContext(ctx, platform); err != nil {
 			return nil, fmt.Errorf("failed to detect Windows version: %w", err)
 		}
 	}
 
 	// Detect desktop environment (Linux only for now)
 	if platform.OS == "linux" {
-		d.detectDesktopEnvironment(platform)
+		d.detectDesktopEnvironmentContext(ctx, platform)
 	}
 
 	// Detect available package managers
 	d.detectPackageManagers(platform)
 
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Cache the result
 	d.cachedPlatform = platform
 
@@ -150,7 +159,10 @@ func (d *Detector) parseOSRelease() (map[string]string, error) {
 
 // detectMacOSVersion detects macOS version
 func (d *Detector) detectMacOSVersion(platform *Platform) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	return d.detectMacOSVersionContext(context.Background(), platform)
+}
+func (d *Detector) detectMacOSVersionContext(parent context.Context, platform *Platform) error {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "sw_vers", "-productVersion")
@@ -166,7 +178,10 @@ func (d *Detector) detectMacOSVersion(platform *Platform) error {
 
 // detectWindowsVersion detects Windows version
 func (d *Detector) detectWindowsVersion(platform *Platform) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	return d.detectWindowsVersionContext(context.Background(), platform)
+}
+func (d *Detector) detectWindowsVersionContext(parent context.Context, platform *Platform) error {
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "powershell", "-Command", "(Get-CimInstance Win32_OperatingSystem).Version")
@@ -187,6 +202,9 @@ func (d *Detector) detectWindowsVersion(platform *Platform) error {
 
 // detectDesktopEnvironment detects the desktop environment on Linux
 func (d *Detector) detectDesktopEnvironment(platform *Platform) {
+	d.detectDesktopEnvironmentContext(context.Background(), platform)
+}
+func (d *Detector) detectDesktopEnvironmentContext(parent context.Context, platform *Platform) {
 	// Check common environment variables
 	envVars := []string{
 		"XDG_CURRENT_DESKTOP",
@@ -228,7 +246,7 @@ func (d *Detector) detectDesktopEnvironment(platform *Platform) {
 	// Fallback to process detection
 	processes := []string{"gnome-session", "kded4", "kded5", "xfce4-session", "mate-session"}
 	for _, proc := range processes {
-		if d.processExists(proc) {
+		if d.processExistsContext(parent, proc) {
 			switch proc {
 			case "gnome-session":
 				platform.DesktopEnv = "gnome"
@@ -249,12 +267,15 @@ func (d *Detector) detectDesktopEnvironment(platform *Platform) {
 
 // processExists checks if a process is currently running
 func (d *Detector) processExists(name string) bool {
+	return d.processExistsContext(context.Background(), name)
+}
+func (d *Detector) processExistsContext(parent context.Context, name string) bool {
 	// Validate process name to prevent command injection
 	if !isValidProcessName(name) {
 		return false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "pgrep", name)
