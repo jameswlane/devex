@@ -70,7 +70,7 @@ func (m *SetupModel) installSelectedApps() {
 		fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
 
 		m.recordInstallationErrors(err)
-		if ctx.Err() != nil || errors.Is(err, tui.ErrSudoAuthorization) {
+		if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, tui.ErrSudoAuthorization) {
 			return
 		}
 	}

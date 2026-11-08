@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -45,15 +46,26 @@ func runInstallLanes(ctx context.Context, apps []types.CrossPlatformApp, prepare
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// Panics must be recovered in the goroutine where they occur.
+			// Keep failures already collected before cancelling the other lane.
+			var failures []error
+			operation := "preparation"
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					failures = append(failures, fmt.Errorf("%s: installation lane panic: %v", operation, recovered))
+					cancel()
+				}
+				results[lane] = errors.Join(failures...)
+			}()
 			if lane == 0 {
 				if err := prepare(ctx, apps); err != nil {
-					results[lane] = err
+					failures = append(failures, err)
 					cancel()
 					return
 				}
 			}
-			var failures []error
 			for _, i := range indices {
+				operation = apps[i].Name
 				if ctx.Err() != nil {
 					failures = append(failures, ctx.Err())
 					break
@@ -66,7 +78,6 @@ func runInstallLanes(ctx context.Context, apps []types.CrossPlatformApp, prepare
 					}
 				}
 			}
-			results[lane] = errors.Join(failures...)
 		}()
 	}
 	wg.Wait()

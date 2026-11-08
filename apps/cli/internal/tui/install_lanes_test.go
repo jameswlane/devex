@@ -94,6 +94,35 @@ var _ = Describe("Installation lanes", func() {
 		Expect(errors.Is(err, expected)).To(BeTrue())
 		Expect(errors.Is(err, context.Canceled)).To(BeTrue())
 	})
+	It("recovers a lane panic and preserves preceding failures", func() {
+		expected := errors.New("earlier failure")
+		apps := []types.CrossPlatformApp{aptApp("bad", "bad"), aptApp("panic", "panic")}
+		err := runInstallLanes(context.Background(), apps, func(context.Context, []types.CrossPlatformApp) error { return nil }, func(_ context.Context, i int, _ types.CrossPlatformApp) error {
+			if i == 0 {
+				return expected
+			}
+			panic("installer exploded")
+		})
+		Expect(errors.Is(err, expected)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("installer exploded"))
+	})
+	It("cancels and joins the other lane after a preparation panic", func() {
+		started := make(chan struct{})
+		finished := make(chan struct{})
+		err := runInstallLanes(context.Background(), []types.CrossPlatformApp{aptApp("bat", "bat"), independent("node", "mise")}, func(context.Context, []types.CrossPlatformApp) error {
+			<-started
+			panic("preparation exploded")
+		}, func(ctx context.Context, _ int, _ types.CrossPlatformApp) error {
+			close(started)
+			<-ctx.Done()
+			close(finished)
+			return ctx.Err()
+		})
+		Expect(err.Error()).To(ContainSubstring("preparation exploded"))
+		Expect(errors.Is(err, context.Canceled)).To(BeTrue())
+		Expect(finished).To(BeClosed())
+	})
+
 	It("does no work for an already cancelled context", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

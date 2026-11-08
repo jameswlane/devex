@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -1642,16 +1641,13 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 //
 // Returns:
 //   - error: nil on successful TUI completion, or error from TUI framework or installation
-func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) error {
-	// Add recovery mechanism to prevent panics from hanging the application
+func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) (result error) {
 	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("\n❌ Streaming installer panic: %v\n", r)
-			// Print stack trace for debugging
-			fmt.Printf("Stack trace: %s\n", string(debug.Stack()))
+		if recovered := recover(); recovered != nil {
+			result = errors.Join(result, fmt.Errorf("streaming installer panic: %v", recovered))
+			log.Error("Streaming installer failed", result)
 		}
 	}()
-
 	ctx = state.WithInstallationAudit(ctx, "tui", struct {
 		Apps     []types.CrossPlatformApp
 		Settings config.CrossPlatformSettings
@@ -1688,60 +1684,21 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 	installer := NewStreamingInstaller(p, repo, ctx, settings)
 	defer installer.cancel() // Ensure cleanup
 
-	result := make(chan error, 1)
-	// Start installation in background with context cancellation
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				installer.sendLog("ERROR", fmt.Sprintf("Installation goroutine panic: %v", r))
-				result <- fmt.Errorf("installation panic: %v", r)
-			}
-		}()
-
+	return runInstallationProgram(ctx, cancel, m, p, func() error {
 		select {
 		case <-ctx.Done():
-			// Installation was cancelled
-			installer.sendLog("INFO", "Installation cancelled by user")
 			recordUnstarted(ctx.Err())
-			result <- ctx.Err()
-			return
+			return ctx.Err()
 		case <-time.After(installer.config.InitializationDelay):
-			// Let TUI initialize before starting installation
-			installErr := installer.InstallApps(ctx, apps, settings)
-			result <- installErr
-			if err := installErr; err != nil {
-				count := 1
-				if joined, ok := err.(interface{ Unwrap() []error }); ok {
-					count = len(joined.Unwrap())
-				}
-				installer.sendLog("ERROR", fmt.Sprintf("Installation completed with %d errors: %v (log: %s)", count, err, log.GetLogFile()))
-			} else {
-				installer.sendLog("INFO", "Application installation finished; setup configuration may follow")
-			}
-
-			// Send quit message to exit TUI - use a timer instead of blocking sleep
-			if p != nil {
-				go func() {
-					time.Sleep(2 * time.Second)
-					p.Send(tea.Quit())
-				}()
-			}
 		}
-	}()
-
-	// Start TUI
-	_, err := p.Run()
-
-	// Cancel any ongoing installation when TUI exits
-	cancel()
-
-	// SECURITY: Clean up channels to prevent memory leaks
-	m.CleanupChannels()
-
-	if err != nil {
+		err := installer.InstallApps(ctx, apps, settings)
+		if err != nil {
+			installer.sendLog("ERROR", fmt.Sprintf("Installation failed: %v (log: %s)", err, log.GetLogFile()))
+		} else {
+			installer.sendLog("INFO", "Application installation finished; setup configuration may follow")
+		}
 		return err
-	}
-	return <-result
+	})
 }
 
 // handleThemeSelection uses the global theme preference instead of prompting for individual apps
