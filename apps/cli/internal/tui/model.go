@@ -98,6 +98,7 @@ type Model struct {
 	// Application state
 	apps          []types.CrossPlatformApp
 	currentApp    int
+	activeApps    map[string]int
 	completedApps int64 // Atomic counter for completed apps to prevent race conditions
 	status        string
 	logs          *CircularBuffer // PERFORMANCE: Use circular buffer for efficient log storage
@@ -162,6 +163,7 @@ type AppStartedMsg struct {
 // AppCompleteMsg indicates that an application installation has completed,
 // either successfully or with an error.
 type AppCompleteMsg struct {
+	Skipped bool
 	AppName string
 	Error   error
 }
@@ -301,12 +303,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case AppStartedMsg:
+		// All lane events are reduced on this event loop.
+		if m.activeApps == nil {
+			m.activeApps = make(map[string]int)
+		}
+		m.activeApps[msg.AppName] = msg.AppIndex
 		// App installation started - update current app display
 		m.currentApp = msg.AppIndex
 		m.status = fmt.Sprintf("Installing %s...", msg.AppName)
 
 	case AppCompleteMsg:
 		// App installation completed
+		delete(m.activeApps, msg.AppName)
+		for i, app := range m.apps {
+			if _, active := m.activeApps[app.Name]; active {
+				m.currentApp = i
+				break
+			}
+		}
 		// SECURITY: Prevent double-counting using thread-safe sync.Map
 		if _, alreadyProcessed := m.appStatus.LoadOrStore(msg.AppName, true); alreadyProcessed {
 			// App already processed, ignore duplicate message
@@ -317,6 +331,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = fmt.Sprintf("Error installing %s: %v", msg.AppName, msg.Error)
 		} else {
 			m.status = fmt.Sprintf("Successfully installed %s", msg.AppName)
+			if msg.Skipped {
+				m.status = fmt.Sprintf("%s already installed; skipped", msg.AppName)
+			}
 		}
 
 		// Count completed apps by iterating over the sync.Map
@@ -480,6 +497,15 @@ func (m *Model) renderLeftPane(width int) string {
 		}
 		if !addLine("") {
 			return leftStyle.Render(content.String())
+		}
+	}
+
+	// Display both lanes in input order for stable progress rendering.
+	for _, app := range m.apps {
+		if _, active := m.activeApps[app.Name]; active {
+			if !addLine("Installing: " + app.Name) {
+				return leftStyle.Render(content.String())
+			}
 		}
 	}
 

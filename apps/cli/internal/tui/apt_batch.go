@@ -3,10 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -39,10 +41,11 @@ var queryInstalledDebPackages = func(ctx context.Context, packages []string) map
 // aptRunState is shared by all apps in one installation run so APT work is not
 // repeated per app.
 type aptRunState struct {
-	mu sync.Mutex
-	// listsFresh is true after a successful `apt-get update` with no APT
-	// sources added since.
-	listsFresh bool
+	mu         sync.Mutex
+	updateOnce sync.Once
+	updateErr  error
+	listsPath  string
+	now        func() time.Time
 	// sourcesAdded holds the source files written during this run.
 	sourcesAdded map[string]bool
 	// preinstalled holds apps whose packages were all installed before the run.
@@ -112,32 +115,42 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, osConfig types.
 		}
 
 		si.apt.mark(&si.apt.sourcesAdded, source.SourceName)
-		si.apt.mu.Lock()
-		si.apt.listsFresh = false
-		si.apt.mu.Unlock()
 	}
 	return nil
 }
 
-// ensureAptLists runs `apt-get update` unless it already ran in this
-// installation and no APT source was added since.
+// ensureAptLists attempts at most one update per run. All known sources must
+// be prepared first; fresh populated lists can skip the update entirely.
 func (si *StreamingInstaller) ensureAptLists(ctx context.Context) error {
-	si.apt.mu.Lock()
-	fresh := si.apt.listsFresh
-	si.apt.mu.Unlock()
-	if fresh {
-		si.sendLog("INFO", "Package lists already updated in this run")
-		return nil
-	}
-
-	si.sendLog("INFO", "Updating package lists...")
-	if err := si.executeCommandStream(ctx, "sudo -n apt-get update"); err != nil {
-		return err
-	}
-	si.apt.mu.Lock()
-	si.apt.listsFresh = true
-	si.apt.mu.Unlock()
-	return nil
+	si.apt.updateOnce.Do(func() {
+		now := time.Now
+		if si.apt.now != nil {
+			now = si.apt.now
+		}
+		path := si.apt.listsPath
+		if path == "" {
+			path = "/var/lib/apt/lists"
+		}
+		si.apt.mu.Lock()
+		fresh := false
+		sourcesChanged := len(si.apt.sourcesAdded) > 0
+		si.apt.mu.Unlock()
+		if info, err := os.Stat(path); err == nil && !sourcesChanged {
+			age := now().Sub(info.ModTime())
+			fresh = age >= 0 && age < 15*time.Minute && populatedAptLists(path)
+		}
+		if fresh {
+			si.sendLog("INFO", "Package lists are fresh; skipping apt-get update")
+			return
+		}
+		si.sendLog("INFO", "Updating package lists...")
+		start := now()
+		si.apt.updateErr = si.executeCommandStream(ctx, "sudo -n apt-get update")
+		if warning := aptMirrorWarning(now().Sub(start)); warning != "" {
+			si.sendLog("WARN", warning)
+		}
+	})
+	return si.apt.updateErr
 }
 
 // prepareAptRun does the APT work for the whole run up front:
@@ -181,7 +194,7 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 		switch {
 		case allInstalled:
 			si.apt.mark(&si.apt.preinstalled, app.Name)
-		case len(app.GetOSConfig().PreInstall) == 0:
+		default:
 			toBatch = append(toBatch, app)
 		}
 	}
@@ -201,6 +214,9 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 			si.sendLog("WARN", fmt.Sprintf("Leaving %s out of the batch install: %v", app.Name, err))
 			continue
 		}
+		if len(app.GetOSConfig().PreInstall) > 0 {
+			continue
+		}
 		batchApps = append(batchApps, app)
 		for _, pkg := range aptPackages(app.GetOSConfig()) {
 			if !installed[pkg] {
@@ -215,6 +231,17 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	targets := make([]string, 0, len(batchApps))
 	for _, app := range batchApps {
 		targets = append(targets, app.Name)
+	}
+	// Show APT work while it overlaps the independent lane, including updates.
+	if si.program != nil {
+		for i, app := range apps {
+			for _, batched := range batchApps {
+				if app.Name == batched.Name {
+					si.program.Send(AppStartedMsg{AppName: app.Name, AppIndex: i})
+					break
+				}
+			}
+		}
 	}
 	if err := state.AuditTargetsStep(ctx, targets, "apt-update", func() error { return si.ensureAptLists(ctx) }); err != nil {
 		if ctx.Err() != nil {
@@ -271,4 +298,26 @@ func InstalledAptApps(ctx context.Context, apps []types.CrossPlatformApp) map[st
 		}
 	}
 	return result
+}
+
+// aptMirrorWarning gives actionable guidance without changing host settings.
+func aptMirrorWarning(elapsed time.Duration) string {
+	if elapsed <= 20*time.Second {
+		return ""
+	}
+	return fmt.Sprintf("apt-get update took %s. Check for a slow mirror or IPv4/IPv6 connectivity delays; try apt-get -o Acquire::ForceIPv4=true update or choose a closer mirror.", elapsed.Round(time.Second))
+}
+
+// A newly created empty lists directory is not a usable package cache.
+func populatedAptLists(path string) bool {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.Contains(entry.Name(), "_Packages") {
+			return true
+		}
+	}
+	return false
 }

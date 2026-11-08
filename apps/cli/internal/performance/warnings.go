@@ -3,6 +3,7 @@ package performance
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/cache"
@@ -83,6 +84,8 @@ type PerformanceAnalyzer struct {
 	cacheManager *cache.CacheManager
 	thresholds   WarningThresholds
 	settings     config.CrossPlatformSettings
+	platformOnce sync.Once
+	platformOS   string
 }
 
 // NewPerformanceAnalyzer creates a new performance analyzer
@@ -150,13 +153,13 @@ func (p *PerformanceAnalyzer) AnalyzePostInstall(appName string, startTime time.
 	installTime := time.Since(startTime)
 
 	// Detect current platform
-	currentPlatform := platform.DetectPlatform()
+	p.platformOnce.Do(func() { p.platformOS = platform.DetectPlatform().OS })
 
 	// Record performance metrics
 	metrics := &cache.PerformanceMetrics{
 		ApplicationName: appName,
 		InstallMethod:   "devex",
-		Platform:        currentPlatform.OS,
+		Platform:        p.platformOS,
 		InstallTime:     installTime,
 		TotalTime:       installTime,
 		PackageSize:     downloadSize,

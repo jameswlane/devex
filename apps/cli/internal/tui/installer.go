@@ -620,7 +620,7 @@ func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager 
 	return si.progressManager
 }
 
-// InstallApps installs multiple applications sequentially with streaming output and context cancellation.
+// InstallApps installs applications in independent serial lanes with streaming output and context cancellation.
 // It processes each app in the provided slice, handling errors and context cancellation gracefully.
 // If context cancellation occurs, the installation stops immediately and returns the cancellation error.
 // Individual app failures are logged but don't stop the overall installation process, unless caused by cancellation.
@@ -637,10 +637,15 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		Apps     []types.CrossPlatformApp
 		Settings config.CrossPlatformSettings
 	}{apps, settings})
+	si.apt = aptRunState{listsPath: si.apt.listsPath, now: si.apt.now}
+	si.analyzeInstallPlan(apps)
 	contexts := make(map[string]context.Context)
 	ctx = state.WithAuditApplications(ctx, contexts)
 	finishes := make(map[string]func(error))
+	var finishMutex sync.Mutex
 	complete := func(name string, err error) {
+		finishMutex.Lock()
+		defer finishMutex.Unlock()
 		if finish := finishes[name]; finish != nil {
 			finish(err)
 			delete(finishes, name)
@@ -654,31 +659,23 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			complete(app.Name, result)
 		}
 	}()
-	var failures []error
-
-	// Skip apt apps that are already installed, and update package lists and
-	// install the remaining apt packages once for the whole run.
-	if err := si.prepareAptRun(ctx, apps); err != nil {
-		return si.installationResult(err)
-	}
-
-	for i, app := range apps {
-		if si.apt.has(si.apt.preinstalled, app.Name) {
+	return si.installationResult(runInstallLanes(ctx, apps, si.prepareAptRun, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
+		if isAptApp(app) && si.apt.has(si.apt.preinstalled, app.Name) {
 			complete(app.Name, nil)
 			si.sendLog("INFO", fmt.Sprintf("%s is already installed; skipping", app.Name))
 			if si.program != nil {
-				si.program.Send(AppCompleteMsg{AppName: app.Name})
+				si.program.Send(AppCompleteMsg{AppName: app.Name, Skipped: true})
 			}
-			continue
+			return nil
 		}
 		if err := AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
-			return si.installationResult(append(failures, err)...)
+			return err
 		}
 		// Check for context cancellation before each app
 		select {
 		case <-ctx.Done():
 			si.sendLog("INFO", "Installation cancelled before starting next app")
-			return si.installationResult(append(failures, ctx.Err())...)
+			return ctx.Err()
 		default:
 		}
 
@@ -693,7 +690,6 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		installErr := si.InstallApp(state.WithAuditApplication(ctx, app.Name), app, settings)
 		complete(app.Name, installErr)
 		if err := installErr; err != nil {
-			failures = append(failures, fmt.Errorf("%s: %w", app.Name, err))
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
 			if si.program != nil {
 				si.program.Send(AppCompleteMsg{
@@ -701,14 +697,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 					Error:   err,
 				})
 			}
-			// If the error is due to context cancellation, stop installation entirely
-			if errors.Is(err, ErrSudoAuthorization) {
-				return si.installationResult(failures...)
-			}
-			if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-				return si.installationResult(failures...)
-			}
-			continue
+			return fmt.Errorf("%s: %w", app.Name, err)
 		}
 
 		if si.program != nil {
@@ -717,8 +706,8 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 				Error:   nil,
 			})
 		}
-	}
-	return si.installationResult(failures...)
+		return nil
+	}))
 }
 
 // Surface optional hook failures in the completion summary without marking the
@@ -729,6 +718,43 @@ func (si *StreamingInstaller) installationResult(failures ...error) error {
 	failures = append(failures, si.postInstallWarnings...)
 	si.postInstallWarnings = nil
 	return errors.Join(failures...)
+}
+
+// analyzeInstallPlan computes app-specific warnings once before execution.
+func (si *StreamingInstaller) analyzeInstallPlan(apps []types.CrossPlatformApp) {
+	for _, app := range apps {
+		// Perform performance analysis and show warnings
+		if si.performanceAnalyzer != nil {
+			si.sendLog("INFO", fmt.Sprintf("Analyzing performance characteristics for %s...", app.Name))
+			warnings := si.performanceAnalyzer.AnalyzePreInstall(app.Name, app)
+
+			// Display warnings to user
+			for _, warning := range warnings {
+				formattedWarning := performance.FormatWarning(warning)
+
+				// Send warning with appropriate level
+				switch warning.Level {
+				case performance.WarningLevelCritical:
+					si.sendLog("CRITICAL", formattedWarning)
+				case performance.WarningLevelWarning:
+					si.sendLog("WARN", formattedWarning)
+				case performance.WarningLevelCaution:
+					si.sendLog("CAUTION", formattedWarning)
+				case performance.WarningLevelInfo:
+					si.sendLog("INFO", formattedWarning)
+				}
+
+				// Note: Removed synchronous sleep to prevent TUI thread blocking
+				// Critical warnings are highlighted through styling instead
+			}
+
+			if len(warnings) > 0 {
+				si.sendLog("INFO", fmt.Sprintf("Performance analysis complete. Found %d warning(s) for %s", len(warnings), app.Name))
+			} else {
+				si.sendLog("INFO", fmt.Sprintf("Performance analysis complete. No issues detected for %s", app.Name))
+			}
+		}
+	}
 }
 
 // InstallApp installs a single application with streaming output and comprehensive error handling.
@@ -770,38 +796,6 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	// Validate app
 	if err := app.Validate(); err != nil {
 		return fmt.Errorf("app validation failed: %w", err)
-	}
-
-	// Perform performance analysis and show warnings
-	if si.performanceAnalyzer != nil {
-		si.sendLog("INFO", fmt.Sprintf("Analyzing performance characteristics for %s...", app.Name))
-		warnings := si.performanceAnalyzer.AnalyzePreInstall(app.Name, app)
-
-		// Display warnings to user
-		for _, warning := range warnings {
-			formattedWarning := performance.FormatWarning(warning)
-
-			// Send warning with appropriate level
-			switch warning.Level {
-			case performance.WarningLevelCritical:
-				si.sendLog("CRITICAL", formattedWarning)
-			case performance.WarningLevelWarning:
-				si.sendLog("WARN", formattedWarning)
-			case performance.WarningLevelCaution:
-				si.sendLog("CAUTION", formattedWarning)
-			case performance.WarningLevelInfo:
-				si.sendLog("INFO", formattedWarning)
-			}
-
-			// Note: Removed synchronous sleep to prevent TUI thread blocking
-			// Critical warnings are highlighted through styling instead
-		}
-
-		if len(warnings) > 0 {
-			si.sendLog("INFO", fmt.Sprintf("Performance analysis complete. Found %d warning(s) for %s", len(warnings), app.Name))
-		} else {
-			si.sendLog("INFO", fmt.Sprintf("Performance analysis complete. No issues detected for %s", app.Name))
-		}
 	}
 
 	// Handle theme selection if app has themes
@@ -989,8 +983,7 @@ func (si *StreamingInstaller) addModernGPGKey(ctx context.Context, keyURL, keyNa
 	}
 
 	// Check if the GPG key file already exists
-	checkExistsCmd := fmt.Sprintf("test -f %s", keyName)
-	if err := si.executeCommandStream(ctx, checkExistsCmd); err == nil {
+	if info, err := os.Stat(keyName); err == nil && info.Mode().IsRegular() {
 		si.sendLog("INFO", "GPG key file already exists")
 		return nil
 	}
