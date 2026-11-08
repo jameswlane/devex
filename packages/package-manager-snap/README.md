@@ -52,12 +52,10 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 
 </div>
 
-## Experimental limitations
+## App-definition options
 
-The plugin forwards explicit `install --classic --channel=... <snap>` arguments
-unchanged. App-definition options do not currently reach this plugin:
-`PluginBasedInstaller.Install` calls `catalogPackageArguments`, which strips
-option tokens (including `--classic` and `--channel=...`). There is no separate
-Snap option field in the current app type or plugin invocation. Wiring those
-options through the CLI is deferred to #163; this plugin is experimental until
-that integration exists. Both `update` and `upgrade` run `snap refresh`.
+The CLI preserves Snap options from both structured `packages` / `options`
+fields and legacy `install_command` strings. For example, `packages: [nvim]`
+with `options: [--classic, --channel=latest/edge]` reaches this plugin as native
+argv. See the [configuration migration guide](../../apps/cli/docs/configuration/package-options.md).
+Both `update` and `upgrade` run `snap refresh`.

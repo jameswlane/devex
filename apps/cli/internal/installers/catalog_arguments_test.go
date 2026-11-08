@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/types"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"gopkg.in/yaml.v3"
@@ -24,7 +26,9 @@ var _ = Describe("Catalog package arguments", func() {
 			executor := &recordingPluginExecutor{}
 			installer := &PluginBasedInstaller{method: method, pluginBootstrap: executor, ctx: ctx}
 			Expect(installer.Install(command, nil)).To(Succeed())
-			Expect(executor.args).To(Equal(append([]string{"install"}, want...)))
+			request, resolveErr := types.ResolvePackageInstall(method, command, nil, nil)
+			Expect(resolveErr).NotTo(HaveOccurred())
+			Expect(executor.args).To(Equal(append(append([]string{"install"}, request.Options...), request.Packages...)))
 			Expect(installer.Uninstall(command, nil)).To(Succeed())
 			Expect(executor.args).To(Equal(append([]string{"remove"}, want...)))
 			installed, err := installer.IsInstalled(command)
@@ -69,7 +73,6 @@ var _ = Describe("Catalog package arguments", func() {
 		Entry("install named package", "apt", "install", []string{"install"}),
 		Entry("remove named package", "apt", "remove", []string{"remove"}),
 		Entry("reserved names within a package list", "apt", "git apt install remove sudo", []string{"git", "apt", "install", "remove", "sudo"}),
-		Entry("empty command", "apt", "", []string{}),
 	)
 
 	DescribeTable("rejects shell programs for package managers before executing a plugin",

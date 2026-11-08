@@ -27,6 +27,11 @@ func (command InstallCommand) Validate() error {
 
 // ValidateShellActions validates hooks on every platform and alternative.
 func (config OSConfig) ValidateShellActions() error {
+	if len(config.Packages) > 0 || len(config.Options) > 0 {
+		if _, err := ResolvePackageInstall(config.InstallMethod, config.InstallCommand, config.Packages, config.Options); err != nil {
+			return err
+		}
+	}
 	for _, commands := range [][]InstallCommand{config.PreInstall, config.PostInstall} {
 		for _, command := range commands {
 			if err := command.Validate(); err != nil {

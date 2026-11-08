@@ -94,11 +94,16 @@ func (v *ConfigValidator) validateOSConfig(osConfig types.OSConfig, platform, fi
 	for i, alternative := range osConfig.Alternatives {
 		v.validateOSConfig(alternative, fmt.Sprintf("%s.alternatives[%d]", platform, i), filename)
 	}
+	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
+		if _, err := types.ResolvePackageInstall(osConfig.InstallMethod, osConfig.InstallCommand, osConfig.Packages, osConfig.Options); err != nil {
+			v.addError(filename, platform+".packages", err.Error(), err)
+		}
+	}
 	if osConfig.InstallMethod == "" {
 		v.addError(filename, platform+".install_method", "Install method is required", nil)
 	}
 
-	if osConfig.InstallCommand == "" && ((osConfig.InstallMethod != "curlpipe" && osConfig.InstallMethod != "appimage") || osConfig.DownloadURL == "") {
+	if osConfig.InstallCommand == "" && len(osConfig.Packages) == 0 && ((osConfig.InstallMethod != "curlpipe" && osConfig.InstallMethod != "appimage") || osConfig.DownloadURL == "") {
 		v.addError(filename, platform+".install_command", "Install command is required", nil)
 	}
 }

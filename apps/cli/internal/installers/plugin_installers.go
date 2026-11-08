@@ -131,14 +131,14 @@ func (p *PluginBasedInstaller) Install(command string, repo types.Repository) er
 		return fmt.Errorf("plugin bootstrap not initialized")
 	}
 
-	pluginName := "package-manager-" + p.method
+	if p.method != "script" && p.method != "curlpipe" {
+		return p.InstallPackages(p.context(), command, nil, nil)
+	}
 	packages, err := catalogPackageArguments(p.method, command)
 	if err != nil {
 		return err
 	}
-	args := append([]string{"install"}, packages...)
-
-	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
+	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), "package-manager-"+p.method, append([]string{"install"}, packages...))
 }
 
 // Uninstall executes the plugin remove command
@@ -203,14 +203,11 @@ func (p *PluginBasedInstaller) executeQuietly(pluginName string, args []string) 
 	return p.pluginBootstrap.ExecutePluginWithContext(p.context(), pluginName, args)
 }
 
-// catalogPackageArguments normalizes package-manager command prefixes, not shell
-// programs. Flags retain the existing behavior of being omitted from plugin argv.
-// Package identifiers (including versions, URLs and local archives) stay intact.
+// catalogPackageArguments returns identifiers for removal and discovery; only
+// Homebrew's namespace selector is meaningful outside installation.
 func catalogPackageArguments(method, command string) ([]string, error) {
-	parts := strings.Fields(command)
 	if method == "script" || method == "curlpipe" {
-		// These methods consume scripts rather than package identifiers. Preserve
-		// their existing token handling; interpreting scripts is outside this parser.
+		parts := strings.Fields(command)
 		packages := make([]string, 0, len(parts))
 		for _, part := range parts {
 			if !strings.HasPrefix(part, "-") && part != "sudo" && part != "install" && part != "remove" {
@@ -219,43 +216,31 @@ func catalogPackageArguments(method, command string) ([]string, error) {
 		}
 		return packages, nil
 	}
-	if strings.ContainsAny(command, "\n\r|;&`") || strings.Contains(command, "$(") {
-		return nil, fmt.Errorf("invalid %s catalog command: use package identifiers and move shell commands to pre_install or post_install", method)
+	request, err := types.ResolvePackageInstall(method, command, nil, nil)
+	if err != nil {
+		return nil, err
 	}
+	if method == "brew" {
+		return append(request.Options, request.Packages...), nil
+	}
+	return request.Packages, nil
+}
 
-	// Only consume a manager name when it introduces a command. A package
-	// named apt, pip, sudo, install or remove must remain a package identifier.
-	start := 0
-	if len(parts) > 1 && parts[0] == "sudo" {
-		start++
+// InstallPackages sends a validated request using the released argv contract.
+func (p *PluginBasedInstaller) InstallPackages(ctx context.Context, command string, packages, options []string) error {
+	if p.pluginBootstrap == nil {
+		return fmt.Errorf("plugin bootstrap not initialized")
 	}
-	manager := method
-	if start < len(parts) && (parts[start] == method ||
-		((method == "apt" || method == "deb") && (parts[start] == "apt" || parts[start] == "apt-get"))) {
-		start++
+	request, err := types.ResolvePackageInstall(p.method, command, packages, options)
+	if err != nil {
+		return err
 	}
-	verb := ""
-	if start < len(parts)-1 {
-		switch parts[start] {
-		case "install", "remove", "uninstall":
-			verb = parts[start]
-			parts = parts[start+1:]
-		}
+	if len(request.Packages) == 0 {
+		return fmt.Errorf("no packages specified")
 	}
-	packages := make([]string, 0, len(parts))
-	for _, part := range parts {
-		// Homebrew's --cask selects the cask namespace (Docker Desktop), so the
-		// plugin must receive it for both install and removal.
-		if !strings.HasPrefix(part, "-") || (manager == "brew" && part == "--cask") {
-			packages = append(packages, part)
-		}
-	}
-	// The only explicit Flatpak remote in the catalog is flathub. It is a
-	// repository selector, never an application to install, remove or probe.
-	if manager == "flatpak" && verb == "install" && len(packages) > 1 && packages[0] == "flathub" {
-		packages = packages[1:]
-	}
-	return packages, nil
+	args := append([]string{"install"}, request.Options...)
+	args = append(args, request.Packages...)
+	return p.pluginBootstrap.ExecutePluginWithContext(ctx, "package-manager-"+p.method, args)
 }
 
 func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.Repository) error {
@@ -271,6 +256,9 @@ func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.
 		return fmt.Errorf("install method '%s' is not supported on this platform", app.InstallMethod)
 	}
 	log.Info("Executing installer", "method", app.InstallMethod)
+	if plugin, ok := installer.(*PluginBasedInstaller); ok && (len(app.Packages) > 0 || len(app.Options) > 0) {
+		return plugin.InstallPackages(ctx, app.InstallCommand, app.Packages, app.Options)
+	}
 	return installer.Install(app.InstallCommand, repo)
 }
 
@@ -303,6 +291,8 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 		Default:          app.Default,
 		InstallMethod:    osConfig.InstallMethod,
 		InstallCommand:   osConfig.InstallCommand,
+		Packages:         osConfig.Packages,
+		Options:          osConfig.Options,
 		UninstallCommand: osConfig.UninstallCommand,
 		Dependencies:     osConfig.Dependencies,
 		PreInstall:       osConfig.PreInstall,

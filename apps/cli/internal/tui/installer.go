@@ -935,6 +935,15 @@ func (si *StreamingInstaller) recordFailedInstallation(appName string, startTime
 
 // executeInstallCommand executes the main installation command
 func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
+		command, err := osConfig.ShellPackageArguments()
+		if err != nil {
+			return err
+		}
+		copyConfig := *osConfig
+		copyConfig.InstallCommand = command
+		osConfig = &copyConfig
+	}
 	switch osConfig.InstallMethod {
 	case "apt":
 		return si.executeAptInstall(ctx, app, osConfig)

@@ -334,7 +334,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 			command := strings.TrimSpace(app.UninstallCommand)
 			if command == "" {
-				command = strings.TrimSpace(app.InstallCommand)
+				command = strings.TrimSpace(app.PackageQueryCommand())
 			}
 			if command == "" || app.InstallMethod == "" {
 				failures = append(failures, fmt.Errorf("%s: cannot preview uninstall without an install method and uninstall or install command", app.Name))
@@ -384,7 +384,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			failures = append(failures, err)
 			continue
 		}
-		if app.InstallMethod != "curlpipe" && strings.TrimSpace(app.UninstallCommand) == "" && strings.TrimSpace(app.InstallCommand) == "" {
+		if app.InstallMethod != "curlpipe" && strings.TrimSpace(app.UninstallCommand) == "" && strings.TrimSpace(app.PackageQueryCommand()) == "" {
 			fmt.Printf("  %s No uninstall or install command is configured\n", red("❌"))
 			failures = append(failures, fmt.Errorf("%s: no uninstall or install command is configured", app.Name))
 			continue
@@ -402,7 +402,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		installed := true
 		var err error
 		if app.InstallMethod != "curlpipe" {
-			installed, err = installer.IsInstalled(app.InstallCommand)
+			installed, err = installer.IsInstalled(app.PackageQueryCommand())
 		}
 		if err != nil {
 			fmt.Printf("  %s Failed to check installation status: %v\n", red("❌"), err)

@@ -98,7 +98,7 @@ Warnings go to stderr, so --format json|yaml output on stdout stays parseable.`,
 					if installer == nil {
 						return false, &agentapi.Error{Category: "unsupported", Message: "local plugin runtime unavailable"}
 					}
-					return installer.IsInstalled(app.InstallCommand)
+					return installer.IsInstalled(app.PackageQueryCommand())
 				})
 				if format == "json" {
 					if len(results) == 0 && err != nil && agentapi.APIError(err).Category != "not_found" {
@@ -327,7 +327,7 @@ func checkAppStatus(ctx context.Context, app *types.AppConfig, settings config.C
 		return appStatus
 	}
 
-	installed, err := installer.IsInstalled(app.InstallCommand)
+	installed, err := installer.IsInstalled(app.PackageQueryCommand())
 	if err != nil {
 		appStatus.Status = "error"
 		appStatus.Issues = append(appStatus.Issues, fmt.Sprintf("Failed to check installation: %v", err))

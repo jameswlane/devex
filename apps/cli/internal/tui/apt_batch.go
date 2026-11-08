@@ -73,6 +73,13 @@ func (s *aptRunState) has(set map[string]bool, key string) bool {
 // not a plain Debian package name.
 func aptPackages(osConfig types.OSConfig) []string {
 	packages := strings.Fields(osConfig.InstallCommand)
+	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
+		request, err := types.ResolvePackageInstall("apt", osConfig.InstallCommand, osConfig.Packages, osConfig.Options)
+		if err != nil || len(request.Options) > 0 {
+			return nil
+		}
+		packages = request.Packages
+	}
 	for _, pkg := range packages {
 		if !aptPackageName.MatchString(pkg) {
 			return nil
