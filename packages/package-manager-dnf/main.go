@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -104,11 +106,11 @@ func (p *DnfPlugin) handleRemove(ctx context.Context, args []string) error {
 	}
 
 	// DNF can exit successfully when no installed packages match. Check every
-	// package before starting the transaction so mixed requests cannot silently
-	// remove only the installed subset. RPM queries do not require elevation.
-	for _, pkg := range args {
-		if _, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-q", "--", pkg); err != nil {
-			return fmt.Errorf("cannot remove package %q: not installed or RPM query failed: %w", pkg, err)
+	// package specification before starting the transaction so mixed requests
+	// cannot silently remove only the installed subset.
+	for _, spec := range args {
+		if err := requireInstalledMatch(ctx, spec); err != nil {
+			return err
 		}
 	}
 
@@ -116,6 +118,29 @@ func (p *DnfPlugin) handleRemove(ctx context.Context, args []string) error {
 
 	cmdArgs := append([]string{"remove", "--assumeyes"}, args...)
 	return sdk.ExecCommandWithContext(ctx, true, "dnf", cmdArgs...)
+}
+
+// requireInstalledMatch resolves spec the way `dnf remove` does (names, globs,
+// NEVRAs and provides) against installed packages only. The query reads the
+// local RPM database, so it needs no elevation or network access.
+func requireInstalledMatch(ctx context.Context, spec string) error {
+	if strings.HasPrefix(spec, "-") {
+		return fmt.Errorf("cannot remove package %q: package specifications must not start with '-'", spec)
+	}
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "dnf", "repoquery", "--installed", "--quiet", "--cacheonly", spec)
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+				return fmt.Errorf("cannot remove package %q: installed-package query failed: %s: %w", spec, stderr, err)
+			}
+		}
+		return fmt.Errorf("cannot remove package %q: installed-package query failed: %w", spec, err)
+	}
+	if strings.TrimSpace(output) == "" {
+		return fmt.Errorf("cannot remove package %q: no installed package matches", spec)
+	}
+	return nil
 }
 
 func (p *DnfPlugin) handleUpdate(ctx context.Context, args []string) error {

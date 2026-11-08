@@ -19,6 +19,31 @@ type operationContract struct {
 	nativeArgv []string
 	elevated   bool
 	pending    string
+	// queries are package specifications checked before the native call.
+	queries []string
+}
+
+func installedQuery(spec string) []string {
+	return []string{"repoquery", "--installed", "--quiet", "--cacheonly", spec}
+}
+
+func installedQueryCall(spec string) sdktest.Call {
+	return sdktest.Call{Args: installedQuery(spec)}
+}
+
+// scriptInstalled makes each spec resolve to one installed package.
+func scriptInstalled(recorder *sdktest.Recorder, specs ...string) {
+	for _, spec := range specs {
+		recorder.Script("dnf", installedQuery(spec), sdktest.Response{Stdout: spec + "-0:1.0-1.fc42.x86_64\n"})
+	}
+}
+
+func expectedCalls(contract operationContract, native []string) []sdktest.Call {
+	calls := make([]sdktest.Call, 0, len(contract.queries)+1)
+	for _, spec := range contract.queries {
+		calls = append(calls, installedQueryCall(spec))
+	}
+	return append(calls, sdktest.Call{Args: native, ElevationRequested: contract.elevated})
 }
 
 var dnfContracts = []operationContract{
@@ -36,6 +61,7 @@ var dnfContracts = []operationContract{
 		currentArg: []string{"remove", "--assumeyes", "git", "vim"},
 		nativeArgv: []string{"remove", "--assumeyes", "git", "vim"},
 		elevated:   true,
+		queries:    []string{"git", "vim"},
 	},
 	{
 		command:    "update",
@@ -83,14 +109,13 @@ var _ = Describe("DNF command contracts", func() {
 	for _, contract := range dnfContracts {
 		contract := contract
 		It(fmt.Sprintf("routes %s with its current argv and elevation behavior", contract.command), func() {
+			scriptInstalled(recorder, contract.queries...)
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
-				Args:               contract.currentArg,
-				ElevationRequested: contract.elevated,
-			}}))
+			Expect(recorder.Calls("dnf")).To(Equal(expectedCalls(contract, contract.currentArg)))
 		})
 
 		It(fmt.Sprintf("propagates native errors from %s", contract.command), func() {
+			scriptInstalled(recorder, contract.queries...)
 			recorder.Script("dnf", contract.currentArg, sdktest.Response{
 				ExitCode: 42,
 				Stderr:   "dnf failed\n",
@@ -99,11 +124,9 @@ var _ = Describe("DNF command contracts", func() {
 		})
 
 		assertNativeArgv := func() {
+			scriptInstalled(recorder, contract.queries...)
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
-			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
-				Args:               contract.nativeArgv,
-				ElevationRequested: contract.elevated,
-			}}))
+			Expect(recorder.Calls("dnf")).To(Equal(expectedCalls(contract, contract.nativeArgv)))
 		}
 		if contract.pending == "" {
 			It(fmt.Sprintf("uses the required native argv for %s", contract.command), assertNativeArgv)
@@ -118,58 +141,80 @@ var _ = Describe("DNF command contracts", func() {
 	})
 
 	Describe("remove", func() {
+		removal := sdktest.Call{Args: []string{"remove", "--assumeyes", "git", "vim"}, ElevationRequested: true}
+
 		for _, unattendedEnv := range []string{"DEVEX_UNATTENDED", "CI"} {
 			It(fmt.Sprintf("uses the exact unattended removal argv with %s", unattendedEnv), func() {
 				GinkgoT().Setenv(unattendedEnv, "true")
 				sdktest.CloseStdin(GinkgoT())
+				scriptInstalled(recorder, "git", "vim")
 				Expect(plugin.Execute("remove", []string{"git", "vim"})).To(Succeed())
-				Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
-					Args: []string{"remove", "--assumeyes", "git", "vim"}, ElevationRequested: true,
-				}}))
-				Expect(recorder.Calls("rpm")).To(Equal([]sdktest.Call{
-					{Args: []string{"-q", "--", "git"}},
-					{Args: []string{"-q", "--", "vim"}},
+				Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{
+					installedQueryCall("git"), installedQueryCall("vim"), removal,
 				}))
 			})
 		}
 
-		It("queries every package without elevation before the elevated transaction", func() {
+		It("queries every specification without elevation before the elevated transaction", func() {
+			scriptInstalled(recorder, "git", "vim")
 			Expect(plugin.Execute("remove", []string{"git", "vim"})).To(Succeed())
-			Expect(recorder.Calls("rpm")).To(Equal([]sdktest.Call{
-				{Args: []string{"-q", "--", "git"}},
-				{Args: []string{"-q", "--", "vim"}},
+			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{
+				installedQueryCall("git"), installedQueryCall("vim"), removal,
 			}))
-			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{
-				Args: []string{"remove", "--assumeyes", "git", "vim"}, ElevationRequested: true,
-			}}))
+			Expect(recorder.Calls("rpm")).To(BeEmpty())
 		})
 
-		for _, packages := range [][]string{{"missing"}, {"git", "missing"}, {"missing", "git"}} {
-			It(fmt.Sprintf("rejects missing packages in %v without starting DNF", packages), func() {
-				recorder.Script("rpm", []string{"-q", "--", "missing"}, sdktest.Response{
-					ExitCode: 1, Stdout: "package missing is not installed\n",
-				})
-				// Unmatched DNF calls would succeed, as DNF can for missing packages.
-				err := plugin.Execute("remove", packages)
-				Expect(err).To(MatchError(ContainSubstring(`cannot remove package "missing": not installed`)))
-				Expect(recorder.Calls("dnf")).To(BeEmpty())
-				Expect(recorder.Calls("sudo")).To(BeEmpty())
+		It("accepts a glob that matches installed packages", func() {
+			recorder.Script("dnf", installedQuery("kernel*"), sdktest.Response{
+				Stdout: "kernel-0:6.11.4-301.fc42.x86_64\nkernel-core-0:6.11.4-301.fc42.x86_64\n",
 			})
-		}
+			Expect(plugin.Execute("remove", []string{"kernel*"})).To(Succeed())
+			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{
+				installedQueryCall("kernel*"),
+				{Args: []string{"remove", "--assumeyes", "kernel*"}, ElevationRequested: true},
+			}))
+		})
 
-		It("reports RPM query failures and retains their native exit status", func() {
-			recorder.Script("rpm", []string{"-q", "--", "git"}, sdktest.Response{
-				ExitCode: 2, Stderr: "cannot open Packages database\n",
-			})
-			err := plugin.Execute("remove", []string{"git"})
-			Expect(err).To(MatchError(ContainSubstring("RPM query failed")))
-			var exitErr *exec.ExitError
-			Expect(errors.As(err, &exitErr)).To(BeTrue())
-			Expect(exitErr.ExitCode()).To(Equal(2))
+		DescribeTable("rejects a specification that matches nothing, stopping at the first miss",
+			func(packages []string, queried []string) {
+				scriptInstalled(recorder, "git")
+				// The unscripted "missing" query returns no output, as DNF does
+				// when no installed package matches.
+				err := plugin.Execute("remove", packages)
+				Expect(err).To(MatchError(`cannot remove package "missing": no installed package matches`))
+				calls := make([]sdktest.Call, 0, len(queried))
+				for _, spec := range queried {
+					calls = append(calls, installedQueryCall(spec))
+				}
+				Expect(recorder.Calls("dnf")).To(Equal(calls))
+				Expect(recorder.Calls("sudo")).To(BeEmpty())
+			},
+			Entry("only a missing package", []string{"missing"}, []string{"missing"}),
+			Entry("missing after an installed package", []string{"git", "missing"}, []string{"git", "missing"}),
+			Entry("missing before an installed package", []string{"missing", "git"}, []string{"missing"}),
+			Entry("missing between installed packages", []string{"git", "missing", "git"}, []string{"git", "missing"}),
+		)
+
+		It("rejects option-like specifications without querying DNF", func() {
+			err := plugin.Execute("remove", []string{"--all"})
+			Expect(err).To(MatchError(ContainSubstring("must not start with '-'")))
 			Expect(recorder.Calls("dnf")).To(BeEmpty())
 		})
 
+		It("reports query failures with native stderr and keeps the exit status", func() {
+			recorder.Script("dnf", installedQuery("git"), sdktest.Response{
+				ExitCode: 2, Stderr: "Error: rpmdb open failed\n",
+			})
+			err := plugin.Execute("remove", []string{"git"})
+			Expect(err).To(MatchError(ContainSubstring(`cannot remove package "git": installed-package query failed: Error: rpmdb open failed: exit status 2`)))
+			var exitErr *exec.ExitError
+			Expect(errors.As(err, &exitErr)).To(BeTrue())
+			Expect(exitErr.ExitCode()).To(Equal(2))
+			Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{installedQueryCall("git")}))
+		})
+
 		It("returns a native DNF failure unchanged", func() {
+			scriptInstalled(recorder, "git")
 			recorder.Script("dnf", []string{"remove", "--assumeyes", "git"}, sdktest.Response{
 				ExitCode: 42, Stderr: "transaction failed\n",
 			})
