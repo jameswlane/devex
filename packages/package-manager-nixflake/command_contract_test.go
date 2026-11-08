@@ -22,6 +22,7 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
+	{command: "upgrade", nativeArgv: []string{"profile", "upgrade", "--all"}, elevated: false},
 	{command: "install", args: []string{"git", "nixpkgs#vim", "github:owner/repo#tool", "./local"}, nativeArgv: []string{"profile", "install", "nixpkgs#git", "nixpkgs#vim", "github:owner/repo#tool", "./local"}},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"profile", "remove", "git", "vim"}},
 	{command: "update", nativeArgv: []string{"flake", "update"}},
@@ -48,7 +49,7 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 	}
 
 	It("has a contract for every advertised command", func() {
-		covered := make([]string, 0, len(contracts))
+		covered := []string{"is-installed"}
 		for _, contract := range contracts {
 			covered = append(covered, contract.command)
 		}
@@ -121,6 +122,13 @@ var _ = Describe("NIXFLAKE command contracts", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()
 	})
+	It("upgrades unattended with exact argv and closed stdin", func() {
+		GinkgoT().Setenv("CI", "true")
+		sdktest.CloseStdin(GinkgoT())
+		Expect(plugin.Execute("upgrade", nil)).To(Succeed())
+		Expect(operationCalls(recorder, "nix")).To(Equal([]sdktest.Call{{Args: []string{"profile", "upgrade", "--all"}, ElevationRequested: false}}))
+	})
+
 })
 
 // Metadata inspection is asserted separately from the mutating operation.

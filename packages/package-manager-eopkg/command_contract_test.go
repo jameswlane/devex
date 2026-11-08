@@ -22,6 +22,7 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
+	{command: "upgrade", nativeArgv: []string{"upgrade", "--yes-all"}, elevated: true},
 	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"install", "--yes-all", "git", "vim"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"remove", "--yes-all", "git", "vim"}, elevated: true},
 	{command: "update", nativeArgv: []string{"update-repo"}, elevated: true},
@@ -47,7 +48,7 @@ var _ = Describe("EOPKG command contracts", func() {
 	}
 
 	It("has a contract for every advertised command", func() {
-		covered := make([]string, 0, len(contracts))
+		covered := []string{"is-installed"}
 		for _, contract := range contracts {
 			covered = append(covered, contract.command)
 		}
@@ -108,4 +109,11 @@ var _ = Describe("EOPKG command contracts", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()
 	})
+	It("upgrades unattended with exact argv and closed stdin", func() {
+		GinkgoT().Setenv("CI", "true")
+		sdktest.CloseStdin(GinkgoT())
+		Expect(plugin.Execute("upgrade", nil)).To(Succeed())
+		Expect(recorder.Calls("eopkg")).To(Equal([]sdktest.Call{{Args: []string{"upgrade", "--yes-all"}, ElevationRequested: true}}))
+	})
+
 })

@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -17,6 +19,7 @@ type operationContract struct {
 }
 
 var snapContracts = []operationContract{
+	{command: "upgrade", argv: []string{"refresh"}, elevated: true},
 	{command: "install", args: []string{"core", "vlc"}, argv: []string{"install", "core", "vlc"}, elevated: true},
 	{command: "remove", args: []string{"core", "vlc"}, argv: []string{"remove", "core", "vlc"}, elevated: true},
 	{command: "update", args: []string{"--channel=candidate", "vlc"}, argv: []string{"refresh", "--channel=candidate", "vlc"}, elevated: true},
@@ -37,7 +40,7 @@ var _ = Describe("Snap command contracts", func() {
 	})
 
 	It("has a contract for every advertised command", func() {
-		covered := make([]string, 0, len(snapContracts))
+		covered := []string{"is-installed"}
 		for _, contract := range snapContracts {
 			covered = append(covered, contract.command)
 		}
@@ -50,7 +53,7 @@ var _ = Describe("Snap command contracts", func() {
 			Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())
 			Expect(recorder.Calls("snap")).To(Equal([]sdktest.Call{{Args: contract.argv, ElevationRequested: contract.elevated}}))
 			if contract.elevated {
-				Expect(recorder.Calls("sudo")).To(ContainElement(sdktest.Call{Args: append([]string{"--", "snap"}, contract.argv...)}))
+				Expect(recorder.Calls("sudo")).To(ContainElement(sdktest.Call{Args: append([]string{"-n", "--", "snap"}, contract.argv...)}))
 			} else {
 				Expect(recorder.Calls("sudo")).To(BeEmpty())
 			}
@@ -68,7 +71,7 @@ var _ = Describe("Snap command contracts", func() {
 	})
 
 	It("rejects an unknown command without invoking snap", func() {
-		Expect(plugin.Execute("upgrade", nil)).To(MatchError("unknown command: upgrade"))
+		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		Expect(recorder.Calls("snap")).To(BeEmpty())
 		Expect(recorder.Calls("sudo")).To(BeEmpty())
 	})
@@ -80,4 +83,27 @@ var _ = Describe("Snap command contracts", func() {
 			Expect(recorder.Calls("snap")).To(BeEmpty())
 		})
 	}
+	It("forwards explicit Snap install options unchanged", func() {
+		Expect(plugin.Execute("install", []string{"--classic", "--channel=beta", "code"})).To(Succeed())
+		Expect(recorder.Calls("snap")).To(Equal([]sdktest.Call{{Args: []string{"install", "--classic", "--channel=beta", "code"}, ElevationRequested: true}}))
+	})
+	It("advertises the scope used for every command", func() {
+		for _, command := range plugin.Info().Commands {
+			privilege := sdk.PluginOperationPrivilege(plugin.Info(), []string{command.Name})
+			Expect(privilege).NotTo(BeNil())
+			scope := sdk.ScopeUser
+			if command.Name == "install" || command.Name == "remove" || command.Name == "update" || command.Name == "upgrade" {
+				scope = sdk.ScopeSystem
+			}
+			Expect(privilege.Scope).To(Equal(scope))
+		}
+	})
+
+	It("upgrades unattended with exact argv and closed stdin", func() {
+		GinkgoT().Setenv("CI", "true")
+		sdktest.CloseStdin(GinkgoT())
+		Expect(plugin.Execute("upgrade", nil)).To(Succeed())
+		Expect(recorder.Calls("snap")).To(Equal([]sdktest.Call{{Args: []string{"refresh"}, ElevationRequested: true}}))
+	})
+
 })

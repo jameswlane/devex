@@ -51,3 +51,13 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 **[DevEx CLI](../../cli)** • **[Plugin Registry](https://registry.devex.sh)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+## Experimental limitations
+
+The plugin forwards explicit `install --classic --channel=... <snap>` arguments
+unchanged. App-definition options do not currently reach this plugin:
+`PluginBasedInstaller.Install` calls `catalogPackageArguments`, which strips
+option tokens (including `--classic` and `--channel=...`). There is no separate
+Snap option field in the current app type or plugin invocation. Wiring those
+options through the CLI is deferred to #163; this plugin is experimental until
+that integration exists. Both `update` and `upgrade` run `snap refresh`.

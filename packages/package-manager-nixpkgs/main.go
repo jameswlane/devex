@@ -37,6 +37,8 @@ func NewNixpkgsPlugin() *NixpkgsPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"nix", "nixpkgs", "functional"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages", Privilege: user},
+			{Name: "is-installed", Description: "Check whether every package is installed", Privilege: user},
 			{
 				Name:        "install",
 				Description: "Install packages into the user profile",
@@ -87,6 +89,10 @@ func (p *NixpkgsPlugin) ExecuteContext(ctx context.Context, command string, args
 	}
 
 	switch command {
+	case "upgrade":
+		return p.run(ctx, "upgrade", append([]string{"--upgrade"}, args...)...)
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":

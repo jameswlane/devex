@@ -22,16 +22,11 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
+	{command: "upgrade", nativeArgv: []string{"--ask=n", "--update", "--deep", "--newuse", "@world"}, elevated: true},
 	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"--ask=n", "git", "vim"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--ask=n", "--depclean", "git", "vim"}, elevated: true},
 	{command: "update", nativeArgv: []string{"--ask=n", "--sync"}, elevated: true},
 	{command: "search", args: []string{"web", "server"}, nativeArgv: []string{"--searchdesc", "web server"}},
-}
-
-// unsupported maps advertised commands that never run emerge to the
-// guidance their error must contain.
-var unsupported = map[string]string{
-	"list": "qlist -I",
 }
 
 var _ = Describe("EMERGE command contracts", func() {
@@ -52,12 +47,9 @@ var _ = Describe("EMERGE command contracts", func() {
 	}
 
 	It("has a contract for every advertised command", func() {
-		covered := make([]string, 0, len(contracts)+len(unsupported))
+		covered := []string{"is-installed", "list"}
 		for _, contract := range contracts {
 			covered = append(covered, contract.command)
-		}
-		for command := range unsupported {
-			covered = append(covered, command)
 		}
 		Expect(covered).To(ConsistOf(sdktest.CommandNames(plugin.Info())))
 	})
@@ -97,15 +89,6 @@ var _ = Describe("EMERGE command contracts", func() {
 		})
 	}
 
-	for command, guidance := range unsupported {
-		It(fmt.Sprintf("rejects unsupported %s with guidance and no native call", command), func() {
-			err := plugin.Execute(command, nil)
-			Expect(err).To(MatchError(ContainSubstring(guidance)))
-			Expect(err.Error()).NotTo(ContainSubstring("unknown command"))
-			expectNoNativeCalls()
-		})
-	}
-
 	DescribeTable("rejects invalid input without invoking emerge",
 		func(command string, args []string, message string) {
 			Expect(plugin.Execute(command, args)).To(MatchError(ContainSubstring(message)))
@@ -125,4 +108,11 @@ var _ = Describe("EMERGE command contracts", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()
 	})
+	It("upgrades unattended with exact argv and closed stdin", func() {
+		GinkgoT().Setenv("CI", "true")
+		sdktest.CloseStdin(GinkgoT())
+		Expect(plugin.Execute("upgrade", nil)).To(Succeed())
+		Expect(recorder.Calls("emerge")).To(Equal([]sdktest.Call{{Args: []string{"--ask=n", "--update", "--deep", "--newuse", "@world"}, ElevationRequested: true}}))
+	})
+
 })

@@ -67,3 +67,12 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 **[DevEx CLI](../../cli)** • **[Plugin Registry](https://registry.devex.sh)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+## Experimental limitations
+
+`upgrade` runs `nix-env --upgrade` in the invoking user's profile.
+`is-installed` reads `nix-env --query --installed --json` and matches full
+names or names with the version suffix removed. `update` remains unsupported:
+choosing channels versus another expression source needs an explicit source
+policy. Use `nix-channel --update` when using channels. This plugin remains
+experimental until source refresh is defined.

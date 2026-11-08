@@ -20,6 +20,8 @@ type SnapPlugin struct {
 
 // NewSnapPlugin creates a new Snap plugin
 func NewSnapPlugin() *SnapPlugin {
+	system := &sdk.OperationPrivilege{Scope: sdk.ScopeSystem}
+	user := &sdk.OperationPrivilege{Scope: sdk.ScopeUser}
 	info := sdk.PluginInfo{
 		Name:        "package-manager-snap",
 		Version:     version,
@@ -28,28 +30,35 @@ func NewSnapPlugin() *SnapPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"snap", "universal", "linux"},
 		Commands: []sdk.PluginCommand{
+			{Name: "upgrade", Description: "Upgrade installed packages", Privilege: system},
+			{Name: "is-installed", Description: "Check whether every package is installed", Privilege: user},
 			{
 				Name:        "install",
+				Privilege:   system,
 				Description: "Install packages using Snap",
 				Usage:       "Install one or more packages with dependency resolution",
 			},
 			{
 				Name:        "remove",
+				Privilege:   system,
 				Description: "Remove packages using Snap",
 				Usage:       "Remove one or more packages from the system",
 			},
 			{
 				Name:        "update",
+				Privilege:   system,
 				Description: "Update installed snaps",
 				Usage:       "Refresh all installed snaps or specific snaps to latest versions. snap refresh itself never prompts, but when not run as root it runs through sudo, which may ask for a password unless passwordless sudo is configured; extra snap flags such as --channel=candidate are forwarded unchanged and snap's own exit status is preserved",
 			},
 			{
 				Name:        "search",
+				Privilege:   user,
 				Description: "Search for packages",
 				Usage:       "Search for packages by name or description",
 			},
 			{
 				Name:        "list",
+				Privilege:   user,
 				Description: "List packages",
 				Usage:       "List installed packages",
 			},
@@ -63,11 +72,20 @@ func NewSnapPlugin() *SnapPlugin {
 
 // Execute handles command execution
 func (p *SnapPlugin) Execute(command string, args []string) error {
-	p.EnsureAvailable()
+	return p.ExecuteContext(context.Background(), command, args)
+}
 
-	ctx := context.Background()
+// ExecuteContext executes with cancellation.
+func (p *SnapPlugin) ExecuteContext(ctx context.Context, command string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	switch command {
+	case "upgrade":
+		return p.run(ctx, "upgrade", append([]string{"refresh"}, args...)...)
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":
@@ -92,7 +110,7 @@ func (p *SnapPlugin) handleInstall(ctx context.Context, args []string) error {
 
 	// Install packages using the package manager
 	cmdArgs := append([]string{"install"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "snap", cmdArgs...)
+	return p.run(ctx, "install", cmdArgs...)
 }
 
 func (p *SnapPlugin) handleRemove(ctx context.Context, args []string) error {
@@ -103,7 +121,7 @@ func (p *SnapPlugin) handleRemove(ctx context.Context, args []string) error {
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
 
 	cmdArgs := append([]string{"remove"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "snap", cmdArgs...)
+	return p.run(ctx, "remove", cmdArgs...)
 }
 
 // handleUpdate runs `snap refresh`. snap refresh itself never prompts, so no
@@ -120,7 +138,7 @@ func (p *SnapPlugin) handleUpdate(ctx context.Context, args []string) error {
 	}
 
 	cmdArgs := append([]string{"refresh"}, args...)
-	return sdk.ExecCommandWithContext(ctx, true, "snap", cmdArgs...)
+	return p.run(ctx, "update", cmdArgs...)
 }
 
 func (p *SnapPlugin) handleSearch(ctx context.Context, args []string) error {
@@ -131,14 +149,19 @@ func (p *SnapPlugin) handleSearch(ctx context.Context, args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return sdk.ExecCommandWithContext(ctx, false, "snap", "search", searchTerm)
+	return p.run(ctx, "search", "search", searchTerm)
 }
 
 func (p *SnapPlugin) handleList(ctx context.Context, args []string) error {
-	return sdk.ExecCommandWithContext(ctx, false, "snap", "list")
+	return p.run(ctx, "list", "list")
 }
 
 func main() {
 	plugin := NewSnapPlugin()
 	sdk.HandleArgs(plugin, os.Args[1:])
+}
+
+func (p *SnapPlugin) run(ctx context.Context, operation string, args ...string) error {
+	privilege := sdk.PluginOperationPrivilege(p.Info(), []string{operation})
+	return sdk.ExecOperationWithContext(ctx, *privilege, "snap", args...)
 }

@@ -22,6 +22,7 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
+	{command: "upgrade", nativeArgv: []string{"--upgrade"}, elevated: false},
 	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"--install", "git", "vim"}},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--uninstall", "git", "vim"}},
 	{command: "search", args: []string{"firefox", "vim"}, nativeArgv: []string{"--query", "--available", "firefox", "vim"}},
@@ -52,7 +53,7 @@ var _ = Describe("NIXPKGS command contracts", func() {
 	}
 
 	It("has a contract for every advertised command", func() {
-		covered := make([]string, 0, len(contracts)+len(unsupported))
+		covered := []string{"is-installed"}
 		for _, contract := range contracts {
 			covered = append(covered, contract.command)
 		}
@@ -136,4 +137,11 @@ var _ = Describe("NIXPKGS command contracts", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()
 	})
+	It("upgrades unattended with exact argv and closed stdin", func() {
+		GinkgoT().Setenv("CI", "true")
+		sdktest.CloseStdin(GinkgoT())
+		Expect(plugin.Execute("upgrade", nil)).To(Succeed())
+		Expect(recorder.Calls("nix-env")).To(Equal([]sdktest.Call{{Args: []string{"--upgrade"}, ElevationRequested: false}}))
+	})
+
 })

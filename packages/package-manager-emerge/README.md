@@ -66,3 +66,11 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 **[DevEx CLI](../../cli)** • **[Plugin Registry](https://registry.devex.sh)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+## Native queries and upgrades
+
+`upgrade` runs `emerge --ask=n --update --deep --newuse @world`.
+`is-installed` queries each atom with `portageq match / <atom>` without sudo;
+empty successful output means absence. `list` runs `portageq match / ''`,
+which lists all installed CPVs using Portage's bundled query tool.
+These queries use the standard system root `/`.
