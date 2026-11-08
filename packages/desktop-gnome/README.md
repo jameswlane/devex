@@ -78,23 +78,89 @@ devex desktop-gnome apply-theme "Adwaita-dark"
 ```
 
 ### Shell Extension Management
-```bash
-# Install popular extensions
-devex desktop-gnome install-extensions
 
-# Install specific extension
-devex desktop-gnome install-extension "dash-to-dock@micxgx.gmail.com"
+Extensions are explicit opt-in operations, separate from setup's `configure`.
+No recommended extensions are installed automatically. Declare UUIDs in a JSON
+file, for example `extensions.json`:
 
-# List installed extensions
-devex desktop-gnome list-extensions
-
-# Enable/disable extensions
-devex desktop-gnome enable-extension "user-theme@gnome-shell-extensions.gcampax.github.com"
-devex desktop-gnome disable-extension "desktop-icons@csoriano"
-
-# Configure extension settings
-devex desktop-gnome configure-extension "dash-to-dock" --position "BOTTOM" --size 48
+```json
+{
+  "shell_version": "48.2",
+  "extensions": [
+    {
+      "uuid": "dash-to-dock@micxgx.gmail.com",
+      "settings": [
+        {"schema": "org.gnome.shell.extensions.dash-to-dock", "key": "dock-position", "value": "'BOTTOM'"}
+      ]
+    }
+  ]
+}
 ```
+
+Use the version from `gnome-shell --version`. For offline installation add
+`"archive": "./extension.zip"` to an entry. Relative archive paths are relative
+to the declaration file. UUIDs must match the archive's root `metadata.json`.
+Entries without archives use extensions.gnome.org's `extension-info` endpoint,
+passing UUID and Shell version, then download the compatible release.
+
+```bash
+# Preview only: no writes, native commands, or desktop session required.
+devex plugin run desktop-gnome describe install-extensions --extensions extensions.json > plan.json
+# Review all actions and bundle sources before accepting.
+cat plan.json
+# Hash compact canonical JSON (without a trailing newline).
+HASH=$(python3 -c 'import hashlib; print(hashlib.sha256(open("plan.json","rb").read().strip()).hexdigest())')
+devex plugin run desktop-gnome install-extensions --extensions extensions.json --expected-plan "$HASH"
+```
+
+The preview contains `extension-bundle` records (UUID, source, SHA-256, Shell
+compatibility version), followed by exact native install, enable and settings
+arguments. Bundle records describe cache writes; they are not executable commands.
+Preview fetches remote metadata/archives into memory; it never persists them.
+Execution resolves again and rejects changed bytes, sources or settings before
+writes. It reads `org.gnome.Shell.ShellVersion` through session D-Bus using `gdbus`
+and checks the running Shell version against the declaration before writing.
+A live GNOME session with `gdbus`, `gnome-extensions`, and `gsettings` is required
+for execution. After upgrading Shell packages, log out and back in first.
+
+Archives must declare support in `shell-version`: GNOME 40+ matches major version,
+older Shell releases match major.minor. Development versions are rejected.
+Compatibility declarations do not guarantee runtime behavior. Archives and HTTP
+responses are limited to 32 MiB. Version validation is never disabled. Installation
+uses `gnome-extensions install --force` for the current user, replacing an existing
+copy. Bundles are cached under `$XDG_CACHE_HOME/devex/gnome-extensions` (default
+`~/.cache/devex/gnome-extensions`). Settings are ordered GVariant strings passed
+to `gsettings`; bundled compiled schemas use the installed extension schema path.
+Schema compilation and arbitrary dconf imports are not performed.
+
+Log out and back in to load newly installed or replaced extension code, especially
+on Wayland. No restart is performed automatically. If enable fails because the
+session has not discovered the extension, the command returns failure with retry
+instructions; previously applied changes remain. After logging back in, preview
+and accept again. Native install, enable and settings failures stop further
+operations and return nonzero; successful enable requests do not prove extension
+runtime health. Remove extensions with `gnome-extensions uninstall UUID`, and
+restore settings from a prior `dconf dump /` backup if needed.
+
+#### Deferred: disposable GNOME session smoke test
+
+Not run in the headless worker environment. In a disposable Linux VM with a GNOME
+Wayland session:
+
+1. Build with `task build` in `packages/desktop-gnome` and run the resulting
+   `dist/devex-plugin-desktop-gnome-linux-amd64` binary in place of
+   `devex plugin run desktop-gnome` in the examples above.
+2. Record `gnome-shell --version`; export settings with `dconf dump / > before.ini`.
+   Declare a compatible UUID (or a local bundle) and one observable setting.
+3. Generate and inspect the preview; confirm no extension is installed or setting
+   changed. Run without a hash and with a stale hash; confirm both fail unchanged.
+4. Accept the exact hash and execute. If discovery prevents enable, verify a
+   nonzero exit and logout instructions, log out/back in, preview and retry.
+5. Log out/back in after success, verify `gnome-extensions list --enabled`, inspect
+   `gnome-extensions info UUID` and read the configured value with `gsettings get`.
+6. Repeat with incompatible metadata and a nonexistent UUID; confirm no installs.
+   Exercise an invalid settings key and confirm failure with partial-change notice.
+7. Remove the extension, restore `dconf load / < before.ini`, and discard the VM.
 
 ### Theme and Appearance
 ```bash

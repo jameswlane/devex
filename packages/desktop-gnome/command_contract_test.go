@@ -178,15 +178,11 @@ var _ = Describe("GNOME command contracts", func() {
 		{
 			command: "install-extensions",
 			routes: func() {
-				output := sdktest.CaptureStdout(GinkgoT(), func() {
-					Expect(plugin.Execute("install-extensions", nil)).To(Succeed())
-				})
-				Expect(output).To(ContainSubstring("1. Dash to Dock - Transform the dash into a dock"))
+				Expect(plugin.Execute("install-extensions", nil)).To(MatchError(ContainSubstring("--extensions FILE")))
 				noNativeCalls()
 			},
 			fails: func() {
-				removeFake("gnome-extensions")
-				Expect(plugin.Execute("install-extensions", nil)).To(MatchError(ContainSubstring("gnome-extensions tool not found")))
+				Expect(plugin.Execute("install-extensions", []string{"--extensions", "missing"})).To(MatchError(ContainSubstring("accepted --expected-plan")))
 				noNativeCalls()
 			},
 		},
