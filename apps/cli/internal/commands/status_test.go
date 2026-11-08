@@ -8,6 +8,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/commands/status"
@@ -249,6 +250,27 @@ var _ = Describe("Status Command", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(output).To(ContainSubstring(`"status": "unknown"`))
 				Expect(output).To(ContainSubstring("not in the DevEx configuration"))
+			})
+
+			It("resolves a tracked app from applications defined by --config", func() {
+				viper.Set("applications", []any{map[string]any{
+					"name":          "config-only-tool",
+					"all_platforms": map[string]any{"install_method": "apt", "install_command": "config-only-tool"},
+				}})
+				DeferCleanup(func() { viper.Set("applications", nil) })
+				Expect(realRepo.AddApp("config-only-tool")).To(Succeed())
+				cmd := commands.NewStatusCmd(realRepo, realSettings)
+				cmd.SetArgs([]string{"--all", "--format", "json"})
+
+				var err error
+				output := captureStatusStdout(func() {
+					err = cmd.Execute()
+				})
+
+				Expect(err).NotTo(HaveOccurred())
+				Expect(output).To(ContainSubstring(`"name": "config-only-tool"`))
+				Expect(output).To(ContainSubstring(`"install_method": "apt"`))
+				Expect(output).NotTo(ContainSubstring("not in the DevEx configuration"))
 			})
 
 			It("reports an unknown app without panicking", func() {

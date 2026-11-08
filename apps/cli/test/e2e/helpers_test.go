@@ -178,8 +178,8 @@ func osRelease(field string) string {
 
 func expectedPlugins() []string {
 	distro := osRelease("ID")
-	Expect(distro).To(BeElementOf("ubuntu", "debian"), "phase 1 supports apt-based ubuntu/debian, got %q", distro)
-	plugins := []string{"package-manager-apt", "tool-shell", "tool-git"}
+	Expect(distro).To(BeElementOf("ubuntu", "debian", "fedora", "centos"), "unsupported distro %q", distro)
+	plugins := []string{"package-manager-" + nativeMethod(), "tool-shell", "tool-git"}
 	// Bootstrap detects universal package managers from PATH, not distro ID.
 	for command, name := range map[string]string{"flatpak": "flatpak", "snap": "snap", "appimagetool": "appimage"} {
 		if _, err := exec.LookPath(command); err == nil {
@@ -302,4 +302,11 @@ func pathWithout(missing string) string {
 		}
 	}
 	return directory
+}
+
+func nativeMethod() string {
+	if osRelease("ID") == "fedora" || osRelease("ID") == "centos" {
+		return "dnf"
+	}
+	return "apt"
 }

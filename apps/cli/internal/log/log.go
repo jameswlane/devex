@@ -336,6 +336,15 @@ func Print(msg string, args ...any) {
 	fmt.Print(formattedMsg)
 }
 
+// printDiagnostic writes a diagnostic to stderr, following the same silent
+// and test-mode rules as Print.
+func printDiagnostic(msg string) {
+	if logger != nil && (logger.silentMode || logger.testMode) {
+		return
+	}
+	_, _ = fmt.Fprint(os.Stderr, msg)
+}
+
 // Printf outputs a formatted message to stdout if not in silent/test mode, otherwise logs it.
 func Printf(format string, args ...any) {
 	Print(format, args...)
@@ -359,7 +368,9 @@ func Success(msg string, args ...any) {
 // Warning prints a warning message with yellow warning icon.
 func Warning(msg string, args ...any) {
 	formattedMsg := fmt.Sprintf("⚠️  "+msg, args...)
-	Print("%s", formattedMsg+"\n")
+	// Warnings are diagnostics: keep them off stdout so machine-readable
+	// output such as --format json stays parseable.
+	printDiagnostic(formattedMsg + "\n")
 	// Also log as warning
 	if logger != nil {
 		logger.logWithContext(log.WarnLevel, strings.TrimSpace(formattedMsg))

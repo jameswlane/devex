@@ -1,0 +1,7 @@
+applications:
+  - name: jq
+    description: Command-line JSON processor
+    category: Utilities
+    linux:
+      install_method: dnf
+      install_command: jq

@@ -145,3 +145,30 @@ var _ = Describe("Log Levels", func() {
 		Skip("Fatal() calls os.Exit() - tested in integration tests")
 	})
 })
+
+var _ = Describe("Warning output stream", func() {
+	capture := func(target **os.File, fn func()) string {
+		original := *target
+		reader, writer, err := os.Pipe()
+		Expect(err).NotTo(HaveOccurred())
+		*target = writer
+		fn()
+		*target = original
+		Expect(writer.Close()).To(Succeed())
+		data, err := io.ReadAll(reader)
+		Expect(err).NotTo(HaveOccurred())
+		return string(data)
+	}
+
+	It("writes warnings to stderr so stdout stays machine-readable", func() {
+		log.InitDefaultLogger(&bytes.Buffer{})
+		var stderr string
+		stdout := capture(&os.Stdout, func() {
+			stderr = capture(&os.Stderr, func() {
+				log.Warning("plugin %s unavailable", "package-manager-yum")
+			})
+		})
+		Expect(stdout).To(BeEmpty())
+		Expect(stderr).To(ContainSubstring("⚠️  plugin package-manager-yum unavailable"))
+	})
+})

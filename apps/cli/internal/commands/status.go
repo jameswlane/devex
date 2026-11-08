@@ -155,6 +155,14 @@ Warnings go to stderr, so --format json|yaml output on stdout stays parseable.`,
 func runStatus(repo types.Repository, settings config.CrossPlatformSettings, apps []string, all bool, category string, format string, verbose bool, fix bool) error {
 	ctx := context.Background()
 
+	// Resolve applications defined by --config exactly as install does, so
+	// apps installed from a config file can be checked from the same file.
+	if _, merged, ok, err := configuredApplications(ctx, settings); err != nil {
+		return err
+	} else if ok {
+		settings = merged
+	}
+
 	var appsToCheck []types.AppConfig
 	unknownApps := 0
 

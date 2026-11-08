@@ -38,6 +38,7 @@ var packageManagerCases = []packageManagerCase{
 		verifyInstalled: dpkgInstalled("jq", "jq", "--version"),
 		verifyRemoved:   dpkgRemoved("jq", "jq"),
 	},
+	{method: "dnf", distros: []string{"fedora-44", "centos-9"}, fixture: "dnf-jq.yaml", pkg: "jq", verifyInstalled: rpmInstalled("jq"), verifyRemoved: rpmRemoved("jq")},
 }
 
 // The install timeout covers apt-get update plus the download on a slow mirror.
@@ -84,12 +85,29 @@ var _ = Describe("Package manager install lifecycle", func() {
 				Expect(installedApps(home, fixture)).To(ContainElement(entry.pkg), "list installed must include %s", entry.pkg)
 			})
 
+			It("reports the installed package as healthy", func() {
+				output, err := sandbox.run(home, sandbox.binary, time.Minute, nil, "status", "--all", "--no-tui", "--format", "json", "--config", fixture)
+				Expect(err).NotTo(HaveOccurred(), "status failed:\n%s", output)
+				location := jsonStart.FindStringIndex(output)
+				Expect(location).NotTo(BeNil(), "status must print JSON: %s", output)
+				var apps []struct {
+					Name      string
+					Installed bool
+				}
+				Expect(json.Unmarshal([]byte(output[location[0]:]), &apps)).To(Succeed())
+				Expect(apps).To(HaveLen(1))
+				Expect(apps[0].Name).To(Equal(entry.pkg))
+				Expect(apps[0].Installed).To(BeTrue(), "status must verify native installation")
+				entry.verifyInstalled(home)
+			})
+
 			It("is safe to run again without downloading anything", func() {
 				plugins = snapshotPlugins(home)
 				// Separate runs by more than coarse filesystem timestamp resolution.
 				time.Sleep(1100 * time.Millisecond)
 				output, err := sandbox.run(home, sandbox.binary, packageInstallTimeout, nil, "install", "--non-interactive", "--config", fixture)
 				Expect(err).NotTo(HaveOccurred(), "repeat install must succeed:\n%s", output)
+				Expect(output).To(ContainSubstring("skipped " + entry.pkg + " (already installed)"))
 				Expect(snapshotPlugins(home)).To(Equal(plugins), "repeat install must not download or replace any plugin")
 				entry.verifyInstalled(home)
 			})
@@ -189,4 +207,24 @@ func fixtureApplications(path string) (byName, inline []string) {
 	}
 	Expect(len(byName)+len(inline)).To(BeNumerically(">", 0), "fixture %s must list applications", path)
 	return byName, inline
+}
+
+// rpmInstalled verifies the native package database and the installed binary.
+func rpmInstalled(pkg string) func(string) {
+	return func(home string) {
+		output, err := sandbox.run(home, "rpm", 30*time.Second, nil, "-q", pkg)
+		Expect(err).NotTo(HaveOccurred(), "rpm -q %s failed:\n%s", pkg, output)
+		output, err = sandbox.run(home, pkg, 30*time.Second, nil, "--version")
+		Expect(err).NotTo(HaveOccurred(), "%s must execute:\n%s", pkg, output)
+	}
+}
+
+func rpmRemoved(pkg string) func(string) {
+	return func(home string) {
+		output, err := sandbox.run(home, "rpm", 30*time.Second, nil, "-q", pkg)
+		Expect(err).To(HaveOccurred(), "rpm -q %s must fail after removal:\n%s", pkg, output)
+		Expect(output).To(ContainSubstring("is not installed"))
+		_, err = exec.LookPath(pkg)
+		Expect(err).To(HaveOccurred(), "%s must be absent from PATH", pkg)
+	}
 }

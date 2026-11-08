@@ -19,6 +19,19 @@ import (
 var installApplication = installers.InstallCrossPlatformApp
 var prepareApplicationInstallers = initializeApplicationInstallers
 
+// Query the native manager rather than trusting a potentially stale tracking row.
+var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatformApp) (bool, error) {
+	cfg := app.GetOSConfig()
+	if cfg.InstallMethod != "apt" && cfg.InstallMethod != "dnf" {
+		return false, nil
+	}
+	installer := installers.GetInstaller(ctx, cfg.InstallMethod)
+	if installer == nil {
+		return false, fmt.Errorf("no installer for %s", cfg.InstallMethod)
+	}
+	return installer.IsInstalled(cfg.InstallCommand)
+}
+
 func initializeApplicationInstallers(ctx context.Context, provider pluginBootstrapProvider) error {
 	if provider != nil {
 		if pb := provider(); pb != nil {
@@ -50,6 +63,23 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 	var failures []string
 	for _, app := range apps {
 		appCtx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
+		if bootstrapErr == nil && ctx.Err() == nil {
+			if existing, lookupErr := repo.GetApp(app.Name); lookupErr == nil && existing != nil {
+				present, queryErr := nativeApplicationInstalled(appCtx, app)
+				if queryErr != nil {
+					finishAudit(queryErr)
+					fmt.Fprintf(out, "failed %s: %v\n", app.Name, queryErr)
+					failures = append(failures, app.Name)
+					continue
+				}
+				if present {
+					_ = state.AuditStep(appCtx, "installation", false, func() error { return nil })
+					finishAudit(nil)
+					fmt.Fprintf(out, "skipped %s (already installed)\n", app.Name)
+					continue
+				}
+			}
+		}
 		fmt.Fprintf(out, "installing %s...\n", app.Name)
 		err := bootstrapErr
 		if err == nil {

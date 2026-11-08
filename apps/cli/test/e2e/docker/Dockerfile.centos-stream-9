@@ -1,0 +1,30 @@
+# Disposable centos-stream-9 lifecycle sandbox; see apps/cli/TESTING.md.
+FROM quay.io/centos/centos:stream9
+
+# Track current distro packages; jq must stay absent until the lifecycle test.
+# Fedora's minimal base supplies curl-minimal, so use --allowerasing for curl.
+# hadolint ignore=DL3041
+RUN dnf install -y --allowerasing ca-certificates curl git gzip procps-ng sudo tar unzip xz shadow-utils \
+    && dnf clean all \
+    && ! rpm -q jq
+
+# The home is created by hand rather than with -m so /etc/skel is not copied.
+RUN useradd --no-create-home --home-dir /home/tester --shell /bin/bash --uid 1000 tester \
+    && install -d -o tester -g tester -m 0755 /home/tester \
+    && echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester \
+    && chmod 0440 /etc/sudoers.d/tester \
+    && install -d -o tester -g tester -m 0755 /artifacts
+
+COPY devex /usr/local/bin/devex
+COPY e2e.test /opt/devex-e2e/e2e.test
+COPY testdata /opt/devex-e2e/testdata
+
+ENV DEVEX_E2E_SANDBOX=1 \
+    LANG=C.UTF-8
+
+# hadolint ignore=DL3066
+USER tester
+WORKDIR /home/tester
+
+# Extra arguments to `docker run` (for example --ginkgo.focus=...) are appended.
+ENTRYPOINT ["/opt/devex-e2e/e2e.test", "--ginkgo.v", "--ginkgo.junit-report=/artifacts/junit.xml"]

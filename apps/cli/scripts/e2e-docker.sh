@@ -9,7 +9,7 @@
 # Usage: scripts/e2e-docker.sh [extra suite args, e.g. --ginkgo.focus=init]
 #
 # Environment:
-#   DISTRO                  ubuntu-24.04 (default) | debian-12
+#   DISTRO                  ubuntu-24.04 (default) | debian-12 | fedora-44 | centos-stream-9
 #   CONTAINER_ENGINE        docker | podman (default: whichever is found first)
 #   E2E_DRY_RUN=1           print the engine commands instead of running them
 #   E2E_DEVEX_BINARY        prebuilt linux devex binary to test instead of building one
@@ -127,6 +127,19 @@ build_binaries() {
 			-o "$context/e2e.test" ./test/e2e
 	)
 
+	# Source runs rebuild the native plugin too, so PR changes cannot be masked
+	# by the registry's latest release. Released CLI runs retain released plugins.
+	mkdir -p "$context/testdata/plugins"
+	if [[ -z "${E2E_DEVEX_BINARY:-}" ]]; then
+		local method=apt
+		case "$DISTRO" in fedora-* | centos-stream-*) method=dnf ;; esac
+		log "building package-manager-$method from source (linux/$goarch)"
+		(
+			cd "$CLI_DIR/../../packages/package-manager-$method"
+			CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath -o "$context/testdata/plugins/package-manager-$method" .
+		)
+	fi
+
 	chmod 0755 "$context/devex" "$context/e2e.test"
 }
 
@@ -139,9 +152,9 @@ main() {
 	# shellcheck disable=SC2064 # expand now: context is local to main
 	trap "rm -rf '$context'" EXIT
 
+	cp -R "$E2E_DIR/testdata" "$context/testdata"
 	build_binaries "$context"
 	cp "$DOCKERFILE" "$context/Dockerfile"
-	cp -R "$E2E_DIR/testdata" "$context/testdata"
 	mkdir -p "$context/testdata/catalog"
 	cp "$CLI_DIR/config/applications/development/docker.yaml" "$context/testdata/catalog/docker.yaml"
 
@@ -188,4 +201,6 @@ main() {
 	exit "$status"
 }
 
-main "$@"
+# Capture build failures as well as suite output; pipefail preserves failures.
+mkdir -p "$CLI_DIR/artifacts/e2e/$DISTRO"
+main "$@" 2>&1 | tee "$CLI_DIR/artifacts/e2e/$DISTRO/runner.log"

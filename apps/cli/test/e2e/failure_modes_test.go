@@ -23,7 +23,7 @@ var _ = Describe("Startup dependency checks", func() {
 		_, output, err := sandbox.runWithStderr(home, sandbox.binary, 30*time.Second, map[string]string{"PATH": pathWithout("unzip")}, "--version")
 		Expect(err).To(HaveOccurred(), "the CLI must refuse to start without unzip:\n%s", output)
 		Expect(output).To(ContainSubstring("missing dependency: unzip"), "the error must name the missing tool")
-		Expect(output).To(ContainSubstring("apt-get install"), "the error must say how to install it")
+		Expect(output).To(MatchRegexp(`(apt-get|dnf) install`), "the error must say how to install it")
 		if legacyWarning {
 			Expect(output).To(ContainSubstring("Warning: legacy migration skipped"), "migration warnings must not hide dependency diagnostics")
 		}
@@ -69,7 +69,7 @@ var _ = Describe("Plugin bootstrap failure modes", func() {
 		dirs := sandbox.paths(home, overrides)
 		output, err := sandbox.run(home, sandbox.binary, 45*time.Second, overrides, "status", "--all", "--no-tui", "--verbose")
 		Expect(err).NotTo(HaveOccurred(), "registry failure should degrade successfully:\n%s", output)
-		Expect(output).To(ContainSubstring("Failed to download plugin package-manager-apt"), "unreachable registry must produce a clear download diagnostic")
+		Expect(output).To(ContainSubstring("Failed to download plugin package-manager-"+nativeMethod()), "unreachable registry must produce a clear download diagnostic")
 		Expect(output).To(ContainSubstring("127.0.0.1:1"), "registry diagnostic must identify the unreachable endpoint")
 		Expect(output).To(ContainSubstring("No applications to check"), "status must remain usable after download failure")
 		entries, readErr := os.ReadDir(dirs.Plugins())

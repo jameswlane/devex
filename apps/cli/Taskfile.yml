@@ -118,7 +118,7 @@ tasks:
       - go generate ./...
   # === END-TO-END (CONTAINER SANDBOX) ===
   e2e:docker:
-    desc: Run the e2e suite in a container sandbox (DISTRO=ubuntu-24.04|debian-12)
+    desc: Run the e2e suite in a container sandbox (DISTRO=ubuntu-24.04|debian-12|fedora-44|centos-stream-9)
     vars:
       DISTRO: '{{.DISTRO | default "ubuntu-24.04"}}'
     cmds:
@@ -131,6 +131,10 @@ tasks:
         vars: {DISTRO: ubuntu-24.04}
       - task: e2e:docker
         vars: {DISTRO: debian-12}
+      - task: e2e:docker
+        vars: {DISTRO: fedora-44}
+      - task: e2e:docker
+        vars: {DISTRO: centos-stream-9}
   # === CLEANUP ===
   clean:
     desc: Clean build artifacts and temporary files
