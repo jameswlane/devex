@@ -31,6 +31,7 @@ DNF package manager plugin for DevEx. Provides comprehensive package management 
   are rejected.
 - **Update**: System updates and package upgrades
 - **Search**: Advanced package search with filters
+- **List**: Show installed packages without elevation
 - **Info**: Detailed package information and metadata
 - **History**: Package transaction history and rollback
 
@@ -39,6 +40,18 @@ DNF package manager plugin for DevEx. Provides comprehensive package management 
 - **Third-party Repos**: External repository management
 - **GPG Key Management**: Automatic key handling and verification
 - **Module Streams**: DNF module and stream management
+
+### Installed Package Listing
+
+The plugin's `list` command runs `dnf list --installed` without elevation.
+The `--installed` option is supported by both
+[DNF4](https://dnf.readthedocs.io/en/latest/command_ref.html#list-command) and
+[DNF5](https://dnf5.readthedocs.io/en/latest/commands/list.8.html).
+
+Output is passed through from DNF and is **human-readable only**, not a stable
+machine-readable interface. Headers, columns, localization, and formatting can
+vary with the DNF version and environment; callers must not rely on a fixed
+format for parsing.
 
 ## 🚀 Quick Start
 
