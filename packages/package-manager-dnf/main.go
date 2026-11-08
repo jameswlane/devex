@@ -30,6 +30,11 @@ func NewDnfPlugin() *DnfPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"dnf", "fedora", "rhel", "linux"},
 		Commands: []sdk.PluginCommand{
+			{Name: "is-installed", Description: "Check whether all requested RPM packages are installed"},
+			{Name: "add-repository", Description: "Add a repository from an HTTPS .repo URL"},
+			{Name: "enable-repository", Description: "Enable a configured repository by ID"},
+			{Name: "enable-copr", Description: "Enable a COPR owner/project"},
+			{Name: "import-key", Description: "Import a GPG key from HTTPS or an absolute file path"},
 			{Name: "upgrade", Description: "Upgrade installed packages"},
 			{
 				Name:        "install",
@@ -69,8 +74,22 @@ func (p *DnfPlugin) Execute(command string, args []string) error {
 	p.EnsureAvailable()
 
 	ctx := context.Background()
+	// This plugin is also callable directly, outside the CLI host.
+	filtered := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--non-interactive" {
+			ctx = sdk.WithUnattended(ctx)
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	args = filtered
 
 	switch command {
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
+	case "add-repository", "enable-repository", "enable-copr", "import-key":
+		return p.handleRepository(ctx, command, args)
 	case "install":
 		return p.handleInstall(ctx, args)
 	case "remove":

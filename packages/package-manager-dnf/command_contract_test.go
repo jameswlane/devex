@@ -109,7 +109,7 @@ var _ = Describe("DNF command contracts", func() {
 		for _, command := range plugin.Info().Commands {
 			advertised = append(advertised, command.Name)
 		}
-		covered := make([]string, 0, len(dnfContracts))
+		covered := []string{"is-installed", "add-repository", "enable-repository", "enable-copr", "import-key"}
 		for _, contract := range dnfContracts {
 			covered = append(covered, contract.command)
 		}

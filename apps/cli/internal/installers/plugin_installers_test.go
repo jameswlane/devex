@@ -31,19 +31,19 @@ var _ = Describe("Plugin installation discovery", func() {
 		Expect(installer.Uninstall("--cask docker", nil)).To(Succeed())
 		Expect(executor.args).To(Equal([]string{"remove", "--cask", "docker"}))
 	})
-	It("checks the requested APT packages and forwards the caller context", func() {
+	DescribeTable("checks requested packages and forwards the caller context", func(method string) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		executor := &recordingPluginExecutor{}
-		installer := &PluginBasedInstaller{method: "apt", pluginBootstrap: executor, ctx: ctx}
+		installer := &PluginBasedInstaller{method: method, pluginBootstrap: executor, ctx: ctx}
 
 		installed, err := installer.IsInstalled("sudo install -y git curl")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(installed).To(BeTrue())
-		Expect(executor.name).To(Equal("package-manager-apt"))
+		Expect(executor.name).To(Equal("package-manager-" + method))
 		Expect(executor.args).To(Equal([]string{"is-installed", "git", "curl"}))
 		Expect(executor.ctx.Done()).To(Equal(ctx.Done()))
-	})
+	}, Entry("APT", "apt"), Entry("DNF", "dnf"))
 
 	DescribeTable("preserves plugin discovery errors for package-specific probes",
 		func(method, operation string) {
@@ -58,6 +58,7 @@ var _ = Describe("Plugin installation discovery", func() {
 			Expect(executor.args[0]).To(Equal(operation))
 		},
 		Entry("apt probe", "apt", "is-installed"),
+		Entry("dnf probe", "dnf", "is-installed"),
 		Entry("flatpak probe", "flatpak", "is-installed"),
 		Entry("pip probe", "pip", "is-installed"),
 	)
@@ -74,6 +75,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		},
 		Entry("apt", "apt"),
 		Entry("deb", "deb"),
+		Entry("dnf", "dnf"),
 		Entry("flatpak", "flatpak"),
 		Entry("mise", "mise"),
 		Entry("pip", "pip"),
@@ -91,7 +93,6 @@ var _ = Describe("Plugin installation discovery", func() {
 			Expect(installed).To(BeTrue())
 			Expect(executor.args).To(BeNil())
 		},
-		Entry("dnf plugin", "dnf"),
 		Entry("brew plugin", "brew"),
 		Entry("pacman plugin", "pacman"),
 	)
@@ -100,7 +101,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		executor := &recordingPluginExecutor{
 			err: errors.New("offline metadata failure"),
 		}
-		installer := &PluginBasedInstaller{method: "dnf", pluginBootstrap: executor, ctx: context.Background()}
+		installer := &PluginBasedInstaller{method: "brew", pluginBootstrap: executor, ctx: context.Background()}
 
 		// IsInstalled skips probe and treats package as present
 		installed, err := installer.IsInstalled("git")
@@ -112,7 +113,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		executor.err = nil
 		err = installer.Uninstall("sudo remove -y git", nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(executor.name).To(Equal("package-manager-dnf"))
+		Expect(executor.name).To(Equal("package-manager-brew"))
 		Expect(executor.args).To(Equal([]string{"remove", "git"}))
 	})
 })
