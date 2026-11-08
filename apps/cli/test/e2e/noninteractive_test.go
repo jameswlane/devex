@@ -94,3 +94,33 @@ var _ = Describe("Bare devex", func() {
 		}
 	})
 })
+
+var _ = Describe("Non-interactive setup Git configuration", func() {
+	It("sets a missing identity and preserves it on subsequent setup", func() {
+		home := sandbox.isolatedHome()
+		config := filepath.Join(sandbox.paths(home, nil).Config, "config.yaml")
+		Expect(os.MkdirAll(filepath.Dir(config), 0750)).To(Succeed())
+		Expect(os.WriteFile(config, []byte("applications: []\n"), 0600)).To(Succeed())
+		overrides := map[string]string{
+			"GIT_CONFIG_GLOBAL":   filepath.Join(home, ".gitconfig"),
+			"GIT_CONFIG_NOSYSTEM": "1",
+		}
+		setup := func(name, email string) {
+			output, err := sandbox.run(home, sandbox.binary, 3*time.Minute, overrides,
+				"setup", "--non-interactive", "--shell", "bash",
+				"--git-name", name, "--git-email", email)
+			Expect(err).NotTo(HaveOccurred(), "setup must succeed using released plugins:\n%s", output)
+		}
+		identity := func(key, expected string) {
+			output, err := sandbox.run(home, "git", time.Minute, overrides, "config", "--global", "--get", key)
+			Expect(err).NotTo(HaveOccurred(), "%s", output)
+			Expect(output).To(Equal(expected + "\n"))
+		}
+		setup("Setup User", "setup@example.com")
+		identity("user.name", "Setup User")
+		identity("user.email", "setup@example.com")
+		setup("Replacement User", "replacement@example.com")
+		identity("user.name", "Setup User")
+		identity("user.email", "setup@example.com")
+	})
+})

@@ -2,6 +2,10 @@ package setup
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+
+	"github.com/spf13/viper"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -104,5 +108,49 @@ var _ = Describe("Existing git identity", func() {
 		_, _ = model.nextStep()
 
 		Expect(calls).To(Equal(1))
+	})
+})
+
+var _ = Describe("Automated git identity", func() {
+	BeforeEach(func() { viper.Reset(); DeferCleanup(viper.Reset) })
+	DescribeTable("fills only missing global identity fields",
+		func(existingName, existingEmail, expectedName, expectedEmail string) {
+			readGlobalGitIdentity = func(context.Context) (string, string) { return existingName, existingEmail }
+			viper.Set("setup.git.name", "Setup User")
+			viper.Set("setup.git.email", "setup@example.com")
+			model, err := createAutomatedSetupModel(mocks.NewMockRepository(), config.CrossPlatformSettings{})
+			Expect(err).NotTo(HaveOccurred())
+			model.loadAutomatedGitIdentity(context.Background())
+			Expect(model.git.gitFullName).To(Equal(expectedName))
+			Expect(model.git.gitEmail).To(Equal(expectedEmail))
+		},
+		Entry("new identity", "", "", "Setup User", "setup@example.com"),
+		Entry("complete identity", "Existing User", "existing@example.com", "Existing User", "existing@example.com"),
+		Entry("name only", "Existing User", "", "Existing User", "setup@example.com"),
+		Entry("email only", "", "existing@example.com", "Setup User", "existing@example.com"),
+	)
+	It("does not invent an identity when no inputs are supplied", func() {
+		model, err := createAutomatedSetupModel(mocks.NewMockRepository(), config.CrossPlatformSettings{})
+		Expect(err).NotTo(HaveOccurred())
+		model.loadAutomatedGitIdentity(context.Background())
+		Expect(model.git.gitFullName).To(BeEmpty())
+		Expect(model.git.gitEmail).To(BeEmpty())
+	})
+	It("reports configuration failures in the summary and returns an error", func() {
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		GinkgoT().Setenv("XDG_DATA_HOME", GinkgoT().TempDir())
+		viper.Set("offline", true)
+		viper.Set("setup.git.name", "Setup User")
+		Expect(os.MkdirAll(filepath.Join(os.Getenv("XDG_DATA_HOME"), "devex", "plugins"), 0750)).To(Succeed())
+		err := ConfigureAutomatedGit(context.Background(), mocks.NewMockRepository(), config.CrossPlatformSettings{})
+		Expect(err).To(MatchError(ContainSubstring("setup completed with 1 errors:")))
+		Expect(err).To(MatchError(ContainSubstring("Git configuration:")))
+		Expect(err).To(MatchError(ContainSubstring("tool-git plugin is not installed")))
+	})
+	It("keeps an existing complete identity without requiring a plugin", func() {
+		readGlobalGitIdentity = func(context.Context) (string, string) { return "Existing User", "existing@example.com" }
+		viper.Set("setup.git.name", "Replacement User")
+		viper.Set("setup.git.email", "replacement@example.com")
+		Expect(ConfigureAutomatedGit(context.Background(), nil, config.CrossPlatformSettings{})).To(Succeed())
 	})
 })

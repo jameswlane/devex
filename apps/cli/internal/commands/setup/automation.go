@@ -101,6 +101,17 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 	}, nil
 }
 
+func (m *SetupModel) loadAutomatedGitIdentity(ctx context.Context) {
+	m.loadGitIdentity(ctx)
+	// Automated inputs only fill missing fields; existing identity always wins.
+	if m.git.gitFullName == "" {
+		m.git.gitFullName = strings.TrimSpace(viper.GetString("setup.git.name"))
+	}
+	if m.git.gitEmail == "" {
+		m.git.gitEmail = strings.TrimSpace(viper.GetString("setup.git.email"))
+	}
+}
+
 // printAutomatedSetupPlan displays the planned installation to the user
 func printAutomatedSetupPlan(model *SetupModel) {
 	fmt.Println("🚀 Starting automated DevEx setup...")
@@ -163,6 +174,8 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 		return err
 	}
 
+	model.loadAutomatedGitIdentity(ctx)
+
 	if viper.GetBool("dry-run") {
 		model.ctx = ctx
 		model.system.detectedPlatform = platform.DetectPlatform()
@@ -218,4 +231,30 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	model.logCompletion()
 
 	return model.CompletionError()
+}
+
+// ConfigureAutomatedGit applies requested Git identity after an explicit application
+// list, which otherwise uses the plain install flow without shell configuration.
+func ConfigureAutomatedGit(ctx context.Context, repo types.Repository, settings config.CrossPlatformSettings) error {
+	if strings.TrimSpace(viper.GetString("setup.git.name")) == "" && strings.TrimSpace(viper.GetString("setup.git.email")) == "" {
+		return nil
+	}
+	model, err := createAutomatedSetupModel(repo, settings)
+	if err != nil {
+		return err
+	}
+	model.loadAutomatedGitIdentity(ctx)
+	if (model.git.gitFullName == "" && model.git.gitEmail == "") || model.gitIdentityUnchanged() {
+		return nil
+	}
+	pluginBootstrap, err := model.initializePlugins(ctx)
+	if err == nil {
+		err = model.handleGitConfiguration(ctx, pluginBootstrap)
+	}
+	if err != nil {
+		model.installation.addError(fmt.Sprintf("Git configuration: %v", err))
+		model.logCompletion()
+		return model.CompletionError()
+	}
+	return nil
 }
