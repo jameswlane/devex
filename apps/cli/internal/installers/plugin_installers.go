@@ -448,3 +448,8 @@ func (p *PluginBasedInstaller) context() context.Context {
 	}
 	return ctx
 }
+
+// CatalogPackageArguments resolves native package identifiers from a catalog command.
+func CatalogPackageArguments(method, command string) ([]string, error) {
+	return catalogPackageArguments(method, command)
+}

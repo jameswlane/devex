@@ -75,6 +75,8 @@ func (a *APTInstaller) Execute(command string, args []string) error {
 		return a.handleUpdate(ctx, args)
 	case "upgrade":
 		return a.handleUpgrade(ctx, args)
+	case "upgrade-packages":
+		return a.handleUpgradePackages(ctx, args)
 	case "search":
 		return a.handleSearch(ctx, args)
 	case "list":
@@ -305,17 +307,46 @@ func (a *APTInstaller) handleUpdate(ctx context.Context, args []string) error {
 func (a *APTInstaller) handleUpgrade(ctx context.Context, args []string) error {
 	a.getLogger().Println("Upgrading installed packages...")
 
+	if len(args) > 0 {
+		return fmt.Errorf("upgrade takes no arguments; use upgrade-packages <pkg...> for targeted upgrades")
+	}
+	upgradeArgs := []string{"upgrade", "-y"}
 	// Update first
 	if err := a.execMutation("update", "update"); err != nil {
 		return fmt.Errorf("failed to update package lists: %w", err)
 	}
 
-	// Then upgrade
-	if err := a.execMutation("upgrade", "upgrade", "-y"); err != nil {
+	if err := a.execMutation("upgrade", upgradeArgs...); err != nil {
 		return fmt.Errorf("failed to upgrade packages: %w", err)
 	}
 
 	a.getLogger().Success("Packages upgraded successfully")
+	return nil
+}
+
+// handleUpgradePackages is a separate contract so older plugins fail safely.
+func (a *APTInstaller) handleUpgradePackages(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("upgrade-packages requires at least one package")
+	}
+	for _, pkg := range args {
+		if strings.TrimSpace(pkg) == "" || strings.HasPrefix(strings.TrimSpace(pkg), "-") {
+			return fmt.Errorf("invalid upgrade package %q", pkg)
+		}
+	}
+	if err := a.execMutation("update", "update"); err != nil {
+		return fmt.Errorf("failed to update package lists: %w", err)
+	}
+	upgradeArgs := append([]string{"install", "--only-upgrade", "-y"}, args...)
+	var err error
+	if sdk.Unattended() {
+		err = a.execMutation("upgrade", upgradeArgs...)
+	} else {
+		err = sdk.ExecCommandWithTimeoutAndOperation(a.GetTimeout("upgrade"), "upgrade", true, "apt-get", upgradeArgs...)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to upgrade packages: %w", err)
+	}
 	return nil
 }
 

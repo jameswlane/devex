@@ -49,10 +49,13 @@ func NewAPTPlugin() *APTInstaller {
 			{
 				Name:        "upgrade",
 				Description: "Upgrade installed packages",
-				Usage:       "Install newer versions of all installed packages",
-				Flags: map[string]string{
-					"dist-upgrade": "Intelligently handle changing dependencies",
-				},
+				Usage:       "upgrade (no arguments); use upgrade-packages <pkg...> for selected packages",
+			},
+			{
+				Name:        "upgrade-packages",
+				Description: "Upgrade only named installed packages",
+				Usage:       "upgrade-packages <pkg...>",
+				Privilege:   &sdk.OperationPrivilege{Scope: sdk.ScopeSystem},
 			},
 			{
 				Name:        "search",
