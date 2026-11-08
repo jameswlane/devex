@@ -26,28 +26,31 @@ var _ = Describe("KDE Font Manager", func() {
 			It("should map firacode and jetbrains correctly", func() {
 				input := []string{"firacode", "jetbrains"}
 				expected := []string{"fonts-firacode", "fonts-jetbrains-mono"}
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(Equal(expected))
 			})
 
 			It("should preserve unknown font names", func() {
 				input := []string{"custom-font"}
 				expected := []string{"custom-font"}
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(Equal(expected))
 			})
 
 			It("should handle mixed case input", func() {
 				input := []string{"FiraCode", "HACK"}
 				expected := []string{"fonts-firacode", "fonts-hack"}
-				result := fm.mapFontNames(input)
+				result, unavailable := fm.mapFontNames("apt-get", input)
+				Expect(unavailable).To(BeEmpty())
 				Expect(result).To(Equal(expected))
 			})
 
 			It("should include KDE-specific fonts in defaults", func() {
-				defaultFonts := fm.getDefaultKDEFonts()
-				Expect(defaultFonts).To(ContainElement("fonts-oxygen"))
-				Expect(defaultFonts).To(ContainElement("fonts-noto"))
+				defaultFonts := fm.defaultFontNames()
+				Expect(defaultFonts).To(ContainElement("oxygen"))
+				Expect(defaultFonts).To(ContainElement("noto"))
 			})
 		})
 	})
@@ -155,22 +158,8 @@ var _ = Describe("KDE Font Manager", func() {
 
 		Context("when package manager detection fails", func() {
 			It("should handle package installation gracefully", func() {
-				err := fm.installPackages(ctx, []string{"nonexistent-font-package"})
-				Expect(err).To(MatchError("no supported package manager found"))
-			})
-		})
-	})
-
-	Describe("Cache Management", func() {
-		Context("when refreshing font cache", func() {
-			It("should handle font cache refresh with context", func() {
-				err := fm.refreshFontCache(ctx)
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should handle KDE cache update with context", func() {
-				err := fm.updateKDECache(ctx)
-				Expect(err).NotTo(HaveOccurred())
+				err := fm.InstallFonts(ctx, []string{"nonexistent-font-package"})
+				Expect(err).To(MatchError("failed to install fonts: no supported package manager found"))
 			})
 		})
 	})

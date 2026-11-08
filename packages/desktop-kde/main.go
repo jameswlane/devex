@@ -31,7 +31,7 @@ func NewKDEPlugin() *KDEPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"desktop", "kde", "plasma", "linux", "qt"},
 		Commands: []sdk.PluginCommand{
-			{Name: "describe", Description: "Preview exact configure commands as JSON without changing settings"},
+			{Name: "describe", Description: "Preview exact configure or install-fonts commands as JSON"},
 			{
 				Name:        "configure",
 				Description: "Configure KDE Plasma desktop settings",
@@ -124,6 +124,12 @@ func NewKDEPlugin() *KDEPlugin {
 // Execute handles command execution
 func (p *KDEPlugin) Execute(command string, args []string) error {
 	if command == "describe" {
+		if len(args) > 0 && args[0] == "install-fonts" {
+			return p.fonts.Describe(args[1:])
+		}
+		if len(args) > 0 {
+			return fmt.Errorf("usage: describe [install-fonts [font...]]")
+		}
 		return p.desktop.Describe()
 	}
 

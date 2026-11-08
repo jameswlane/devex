@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
-	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -27,35 +26,9 @@ func NewFontManager() *FontManager {
 
 // InstallFonts installs development fonts for KDE
 func (fm *FontManager) InstallFonts(ctx context.Context, args []string) error {
-	// Validate input arguments
-	for _, arg := range args {
-		if err := validateFontName(arg); err != nil {
-			return fmt.Errorf("invalid font argument %q: %w", arg, err)
-		}
-	}
-	fmt.Println("Installing fonts for KDE Plasma desktop...")
-
-	// Default development fonts if none specified
-	var fontPackages []string
-	if len(args) == 0 {
-		fontPackages = fm.getDefaultKDEFonts()
-		fmt.Println("Installing default development fonts...")
-	} else {
-		fontPackages = fm.mapFontNames(args)
-	}
-
-	if err := fm.installPackages(ctx, fontPackages); err != nil {
+	if err := fm.executeInstall(ctx, args); err != nil {
 		return fmt.Errorf("failed to install fonts: %w", err)
 	}
-
-	if err := fm.refreshFontCache(ctx); err != nil {
-		fmt.Printf("Warning: Failed to refresh font cache: %v\n", err)
-	}
-
-	if err := fm.updateKDECache(ctx); err != nil {
-		fmt.Printf("Warning: Failed to update KDE cache: %v\n", err)
-	}
-
 	fmt.Println("✓ Fonts installed successfully!")
 	return nil
 }
@@ -112,102 +85,6 @@ func (fm *FontManager) ConfigureFonts(ctx context.Context, args []string) error 
 	fmt.Println("\nFont configuration complete!")
 	fmt.Println("You may need to restart KDE Plasma or log out for all changes to take effect.")
 	fmt.Println("Run 'devex desktop-kde restart-plasma' to restart Plasma Shell.")
-	return nil
-}
-
-// getDefaultKDEFonts returns the default font packages for KDE
-func (fm *FontManager) getDefaultKDEFonts() []string {
-	return []string{
-		"fonts-firacode",
-		"fonts-jetbrains-mono",
-		"fonts-hack",
-		"fonts-source-code-pro",
-		"fonts-inconsolata",
-		"fonts-cascadia-code",
-		"fonts-noto", // KDE prefers Noto fonts
-		"fonts-liberation",
-		"fonts-oxygen", // KDE Oxygen font
-	}
-}
-
-// mapFontNames converts common font names to package names
-func (fm *FontManager) mapFontNames(args []string) []string {
-	fontMap := map[string]string{
-		"firacode":      "fonts-firacode",
-		"jetbrains":     "fonts-jetbrains-mono",
-		"jetbrainsmono": "fonts-jetbrains-mono",
-		"hack":          "fonts-hack",
-		"sourcecodepro": "fonts-source-code-pro",
-		"inconsolata":   "fonts-inconsolata",
-		"cascadia":      "fonts-cascadia-code",
-		"noto":          "fonts-noto",
-		"liberation":    "fonts-liberation",
-		"oxygen":        "fonts-oxygen",
-		"roboto":        "fonts-roboto",
-	}
-
-	var fontPackages []string
-	for _, fontName := range args {
-		if packageName, ok := fontMap[strings.ToLower(fontName)]; ok {
-			fontPackages = append(fontPackages, packageName)
-		} else {
-			// Assume it's already a package name
-			fontPackages = append(fontPackages, fontName)
-		}
-	}
-
-	return fontPackages
-}
-
-// installPackages installs font packages using appropriate package manager
-func (fm *FontManager) installPackages(ctx context.Context, fontPackages []string) error {
-	for _, pkg := range fontPackages {
-		if strings.HasPrefix(pkg, "-") {
-			return fmt.Errorf("font package argument %q must not start with '-'", pkg)
-		}
-	}
-	var installCmd []string
-	if sdk.CommandExists("apt-get") {
-		// apt interprets a trailing '-' as removal, even after '--'.
-		for _, pkg := range fontPackages {
-			if strings.HasSuffix(pkg, "-") {
-				return fmt.Errorf("apt font package argument %q must not end with '-'", pkg)
-			}
-		}
-		installCmd = append([]string{"apt-get", "install", "-y"}, fontPackages...)
-	} else if sdk.CommandExists("dnf") {
-		installCmd = append([]string{"dnf", "install", "-y"}, fontPackages...)
-	} else if sdk.CommandExists("pacman") {
-		installCmd = append([]string{"pacman", "-S", "--noconfirm"}, fontPackages...)
-	} else if sdk.CommandExists("zypper") {
-		installCmd = append([]string{"zypper", "install", "-y"}, fontPackages...)
-	} else {
-		return fmt.Errorf("no supported package manager found")
-	}
-
-	fmt.Printf("Installing: %s\n", strings.Join(fontPackages, ", "))
-	// Distribution packages are system state: the SDK runs the manager directly
-	// when already elevated and through sudo otherwise (sudo -n, without prompts,
-	// when unattended). Authorization failures surface as *sdk.AuthorizationError;
-	// the manager's own exit status is preserved.
-	return sdk.ExecOperationWithContext(ctx, systemScope, installCmd[0], installCmd[1:]...)
-}
-
-// refreshFontCache refreshes the system font cache
-func (fm *FontManager) refreshFontCache(ctx context.Context) error {
-	fmt.Println("Refreshing font cache...")
-	if sdk.CommandExists("fc-cache") {
-		return sdk.ExecOperationWithContext(ctx, userScope, "fc-cache", "-f", "-v")
-	}
-	return nil
-}
-
-// updateKDECache updates KDE system configuration cache
-func (fm *FontManager) updateKDECache(ctx context.Context) error {
-	if sdk.CommandExists("kbuildsycoca5") {
-		fmt.Println("Updating KDE system configuration cache...")
-		return sdk.ExecOperationWithContext(ctx, userScope, "kbuildsycoca5", "--noincremental")
-	}
 	return nil
 }
 

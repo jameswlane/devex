@@ -540,3 +540,6 @@ Run `devex plugin run desktop-gnome describe` to print the exact
 session. Setup displays this plan disabled by default and requires opt-in.
 Setup passes `configure --expected-plan HASH` to reject settings that differ
 from the accepted preview.
+
+See [font package mappings and exact install previews](FONT_PACKAGES.md) for
+distribution-specific font packages, repository sources, and unavailable fonts.

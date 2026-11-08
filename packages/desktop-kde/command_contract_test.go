@@ -164,8 +164,8 @@ func kwrite(file, group, key, value string) sdktest.Call {
 }
 
 var defaultKDEFonts = []string{
-	"fonts-firacode", "fonts-jetbrains-mono", "fonts-hack", "fonts-source-code-pro",
-	"fonts-inconsolata", "fonts-cascadia-code", "fonts-noto", "fonts-liberation", "fonts-oxygen",
+	"fonts-firacode", "fonts-jetbrains-mono", "fonts-hack",
+	"fonts-inconsolata", "fonts-cascadia-code", "fonts-noto", "fonts-liberation",
 }
 
 var _ = Describe("KDE command contracts", func() {
@@ -411,13 +411,13 @@ var _ = Describe("KDE command contracts", func() {
 					name, previous string
 					args           []string
 				}{
-					{"dnf", "apt-get", []string{"install", "-y", "fonts-oxygen", "custom-font"}},
-					{"pacman", "dnf", []string{"-S", "--noconfirm", "fonts-oxygen", "custom-font"}},
-					{"zypper", "pacman", []string{"install", "-y", "fonts-oxygen", "custom-font"}},
+					{"dnf", "apt-get", []string{"install", "-y", "source-foundry-hack-fonts", "custom-font"}},
+					{"pacman", "dnf", []string{"-S", "--noconfirm", "ttf-hack", "custom-font"}},
+					{"zypper", "pacman", []string{"install", "-y", "hack-fonts", "custom-font"}},
 				} {
 					removeFake(manager.previous)
 					recorder.Reset()
-					Expect(plugin.Execute("install-fonts", []string{"Oxygen", "custom-font"})).To(Succeed())
+					Expect(plugin.Execute("install-fonts", []string{"Hack", "custom-font"})).To(Succeed())
 					Expect(recorder.Calls(manager.name)).To(Equal([]sdktest.Call{{Args: manager.args, ElevationRequested: true}}), manager.name)
 				}
 			},
@@ -431,7 +431,7 @@ var _ = Describe("KDE command contracts", func() {
 				recorder.Reset()
 				fail("fc-cache", "-f", "-v")
 				fail("kbuildsycoca5", "--noincremental")
-				output := sdktest.CaptureStdout(GinkgoT(), func() {
+				output := captureFontStderr(func() {
 					Expect(plugin.Execute("install-fonts", []string{"noto"})).To(Succeed())
 				})
 				Expect(output).To(ContainSubstring("Warning: Failed to refresh font cache: exit status 42"))
