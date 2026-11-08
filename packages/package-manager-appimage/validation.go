@@ -47,12 +47,12 @@ func (p *AppimagePlugin) validateURL(inputURL string) error {
 	}
 
 	// Validate scheme
-	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
-		return fmt.Errorf("only HTTP and HTTPS URLs are allowed")
+	if parsedURL.Scheme != "https" {
+		return fmt.Errorf("only HTTPS URLs are allowed")
 	}
 
 	// Validate hostname
-	if parsedURL.Host == "" {
+	if parsedURL.Hostname() == "" {
 		return fmt.Errorf("URL must have a valid hostname")
 	}
 

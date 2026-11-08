@@ -47,7 +47,7 @@ func NewAppimagePlugin() *AppimagePlugin {
 			{
 				Name:        "validate-url",
 				Description: "Validate AppImage download URL",
-				Usage:       "Check if URL is accessible and points to valid AppImage",
+				Usage:       "Check HTTPS URL accessibility (does not verify AppImage content or integrity)",
 			},
 		},
 	}

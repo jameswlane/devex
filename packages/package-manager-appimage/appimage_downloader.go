@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +11,7 @@ import (
 )
 
 // installAppImage downloads and installs an AppImage
-func (p *AppimagePlugin) installAppImage(downloadURL, binaryName, installLocation string) error {
+func (p *AppimagePlugin) installAppImage(ctx context.Context, downloadURL, binaryName, installLocation string) error {
 	homeDir := os.Getenv("HOME")
 	var installDir string
 
@@ -34,7 +35,7 @@ func (p *AppimagePlugin) installAppImage(downloadURL, binaryName, installLocatio
 	p.logger.Printf("Downloading AppImage to: %s\n", binaryPath)
 
 	// Download the AppImage
-	if err := p.downloadFile(downloadURL, binaryPath); err != nil {
+	if err := p.downloadFile(ctx, downloadURL, binaryPath); err != nil {
 		return fmt.Errorf("failed to download AppImage: %w", err)
 	}
 
@@ -55,13 +56,16 @@ func (p *AppimagePlugin) installAppImage(downloadURL, binaryName, installLocatio
 }
 
 // downloadFile downloads a file from URL to local path
-func (p *AppimagePlugin) downloadFile(url, filepath string) error {
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 5 * time.Minute, // 5 minute timeout for large AppImages
+func (p *AppimagePlugin) downloadFile(ctx context.Context, url, filepath string) error {
+	if err := p.validateURL(url); err != nil {
+		return err
 	}
-
-	resp, err := client.Get(url)
+	client := p.urlClient(5 * time.Minute)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create download request: %w", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to download file: %w", err)
 	}
@@ -85,30 +89,50 @@ func (p *AppimagePlugin) downloadFile(url, filepath string) error {
 	return nil
 }
 
-// validateURLAccessibility checks if a URL is accessible
-func (p *AppimagePlugin) validateURLAccessibility(downloadURL string) error {
-	p.logger.Debug("Validating URL accessibility: %s", downloadURL)
-
-	// Create a HEAD request to check if URL is accessible
-	client := &http.Client{
-		Timeout: 30 * time.Second,
+// urlClient applies the same URL policy to probes, downloads, and every redirect.
+func (p *AppimagePlugin) urlClient(timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			return p.validateURL(req.URL.String())
+		},
 	}
+}
 
-	req, err := http.NewRequest("HEAD", downloadURL, nil)
+// validateURLAccessibility checks reachability, not artifact content or integrity.
+func (p *AppimagePlugin) validateURLAccessibility(ctx context.Context, downloadURL string) error {
+	if err := p.validateURL(downloadURL); err != nil {
+		return err
+	}
+	client := p.urlClient(30 * time.Second)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, downloadURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request for URL validation: %w", err)
 	}
-
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("URL is not accessible: %w (hint: check internet connection and URL validity)", err)
 	}
+	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
+		_ = resp.Body.Close()
+		// Probe one byte at the final URL; a server may ignore Range and return
+		// 200, so never read the body of this accessibility-only request.
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, resp.Request.URL.String(), nil)
+		if err != nil {
+			return fmt.Errorf("failed to create fallback request: %w", err)
+		}
+		req.Header.Set("Range", "bytes=0-0")
+		resp, err = client.Do(req)
+		if err != nil {
+			return fmt.Errorf("URL is not accessible: %w", err)
+		}
+	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("URL returned status %d: %s (hint: check if the download link is valid)", resp.StatusCode, resp.Status)
 	}
-
-	p.logger.Debug("URL accessibility validated: %s (status: %d)", downloadURL, resp.StatusCode)
 	return nil
 }
