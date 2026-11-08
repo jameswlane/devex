@@ -59,13 +59,3 @@ macos:
       destination: ~/.config/btop/btop.conf
     - source: ~/.local/share/devex/assets/themes/btop/tokyo-night/btop.theme
       destination: ~/.config/btop/themes/tokyo-night.theme
-freebsd:
-  install_method: pkg
-  install_command: btop
-  uninstall_command: btop
-  official_support: true
-netbsd:
-  install_method: pkg_add
-  install_command: btop
-  uninstall_command: btop
-  official_support: true

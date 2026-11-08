@@ -94,13 +94,3 @@ linux:
       install_command: fzf
       uninstall_command: fzf
       official_support: false
-freebsd:
-  install_method: pkg
-  install_command: fzf
-  uninstall_command: fzf
-  official_support: true
-openbsd:
-  install_method: pkg_add
-  install_command: fzf
-  uninstall_command: fzf
-  official_support: true

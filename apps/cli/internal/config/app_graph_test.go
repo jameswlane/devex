@@ -26,6 +26,14 @@ var _ = Describe("Application graph validation", func() {
 		Expect(config.ClassifyInstallMethod("aptt")).To(Equal(config.MethodUnknown))
 	})
 
+	It("rejects methods incompatible with the declared platform while accepting offline alternatives", func() {
+		bad := types.CrossPlatformApp{Name: "git", MacOS: types.OSConfig{InstallMethod: "apt", InstallCommand: "git"}}
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{bad})).To(ContainElement(And(HaveField("Field", "macos.install_method"), HaveField("Message", ContainSubstring("incompatible")))))
+		good := linuxApp("git", "apt", "git")
+		good.Linux.Alternatives = []types.OSConfig{{InstallMethod: "brew", InstallCommand: "git"}, {InstallMethod: "pip", InstallCommand: "git"}}
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{good})).To(BeEmpty())
+	})
+
 	It("reports unknown install methods, including in alternatives, with their location", func() {
 		app := linuxApp("bat", "aptt", "bat")
 		app.Linux.Alternatives = []types.OSConfig{{InstallMethod: "dnff", InstallCommand: "bat"}}
@@ -35,6 +43,14 @@ var _ = Describe("Application graph validation", func() {
 		Expect(errs).To(HaveLen(2))
 		Expect(errs[0].Error()).To(And(ContainSubstring(`unknown install method "aptt"`), ContainSubstring("bat"), ContainSubstring("linux.install_method")))
 		Expect(errs[1].Error()).To(ContainSubstring("linux.alternatives[0].install_method"))
+	})
+
+	It("detects cycles spanning all-platform and OS-specific applications", func() {
+		apps := []types.CrossPlatformApp{
+			{Name: "A", AllPlatforms: types.OSConfig{InstallMethod: "mise", InstallCommand: "a", Dependencies: []string{"B"}}},
+			linuxApp("B", "apt", "b", "A"),
+		}
+		Expect(config.ValidateApplicationGraph(apps)).To(ContainElement(HaveField("Message", ContainSubstring("A -> B -> A"))))
 	})
 
 	It("reports a dependency cycle once, with its path", func() {

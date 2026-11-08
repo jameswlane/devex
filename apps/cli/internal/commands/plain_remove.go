@@ -30,7 +30,7 @@ func removeInstalledApplication(cmd *cobra.Command, name string, settings config
 	if _, err := resolveAppsByName(settings, []string{name}); err == nil {
 		return false, nil
 	}
-	_, merged, present, err := configuredApplications(settings)
+	_, merged, present, err := configuredApplications(cmd.Context(), settings)
 	if err != nil {
 		return true, err
 	}

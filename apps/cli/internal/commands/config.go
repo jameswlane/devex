@@ -603,30 +603,20 @@ func validateConfigurationFiles(ctx context.Context, out io.Writer, settings con
 		return fmt.Errorf("failed to build config summary: %w", err)
 	}
 
-	// File presence and YAML syntax.
+	// Summary is presentation only; diagnostics come from the shared validator.
 	result := agentapi.ValidationResult{Valid: true, Diagnostics: []agentapi.Diagnostic{}}
 	configs := []struct {
 		name     string
 		info     ConfigInfo
 		required bool
 	}{
-		{"applications/", summary.Applications, true},
-		{"environments/", summary.Environment, true},
-		{"system/", summary.System, true},
+		{"applications/", summary.Applications, false},
+		{"environments/", summary.Environment, false},
+		{"system/", summary.System, false},
 		{"desktop/", summary.Desktop, false},
 		{"dotfiles.yaml", summary.Dotfiles, false},
 		{"security.yaml", summary.Security, false},
 		{"devex.yaml", summary.InitMetadata, false},
-	}
-	for _, cfg := range configs {
-		switch {
-		case !cfg.info.Exists && cfg.required:
-			result.Add(agentapi.Diagnostic{Severity: agentapi.SeverityError, Category: agentapi.CategoryFileMissing, File: cfg.name, Message: "Missing (required)"})
-		case !cfg.info.Exists:
-			result.Add(agentapi.Diagnostic{Severity: agentapi.SeverityWarning, Category: agentapi.CategoryFileMissing, File: cfg.name, Message: "Missing (optional)"})
-		case !cfg.info.Valid:
-			result.Add(agentapi.Diagnostic{Severity: agentapi.SeverityError, Category: agentapi.CategoryFileInvalidYAML, File: cfg.name, Message: cfg.info.ErrorMessage})
-		}
 	}
 
 	// Schema, install methods and dependency cycles.
@@ -1908,6 +1898,10 @@ func importConfiguration(ctx context.Context, settings config.CrossPlatformSetti
 
 	if err != nil {
 		return fmt.Errorf("failed to read import data: %w", err)
+	}
+
+	if err := validateImportCandidate(ctx, settings, importData); err != nil {
+		return fmt.Errorf("import validation failed: %w", err)
 	}
 
 	// Validate import data structure

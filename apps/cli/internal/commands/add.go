@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -196,6 +197,19 @@ func (m AddModel) View() string {
 
 // addAppToConfig adds an application to the user's configuration
 func (m *AddModel) addAppToConfig(app types.AppConfig) error {
+	// Keep every platform definition rather than saving only the current OS.
+	definition := config.CrossPlatformAppFromLegacy(app)
+	for _, candidate := range m.settings.GetAllApps() {
+		if strings.EqualFold(candidate.Name, app.Name) {
+			definition = candidate
+			break
+		}
+	}
+	candidateSettings := m.settings
+	candidateSettings.ApplicationOverrides = append(append([]types.CrossPlatformApp{}, m.settings.GetAllApps()...), definition)
+	if err := config.RequireValidConfig(context.Background(), candidateSettings); err != nil {
+		return err
+	}
 	userConfigDir := m.settings.GetConfigDir()
 	apps, err := configuredEditableApplications(m.settings)
 	if err != nil {
@@ -233,14 +247,6 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 		fmt.Fprintf(os.Stderr, "Warning: Failed to record undo operation: %v\n", err)
 	}
 
-	// Keep every platform definition rather than saving only the current OS.
-	definition := config.CrossPlatformAppFromLegacy(app)
-	for _, candidate := range m.settings.GetAllApps() {
-		if strings.EqualFold(candidate.Name, app.Name) {
-			definition = candidate
-			break
-		}
-	}
 	if err := writeNewApplicationConfig(definition, path); err != nil {
 		return err
 	}

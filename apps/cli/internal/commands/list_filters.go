@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -17,7 +18,7 @@ func getInstalledApps(repo types.Repository, settings config.CrossPlatformSettin
 	installedAppsCache := getInstalledAppsCache(repo)
 
 	// Get all available apps for cross-referencing
-	_, merged, _, err := configuredApplications(settings)
+	_, merged, _, err := configuredApplications(context.Background(), settings)
 	if err != nil {
 		return nil, err
 	}

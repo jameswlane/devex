@@ -132,9 +132,10 @@ configure_ssh: false`,
 					"applications.yaml": map[string]interface{}{
 						"applications": []map[string]interface{}{
 							{
-								"name":        "git",
-								"category":    "development",
-								"description": "Version control",
+								"name":           "git",
+								"category":       "development",
+								"description":    "Version control",
+								"install_method": "apt", "install_command": "git",
 							},
 						},
 					},
@@ -143,8 +144,8 @@ configure_ssh: false`,
 						"languages": []string{"node", "python"},
 					},
 					"system.yaml": map[string]interface{}{
-						"configure_git": true,
-						"configure_ssh": false,
+						"git": []interface{}{},
+						"ssh": map[string]interface{}{},
 					},
 				}
 
@@ -287,13 +288,12 @@ configure_ssh: false`,
 		})
 
 		Context("with missing required files", func() {
-			It("should detect missing files", func() {
+			It("accepts an empty optional configuration tree", func() {
 				cmd := commands.NewConfigCmd(mockRepo, *settings)
 				cmd.SetArgs([]string{"validate"})
 
 				err := cmd.Execute()
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("validation failed"))
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})

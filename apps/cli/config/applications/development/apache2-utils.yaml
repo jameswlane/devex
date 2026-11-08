@@ -56,8 +56,3 @@ windows:
   install_command: apache-httpd
   uninstall_command: apache-httpd
   official_support: false
-freebsd:
-  install_method: pkg
-  install_command: apache24
-  uninstall_command: apache24
-  official_support: true

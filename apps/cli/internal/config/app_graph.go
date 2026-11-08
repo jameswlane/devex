@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -10,11 +11,29 @@ import (
 
 // pluginInstallMethods have a package-manager plugin today. Whether that plugin
 // is downloaded doesn't matter: offline configurations stay valid.
-var pluginInstallMethods = map[string]bool{
-	"apk": true, "appimage": true, "apt": true, "brew": true, "curlpipe": true,
-	"deb": true, "dnf": true, "docker": true, "emerge": true, "eopkg": true,
-	"flatpak": true, "mise": true, "nixflake": true, "nixpkgs": true, "pacman": true,
-	"pip": true, "rpm": true, "snap": true, "xbps": true, "yay": true, "zypper": true,
+// Platform capabilities mirror packages/package-manager-*/metadata.yaml.
+var pluginInstallMethods = map[string][]string{
+	"apk":      {"linux"},
+	"appimage": {"linux"},
+	"apt":      {"linux"},
+	"brew":     {"macos", "linux"},
+	"curlpipe": {"linux", "macos", "windows"},
+	"deb":      {"linux"},
+	"dnf":      {"linux"},
+	"docker":   {"linux", "macos", "windows"},
+	"emerge":   {"linux"},
+	"eopkg":    {"linux"},
+	"flatpak":  {"linux"},
+	"mise":     {"linux", "macos", "windows"},
+	"nixflake": {"linux", "macos"},
+	"nixpkgs":  {"linux", "macos"},
+	"pacman":   {"linux"},
+	"pip":      {"linux", "macos", "windows"},
+	"rpm":      {"linux"},
+	"snap":     {"linux"},
+	"xbps":     {"linux"},
+	"yay":      {"linux"},
+	"zypper":   {"linux"},
 }
 
 // plannedInstallMethods are recognised but have no plugin yet. Entries using
@@ -41,7 +60,7 @@ const (
 // ClassifyInstallMethod reports whether DevEx can install with a method.
 func ClassifyInstallMethod(method string) InstallMethodSupport {
 	switch {
-	case pluginInstallMethods[method]:
+	case len(pluginInstallMethods[method]) > 0:
 		return MethodSupported
 	case plannedInstallMethods[method]:
 		return MethodPlanned
@@ -92,9 +111,13 @@ func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationE
 
 	graphs := map[string]map[string][]string{} // platform -> app -> dependency apps
 	for _, app := range apps {
-		for platform, osConfig := range platformConfigs(app) {
+		for _, platform := range sortedKeys(platformConfigs(app)) {
+			osConfig := platformConfigs(app)[platform]
 			field := platform
 			checkMethod := func(method, where string) {
+				if capabilities := pluginInstallMethods[method]; len(capabilities) > 0 && platform != "all_platforms" && !slices.Contains(capabilities, platform) {
+					errs = append(errs, ValidationError{File: app.Name, Field: where, Message: fmt.Sprintf("install method %q is incompatible with %s", method, platform)})
+				}
 				if ClassifyInstallMethod(method) == MethodUnknown {
 					errs = append(errs, ValidationError{
 						File: app.Name, Field: where,
@@ -125,8 +148,27 @@ func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationE
 		}
 	}
 
+	// all_platforms takes precedence at runtime and its edges participate in
+	// each OS graph, including edges to applications with OS-specific entries.
+	for _, platform := range []string{"linux", "macos", "windows"} {
+		if graphs[platform] == nil {
+			continue
+		}
+		for _, app := range apps {
+			if app.AllPlatforms.InstallMethod != "" {
+				graphs[platform][app.Name] = graphs["all_platforms"][app.Name]
+			}
+		}
+	}
+	seenCycles := map[string]bool{}
+
 	for _, platform := range sortedKeys(graphs) {
 		for _, cycle := range findCycles(graphs[platform]) {
+			key := canonicalCycle(cycle)
+			if seenCycles[key] {
+				continue
+			}
+			seenCycles[key] = true
 			errs = append(errs, ValidationError{
 				File: cycle[0], Field: platform + ".dependencies",
 				Message: "dependency cycle: " + strings.Join(cycle, " -> "),

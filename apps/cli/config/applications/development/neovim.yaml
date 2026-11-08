@@ -53,6 +53,19 @@ macos:
       destination: ~/.config/nvim/plugin/after/transparency.lua
     - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
       destination: ~/.config/nvim/lazyvim.json
+  system_requirements:
+    required_commands:
+      - git
+      - curl
+  themes:
+    - name: Tokyo Night
+      theme_color: '#1A1B26'
+      theme_background: dark
+      files:
+        - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
+          destination: ~/.config/nvim/lua/plugins/theme.lua
+        - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
+          destination: ~/.config/gnome-shell/themes/tokyo-night.css
 windows:
   install_method: winget
   install_command: Neovim.Neovim
@@ -61,6 +74,9 @@ windows:
   system_requirements:
     required_env_vars:
       - PATH
+    required_commands:
+      - git
+      - curl
   dependencies:
     - git
   alternatives:
@@ -89,6 +105,15 @@ windows:
       destination: '%LOCALAPPDATA%/nvim/init.vim'
     - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
       destination: '%LOCALAPPDATA%/nvim/lazy.toml'
+  themes:
+    - name: Tokyo Night
+      theme_color: '#1A1B26'
+      theme_background: dark
+      files:
+        - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
+          destination: ~/.config/nvim/lua/plugins/theme.lua
+        - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
+          destination: ~/.config/gnome-shell/themes/tokyo-night.css
 linux:
   install_method: curlpipe
   download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
@@ -239,40 +264,16 @@ linux:
       destination: ~/.config/nvim/plugin/after/transparency.lua
     - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
       destination: ~/.config/nvim/lazyvim.json
-freebsd:
-  install_method: pkg
-  install_command: neovim py36-pynvim
-  uninstall_command: neovim py36-pynvim
-  official_support: true
-  alternatives:
-    - install_method: ports
-      install_command: neovim
-      uninstall_command: neovim
-      official_support: true
-      pre_install:
-        - shell: cd /usr/ports/editors/neovim/ && make install clean
-openbsd:
-  install_method: pkg_add
-  install_command: neovim
-  uninstall_command: neovim
-  official_support: true
-  alternatives:
-    - install_method: ports
-      install_command: neovim
-      uninstall_command: neovim
-      official_support: true
-      pre_install:
-        - shell: cd /usr/ports/editors/neovim/ && make install
-system_requirements:
-  required_commands:
-    - git
-    - curl
-themes:
-  - name: Tokyo Night
-    theme_color: '#1A1B26'
-    theme_background: dark
-    files:
-      - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
-        destination: ~/.config/nvim/lua/plugins/theme.lua
-      - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
-        destination: ~/.config/gnome-shell/themes/tokyo-night.css
+  system_requirements:
+    required_commands:
+      - git
+      - curl
+  themes:
+    - name: Tokyo Night
+      theme_color: '#1A1B26'
+      theme_background: dark
+      files:
+        - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
+          destination: ~/.config/nvim/lua/plugins/theme.lua
+        - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
+          destination: ~/.config/gnome-shell/themes/tokyo-night.css

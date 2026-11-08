@@ -96,13 +96,3 @@ linux:
       install_command: ripgrep
       uninstall_command: ripgrep
       official_support: true
-freebsd:
-  install_method: pkg
-  install_command: ripgrep
-  uninstall_command: ripgrep
-  official_support: true
-openbsd:
-  install_method: pkg_add
-  install_command: ripgrep
-  uninstall_command: ripgrep
-  official_support: true

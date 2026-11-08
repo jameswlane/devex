@@ -100,13 +100,3 @@ linux:
       install_command: tealdeer
       uninstall_command: tealdeer
       official_support: true
-freebsd:
-  install_method: pkg
-  install_command: tldr
-  uninstall_command: tldr
-  official_support: true
-openbsd:
-  install_method: pkg_add
-  install_command: tldr
-  uninstall_command: tldr
-  official_support: true

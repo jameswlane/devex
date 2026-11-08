@@ -172,7 +172,7 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 		return fmt.Errorf("invalid inputs: %w", err)
 	}
 
-	configured, merged, present, err := configuredApplications(settings)
+	configured, merged, present, err := configuredApplications(ctx, settings)
 	if err != nil {
 		return err
 	}

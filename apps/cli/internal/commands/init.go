@@ -171,7 +171,7 @@ Examples:
   devex init --import team-config.yaml`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if validate {
-				return validateConfiguration(settings)
+				return validateConfigurationFiles(cmd.Context(), cmd.OutOrStdout(), settings, false, false, "table")
 			}
 
 			if export {
@@ -460,10 +460,6 @@ func initWithProfile(profileName string, settings config.CrossPlatformSettings, 
 	return nil
 }
 
-func validateConfiguration(settings config.CrossPlatformSettings) error {
-	return validateConfigurationFiles(context.Background(), os.Stdout, settings, false, false, "table")
-}
-
 func exportInitConfiguration(settings config.CrossPlatformSettings) error {
 	// Create a comprehensive export of all configurations
 	export := map[string]interface{}{
@@ -505,6 +501,9 @@ func importInitConfiguration(file string, settings config.CrossPlatformSettings,
 	var imported map[string]interface{}
 	if err := yaml.Unmarshal(data, &imported); err != nil {
 		return fmt.Errorf("invalid configuration file: %w", err)
+	}
+	if err := validateImportCandidate(context.Background(), settings, map[string]interface{}{"configurations": map[string]interface{}{"default": imported}}); err != nil {
+		return fmt.Errorf("import validation failed: %w", err)
 	}
 	if err := config.WriteDefaultConfig(configDir); err != nil {
 		return fmt.Errorf("failed to create default configuration: %w", err)
@@ -691,6 +690,9 @@ func importDesktop(content interface{}, configDir string) error {
 }
 
 func saveInitConfig(config InitConfig, settings config.CrossPlatformSettings) error {
+	if err := validateBeforeMutation(context.Background(), settings); err != nil {
+		return err
+	}
 	configDir := settings.GetConfigDir()
 
 	// Create config directory if it doesn't exist

@@ -46,6 +46,20 @@ func main() {
 		handleError("resolving directories", err)
 		return
 	}
+	// Validation must remain usable with malformed settings and must not create
+	// databases, migrate files or initialize installation state before reporting.
+	if configurationValidationCommand(os.Args[1:]) {
+		homeDir, homeErr := utils.GetHomeDir()
+		if homeErr != nil {
+			handleError("determining home directory", homeErr)
+			return
+		}
+		root := commands.NewRootCmd(version, nil, config.CrossPlatformSettings{HomeDir: homeDir})
+		if err := root.ExecuteContext(ctx); err != nil {
+			Exit(exitCode(err))
+		}
+		return
+	}
 	dryRun := migrationDryRun(os.Args[1:])
 	if err := migrateLegacy(ctx, dirs, dryRun, os.Args[1:], os.Stderr); err != nil {
 		handleError("migrating legacy files", err)
@@ -271,4 +285,23 @@ func migrateLegacy(ctx context.Context, dirs devexpaths.Dirs, dryRun bool, args 
 		return nil
 	}
 	return err
+}
+
+// configurationValidationCommand identifies the read-only validation route before startup.
+func configurationValidationCommand(args []string) bool {
+	var words []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") {
+			words = append(words, arg)
+		}
+	}
+	return len(words) >= 2 && words[0] == "config" && words[1] == "validate"
 }
