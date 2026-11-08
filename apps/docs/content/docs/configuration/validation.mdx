@@ -1,46 +1,67 @@
 ---
 title: Configuration Validation
-description: Check the canonical configuration tree and diagnose loading errors
+description: Validate effective configuration schemas, installation methods and dependencies
 ---
 
 # Configuration Validation
 
-`devex config validate` recursively checks YAML files in the default configuration tree at `~/.local/share/devex/config/`:
-
 ```bash
 devex config validate
 devex config validate --strict
+devex config validate --strict --format json
 ```
 
-The command checks the `applications/`, `environments/`, `system/`, and optional `desktop/` directories. It also checks YAML syntax in existing `dotfiles.yaml`, `security.yaml`, and init metadata. When a canonical directory has no YAML files, the summary falls back to the corresponding legacy monolithic file if one exists.
+Loading, init, add, import and `config validate` use the same semantic validator.
+Validation reads the runtime precedence stream: defaults, environment defaults,
+team, team environment, user, and user environment. `DEVEX_ENV` selects the
+active environment. Legacy files and canonical directory files use the same
+precedence as loading; later application definitions replace earlier ones by name.
+Optional absent tiers are valid.
 
-## What validation checks
+## Modes and severity
 
-- YAML syntax in nested files.
-- Required application `name` and `description` fields.
-- A platform or `all_platforms` installation configuration.
-- Installation methods and required installation commands. A `curlpipe` configuration may instead provide a download URL.
-- Basic environment, system, and desktop configuration checks.
+Normal mode reports unknown schema keys as warnings. Strict mode promotes those
+keys to errors. Both modes reject malformed YAML, invalid application structures,
+unknown installation methods and cycles between known applications. Errors cause
+a nonzero exit; mutations stop before destination files, backups or undo state
+are written. Import prepares an isolated candidate configuration first. The
+`--validate=false` flag is retained for compatibility; candidate semantic
+validation always runs.
 
-Categories are free-form labels. Supported methods used by the shipped catalog do not produce warnings. Strict mode requires the `system/` directory during directory content validation. Validation errors return a nonzero exit status; warnings are reported separately.
+Init and add use normal mode, as does ordinary loading. Warnings do not block
+these operations. Run strict validation in CI to prevent ignored fields from
+entering shared configurations. For example, `dependencies` belongs inside an OS
+configuration such as `linux.dependencies`; it is not an application root field.
+Unknown fields include their file, field path, YAML line and column.
 
-## Find the file to fix
+Installation methods are checked against the offline capability catalog, including
+alternatives. A supported method does not require an already downloaded plugin
+and validation never downloads one. Recognized planned methods produce `info` diagnostics:
+the definition is valid, but that capability cannot execute until implemented.
+Infos do not promise that every alternative can run on the current machine.
 
-```bash
-devex config show --detailed
-devex config edit applications
-devex config validate
-```
+Dependencies matching known application names or package aliases participate in
+cycle detection. A cycle diagnostic includes its path, for example
+`A -> B -> A`. Unmatched dependencies produce `info` diagnostics and remain native package
+names; validation does not attempt a network lookup or treat them as missing apps.
+Platform requirements also refer to native packages.
 
-Errors identify the relative file and field, for example `Required field missing in development/git.yaml.name`. Application files contain one application at the YAML root; an `applications:` wrapper belongs to the legacy monolithic format.
+## Diagnostics and file schemas
 
-`config show` reports file sizes, modification times, and syntax status for each directory. Its syntax status does not replace content validation. The `--fix` option currently reports that automatic fixes are not implemented; correct the reported files manually.
+Application files contain one cross-platform application at the YAML root.
+Environment language and shell entries also accept legacy application definitions.
+Fonts, Git, global settings and desktop files each use their own typed schema.
+SSH and terminal settings intentionally accept open maps. Unknown-key checks
+also inspect nested structures and installation alternatives.
 
-## Verify loaded applications
+JSON output contains `valid`, `errors`, `warnings`, `infos` and `diagnostics`. Each diagnostic
+includes `severity`, `category`, `message`, and source `file` and `field` when
+available. Severity is `error`, `warning` or `info`. Warnings and infos do not
+set `valid` to false, and infos are not counted as warnings. A JSON report is emitted before
+the command returns its validation error.
 
-```bash
-devex list available
-devex list available --search docker
-```
+`config show --detailed` reports file sizes and syntax status; use validation for
+semantic checks. `--fix` currently reports that automatic fixes are unavailable;
+correct the reported files manually.
 
-For configuration locations, precedence, and legacy migration, see the [configuration overview](/configuration).
+For paths, precedence and legacy migration, see the [configuration overview](/configuration).

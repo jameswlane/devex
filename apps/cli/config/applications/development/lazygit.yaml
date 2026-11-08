@@ -16,6 +16,10 @@ macos:
       official_support: true
       pre_install:
         - shell: sudo port install lazygit
+  system_requirements:
+    git_version: '>=2.0'
+    required_commands:
+      - git
 windows:
   install_method: winget
   install_command: JesseDuffield.lazygit
@@ -32,6 +36,10 @@ windows:
       official_support: true
       pre_install:
         - shell: scoop bucket add extras
+  system_requirements:
+    git_version: '>=2.0'
+    required_commands:
+      - git
 linux:
   install_method: curlpipe
   download_url: https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_*_Linux_x86_64.tar.gz
@@ -116,12 +124,7 @@ linux:
       official_support: false
       platform_requirements:
         - os: alpine
-freebsd:
-  install_method: pkg
-  install_command: lazygit
-  uninstall_command: lazygit
-  official_support: true
-system_requirements:
-  git_version: '>=2.0'
-  required_commands:
-    - git
+  system_requirements:
+    git_version: '>=2.0'
+    required_commands:
+      - git

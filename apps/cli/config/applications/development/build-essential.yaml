@@ -18,6 +18,12 @@ macos:
       official_support: true
       pre_install:
         - shell: sudo port selfupdate
+  system_requirements:
+    min_memory_mb: 2048
+    min_disk_space_mb: 5120
+    required_commands:
+      - make
+      - gcc
 windows:
   install_method: chocolatey
   install_command: visualstudio2022buildtools visualstudio2022-workload-vctools pkgconfiglite openssl zlib sqlite mysql.utilities postgresql redis-64
@@ -39,6 +45,12 @@ windows:
       pre_install:
         - shell: scoop bucket add main
         - shell: scoop bucket add extras
+  system_requirements:
+    min_memory_mb: 2048
+    min_disk_space_mb: 5120
+    required_commands:
+      - make
+      - gcc
 linux:
   install_method: apt
   install_command: build-essential pkg-config autoconf bison clang rustc libssl-dev libreadline-dev zlib1g-dev libyaml-dev libncurses5-dev libffi-dev libgdbm-dev libjemalloc2 libvips-dev imagemagick libmagickwand-dev mupdf mupdf-tools gir1.2-gtop-2.0 gir1.2-clutter-1.0 redis-tools sqlite3 libsqlite3-0 libmysqlclient-dev libpq-dev postgresql-client postgresql-client-common
@@ -106,26 +118,9 @@ linux:
       official_support: true
       platform_requirements:
         - os: nixos
-freebsd:
-  install_method: pkg
-  install_command: autotools bison clang rust openssl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql80-client postgresql16-client
-  uninstall_command: autotools bison clang rust openssl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql80-client postgresql16-client
-  official_support: true
-  alternatives:
-    - install_method: ports
-      install_command: build-essential
-      uninstall_command: build-essential
-      official_support: true
-      pre_install:
-        - shell: cd /usr/ports/devel && make install clean
-openbsd:
-  install_method: pkg_add
-  install_command: autoconf bison clang rust libressl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql-client postgresql-client
-  uninstall_command: autoconf bison clang rust libressl readline ncurses libffi gdbm jemalloc vips ImageMagick mupdf redis sqlite3 mysql-client postgresql-client
-  official_support: true
-system_requirements:
-  min_memory_mb: 2048
-  min_disk_space_mb: 5120
-  required_commands:
-    - make
-    - gcc
+  system_requirements:
+    min_memory_mb: 2048
+    min_disk_space_mb: 5120
+    required_commands:
+      - make
+      - gcc

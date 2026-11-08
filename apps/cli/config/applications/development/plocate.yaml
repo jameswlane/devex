@@ -54,11 +54,6 @@ linux:
       official_support: true
       platform_requirements:
         - os: alpine
-freebsd:
-  install_method: pkg
-  install_command: plocate
-  uninstall_command: plocate
-  official_support: true
 macos:
   install_method: brew
   install_command: plocate

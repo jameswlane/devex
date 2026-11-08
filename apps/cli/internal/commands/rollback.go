@@ -204,7 +204,7 @@ func runRollback(ctx context.Context, appName string, force bool, restoreConfig 
 	fmt.Printf("Found backup from: %s\n", selectedBackup.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("Backup location: %s\n\n", selectedBackup.BackupPath)
 
-	_, mergedSettings, _, err := configuredApplications(settings)
+	_, mergedSettings, _, err := configuredApplications(ctx, settings)
 	if err != nil {
 		return fmt.Errorf("failed to load rollback configuration: %w", err)
 	}

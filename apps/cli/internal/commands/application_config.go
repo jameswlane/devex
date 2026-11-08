@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/viper"
@@ -12,7 +13,7 @@ import (
 
 // configuredApplications resolves the config read by initializeConfig after Cobra
 // parses flags. Inline definitions override bundled definitions by name.
-func configuredApplications(settings config.CrossPlatformSettings) ([]types.CrossPlatformApp, config.CrossPlatformSettings, bool, error) {
+func configuredApplications(ctx context.Context, settings config.CrossPlatformSettings) ([]types.CrossPlatformApp, config.CrossPlatformSettings, bool, error) {
 	if !viper.IsSet("applications") {
 		return nil, settings, false, nil
 	}
@@ -62,5 +63,8 @@ func configuredApplications(settings config.CrossPlatformSettings) ([]types.Cros
 	}
 	// Keep runtime and non-application settings for the installers.
 	settings.ApplicationOverrides = known
+	if err := config.RequireValidConfig(ctx, settings); err != nil {
+		return nil, settings, true, err
+	}
 	return resolved, settings, true, nil
 }

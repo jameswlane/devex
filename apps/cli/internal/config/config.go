@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -571,25 +572,32 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 }
 
 func loadCrossPlatformSettings(homeDir string, applicationLoader ApplicationLoader) (CrossPlatformSettings, error) {
-	log.Info("Loading cross-platform settings", "homeDir", homeDir)
+	return LoadConfigDirs(context.Background(), homeDir, EffectiveConfigDirs(CrossPlatformSettings{HomeDir: homeDir}), applicationLoader)
+}
 
-	if err := ValidateDirectoryBasedConfig(homeDir, false); err != nil {
-		log.Warn("Configuration validation failed, continuing with loading", "error", err)
+// LoadConfigDirs reads and validates an explicit ordered set of configuration tiers.
+// This also allows import to validate a candidate tree before changing user files.
+func LoadConfigDirs(ctx context.Context, homeDir string, configDirs []string, applicationLoader ApplicationLoader) (CrossPlatformSettings, error) {
+	settings, err := loadConfigDirs(homeDir, configDirs, applicationLoader)
+	if err != nil {
+		return CrossPlatformSettings{}, err
 	}
+	result, err := ValidateConfigDirs(ctx, settings, configDirs, false)
+	if err != nil {
+		return CrossPlatformSettings{}, err
+	}
+	if !result.Valid {
+		return CrossPlatformSettings{}, fmt.Errorf("configuration validation failed: %v", result.Diagnostics)
+	}
+	return settings, nil
+}
+
+func loadConfigDirs(homeDir string, configDirs []string, applicationLoader ApplicationLoader) (CrossPlatformSettings, error) {
+	log.Info("Loading cross-platform settings", "homeDir", homeDir)
 
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	tempSettings := CrossPlatformSettings{HomeDir: homeDir}
-	defaultConfigPath, teamConfigPath, userConfigPath, envDirs := tempSettings.GetConfigDirsWithEnvironment()
-	configDirs := []string{
-		defaultConfigPath,
-		envDirs["default"],
-		teamConfigPath,
-		envDirs["team"],
-		userConfigPath,
-		envDirs["user"],
-	}
 	v.SetDefault("debug_mode", false)
 	v.SetDefault("home_dir", homeDir)
 	v.AutomaticEnv()

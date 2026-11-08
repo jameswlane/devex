@@ -172,7 +172,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		return err
 	}
 	dryRun := viper.GetBool("dry-run")
-	_, mergedSettings, _, err := configuredApplications(settings)
+	_, mergedSettings, _, err := configuredApplications(ctx, settings)
 	if err != nil {
 		return fmt.Errorf("failed to load applications from configuration: %w", err)
 	}

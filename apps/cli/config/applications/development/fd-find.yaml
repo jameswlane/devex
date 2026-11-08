@@ -104,13 +104,3 @@ linux:
       install_command: fd-find
       uninstall_command: fd-find
       official_support: true
-freebsd:
-  install_method: pkg
-  install_command: fd
-  uninstall_command: fd
-  official_support: true
-openbsd:
-  install_method: pkg_add
-  install_command: fd
-  uninstall_command: fd
-  official_support: true

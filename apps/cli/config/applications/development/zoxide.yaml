@@ -102,13 +102,3 @@ linux:
       install_command: zoxide --locked
       uninstall_command: zoxide
       official_support: true
-freebsd:
-  install_method: pkg
-  install_command: zoxide
-  uninstall_command: zoxide
-  official_support: true
-openbsd:
-  install_method: pkg_add
-  install_command: zoxide
-  uninstall_command: zoxide
-  official_support: true

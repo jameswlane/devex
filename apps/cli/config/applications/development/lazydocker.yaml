@@ -4,8 +4,6 @@ category: Development Tools
 default: false
 desktop_environments:
   - all
-dependencies:
-  - docker
 macos:
   install_method: brew
   install_command: jesseduffield/lazydocker/lazydocker
@@ -21,6 +19,8 @@ macos:
       install_command: lazydocker
       uninstall_command: lazydocker
       official_support: true
+  dependencies:
+    - docker
 windows:
   install_method: scoop
   install_command: lazydocker
@@ -35,6 +35,8 @@ windows:
       install_command: lazydocker
       uninstall_command: lazydocker
       official_support: true
+  dependencies:
+    - docker
 linux:
   install_method: curlpipe
   install_command: curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
@@ -57,8 +59,6 @@ linux:
       install_command: github.com/jesseduffield/lazydocker@latest
       uninstall_command: lazydocker
       official_support: true
-      platform_requirements:
-        - go_version: 1.19+
       system_requirements:
         docker_version: 20.10+
         go_version: 1.19+
@@ -72,3 +72,5 @@ linux:
       official_support: false
       pre_install:
         - shell: asdf plugin add lazydocker https://github.com/comdotlinux/asdf-lazydocker.git
+  dependencies:
+    - docker
