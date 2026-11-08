@@ -82,7 +82,15 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			}
 			// Even offline bootstrap can create plugin state or execute local plugins.
 			// Preview commands resolve their plans without initializing the runtime.
-			if viper.GetBool("dry-run") || readAPICommand(cmd) {
+			if viper.GetBool("dry-run") {
+				return nil
+			}
+			if readAPICommand(cmd) {
+				// JSON status probes plugins that are already installed; it never
+				// downloads plugins or creates plugin state.
+				if cmd.Name() == "status" {
+					return runtime.discoverLocalPlugins(cmd.Context())
+				}
 				return nil
 			}
 
@@ -340,6 +348,23 @@ func (r *rootRuntime) initializePluginSystem(ctx context.Context) error {
 		log.Info("Available package managers", "managers", platform.PackageManagers)
 	}
 
+	return nil
+}
+
+// discoverLocalPlugins registers installers for plugins that are already
+// installed, with downloads disabled, for read-only inspection commands.
+func (r *rootRuntime) discoverLocalPlugins(ctx context.Context) error {
+	pluginBootstrap, err := bootstrap.NewPluginBootstrap(true)
+	if err != nil {
+		log.Debug("Local plugin discovery unavailable", "error", err)
+		return nil
+	}
+	if err := pluginBootstrap.Initialize(ctx); err != nil {
+		log.Debug("Local plugin discovery failed", "error", err)
+		return nil
+	}
+	r.pluginBootstrap = pluginBootstrap
+	installers.InitializeWithPluginBootstrap(pluginBootstrap)
 	return nil
 }
 
