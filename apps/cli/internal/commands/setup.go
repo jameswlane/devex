@@ -139,7 +139,7 @@ Run 'devex setup' to begin the guided installation process.`,
 				model = setup.NewSetupModel(repo, settings, detectedPlatform)
 			}
 
-			if setupModel, ok := model.(*setup.SetupModel); ok {
+			if setupModel, ok := model.(interface{ SetContext(context.Context) }); ok {
 				setupModel.SetContext(ctx)
 			}
 			p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithInput(cmd.InOrStdin()), tea.WithOutput(cmd.OutOrStdout()))
@@ -149,7 +149,7 @@ Run 'devex setup' to begin the guided installation process.`,
 			}
 
 			// Check if setup was successful
-			if m, ok := finalModel.(*setup.SetupModel); ok {
+			if m, ok := finalModel.(interface{ CompletionError() error }); ok {
 				if err := m.CompletionError(); err != nil {
 					return err
 				}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +15,8 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/shellrc"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"gopkg.in/yaml.v3"
@@ -24,6 +27,8 @@ type ActionExecutor struct {
 	pluginBootstrap *bootstrap.PluginBootstrap
 	settings        config.CrossPlatformSettings
 	platform        platform.DetectionResult
+	repo            types.Repository
+	installApps     func(context.Context, []types.CrossPlatformApp, types.Repository, config.CrossPlatformSettings) error
 }
 
 // NewActionExecutor creates a new action executor
@@ -31,11 +36,14 @@ func NewActionExecutor(
 	pluginBootstrap *bootstrap.PluginBootstrap,
 	settings config.CrossPlatformSettings,
 	detectedPlatform platform.DetectionResult,
+	repo types.Repository,
 ) *ActionExecutor {
 	return &ActionExecutor{
 		pluginBootstrap: pluginBootstrap,
 		settings:        settings,
 		platform:        detectedPlatform,
+		repo:            repo,
+		installApps:     tui.StartInstallation,
 	}
 }
 
@@ -207,14 +215,50 @@ func (ae *ActionExecutor) installDatabases(ctx context.Context, items interface{
 
 // installDesktopApps installs desktop applications
 func (ae *ActionExecutor) installDesktopApps(ctx context.Context, items interface{}, state *types.SetupState) error {
-	apps, err := ae.toStringSlice(items)
+	// Preserve typed multiselect answers rather than stringifying a slice.
+	if reference, ok := items.(string); ok && strings.HasPrefix(reference, "{{.") && strings.HasSuffix(reference, "}}") {
+		variable := strings.TrimSpace(reference[3 : len(reference)-2])
+		var exists bool
+		items, exists = state.Answers[variable]
+		if !exists {
+			return fmt.Errorf("desktop app selection %q is missing", variable)
+		}
+	}
+	names, err := ae.toStringSlice(items)
 	if err != nil {
 		return fmt.Errorf("invalid install_desktop_apps format: %w", err)
 	}
-
-	log.Info("Installing desktop applications", "apps", apps)
-	// TODO: Implement desktop app installation
-	return nil
+	catalog := make(map[string]types.CrossPlatformApp)
+	for _, app := range ae.settings.GetAllApps() {
+		catalog[app.Name] = app
+	}
+	var apps []types.CrossPlatformApp
+	var failures []error
+	seen := make(map[string]bool)
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		app, exists := catalog[name]
+		if !exists {
+			failures = append(failures, fmt.Errorf("desktop app %q: definition not found", name))
+			continue
+		}
+		apps = append(apps, app)
+	}
+	// Pass exactly the selected definitions as one plan: the shared installer
+	// owns skip checks, authorization, lifecycle hooks, lanes and failure aggregation.
+	if len(apps) > 0 {
+		if shell, ok := state.Answers["selected_shell"].(string); ok {
+			ctx = shellrc.WithShell(ctx, shell)
+		}
+		if err := ae.installApps(ctx, apps, ae.repo, ae.settings); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
 }
 
 // configureShell configures the user's shell
