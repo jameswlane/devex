@@ -52,6 +52,7 @@ var _ = BeforeSuite(func() {
 	sandbox.homes = []string{sandbox.home}
 	sandbox.work, err = os.MkdirTemp("", "devex-e2e-work-")
 	Expect(err).NotTo(HaveOccurred(), "create isolated CLI working directory")
+	configureSourceRegistry()
 })
 
 var _ = AfterSuite(func() {

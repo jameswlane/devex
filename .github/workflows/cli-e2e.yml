@@ -21,6 +21,8 @@ on:
           - all
           - ubuntu-24.04
           - debian-12
+          - fedora-44
+          - centos-stream-9
         default: all
       desktop:
         description: 'Desktop environment to test'
@@ -39,7 +41,7 @@ on:
   workflow_call:
     inputs:
       distro:
-        description: 'Distribution to test: all, ubuntu-24.04, or debian-12'
+        description: 'Distribution to test: all, ubuntu-24.04, debian-12, fedora-44, or centos-stream-9'
         required: false
         type: string
         default: all
@@ -106,7 +108,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        distro: ${{ fromJSON(inputs.distro == 'ubuntu-24.04' && '["ubuntu-24.04"]' || inputs.distro == 'debian-12' && '["debian-12"]' || '["ubuntu-24.04", "debian-12"]') }}
+        distro: ${{ fromJSON(inputs.distro == 'ubuntu-24.04' && '["ubuntu-24.04"]' || inputs.distro == 'debian-12' && '["debian-12"]' || inputs.distro == 'fedora-44' && '["fedora-44"]' || inputs.distro == 'centos-stream-9' && '["centos-stream-9"]' || '["ubuntu-24.04", "debian-12", "fedora-44", "centos-stream-9"]') }}
         desktop: ${{ fromJSON(inputs.desktop == 'gnome' && '["gnome"]' || inputs.desktop == 'kde' && '["kde"]' || inputs.desktop == 'none' && '["none"]' || '["gnome", "none"]') }}
     env:
       DEVEX_E2E_DESKTOP: ${{ matrix.desktop }}

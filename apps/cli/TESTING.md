@@ -17,13 +17,15 @@ This runs the Ginkgo unit test suites recursively. Use `task test:short` to skip
 
 ## End-to-end tests
 
-The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu or Debian container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
+The Ginkgo v2 end-to-end suite lives in `test/e2e`. It exercises the real CLI in a disposable Ubuntu, Debian, Fedora or CentOS Stream container with an empty home directory, including setup, plugin downloads and registry checksums, desktop-specific plugin selection, and optional package installation and removal. The suite refuses to run outside its sandbox because it changes `$HOME` and destructive specs use sudo.
 
 ### Run with Docker
 
 ```bash
 task e2e:docker DISTRO=ubuntu-24.04
 task e2e:docker DISTRO=debian-12
+task e2e:docker DISTRO=fedora-44
+task e2e:docker DISTRO=centos-stream-9
 ```
 
 The runner builds the CLI and test binary, creates the sandbox, and executes the suite with verbose Ginkgo output and a JUnit report. CI enables destructive specs because every container is throwaway; local runs skip them unless explicitly enabled.
@@ -90,8 +92,55 @@ Label destructive lifecycle specs with `destructive` and `pm:<method>`, and skip
 
 ### Artifacts
 
-Local runs write JUnit XML, logs, and captured CLI state under `artifacts/e2e/` in `apps/cli`. CI runs the full suite in all four pull-request matrix jobs with destructive specs enabled, uploads that directory even after failures, and includes each job's JUnit test, failure, error, skip, and pending counts in the job summary.
+Local runs write JUnit XML, logs, and captured CLI state under `artifacts/e2e/` in `apps/cli`. CI runs the full suite in all distribution/desktop matrix jobs with destructive specs enabled, uploads that directory even after failures, and includes each job's JUnit test, failure, error, skip, and pending counts in the job summary.
 
 ## Roadmap
 
-Later end-to-end testing phases will add a local registry mode, headless GNOME and KDE containers, QEMU/Packer virtual machines, and Fedora and Arch coverage.
+Later end-to-end testing phases will add headless GNOME and KDE containers, QEMU/Packer virtual machines, and Arch coverage.
+
+### Fedora and EL lifecycle coverage
+
+The active fixtures in `test/e2e/docker/` use `fedora:44` and
+`quay.io/centos/centos:stream9` alongside `ubuntu:24.04` and `debian:12`.
+Fedora 44 is maintained under the [Fedora release lifecycle](https://docs.fedoraproject.org/en-US/releases/lifecycle/).
+[CentOS Stream 9](https://www.centos.org/stream9/) tracks the RHEL 9 family
+and is supported until May 2027. Bump these explicit major versions before
+upstream support ends; floating package updates intentionally test current
+repositories. The older `docker/Dockerfile.{fedora,redhat,centos-stream}`
+fixtures are separate from this runner.
+
+Source CLI runs also rebuild the target's native package-manager plugin
+(APT on Ubuntu/Debian, DNF on Fedora/CentOS) from this checkout, including
+plugin-sdk changes. The suite exposes that binary and its SHA256 through a
+loopback registry overlay, forwarding other plugin requests to the selected
+registry. CLI download verification remains active. This always-build policy
+ensures PR plugin edits are tested without depending on a plugin release.
+When `E2E_DEVEX_BINARY` (or reusable workflow `cli_version`) selects a released
+CLI, plugins come from the registry instead. Internet access is still required.
+
+Reproduce the complete native lifecycle locally from `apps/cli`:
+
+```bash
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=fedora-44
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=centos-stream-9
+# Narrow to the DNF lifecycle while debugging:
+DEVEX_E2E_DESTRUCTIVE=1 task e2e:docker DISTRO=fedora-44 -- --ginkgo.label-filter=pm:dnf
+```
+
+Both DNF fixtures start without jq. Specs install it, verify `rpm -q jq` and
+`jq --version`, run CLI status, repeat installation and assert the explicit
+`skipped jq (already installed)` result, then uninstall and verify `rpm -q`
+fails because the package is absent. Tracked native applications are skipped
+only after querying the package manager; stale tracking triggers installation
+and query failures fail the command. Existing non-native install flows retain
+their normal behavior.
+
+The CI manual `distro` input and reusable workflow accept both new target
+names, or `all`. Destructive specs default to enabled in CI. `runner.log`
+captures build and suite output, including failures before JUnit can be
+created; command transcripts, failure state and `junit.xml` are uploaded by
+the existing always-run artifact step. To lint these build-tagged specs, use
+`GOFLAGS=-tags=e2e task --force lint`; normal `task test` excludes the sandbox
+suite. A quick registry-overlay regression check can run without Docker using
+a fresh temporary HOME, `DEVEX_E2E_SANDBOX=1`, and Ginkgo's `registry` label;
+never enable destructive specs on the host.

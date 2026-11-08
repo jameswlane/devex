@@ -57,13 +57,15 @@ var _ = Describe("Non-interactive application commands", func() {
 		installed = nil
 		removed = nil
 		prepared = 0
-		oldInstall, oldPrepare, oldRemove := installApplication, prepareApplicationInstallers, uninstallApplication
+		oldInstall, oldPrepare, oldRemove, oldQuery := installApplication, prepareApplicationInstallers, uninstallApplication, nativeApplicationInstalled
 		DeferCleanup(func() {
 			installApplication = oldInstall
 			prepareApplicationInstallers = oldPrepare
 			uninstallApplication = oldRemove
+			nativeApplicationInstalled = oldQuery
 		})
 		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { prepared++; return nil }
+		nativeApplicationInstalled = func(context.Context, types.CrossPlatformApp) (bool, error) { return false, nil }
 		installApplication = func(_ context.Context, a types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
 			installed = append(installed, a.Name)
 			return nil
