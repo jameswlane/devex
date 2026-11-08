@@ -15,6 +15,7 @@ type ValidationResult = config.ValidationResult
 const (
 	SeverityError                = config.SeverityError
 	SeverityWarning              = config.SeverityWarning
+	SeverityInfo                 = config.SeverityInfo
 	CategoryFileMissing          = config.CategoryFileMissing
 	CategoryFileInvalidYAML      = config.CategoryFileInvalidYAML
 	CategorySchema               = config.CategorySchema

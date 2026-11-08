@@ -67,12 +67,17 @@ var _ = Describe("Shared semantic validation", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Valid).To(BeTrue(), "%v", result.Diagnostics)
 	})
-	It("keeps planned methods and native dependencies as warnings even in strict mode", func() {
+	It("reports planned methods and native dependencies as infos even in strict mode", func() {
 		settings.ApplicationOverrides = []types.CrossPlatformApp{{Name: "terminal", Windows: types.OSConfig{InstallMethod: "winget", InstallCommand: "terminal", Dependencies: []string{"native-package"}}}}
 		result, err := config.ValidateConfig(context.Background(), settings, true)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Valid).To(BeTrue())
-		Expect(result.Diagnostics).To(ContainElements(HaveField("Category", config.CategoryDependencyNative), HaveField("Category", config.CategoryInstallMethodPlanned)))
+		Expect(result.Diagnostics).To(ContainElements(
+			And(HaveField("Category", config.CategoryDependencyNative), HaveField("Severity", config.SeverityInfo)),
+			And(HaveField("Category", config.CategoryInstallMethodPlanned), HaveField("Severity", config.SeverityInfo)),
+		))
+		Expect(result.Warnings).To(BeZero())
+		Expect(result.Infos).To(Equal(2))
 	})
 
 	It("validates every runtime schema in the source config tree strictly", func() {

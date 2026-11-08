@@ -17,6 +17,10 @@ type Severity string
 const (
 	SeverityError   Severity = "error"
 	SeverityWarning Severity = "warning"
+	// SeverityInfo marks expected, informational findings (for example
+	// install methods planned for other platforms). Infos never affect
+	// validity and are not counted as warnings.
+	SeverityInfo Severity = "info"
 )
 
 // Category is a stable, machine-readable diagnostic kind. Values are part of
@@ -47,6 +51,7 @@ type ValidationResult struct {
 	Valid       bool         `json:"valid"`
 	Errors      int          `json:"errors"`
 	Warnings    int          `json:"warnings"`
+	Infos       int          `json:"infos"`
 	Diagnostics []Diagnostic `json:"diagnostics"`
 }
 
@@ -58,6 +63,8 @@ func (r *ValidationResult) Add(d Diagnostic) {
 		r.Errors++
 	case SeverityWarning:
 		r.Warnings++
+	case SeverityInfo:
+		r.Infos++
 	}
 	r.Valid = r.Errors == 0
 }
@@ -169,11 +176,11 @@ func applicationCapabilityWarnings(apps []types.CrossPlatformApp, sources map[st
 		var visit func(types.OSConfig, string)
 		visit = func(osConfig types.OSConfig, field string) {
 			if ClassifyInstallMethod(osConfig.InstallMethod) == MethodPlanned {
-				diagnostics = append(diagnostics, Diagnostic{Severity: SeverityWarning, Category: CategoryInstallMethodPlanned, File: file, Field: field + ".install_method", Message: fmt.Sprintf("install method %q is planned; no plugin capability is available yet", osConfig.InstallMethod)})
+				diagnostics = append(diagnostics, Diagnostic{Severity: SeverityInfo, Category: CategoryInstallMethodPlanned, File: file, Field: field + ".install_method", Message: fmt.Sprintf("install method %q is planned; no plugin capability is available yet", osConfig.InstallMethod)})
 			}
 			for i, dependency := range osConfig.Dependencies {
 				if !known[strings.ToLower(dependency)] {
-					diagnostics = append(diagnostics, Diagnostic{Severity: SeverityWarning, Category: CategoryDependencyNative, File: file, Field: fmt.Sprintf("%s.dependencies[%d]", field, i), Message: fmt.Sprintf("%q is not a known app; treated as native package", dependency)})
+					diagnostics = append(diagnostics, Diagnostic{Severity: SeverityInfo, Category: CategoryDependencyNative, File: file, Field: fmt.Sprintf("%s.dependencies[%d]", field, i), Message: fmt.Sprintf("%q is not a known app; treated as native package", dependency)})
 				}
 			}
 			for i, alternative := range osConfig.Alternatives {

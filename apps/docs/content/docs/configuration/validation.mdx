@@ -36,13 +36,13 @@ Unknown fields include their file, field path, YAML line and column.
 
 Installation methods are checked against the offline capability catalog, including
 alternatives. A supported method does not require an already downloaded plugin
-and validation never downloads one. Recognized planned methods produce warnings:
+and validation never downloads one. Recognized planned methods produce `info` diagnostics:
 the definition is valid, but that capability cannot execute until implemented.
-Warnings do not promise that every alternative can run on the current machine.
+Infos do not promise that every alternative can run on the current machine.
 
 Dependencies matching known application names or package aliases participate in
 cycle detection. A cycle diagnostic includes its path, for example
-`A -> B -> A`. Unmatched dependencies produce warnings and remain native package
+`A -> B -> A`. Unmatched dependencies produce `info` diagnostics and remain native package
 names; validation does not attempt a network lookup or treat them as missing apps.
 Platform requirements also refer to native packages.
 
@@ -54,9 +54,10 @@ Fonts, Git, global settings and desktop files each use their own typed schema.
 SSH and terminal settings intentionally accept open maps. Unknown-key checks
 also inspect nested structures and installation alternatives.
 
-JSON output contains `valid`, `errors`, `warnings` and `diagnostics`. Each diagnostic
+JSON output contains `valid`, `errors`, `warnings`, `infos` and `diagnostics`. Each diagnostic
 includes `severity`, `category`, `message`, and source `file` and `field` when
-available. Warnings do not set `valid` to false. A JSON report is emitted before
+available. Severity is `error`, `warning` or `info`. Warnings and infos do not
+set `valid` to false, and infos are not counted as warnings. A JSON report is emitted before
 the command returns its validation error.
 
 `config show --detailed` reports file sizes and syntax status; use validation for
