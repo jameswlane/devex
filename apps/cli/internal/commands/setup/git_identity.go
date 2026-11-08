@@ -29,11 +29,15 @@ var readGlobalGitIdentity = func(ctx context.Context) (name, email string) {
 // loadExistingGitIdentity reads the global git identity once and pre-fills the
 // Git Configuration fields that the user has not typed into yet.
 func (m *SetupModel) loadExistingGitIdentity() {
+	m.loadGitIdentity(context.Background())
+}
+
+func (m *SetupModel) loadGitIdentity(ctx context.Context) {
 	if m.git.identityLoaded {
 		return
 	}
 	m.git.identityLoaded = true
-	m.git.existingName, m.git.existingEmail = readGlobalGitIdentity(context.Background())
+	m.git.existingName, m.git.existingEmail = readGlobalGitIdentity(ctx)
 	if m.git.gitFullName == "" {
 		m.git.gitFullName = m.git.existingName
 	}

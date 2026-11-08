@@ -56,6 +56,16 @@ var _ = Describe("Setup failure regressions", func() {
 				commands = append(commands, command.Name)
 			}
 			calls := desktopConfigurationArgs("accepted-hash")
+			if info.Name == "desktop-gnome" || info.Name == "desktop-kde" {
+				executor := configurationExecutorFunc(func(_ context.Context, name string, args []string, streams sdk.OperationIO) error {
+					Expect(name).To(Equal(info.Name))
+					calls = append(calls, args)
+					_, err := io.WriteString(streams.Stdout, `[["preview"]]`)
+					return err
+				})
+				_, err := describeDesktop(ctx, executor, info.Name)
+				Expect(err).NotTo(HaveOccurred())
+			}
 			if info.Name == "tool-git" {
 				calls = [][]string{gitConfigurationArgs("Setup User", "setup@example.com")}
 				GinkgoT().Setenv("GIT_CONFIG_GLOBAL", filepath.Join(GinkgoT().TempDir(), "gitconfig"))
