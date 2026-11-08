@@ -18,6 +18,7 @@ import (
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/catalog"
 	"github.com/jameswlane/devex/apps/cli/internal/commands"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/datastore"
@@ -129,6 +130,9 @@ func main() {
 	if err != nil {
 		handleError("loading cross-platform configuration", err)
 	}
+
+	// Enable runtime catalog resolution after Cobra has parsed configuration.
+	crossPlatformSettings.Catalog = &catalog.Result{}
 
 	// Set runtime flags
 	crossPlatformSettings.HomeDir = homeDir

@@ -14,7 +14,7 @@ Store one application per YAML file under `applications/<category>/<app>.yaml`. 
 └── optional/
 ```
 
-Personal overrides use the same tree under `~/.devex/config/applications/`. See [configuration priority](/configuration#configuration-priority) for team and environment overrides.
+Personal overrides use the same tree under `$DEVEX_CONFIG_DIR/config/applications/` (normally `~/.config/devex/config/applications/`). See [configuration priority](/configuration#configuration-priority) for team and environment overrides.
 
 ## Application definition
 
@@ -86,7 +86,7 @@ devex config validate
 devex config edit applications
 ```
 
-The editor opens every nested application YAML file in the default configuration directory. For a personal override, edit its file under `~/.devex/config/applications/` directly.
+The editor opens every nested application YAML file in the default configuration directory. For a personal override, edit its file under `$DEVEX_CONFIG_DIR/config/applications/` (normally `~/.config/devex/config/applications/`) directly.
 
 ## Migrating legacy applications
 
@@ -152,3 +152,46 @@ choices such as Git identity, and record enough information for restoration.
 Report failures honestly, including partial changes; never label an incomplete
 setup successful. Reviewers must verify scope, preview/execution parity,
 reversibility, failure reporting, and regression coverage for every new effect.
+
+## Registry catalog and offline use
+
+`devex list available`, `devex install <app>`, and setup load application defaults
+from `https://registry.devex.sh/api/v1/applications`. List search, category,
+recommended, and output format options work on the resolved catalog. Applications
+without an installation method for the current platform are excluded from the
+available list. The CLI fetches all pages so local overrides participate in search
+and filtering too.
+
+The catalog is cached for one hour under the shared DevEx cache directory
+(`$DEVEX_CACHE_DIR`, otherwise `$XDG_CACHE_HOME/devex`, normally `~/.cache/devex`).
+Each registry URL has its own cache file. Stale single-page results use ETag
+revalidation; paginated catalogs refresh all pages. Registry requests have a
+five-second timeout and a fifteen-second budget for pagination.
+
+If the registry fails, DevEx uses its last complete cached catalog, even if stale,
+then the bundled application catalog. `--offline` or `DEVEX_OFFLINE=true` avoids
+registry requests. DevEx reports stale-cache or bundled fallback and its reason on stderr. Fresh
+registry responses and fresh caches are silent by default. `--verbose` always
+reports the selected source, registry URL, cache age, and refresh or cache-write
+errors. Installed listings, status, configuration, version, and help do not load
+the registry catalog. JSON output
+remains on stdout. Cache files can safely be deleted.
+
+Local application definitions override registry, cached, or bundled defaults by
+case-insensitive application name. A matching local definition replaces the whole
+application, including platform methods; it is not a field-by-field merge. Local
+tiers retain their existing precedence: default data config, its environment,
+team config, its environment, user config, then its environment. Custom names are
+added. Inline `applications` definitions from the selected configuration have the
+highest precedence for installation.
+
+To use a self-hosted registry, set:
+
+```sh
+export DEVEX_PLUGIN_REGISTRY_URL=https://registry.example.com
+```
+
+Or set `plugin_registry_url: https://registry.example.com` in
+`$DEVEX_CONFIG_DIR/config.yaml` (normally `~/.config/devex/config.yaml`). The
+environment variable takes precedence. Supply the registry origin; the CLI appends
+`/api/v1/applications`. This setting is shared with plugin downloads.

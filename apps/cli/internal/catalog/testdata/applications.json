@@ -1,0 +1,43 @@
+{
+	"items": [
+		{
+			"name": "git",
+			"description": "A distributed version control system",
+			"category": "Dependency",
+			"type": "application",
+			"official": false,
+			"default": false,
+			"platforms": {
+				"linux": {
+					"installMethod": "apt",
+					"installCommand": "git",
+					"officialSupport": false,
+					"alternatives": []
+				},
+				"macos": null,
+				"windows": null
+			},
+			"tags": [],
+			"desktopEnvironments": [],
+			"githubUrl": "https://github.com/jameswlane/devex",
+			"githubPath": "https://github.com/jameswlane/devex/tree/main/apps/web/app/generated/tools.json"
+		}
+	],
+	"pagination": {
+		"total": 1,
+		"count": 1,
+		"limit": 100,
+		"offset": 0,
+		"page": 1,
+		"totalPages": 1,
+		"hasNext": false,
+		"hasPrevious": false
+	},
+	"filters": {},
+	"meta": {
+		"source": "database",
+		"transformationCache": "enabled",
+		"queryOptimization": "composite-indexes",
+		"platformFiltering": "none"
+	}
+}

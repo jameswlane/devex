@@ -23,8 +23,9 @@ func init() {
 
 func NewSetupCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "setup",
-		Short: "Interactive guided setup for your development environment",
+		Annotations: map[string]string{catalogAnnotation: catalogRequired},
+		Use:         "setup",
+		Short:       "Interactive guided setup for your development environment",
 		Long: `The setup command provides an interactive, guided installation experience.
 
 Choose from popular programming languages, databases, and applications to create

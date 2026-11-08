@@ -76,6 +76,10 @@ func GetAvailableApps(repo types.Repository, settings config.CrossPlatformSettin
 	availableApps := make([]AvailableApp, 0, len(allApps))
 
 	for _, app := range allApps {
+		// Applications without a method for this platform are not available here.
+		if !app.IsSupported() {
+			continue
+		}
 		// Skip already installed apps unless verbose mode
 		if installedAppsCache[app.Name] && !options.Verbose {
 			continue

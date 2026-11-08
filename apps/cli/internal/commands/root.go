@@ -66,13 +66,19 @@ DevEx supports multiple platforms and package managers:
   • Windows: winget, Chocolatey, Scoop
 
 All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
-		Version: version,
+		Version:     version,
+		Annotations: map[string]string{catalogAnnotation: catalogRequired},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if err := initializeConfig(cmd); err != nil {
 				if f := cmd.Flags().Lookup("format"); f != nil && f.Value.String() == "json" {
 					return writeAPIJSON(cmd, nil, agentapi.APIError(err))
 				}
 				return err
+			}
+			if cmd.HasParent() && requiresCatalog(cmd) {
+				if err := loadCommandCatalog(cmd, settings); err != nil {
+					return err
+				}
 			}
 			// Even offline bootstrap can create plugin state or execute local plugins.
 			// Preview commands resolve their plans without initializing the runtime.
@@ -117,6 +123,13 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			}
 			if len(apps) > 0 {
 				return printRootNextSteps(cmd)
+			}
+
+			// Only the first-run setup flow needs the root catalog opt-in.
+			if requiresCatalog(cmd) {
+				if err := loadCommandCatalog(cmd, settings); err != nil {
+					return err
+				}
 			}
 
 			// Invoke the handler directly: Execute on a child restarts the root command.

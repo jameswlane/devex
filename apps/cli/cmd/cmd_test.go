@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -100,10 +103,12 @@ func isolatedGoRunEnv(home string) (string, []string) {
 	Expect(values).To(HaveLen(4))
 
 	overrides := map[string]string{
-		"HOME":       home,
-		"GOPATH":     values[1],
-		"GOCACHE":    values[2],
-		"GOMODCACHE": values[3],
+		"HOME":                       home,
+		"DEVEX_OFFLINE":              "true",
+		"DEVEX_DISABLE_UPDATE_CHECK": "true",
+		"GOPATH":                     values[1],
+		"GOCACHE":                    values[2],
+		"GOMODCACHE":                 values[3],
 	}
 	excluded := map[string]bool{"DEBUG": true, "DEVEX_DEBUG": true, "DEVEX_VERBOSE": true}
 
@@ -166,4 +171,112 @@ var _ = Describe("CLI startup regression coverage", func() {
 			Expect(os.ReadFile(path)).To(Equal(before))
 		}
 	})
+})
+
+var _ = Describe("Runtime registry catalog", func() {
+	It("uses the registry for filtered JSON listings and explicit install resolution", func(ctx SpecContext) {
+		fixture, err := os.ReadFile("../internal/catalog/testdata/applications.json")
+		Expect(err).NotTo(HaveOccurred())
+		fixture = bytes.ReplaceAll(fixture, []byte(`"git"`), []byte(`"registry-only"`))
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(fixture) }))
+		defer server.Close()
+		home := GinkgoT().TempDir()
+		goBin, env := isolatedGoRunEnv(home)
+		// This test opts into its local httptest registry explicitly.
+		for i, entry := range env {
+			if strings.HasPrefix(entry, "DEVEX_OFFLINE=") {
+				env[i] = "DEVEX_OFFLINE=false"
+			}
+		}
+		env = append(env, "DEVEX_PLUGIN_REGISTRY_URL="+server.URL, "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"))
+		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
+		build.Env = env
+		output, err := build.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		list := exec.CommandContext(ctx, binary, "list", "available", "--search", "registry-only", "--category", "Dependency", "--format", "json", "--skip-plugin-download")
+		list.Env = env
+		var stderr bytes.Buffer
+		list.Stderr = &stderr
+		output, err = list.Output()
+		Expect(err).NotTo(HaveOccurred(), stderr.String())
+		Expect(json.Valid(output)).To(BeTrue(), string(output))
+		Expect(string(output)).To(ContainSubstring("registry-only"))
+		Expect(stderr.String()).NotTo(ContainSubstring("Application catalog:"))
+		verboseList := exec.CommandContext(ctx, binary, "list", "available", "--format", "json", "--skip-plugin-download", "--verbose")
+		verboseList.Env = env
+		stderr.Reset()
+		verboseList.Stderr = &stderr
+		output, err = verboseList.Output()
+		Expect(err).NotTo(HaveOccurred(), stderr.String())
+		Expect(json.Valid(output)).To(BeTrue())
+		Expect(stderr.String()).To(ContainSubstring("Application catalog: cache"))
+		Expect(stderr.String()).To(ContainSubstring(server.URL))
+		Expect(stderr.String()).To(ContainSubstring("cache age:"))
+		install := exec.CommandContext(ctx, binary, "install", "registry-only", "--dry-run", "--offline")
+		install.Env = env
+		output, err = install.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(ContainSubstring("registry-only"))
+		Expect(string(output)).NotTo(ContainSubstring("Application catalog:"))
+		// Force a stale snapshot and verify its offline fallback reason.
+		entries, err := os.ReadDir(filepath.Join(home, "cache"))
+		Expect(err).NotTo(HaveOccurred())
+		for _, entry := range entries {
+			path := filepath.Join(home, "cache", entry.Name())
+			data, err := os.ReadFile(path)
+			Expect(err).NotTo(HaveOccurred())
+			var snapshot map[string]any
+			Expect(json.Unmarshal(data, &snapshot)).To(Succeed())
+			snapshot["Checked"] = time.Now().Add(-2 * time.Hour).Format(time.RFC3339Nano)
+			data, err = json.Marshal(snapshot)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.WriteFile(path, data, 0600)).To(Succeed())
+		}
+		stale := exec.CommandContext(ctx, binary, "list", "available", "--offline", "--skip-plugin-download")
+		stale.Env = env
+		output, err = stale.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(ContainSubstring("Application catalog: cache (stale)"))
+		Expect(string(output)).To(ContainSubstring("offline mode enabled"))
+		Expect(os.RemoveAll(filepath.Join(home, "cache"))).To(Succeed())
+		fallback := exec.CommandContext(ctx, binary, "list", "available", "--offline", "--skip-plugin-download")
+		fallback.Env = env
+		output, err = fallback.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(ContainSubstring("Application catalog: bundled"))
+		Expect(string(output)).To(ContainSubstring("offline mode enabled"))
+	}, SpecTimeout(30*time.Second))
+	It("does not request the catalog for installed listings, status, configuration, version, or help", func(ctx SpecContext) {
+		var hits atomic.Int32
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1); w.WriteHeader(503) }))
+		defer server.Close()
+		home := GinkgoT().TempDir()
+		goBin, env := isolatedGoRunEnv(home)
+		for i, entry := range env {
+			if strings.HasPrefix(entry, "DEVEX_OFFLINE=") {
+				env[i] = "DEVEX_OFFLINE=false"
+			}
+		}
+		env = append(env, "DEVEX_PLUGIN_REGISTRY_URL="+server.URL, "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"))
+		binary := filepath.Join(GinkgoT().TempDir(), "devex")
+		build := exec.CommandContext(ctx, goBin, "build", "-o", binary, "main.go")
+		build.Env = env
+		output, err := build.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		for _, args := range [][]string{
+			{"list", "installed", "--skip-plugin-download"},
+			{"status", "--skip-plugin-download"},
+			{"config", "show", "--skip-plugin-download"},
+			{"--version"}, {"--help"}, {"help", "install"}, {"install", "--help"}, {"setup", "--help"},
+		} {
+			command := exec.CommandContext(ctx, binary, args...)
+			command.Env = env
+			output, err = command.CombinedOutput()
+			Expect(err).NotTo(HaveOccurred(), "args=%v output=%s", args, output)
+			Expect(hits.Load()).To(BeZero(), "args=%v", args)
+			Expect(string(output)).NotTo(ContainSubstring("Application catalog:"))
+		}
+	}, SpecTimeout(30*time.Second))
+
 })
