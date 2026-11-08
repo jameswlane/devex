@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -25,13 +26,21 @@ type AppImageVersion struct {
 
 // Execute handles command execution
 func (p *AppimagePlugin) Execute(command string, args []string) error {
+	return p.ExecuteContext(context.Background(), command, args)
+}
+
+// ExecuteContext handles command execution with caller cancellation.
+func (p *AppimagePlugin) ExecuteContext(ctx context.Context, command string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	switch command {
 	case "is-installed":
 		return p.handleIsInstalled(args)
 	case "validate-url":
-		return p.handleValidateURL(args)
+		return p.handleValidateURL(ctx, args)
 	case "install":
-		return p.handleInstall(args)
+		return p.handleInstall(ctx, args)
 	case "remove":
 		return p.handleRemove(args)
 	case "list":
@@ -42,7 +51,7 @@ func (p *AppimagePlugin) Execute(command string, args []string) error {
 }
 
 // handleInstall installs AppImage applications
-func (p *AppimagePlugin) handleInstall(args []string) error {
+func (p *AppimagePlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) < 2 {
 		return fmt.Errorf("usage: <download_url> <binary_name> [flags]")
 	}
@@ -77,12 +86,12 @@ func (p *AppimagePlugin) handleInstall(args []string) error {
 	}
 
 	// Validate URL accessibility
-	if err := p.validateURLAccessibility(downloadURL); err != nil {
+	if err := p.validateURLAccessibility(ctx, downloadURL); err != nil {
 		return fmt.Errorf("URL validation failed: %w", err)
 	}
 
 	// Install the AppImage
-	if err := p.installAppImage(downloadURL, binaryName, installLocation); err != nil {
+	if err := p.installAppImage(ctx, downloadURL, binaryName, installLocation); err != nil {
 		return fmt.Errorf("failed to install AppImage: %w", err)
 	}
 
@@ -224,7 +233,7 @@ func (p *AppimagePlugin) handleIsInstalled(args []string) error {
 }
 
 // handleValidateURL validates AppImage download URLs
-func (p *AppimagePlugin) handleValidateURL(args []string) error {
+func (p *AppimagePlugin) handleValidateURL(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no URL specified")
 	}
@@ -234,7 +243,7 @@ func (p *AppimagePlugin) handleValidateURL(args []string) error {
 	for _, downloadURL := range args {
 		p.logger.Printf("Validating URL: %s\n", downloadURL)
 
-		if err := p.validateURLAccessibility(downloadURL); err != nil {
+		if err := p.validateURLAccessibility(ctx, downloadURL); err != nil {
 			p.logger.Printf("❌ %s: %v\n", downloadURL, err)
 			failures = append(failures, fmt.Errorf("URL validation failed for %s: %w", downloadURL, err))
 		} else {

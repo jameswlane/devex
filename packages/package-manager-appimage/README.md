@@ -31,6 +31,28 @@ devex package-manager appimage list
 devex package-manager appimage integrate app.AppImage
 ```
 
+## Download URL policy
+
+`validate-url` and `install` accept HTTPS URLs only. Plain HTTP and other
+schemes fail before any request. Each redirect must pass the same URL checks,
+including the existing localhost/private-address restrictions; HTTPS redirects
+across hosts and relative redirects are allowed, with at most 10 requests per
+redirect chain. HTTP downgrades are rejected before contacting the target.
+These URL checks are not a DNS-based private-network isolation guarantee.
+
+Validation sends HEAD and requires a final 2xx response. Only HEAD 405 or 501
+falls back to GET with `Range: bytes=0-0` at the final URL. A 2xx fallback is
+accepted even when the server ignores Range; the probe body is closed without
+being read. Other error statuses and unresolved redirects fail without fallback.
+A successful probe confirms HTTPS accessibility at that time. It does not
+verify content type, size, AppImage format, checksum, signature, safety, or
+whether the subsequent download will succeed.
+
+The caller context cancels probes, fallback requests, redirects, and the actual
+install download. Probes have a 30-second client timeout; the full download has
+a five-minute timeout and independently enforces the same redirect policy.
+Installation requires a final HTTP 200 download response.
+
 ## ⚠️ Error Handling
 
 - `list` shows both `~/Applications` and `~/.local/bin` even if one cannot be read, then fails with every read error. A directory that does not exist is listed as empty.
