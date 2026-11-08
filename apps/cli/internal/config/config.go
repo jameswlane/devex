@@ -579,6 +579,12 @@ func LoadCrossPlatformSettings(homeDir string) (CrossPlatformSettings, error) {
 	return loadCrossPlatformSettings(homeDir, FileApplicationLoader{})
 }
 
+// LoadCrossPlatformSettingsContext is LoadCrossPlatformSettings with the
+// caller's context passed through to configuration validation.
+func LoadCrossPlatformSettingsContext(ctx context.Context, homeDir string) (CrossPlatformSettings, error) {
+	return LoadConfigDirs(ctx, homeDir, EffectiveConfigDirs(CrossPlatformSettings{HomeDir: homeDir}), FileApplicationLoader{})
+}
+
 func loadCrossPlatformSettings(homeDir string, applicationLoader ApplicationLoader) (CrossPlatformSettings, error) {
 	return LoadConfigDirs(context.Background(), homeDir, EffectiveConfigDirs(CrossPlatformSettings{HomeDir: homeDir}), applicationLoader)
 }

@@ -19,7 +19,7 @@ import (
 // LoadCatalogSettings loads registry defaults followed by local configuration.
 // The local-only loader remains available to config tooling and offline callers.
 func LoadCatalogSettings(ctx context.Context, home string) (CrossPlatformSettings, error) {
-	settings, err := LoadCrossPlatformSettings(home)
+	settings, err := LoadCrossPlatformSettingsContext(ctx, home)
 	if err != nil {
 		return settings, err
 	}
