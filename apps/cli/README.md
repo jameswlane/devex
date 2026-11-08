@@ -345,3 +345,51 @@ This project is licensed under the [Apache-2.0 License](../../LICENSE).
 **[Install DevEx](https://devex.sh)** • **[Documentation](https://docs.devex.sh)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+## Package metadata refresh and upgrades
+
+Use `devex update [apps...]` to refresh repository metadata once per selected
+manager, and `devex upgrade [apps...]` to upgrade only selected application
+packages. Use `--categories Tools,Databases` instead of names. Without a selection,
+these commands use configured applications (catalog defaults if no configuration
+exists). Repeated managers and packages are deduplicated.
+
+```sh
+devex update git
+devex upgrade git curl --dry-run
+devex upgrade --categories Tools --non-interactive
+CI=true devex upgrade git
+```
+
+`--dry-run` prints exact plugin argv and corresponding native commands without
+initializing, downloading, or executing plugins. APT upgrades include a metadata
+refresh, then `apt-get install --only-upgrade -y` for the selected packages.
+Native argv excludes the platform-dependent elevation wrapper. System managers
+request elevation through the SDK; Nix runs as the user. Unattended execution
+uses non-prompting elevation and closes stdin. The existing `--non-interactive`,
+`DEVEX_NONINTERACTIVE=1`, and CI policies apply.
+
+| Manager | `update` (metadata only) | `upgrade` (selected packages) |
+| --- | --- | --- |
+| APT | Yes | Yes, with `--only-upgrade` after metadata refresh |
+| DNF | Yes, `makecache` | Yes |
+| Zypper | Yes, `refresh` | Yes, native `update` |
+| XBPS | Yes, `--sync` | Yes |
+| Eopkg | Yes, `update-repo` | Yes |
+| Emerge | Yes, `--sync` | Unsupported: plugin upgrades all of `@world` |
+| APK | Yes | Unsupported: plugin ignores selected package arguments |
+| Snap | Unsupported: plugin `update` upgrades packages | Yes, `refresh` |
+| Nixpkgs | Unsupported by plugin | Yes, `nix-env --upgrade` |
+| Other managers | Unsupported through these commands | Unsupported through these commands |
+
+Unsupported operations fail explicitly; no system-wide upgrade is substituted.
+Other supported managers continue after failures. Each manager's result is
+reported and any failure produces a nonzero exit, including unsupported dry-run
+selections. A failed transaction may have partially completed; no rollback is
+claimed. These commands do not run install hooks, add dependencies, or apply
+shell/desktop configuration.
+
+APT targeted upgrades require a plugin advertising `upgrade-packages`. Older
+plugins return an actionable error and a nonzero exit; the CLI never falls back
+to `upgrade`, which older plugins implement as a system-wide upgrade. Release the
+new APT plugin before the CLI for uninterrupted targeted-upgrade support.

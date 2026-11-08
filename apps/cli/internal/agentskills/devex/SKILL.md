@@ -148,3 +148,12 @@ devex uninstall --app vscode --keep-config --non-interactive
   guided recovery; use it only with the user.
 - Not every preview is guaranteed to be free of side effects in every plugin.
   Treat `--dry-run` as a plan to review, not as proof that nothing changes.
+
+## Package maintenance
+
+Preview metadata refresh with `devex update git --dry-run` and selected package
+upgrades with `devex upgrade git --dry-run`. Show the plan and obtain approval
+before running either operation; use `--non-interactive` for unattended runs.
+`update` never upgrades packages, and `upgrade` never substitutes a system-wide
+upgrade for the selected packages. Unsupported managers return errors; consult
+`devex update --help` and the CLI README's capability table.

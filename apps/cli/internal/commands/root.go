@@ -104,7 +104,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 					return nil
 				}
 			}
-			if cmd.Parent() == nil || (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
+			if cmd.Parent() == nil || (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "update" || cmdName == "upgrade" || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
 				log.Debug("Deferring plugin initialization to command", "command", cmdName)
 				return nil
 			}
@@ -153,6 +153,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(setupCmd)
 	cmd.AddCommand(NewInstallCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewUninstallCmd(repo, settings))
+	cmd.AddCommand(newPackageMaintenanceCmd("update", settings, runtime.getPluginBootstrap))
+	cmd.AddCommand(newPackageMaintenanceCmd("upgrade", settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewRollbackCmd(repo, settings))
 	cmd.AddCommand(NewStatusCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
 	cmd.AddCommand(NewMaintainCmdWithPluginProvider(repo, settings, runtime.getPluginBootstrap))
