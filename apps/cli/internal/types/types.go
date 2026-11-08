@@ -22,6 +22,8 @@ type BaseConfig struct {
 
 // AppConfig defines the configuration for an application, including its installation method, dependencies, and optional post-install steps.
 type AppConfig struct {
+	Packages           []string `mapstructure:"packages" yaml:"packages,omitempty"`
+	Options            []string `mapstructure:"options" yaml:"options,omitempty"`
 	BaseConfig         `yaml:",inline" mapstructure:",squash"`
 	Default            bool               `mapstructure:"default" yaml:"default"`
 	InstallMethod      string             `mapstructure:"install_method" yaml:"install_method"`
@@ -45,7 +47,7 @@ type AppConfig struct {
 
 // Validate checks the validity of the AppConfig structure.
 func (a *AppConfig) Validate() error {
-	if err := (OSConfig{PreInstall: a.PreInstall, PostInstall: a.PostInstall}).ValidateShellActions(); err != nil {
+	if err := (OSConfig{InstallMethod: a.InstallMethod, InstallCommand: a.InstallCommand, Packages: a.Packages, Options: a.Options, PreInstall: a.PreInstall, PostInstall: a.PostInstall}).ValidateShellActions(); err != nil {
 		return err
 	}
 	if a.Name == "" {
@@ -67,7 +69,7 @@ func (a *AppConfig) Validate() error {
 	if a.InstallMethod == "curlpipe" && a.DownloadURL == "" {
 		return fmt.Errorf("download URL is required for app %s with install method curlpipe", a.Name)
 	}
-	if a.InstallCommand == "" && a.InstallMethod != "curlpipe" {
+	if a.InstallCommand == "" && len(a.Packages) == 0 && a.InstallMethod != "curlpipe" {
 		return fmt.Errorf("install command is required for app %s", a.Name)
 	}
 	return nil
@@ -342,6 +344,8 @@ type PlatformRequirement struct {
 }
 
 type OSConfig struct {
+	Packages             []string              `mapstructure:"packages" yaml:"packages,omitempty"`
+	Options              []string              `mapstructure:"options" yaml:"options,omitempty"`
 	InstallMethod        string                `mapstructure:"install_method" yaml:"install_method"`
 	InstallCommand       string                `mapstructure:"install_command" yaml:"install_command"`
 	UninstallCommand     string                `mapstructure:"uninstall_command" yaml:"uninstall_command"`
@@ -585,6 +589,8 @@ func (app *CrossPlatformApp) ToLegacyAppConfig() AppConfig {
 		Default:            app.Default,
 		InstallMethod:      osConfig.InstallMethod,
 		InstallCommand:     osConfig.InstallCommand,
+		Packages:           osConfig.Packages,
+		Options:            osConfig.Options,
 		UninstallCommand:   osConfig.UninstallCommand,
 		Dependencies:       osConfig.Dependencies,
 		PreInstall:         osConfig.PreInstall,

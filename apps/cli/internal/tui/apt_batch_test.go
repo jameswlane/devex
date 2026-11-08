@@ -229,6 +229,8 @@ var _ = Describe("APT batching", func() {
 	})
 
 	It("leaves install commands that are not plain package names to the per-app path", func() {
+		Expect(aptPackages(types.OSConfig{Packages: []string{"bat", "fzf"}})).To(Equal([]string{"bat", "fzf"}))
+		Expect(aptPackages(types.OSConfig{Packages: []string{"bat"}, Options: []string{"--unknown"}})).To(BeNil())
 		Expect(aptPackages(types.OSConfig{InstallCommand: "bat fzf"})).To(Equal([]string{"bat", "fzf"}))
 		Expect(aptPackages(types.OSConfig{InstallCommand: "--no-install-recommends bat"})).To(BeNil())
 		Expect(aptPackages(types.OSConfig{InstallCommand: "bat; rm -rf /"})).To(BeNil())

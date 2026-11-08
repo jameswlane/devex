@@ -35,7 +35,7 @@ func uninstallConfiguredApplication(ctx context.Context, app types.AppConfig, in
 	}
 	command := strings.TrimSpace(app.UninstallCommand)
 	if command == "" {
-		command = strings.TrimSpace(app.InstallCommand)
+		command = strings.TrimSpace(app.PackageQueryCommand())
 	}
 	return installer.Uninstall(command, repo)
 }
