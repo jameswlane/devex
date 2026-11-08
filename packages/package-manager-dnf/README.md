@@ -19,7 +19,16 @@ DNF package manager plugin for DevEx. Provides comprehensive package management 
 
 ### Package Operations
 - **Install**: Single and multi-package installation with dependency resolution
-- **Remove**: Safe package removal with reverse dependency checking
+- **Remove**: Safe package removal with reverse dependency checking. Each package
+  specification is checked with unelevated
+  `dnf repoquery --installed --quiet --cacheonly <spec>`, falling back to
+  `--whatprovides <spec>`, before the elevated
+  `dnf remove --assumeyes <packages>` transaction, so names, globs (for example
+  `kernel*`), NEVRAs and provides resolve the same way DNF removal resolves them.
+  A specification that matches no installed package, or a failed query
+  (reported with DNF's stderr), returns an error before any removal starts;
+  native DNF failures are returned unchanged. Specifications starting with `-`
+  are rejected.
 - **Update**: System updates and package upgrades
 - **Search**: Advanced package search with filters
 - **Info**: Detailed package information and metadata

@@ -4,8 +4,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -86,6 +88,7 @@ func (p *DnfPlugin) Execute(command string, args []string) error {
 	}
 }
 
+// handleInstall installs packages non-interactively with elevated DNF.
 func (p *DnfPlugin) handleInstall(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
@@ -98,9 +101,20 @@ func (p *DnfPlugin) handleInstall(ctx context.Context, args []string) error {
 	return sdk.ExecCommandWithContext(ctx, true, "dnf", cmdArgs...)
 }
 
+// handleRemove removes packages after confirming each specification matches
+// an installed package, because DNF can succeed when nothing matches.
 func (p *DnfPlugin) handleRemove(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
+	}
+
+	// DNF can exit successfully when no installed packages match. Check every
+	// package specification before starting the transaction so mixed requests
+	// cannot silently remove only the installed subset.
+	for _, spec := range args {
+		if err := requireInstalledMatch(ctx, spec); err != nil {
+			return err
+		}
 	}
 
 	fmt.Printf("Removing packages: %s\n", strings.Join(args, ", "))
@@ -109,11 +123,51 @@ func (p *DnfPlugin) handleRemove(ctx context.Context, args []string) error {
 	return sdk.ExecCommandWithContext(ctx, true, "dnf", cmdArgs...)
 }
 
+// requireInstalledMatch resolves spec the way `dnf remove` does against
+// installed packages only: first by name, glob or NEVRA, then by provided
+// capability. The queries read the local RPM database, so they need no
+// elevation or network access.
+func requireInstalledMatch(ctx context.Context, spec string) error {
+	if strings.HasPrefix(spec, "-") {
+		return fmt.Errorf("cannot remove package %q: package specifications must not start with '-'", spec)
+	}
+	for _, selector := range [][]string{{spec}, {"--whatprovides", spec}} {
+		matched, err := installedQueryMatches(ctx, selector...)
+		if err != nil {
+			return fmt.Errorf("cannot remove package %q: installed-package query failed: %w", spec, err)
+		}
+		if matched {
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot remove package %q: no installed package matches", spec)
+}
+
+// installedQueryMatches runs an installed-only repoquery and reports whether it
+// printed any package. A failed query includes DNF's stderr in its error and
+// keeps the native exit error wrapped.
+func installedQueryMatches(ctx context.Context, selector ...string) (bool, error) {
+	args := append([]string{"repoquery", "--installed", "--quiet", "--cacheonly"}, selector...)
+	output, err := sdk.ExecCommandOutputWithContext(ctx, "dnf", args...)
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+				return false, fmt.Errorf("%s: %w", stderr, err)
+			}
+		}
+		return false, err
+	}
+	return strings.TrimSpace(output) != "", nil
+}
+
+// handleUpdate refreshes repository metadata with `dnf makecache`.
 func (p *DnfPlugin) handleUpdate(ctx context.Context, args []string) error {
 	fmt.Println("Updating package repositories...")
 	return sdk.ExecCommandWithContext(ctx, true, "dnf", "makecache")
 }
 
+// handleSearch searches repositories for the joined search term.
 func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no search term specified")
@@ -125,10 +179,12 @@ func (p *DnfPlugin) handleSearch(ctx context.Context, args []string) error {
 	return sdk.ExecCommandWithContext(ctx, false, "dnf", "search", searchTerm)
 }
 
+// handleList prints installed packages in DNF's human-readable format.
 func (p *DnfPlugin) handleList(ctx context.Context, args []string) error {
 	return sdk.ExecCommandWithContext(ctx, false, "dnf", "list", "installed")
 }
 
+// main dispatches plugin commands from the command line.
 func main() {
 	plugin := NewDnfPlugin()
 	sdk.HandleArgs(plugin, os.Args[1:])
