@@ -2,6 +2,7 @@ package sdk_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -20,13 +21,13 @@ import (
 
 var _ = Describe("Plugin Trust & Signature Verification", func() {
 	var (
-		tempDir       string
-		keyPairA      *openpgp.Entity
+		tempDir             string
+		keyPairA            *openpgp.Entity
 		keyPairAFingerprint string
-		pubKeyAPath   string
-		testFile      string
-		testSigPath   string
-		testContent   []byte
+		pubKeyAPath         string
+		testFile            string
+		testSigPath         string
+		testContent         []byte
 	)
 
 	BeforeEach(func() {
@@ -74,6 +75,30 @@ var _ = Describe("Plugin Trust & Signature Verification", func() {
 		}
 	})
 
+	It("verifies artifact signatures with a pinned signer and rejects unavailable signatures", func() {
+		signature, err := os.ReadFile(testSigPath)
+		Expect(err).NotTo(HaveOccurred())
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/missing" {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(signature)
+		}))
+		defer server.Close()
+		metadata := sdk.ArtifactVerification{Policy: "required", SignatureURL: server.URL + "/signature", PublicKeyPath: pubKeyAPath, Fingerprint: keyPairAFingerprint}
+		result, err := sdk.VerifyArtifact(context.Background(), testFile, metadata)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.SignatureVerified).To(BeTrue())
+		Expect(result.ChecksumVerified).To(BeFalse())
+		metadata.Fingerprint = "0000000000000000000000000000000000000000"
+		_, err = sdk.VerifyArtifact(context.Background(), testFile, metadata)
+		Expect(err).To(HaveOccurred())
+		metadata.Fingerprint = keyPairAFingerprint
+		metadata.SignatureURL = server.URL + "/missing"
+		_, err = sdk.VerifyArtifact(context.Background(), testFile, metadata)
+		Expect(err).To(MatchError(ContainSubstring("signature unavailable")))
+	})
 	Describe("Fail-Closed Signature Checks (P1-6)", func() {
 		Context("when VerifySignatures is enabled without a public key", func() {
 			It("should fail closed and return ErrNoPublicKey", func() {

@@ -19,6 +19,7 @@ import (
 	securitypkg "github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // RefactoredStreamingInstaller handles installation with modular components
@@ -242,6 +243,12 @@ func (rsi *RefactoredStreamingInstaller) executeCurlPipeInstall(ctx context.Cont
 		return fmt.Errorf("script download/validation failed: %w", err)
 	}
 	defer rsi.scriptManager.Cleanup(scriptPath)
+
+	verified, err := sdk.VerifyArtifact(ctx, scriptPath, osConfig.Verification)
+	if err != nil {
+		return fmt.Errorf("download integrity verification failed: %w", err)
+	}
+	rsi.sendLog("INFO", fmt.Sprintf("Download verification: checksum=%t signature=%t (false means skipped)", verified.ChecksumVerified, verified.SignatureVerified))
 
 	// Execute the validated script
 	command := fmt.Sprintf("bash %s", scriptPath)

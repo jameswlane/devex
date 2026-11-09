@@ -104,7 +104,7 @@ func (p *CurlpipePlugin) ValidateScriptContent(content string) error {
 }
 
 // ExecuteScriptFromURL downloads and executes a script from URL with validation
-func (p *CurlpipePlugin) ExecuteScriptFromURL(ctx context.Context, scriptURL string) error {
+func (p *CurlpipePlugin) ExecuteScriptFromURL(ctx context.Context, scriptURL string, metadata ...sdk.ArtifactVerification) error {
 	p.logger.Printf("Executing script from: %s\n", scriptURL)
 
 	// Validate URL first
@@ -123,6 +123,13 @@ func (p *CurlpipePlugin) ExecuteScriptFromURL(ctx context.Context, scriptURL str
 		return fmt.Errorf("failed to download script from '%s': %w", scriptURL, err)
 	}
 
+	verification := sdk.ArtifactVerification{}
+	if len(metadata) > 0 {
+		verification = metadata[0]
+	}
+	if _, err := sdk.VerifyArtifact(ctx, tempFile.Name(), verification); err != nil {
+		return fmt.Errorf("download integrity verification failed: %w", err)
+	}
 	// Validate script content before execution
 	contentBytes, err := os.ReadFile(tempFile.Name())
 	if err != nil {

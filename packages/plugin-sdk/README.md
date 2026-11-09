@@ -488,3 +488,6 @@ EOF. Pacman and yay's native argv/confirmation work is tracked separately in
 
 Tests use `sdktest.NewRecorder` and `sdktest.CloseStdin` to run exact native argv
 contracts without native package managers or the real home directory.
+
+See [Download verification](DOWNLOAD_VERIFICATION.md) for direct artifact metadata,
+trust configuration, verification policy, and installed plugin validation.

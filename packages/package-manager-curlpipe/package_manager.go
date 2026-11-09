@@ -37,6 +37,11 @@ func (p *CurlpipePlugin) Execute(command string, args []string) error {
 
 // handleInstall executes installation scripts from URLs
 func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error {
+	args, verification, parseErr := sdk.ParseVerificationArgs(args)
+	if parseErr != nil {
+		return parseErr
+	}
+
 	if len(args) == 0 {
 		return fmt.Errorf("no URLs specified for installation")
 	}
@@ -61,6 +66,9 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 		return fmt.Errorf("no URLs specified for installation")
 	}
 
+	if len(verification.Arguments()) > 0 && len(scriptURLs) != 1 {
+		return fmt.Errorf("verification metadata requires exactly one artifact")
+	}
 	// Validate all URLs first
 	for _, scriptURL := range scriptURLs {
 		if err := p.ValidateScriptURL(scriptURL); err != nil {
@@ -98,6 +106,11 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 			return fmt.Errorf("failed to download script from '%s': %w", scriptURL, err)
 		}
 
+		verified, err := sdk.VerifyArtifact(ctx, tempFile.Name(), verification)
+		if err != nil {
+			return fmt.Errorf("download integrity verification failed: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Download verification: checksum=%t signature=%t (false means skipped)\n", verified.ChecksumVerified, verified.SignatureVerified)
 		// Run the file with bash as a separate argv
 		if err := sdk.ExecCommandWithContext(ctx, true, "bash", tempFile.Name()); err != nil {
 			return fmt.Errorf("failed to execute script from '%s': %w", scriptURL, err)

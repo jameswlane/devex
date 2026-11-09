@@ -109,6 +109,10 @@ func packageOption(method, name string) (takesValue, supported bool) {
 		return false, true
 	}
 	switch method {
+	case "appimage":
+		if name == "--cli" || name == "--gui" {
+			return false, true
+		}
 	case "snap":
 		switch name {
 		case "--channel", "--revision":

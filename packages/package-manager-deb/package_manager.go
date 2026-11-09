@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -45,6 +46,14 @@ func (d *DebInstaller) Execute(command string, args []string) error {
 
 // handleInstall installs .deb packages with dependency resolution
 func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
+	args, verification, parseErr := sdk.ParseVerificationArgs(args)
+	if parseErr != nil {
+		return parseErr
+	}
+	if len(verification.Arguments()) > 0 && len(args) != 1 {
+		return fmt.Errorf("verification metadata requires exactly one artifact")
+	}
+
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
 	}
@@ -78,6 +87,13 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 		}
 	}
 
+	for _, path := range debFiles {
+		verified, err := sdk.VerifyArtifact(ctx, path, verification)
+		if err != nil {
+			return fmt.Errorf("download integrity verification failed: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Download verification: checksum=%t signature=%t (false means skipped)\n", verified.ChecksumVerified, verified.SignatureVerified)
+	}
 	// Dependency checking and installation are best-effort: their failures are
 	// warnings because dpkg -i below is the authoritative check. If a
 	// dependency is still unmet, dpkg -i fails and that error is returned.

@@ -21,6 +21,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
@@ -935,6 +936,9 @@ func (si *StreamingInstaller) recordFailedInstallation(appName string, startTime
 
 // executeInstallCommand executes the main installation command
 func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" {
+		return installers.InstallArtifact(ctx, types.AppConfig{InstallMethod: osConfig.InstallMethod, InstallCommand: osConfig.InstallCommand, DownloadURL: osConfig.DownloadURL, Packages: osConfig.Packages, Options: osConfig.Options, Verification: osConfig.Verification})
+	}
 	if len(osConfig.Packages) > 0 || len(osConfig.Options) > 0 {
 		command, err := osConfig.ShellPackageArguments()
 		if err != nil {
@@ -1069,12 +1073,12 @@ func (si *StreamingInstaller) executeCurlPipeInstall(ctx context.Context, app ty
 	si.sendLog("INFO", fmt.Sprintf("Downloading from validated URL: %s", osConfig.DownloadURL))
 
 	// SECURITY ENHANCEMENT: Download-validate-execute pattern instead of direct pipe
-	return si.downloadValidateExecute(ctx, app.Name, osConfig.DownloadURL)
+	return si.downloadValidateExecute(ctx, app.Name, osConfig.DownloadURL, osConfig.Verification)
 }
 
 // downloadValidateExecute implements a safer alternative to curl pipe
 // SECURITY: Downloads script first, validates content, then executes
-func (si *StreamingInstaller) downloadValidateExecute(ctx context.Context, appName, downloadURL string) error {
+func (si *StreamingInstaller) downloadValidateExecute(ctx context.Context, appName, downloadURL string, metadata ...sdk.ArtifactVerification) error {
 	// Create temporary file for script
 	tmpFile, err := si.createTempScript()
 	if err != nil {
@@ -1089,6 +1093,15 @@ func (si *StreamingInstaller) downloadValidateExecute(ctx context.Context, appNa
 		return fmt.Errorf("failed to download script: %w", err)
 	}
 
+	verification := sdk.ArtifactVerification{}
+	if len(metadata) > 0 {
+		verification = metadata[0]
+	}
+	verified, err := sdk.VerifyArtifact(ctx, tmpFile, verification)
+	if err != nil {
+		return fmt.Errorf("download integrity verification failed: %w", err)
+	}
+	si.sendLog("INFO", fmt.Sprintf("Download verification: checksum=%t signature=%t (false means skipped)", verified.ChecksumVerified, verified.SignatureVerified))
 	// Validate script content for basic safety
 	if err := si.validateScriptContent(tmpFile); err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("Script validation failed: %v", err))

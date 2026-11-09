@@ -1,6 +1,7 @@
 package main_test
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -47,6 +48,19 @@ var _ = Describe("DEB command contracts", func() {
 			{"is-installed", "dpkg-query", []string{"-W", "-f=${Status}", "git"}, false},
 			{"extract", "dpkg-deb", []string{"-x", file, target}, false},
 		}
+	})
+
+	It("rejects tampered packages before native inspection or install", func() {
+		err := plugin.Execute("install", []string{"--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("different"))), file})
+		Expect(err).To(MatchError(ContainSubstring("checksum mismatch")))
+		Expect(recorder.Calls("dpkg")).To(BeEmpty())
+		Expect(recorder.Calls("dpkg-deb")).To(BeEmpty())
+	})
+	It("installs a package only after its expected digest matches", func() {
+		content, err := os.ReadFile(file)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(plugin.Execute("install", []string{"--sha256", fmt.Sprintf("%x", sha256.Sum256(content)), file})).To(Succeed())
+		Expect(recorder.Calls("dpkg")).To(HaveLen(1))
 	})
 	argsFor := func(command string) []string {
 		switch command {

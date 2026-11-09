@@ -1044,7 +1044,7 @@ func (d *Downloader) downloadAndVerifyPluginValidated(ctx context.Context, plugi
 		return err
 	}
 	// Check if the plugin already exists and is up to date
-	if d.isPluginUpToDate(root, pluginName, pluginBase, binary.Checksum) {
+	if !d.verifySignatures && d.isPluginUpToDate(root, pluginName, pluginBase, binary.Checksum) {
 		if d.logger != nil {
 			d.logger.Printf("Plugin %s is already up to date\n", pluginName)
 		}
