@@ -393,3 +393,21 @@ APT targeted upgrades require a plugin advertising `upgrade-packages`. Older
 plugins return an actionable error and a nonzero exit; the CLI never falls back
 to `upgrade`, which older plugins implement as a system-wide upgrade. Release the
 new APT plugin before the CLI for uninterrupted targeted-upgrade support.
+
+## Runtime logging
+
+`--log-level debug|info|warn|error` controls runtime log severity (default:
+`info`). Flags override `DEVEX_LOG_LEVEL`, which overrides `log-level` in
+`config.yaml`. Logs normally go to the DevEx log directory; `debug` also
+mirrors diagnostics to stderr. `--verbose` (`-v`, or `DEVEX_VERBOSE=true`)
+selects debug logging when no explicit log level is configured. Legacy
+`DEVEX_DEBUG=true` and `DEBUG=true` remain supported as lower priority
+aliases for `DEVEX_VERBOSE`.
+
+`--quiet` (`-q`, `DEVEX_QUIET=true`, or `quiet: true` in configuration) takes
+precedence over verbosity. It keeps error logs while suppressing routine log
+messages, progress emitted through the logging helpers, and update notifications.
+Command results (including JSON), consent previews and prompts remain visible;
+quiet does not grant consent or enable unattended installation. Actionable
+errors remain on stderr and in the log file. Diagnostic helpers write warnings
+and errors to stderr so they do not corrupt `--format json` stdout.

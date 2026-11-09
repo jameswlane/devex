@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -118,5 +119,78 @@ var _ = Describe("Bare root command", func() {
 		Expect(initializeConfig(cmd)).To(Succeed())
 		Expect(viper.GetBool("skip-plugin-download")).To(BeTrue())
 		Expect(viper.GetBool("offline")).To(BeTrue())
+	})
+})
+
+var _ = Describe("Runtime logging configuration", func() {
+	BeforeEach(func() {
+		viper.Reset()
+		DeferCleanup(viper.Reset)
+		DeferCleanup(log.InitTestLogger)
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		for _, key := range []string{"DEVEX_LOG_LEVEL", "DEVEX_VERBOSE", "DEVEX_DEBUG", "DEBUG", "DEVEX_QUIET", "DEVEX_CONFIG"} {
+			GinkgoT().Setenv(key, "")
+		}
+	})
+	DescribeTable("filters logs after resolving flags, environment and config", func(args []string, env, configText, expected string) {
+		var output bytes.Buffer
+		log.InitDefaultLogger(&output)
+		if env != "" {
+			GinkgoT().Setenv("DEVEX_LOG_LEVEL", env)
+		}
+		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
+		if configText != "" {
+			path := filepath.Join(GinkgoT().TempDir(), "config.yaml")
+			Expect(os.WriteFile(path, []byte(configText), 0600)).To(Succeed())
+			args = append(args, "--config", path)
+		}
+		Expect(cmd.ParseFlags(args)).To(Succeed())
+		Expect(initializeConfig(cmd)).To(Succeed())
+		log.Debug("debug-marker")
+		log.Info("info-marker")
+		log.Warn("warn-marker")
+		log.Error("error-marker", errors.New("action needed"))
+		for _, level := range []string{"debug", "info", "warn", "error"} {
+			if strings.Contains(expected, level) {
+				Expect(output.String()).To(ContainSubstring(level + "-marker"))
+			} else {
+				Expect(output.String()).NotTo(ContainSubstring(level + "-marker"))
+			}
+		}
+	},
+		Entry("debug flag", []string{"--log-level", "debug"}, "", "", "debug info warn error"),
+		Entry("default info", []string{}, "", "", "info warn error"),
+		Entry("warn env overrides config", []string{}, "warn", "log-level: debug", "warn error"),
+		Entry("error flag overrides env", []string{"--log-level", "error"}, "debug", "", "error"),
+		Entry("config level", []string{}, "", "log-level: warn", "warn error"),
+		Entry("verbose shorthand", []string{"--verbose"}, "", "", "debug info warn error"),
+		Entry("explicit info beats verbose", []string{"--verbose", "--log-level", "info"}, "", "", "info warn error"),
+		Entry("quiet beats debug", []string{"--quiet", "--log-level", "debug", "--verbose"}, "", "", "error"),
+		Entry("quiet config", []string{}, "", "quiet: true", "error"),
+	)
+	DescribeTable("keeps debug environment aliases compatible", func(key string) {
+		GinkgoT().Setenv(key, "true")
+		var output bytes.Buffer
+		log.InitDefaultLogger(&output)
+		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
+		Expect(initializeConfig(cmd)).To(Succeed())
+		log.Debug("legacy-debug-marker")
+		Expect(output.String()).To(ContainSubstring("legacy-debug-marker"))
+	}, Entry("DEVEX_DEBUG", "DEVEX_DEBUG"), Entry("DEBUG", "DEBUG"))
+	It("lets an explicit false quiet flag override the environment", func() {
+		GinkgoT().Setenv("DEVEX_QUIET", "true")
+		var output bytes.Buffer
+		log.InitDefaultLogger(&output)
+		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
+		Expect(cmd.ParseFlags([]string{"--quiet=false"})).To(Succeed())
+		Expect(initializeConfig(cmd)).To(Succeed())
+		log.Info("visible-info-marker")
+		Expect(output.String()).To(ContainSubstring("visible-info-marker"))
+	})
+
+	It("rejects invalid levels even with quiet", func() {
+		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
+		Expect(cmd.ParseFlags([]string{"--log-level", "trace", "--quiet"})).To(Succeed())
+		Expect(initializeConfig(cmd)).To(MatchError(ContainSubstring("invalid log-level")))
 	})
 })

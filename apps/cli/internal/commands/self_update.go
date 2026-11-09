@@ -118,7 +118,7 @@ func updateNotificationPolicy(cmd *cobra.Command, version string, tty bool) self
 		TTY:            tty,
 		CI:             os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" || os.Getenv("GITLAB_CI") != "",
 		NonInteractive: nonInteractive || viper.GetBool("non-interactive"),
-		Disabled:       os.Getenv("DEVEX_NO_UPDATE_CHECK") == "1" || !viper.GetBool("update_check"),
+		Disabled:       os.Getenv("DEVEX_NO_UPDATE_CHECK") == "1" || !viper.GetBool("update_check") || viper.GetBool("quiet"),
 		Offline:        viper.GetBool("offline"),
 	}
 }
