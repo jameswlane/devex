@@ -37,7 +37,8 @@ Git version control system configuration plugin for DevEx. Provides comprehensiv
 devex tool git setup --name "Your Name" --email "your@email.com"
 
 # Generate and configure SSH key
-devex tool git ssh-key --generate --add-to-agent
+devex plugin run tool-git ssh --mode generate --path "$HOME/.ssh/id_devex"
+# Review the preview, then add --apply to consent to an unencrypted key
 
 # Set up GPG signing
 devex tool git gpg --setup-signing --key-id "your-key-id"
@@ -134,3 +135,52 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 **[DevEx CLI](../../cli)** • **[Plugin Registry](https://registry.devex.sh)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+## Explicit SSH setup (Debian/Ubuntu)
+
+SSH is optional and skipped by default. In `devex setup`, open Git
+Configuration (`p` from Confirmation if an existing identity was detected),
+cycle SSH to `existing` or `generate`, and enter an absolute private-key path.
+The Confirmation screen previews the operation before installation. Existing
+identity remains unchanged when only SSH was selected.
+
+Create the parent directory yourself with mode 0700 (for example,
+`mkdir -m 700 ~/.ssh` if it does not exist). Existing private keys must have
+mode 0600 or stricter and a regular public `.pub` file alongside them. Symlink
+paths are rejected. DevEx does not change existing files or permissions, so
+there are no existing files to back up. Generation refuses either occupied
+key path, stages files in a protected directory, and publishes without overwrite.
+
+The standalone plugin command also supports preview and public-key display:
+
+```sh
+devex plugin run tool-git ssh --mode generate --path "$HOME/.ssh/id_devex"
+# Review the preview before explicitly consenting:
+devex plugin run tool-git ssh --mode generate --path "$HOME/.ssh/id_devex" --apply
+# Display/export only the public key (never the private key):
+devex plugin run tool-git ssh --mode existing --path "$HOME/.ssh/id_devex"
+cat "$HOME/.ssh/id_devex.pub"  # copy this public key to your host
+```
+
+Generation creates an **unencrypted Ed25519 key** for unattended setup. For a
+passphrase-protected key, generate it yourself with
+`ssh-keygen -t ed25519 -f ~/.ssh/id_devex` and select `existing` in setup.
+OpenSSH prompts for the passphrase; DevEx never collects it. You can also add a
+passphrase afterward with `ssh-keygen -p -f ~/.ssh/id_devex`.
+
+DevEx never starts an agent, loads a key, edits SSH/Git configuration, or
+contacts a remote host for SSH setup. In your current shell, use an existing
+agent or start one with `eval "$(ssh-agent -s)"`, then explicitly load your key
+with `ssh-add -t 1h ~/.ssh/id_devex`. The key expires after an hour; the agent
+lasts until stopped (`ssh-agent -k`) or its session ends. Agents started by a
+subprocess cannot export their environment into your parent shell.
+
+Register the displayed public key in your Git host's account SSH keys settings
+(GitHub: Settings → SSH and GPG keys; GitLab: Preferences → SSH Keys).
+Registration is manual: DevEx performs no upload. Setup captures public-key
+output in its log; the `.pub` file is also always available for copying.
+Verify the host fingerprint independently before accepting a first connection,
+then test authentication (for example, `ssh -T git@github.com`). Use an SSH remote
+URL. For a custom key name, load it with ssh-add or explicitly use
+`git -c core.sshCommand='ssh -i ~/.ssh/id_devex -o IdentitiesOnly=yes' fetch`.
+Windows/macOS integration and automatic agent/keychain configuration are deferred.

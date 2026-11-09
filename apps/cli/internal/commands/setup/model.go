@@ -66,6 +66,8 @@ type UISelections struct {
 
 // GitConfiguration holds Git-specific configuration state
 type GitConfiguration struct {
+	sshMode        string // empty means skip; generate or existing is explicit opt-in
+	sshPath        string
 	gitFullName    string
 	gitEmail       string
 	gitInputField  int  // 0 = full name, 1 = email

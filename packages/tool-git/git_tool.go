@@ -29,6 +29,8 @@ func (p *GitPlugin) Execute(command string, args []string) error {
 	ctx := context.Background()
 
 	switch command {
+	case "ssh":
+		return p.HandleSSH(ctx, args)
 	case "config":
 		return p.HandleConfig(ctx, args)
 	case "aliases":

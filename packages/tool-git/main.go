@@ -20,6 +20,7 @@ func NewGitPlugin() *GitPlugin {
 		Repository:  "https://github.com/jameswlane/devex",
 		Tags:        []string{"git", "vcs", "development", "configuration", "aliases"},
 		Commands: []sdk.PluginCommand{
+			{Name: "ssh", Description: "Preview SSH key generation or display an existing public key", Usage: "ssh --mode generate|existing --path /absolute/key [--apply]"},
 			{
 				Name:        "config",
 				Description: "Configure Git settings",

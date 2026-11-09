@@ -179,11 +179,11 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 	gitName := strings.TrimSpace(m.git.gitFullName)
 	gitEmail := strings.TrimSpace(m.git.gitEmail)
 
-	if gitName == "" && gitEmail == "" {
+	if gitName == "" && gitEmail == "" && m.git.sshMode == "" {
 		log.Debug("No Git configuration provided, skipping git setup")
 		return nil
 	}
-	if m.gitIdentityUnchanged() {
+	if m.gitIdentityUnchanged() && m.git.sshMode == "" {
 		log.Info("Keeping the existing global Git identity", "name", gitName, "email", gitEmail)
 		return nil
 	}
@@ -200,7 +200,7 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 	log.Info("Configuring Git using tool-git plugin", "name", gitName, "email", gitEmail)
 
 	// Execute tool-git plugin with user configuration
-	if err := runConfigurationPlugin(ctx, manager, "tool-git", gitConfigurationArgs(gitName, gitEmail)); err != nil {
+	if err := m.applyGitConfiguration(ctx, manager, gitName, gitEmail); err != nil {
 		return fmt.Errorf("failed to configure git using tool-git plugin: %w", err)
 	}
 

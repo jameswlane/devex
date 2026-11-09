@@ -26,6 +26,20 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		// Theme step: Enter should not continue, only 'n' continues
 		return m, nil
 	case StepGitConfig:
+		if m.cursor == 2 {
+			if m.system.detectedPlatform.OS != "linux" {
+				return m, nil
+			}
+			switch m.git.sshMode {
+			case "":
+				m.git.sshMode = "existing"
+			case "existing":
+				m.git.sshMode = "generate"
+			default:
+				m.git.sshMode = ""
+			}
+			return m, nil
+		}
 		if !m.git.gitInputActive {
 			// Start editing the selected field
 			m.git.gitInputActive = true
@@ -66,6 +80,9 @@ func (m *SetupModel) handleGitInput(msg tea.KeyMsg) (*SetupModel, tea.Cmd) {
 		} else if m.git.gitInputField == 1 && len(m.git.gitEmail) > 0 {
 			m.git.gitEmail = m.git.gitEmail[:len(m.git.gitEmail)-1]
 		}
+		if m.git.gitInputField == 3 && len(m.git.sshPath) > 0 {
+			m.git.sshPath = m.git.sshPath[:len(m.git.sshPath)-1]
+		}
 		return m, nil
 	default:
 		// Add character to current field
@@ -76,6 +93,8 @@ func (m *SetupModel) handleGitInput(msg tea.KeyMsg) (*SetupModel, tea.Cmd) {
 				m.git.gitFullName += string(char)
 			case 1:
 				m.git.gitEmail += string(char)
+			case 3:
+				m.git.sshPath += string(char)
 			}
 		}
 		return m, nil
@@ -97,7 +116,7 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 	case StepTheme:
 		maxItems = len(m.system.themes)
 	case StepGitConfig:
-		maxItems = 2 // Full name and email
+		maxItems = 4 // Identity, SSH choice and key path
 	default:
 		return m, nil // No navigation needed for other steps
 	}
