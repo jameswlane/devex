@@ -52,6 +52,11 @@ func (p *AppimagePlugin) ExecuteContext(ctx context.Context, command string, arg
 
 // handleInstall installs AppImage applications
 func (p *AppimagePlugin) handleInstall(ctx context.Context, args []string) error {
+	args, verification, err := sdk.ParseVerificationArgs(args)
+	if err != nil {
+		return err
+	}
+
 	if len(args) < 2 {
 		return fmt.Errorf("usage: <download_url> <binary_name> [flags]")
 	}
@@ -80,7 +85,7 @@ func (p *AppimagePlugin) handleInstall(ctx context.Context, args []string) error
 	// Check if already installed
 	if installed, err := p.isAppImageInstalled(binaryName); err != nil {
 		p.logger.Warning("Failed to check installation status: %v", err)
-	} else if installed {
+	} else if installed && len(verification.Arguments()) == 0 {
 		p.logger.Printf("AppImage %s is already installed, skipping\n", binaryName)
 		return nil
 	}
@@ -91,7 +96,7 @@ func (p *AppimagePlugin) handleInstall(ctx context.Context, args []string) error
 	}
 
 	// Install the AppImage
-	if err := p.installAppImage(ctx, downloadURL, binaryName, installLocation); err != nil {
+	if err := p.installAppImage(ctx, downloadURL, binaryName, installLocation, verification); err != nil {
 		return fmt.Errorf("failed to install AppImage: %w", err)
 	}
 

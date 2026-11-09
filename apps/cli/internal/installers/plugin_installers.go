@@ -256,6 +256,10 @@ func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.
 		return fmt.Errorf("install method '%s' is not supported on this platform", app.InstallMethod)
 	}
 	log.Info("Executing installer", "method", app.InstallMethod)
+	if app.InstallMethod == "curlpipe" || app.InstallMethod == "deb" || app.InstallMethod == "appimage" {
+		return InstallArtifact(ctx, app)
+	}
+
 	if plugin, ok := installer.(*PluginBasedInstaller); ok && (len(app.Packages) > 0 || len(app.Options) > 0) {
 		return plugin.InstallPackages(ctx, app.InstallCommand, app.Packages, app.Options)
 	}
@@ -302,6 +306,7 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 		CleanupFiles:     osConfig.CleanupFiles,
 		Conflicts:        osConfig.Conflicts,
 		DownloadURL:      osConfig.DownloadURL,
+		Verification:     osConfig.Verification,
 		InstallDir:       osConfig.Destination,
 	}
 
@@ -442,4 +447,50 @@ func (p *PluginBasedInstaller) context() context.Context {
 // CatalogPackageArguments resolves native package identifiers from a catalog command.
 func CatalogPackageArguments(method, command string) ([]string, error) {
 	return catalogPackageArguments(method, command)
+}
+
+// InstallArtifact dispatches integrity metadata alongside direct artifact arguments.
+func InstallArtifact(ctx context.Context, app types.AppConfig) error {
+	installer := GetInstaller(ctx, app.InstallMethod)
+	if plugin, ok := installer.(*PluginBasedInstaller); ok {
+		return plugin.InstallArtifact(ctx, app)
+	}
+
+	if installer == nil {
+		return fmt.Errorf("artifact installer unavailable: %s", app.InstallMethod)
+	}
+	return installer.Install(app.InstallCommand, nil)
+}
+
+// InstallArtifact preserves metadata and native argv in the plugin request.
+func (p *PluginBasedInstaller) InstallArtifact(ctx context.Context, app types.AppConfig) error {
+	if p.pluginBootstrap == nil {
+		return fmt.Errorf("plugin bootstrap not initialized")
+	}
+	command := app.InstallCommand
+	if app.DownloadURL != "" && app.InstallMethod != "appimage" {
+		command = app.DownloadURL
+	}
+	packages := app.Packages
+	options := app.Options
+	var err error
+	if app.InstallMethod != "curlpipe" {
+		request, resolveErr := types.ResolvePackageInstall(app.InstallMethod, command, packages, options)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		packages, options = request.Packages, request.Options
+	} else if len(packages) == 0 {
+		packages, err = catalogPackageArguments(app.InstallMethod, command)
+	}
+	if err != nil {
+		return err
+	}
+	args := append([]string{"install"}, app.Verification.Arguments()...)
+	args = append(args, packages...)
+	args = append(args, options...)
+	if executor, ok := p.pluginBootstrap.(pluginIOExecutor); ok {
+		return executor.ExecutePluginWithIO(ctx, "package-manager-"+app.InstallMethod, args, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stderr, Stderr: os.Stderr})
+	}
+	return p.pluginBootstrap.ExecutePluginWithContext(ctx, "package-manager-"+app.InstallMethod, args)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -86,6 +87,21 @@ var _ = Describe("AppImage operation contracts", func() {
 		Expect(os.WriteFile(path, []byte("fixture"), mode)).To(Succeed())
 		return path
 	}
+
+	It("does not publish a tampered download or replace an existing binary", func() {
+		path := writeBinary("Applications", "tool", 0755)
+		err := plugin.Execute("install", []string{url, "tool", "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("different")))})
+		Expect(err).To(MatchError(ContainSubstring("checksum mismatch")))
+		content, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(content)).To(Equal("fixture"))
+	})
+	It("publishes an artifact with a matching digest", func() {
+		Expect(plugin.Execute("install", []string{url, "tool", "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("AppImage fixture")))})).To(Succeed())
+		content, err := os.ReadFile(filepath.Join(home, "Applications", "tool"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(content)).To(Equal("AppImage fixture"))
+	})
 	It("has a handler contract for every advertised command", func() {
 		var advertised []string
 		for _, c := range plugin.Info().Commands {

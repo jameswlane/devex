@@ -6,6 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/common"
@@ -99,6 +100,7 @@ func convertToAppConfig(app types.CrossPlatformApp) *types.AppConfig {
 		CleanupFiles:     osConfig.CleanupFiles,
 		Conflicts:        osConfig.Conflicts,
 		DownloadURL:      osConfig.DownloadURL,
+		Verification:     osConfig.Verification,
 		InstallDir:       osConfig.Destination,
 	}
 }
@@ -170,6 +172,16 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 					downloadURL = ""
 				}
 
+				var verification sdk.ArtifactVerification
+				if value, exists := candidate["verification"]; exists {
+					encoded, err := yaml.Marshal(value)
+					if err != nil {
+						return nil, fmt.Errorf("invalid verification metadata: %w", err)
+					}
+					if err := yaml.Unmarshal(encoded, &verification); err != nil {
+						return nil, fmt.Errorf("invalid verification metadata: %w", err)
+					}
+				}
 				return &types.AppConfig{
 					BaseConfig: types.BaseConfig{
 						Name:        name,
@@ -178,6 +190,7 @@ func GetAppInfo(identifier string) (*types.AppConfig, error) {
 					InstallMethod:  installMethod,
 					InstallCommand: installCommand,
 					DownloadURL:    downloadURL,
+					Verification:   verification,
 					Dependencies:   ResolvePlatformDependencies(candidate),
 					PostInstall:    toInstallCommandSlice(candidate["post_install"]),
 				}, nil

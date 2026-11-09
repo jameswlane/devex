@@ -463,7 +463,7 @@ func (v *PluginValidator) validateSinglePlugin(ctx context.Context, pluginName s
 	// Enhanced validation with checksum and signature verification
 	// This leverages the existing SDK validation infrastructure
 	if v.checksumVerifier || v.signatureVerifier {
-		if err := v.performEnhancedValidation(pluginCtx, pluginName); err != nil {
+		if err := v.performEnhancedValidation(pluginCtx, pluginName, &result); err != nil {
 			result.Error = enhanceErrorMessage("Plugin security validation", pluginName, err)
 			result.ValidationTime = time.Since(startTime)
 			return result
@@ -472,8 +472,7 @@ func (v *PluginValidator) validateSinglePlugin(ctx context.Context, pluginName s
 
 	// Plugin is valid
 	result.IsValid = true
-	result.ChecksumValid = v.checksumVerifier
-	result.SignatureValid = v.signatureVerifier
+
 	result.ValidationTime = time.Since(startTime)
 
 	log.Debug("Plugin validation completed",
@@ -486,16 +485,10 @@ func (v *PluginValidator) validateSinglePlugin(ctx context.Context, pluginName s
 }
 
 // performEnhancedValidation performs checksum and signature validation
-func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginName string) error {
+func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginName string, results ...*PluginValidationResult) error {
 	log.Debug("Performing enhanced validation", "plugin", pluginName)
 
-	// Get plugin manager to access plugin information
-	manager := v.pluginBootstrap.GetManager()
-	pluginInfo, exists := manager.ListPluginsWithContext(ctx)[pluginName]
-	if !exists {
-		return enhanceErrorMessage("Plugin manager lookup", pluginName,
-			fmt.Errorf("plugin not found in manager"))
-	}
+	var pluginInfo interface{}
 
 	// Basic plugin integrity checks
 	if err := v.validatePluginIntegrity(ctx, pluginName, pluginInfo); err != nil {
@@ -511,6 +504,8 @@ func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginN
 				return fmt.Errorf("checksum verification failed for plugin %s (use --allow-insecure-plugins to bypass): %w", pluginName, err)
 			}
 			log.Warn("Continuing with unverified plugin due to --allow-insecure-plugins flag", "plugin", pluginName)
+		} else if len(results) > 0 {
+			results[0].ChecksumValid = true
 		}
 	}
 
@@ -523,6 +518,8 @@ func (v *PluginValidator) performEnhancedValidation(ctx context.Context, pluginN
 				return fmt.Errorf("signature verification failed for plugin %s (use --allow-insecure-plugins to bypass): %w", pluginName, err)
 			}
 			log.Warn("Continuing with unsigned plugin due to --allow-insecure-plugins flag", "plugin", pluginName)
+		} else if len(results) > 0 {
+			results[0].SignatureValid = true
 		}
 	}
 
@@ -552,30 +549,14 @@ func (v *PluginValidator) validatePluginIntegrity(ctx context.Context, pluginNam
 	return nil
 }
 
-// validatePluginChecksum performs checksum validation (placeholder for SDK integration)
+// validatePluginChecksum verifies installed bytes against SDK registry metadata.
 func (v *PluginValidator) validatePluginChecksum(ctx context.Context, pluginName string, pluginInfo interface{}) error {
-	// Check context cancellation
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
-	log.Debug("Checksum validation placeholder", "plugin", pluginName)
-	return nil
+	return v.pluginBootstrap.VerifyInstalledPlugin(ctx, pluginName, true, false)
 }
 
-// validatePluginSignature performs signature validation (placeholder for SDK integration)
+// validatePluginSignature verifies the registry payload and installed executable.
 func (v *PluginValidator) validatePluginSignature(ctx context.Context, pluginName string, pluginInfo interface{}) error {
-	// Check context cancellation
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-	}
-
-	log.Debug("Signature validation placeholder", "plugin", pluginName)
-	return nil
+	return v.pluginBootstrap.VerifyInstalledPlugin(ctx, pluginName, true, true)
 }
 
 // getRemainingPlugins filters out plugins that were already validated in the critical phase

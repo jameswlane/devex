@@ -177,7 +177,11 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 		log.Info("Using custom plugin registry", "url", registryURL)
 	}
 
-	downloader := sdk.NewDownloader(registryURL, pluginDir)
+	downloader := sdk.NewSecureDownloader(sdk.DownloaderConfig{
+		RegistryURL: registryURL, PluginDir: pluginDir,
+		CacheDir:        filepath.Join(sdk.PathsForHome(homeDir).Cache, "plugins"),
+		VerifyChecksums: true, PublicKeyPath: viper.GetString("plugin.public-key"),
+	})
 	if resolver.Elevated && identity.UID != "0" {
 		if err := downloader.SetInstallOwner(*identity); err != nil {
 			return nil, err
@@ -806,4 +810,9 @@ func validatePluginName(pluginName string) error {
 	}
 
 	return nil
+}
+
+// VerifyInstalledPlugin checks installed bytes without trusting executable metadata.
+func (b *PluginBootstrap) VerifyInstalledPlugin(ctx context.Context, name string, checksum, signature bool) error {
+	return b.downloader.VerifyInstalledPlugin(ctx, name, checksum, signature)
 }

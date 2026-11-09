@@ -286,6 +286,7 @@ func CrossPlatformAppFromLegacy(legacy types.AppConfig) types.CrossPlatformApp {
 			CleanupFiles:       legacy.CleanupFiles,
 			Conflicts:          legacy.Conflicts,
 			DownloadURL:        legacy.DownloadURL,
+			Verification:       legacy.Verification,
 			Destination:        legacy.InstallDir,
 		},
 	}

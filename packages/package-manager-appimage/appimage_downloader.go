@@ -8,10 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
 // installAppImage downloads and installs an AppImage
-func (p *AppimagePlugin) installAppImage(ctx context.Context, downloadURL, binaryName, installLocation string) error {
+func (p *AppimagePlugin) installAppImage(ctx context.Context, downloadURL, binaryName, installLocation string, metadata ...sdk.ArtifactVerification) error {
 	homeDir := os.Getenv("HOME")
 	var installDir string
 
@@ -31,12 +33,31 @@ func (p *AppimagePlugin) installAppImage(ctx context.Context, downloadURL, binar
 	}
 
 	binaryPath := filepath.Join(installDir, binaryName)
+	temporary, err := os.CreateTemp(installDir, ".devex-appimage-*")
+	if err != nil {
+		return err
+	}
+	_ = temporary.Close()
+	defer func() { _ = os.Remove(temporary.Name()) }()
 
 	p.logger.Printf("Downloading AppImage to: %s\n", binaryPath)
 
 	// Download the AppImage
-	if err := p.downloadFile(ctx, downloadURL, binaryPath); err != nil {
+	if err := p.downloadFile(ctx, downloadURL, temporary.Name()); err != nil {
 		return fmt.Errorf("failed to download AppImage: %w", err)
+	}
+
+	verification := sdk.ArtifactVerification{}
+	if len(metadata) > 0 {
+		verification = metadata[0]
+	}
+	verified, err := sdk.VerifyArtifact(ctx, temporary.Name(), verification)
+	if err != nil {
+		return fmt.Errorf("download integrity verification failed: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Download verification: checksum=%t signature=%t (false means skipped)\n", verified.ChecksumVerified, verified.SignatureVerified)
+	if err := os.Rename(temporary.Name(), binaryPath); err != nil {
+		return err
 	}
 
 	// Set executable permissions
