@@ -18,6 +18,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
@@ -1610,22 +1611,24 @@ func newConfigImportCmd(settings config.CrossPlatformSettings) *cobra.Command {
 		backup   bool
 		validate bool
 		dryRun   bool
+		format   string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "import [file]",
-		Short: "Import DevEx configurations",
+		Use:          "import [file]",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		Short:        "Import DevEx configurations",
 		Long: `Import DevEx configuration files from backup, shared configs, or migration.
 
 This command allows you to import configurations from various sources:
 - Individual YAML/JSON files
 - Bundle archives created with export
-- Remote configurations via URL
 
 Import modes:
-- Merge: Combine with existing configuration (default)
-- Replace: Overwrite existing configuration completely
-- Validate: Check configuration without applying
+- Merge: Recursively combine maps and lists; conflicts require --force (default)
+- Replace: --merge=false replaces supplied files; changed files require --force
+- Preview: --dry-run validates and shows exact changes without applying
 
 Examples:
   # Import from bundle
@@ -1644,14 +1647,29 @@ Examples:
 			if len(args) > 0 {
 				inputFile = args[0]
 			}
-			return importConfiguration(cmd.Context(), settings, inputFile, merge, force, backup, validate, dryRun)
+			options := viper.New()
+			if err := options.MergeConfigMap(viper.AllSettings()); err != nil {
+				return err
+			}
+			options.SetEnvPrefix("DEVEX")
+			options.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+			options.AutomaticEnv()
+			for _, key := range []string{"merge", "force", "backup", "validate", "dry-run", "format"} {
+				if err := options.BindPFlag(key, cmd.Flags().Lookup(key)); err != nil {
+					return err
+				}
+			}
+			return runConfigurationImport(cmd.Context(), cmd.OutOrStdout(), settings, inputFile,
+				options.GetBool("merge"), options.GetBool("force"), options.GetBool("backup"),
+				options.GetBool("validate"), options.GetBool("dry-run"), options.GetString("format"))
 		},
 	}
 
-	cmd.Flags().BoolVar(&merge, "merge", true, "Merge with existing configuration")
-	cmd.Flags().BoolVar(&force, "force", false, "Force import, overwriting conflicts")
-	cmd.Flags().BoolVar(&backup, "backup", true, "Create backup before import")
-	cmd.Flags().BoolVar(&validate, "validate", true, "Validate configuration before import")
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
+	cmd.Flags().BoolVar(&merge, "merge", true, "Recursively merge with existing configuration; --merge=false replaces supplied files")
+	cmd.Flags().BoolVar(&force, "force", false, "Accept imported values for conflicts (also required to replace changed files)")
+	cmd.Flags().BoolVar(&backup, "backup", true, "Changed existing files are always backed up")
+	cmd.Flags().BoolVar(&validate, "validate", true, "Semantic validation is always performed before import")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be imported without applying")
 
 	return cmd
@@ -1865,76 +1883,20 @@ func exportAsBundle(ctx context.Context, data map[string]interface{}, output str
 
 // importConfiguration handles the configuration import functionality
 func importConfiguration(ctx context.Context, settings config.CrossPlatformSettings, inputFile string, merge, force, backup, validate, dryRun bool) error {
-	green := color.New(color.FgGreen).SprintFunc()
-	yellow := color.New(color.FgYellow).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
+	return runConfigurationImport(ctx, os.Stdout, settings, inputFile, merge, force, backup, validate, dryRun, "table")
+}
 
-	if inputFile == "" {
-		return fmt.Errorf("input file is required")
-	}
-
-	fmt.Printf("%s Importing DevEx Configuration\n\n", cyan("📥"))
-	fmt.Printf("Input file: %s\n", inputFile)
-	fmt.Printf("Mode: %s\n", map[bool]string{true: "merge", false: "replace"}[merge])
-
-	// Check if input file exists
-	if _, err := os.Stat(inputFile); os.IsNotExist(err) {
-		return fmt.Errorf("input file not found: %s", inputFile)
-	}
-
-	// Determine file type and extract data
-	var importData map[string]interface{}
-	var err error
-
+func readConfigurationImport(ctx context.Context, inputFile string) (map[string]interface{}, error) {
 	switch {
 	case strings.HasSuffix(inputFile, ".tar.gz"), strings.HasSuffix(inputFile, ".tar"):
-		importData, err = importFromBundle(ctx, inputFile)
+		return importFromBundle(ctx, inputFile)
 	case strings.HasSuffix(inputFile, ".json"):
-		importData, err = importFromJSON(inputFile)
+		return importFromJSON(inputFile)
 	case strings.HasSuffix(inputFile, ".yaml"), strings.HasSuffix(inputFile, ".yml"):
-		importData, err = importFromYAML(inputFile)
+		return importFromYAML(inputFile)
 	default:
-		return fmt.Errorf("unsupported file format: %s", inputFile)
+		return nil, fmt.Errorf("unsupported file format: %s", inputFile)
 	}
-
-	if err != nil {
-		return fmt.Errorf("failed to read import data: %w", err)
-	}
-
-	if err := validateImportCandidate(ctx, settings, importData); err != nil {
-		return fmt.Errorf("import validation failed: %w", err)
-	}
-
-	// Validate import data structure
-	if validate {
-		if err := validateImportData(importData); err != nil {
-			return fmt.Errorf("import validation failed: %w", err)
-		}
-		fmt.Printf("%s Import data validation passed\n", green("✓"))
-	}
-
-	if dryRun {
-		fmt.Printf("\n%s Dry run - showing what would be imported:\n", yellow("🔍"))
-		return showImportPreview(importData, settings)
-	}
-
-	// Create backup if requested
-	if backup {
-		backupFile := fmt.Sprintf("devex-config-backup-%s.yaml", time.Now().Format("20060102-150405"))
-		if err := exportConfiguration(ctx, settings, "yaml", backupFile, []string{}, []string{}, false, false); err != nil {
-			fmt.Printf("%s Warning: Failed to create backup: %v\n", yellow("⚠"), err)
-		} else {
-			fmt.Printf("%s Backup created: %s\n", green("💾"), backupFile)
-		}
-	}
-
-	// Apply configurations
-	if err := applyImportedConfigurations(importData, settings, merge, force); err != nil {
-		return fmt.Errorf("failed to apply configurations: %w", err)
-	}
-
-	fmt.Printf("\n%s Configuration imported successfully!\n", green("🎉"))
-	return nil
 }
 
 // importFromBundle extracts and reads configuration from a tar bundle
@@ -1968,7 +1930,7 @@ func importFromBundle(ctx context.Context, bundlePath string) (map[string]interf
 	if data, err := os.ReadFile(metadataPath); err == nil {
 		if err := yaml.Unmarshal(data, &metadata); err != nil {
 			// Metadata is optional, just log and continue
-			fmt.Printf("Warning: failed to parse metadata: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Warning: failed to parse metadata: %v\n", err)
 		}
 	}
 
@@ -1990,13 +1952,16 @@ func importFromBundle(ctx context.Context, bundlePath string) (map[string]interf
 
 		for _, configFile := range configFiles {
 			configPath := filepath.Join(tierDir, configFile)
-			if data, err := os.ReadFile(configPath); err == nil {
-				var configData interface{}
-				if err := yaml.Unmarshal(data, &configData); err == nil {
-					configType := strings.TrimSuffix(filepath.ToSlash(configFile), filepath.Ext(configFile))
-					tierConfigs[configType] = configData
-				}
+			data, err := os.ReadFile(configPath)
+			if err != nil {
+				return nil, err
 			}
+			var configData interface{}
+			if err := yaml.Unmarshal(data, &configData); err != nil {
+				return nil, fmt.Errorf("parse bundle %s: %w", configFile, err)
+			}
+			configType := strings.TrimSuffix(filepath.ToSlash(configFile), filepath.Ext(configFile))
+			tierConfigs[configType] = configData
 		}
 
 		if len(tierConfigs) > 0 {
@@ -2068,84 +2033,13 @@ func validateImportData(data map[string]interface{}) error {
 	return nil
 }
 
-// showImportPreview shows what would be imported without applying changes
-func showImportPreview(data map[string]interface{}, settings config.CrossPlatformSettings) error {
-	cyan := color.New(color.FgCyan).SprintFunc()
-
-	configurations, ok := data["configurations"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("invalid configurations data")
-	}
-
-	fmt.Printf("\n%s Import Preview:\n", cyan("👀"))
-
-	for tier, tierConfigs := range configurations {
-		fmt.Printf("\n%s:\n", tier)
-		tierConfigsMap, ok := tierConfigs.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		for configType, configData := range tierConfigsMap {
-			fmt.Printf("  • %s.yaml\n", configType)
-
-			// Show some details about the config
-			if configMap, ok := configData.(map[string]interface{}); ok {
-				for key := range configMap {
-					fmt.Printf("    - %s\n", key)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // applyImportedConfigurations applies the imported configurations to the file system
 func applyImportedConfigurations(data map[string]interface{}, settings config.CrossPlatformSettings, merge, force bool) error {
-	green := color.New(color.FgGreen).SprintFunc()
-
-	configurations, ok := data["configurations"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("invalid configurations data")
+	p, err := planConfigurationImport(context.Background(), settings, data, merge)
+	if err != nil {
+		return err
 	}
-
-	// Get target directories
-	defaultDir, teamDir, userDir, envDirs := settings.GetConfigDirsWithEnvironment()
-
-	tierDirs := map[string]string{
-		"default":     defaultDir,
-		"team":        teamDir,
-		"user":        userDir,
-		"default_env": envDirs["default"],
-		"team_env":    envDirs["team"],
-		"user_env":    envDirs["user"],
-	}
-
-	for tier, tierConfigs := range configurations {
-		targetDir, ok := tierDirs[tier]
-		if !ok {
-			continue
-		}
-
-		// Create target directory if it doesn't exist
-		if err := os.MkdirAll(targetDir, 0750); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", targetDir, err)
-		}
-
-		tierConfigsMap, ok := tierConfigs.(map[string]interface{})
-		if !ok {
-			continue
-		}
-		for configType, configData := range tierConfigsMap {
-			if err := writeImportedConfiguration(targetDir, configType, configData); err != nil {
-				return fmt.Errorf("import %s/%s: %w", tier, configType, err)
-			}
-
-			fmt.Printf("  %s Applied %s/%s\n", green("✓"), tier, configType)
-		}
-	}
-
-	return nil
+	return applyImportPlan(context.Background(), p, force)
 }
 
 // newConfigBackupCmd creates the backup subcommand
