@@ -15,6 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 )
@@ -292,22 +293,23 @@ func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, se
 			Description: app.Description,
 			Category:    app.Category,
 		},
-		Default:          app.Default,
-		InstallMethod:    osConfig.InstallMethod,
-		InstallCommand:   osConfig.InstallCommand,
-		Packages:         osConfig.Packages,
-		Options:          osConfig.Options,
-		UninstallCommand: osConfig.UninstallCommand,
-		Dependencies:     osConfig.Dependencies,
-		PreInstall:       osConfig.PreInstall,
-		PostInstall:      osConfig.PostInstall,
-		ConfigFiles:      osConfig.ConfigFiles,
-		AptSources:       osConfig.AptSources,
-		CleanupFiles:     osConfig.CleanupFiles,
-		Conflicts:        osConfig.Conflicts,
-		DownloadURL:      osConfig.DownloadURL,
-		Verification:     osConfig.Verification,
-		InstallDir:       osConfig.Destination,
+		SystemRequirements: osConfig.SystemRequirements,
+		Default:            app.Default,
+		InstallMethod:      osConfig.InstallMethod,
+		InstallCommand:     osConfig.InstallCommand,
+		Packages:           osConfig.Packages,
+		Options:            osConfig.Options,
+		UninstallCommand:   osConfig.UninstallCommand,
+		Dependencies:       osConfig.Dependencies,
+		PreInstall:         osConfig.PreInstall,
+		PostInstall:        osConfig.PostInstall,
+		ConfigFiles:        osConfig.ConfigFiles,
+		AptSources:         osConfig.AptSources,
+		CleanupFiles:       osConfig.CleanupFiles,
+		Conflicts:          osConfig.Conflicts,
+		DownloadURL:        osConfig.DownloadURL,
+		Verification:       osConfig.Verification,
+		InstallDir:         osConfig.Destination,
 	}
 
 	// Install the app directly
@@ -319,6 +321,10 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
 	defer func() { finishAudit(result) }()
 	log.Info("Installing app", "app", app.Name)
+
+	if err := system.CheckApplicationRequirements(ctx, app.Name, app.SystemRequirements, nil); err != nil {
+		return err
+	}
 
 	// Resolve the same configured policy used by the interactive installer.
 	validator, err := settings.GetCommandValidator()

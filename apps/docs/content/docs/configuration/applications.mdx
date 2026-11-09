@@ -195,3 +195,43 @@ Or set `plugin_registry_url: https://registry.example.com` in
 `$DEVEX_CONFIG_DIR/config.yaml` (normally `~/.config/devex/config.yaml`). The
 environment variable takes precedence. Supply the registry origin; the CLI appends
 `/api/v1/applications`. This setting is shared with plugin downloads.
+
+## System requirements
+
+Declare `system_requirements` inside the platform configuration (or
+`all_platforms`). DevEx checks these requirements before pre-install hooks,
+APT source setup, and package installation. These checks never install missing
+tools, start services, or grant consent for installation.
+
+```yaml
+linux:
+  install_method: apt
+  install_command: example
+  system_requirements:
+    min_memory_mb: 2048
+    min_disk_space_mb: 1024
+    git_version: "2.30+"
+    required_commands: [curl]
+    required_services: [docker]
+    required_ports: [8080]
+    required_env_vars: [EXAMPLE_TOKEN]
+```
+
+Insufficient memory or disk, missing commands or environment variables,
+inactive services, unavailable ports, and supported versions below the required
+version are hard failures: installation stops for that application. Failed
+probes that cannot establish resource or version information produce warnings
+and permit installation. Every result includes the requirement name and, when
+needed, a suggested remedy; warnings and skipped checks are explicitly reported.
+Disk space is measured on the current working directory's filesystem.
+
+Version checks support Docker, Docker Compose, Go, Node.js, Python, and Git.
+`ruby_version`, `java_version`, and `kubectl_version` currently produce `SKIPPED`
+results with instructions to verify the version manually. Version constraints
+use the existing checker, including minimum versions such as `2.30+`.
+
+`devex install --dry-run` reports read-only requirement results without running
+hooks or installing packages, including when a requirement fails. With
+`--dry-run --format json`, requirement diagnostics go to stderr and stdout
+remains the JSON installation plan. These probes are validated on Debian/Ubuntu;
+platform-specific resource and service probes on other systems are deferred.

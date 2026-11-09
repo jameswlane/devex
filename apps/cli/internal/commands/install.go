@@ -26,6 +26,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
@@ -103,6 +104,15 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
 				}
 				plan, err := agentapi.PlanInstall(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+				if err == nil {
+					selected, _, selectErr := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+					if selectErr != nil {
+						return writeAPIJSON(cmd, nil, selectErr)
+					}
+					for _, app := range selected {
+						_ = system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), message) })
+					}
+				}
 				return writeAPIJSON(cmd, plan, err)
 			}
 			if format != "table" {
@@ -364,6 +374,8 @@ func previewInstallation(ctx context.Context, apps []types.CrossPlatformApp, pro
 	log.Info("Dry run - showing what would be installed:")
 
 	for _, app := range apps {
+		// Preview reports failures without executing hooks or installations.
+		_ = system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { fmt.Fprintln(out, message) })
 		if len(app.GetOSConfig().PreInstall)+len(app.GetOSConfig().PostInstall) > 0 {
 			hooks, err := sdk.NewPrivilegeResolver().Plan(sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: "install-hooks"})
 			if err != nil {

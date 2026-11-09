@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -175,6 +176,9 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	var allPackages []string
 	for _, app := range apps {
 		if !isAptApp(app) {
+			continue
+		}
+		if err := system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { si.sendLog("INFO", message) }); err != nil {
 			continue
 		}
 		packages := aptPackages(app.GetOSConfig())

@@ -3,6 +3,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -75,6 +76,31 @@ var _ = Describe("Non-interactive application commands", func() {
 			return nil
 		}
 	})
+	It("previews failed and skipped requirements without bootstrapping or installing", func() {
+		setEnv("DEVEX_MISSING_REQUIREMENT_TEST", "")
+		settings.Terminal.Utilities[0].AllPlatforms.SystemRequirements = types.SystemRequirements{RequiredEnvVars: []string{"DEVEX_MISSING_REQUIREMENT_TEST"}, RubyVersion: "3.0+"}
+		viper.Set("dry-run", true)
+		Expect(run(NewInstallCmd(repo, settings), "git", "--non-interactive")).To(Succeed())
+		Expect(out.String()).To(And(ContainSubstring("FAILED Environment variable"), ContainSubstring("SKIPPED Ruby"), ContainSubstring("Would install git")))
+		Expect(prepared).To(BeZero())
+		Expect(installed).To(BeEmpty())
+	})
+	It("keeps requirement diagnostics on stderr for JSON previews", func() {
+		setEnv("DEVEX_MISSING_REQUIREMENT_TEST", "")
+		settings.Terminal.Utilities[0].AllPlatforms.SystemRequirements.RequiredEnvVars = []string{"DEVEX_MISSING_REQUIREMENT_TEST"}
+		var diagnostics bytes.Buffer
+		cmd := NewInstallCmd(repo, settings)
+		cmd.SetOut(&out)
+		cmd.SetErr(&diagnostics)
+		viper.Set("dry-run", true)
+		cmd.SetArgs([]string{"git", "--format", "json"})
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(json.Valid(out.Bytes())).To(BeTrue(), out.String())
+		Expect(diagnostics.String()).To(ContainSubstring("FAILED Environment variable"))
+		Expect(prepared).To(BeZero())
+		Expect(installed).To(BeEmpty())
+	})
+
 	It("installs defaults in plain mode and records them, safely repeating", func() {
 		cmd := NewInstallCmd(repo, settings)
 		Expect(run(cmd, "--non-interactive")).To(Succeed())
