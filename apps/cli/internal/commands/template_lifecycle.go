@@ -99,6 +99,7 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 	}
 	execRuntime := templateexec.NewExecutionRuntime(store, pluginExecutor)
 	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{})
+	reportRollback(os.Stderr, result)
 	if err != nil {
 		if action == templates.LifecycleStatus && len(resources) > 0 {
 			return displayRecordedTemplateResources(templateLifecycleResult{

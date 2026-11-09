@@ -439,16 +439,16 @@ var _ = Describe("Template Execution Runtime", func() {
 		Expect(plugin.calls).To(BeEmpty())
 	})
 
-	It("fails explicitly when rollback policy is requested", func() {
+	It("preserves the install error when rollback policy is requested", func() {
 		plan.Steps[0].OnError = templates.ErrorPolicyRollback
 		plugin.errs = map[string]error{"package-manager-docker": fmt.Errorf("docker failed")}
 		runtime := templateexec.NewExecutionRuntime(store, plugin)
 
 		_, err := runtime.Execute(context.Background(), plan, templateexec.ExecuteOptions{})
 
-		Expect(err).To(MatchError(`rollback policy is not yet implemented for step "postgres"`))
+		Expect(err).To(MatchError(`docker failed`))
 		Expect(store.runs[plan.ID].Status).To(Equal(state.RunStatusFailed))
-		Expect(store.runs[plan.ID].Error).To(Equal(`rollback policy is not yet implemented for step "postgres"`))
+		Expect(store.runs[plan.ID].Error).To(Equal(`docker failed`))
 	})
 
 	It("records remove resources with removed desired and current state", func() {

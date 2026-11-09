@@ -2,6 +2,7 @@ package templateexec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -38,6 +39,7 @@ type ExecuteOptions struct {
 	LockStaleTimeout      time.Duration
 	LockHeartbeatInterval time.Duration
 	ForceLock             bool
+	RollbackOnFailure     bool
 }
 
 type ExecutionResult struct {
@@ -45,6 +47,7 @@ type ExecutionResult struct {
 	DryRun        bool
 	StepsPlanned  int
 	StepsExecuted int
+	Rollback      []RollbackOutcome `json:"rollback,omitempty"`
 }
 
 const DefaultLockStaleTimeout = 30 * time.Minute
@@ -135,12 +138,31 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		RunID:        run.ID,
 		StepsPlanned: len(plan.Steps),
 	}
+	rollbackEnabled := opts.RollbackOnFailure
+	for _, step := range plan.Steps {
+		if step.OnError == templates.ErrorPolicyRollback {
+			rollbackEnabled = true
+		}
+	}
+	finishFailure := func(cause error) error {
+		cleanupCtx, cancel := rollbackContext(ctx)
+		defer cancel()
+		var recoveryErr error
+		if rollbackEnabled {
+			result.Rollback, recoveryErr = r.rollback(cleanupCtx, run, false)
+		}
+		status := state.RunStatusFailed
+		if ctx.Err() != nil {
+			status = state.RunStatusCanceled
+		}
+		recordErr := r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, status, cause.Error())
+		return errors.Join(cause, recoveryErr, recordErr)
+	}
 	runFailed := false
 	runError := ""
 	for index, step := range plan.Steps {
 		if err := ctx.Err(); err != nil {
-			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusCanceled, err.Error())
-			return result, err
+			return result, finishFailure(err)
 		}
 		opID := operationID(run.ID, step.ID, index)
 		persistedStep := step
@@ -157,41 +179,51 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 			Status:     state.OperationStatusRunning,
 			StartedAt:  r.now(),
 		}); err != nil {
-			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, err.Error())
-			return result, err
+			return result, finishFailure(err)
 		}
 
-		outputs, err := r.executeStep(ctx, step)
+		compensation, err := r.prepareCompensation(ctx, step)
 		if err != nil {
-			persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
-			if completeErr := r.Store.CompleteOperation(ctx, opID, state.OperationStatusFailed, persistedOutputs, err.Error()); completeErr != nil {
+			return result, finishFailure(err)
+		}
+		journal := map[string]any{compensationKey: compensation}
+		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusRunning, journal, ""); err != nil {
+			return result, finishFailure(err)
+		}
+		var outputs map[string]any
+		if compensation.Kind == "noop" && (step.Type == templates.StepTypeApp || step.Type == templates.StepTypePlugin) {
+			outputs = map[string]any{"skipped": "already installed"}
+		} else {
+			outputs, err = r.executeStep(ctx, step)
+		}
+		if outputs == nil {
+			outputs = make(map[string]any)
+		}
+		persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
+		if persistedOutputs == nil {
+			persistedOutputs = make(map[string]any)
+		}
+		persistedOutputs[compensationKey] = compensation
+		if err != nil {
+			if completeErr := r.Store.CompleteOperation(context.WithoutCancel(ctx), opID, state.OperationStatusFailed, persistedOutputs, err.Error()); completeErr != nil {
 				_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, completeErr.Error())
-				return result, completeErr
+				return result, finishFailure(errors.Join(err, completeErr))
 			}
-			switch step.OnError {
-			case templates.ErrorPolicyContinue:
+			if step.OnError == templates.ErrorPolicyContinue {
 				runFailed = true
 				if runError == "" {
 					runError = err.Error()
 				}
 				continue
-			case templates.ErrorPolicyRollback:
-				rollbackErr := fmt.Errorf("rollback policy is not yet implemented for step %q", step.ID)
-				_ = r.Store.CompleteRun(ctx, run.ID, state.RunStatusFailed, rollbackErr.Error())
-				return result, rollbackErr
 			}
-			_ = r.Store.CompleteRun(ctx, run.ID, state.RunStatusFailed, err.Error())
-			return result, err
+			return result, finishFailure(err)
 		}
 
-		persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
 		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusSucceeded, persistedOutputs, ""); err != nil {
-			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, err.Error())
-			return result, err
+			return result, finishFailure(err)
 		}
 		if err := r.recordResources(ctx, run.ID, plan.TemplateID, persistedStep, persistedOutputs); err != nil {
-			_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, err.Error())
-			return result, err
+			return result, finishFailure(err)
 		}
 		result.StepsExecuted++
 	}
@@ -312,6 +344,7 @@ func (r *ExecutionRuntime) hostname() string {
 }
 
 type PluginStepExecutor struct {
+	Repository     types.Repository
 	PluginExecutor PluginExecutor
 }
 
@@ -353,7 +386,7 @@ func executeAppHooks(ctx context.Context, hooks []types.InstallCommand) error {
 		}
 		output, err := utils.ExecInstallHookWithContext(ctx, hook)
 		if output != "" {
-			fmt.Fprint(os.Stdout, output)
+			fmt.Fprint(os.Stderr, output)
 		}
 		if err != nil {
 			return err
@@ -377,21 +410,7 @@ func (e PluginDispatchStepExecutor) ExecuteStep(ctx context.Context, step templa
 type FileStepExecutor struct{}
 
 func (FileStepExecutor) ExecuteStep(_ context.Context, step templates.PlannedStep) (map[string]any, error) {
-	source := stringMetadata(step.Request.Metadata, "source")
-	destination := stringMetadata(step.Request.Metadata, "destination")
-	content := stringMetadata(step.Request.Metadata, "content")
-	if source == "" || destination == "" || content == "" {
-		for _, arg := range step.Request.Args {
-			switch {
-			case strings.HasPrefix(arg, "--source="):
-				source = strings.TrimPrefix(arg, "--source=")
-			case strings.HasPrefix(arg, "--destination="):
-				destination = strings.TrimPrefix(arg, "--destination=")
-			case strings.HasPrefix(arg, "--content="):
-				content = strings.TrimPrefix(arg, "--content=")
-			}
-		}
-	}
+	source, destination, content := fileArguments(step)
 
 	switch step.Request.Command {
 	case "write":
@@ -440,6 +459,26 @@ func (FileStepExecutor) ExecuteStep(_ context.Context, step templates.PlannedSte
 		"source":      source,
 		"destination": destination,
 	}, nil
+}
+
+func fileArguments(step templates.PlannedStep) (string, string, string) {
+	source := stringMetadata(step.Request.Metadata, "source")
+	destination := stringMetadata(step.Request.Metadata, "destination")
+	content := stringMetadata(step.Request.Metadata, "content")
+	if source == "" || destination == "" || content == "" {
+		for _, arg := range step.Request.Args {
+			switch {
+			case strings.HasPrefix(arg, "--source="):
+				source = strings.TrimPrefix(arg, "--source=")
+			case strings.HasPrefix(arg, "--destination="):
+				destination = strings.TrimPrefix(arg, "--destination=")
+			case strings.HasPrefix(arg, "--content="):
+				content = strings.TrimPrefix(arg, "--content=")
+			}
+		}
+	}
+
+	return source, destination, content
 }
 
 func copyFile(source string, destination string) error {
