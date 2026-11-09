@@ -9,9 +9,6 @@ macos:
   install_command: fastfetch
   uninstall_command: fastfetch
   official_support: true
-  config_files:
-    - source: ~/.local/share/devex/assets/defaults/fastfetch/fastfetch.jsonc
-      destination: ~/.config/fastfetch/config.jsonc
   alternatives:
     - install_method: macports
       install_command: fastfetch
@@ -42,9 +39,6 @@ linux:
       version: 11+
     - os: ubuntu
       version: 20.04+
-  config_files:
-    - source: ~/.local/share/devex/assets/defaults/fastfetch/fastfetch.jsonc
-      destination: ~/.config/fastfetch/config.jsonc
   post_install:
     - shell: export PATH=$PATH:/usr/bin:/usr/local/bin && hash -r
   alternatives:

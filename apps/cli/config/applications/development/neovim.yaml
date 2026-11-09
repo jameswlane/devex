@@ -45,10 +45,6 @@ macos:
         - shell: sudo mv nvim-macos-x86_64 /usr/local/ && rm -f nvim-macos-x86_64.tar.gz
         - path: [/usr/local/nvim-macos-x86_64/bin]
   config_files:
-    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
-      destination: ~/.config/nvim/init.vim
-    - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
-      destination: ~/.config/nvim/lazy.toml
     - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
       destination: ~/.config/nvim/plugin/after/transparency.lua
     - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
@@ -64,8 +60,6 @@ macos:
       files:
         - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
           destination: ~/.config/nvim/lua/plugins/theme.lua
-        - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
-          destination: ~/.config/gnome-shell/themes/tokyo-night.css
 windows:
   install_method: winget
   install_command: Neovim.Neovim
@@ -100,11 +94,6 @@ windows:
       post_install:
         - shell: setx PATH "%PATH%;C:\Program Files\nvim\bin"
         - shell: del nvim-win64.zip
-  config_files:
-    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
-      destination: '%LOCALAPPDATA%/nvim/init.vim'
-    - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
-      destination: '%LOCALAPPDATA%/nvim/lazy.toml'
   themes:
     - name: Tokyo Night
       theme_color: '#1A1B26'
@@ -112,8 +101,6 @@ windows:
       files:
         - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
           destination: ~/.config/nvim/lua/plugins/theme.lua
-        - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
-          destination: ~/.config/gnome-shell/themes/tokyo-night.css
 linux:
   install_method: curlpipe
   download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
@@ -256,10 +243,6 @@ linux:
         - shell: sudo mv nvim-linux-x86_64.appimage /opt/nvim/nvim
         - path: [/opt/nvim/]
   config_files:
-    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
-      destination: ~/.config/nvim/init.vim
-    - source: ~/.local/share/devex/assets/defaults/neovim/lazy.toml
-      destination: ~/.config/nvim/lazy.toml
     - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
       destination: ~/.config/nvim/plugin/after/transparency.lua
     - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
@@ -275,5 +258,3 @@ linux:
       files:
         - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
           destination: ~/.config/nvim/lua/plugins/theme.lua
-        - source: ~/.local/share/devex/themes/gnome/tokyo-night.css
-          destination: ~/.config/gnome-shell/themes/tokyo-night.css

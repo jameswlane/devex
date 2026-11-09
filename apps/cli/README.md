@@ -411,3 +411,21 @@ Command results (including JSON), consent previews and prompts remain visible;
 quiet does not grant consent or enable unattended installation. Actionable
 errors remain on stderr and in the log file. Diagnostic helpers write warnings
 and errors to stderr so they do not corrupt `--format json` stdout.
+
+### Validate shipped configurations
+
+From `apps/cli`, run `go run ./internal/tools/configcheck` to reproduce CI's
+whole-catalog check. It walks every YAML file in `config/` and
+`assets/templates/`, uses the runtime configuration and template loaders and
+validators, and checks catalog app references, declared install methods,
+manifest files, and local config/theme assets. Errors include the source file
+and field and return a nonzero exit status. Native package dependencies remain
+native packages; recognized planned installers retain their runtime status.
+
+This command is read-only: it does not install packages, execute template
+steps, generate SSH keys, or apply user configuration. Missing optional asset
+references have been removed from the shipped catalog; existing user files
+are unaffected. Remote URLs and native package availability are not tested.
+Schema validation follows runtime types, including intentionally open maps in
+legacy environment, system, and desktop templates. Debian/Ubuntu is the CI
+execution target; installation checks for other platforms remain deferred.
