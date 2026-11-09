@@ -86,6 +86,11 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 					return err
 				}
 			}
+			// Adding configuration never requires a plugin runtime. Keep failed
+			// validation and cancelled previews free of plugin-state mutations.
+			if cmd.Name() == "add" {
+				return nil
+			}
 			// Even offline bootstrap can create plugin state or execute local plugins.
 			// Preview commands resolve their plans without initializing the runtime.
 			if viper.GetBool("dry-run") {

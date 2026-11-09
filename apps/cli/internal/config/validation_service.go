@@ -33,6 +33,7 @@ const (
 	CategorySchema               Category = "schema"
 	CategoryInstallMethodUnknown Category = "install_method_unknown"
 	CategoryDependencyCycle      Category = "dependency_cycle"
+	CategoryApplicationConflict  Category = "application_conflict"
 	CategoryDependencyNative     Category = "dependency_native"
 	CategoryInstallMethodPlanned Category = "install_method_planned"
 )
@@ -121,6 +122,9 @@ func ValidateConfigDirs(ctx context.Context, settings CrossPlatformSettings, dir
 		category := CategoryInstallMethodUnknown
 		if strings.Contains(e.Message, "dependency cycle") {
 			category = CategoryDependencyCycle
+		}
+		if strings.Contains(e.Field, ".conflicts[") {
+			category = CategoryApplicationConflict
 		}
 		if path, ok := sources[strings.ToLower(e.File)]; ok {
 			e.File = path
