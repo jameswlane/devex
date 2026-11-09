@@ -111,6 +111,12 @@ func main() {
 		handleError("checking platform", fmt.Errorf("unsupported platform: %s", plat.OS))
 	}
 
+	// Required tools are checked with PATH lookups only (no subprocesses).
+	// Presentation commands returned above, so --help and --version stay usable.
+	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
+		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
+	}
+
 	homeDir, err := utils.GetHomeDir()
 	if err != nil {
 		handleError("determining home directory", err)

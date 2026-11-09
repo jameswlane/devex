@@ -20,7 +20,7 @@ var _ = Describe("Startup dependency checks", func() {
 			Expect(os.MkdirAll(legacy, 0700)).To(Succeed())
 			Expect(os.Symlink("dotfiles.yaml", filepath.Join(legacy, "config.yaml"))).To(Succeed())
 		}
-		_, output, err := sandbox.runWithStderr(home, sandbox.binary, 30*time.Second, map[string]string{"PATH": pathWithout("unzip")}, "--version")
+		_, output, err := sandbox.runWithStderr(home, sandbox.binary, 30*time.Second, map[string]string{"PATH": pathWithout("unzip")}, "status", "--no-tui")
 		Expect(err).To(HaveOccurred(), "the CLI must refuse to start without unzip:\n%s", output)
 		Expect(output).To(ContainSubstring("missing dependency: unzip"), "the error must name the missing tool")
 		Expect(output).To(MatchRegexp(`(apt-get|dnf) install`), "the error must say how to install it")
