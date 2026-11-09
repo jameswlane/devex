@@ -51,7 +51,13 @@ func main() {
 	}
 	// Validation must remain usable with malformed settings and must not create
 	// databases, migrate files or initialize installation state before reporting.
-	if configurationValidationCommand(os.Args[1:]) {
+	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) {
+		if presentationCommand(os.Args[1:]) {
+			if err := migrateLegacy(ctx, dirs, true, os.Args[1:], os.Stderr); err != nil {
+				handleError("checking legacy files", err)
+				return
+			}
+		}
 		homeDir, homeErr := utils.GetHomeDir()
 		if homeErr != nil {
 			handleError("determining home directory", homeErr)
@@ -103,11 +109,6 @@ func main() {
 	// Check if a platform is supported
 	if !platform.IsSupportedPlatform() {
 		handleError("checking platform", fmt.Errorf("unsupported platform: %s", plat.OS))
-	}
-
-	// Validate dependencies quietly; report failures on stderr since logs go to a file
-	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
-		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
 	}
 
 	homeDir, err := utils.GetHomeDir()
@@ -365,6 +366,35 @@ func jsonOutputRequested(args []string) bool {
 		}
 		if (arg == "--format" || arg == "-f") && i+1 < len(args) && args[i+1] == "json" {
 			return true
+		}
+	}
+	return false
+}
+
+// presentationCommand identifies Cobra-only routes before runtime initialization.
+func presentationCommand(args []string) bool {
+	firstWord := true
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
+			i++
+			continue
+		}
+		if arg == "--help" || arg == "-h" || (firstWord && arg == "--version") {
+			return true
+		}
+		if strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if firstWord {
+			switch arg {
+			case "help", "completion", "__complete", "__completeNoDesc":
+				return true
+			}
+			firstWord = false
 		}
 	}
 	return false

@@ -8,6 +8,7 @@ import (
 	"os/user"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -42,7 +43,12 @@ type SystemInfo struct {
 
 // GatherSystemInfo collects comprehensive system information for debug logging
 func GatherSystemInfo(devexVersion string) *SystemInfo {
-	ctx := context.Background()
+	return GatherSystemInfoForTools(context.Background(), devexVersion)
+}
+
+// GatherSystemInfoForTools probes only explicitly requested diagnostic tools.
+// Each probe has a 500ms deadline; independent probes run concurrently.
+func GatherSystemInfoForTools(ctx context.Context, devexVersion string, tools ...string) *SystemInfo {
 	platform := DetectPlatform()
 
 	info := &SystemInfo{
@@ -76,13 +82,6 @@ func GatherSystemInfo(devexVersion string) *SystemInfo {
 		info.Shell = shell
 	}
 
-	// Get kernel version (Linux only)
-	if platform.OS == "linux" {
-		if kernel, err := exec.CommandContext(ctx, "uname", "-r").Output(); err == nil {
-			info.KernelVersion = strings.TrimSpace(string(kernel))
-		}
-	}
-
 	// Get environment variables
 	info.Path = os.Getenv("PATH")
 
@@ -91,13 +90,13 @@ func GatherSystemInfo(devexVersion string) *SystemInfo {
 	}
 
 	// Detect package managers and their versions
-	info.detectPackageManagers(ctx)
+	info.detectPackageManagers(ctx, tools)
 
 	return info
 }
 
 // detectPackageManagers detects available package managers and their versions
-func (info *SystemInfo) detectPackageManagers(ctx context.Context) {
+func (info *SystemInfo) detectPackageManagers(ctx context.Context, tools []string) {
 	packageManagers := []struct {
 		name    string
 		command string
@@ -133,24 +132,36 @@ func (info *SystemInfo) detectPackageManagers(ctx context.Context) {
 		{"java", "java", []string{"--version"}},
 	}
 
+	requested := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		requested[tool] = true
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	for _, pm := range packageManagers {
-		// Try to get version with timeout
-		timeoutCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		defer cancel() // SECURITY: Ensure context is always cancelled
-
-		if output, err := exec.CommandContext(timeoutCtx, pm.command, pm.args...).Output(); err == nil {
-			version := strings.TrimSpace(string(output))
-			// Clean up version output - take first line and limit length
-			lines := strings.Split(version, "\n")
-			if len(lines) > 0 {
-				version = lines[0]
+		if !requested[pm.name] {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			probeCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+			defer cancel()
+			cmd := exec.CommandContext(probeCtx, pm.command, pm.args...)
+			// Bound waiting on pipes inherited by children of shims.
+			cmd.WaitDelay = 100 * time.Millisecond
+			if output, err := cmd.Output(); err == nil {
+				version, _, _ := strings.Cut(strings.TrimSpace(string(output)), "\n")
 				if len(version) > 100 {
 					version = version[:100] + "..."
 				}
+				mu.Lock()
 				info.PackageManagers[pm.name] = version
+				mu.Unlock()
 			}
-		}
+		}()
 	}
+	wg.Wait()
 }
 
 // GetDetailedSystemInfoString returns comprehensive system information as a formatted string for log headers
