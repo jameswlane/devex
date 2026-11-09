@@ -53,6 +53,18 @@ var _ = Describe("Application graph validation", func() {
 		Expect(config.ValidateApplicationGraph(apps)).To(ContainElement(HaveField("Message", ContainSubstring("A -> B -> A"))))
 	})
 
+	It("reports conflicts by name and package alias only on overlapping platforms", func() {
+		a := linuxApp("A", "apt", "a")
+		a.Linux.Conflicts = []string{"b-package"}
+		b := linuxApp("B", "apt", "b-package")
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{a, b})).To(ContainElement(And(HaveField("Field", "linux.conflicts[0]"), HaveField("Message", ContainSubstring("remove one application")))))
+		b.MacOS = types.OSConfig{InstallMethod: "brew", InstallCommand: "b-package"}
+		b.Linux = types.OSConfig{}
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{a, b})).To(BeEmpty())
+		b.AllPlatforms = types.OSConfig{InstallMethod: "mise", InstallCommand: "b-package"}
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{a, b})).NotTo(BeEmpty())
+	})
+
 	It("reports a dependency cycle once, with its path", func() {
 		apps := []types.CrossPlatformApp{
 			linuxApp("A", "apt", "a", "B"),

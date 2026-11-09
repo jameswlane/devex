@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -14,8 +16,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/backup"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/undo"
 	"github.com/jameswlane/devex/apps/cli/internal/version"
@@ -164,17 +169,7 @@ func (m AddModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			item, ok := m.list.SelectedItem().(AppItem)
 			if ok {
-				// Check if app is already installed
-				if item.isInstalled {
-					m.choice = fmt.Sprintf("Application '%s' is already in your configuration", item.app.Name)
-				} else {
-					// Add the application to user config
-					if err := m.addAppToConfig(item.app); err != nil {
-						m.choice = fmt.Sprintf("Error adding %s: %v", item.app.Name, err)
-					} else {
-						m.choice = fmt.Sprintf("Successfully added %s to your configuration", item.app.Name)
-					}
-				}
+				m.choice = item.app.Name
 			}
 			return m, tea.Quit
 		}
@@ -197,39 +192,27 @@ func (m AddModel) View() string {
 
 // addAppToConfig adds an application to the user's configuration
 func (m *AddModel) addAppToConfig(app types.AppConfig) error {
-	// Keep every platform definition rather than saving only the current OS.
-	definition := config.CrossPlatformAppFromLegacy(app)
-	for _, candidate := range m.settings.GetAllApps() {
-		if strings.EqualFold(candidate.Name, app.Name) {
-			definition = candidate
-			break
-		}
-	}
-	candidateSettings := m.settings
-	candidateSettings.ApplicationOverrides = append(append([]types.CrossPlatformApp{}, m.settings.GetAllApps()...), definition)
-	if err := config.RequireValidConfig(context.Background(), candidateSettings); err != nil {
-		return err
-	}
-	userConfigDir := m.settings.GetConfigDir()
-	apps, err := configuredEditableApplications(m.settings)
+	plan, err := planAddition(context.Background(), m.settings, app.Name)
 	if err != nil {
 		return err
 	}
-	for _, existing := range apps {
-		if strings.EqualFold(existing.Name, app.Name) {
-			return fmt.Errorf("application %q is already in your configuration", app.Name)
-		}
-	}
-	if err := migrateApplicationConfig(userConfigDir); err != nil {
-		return err
-	}
-	path, err := applicationConfigPath(userConfigDir, "applications", app.Category, app.Name)
-	if err != nil {
-		return err
-	}
+	return saveAddition(m.settings, plan)
+}
 
+func saveAddition(settings config.CrossPlatformSettings, plan []types.CrossPlatformApp) error {
+	userConfigDir := settings.GetConfigDir()
+	app := plan[len(plan)-1]
+
+	// Back up the editable tree before migration or writing any application.
+	// The legacy undo manager backs up the user override tier, not this tree.
+	if err := os.MkdirAll(userConfigDir, 0750); err != nil {
+		return err
+	}
+	if _, err := backup.NewBackupManager(devexpaths.ForHome(settings.HomeDir).Data).CreateBackup(backup.BackupOptions{Description: "Before adding " + app.Name, Type: "pre-add", Compress: true}); err != nil {
+		return fmt.Errorf("backup configuration before adding: %w", err)
+	}
 	// Create undo operation before modification
-	baseDir := devexpaths.ForHome(m.settings.HomeDir).Config
+	baseDir := devexpaths.ForHome(settings.HomeDir).Config
 	undoManager := undo.NewUndoManager(baseDir)
 
 	metadata := map[string]interface{}{
@@ -243,12 +226,20 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 		app.Name,
 		metadata)
 	if err != nil {
-		// Log warning but don't block the operation
 		fmt.Fprintf(os.Stderr, "Warning: Failed to record undo operation: %v\n", err)
 	}
 
-	if err := writeNewApplicationConfig(definition, path); err != nil {
+	if err := migrateApplicationConfig(userConfigDir); err != nil {
 		return err
+	}
+	for _, definition := range plan {
+		path, err := applicationConfigPath(userConfigDir, "applications", definition.Category, definition.Name)
+		if err != nil {
+			return err
+		}
+		if err := writeNewApplicationConfig(definition, path); err != nil {
+			return err
+		}
 	}
 
 	// Create new version after successful configuration change
@@ -278,18 +269,28 @@ func NewAddCmd(repo types.Repository, settings config.CrossPlatformSettings) *co
 		category string
 		search   string
 		dryRun   bool
+		yes      bool
+		format   string
 	)
 
 	cmd := &cobra.Command{
-		Use:   "add [application-name]",
-		Short: "Add applications to your DevEx configuration",
+		Use:          "add [application-name]",
+		Annotations:  map[string]string{catalogAnnotation: catalogRequired},
+		SilenceUsage: true,
+		Args:         cobra.MaximumNArgs(1),
+		Short:        "Add applications to your DevEx configuration",
 		Long: `Add applications to your DevEx configuration interactively.
 
 This command allows you to:
   • Browse and search available applications
   • Filter by category
   • Add applications to your personal configuration
+  • Resolve catalog dependencies and preview configuration changes
   • Validate configuration before saving
+
+Confirm the preview interactively, or use --yes for unattended changes.
+Use --dry-run to validate and preview without saving. Unknown dependencies
+remain native packages; they are not added as DevEx application definitions.
 
 Examples:
   # Interactive application browser
@@ -306,17 +307,20 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// If specific app name provided, add it directly
 			if len(args) > 0 {
-				return addSpecificApp(args[0], settings, dryRun)
+				return runAdd(cmd, args[0], settings, viper.GetBool("add.dry-run"), viper.GetBool("add.yes"), viper.GetString("add.format"))
 			}
 
+			if !interaction.IsInteractiveMode() || viper.GetString("add.format") == "json" {
+				return fmt.Errorf("specify an application name in unattended mode")
+			}
 			// Interactive mode
 			model := NewAddModel(settings)
 
 			// Apply filters if provided
-			if category != "" {
-				model.filterByCategory(category)
+			if viper.GetString("add.category") != "" {
+				model.filterByCategory(viper.GetString("add.category"))
 			}
-			if search != "" {
+			if viper.GetString("add.search") != "" {
 				model.list.SetFilteringEnabled(true)
 			}
 
@@ -328,7 +332,7 @@ Examples:
 
 			// Handle the result
 			if addModel, ok := finalModel.(AddModel); ok && addModel.choice != "" {
-				fmt.Println(addModel.choice)
+				return runAdd(cmd, addModel.choice, settings, viper.GetBool("add.dry-run"), viper.GetBool("add.yes"), viper.GetString("add.format"))
 			}
 
 			return nil
@@ -338,6 +342,13 @@ Examples:
 	cmd.Flags().StringVarP(&category, "category", "c", "", "Filter by application category")
 	cmd.Flags().StringVarP(&search, "search", "s", "", "Search for applications")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be added without making changes")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Accept the preview and add dependencies")
+	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
+	_ = viper.BindPFlag("add.dry-run", cmd.Flags().Lookup("dry-run"))
+	_ = viper.BindPFlag("add.yes", cmd.Flags().Lookup("yes"))
+	_ = viper.BindPFlag("add.format", cmd.Flags().Lookup("format"))
+	_ = viper.BindPFlag("add.category", cmd.Flags().Lookup("category"))
+	_ = viper.BindPFlag("add.search", cmd.Flags().Lookup("search"))
 
 	return cmd
 }
@@ -361,44 +372,64 @@ func (m *AddModel) filterByCategory(category string) {
 
 // addSpecificApp adds a specific application by name
 func addSpecificApp(appName string, settings config.CrossPlatformSettings, dryRun bool) error {
-	// Find the application
-	availableApps := settings.GetApplications()
-	var targetApp *types.AppConfig
-
-	for _, app := range availableApps {
-		if strings.EqualFold(app.Name, appName) {
-			targetApp = &app
-			break
-		}
-	}
-
-	if targetApp == nil {
-		return fmt.Errorf("application '%s' not found", appName)
-	}
-
-	apps, err := configuredEditableApplications(settings)
+	plan, err := planAddition(context.Background(), settings, appName)
 	if err != nil {
 		return err
 	}
-	for _, app := range apps {
-		if strings.EqualFold(app.Name, targetApp.Name) {
-			return fmt.Errorf("application '%s' is already in your configuration", appName)
-		}
-	}
-
 	if dryRun {
-		fmt.Printf("Would add application '%s' to configuration\n", targetApp.Name)
-		fmt.Printf("Description: %s\n", targetApp.Description)
-		fmt.Printf("Category: %s\n", targetApp.Category)
 		return nil
 	}
+	return saveAddition(settings, plan)
+}
 
-	// Add to configuration
-	model := &AddModel{settings: settings}
-	if err := model.addAppToConfig(*targetApp); err != nil {
-		return fmt.Errorf("failed to add application: %w", err)
+func runAdd(cmd *cobra.Command, name string, settings config.CrossPlatformSettings, dryRun, yes bool, format string) error {
+	if format != "table" && format != "json" {
+		return fmt.Errorf("unsupported format %q; use table or json", format)
 	}
-
-	fmt.Printf("Successfully added '%s' to your configuration\n", targetApp.Name)
+	plan, err := planAddition(cmd.Context(), settings, name)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(plan))
+	for _, app := range plan {
+		names = append(names, app.Name)
+	}
+	fmt.Fprintf(cmd.ErrOrStderr(), "Configuration preview: add %s\n", strings.Join(names, ", "))
+	for _, app := range plan {
+		for platform, definition := range map[string]types.OSConfig{"linux": app.Linux, "macos": app.MacOS, "windows": app.Windows, "all_platforms": app.AllPlatforms} {
+			if len(definition.Dependencies) > 0 {
+				fmt.Fprintf(cmd.ErrOrStderr(), "%s %s dependencies: %s (uncatalogued names remain native packages)\n", app.Name, platform, strings.Join(definition.Dependencies, ", "))
+			}
+		}
+	}
+	if !dryRun && !yes {
+		if !interaction.IsInteractiveMode() || format == "json" {
+			return fmt.Errorf("confirmation required; review with --dry-run, then use --yes to add applications and dependencies")
+		}
+		fmt.Fprint(cmd.ErrOrStderr(), "Add these applications and dependencies? [y/N]: ")
+		answer, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+		if err != nil || !strings.EqualFold(strings.TrimSpace(answer), "y") {
+			return fmt.Errorf("addition cancelled; configuration unchanged")
+		}
+	}
+	if err := cmd.Context().Err(); err != nil {
+		return err
+	}
+	if !dryRun {
+		if err := saveAddition(settings, plan); err != nil {
+			return err
+		}
+	}
+	if format == "json" {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(struct {
+			Added  []string `json:"added"`
+			DryRun bool     `json:"dry_run"`
+		}{names, dryRun})
+	}
+	if dryRun {
+		fmt.Fprintf(cmd.OutOrStdout(), "Would add: %s\n", strings.Join(names, ", "))
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "Added: %s\n", strings.Join(names, ", "))
+	}
 	return nil
 }

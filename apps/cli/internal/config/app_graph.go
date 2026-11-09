@@ -91,8 +91,10 @@ func platformConfigs(app types.CrossPlatformApp) map[string]types.OSConfig {
 // File in each error is the application name.
 func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationError) {
 	index := map[string]string{} // lower-case name or install command -> app name
+	definitions := map[string]types.CrossPlatformApp{}
 	for _, app := range apps {
 		index[strings.ToLower(app.Name)] = app.Name
+		definitions[app.Name] = app
 	}
 	// A single-word install command is a package name, so a dependency on that
 	// package refers to the app. Multi-word commands are scripts or manager
@@ -128,6 +130,16 @@ func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationE
 			checkMethod(osConfig.InstallMethod, field+".install_method")
 			for i, alternative := range osConfig.Alternatives {
 				checkMethod(alternative.InstallMethod, fmt.Sprintf("%s.alternatives[%d].install_method", field, i))
+			}
+
+			for i, conflict := range osConfig.Conflicts {
+				if target, ok := index[strings.ToLower(conflict)]; ok && target != app.Name {
+					targetPlatforms := platformConfigs(definitions[target])
+					if platform != "all_platforms" && targetPlatforms[platform].InstallMethod == "" && targetPlatforms["all_platforms"].InstallMethod == "" {
+						continue
+					}
+					errs = append(errs, ValidationError{File: app.Name, Field: fmt.Sprintf("%s.conflicts[%d]", platform, i), Message: fmt.Sprintf("application %q conflicts with %q; remove one application or choose a compatible catalog definition", app.Name, target)})
+				}
 			}
 
 			for _, dependency := range osConfig.Dependencies {
@@ -171,7 +183,7 @@ func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationE
 			seenCycles[key] = true
 			errs = append(errs, ValidationError{
 				File: cycle[0], Field: platform + ".dependencies",
-				Message: "dependency cycle: " + strings.Join(cycle, " -> "),
+				Message: "dependency cycle: " + strings.Join(cycle, " -> ") + "; remove a dependency edge or choose a definition without this cycle",
 			})
 		}
 	}
