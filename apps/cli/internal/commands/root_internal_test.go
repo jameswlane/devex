@@ -194,3 +194,32 @@ var _ = Describe("Runtime logging configuration", func() {
 		Expect(initializeConfig(cmd)).To(MatchError(ContainSubstring("invalid log-level")))
 	})
 })
+
+var _ = Describe("Root platform support help", func() {
+	DescribeTable("labels support without starting setup or creating plugin state", func(args []string) {
+		viper.Reset()
+		DeferCleanup(viper.Reset)
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		var output, diagnostics bytes.Buffer
+		cmd := newRootCmd("test", mocks.NewMockRepository(), config.CrossPlatformSettings{}, rootOptions{
+			runSetup: func(*cobra.Command, []string) error {
+				Fail("help must not start setup")
+				return nil
+			},
+		})
+		cmd.SetOut(&output)
+		cmd.SetErr(&diagnostics)
+		cmd.SetArgs(args)
+		Expect(cmd.Execute()).To(Succeed())
+		Expect(output.String()).To(ContainSubstring("Stable: APT (Debian/Ubuntu)"))
+		Expect(output.String()).To(ContainSubstring("Experimental: DNF (Fedora/RHEL), Pacman (Arch), Flatpak, Snap, Homebrew"))
+		Expect(output.String()).To(ContainSubstring("Planned (no plugin): Mac App Store, winget, Chocolatey, Scoop"))
+		Expect(output.String()).To(ContainSubstring("https://docs.devex.sh/platforms"))
+		Expect(diagnostics.String()).To(BeEmpty())
+		Expect(filepath.Join(home, ".devex", "plugins")).NotTo(BeADirectory())
+	},
+		Entry("help flag", []string{"--help"}),
+		Entry("help command", []string{"help"}),
+	)
+})

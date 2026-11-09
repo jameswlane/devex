@@ -1,200 +1,64 @@
 ---
 title: Platform Support Overview
-description: Complete overview of DevEx platform compatibility and installer support
+description: Verified support levels and package manager implementation status.
 ---
 
 # Platform Support Overview
 
-DevEx is designed to work across multiple operating systems and package managers, providing a unified development environment setup experience regardless of your platform.
+Debian/Ubuntu with APT is the stable path. Other existing managers are
+experimental; a plugin's presence or platform metadata does not establish a
+fully tested setup experience.
 
-## Supported Platforms
+## Support matrix
 
-<Callout type="info">
-DevEx automatically detects your platform and selects the best installer for your system.
-</Callout>
+This matrix is manually maintained from the repository's
+[package manager metadata and implementations](https://github.com/jameswlane/devex/tree/main/packages).
+Metadata describes platform eligibility and capabilities, but does not encode
+stable/experimental/planned status or managers with no plugin. Review this page
+and root CLI help together when support changes.
 
-### Primary Support (Full Testing)
+- **Stable**: the primary supported installation path, with automated coverage.
+- **Experimental**: a plugin exists, but full platform lifecycle validation or
+  advertised capabilities remain incomplete. Review the linked limitations.
+- **Planned**: no package manager plugin exists; configuration entries alone do
+  not make a manager usable.
 
-| Platform | Status | Package Managers | Desktop Environments |
-|----------|--------|------------------|---------------------|
-| **Ubuntu/Debian** | ✅ Primary | APT, Flatpak, Snap | GNOME, KDE, XFCE, Unity |
-| **Fedora/RHEL** | ✅ Active | DNF, RPM, Flatpak | GNOME, KDE, XFCE |
-| **Arch Linux** | ✅ Active | Pacman, Yay, Flatpak | GNOME, KDE, XFCE |
-| **macOS** | ✅ Active | Homebrew, Mac App Store | Native macOS |
+| Platform / method | Manager | Status | Evidence / tracking |
+| --- | --- | --- | --- |
+| Debian / Ubuntu | APT | stable | [Plugin and tests](https://github.com/jameswlane/devex/tree/main/packages/package-manager-apt), [container coverage](https://github.com/jameswlane/devex/tree/main/apps/cli/test/e2e) |
+| Fedora / RHEL family | DNF | experimental | [Implementation](https://github.com/jameswlane/devex/tree/main/packages/package-manager-dnf), [lifecycle coverage #121](https://github.com/jameswlane/devex/issues/121) |
+| Arch family | Pacman, Yay | experimental | [Pacman implementation #106](https://github.com/jameswlane/devex/issues/106), [lifecycle coverage #122](https://github.com/jameswlane/devex/issues/122), [Yay #107](https://github.com/jameswlane/devex/issues/107) |
+| openSUSE | Zypper | experimental | [Operations #108](https://github.com/jameswlane/devex/issues/108), [lifecycle coverage #123](https://github.com/jameswlane/devex/issues/123) |
+| Alpine, Gentoo, Void, Solus, Nix | APK, Emerge, XBPS, Eopkg, Nixpkgs, Nixflake | experimental | [Native command audit #187](https://github.com/jameswlane/devex/issues/187) |
+| Linux package files | DEB, RPM, AppImage | experimental | [Native command audit #187](https://github.com/jameswlane/devex/issues/187) |
+| Linux optional managers | Flatpak, Snap | experimental | [Flatpak plugin](https://github.com/jameswlane/devex/tree/main/packages/package-manager-flatpak), [Snap plugin](https://github.com/jameswlane/devex/tree/main/packages/package-manager-snap) |
+| Linux / macOS | Homebrew | experimental | [User execution and Cask support #109](https://github.com/jameswlane/devex/issues/109) |
+| Language / tool methods | mise, pip, Docker, curlpipe | experimental | [Plugin implementations](https://github.com/jameswlane/devex/tree/main/packages); availability depends on the host and selected method |
+| macOS | Mac App Store (mas) | planned | [Plugin #110](https://github.com/jameswlane/devex/issues/110) |
+| macOS | MacPorts | planned | [Plugin #124](https://github.com/jameswlane/devex/issues/124) |
+| Windows native | winget | planned | [Plugin #111](https://github.com/jameswlane/devex/issues/111) |
+| Windows native | Chocolatey | planned | [Plugin #112](https://github.com/jameswlane/devex/issues/112) |
+| Windows native | Scoop | planned | [Plugin #113](https://github.com/jameswlane/devex/issues/113) |
+| Legacy RHEL | YUM | planned | [Plugin #104](https://github.com/jameswlane/devex/issues/104) |
 
-### Secondary Support (Community Tested)
+These levels describe DevEx integration, not the upstream package manager's
+quality. Native command tests do not establish support for every OS release,
+architecture, desktop environment, repository, or package.
 
-| Platform | Status | Package Managers | Notes |
-|----------|--------|------------------|-------|
-| **openSUSE** | 🔄 Beta | Zypper, Flatpak | Leap and Tumbleweed |
-| **Alpine Linux** | 🔄 Beta | APK | Container-focused |
-| **Gentoo** | 🔄 Beta | Emerge | Source-based |
-| **Void Linux** | 🔄 Beta | XBPS | Independent |
-| **Windows 10/11** | 🚧 Planned | WinGet, Chocolatey, Scoop | Under development |
+## Before installing
 
-## Platform Detection
+Review the selected applications, implicit dependencies and configuration changes
+with `devex install --dry-run` or the setup confirmation screen. Install only the
+plan you intend to apply. Optional package managers and desktop settings are not
+blanket permission to change the system; see the
+[consent rules #271](https://github.com/jameswlane/devex/issues/271).
 
-DevEx automatically detects your platform using several methods:
+For machine-readable planning, use `devex install --dry-run --format json`.
+Support information on this page does not add diagnostics to JSON stdout.
 
-### Operating System Detection
-- **Linux**: Reads `/etc/os-release` and distribution-specific files
-- **macOS**: Uses runtime detection for Darwin systems  
-- **Windows**: Runtime detection (planned)
+## Platform guides
 
-### Distribution Detection (Linux)
-```bash
-# DevEx checks in order:
-1. /etc/os-release (ID field)
-2. Distribution-specific files:
-   - /etc/ubuntu-release (Ubuntu)
-   - /etc/debian_version (Debian)
-   - /etc/fedora-release (Fedora)
-   - /etc/arch-release (Arch)
-   - /etc/manjaro-release (Manjaro)
-   - /etc/SUSE-release (openSUSE)
-```
-
-### Desktop Environment Detection (Linux)
-DevEx detects your desktop environment for theme and configuration management:
-
-- **GNOME**: `GNOME_DESKTOP_SESSION_ID` or `XDG_CURRENT_DESKTOP=GNOME`
-- **KDE**: `KDE_FULL_SESSION` or `XDG_CURRENT_DESKTOP=KDE`
-- **XFCE**: `XDG_CURRENT_DESKTOP=XFCE`
-- **Unity**: `XDG_CURRENT_DESKTOP=Unity`
-- **Cinnamon**: `DESKTOP_SESSION=cinnamon`
-
-## Installer Priority System
-
-DevEx automatically selects the best installer for your platform based on a priority system:
-
-### Linux (Debian/Ubuntu)
-```
-1. apt        (System package manager)
-2. flatpak    (Universal Linux packages)
-3. snap       (Ubuntu's universal packages)
-4. mise       (Programming language manager)
-5. curlpipe   (Direct downloads via curl)
-6. download   (Manual downloads)
-```
-
-### Linux (Fedora/RHEL)
-```
-1. dnf        (System package manager)
-2. rpm        (Package files)
-3. flatpak    (Universal Linux packages)
-4. mise       (Programming language manager)
-5. curlpipe   (Direct downloads via curl)
-6. download   (Manual downloads)
-```
-
-### Linux (Arch-based)
-```
-1. pacman     (System package manager)
-2. yay        (AUR helper)
-3. flatpak    (Universal Linux packages)
-4. mise       (Programming language manager)
-5. curlpipe   (Direct downloads via curl)
-6. download   (Manual downloads)
-```
-
-### macOS
-```
-1. brew       (Homebrew package manager)
-2. mas        (Mac App Store CLI)
-3. mise       (Programming language manager)
-4. curlpipe   (Direct downloads via curl)
-5. download   (Manual downloads)
-```
-
-### Windows (Planned)
-```
-1. winget     (Windows Package Manager)
-2. chocolatey (Community package manager)
-3. scoop      (Command-line installer)
-4. mise       (Programming language manager)
-5. download   (Manual downloads)
-```
-
-## Cross-Platform Applications
-
-DevEx supports applications that have different installation methods per platform:
-
-```yaml
-applications:
-  development:
-    - name: visual-studio-code
-      description: 'Code editor by Microsoft'
-      category: 'Development'
-      default: true
-      # macOS configuration
-      macos:
-        install_method: 'brew'
-        install_command: '--cask visual-studio-code'
-        official_support: true
-      # Windows configuration  
-      windows:
-        install_method: 'winget'
-        install_command: 'Microsoft.VisualStudioCode'
-        official_support: true
-      # Linux configuration
-      linux:
-        install_method: 'apt'
-        install_command: 'code'
-        official_support: true
-```
-
-## Platform Requirements
-
-### Minimum System Requirements
-
-| Component | Requirement |
-|-----------|-------------|
-| **Memory** | 512MB RAM |
-| **Storage** | 100MB free space |
-| **Network** | Internet connection for downloads |
-| **Shell** | Bash, Zsh, or Fish |
-
-### Linux Requirements
-- **Kernel**: 3.10+ (most distributions)
-- **glibc**: 2.17+ (for binary compatibility)
-- **systemd**: Recommended for service management
-- **sudo**: Required for system package installation
-
-### macOS Requirements
-- **Version**: macOS 10.14+ (Mojave)
-- **Xcode CLI Tools**: Automatically installed if needed
-- **Homebrew**: Automatically installed if needed
-
-### Windows Requirements (Planned)
-- **Version**: Windows 10 1809+ or Windows 11
-- **PowerShell**: 5.1+ or PowerShell Core 7+
-- **Windows Package Manager**: Automatically installed if needed
-
-## Getting Started
-
-1. **Check platform support**: Run `devex status` to see detected platform
-2. **View available installers**: Run `devex config list-installers`
-3. **Install applications**: Run `devex install` to install default apps
-4. **Customize**: Edit configuration files in `~/.devex/`
-
-<Callout type="tip">
-Use `devex status --verbose` to see detailed platform detection information including distribution, version, and desktop environment.
-</Callout>
-
-## Platform-Specific Guides
-
-- [Linux Distributions](/docs/platforms/linux) - Detailed Linux support information
-- [macOS Support](/docs/platforms/macos) - macOS-specific installation and configuration
-- [Windows Support](/docs/platforms/windows) - Windows support roadmap and current status
-- [Installer Reference](/docs/platforms/installers) - Complete installer documentation
-
-## Contributing Platform Support
-
-Help us expand platform support:
-
-1. **Test on your platform** and report compatibility
-2. **Submit installer implementations** for new package managers
-3. **Contribute platform detection** improvements
-4. **Document platform-specific issues** and solutions
-
-See our [contribution guide](https://github.com/jameswlane/devex/blob/main/CONTRIBUTING.md) for details.
+- [Linux distributions](/platforms/linux)
+- [macOS](/platforms/macos)
+- [Windows](/platforms/windows)
+- [Installer reference](/platforms/installers)

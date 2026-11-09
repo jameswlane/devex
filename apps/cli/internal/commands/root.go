@@ -60,10 +60,12 @@ It automates the installation and configuration of:
   • Desktop themes and GNOME extensions
   • Shell configurations and dotfiles
 
-DevEx supports multiple platforms and package managers:
-  • Linux: APT (Ubuntu/Debian), DNF (Fedora/RHEL), Pacman (Arch), Flatpak
-  • macOS: Homebrew, Mac App Store
-  • Windows: winget, Chocolatey, Scoop
+Package manager support:
+  • Stable: APT (Debian/Ubuntu)
+  • Experimental: DNF (Fedora/RHEL), Pacman (Arch), Flatpak, Snap, Homebrew
+  • Planned (no plugin): Mac App Store, winget, Chocolatey, Scoop
+
+Support matrix and limitations: https://docs.devex.sh/platforms
 
 All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 		Version:     version,
