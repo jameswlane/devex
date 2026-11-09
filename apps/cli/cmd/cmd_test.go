@@ -280,3 +280,33 @@ var _ = Describe("Runtime registry catalog", func() {
 	}, SpecTimeout(30*time.Second))
 
 })
+
+var _ = Describe("Runtime logging CLI output", func() {
+	DescribeTable("preserves JSON stdout with logging flags", func(flags []string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		goBin, goEnv := isolatedGoRunEnv(GinkgoT().TempDir())
+		args := append([]string{"run", ".", "platform", "--format", "json"}, flags...)
+		cmd := exec.CommandContext(ctx, goBin, args...)
+		cmd.Env = goEnv
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		Expect(cmd.Run()).To(Succeed(), stderr.String())
+		Expect(json.Valid(stdout.Bytes())).To(BeTrue(), stdout.String())
+	},
+		Entry("debug", []string{"--log-level", "debug"}),
+		Entry("quiet overrides verbose", []string{"--quiet", "--verbose"}),
+	)
+	It("keeps invalid log-level errors actionable in quiet mode", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		goBin, goEnv := isolatedGoRunEnv(GinkgoT().TempDir())
+		cmd := exec.CommandContext(ctx, goBin, "run", ".", "paths", "--quiet", "--log-level", "invalid")
+		cmd.Env = goEnv
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		Expect(cmd.Run()).NotTo(Succeed())
+		Expect(stdout.String()).To(BeEmpty())
+		Expect(stderr.String()).To(ContainSubstring("invalid log-level"))
+	})
+})

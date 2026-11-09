@@ -75,13 +75,10 @@ func main() {
 		return
 	}
 
-	// Determine debug mode from command line arguments or environment
-	debugMode := isDebugMode()
-
-	// Initialize the logger based on debug mode with improved error reporting
+	// Initialize the log destination before resolving runtime verbosity.
 	if dryRun {
 		log.InitDefaultLogger(os.Stderr)
-	} else if err := log.InitFileLogger(debugMode); err != nil {
+	} else if err := log.InitFileLogger(false); err != nil {
 		// Fallback to stderr logging if file logging fails
 		log.InitDefaultLogger(os.Stderr)
 		_, err := fmt.Fprintf(os.Stderr, "Warning: Failed to initialize file logging: %v\n", err)
@@ -94,14 +91,11 @@ func main() {
 		}
 	}
 
-	// Set the CLI version for logging and display build info in debug mode
+	// Keep startup diagnostics error-only until Cobra resolves flags/env/config.
+	log.SetLevel(log.ErrorLevel)
+
+	// Set the CLI version for logging
 	log.SetCLIVersion(version)
-	if debugMode {
-		_, err := fmt.Fprintf(os.Stderr, "DevEx CLI v%s starting in debug mode\n", version)
-		if err != nil {
-			return
-		}
-	}
 
 	// Detect platform information
 	plat := platform.DetectPlatform()
@@ -121,8 +115,6 @@ func main() {
 	if err != nil {
 		handleError("determining home directory", err)
 	}
-
-	log.Info("DevEx CLI started", "version", version, "platform", fmt.Sprintf("%s/%s", plat.OS, plat.Architecture))
 
 	// Initialize a database with proper directory creation
 	repo, db, err := initializeDatabase(ctx, homeDir, dryRun)
@@ -163,26 +155,6 @@ func main() {
 			return
 		}
 	}
-}
-
-// isDebugMode checks if debug mode should be enabled based on command line arguments or environment.
-func isDebugMode() bool {
-	// Check command line arguments for debug flags
-	for _, arg := range os.Args[1:] {
-		if strings.HasPrefix(arg, "--debug") || arg == "-d" {
-			return true
-		}
-		if strings.HasPrefix(arg, "--verbose") || arg == "-v" {
-			return true
-		}
-	}
-
-	// Check environment variables
-	if os.Getenv("DEVEX_DEBUG") == "true" || os.Getenv("DEBUG") == "true" || os.Getenv("DEVEX_VERBOSE") == "true" {
-		return true
-	}
-
-	return false
 }
 
 func handleError(context string, err error) {

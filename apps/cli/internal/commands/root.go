@@ -181,7 +181,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.SetHelpCommand(NewHelpCmd(repo, settings))
 
 	// Define persistent flags (available to all subcommands)
-	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose output")
+	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable debug logging unless log-level is configured")
+	cmd.PersistentFlags().BoolP("quiet", "q", false, "Suppress routine logs and notifications; preserve errors, results and consent prompts")
 	cmd.PersistentFlags().Bool("dry-run", false, "Show what would be done without executing")
 	cmd.PersistentFlags().String("config", "", "Config file (default: $DEVEX_CONFIG_DIR/config.yaml)")
 	cmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
@@ -190,6 +191,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.PersistentFlags().Bool("offline", false, "Run in offline mode (no plugin downloads)")
 
 	// Bind persistent flags to viper for global access
+	_ = viper.BindPFlag("quiet", cmd.PersistentFlags().Lookup("quiet"))
 	_ = viper.BindPFlag("verbose", cmd.PersistentFlags().Lookup("verbose"))
 	_ = viper.BindPFlag("dry-run", cmd.PersistentFlags().Lookup("dry-run"))
 	_ = viper.BindPFlag("config", cmd.PersistentFlags().Lookup("config"))
@@ -213,6 +215,8 @@ func initializeConfig(cmd *cobra.Command) error {
 	viper.SetEnvPrefix("DEVEX")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_", "-", "_"))
 	viper.AutomaticEnv()
+	// Preserve legacy debug environment aliases below the supported verbose key.
+	_ = viper.BindEnv("verbose", "DEVEX_VERBOSE", "DEVEX_DEBUG", "DEBUG")
 	_ = viper.BindEnv("non-interactive", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE")
 	_ = viper.BindEnv(state.DBPathConfigKey, state.DBPathEnvVar, state.DBPathAutoEnvVar)
 
@@ -226,7 +230,16 @@ func initializeConfig(cmd *cobra.Command) error {
 	}
 
 	// 6. Validate configuration after all sources are loaded
-	return validateViperConfiguration()
+	if err := validateViperConfiguration(); err != nil {
+		return err
+	}
+	level := viper.GetString("log-level")
+	// An explicitly configured level wins over the verbose shorthand.
+	if !cmd.Flags().Changed("log-level") && !cmd.Root().PersistentFlags().Changed("log-level") && os.Getenv("DEVEX_LOG_LEVEL") == "" && !viper.InConfig("log-level") && viper.GetBool("verbose") {
+		level = "debug"
+	}
+	log.Configure(level, viper.GetBool("quiet"))
+	return nil
 }
 
 // loadCLIConfig keeps file loading separate from application resolution.
@@ -269,6 +282,7 @@ func loadCLIConfig(cfgFile string) error {
 func setConfigurationDefaults() {
 	// Core application defaults
 	viper.SetDefault("verbose", false)
+	viper.SetDefault("quiet", false)
 	viper.SetDefault("dry-run", false)
 	viper.SetDefault("log-level", "info")
 

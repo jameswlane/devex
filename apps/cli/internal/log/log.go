@@ -21,6 +21,7 @@ type Logger struct {
 	logFile    *os.File
 	debugMode  bool
 	testMode   bool // For silent testing
+	quietMode  bool // Suppress routine messages while preserving errors
 	silentMode bool // For completely suppressing all output
 }
 
@@ -233,6 +234,31 @@ func SetLevel(level log.Level) {
 	}
 }
 
+// Configure applies resolved runtime logging preferences. Quiet takes precedence
+// over verbosity; command results and consent prompts remain command-owned.
+func Configure(level string, quiet bool) {
+	levels := map[string]log.Level{
+		"debug": DebugLevel, "info": InfoLevel, "warn": WarnLevel, "error": ErrorLevel,
+	}
+	selected := levels[level]
+	if quiet {
+		selected = ErrorLevel
+	}
+	if logger == nil {
+		InitDefaultLogger(os.Stderr)
+	}
+	logger.quietMode = quiet
+	logger.debugMode = selected == DebugLevel
+	if logger.logFile != nil {
+		var writer io.Writer = logger.logFile
+		if logger.debugMode {
+			writer = io.MultiWriter(logger.logFile, os.Stderr)
+		}
+		logger.logger.SetOutput(writer)
+	}
+	SetLevel(selected)
+}
+
 // WithContext adds contextual metadata to the logger.
 func WithContext(ctx map[string]any) {
 	if logger != nil {
@@ -325,7 +351,7 @@ func Print(msg string, args ...any) {
 		return
 	}
 
-	if logger.silentMode || logger.testMode {
+	if logger.silentMode || logger.testMode || logger.quietMode {
 		// In silent or test mode, suppress all output completely
 		return
 	}
@@ -368,7 +394,9 @@ func Warning(msg string, args ...any) {
 	formattedMsg := fmt.Sprintf("⚠️  "+msg, args...)
 	// Warnings are diagnostics: keep them off stdout so machine-readable
 	// output such as --format json stays parseable.
-	printDiagnostic(formattedMsg + "\n")
+	if logger == nil || (!logger.quietMode && logger.logger.GetLevel() <= WarnLevel) {
+		printDiagnostic(formattedMsg + "\n")
+	}
 	// Also log as warning
 	if logger != nil {
 		logger.logWithContext(log.WarnLevel, strings.TrimSpace(formattedMsg))
@@ -378,7 +406,7 @@ func Warning(msg string, args ...any) {
 // ErrorMsg prints an error message with red cross icon.
 func ErrorMsg(msg string, args ...any) {
 	formattedMsg := fmt.Sprintf("❌ "+msg, args...)
-	Print("%s", formattedMsg+"\n")
+	printDiagnostic(formattedMsg + "\n")
 	// Also log as error
 	if logger != nil {
 		logger.logWithContext(log.ErrorLevel, strings.TrimSpace(formattedMsg))

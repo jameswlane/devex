@@ -33,6 +33,16 @@ var _ = Describe("Update notification command policy", func() {
 		setConfigurationDefaults()
 	})
 	It("enables normal interactive releases", func() { Expect(updateNotificationPolicy(cmd, "0.3.2", true).Enabled()).To(BeTrue()) })
+	It("suppresses quiet notifications even for interactive releases", func() {
+		Expect(updateNotificationPolicy(cmd, "0.3.2", true).Enabled()).To(BeTrue())
+		viper.Set("quiet", true)
+		Expect(updateNotificationPolicy(cmd, "0.3.2", true).Enabled()).To(BeFalse())
+		cache := filepath.Join(GinkgoT().TempDir(), "uncreated")
+		GinkgoT().Setenv("DEVEX_CACHE_DIR", cache)
+		Expect(startUpdateNotification(cmd, "0.3.2")).To(BeNil())
+		Expect(cache).NotTo(BeADirectory())
+	})
+
 	DescribeTable("suppresses environment opt-outs", func(env, value string) {
 		GinkgoT().Setenv(env, value)
 		_ = viper.BindEnv("non-interactive", "DEVEX_NONINTERACTIVE", "DEVEX_NON_INTERACTIVE")

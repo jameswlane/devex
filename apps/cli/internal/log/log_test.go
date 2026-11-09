@@ -172,3 +172,99 @@ var _ = Describe("Warning output stream", func() {
 		Expect(stderr).To(ContainSubstring("⚠️  plugin package-manager-yum unavailable"))
 	})
 })
+
+var _ = Describe("Runtime output policy", func() {
+	AfterEach(log.InitTestLogger)
+	capture := func(target **os.File, fn func()) string {
+		original := *target
+		reader, writer, err := os.Pipe()
+		Expect(err).NotTo(HaveOccurred())
+		defer reader.Close()
+		*target = writer
+		defer func() { *target = original }()
+		fn()
+		Expect(writer.Close()).To(Succeed())
+		data, err := io.ReadAll(reader)
+		Expect(err).NotTo(HaveOccurred())
+		return string(data)
+	}
+	It("suppresses routine output in quiet mode but preserves actionable errors on stderr", func() {
+		log.InitDefaultLogger(&bytes.Buffer{})
+		log.Configure("debug", true)
+		var stderr string
+		stdout := capture(&os.Stdout, func() {
+			stderr = capture(&os.Stderr, func() {
+				log.Print("routine progress")
+				log.Success("done")
+				log.Warning("routine warning")
+				log.ErrorMsg("repair configuration")
+			})
+		})
+		Expect(stdout).To(BeEmpty())
+		Expect(stderr).To(ContainSubstring("repair configuration"))
+		Expect(stderr).NotTo(ContainSubstring("routine"))
+	})
+
+	It("keeps error diagnostics off stdout and filters warning helpers at error level", func() {
+		log.InitDefaultLogger(&bytes.Buffer{})
+		log.Configure("error", false)
+		var stderr string
+		stdout := capture(&os.Stdout, func() {
+			stderr = capture(&os.Stderr, func() {
+				log.Warning("suppressed-warning")
+				log.ErrorMsg("actionable-error")
+			})
+		})
+		Expect(stdout).To(BeEmpty())
+		Expect(stderr).To(ContainSubstring("actionable-error"))
+		Expect(stderr).NotTo(ContainSubstring("suppressed-warning"))
+	})
+	It("mirrors resolved debug logs to stderr and stops mirroring when quiet is enabled", func() {
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		Expect(log.InitFileLogger(false)).To(Succeed())
+		defer log.Close()
+		stderr := capture(&os.Stderr, func() {
+			log.Configure("debug", false)
+			log.Debug("console-debug-marker")
+			log.Configure("debug", true)
+			log.Info("quiet-info-marker")
+		})
+		Expect(stderr).To(ContainSubstring("console-debug-marker"))
+		Expect(stderr).NotTo(ContainSubstring("quiet-info-marker"))
+	})
+	DescribeTable("filters file logging", func(level string, quiet bool, expected []string) {
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		Expect(log.InitFileLogger(false)).To(Succeed())
+		log.Configure(level, quiet)
+		log.Debug("file-debug-marker")
+		log.Info("file-info-marker")
+		log.Warn("file-warn-marker")
+		log.Error("file-error-marker", nil)
+		path := log.GetLogFile()
+		Expect(log.Close()).To(Succeed())
+		data, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		for _, name := range []string{"debug", "info", "warn", "error"} {
+			if containsLevel(expected, name) {
+				Expect(string(data)).To(ContainSubstring("file-" + name + "-marker"))
+			} else {
+				Expect(string(data)).NotTo(ContainSubstring("file-" + name + "-marker"))
+			}
+		}
+	},
+		Entry("debug", "debug", false, []string{"debug", "info", "warn", "error"}),
+		Entry("info", "info", false, []string{"info", "warn", "error"}),
+		Entry("warn", "warn", false, []string{"warn", "error"}),
+		Entry("error", "error", false, []string{"error"}),
+		Entry("quiet", "debug", true, []string{"error"}),
+	)
+})
+
+func containsLevel(levels []string, target string) bool {
+	for _, level := range levels {
+		if level == target {
+			return true
+		}
+	}
+	return false
+}
