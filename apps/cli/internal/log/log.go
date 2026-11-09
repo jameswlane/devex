@@ -1,11 +1,9 @@
 package log
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -408,9 +406,6 @@ func gatherBasicSystemInfo() string {
 		if version := getOSVersion(); version != "" {
 			fmt.Fprintf(&sb, "OS Version: %s\n", version)
 		}
-		if kernel := getKernelVersion(); kernel != "" {
-			fmt.Fprintf(&sb, "Kernel Version: %s\n", kernel)
-		}
 		if desktop := getDesktopEnvironment(); desktop != "" && desktop != "unknown" {
 			fmt.Fprintf(&sb, "Desktop Environment: %s\n", desktop)
 		}
@@ -432,17 +427,6 @@ func gatherBasicSystemInfo() string {
 	}
 	if pwd, err := os.Getwd(); err == nil {
 		fmt.Fprintf(&sb, "Working Directory: %s\n", pwd)
-	}
-
-	// Package managers
-	sb.WriteString("=== PACKAGE MANAGERS ===\n")
-	packageManagers := detectPackageManagers()
-	if len(packageManagers) == 0 {
-		sb.WriteString("No package managers detected\n")
-	} else {
-		for pm, version := range packageManagers {
-			fmt.Fprintf(&sb, "%s: %s\n", pm, version)
-		}
 	}
 
 	// Environment
@@ -504,17 +488,6 @@ func getOSVersion() string {
 	return ""
 }
 
-// getKernelVersion gets the kernel version
-func getKernelVersion() string {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	if output, err := exec.CommandContext(ctx, "uname", "-r").Output(); err == nil {
-		return strings.TrimSpace(string(output))
-	}
-	return ""
-}
-
 // getDesktopEnvironment detects the desktop environment
 func getDesktopEnvironment() string {
 	if os.Getenv("GNOME_DESKTOP_SESSION_ID") != "" ||
@@ -540,58 +513,4 @@ func getDesktopEnvironment() string {
 	}
 
 	return "unknown"
-}
-
-// detectPackageManagers detects available package managers and their versions
-func detectPackageManagers() map[string]string {
-	packageManagers := make(map[string]string)
-
-	managers := []struct {
-		name    string
-		command string
-		args    []string
-	}{
-		{"apt", "apt", []string{"--version"}},
-		{"dnf", "dnf", []string{"--version"}},
-		{"yum", "yum", []string{"--version"}},
-		{"pacman", "pacman", []string{"--version"}},
-		{"zypper", "zypper", []string{"--version"}},
-		{"emerge", "emerge", []string{"--version"}},
-		{"apk", "apk", []string{"--version"}},
-		{"flatpak", "flatpak", []string{"--version"}},
-		{"snap", "snap", []string{"--version"}},
-		{"brew", "brew", []string{"--version"}},
-		{"pip", "pip", []string{"--version"}},
-		{"pip3", "pip3", []string{"--version"}},
-		{"docker", "docker", []string{"--version"}},
-		{"mise", "mise", []string{"--version"}},
-		{"git", "git", []string{"--version"}},
-		{"curl", "curl", []string{"--version"}},
-		{"wget", "wget", []string{"--version"}},
-		{"go", "go", []string{"version"}},
-		{"python3", "python3", []string{"--version"}},
-		{"node", "node", []string{"--version"}},
-		{"npm", "npm", []string{"--version"}},
-	}
-
-	for _, pm := range managers {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-
-		if output, err := exec.CommandContext(ctx, pm.command, pm.args...).Output(); err == nil {
-			version := strings.TrimSpace(string(output))
-			// Clean up version output - take first line and limit length
-			lines := strings.Split(version, "\n")
-			if len(lines) > 0 {
-				version = lines[0]
-				if len(version) > 100 {
-					version = version[:100] + "..."
-				}
-				packageManagers[pm.name] = version
-			}
-		}
-
-		cancel()
-	}
-
-	return packageManagers
 }

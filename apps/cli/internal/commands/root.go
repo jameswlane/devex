@@ -69,6 +69,10 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 		Version:     version,
 		Annotations: map[string]string{catalogAnnotation: catalogRequired},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Presentation routes must not initialize plugins or update checks.
+			if cmd.Name() == "help" || cmd.Name() == "completion" || cmd.Name() == "__complete" || cmd.Name() == "__completeNoDesc" {
+				return nil
+			}
 			if err := initializeConfig(cmd); err != nil {
 				if f := cmd.Flags().Lookup("format"); f != nil && f.Value.String() == "json" {
 					return writeAPIJSON(cmd, nil, agentapi.APIError(err))
