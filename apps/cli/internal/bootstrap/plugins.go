@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"slices"
 	"text/tabwriter"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/installretry"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
@@ -372,19 +374,7 @@ func (b *PluginBootstrap) ExecutePlugin(pluginName string, args []string) error 
 
 // ExecutePluginWithContext executes a plugin with cancellation from the caller.
 func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginName string, args []string) error {
-	if !interaction.IsInteractiveMode() {
-		ctx = sdk.WithUnattended(ctx)
-	}
-	if err := validatePluginName(pluginName); err != nil {
-		return fmt.Errorf("invalid plugin name: %w", err)
-	}
-	if _, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]; !installed {
-		if err := b.PluginDownloadError(pluginName); err != nil {
-			return fmt.Errorf("required plugin %s is unavailable: %w", pluginName, err)
-		}
-	}
-
-	return b.manager.ExecutePluginWithContext(ctx, pluginName, args)
+	return b.ExecutePluginWithIO(ctx, pluginName, args, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
 // ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with
@@ -402,7 +392,18 @@ func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName st
 		}
 	}
 
-	return b.manager.ExecutePluginWithIO(ctx, pluginName, args, streams)
+	if !installretry.Eligible(pluginName, args) {
+		return b.manager.ExecutePluginWithIO(ctx, pluginName, args, streams)
+	}
+	policy, err := installretry.Configured()
+	if err != nil {
+		return err
+	}
+	return policy.Run(ctx, streams.Stderr, func(stderr io.Writer) error {
+		attemptStreams := streams
+		attemptStreams.Stderr = stderr
+		return b.manager.ExecutePluginWithIO(ctx, pluginName, args, attemptStreams)
+	})
 }
 
 // GetPlatform returns the detected platform
