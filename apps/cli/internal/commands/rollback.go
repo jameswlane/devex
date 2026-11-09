@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -12,8 +13,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
+	"github.com/jameswlane/devex/apps/cli/internal/templates"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
@@ -49,7 +53,7 @@ func NewRollbackCmd(repo types.Repository, settings config.CrossPlatformSettings
 
 	cmd := &cobra.Command{
 		Use:   "rollback",
-		Short: "Rollback a previously uninstalled application",
+		Short: "Recover a lifecycle run or restore an uninstalled application",
 		Long: `The rollback command allows you to restore applications that were previously 
 uninstalled by DevEx. It can restore the application package, configuration files,
 data files, and services.
@@ -77,7 +81,49 @@ Requirements:
   devex rollback --app docker --force`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			settings.Verbose = viper.GetBool("verbose")
+			runID, _ := cmd.Flags().GetString("run")
+			if runID != "" {
+				if appName != "" || listOnly {
+					return fmt.Errorf("--run cannot be combined with --app or --list")
+				}
+				format, _ := cmd.Flags().GetString("format")
+				if format != "json" && format != "table" {
+					return fmt.Errorf("unsupported format %q", format)
+				}
+				store, err := openTemplateStateStore()
+				if err != nil {
+					return err
+				}
+				defer store.Close()
+				dryRun := viper.GetBool("dry-run")
+				var executor templateexec.PluginExecutor
+				if !dryRun {
+					pb, err := bootstrap.NewPluginBootstrap(true)
+					if err != nil {
+						return err
+					}
+					if err := pb.Initialize(cmd.Context()); err != nil {
+						return err
+					}
+					executor = pluginBootstrapExecutor{bootstrap: pb}
+				}
+				runtime := templateexec.NewExecutionRuntime(store, executor)
+				runtime.Executors[templates.StepTypeApp] = templateexec.PluginStepExecutor{PluginExecutor: executor, Repository: repo}
+				outcomes, recoveryErr := runtime.Rollback(cmd.Context(), runID, dryRun)
+				if format == "json" {
+					if err := json.NewEncoder(cmd.OutOrStdout()).Encode(outcomes); err != nil {
+						return err
+					}
+				} else {
+					reportRollback(cmd.OutOrStdout(), &templateexec.ExecutionResult{RunID: runID, Rollback: outcomes})
+				}
+				return recoveryErr
+			}
 
+			format, _ := cmd.Flags().GetString("format")
+			if format != "table" {
+				return fmt.Errorf("--format %s requires --run", format)
+			}
 			if listOnly {
 				return listRollbackHistory(repo)
 			}
@@ -90,6 +136,8 @@ Requirements:
 		},
 	}
 
+	cmd.Flags().String("run", "", "Compensate a recorded lifecycle run (use --dry-run to preview)")
+	cmd.Flags().String("format", "table", "Output format (table, json) for --run")
 	cmd.Flags().StringVar(&appName, "app", "", "Name of the application to rollback")
 	cmd.Flags().BoolVar(&listOnly, "list", false, "List available rollbacks")
 	cmd.Flags().BoolVar(&force, "force", false, "Skip confirmation prompts")

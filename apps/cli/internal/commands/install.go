@@ -126,11 +126,21 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				}, settings, getPluginBootstrap)
 			}
 
+			if viper.GetBool("rollback-on-failure") && !dryRun {
+				apps, resolvedSettings, err := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories})
+				if err != nil {
+					return err
+				}
+				fmt.Fprintln(cmd.ErrOrStderr(), "Rollback enabled: failed batches remove newly installed APT packages and restore backed-up files; hooks and dependencies may require manual recovery.")
+				return runRollbackBatch(ctx, cmd.ErrOrStderr(), apps, repo, resolvedSettings, getPluginBootstrap)
+			}
 			return executeInstallWithOutput(ctx, args, categories, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
 		},
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 
+	cmd.Flags().Bool("rollback-on-failure", false, "Roll back reversible steps if installation fails")
+	_ = viper.BindPFlag("rollback-on-failure", cmd.Flags().Lookup("rollback-on-failure"))
 	cmd.Flags().String("format", "table", "Output format (table, json; JSON requires --dry-run)")
 	// Define command-specific flags
 	cmd.Flags().StringSlice("categories", nil, "Install apps from specific categories")
@@ -249,7 +259,7 @@ func (e pluginBootstrapExecutor) ExecutePlugin(ctx context.Context, pluginName s
 	if e.bootstrap == nil {
 		return fmt.Errorf("plugin bootstrap is required")
 	}
-	return e.bootstrap.ExecutePluginWithContext(ctx, pluginName, args)
+	return e.bootstrap.ExecutePluginWithIO(ctx, pluginName, args, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stderr, Stderr: os.Stderr})
 }
 
 func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateInstallOptions, settings config.CrossPlatformSettings, getPluginBootstrap pluginBootstrapProvider) error {
@@ -293,7 +303,8 @@ func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateI
 		return err
 	}
 	execRuntime := templateexec.NewExecutionRuntime(store, pluginExecutor)
-	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{DryRun: opts.DryRun})
+	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{DryRun: opts.DryRun, RollbackOnFailure: viper.GetBool("rollback-on-failure")})
+	reportRollback(os.Stderr, result)
 	if err != nil {
 		return err
 	}
