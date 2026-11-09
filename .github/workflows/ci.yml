@@ -42,6 +42,7 @@ jobs:
           filters: |
             cli:
               - 'apps/cli/**'
+              - '.github/workflows/ci.yml'
               # The CLI builds against the local SDK through a replace directive.
               - 'packages/plugin-sdk/**'
             sdk:
@@ -121,6 +122,9 @@ jobs:
           work-dir: apps/cli
       - name: Build CLI
         run: pnpm turbo build --filter=@devex/cli
+      - name: Validate shipped configurations and local assets
+        working-directory: apps/cli
+        run: go run ./internal/tools/configcheck
       - name: Test CLI
         run: pnpm turbo test --filter=@devex/cli
   test-sdk:

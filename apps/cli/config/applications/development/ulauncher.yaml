@@ -59,11 +59,6 @@ linux:
       official_support: true
       platform_requirements:
         - os: fedora
-  config_files:
-    - source: ~/.local/share/devex/configs/ulauncher.desktop
-      destination: ~/.config/autostart/ulauncher.desktop
-    - source: ~/.local/share/devex/configs/ulauncher.json
-      destination: ~/.config/ulauncher/settings.json
   post_install:
     - shell: gtk-launch ulauncher.desktop
     - sleep: 2

@@ -620,3 +620,19 @@ func isValidTemplateInputType(inputType string) bool {
 		return false
 	}
 }
+
+// LoadTemplateSpecFile loads a single flat template or directory manifest via
+// the runtime loaders, without the discovery API's skip-on-error behavior.
+func (tm *TemplateManager) LoadTemplateSpecFile(path string) (*TemplateSpec, error) {
+	var spec TemplateSpec
+	var err error
+	if filepath.Base(path) == "manifest.yaml" {
+		spec, err = tm.loadDirectoryTemplateSpec(filepath.Dir(path))
+	} else {
+		spec, err = tm.loadFlatTemplateSpec(path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &spec, nil
+}

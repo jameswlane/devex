@@ -9,11 +9,6 @@ linux:
   install_command: btop
   uninstall_command: btop
   official_support: true
-  config_files:
-    - source: ~/.local/share/devex/assets/defaults/btop/btop.conf
-      destination: ~/.config/btop/btop.conf
-    - source: ~/.local/share/devex/assets/themes/btop/tokyo-night/btop.theme
-      destination: ~/.config/btop/themes/tokyo-night.theme
   alternatives:
     - install_method: dnf
       install_command: btop
@@ -54,8 +49,3 @@ macos:
   install_command: btop
   uninstall_command: btop
   official_support: true
-  config_files:
-    - source: ~/.local/share/devex/assets/defaults/btop/btop.conf
-      destination: ~/.config/btop/btop.conf
-    - source: ~/.local/share/devex/assets/themes/btop/tokyo-night/btop.theme
-      destination: ~/.config/btop/themes/tokyo-night.theme
