@@ -17,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/performance"
 	securitypkg "github.com/jameswlane/devex/apps/cli/internal/security"
+	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -156,6 +157,10 @@ func (rsi *RefactoredStreamingInstaller) InstallApp(ctx context.Context, app typ
 	osConfig := app.GetOSConfig()
 	if osConfig.InstallMethod == "" {
 		return fmt.Errorf("no configuration available for current platform")
+	}
+
+	if err := system.CheckApplicationRequirements(ctx, app.Name, osConfig.SystemRequirements, func(message string) { rsi.sendLog("INFO", message) }); err != nil {
+		return err
 	}
 
 	// Validate app

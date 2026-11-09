@@ -11,7 +11,7 @@ import (
 )
 
 // VersionChecker provides methods to check installed versions of various tools
-type VersionChecker struct{}
+type VersionChecker struct{ run func(string) (string, error) }
 
 // NewVersionChecker creates a new version checker
 func NewVersionChecker() *VersionChecker {
@@ -23,15 +23,15 @@ func (vc *VersionChecker) CheckDockerVersion(requiredVersion string) (bool, stri
 	log.Debug("Checking Docker version", "required", requiredVersion)
 
 	// First check if docker command exists
-	if _, err := utils.CommandExec.RunShellCommand("which docker"); err != nil {
+	if _, err := vc.runProbe("which docker"); err != nil {
 		return false, "", fmt.Errorf("docker command not found")
 	}
 
 	// Get Docker version
-	output, err := utils.CommandExec.RunShellCommand("docker version --format '{{.Client.Version}}'")
+	output, err := vc.runProbe("docker version --format '{{.Client.Version}}'")
 	if err != nil {
 		// Try alternative command
-		output, err = utils.CommandExec.RunShellCommand("docker --version")
+		output, err = vc.runProbe("docker --version")
 		if err != nil {
 			return false, "", fmt.Errorf("failed to get docker version: %w", err)
 		}
@@ -59,10 +59,10 @@ func (vc *VersionChecker) CheckDockerComposeVersion(requiredVersion string) (boo
 	log.Debug("Checking Docker Compose version", "required", requiredVersion)
 
 	// Try docker compose (newer syntax)
-	output, err := utils.CommandExec.RunShellCommand("docker compose version --short")
+	output, err := vc.runProbe("docker compose version --short")
 	if err != nil {
 		// Try docker-compose (legacy syntax)
-		output, err = utils.CommandExec.RunShellCommand("docker-compose --version")
+		output, err = vc.runProbe("docker-compose --version")
 		if err != nil {
 			return false, "", fmt.Errorf("docker-compose command not found")
 		}
@@ -89,7 +89,7 @@ func (vc *VersionChecker) CheckDockerComposeVersion(requiredVersion string) (boo
 func (vc *VersionChecker) CheckGoVersion(requiredVersion string) (bool, string, error) {
 	log.Debug("Checking Go version", "required", requiredVersion)
 
-	output, err := utils.CommandExec.RunShellCommand("go version")
+	output, err := vc.runProbe("go version")
 	if err != nil {
 		return false, "", fmt.Errorf("go command not found")
 	}
@@ -115,7 +115,7 @@ func (vc *VersionChecker) CheckGoVersion(requiredVersion string) (bool, string, 
 func (vc *VersionChecker) CheckNodeVersion(requiredVersion string) (bool, string, error) {
 	log.Debug("Checking Node.js version", "required", requiredVersion)
 
-	output, err := utils.CommandExec.RunShellCommand("node --version")
+	output, err := vc.runProbe("node --version")
 	if err != nil {
 		return false, "", fmt.Errorf("node command not found")
 	}
@@ -136,9 +136,9 @@ func (vc *VersionChecker) CheckPythonVersion(requiredVersion string) (bool, stri
 	log.Debug("Checking Python version", "required", requiredVersion)
 
 	// Try python3 first, then python
-	output, err := utils.CommandExec.RunShellCommand("python3 --version")
+	output, err := vc.runProbe("python3 --version")
 	if err != nil {
-		output, err = utils.CommandExec.RunShellCommand("python --version")
+		output, err = vc.runProbe("python --version")
 		if err != nil {
 			return false, "", fmt.Errorf("python command not found")
 		}
@@ -165,7 +165,7 @@ func (vc *VersionChecker) CheckPythonVersion(requiredVersion string) (bool, stri
 func (vc *VersionChecker) CheckGitVersion(requiredVersion string) (bool, string, error) {
 	log.Debug("Checking Git version", "required", requiredVersion)
 
-	output, err := utils.CommandExec.RunShellCommand("git --version")
+	output, err := vc.runProbe("git --version")
 	if err != nil {
 		return false, "", fmt.Errorf("git command not found")
 	}
@@ -363,4 +363,11 @@ func (vc *VersionChecker) checkTildeRange(installed, base string) (bool, error) 
 	// < next minor version
 	nextMinor := fmt.Sprintf("%d.%d.0", baseVersion.Major, baseVersion.Minor+1)
 	return vc.compareSemanticVersions(installed, nextMinor, "<")
+}
+
+func (vc *VersionChecker) runProbe(command string) (string, error) {
+	if vc.run != nil {
+		return vc.run(command)
+	}
+	return utils.CommandExec.RunShellCommand(command)
 }

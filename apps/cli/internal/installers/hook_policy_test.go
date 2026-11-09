@@ -20,6 +20,15 @@ var _ = Describe("Noninteractive hook policy", func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "bash", "env")
 	})
 
+	It("blocks unmet requirements before pre-install hooks or packages", func() {
+		GinkgoT().Setenv("DEVEX_MISSING_REQUIREMENT_TEST", "")
+		app := types.CrossPlatformApp{Name: "example", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "example", PreInstall: []types.InstallCommand{{Shell: "echo mutated"}}, SystemRequirements: types.SystemRequirements{RequiredEnvVars: []string{"DEVEX_MISSING_REQUIREMENT_TEST"}}}}
+		err := InstallCrossPlatformApp(context.Background(), app, config.CrossPlatformSettings{}, nil)
+		Expect(err).To(MatchError(And(ContainSubstring("system requirements failed"), ContainSubstring("DEVEX_MISSING_REQUIREMENT_TEST"))))
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+		Expect(recorder.Calls("sudo")).To(BeEmpty())
+	})
+
 	DescribeTable("rejects hooks with actionable errors before any execution", func(scope string) {
 		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "example"}, PreInstall: []types.InstallCommand{{Scope: scope, Shell: "echo ok; rm -rf /"}}}
 		err := InstallApp(context.Background(), app, config.CrossPlatformSettings{}, nil)

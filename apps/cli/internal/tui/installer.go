@@ -27,6 +27,7 @@ import (
 	progresspkg "github.com/jameswlane/devex/apps/cli/internal/progress"
 	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/apps/cli/internal/utils"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -791,6 +792,10 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	osConfig := app.GetOSConfig()
 	if osConfig.InstallMethod == "" {
 		return fmt.Errorf("no configuration available for current platform")
+	}
+
+	if err := system.CheckApplicationRequirements(ctx, app.Name, osConfig.SystemRequirements, func(message string) { si.sendLog("INFO", message) }); err != nil {
+		return err
 	}
 
 	// Validate app

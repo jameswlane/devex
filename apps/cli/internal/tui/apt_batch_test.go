@@ -68,6 +68,18 @@ var _ = Describe("APT batching", func() {
 		DeferCleanup(func() { queryInstalledDebPackages = originalQuery })
 	})
 
+	It("does not add sources or batch packages for failed requirements", func() {
+		GinkgoT().Setenv("DEVEX_MISSING_REQUIREMENT_TEST", "")
+		app := aptApp("example", "example", types.AptSource{SourceName: "/etc/apt/sources.list.d/example.list", SourceRepo: "deb https://example.test stable main"})
+		app.AllPlatforms.SystemRequirements.RequiredEnvVars = []string{"DEVEX_MISSING_REQUIREMENT_TEST"}
+		Expect(installer.prepareAptRun(context.Background(), []types.CrossPlatformApp{app})).To(Succeed())
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+		Expect(recorder.Calls("sudo")).To(BeEmpty())
+		Expect(installer.apt.sourcesAdded).To(BeEmpty())
+		Expect(installer.apt.batchInstalled).To(BeEmpty())
+	})
+
 	aptGetCalls := func(subcommand string) []sdktest.Call {
 		var calls []sdktest.Call
 		for _, call := range recorder.Calls("apt-get") {

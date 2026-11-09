@@ -22,6 +22,29 @@ var _ = Describe("Interactive hook policy", func() {
 		recorder = sdktest.NewRecorder(GinkgoT(), "bash", "env", "apt-get")
 	})
 
+	It("blocks unmet requirements before pre-install hooks or packages", func() {
+		GinkgoT().Setenv("DEVEX_MISSING_REQUIREMENT_TEST", "")
+		app := aptApp("example", "example")
+		app.AllPlatforms.PreInstall = []types.InstallCommand{{Shell: "echo mutated"}}
+		app.AllPlatforms.SystemRequirements.RequiredEnvVars = []string{"DEVEX_MISSING_REQUIREMENT_TEST"}
+		installer := &StreamingInstaller{}
+		err := installer.InstallApp(context.Background(), app, config.CrossPlatformSettings{})
+		Expect(err).To(MatchError(And(ContainSubstring("system requirements failed"), ContainSubstring("DEVEX_MISSING_REQUIREMENT_TEST"))))
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+		Expect(recorder.Calls("sudo")).To(BeEmpty())
+	})
+
+	It("blocks requirements in the modular installer before hooks", func() {
+		GinkgoT().Setenv("DEVEX_MISSING_REQUIREMENT_TEST", "")
+		app := aptApp("example", "example")
+		app.AllPlatforms.PreInstall = []types.InstallCommand{{Shell: "echo mutated"}}
+		app.AllPlatforms.SystemRequirements.RequiredEnvVars = []string{"DEVEX_MISSING_REQUIREMENT_TEST"}
+		installer := &RefactoredStreamingInstaller{}
+		Expect(installer.InstallApp(context.Background(), app, config.CrossPlatformSettings{})).To(MatchError(ContainSubstring("system requirements failed")))
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
+	})
+
 	DescribeTable("rejects hooks with actionable errors before any execution", func(scope string) {
 		app := aptApp("example", "example")
 		app.AllPlatforms.PreInstall = []types.InstallCommand{{Scope: scope, Shell: "echo ok; rm -rf /"}}

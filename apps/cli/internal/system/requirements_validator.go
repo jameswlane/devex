@@ -17,12 +17,16 @@ import (
 // RequirementsValidator validates system requirements
 type RequirementsValidator struct {
 	versionChecker *VersionChecker
+	run            func(string) (string, error)
+	diskSpace      func(string) (int, error)
 }
 
 // NewRequirementsValidator creates a new requirements validator
 func NewRequirementsValidator() *RequirementsValidator {
 	return &RequirementsValidator{
 		versionChecker: NewVersionChecker(),
+		run:            utils.CommandExec.RunShellCommand,
+		diskSpace:      getDiskSpaceInfo,
 	}
 }
 
@@ -62,6 +66,17 @@ func (vs ValidationStatus) String() string {
 
 // ValidateRequirements validates all system requirements for an application
 func (rv *RequirementsValidator) ValidateRequirements(appName string, requirements types.SystemRequirements) ([]ValidationResult, error) {
+	return rv.ValidateRequirementsContext(context.Background(), appName, requirements)
+}
+
+// ValidateRequirementsContext validates requirements with caller cancellation.
+func (rv *RequirementsValidator) ValidateRequirementsContext(ctx context.Context, appName string, requirements types.SystemRequirements) ([]ValidationResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := requirements.Validate(); err != nil {
+		return nil, err
+	}
 	log.Info("Validating system requirements", "app", appName)
 
 	// Pre-allocate results slice with estimated capacity
@@ -113,7 +128,7 @@ func (rv *RequirementsValidator) ValidateRequirements(appName string, requiremen
 
 	// Validate required ports
 	for _, port := range requirements.RequiredPorts {
-		result := rv.validatePortRequirement(port)
+		result := rv.validatePortRequirement(ctx, port)
 		results = append(results, result)
 	}
 
@@ -132,7 +147,7 @@ func (rv *RequirementsValidator) validateMemoryRequirement(minMemoryMB int) Vali
 	log.Debug("Validating memory requirement", "required_mb", minMemoryMB)
 
 	// Read memory info from /proc/meminfo on Linux
-	output, err := utils.CommandExec.RunShellCommand("grep '^MemTotal:' /proc/meminfo")
+	output, err := rv.run("grep '^MemTotal:' /proc/meminfo")
 	if err != nil {
 		return ValidationResult{
 			Requirement: fmt.Sprintf("Memory >= %d MB", minMemoryMB),
@@ -186,7 +201,7 @@ func (rv *RequirementsValidator) validateDiskSpaceRequirement(minDiskSpaceMB int
 	log.Debug("Validating disk space requirement", "required_mb", minDiskSpaceMB)
 
 	// Get disk usage for current directory using platform-specific implementation
-	availableMBFromSyscall, err := getDiskSpaceInfo(".")
+	availableMBFromSyscall, err := rv.diskSpace(".")
 	if err == nil {
 		// Use syscall result if successful
 		if availableMBFromSyscall >= minDiskSpaceMB {
@@ -206,7 +221,7 @@ func (rv *RequirementsValidator) validateDiskSpaceRequirement(minDiskSpaceMB int
 	}
 
 	// Calculate available space in MB - use df command for safer cross-platform approach
-	output, err := utils.CommandExec.RunShellCommand("df -m . | tail -1 | awk '{print $4}'")
+	output, err := rv.run("df -m . | tail -1 | awk '{print $4}'")
 	if err != nil {
 		return ValidationResult{
 			Requirement: fmt.Sprintf("Disk space >= %d MB", minDiskSpaceMB),
@@ -311,7 +326,7 @@ func (rv *RequirementsValidator) validateVersionRequirement(tool, requiredVersio
 func (rv *RequirementsValidator) validateCommandRequirement(command string) ValidationResult {
 	log.Debug("Validating command requirement", "command", command)
 
-	_, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("which %s", command))
+	_, err := rv.run(fmt.Sprintf("command -v %s", quoteRequirement(command)))
 	if err != nil {
 		return ValidationResult{
 			Requirement: fmt.Sprintf("Command '%s' available", command),
@@ -332,8 +347,18 @@ func (rv *RequirementsValidator) validateCommandRequirement(command string) Vali
 func (rv *RequirementsValidator) validateServiceRequirement(service string) ValidationResult {
 	log.Debug("Validating service requirement", "service", service)
 
+	// SysV service treats leading dashes as options, even when shell-quoted.
+	if strings.HasPrefix(service, "-") {
+		return ValidationResult{
+			Requirement: fmt.Sprintf("Service '%s' running", service),
+			Status:      ValidationFailed,
+			Message:     "Service name must not be an option",
+			Suggestion:  "Configure a service name without a leading dash",
+		}
+	}
+
 	// Try systemctl first (systemd systems)
-	_, err := utils.CommandExec.RunShellCommand(fmt.Sprintf("systemctl is-active %s", service))
+	_, err := rv.run(fmt.Sprintf("systemctl is-active -- %s", quoteRequirement(service)))
 	if err == nil {
 		return ValidationResult{
 			Requirement: fmt.Sprintf("Service '%s' running", service),
@@ -343,7 +368,7 @@ func (rv *RequirementsValidator) validateServiceRequirement(service string) Vali
 	}
 
 	// Try service command (SysV systems)
-	_, err = utils.CommandExec.RunShellCommand(fmt.Sprintf("service %s status", service))
+	_, err = rv.run(fmt.Sprintf("service %s status", quoteRequirement(service)))
 	if err == nil {
 		return ValidationResult{
 			Requirement: fmt.Sprintf("Service '%s' running", service),
@@ -361,11 +386,11 @@ func (rv *RequirementsValidator) validateServiceRequirement(service string) Vali
 }
 
 // validatePortRequirement checks if a port is available
-func (rv *RequirementsValidator) validatePortRequirement(port int) ValidationResult {
+func (rv *RequirementsValidator) validatePortRequirement(ctx context.Context, port int) ValidationResult {
 	log.Debug("Validating port requirement", "port", port)
 
 	// Create a context with timeout for the network operation
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// Use ListenConfig for proper context support
@@ -443,4 +468,53 @@ func (rv *RequirementsValidator) GetWarnings(results []ValidationResult) []Valid
 		}
 	}
 	return warnings
+}
+
+// quoteRequirement treats configured command and service names as literal arguments.
+func quoteRequirement(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+// NewRequirementsValidatorWithProbes allows deterministic, read-only probes.
+func NewRequirementsValidatorWithProbes(run func(string) (string, error), disk func(string) (int, error)) *RequirementsValidator {
+	return &RequirementsValidator{run: run, diskSpace: disk, versionChecker: &VersionChecker{run: run}}
+}
+
+// CheckApplicationRequirements reports every result and blocks only hard failures.
+// Callers must invoke this before hooks, source setup, or package installation.
+func CheckApplicationRequirements(ctx context.Context, name string, requirements types.SystemRequirements, report func(string)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	run := func(command string) (string, error) {
+		probeCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		return utils.CommandExec.RunCommand(probeCtx, "sh", "-c", command)
+	}
+	validator := NewRequirementsValidatorWithProbes(run, getDiskSpaceInfo)
+	results, err := validator.ValidateRequirementsContext(ctx, name, requirements)
+	if err != nil {
+		return fmt.Errorf("%s system requirements: %w", name, err)
+	}
+	if report == nil {
+		report = func(message string) { fmt.Fprintln(os.Stderr, message) }
+	}
+	var failures []string
+	for _, result := range results {
+		message := fmt.Sprintf("%s: %s %s: %s", name, result.Status, result.Requirement, result.Message)
+		if result.Suggestion != "" {
+			message += "; " + result.Suggestion
+		}
+		report(message)
+		if result.Status == ValidationFailed {
+			failures = append(failures, result.Requirement)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("%s system requirements failed: %s", name, strings.Join(failures, ", "))
+	}
+	return nil
 }
