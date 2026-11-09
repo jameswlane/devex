@@ -69,6 +69,7 @@ func (m *SetupModel) renderInstallPlan() string {
 		}
 		b.WriteString("\n")
 	}
+	b.WriteString(m.renderSSHPreview())
 	b.WriteString("\n")
 
 	fmt.Fprintf(&b, "Total: %d apps to install", toInstall)

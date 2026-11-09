@@ -251,6 +251,22 @@ func (m *SetupModel) View() string {
 		}
 		s += fmt.Sprintf("%s Email: %s\n", cursor, emailValue)
 
+		sshMode := m.git.sshMode
+		if sshMode == "" {
+			sshMode = "skip (default)"
+		}
+		marker := " "
+		if m.cursor == 2 {
+			marker = ">"
+		}
+		s += fmt.Sprintf("%s SSH: %s (Enter to cycle)\n", marker, sshMode)
+		marker = " "
+		if m.cursor == 3 {
+			marker = ">"
+		}
+		s += fmt.Sprintf("%s SSH private key path (absolute): %s\n", marker, m.git.sshPath)
+		s += "SSH generation creates an UNENCRYPTED key; existing keys are read only.\nCreate the parent directory with mode 0700 first. No agent/config changes.\n"
+
 		// Show email validation feedback
 		if m.git.gitEmail != "" && !isValidEmail(m.git.gitEmail) {
 			s += errorStyle.Render("   ⚠️  Email must contain @ and . characters") + "\n"
