@@ -36,6 +36,30 @@ var _ = Describe("Nix 2.8 plain profile compatibility", func() {
 			{Args: []string{"profile", "remove", `legacyPackages\.x86_64-linux\.spotify`}},
 		}))
 	})
+	It("answers is-installed from the plain 2.8 listing when --json is unsupported", func() {
+		legacyProbe()
+		data, err := os.ReadFile(filepath.Join("testdata", "profile-2.8.txt"))
+		Expect(err).NotTo(HaveOccurred())
+		recorder.Script("nix", []string{"profile", "list"}, sdktest.Response{Stdout: string(data)})
+		plugin := main.NewNixflakePlugin()
+		Expect(plugin.Execute("is-installed", []string{"spotify", "zoom-us"})).To(Succeed())
+		err = plugin.Execute("is-installed", []string{"spotify", "git"})
+		var absent *sdk.NotInstalledError
+		Expect(errors.As(err, &absent)).To(BeTrue())
+		Expect(absent.Packages).To(Equal([]string{"git"}))
+		Expect(recorder.Calls("nix")).To(HaveLen(4))
+		Expect(recorder.Calls("sudo")).To(BeEmpty())
+	})
+	It("does not report absence when the plain listing is malformed or fails", func() {
+		legacyProbe()
+		recorder.Script("nix", []string{"profile", "list"}, sdktest.Response{Stdout: "garbage\n"})
+		err := main.NewNixflakePlugin().Execute("is-installed", []string{"git"})
+		Expect(err).To(HaveOccurred())
+		var absent *sdk.NotInstalledError
+		Expect(errors.As(err, &absent)).To(BeFalse())
+		recorder.Script("nix", []string{"profile", "list"}, sdktest.Response{ExitCode: 42})
+		Expect(sdk.ExitStatus(main.NewNixflakePlugin().Execute("is-installed", []string{"git"}))).To(Equal(42))
+	})
 	DescribeTable("does not reinterpret native metadata failures as old Nix", func(diagnostic string) {
 		recorder.Script("nix", []string{"profile", "list", "--json"}, sdktest.Response{ExitCode: 42, Stderr: diagnostic})
 		err := main.NewNixflakePlugin().Execute("remove", []string{"git"})

@@ -108,7 +108,11 @@ func (p *SnapPlugin) handleInstall(ctx context.Context, args []string) error {
 
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
-	// Install packages using the package manager
+	// The CLI sends native options (--classic, --channel=<ch>, ...) ahead of the
+	// package names as separate argv elements (see apps/cli package-options docs).
+	// `snap install` accepts them in any position and applies them to every
+	// named snap, so everything is forwarded unchanged. snap never prompts, so
+	// there is no non-interactive flag to add; sudo -n is used when unattended.
 	cmdArgs := append([]string{"install"}, args...)
 	return p.run(ctx, "install", cmdArgs...)
 }
@@ -149,7 +153,9 @@ func (p *SnapPlugin) handleSearch(ctx context.Context, args []string) error {
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
 
-	return p.run(ctx, "search", "search", searchTerm)
+	// `snap find` is the documented command; `snap search` is only its alias
+	// (snap help find / snapcraft.io docs "snap find").
+	return p.run(ctx, "search", "find", searchTerm)
 }
 
 func (p *SnapPlugin) handleList(ctx context.Context, args []string) error {

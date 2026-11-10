@@ -59,3 +59,25 @@ fields and legacy `install_command` strings. For example, `packages: [nvim]`
 with `options: [--classic, --channel=latest/edge]` reaches this plugin as native
 argv. See the [configuration migration guide](../../apps/cli/docs/configuration/package-options.md).
 Both `update` and `upgrade` run `snap refresh`.
+
+## Operations
+
+| Command | Native command | Privilege |
+| --- | --- | --- |
+| `install` | `snap install [--classic] [--channel=<ch>] <snaps>`; options come from the app definition and are forwarded unchanged | sudo (system) |
+| `remove` | `snap remove <snaps>` | sudo (system) |
+| `update` | `snap refresh [snaps]` | sudo (system) |
+| `upgrade` | `snap refresh` | sudo (system) |
+| `search` | `snap find <phrase>` | none |
+| `list` | `snap list` | none |
+| `is-installed` | `snap list`, matched on the Name column; exits with the SDK not-installed status for missing snaps | none |
+
+snap never prompts, so unattended mode (`CI=true`, `DEVEX_UNATTENDED=1`) adds no
+flags; mutations use `sudo -n` and fail fast when authorization is unavailable.
+
+## Compatibility and release order
+
+The plugin forwards install arguments verbatim, so it accepts the options the
+CLI sends and still works with older CLIs. Release the Snap plugin before the
+CLI that sends `--classic` / `--channel` arrays (see the package-options guide)
+so installs on machines with an older plugin never see unforwarded options.

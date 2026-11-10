@@ -101,6 +101,10 @@ func (p *EopkgPlugin) ExecuteContext(ctx context.Context, command string, args [
 	}
 }
 
+// Native commands follow eopkg(1): `install`, `remove` and `upgrade` take
+// `--yes-all` (-y, "assume yes in all yes/no queries") so they never prompt;
+// `update-repo` refreshes repository indexes; `search` and `list-installed`
+// are read-only and run without sudo.
 func (p *EopkgPlugin) handleInstall(ctx context.Context, args []string) error {
 	if err := validatePackages(args); err != nil {
 		return err

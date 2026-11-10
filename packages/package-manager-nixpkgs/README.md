@@ -28,8 +28,9 @@ devex plugin run package-manager-nixpkgs remove git
 devex plugin run package-manager-nixpkgs search firefox
 devex plugin run package-manager-nixpkgs list
 
-# Refresh channels directly; the plugin's update is unsupported
-nix-channel --update
+# Refresh channels, then upgrade installed packages
+devex plugin run package-manager-nixpkgs update
+devex plugin run package-manager-nixpkgs upgrade
 ```
 
 ## Operations
@@ -40,13 +41,17 @@ nix-channel --update
 | --- | --- | --- |
 | `install` | `nix-env --install <derivation names>` | user |
 | `remove` | `nix-env --uninstall <derivation names>` | user |
-| `update` | Unsupported: nix-env cannot refresh package sources. Refreshing means either `nix-channel --update` or updating flake inputs, and the plugin does not choose a channel or flake policy for the user. Run `nix-channel --update`, or use the nixflake plugin. | n/a (no native call) |
+| `upgrade` | `nix-env --upgrade` | user |
+| `update` | `nix-channel --update [channel...]`; refreshes the channels `nix-env` installs from. Flake users refresh inputs with the nixflake plugin | user |
+| `is-installed` | `nix-env --query --installed --json` | user |
 | `search` | `nix-env --query --available <terms>`; each term is a separate derivation-name selector | user |
 | `list` | `nix-env --query --installed` | user |
 
 Package arguments that are empty or start with `-` are rejected before any native command runs.
 
-The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
+`is-installed` matches full derivation names (`git-2.45.1`) or names with the version suffix removed (`git`).
+
+Nothing here prompts, so unattended mode (`CI=true`, `DEVEX_UNATTENDED=1`) needs no extra flags; user-profile operations never use sudo.
 
 ## 🚀 Platform Support
 
@@ -68,11 +73,9 @@ Licensed under the [Apache-2.0 License](../../../LICENSE).
 
 </div>
 
-## Experimental limitations
+## Notes
 
-`upgrade` runs `nix-env --upgrade` in the invoking user's profile.
-`is-installed` reads `nix-env --query --installed --json` and matches full
-names or names with the version suffix removed. `update` remains unsupported:
-choosing channels versus another expression source needs an explicit source
-policy. Use `nix-channel --update` when using channels. This plugin remains
-experimental until source refresh is defined.
+`install` and `remove` select packages by derivation name (`nix-env --install git`),
+matching how app definitions name packages. `nix-env -iA nixpkgs.git` (attribute
+path) is faster and `nix profile install nixpkgs#git` is the flake equivalent,
+which the nixflake plugin provides.

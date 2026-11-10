@@ -104,6 +104,15 @@ func (p *EmergePlugin) ExecuteContext(ctx context.Context, command string, args 
 	}
 }
 
+// Native commands follow emerge(1) and portageq(1):
+//   - `--ask=n` (explicitly non-interactive; `--ask` would prompt) on every
+//     mutation, so unattended runs never wait for confirmation.
+//   - remove uses `--depclean <atoms>`, the supported way to uninstall; it
+//     refuses packages other installed packages depend on.
+//   - update is `--sync` (repository synchronization); upgrade is
+//     `--update --deep --newuse @world`, the Gentoo handbook upgrade command.
+//   - installed queries use `portageq match / <atom>`, an installed-package
+//     lookup that needs no root.
 func (p *EmergePlugin) handleInstall(ctx context.Context, args []string) error {
 	if err := validatePackages(args); err != nil {
 		return err
