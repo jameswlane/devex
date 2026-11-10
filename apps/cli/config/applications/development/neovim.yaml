@@ -116,9 +116,6 @@ linux:
   post_install:
     - shell: sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz && rm -f nvim-linux-x86_64.tar.gz
     - path: [/opt/nvim-linux-x86_64/bin]
-    - shell: git clone https://github.com/LazyVim/starter ~/.config/nvim || true
-    - shell: rm -rf ~/.config/nvim/.git
-    - shell: mkdir -p ~/.config/nvim/plugin/after
   alternatives:
     - install_method: apt
       install_command: neovim

@@ -415,3 +415,6 @@ This documentation is licensed under the [Apache-2.0 License](../../LICENSE).
 **[Visit Documentation](https://docs.devex.sh)** • **[Edit Content](https://github.com/jameswlane/devex/tree/main/apps/docs/content)** • **[Report Issues](https://github.com/jameswlane/devex/issues)**
 
 </div>
+
+Application and plugin authors: read the [consent rules](../cli/docs/consent-rules.md)
+before adding installation hooks, user configuration changes or desktop settings.

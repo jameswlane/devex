@@ -111,3 +111,25 @@ var _ = Describe("Install plan and Confirmation screen", func() {
 		Expect(model.View()).NotTo(ContainSubstring("apt-get update"))
 	})
 })
+
+var _ = Describe("Consent hook preview", func() {
+	It("shows commands and config destinations but only selected-shell initialization", func() {
+		model := &SetupModel{step: StepConfirmation,
+			system: SystemInfo{shells: []string{"bash"}},
+			settings: config.CrossPlatformSettings{ApplicationOverrides: []types.CrossPlatformApp{{Name: "example", Default: true,
+				Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "example",
+					PostInstall: []types.InstallCommand{{Shell: "example init"}, {ShellInit: map[string]string{"bash": "example init bash", "zsh": "example init zsh"}}, {Path: []string{"/opt/example/bin"}}},
+					ConfigFiles: []types.ConfigFile{{Source: "example.conf", Destination: "~/.config/example/config"}},
+				},
+			}}},
+		}
+		view := model.renderInstallPlan()
+		for _, expected := range []string{"[x] example", "apt: example", "example init bash", "/opt/example/bin", "~/.config/example/config"} {
+			Expect(view).To(ContainSubstring(expected))
+		}
+		Expect(view).NotTo(ContainSubstring("example init zsh"))
+		model.selections.skipDefaultApps = true
+		Expect(model.renderInstallPlan()).NotTo(ContainSubstring("example init"))
+		Expect(model.renderInstallPlan()).To(ContainSubstring("[ ] Default tools skipped"))
+	})
+})

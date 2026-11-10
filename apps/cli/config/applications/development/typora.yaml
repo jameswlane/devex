@@ -10,8 +10,6 @@ linux:
       key_name: /etc/apt/trusted.gpg.d/typora.asc
       source_repo: deb https://typora.io/linux ./
       source_name: /etc/apt/sources.list.d/typora.list
-  post_install:
-    - command: mkdir -p ~/.config/Typora/themes
   themes:
     - name: Standard Theme
       files:
