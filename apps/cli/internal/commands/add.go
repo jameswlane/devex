@@ -200,6 +200,13 @@ func (m *AddModel) addAppToConfig(app types.AppConfig) error {
 }
 
 func saveAddition(settings config.CrossPlatformSettings, plan []types.CrossPlatformApp) error {
+	return saveApplications(settings, plan, false)
+}
+
+// saveApplications backs up the editable tree, then writes plan. With replace
+// the last definition supersedes any existing definition of the same name;
+// otherwise an existing file is never overwritten.
+func saveApplications(settings config.CrossPlatformSettings, plan []types.CrossPlatformApp, replace bool) error {
 	userConfigDir := settings.GetConfigDir()
 	app := plan[len(plan)-1]
 
@@ -236,6 +243,16 @@ func saveAddition(settings config.CrossPlatformSettings, plan []types.CrossPlatf
 		path, err := applicationConfigPath(userConfigDir, "applications", definition.Category, definition.Name)
 		if err != nil {
 			return err
+		}
+		if replace {
+			existing, err := applicationConfigFiles(userConfigDir, definition.Name)
+			if err != nil {
+				return err
+			}
+			if err := replaceApplicationConfig(definition, path, existing); err != nil {
+				return err
+			}
+			continue
 		}
 		if err := writeNewApplicationConfig(definition, path); err != nil {
 			return err
@@ -288,6 +305,13 @@ This command allows you to:
   • Resolve catalog dependencies and preview configuration changes
   • Validate configuration before saving
 
+Custom tools: use --custom with NAME and per-platform flags
+(--linux-method/--linux-package, --macos-..., --windows-..., --all-...) plus
+optional --<platform>-pre-install/--<platform>-post-install hook commands.
+Methods must have a DevEx package-manager plugin; packages are single
+identifiers, never shell text. Missing fields are prompted for when a terminal
+is attached. --force replaces an existing definition after a backup.
+
 Confirm the preview interactively, or use --yes for unattended changes.
 Use --dry-run to validate and preview without saving. Unknown dependencies
 remain native packages; they are not added as DevEx application definitions.
@@ -303,8 +327,26 @@ Examples:
   devex add --category development
   
   # Search for applications
-  devex add --search docker`,
+  devex add --search docker
+
+  # Define a custom tool that is not in the catalog (preview, then write)
+  devex add mytool --custom --description "My internal tool" \
+    --linux-method apt --linux-package mytool \
+    --macos-method brew --macos-package acme/tap/mytool \
+    --linux-post-install "mytool --version" --dry-run
+  devex add mytool --custom --linux-method apt --linux-package mytool --yes`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if custom, _ := cmd.Flags().GetBool("custom"); custom {
+				return runAddCustom(cmd, args, settings, customAddOptions{
+					DryRun: viper.GetBool("add.dry-run"),
+					Yes:    viper.GetBool("add.yes"),
+					Force:  viper.GetBool("add.force"),
+					Format: viper.GetString("add.format"),
+				})
+			}
+			if err := rejectCustomFlagsWithoutCustom(cmd); err != nil {
+				return err
+			}
 			// If specific app name provided, add it directly
 			if len(args) > 0 {
 				return runAdd(cmd, args[0], settings, viper.GetBool("add.dry-run"), viper.GetBool("add.yes"), viper.GetString("add.format"))
@@ -339,11 +381,12 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVarP(&category, "category", "c", "", "Filter by application category")
+	cmd.Flags().StringVarP(&category, "category", "c", "", "Filter by application category (with --custom: the new application's category)")
 	cmd.Flags().StringVarP(&search, "search", "s", "", "Search for applications")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be added without making changes")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Accept the preview and add dependencies")
 	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
+	registerCustomFlags(cmd)
 	_ = viper.BindPFlag("add.dry-run", cmd.Flags().Lookup("dry-run"))
 	_ = viper.BindPFlag("add.yes", cmd.Flags().Lookup("yes"))
 	_ = viper.BindPFlag("add.format", cmd.Flags().Lookup("format"))

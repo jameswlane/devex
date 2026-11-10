@@ -27,10 +27,17 @@ devex add [application...] [flags]
 | Flag | Short | Type | Default | Description |
 |------|-------|------|---------|-------------|
 | `--install` | `-i` | `bool` | `false` | Install immediately after adding to config |
-| `--category` | `-c` | `string` | | Filter applications by category |
+| `--category` | `-c` | `string` | | Filter applications by category (with `--custom`: the new tool's category, default `development`) |
 | `--search` | `-s` | `string` | | Search applications by name or description |
 | `--interactive` | | `bool` | `true` | Use interactive selection mode |
-| `--force` | `-f` | `bool` | `false` | Add even if already configured |
+| `--force` | | `bool` | `false` | With `--custom`: replace an existing definition of the same name (backed up first) |
+| `--yes` | `-y` | `bool` | `false` | Accept the preview without asking |
+| `--custom` | | `bool` | `false` | Define a tool that is not in the catalog, see [Custom tools](#custom-tools) |
+| `--description` | | `string` | | With `--custom`: description of the tool |
+| `--<platform>-method` | | `string` | | With `--custom`: install method for `linux`, `macos`, `windows` or `all` (all platforms) |
+| `--<platform>-package` | | `string` | | With `--custom`: package identifier for that platform |
+| `--<platform>-pre-install` | | `string` (repeatable) | | With `--custom`: shell command to run before installing on that platform |
+| `--<platform>-post-install` | | `string` (repeatable) | | With `--custom`: shell command to run after installing on that platform |
 | `--dry-run` | `-n` | `bool` | `false` | Show what would be added without executing |
 
 ### Interactive Mode
@@ -107,9 +114,6 @@ Add specific applications directly:
     
     # Add to config only (install later)
     devex add docker
-    
-    # Force add even if already configured
-    devex add docker --force
     ```
   </Tab>
   
@@ -183,6 +187,72 @@ devex add --search "api testing"
 # Preview additions
 devex add docker kubernetes --dry-run
 ```
+
+### Custom tools
+
+A tool that is not in the catalog can be defined with `--custom`. DevEx writes a complete
+cross-platform definition to your user configuration (`~/.local/share/devex/config/applications/<category>/<name>.yaml`)
+and never runs a package manager while doing so. Install it afterwards with `devex install <name>`.
+
+```bash
+# 1. Preview the YAML. Nothing is written.
+devex add mytool --custom \
+  --description "Internal build helper" \
+  --category development \
+  --linux-method apt   --linux-package mytool \
+  --linux-pre-install  "mkdir -p \$HOME/.mytool" \
+  --linux-post-install "mytool --version" \
+  --macos-method brew  --macos-package acme/tap/mytool \
+  --windows-method mise --windows-package mytool \
+  --dry-run
+
+# 2. Write it. Unattended runs need --yes; a terminal asks you to confirm instead.
+devex add mytool --custom ... --yes
+```
+
+The preview shows the exact file that will be written:
+
+```yaml
+name: mytool
+description: Internal build helper
+category: development
+default: false
+linux:
+    install_method: apt
+    install_command: mytool
+    uninstall_command: mytool
+    pre_install:
+        - shell: mkdir -p $HOME/.mytool
+    post_install:
+        - shell: mytool --version
+macos:
+    install_method: brew
+    install_command: acme/tap/mytool
+    uninstall_command: mytool
+windows:
+    install_method: mise
+    install_command: mytool
+    uninstall_command: mytool
+```
+
+**Rules**
+
+- **Methods**: only install methods that have a DevEx package-manager plugin and run on that platform are accepted.
+  An unknown, planned (no plugin yet) or wrong-platform method is rejected with the list of supported methods.
+  Download methods (`curlpipe`, `appimage`) need checksum verification, which flags cannot express; write those in the YAML directly.
+- **Packages**: `--<platform>-package` is a single identifier and is stored as `install_command`. Whitespace, a leading `-`
+  and shell characters (``; | & $ ` ( ) < >`` and quotes) are rejected, so a package name can never smuggle in an argument or a command.
+  Put anything else in a hook.
+- **Hooks**: `--<platform>-pre-install` and `--<platform>-post-install` can be repeated and run in order. They are checked with the same
+  command policy used at install time (`security.yaml` level and overrides), so a hook that would be refused later is refused now.
+  Hooks are kept as separate `shell:` entries; the package name is never interpolated into them.
+- **Platforms**: define any of `linux`, `macos`, `windows`, or `all` (written as `all_platforms`, which takes precedence).
+- **Prompts**: with a terminal attached, `devex add --custom` asks for anything the flags left out (name, description, category,
+  platforms, method, package and optional hooks) and re-asks when a value is invalid. In CI or with `--format json` it never prompts
+  and reports what is missing.
+- **Existing definitions are preserved**: if a tool with that name is already configured, or exists in the catalog, the command stops.
+  `--force` replaces it (as a user override) after the whole configuration tree is backed up under `~/.local/share/devex/backups`;
+  restore it with the usual `devex config` backup commands.
 
 ## devex remove
 
@@ -544,19 +614,7 @@ devex config undo operation 3 --confirm
 
 ### Custom Application Definitions
 
-Add custom applications not in the default catalog:
-
-```bash
-# Add custom application with definition
-devex add custom-tool --define \
-  --name="Custom Tool" \
-  --description="My custom development tool" \
-  --install-method="curlpipe" \
-  --install-command="https://example.com/install.sh"
-
-# Add from custom configuration file
-devex add --from-file ./my-custom-apps.yaml
-```
+Add custom applications not in the default catalog with `devex add NAME --custom`; see [Custom tools](#custom-tools) for the flags and a complete example.
 
 ### Bulk Operations
 

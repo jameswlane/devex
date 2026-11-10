@@ -143,11 +143,11 @@ type InstallCommand struct {
 	Path      []string          `mapstructure:"path" yaml:"path,omitempty"`
 	// Scope defaults to user; system explicitly requests the SDK elevation policy.
 	Scope             string       `mapstructure:"scope" yaml:"scope,omitempty"`
-	Shell             string       `mapstructure:"shell" yaml:"shell"`
-	UpdateShellConfig string       `mapstructure:"update_shell_config" yaml:"update_shell_config"`
-	Copy              *CopyCommand `mapstructure:"copy" yaml:"copy"`
-	Command           string       `mapstructure:"command" yaml:"command"`
-	Sleep             int          `mapstructure:"sleep" yaml:"sleep"`
+	Shell             string       `mapstructure:"shell" yaml:"shell,omitempty"`
+	UpdateShellConfig string       `mapstructure:"update_shell_config" yaml:"update_shell_config,omitempty"`
+	Copy              *CopyCommand `mapstructure:"copy" yaml:"copy,omitempty"`
+	Command           string       `mapstructure:"command" yaml:"command,omitempty"`
+	Sleep             int          `mapstructure:"sleep" yaml:"sleep,omitempty"`
 }
 
 // CopyCommand defines the source and destination for file copying.

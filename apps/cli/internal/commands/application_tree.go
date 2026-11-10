@@ -102,36 +102,90 @@ func migrateApplicationConfig(dir string) error {
 	return nil
 }
 
-func deleteApplicationConfig(dir, name string) error {
-	if err := migrateApplicationConfig(dir); err != nil {
-		return err
-	}
+// applicationConfigFiles returns the per-application files that define name.
+func applicationConfigFiles(dir, name string) ([]string, error) {
 	files, err := config.ConfigurationFiles(dir)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	found := false
+	var matches []string
 	for _, relative := range files {
 		if !strings.HasPrefix(filepath.ToSlash(relative), "applications/") {
 			continue
 		}
 		path := filepath.Join(dir, relative)
-		data, err := os.ReadFile(path)
+		owned, err := fileDefinesApplication(path, name)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		var app types.CrossPlatformApp
-		if err := yaml.Unmarshal(data, &app); err != nil {
-			return fmt.Errorf("parse application %s: %w", path, err)
-		}
-		if strings.EqualFold(app.Name, name) {
-			if err := os.Remove(path); err != nil {
-				return fmt.Errorf("remove application %s: %w", path, err)
-			}
-			found = true
+		if owned {
+			matches = append(matches, path)
 		}
 	}
-	if !found {
+	return matches, nil
+}
+
+// fileDefinesApplication reports whether a configuration file defines name.
+func fileDefinesApplication(path, name string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	var app types.CrossPlatformApp
+	if err := yaml.Unmarshal(data, &app); err != nil {
+		return false, fmt.Errorf("parse application %s: %w", path, err)
+	}
+	return strings.EqualFold(app.Name, name), nil
+}
+
+// replaceApplicationConfig atomically swaps in a new definition for name and
+// then removes any other files that defined it (for example after a category
+// change). The caller must have backed up the tree first.
+func replaceApplicationConfig(app types.CrossPlatformApp, path string, existing []string) error {
+	data, err := yaml.Marshal(app)
+	if err != nil {
+		return fmt.Errorf("marshal application %q: %w", app.Name, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
+		return fmt.Errorf("create configuration directory for application %q at %s: %w", app.Name, path, err)
+	}
+	// The temporary name does not end in .yaml, so a crash cannot leave a loadable stray.
+	temp, err := os.CreateTemp(filepath.Dir(path), ".devex-add-*.tmp")
+	if err != nil {
+		return fmt.Errorf("stage application %q at %s: %w", app.Name, path, err)
+	}
+	_, writeErr := temp.Write(data)
+	if err := errors.Join(writeErr, temp.Chmod(0600), temp.Close()); err != nil {
+		return fmt.Errorf("write application %q at %s: %w", app.Name, path, errors.Join(err, os.Remove(temp.Name())))
+	}
+	if err := os.Rename(temp.Name(), path); err != nil {
+		return fmt.Errorf("replace application %q at %s: %w", app.Name, path, errors.Join(err, os.Remove(temp.Name())))
+	}
+	for _, old := range existing {
+		if filepath.Clean(old) == filepath.Clean(path) {
+			continue
+		}
+		if err := os.Remove(old); err != nil {
+			return fmt.Errorf("remove superseded definition %s: %w", old, err)
+		}
+	}
+	return nil
+}
+
+func deleteApplicationConfig(dir, name string) error {
+	if err := migrateApplicationConfig(dir); err != nil {
+		return err
+	}
+	paths, err := applicationConfigFiles(dir, name)
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove application %s: %w", path, err)
+		}
+	}
+	if len(paths) == 0 {
 		return fmt.Errorf("application %q not found in configuration", name)
 	}
 	return nil
