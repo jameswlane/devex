@@ -248,7 +248,11 @@ func (a *auditApplication) start(step string) func(OperationStatus, error) {
 }
 
 // Audit persistence is deliberately best-effort, including open, retention and close failures.
+var applicationStateMutex sync.Mutex
+
 func writeAudit(event AuditEvent) {
+	applicationStateMutex.Lock()
+	defer applicationStateMutex.Unlock()
 	path, err := ConfiguredDBPath()
 	if err == nil {
 		var store *BoltStore

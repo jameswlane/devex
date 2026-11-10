@@ -61,6 +61,8 @@ func StartApplicationRun(ctx context.Context, apps []types.CrossPlatformApp, set
 	if err != nil {
 		return nil, err
 	}
+	applicationStateMutex.Lock()
+	defer applicationStateMutex.Unlock()
 	store, err := OpenBoltStore(path, 0o600)
 	if err != nil {
 		log.Warn("Installation run state unavailable; this run cannot be resumed", "error", err)
@@ -98,6 +100,8 @@ func (r *ApplicationRun) CompleteApp(ctx context.Context, name string, cause err
 	if r == nil {
 		return nil
 	}
+	applicationStateMutex.Lock()
+	defer applicationStateMutex.Unlock()
 	store, err := OpenBoltStore(r.path, 0o600)
 	if err != nil {
 		return err
@@ -122,6 +126,8 @@ func (r *ApplicationRun) Finish(ctx context.Context, cause error) error {
 	if r == nil {
 		return nil
 	}
+	applicationStateMutex.Lock()
+	defer applicationStateMutex.Unlock()
 	store, err := OpenBoltStore(r.path, 0o600)
 	if err != nil {
 		return err

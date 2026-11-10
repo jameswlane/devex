@@ -107,7 +107,7 @@ func newRunsResumeCmd(repo types.Repository, settings config.CrossPlatformSettin
 			return err
 		}
 		runtime := templateexec.NewExecutionRuntime(store, executor)
-		result, err := runtime.Execute(cmd.Context(), *plan, templateexec.ExecuteOptions{ResumeRunID: run.ID, Source: source})
+		result, err := runtime.Execute(cmd.Context(), *plan, templateexec.ExecuteOptions{Concurrency: installConcurrency(), ResumeRunID: run.ID, Source: source})
 		if result != nil {
 			fmt.Fprintf(cmd.OutOrStdout(), "Resume attempt: %s\n", result.RunID)
 		}

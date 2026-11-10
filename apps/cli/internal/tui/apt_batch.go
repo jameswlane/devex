@@ -172,6 +172,14 @@ func (si *StreamingInstaller) ensureAptLists(ctx context.Context) error {
 // Apps with pre-install steps are left out of the batch because those steps
 // must run before their packages are installed.
 func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.CrossPlatformApp) error {
+	// Dependency graphs and hooks must execute through the scheduler rather than
+	// the eager batch path, which could otherwise install a consumer first.
+	for _, app := range apps {
+		cfg := app.GetOSConfig()
+		if len(cfg.Dependencies)+len(cfg.Conflicts)+len(cfg.PreInstall)+len(cfg.PostInstall)+len(cfg.ConfigFiles)+len(cfg.Themes) > 0 {
+			return nil
+		}
+	}
 	var candidates []types.CrossPlatformApp
 	var allPackages []string
 	for _, app := range apps {
@@ -243,7 +251,7 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 	for _, app := range batchApps {
 		targets = append(targets, app.Name)
 	}
-	// Show APT work while it overlaps the independent lane, including updates.
+	// Show APT preparation before scheduled app work starts.
 	if si.program != nil {
 		for i, app := range apps {
 			for _, batched := range batchApps {

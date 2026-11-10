@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
+
+	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
 
 	"github.com/spf13/viper"
 
@@ -67,30 +70,37 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 	}
 	installed := 0
 	var failures []string
-	for _, app := range apps {
+	var mu sync.Mutex
+	printLine := func(format string, args ...any) { mu.Lock(); defer mu.Unlock(); fmt.Fprintf(out, format, args...) }
+	scheduleErr := scheduler.Run(ctx, scheduler.Applications(apps, func(ctx context.Context, _ int, app types.CrossPlatformApp) error {
 		appCtx, auditFinish := state.BeginApplication(ctx, app.Name, "plain", app)
 		finishAudit := func(cause error) {
 			auditFinish(cause)
-			result = errors.Join(result, run.CompleteApp(ctx, app.Name, cause))
+			recordErr := run.CompleteApp(ctx, app.Name, cause)
+			mu.Lock()
+			defer mu.Unlock()
+			result = errors.Join(result, recordErr)
 		}
 		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) {
 			if existing, lookupErr := repo.GetApp(app.Name); lookupErr == nil && existing != nil {
 				present, queryErr := nativeApplicationInstalled(appCtx, app)
 				if queryErr != nil {
 					finishAudit(queryErr)
-					fmt.Fprintf(out, "failed %s: %v\n", app.Name, queryErr)
+					printLine("failed %s: %v\n", app.Name, queryErr)
+					mu.Lock()
 					failures = append(failures, app.Name)
-					continue
+					mu.Unlock()
+					return queryErr
 				}
 				if present {
 					_ = state.AuditStep(appCtx, "installation", false, func() error { return nil })
 					finishAudit(nil)
-					fmt.Fprintf(out, "skipped %s (already installed)\n", app.Name)
-					continue
+					printLine("skipped %s (already installed)\n", app.Name)
+					return nil
 				}
 			}
 		}
-		fmt.Fprintf(out, "installing %s...\n", app.Name)
+		printLine("installing %s...\n", app.Name)
 		err := bootstrapErr
 		if err == nil {
 			err = ctx.Err()
@@ -114,19 +124,32 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 		}
 		finishAudit(err)
 		if err != nil {
-			fmt.Fprintf(out, "failed %s: %v\n", app.Name, err)
+			printLine("failed %s: %v\n", app.Name, err)
+			mu.Lock()
 			failures = append(failures, app.Name)
-			continue
+			mu.Unlock()
+			return err
 		}
+		mu.Lock()
 		installed++
-		fmt.Fprintf(out, "installed %s\n", app.Name)
-	}
+		mu.Unlock()
+		printLine("installed %s\n", app.Name)
+		return nil
+	}), installConcurrency())
+	result = errors.Join(result, scheduleErr)
 	if ctx.Err() != nil {
 		return errors.Join(result, ctx.Err())
 	}
-	fmt.Fprintf(out, "installed %d of %d applications\n", installed, len(apps))
+	printLine("installed %d of %d applications\n", installed, len(apps))
 	if len(failures) > 0 {
 		return errors.Join(result, fmt.Errorf("failed to install applications: %s", strings.Join(failures, ", ")))
 	}
 	return result
+}
+
+func installConcurrency() int {
+	if !viper.IsSet("install-concurrency") {
+		return 1
+	}
+	return viper.GetInt("install-concurrency")
 }
