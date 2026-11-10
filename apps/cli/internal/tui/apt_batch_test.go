@@ -18,6 +18,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
+	"github.com/spf13/viper"
 )
 
 func aptApp(name, packages string, sources ...types.AptSource) types.CrossPlatformApp {
@@ -46,7 +47,8 @@ var _ = Describe("APT batching", func() {
 
 	BeforeEach(func() {
 		// Bash stands in for a shell pre-install step; the recorder isolates PATH.
-		recorder = sdktest.NewRecorder(GinkgoT(), "apt-get", "bash", "flatpak")
+		recorder = sdktest.NewRecorder(GinkgoT(), "apt-get", "bash", "flatpak", "mise")
+		recorder.Script("flatpak", []string{"info", "org.example.App"}, sdktest.Response{ExitCode: 1})
 		repo = &MockRepository{}
 		installer = &StreamingInstaller{
 			ctx:      context.Background(),
@@ -234,6 +236,108 @@ var _ = Describe("APT batching", func() {
 		Expect(recorder.Calls("bash")).To(HaveLen(1))
 		Expect(repo.installedApps).To(Equal([]string{"bat"}))
 	})
+	It("batches several apt apps with post-install hooks and runs every hook", func() {
+		a, b := aptApp("bat", "bat"), aptApp("fzf", "fzf")
+		a.AllPlatforms.PostInstall = []types.InstallCommand{{Shell: "true"}}
+		b.AllPlatforms.PostInstall = []types.InstallCommand{{Shell: "false"}}
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{a, b}, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(aptGetCalls("install")).To(HaveLen(1))
+		Expect(aptGetCalls("install")[0].Args).To(Equal([]string{"install", "-y", "bat", "fzf"}))
+		Expect(recorder.Calls("bash")).To(HaveLen(2))
+	})
+	It("detects installed apt apps even when another app has a pre-install hook", func() {
+		installedPkgs["bat"] = true
+		a := aptApp("fzf", "fzf")
+		a.AllPlatforms.PreInstall = []types.InstallCommand{{Shell: "true"}}
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{aptApp("bat", "bat"), a}, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(repo.installedApps).To(Equal([]string{"fzf"}))
+	})
+	It("uses the configured list cache age", func() {
+		old := viper.Get("apt-lists-max-age")
+		DeferCleanup(func() { viper.Set("apt-lists-max-age", old) })
+		viper.Set("apt-lists-max-age", "2h")
+		path := GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(path, "mirror_Packages"), nil, 0600)).To(Succeed())
+		age := time.Now().Add(-time.Hour)
+		Expect(os.Chtimes(path, age, age)).To(Succeed())
+		installer.apt.listsPath = path
+		Expect(installer.ensureAptLists(context.Background())).To(Succeed())
+		Expect(aptGetCalls("update")).To(BeEmpty())
+	})
+	It("batches flatpak apps and preserves per-app recording", func() {
+		a, b := aptApp("one", "org.test.One"), aptApp("two", "org.test.Two")
+		a.AllPlatforms.InstallMethod = "flatpak"
+		b.AllPlatforms.InstallMethod = "flatpak"
+		recorder.Script("flatpak", []string{"info", "org.test.One"}, sdktest.Response{ExitCode: 1})
+		recorder.Script("flatpak", []string{"info", "org.test.Two"}, sdktest.Response{ExitCode: 1})
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{a, b}, config.CrossPlatformSettings{})).To(Succeed())
+		var installs []sdktest.Call
+		for _, call := range recorder.Calls("flatpak") {
+			if call.Args[0] == "install" {
+				installs = append(installs, call)
+			}
+		}
+		Expect(installs).To(Equal([]sdktest.Call{{Args: []string{"install", "-y", "org.test.One", "org.test.Two"}}}))
+		Expect(repo.installedApps).To(ConsistOf("one", "two"))
+	})
+
+	It("falls back to individual flatpak installs after a failed batch", func() {
+		a, b := aptApp("one", "org.test.One"), aptApp("two", "org.test.Two")
+		a.AllPlatforms.InstallMethod = "flatpak"
+		b.AllPlatforms.InstallMethod = "flatpak"
+		recorder.Script("flatpak", []string{"info", "org.test.One"}, sdktest.Response{ExitCode: 1})
+		recorder.Script("flatpak", []string{"info", "org.test.Two"}, sdktest.Response{ExitCode: 1})
+		recorder.Script("flatpak", []string{"install", "-y", "org.test.One", "org.test.Two"}, sdktest.Response{ExitCode: 1})
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{a, b}, config.CrossPlatformSettings{})).To(Succeed())
+		var installs []sdktest.Call
+		for _, call := range recorder.Calls("flatpak") {
+			if call.Args[0] == "install" {
+				installs = append(installs, call)
+			}
+		}
+		Expect(installs).To(HaveLen(3))
+		Expect(repo.installedApps).To(ConsistOf("one", "two"))
+	})
+	It("skips installed mise and flatpak apps before running hooks", func() {
+		a, b := aptApp("node", "node@22"), aptApp("desktop", "org.test.App")
+		a.AllPlatforms.InstallMethod = "mise"
+		b.AllPlatforms.InstallMethod = "flatpak"
+		a.AllPlatforms.PostInstall = []types.InstallCommand{{Shell: "true"}}
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{a, b}, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(repo.installedApps).To(BeEmpty())
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+	})
+	It("batches mise activation while preserving the global-use command", func() {
+		a, b := aptApp("node", "node@22"), aptApp("python", "python@3.13")
+		a.AllPlatforms.InstallMethod = "mise"
+		b.AllPlatforms.InstallMethod = "mise"
+		recorder.Script("mise", []string{"where", "node@22"}, sdktest.Response{ExitCode: 1})
+		recorder.Script("mise", []string{"where", "python@3.13"}, sdktest.Response{ExitCode: 1})
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{a, b}, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(recorder.Calls("bash")).To(HaveLen(1))
+		Expect(recorder.Calls("bash")[0].Args[1]).To(ContainSubstring("mise use --global node@22 python@3.13"))
+	})
+
+	It("does not rewrite an unchanged source or invalidate fresh lists", func() {
+		source := filepath.Join(GinkgoT().TempDir(), "example.list")
+		Expect(os.WriteFile(source, []byte("deb https://example.test stable main\n"), 0600)).To(Succeed())
+		installer.apt.listsPath = GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(installer.apt.listsPath, "mirror_Packages"), nil, 0600)).To(Succeed())
+		Expect(installer.addAptSources(context.Background(), types.OSConfig{AptSources: []types.AptSource{{SourceName: source, SourceRepo: "deb https://example.test stable main"}}})).To(Succeed())
+		Expect(installer.ensureAptLists(context.Background())).To(Succeed())
+		Expect(installer.apt.sourcesAdded).To(BeEmpty())
+		Expect(aptGetCalls("update")).To(BeEmpty())
+	})
+	It("refreshes populated lists when cache reuse is disabled", func() {
+		old := viper.Get("apt-lists-max-age")
+		DeferCleanup(func() { viper.Set("apt-lists-max-age", old) })
+		viper.Set("apt-lists-max-age", "0")
+		installer.apt.listsPath = GinkgoT().TempDir()
+		Expect(os.WriteFile(filepath.Join(installer.apt.listsPath, "mirror_Packages"), nil, 0600)).To(Succeed())
+		Expect(installer.ensureAptLists(context.Background())).To(Succeed())
+		Expect(aptGetCalls("update")).To(HaveLen(1))
+	})
+
 	It("uses a filesystem check for existing key files", func() {
 		path := filepath.Join(GinkgoT().TempDir(), "key.gpg")
 		Expect(os.WriteFile(path, []byte("existing"), 0600)).To(Succeed())

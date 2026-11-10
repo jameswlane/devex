@@ -13,6 +13,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/spf13/viper"
 )
 
 // aptPackageName matches Debian package names (policy 5.6.1) plus an optional
@@ -101,6 +102,15 @@ func (si *StreamingInstaller) addAptSources(ctx context.Context, osConfig types.
 		if si.apt.has(si.apt.sourcesAdded, source.SourceName) {
 			continue
 		}
+		if content, err := os.ReadFile(source.SourceName); err == nil && strings.TrimSpace(string(content)) == strings.TrimSpace(source.SourceRepo) {
+			keyReady := source.KeySource == ""
+			if info, err := os.Stat(source.KeyName); err == nil && info.Mode().IsRegular() {
+				keyReady = true
+			}
+			if keyReady {
+				continue
+			}
+		}
 		si.sendLog("INFO", fmt.Sprintf("Adding APT source: %s", source.SourceName))
 
 		// SECURITY: Validate GPG key with fingerprint if provided
@@ -145,7 +155,7 @@ func (si *StreamingInstaller) ensureAptLists(ctx context.Context) error {
 		si.apt.mu.Unlock()
 		if info, err := os.Stat(path); err == nil && !sourcesChanged {
 			age := now().Sub(info.ModTime())
-			fresh = age >= 0 && age < 15*time.Minute && populatedAptLists(path)
+			fresh = age >= 0 && age < aptListsMaxAge() && populatedAptLists(path)
 		}
 		if fresh {
 			si.sendLog("INFO", "Package lists are fresh; skipping apt-get update")
@@ -172,18 +182,14 @@ func (si *StreamingInstaller) ensureAptLists(ctx context.Context) error {
 // Apps with pre-install steps are left out of the batch because those steps
 // must run before their packages are installed.
 func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.CrossPlatformApp) error {
-	// Dependency graphs and hooks must execute through the scheduler rather than
-	// the eager batch path, which could otherwise install a consumer first.
-	for _, app := range apps {
-		cfg := app.GetOSConfig()
-		if len(cfg.Dependencies)+len(cfg.Conflicts)+len(cfg.PreInstall)+len(cfg.PostInstall)+len(cfg.ConfigFiles)+len(cfg.Themes) > 0 {
-			return nil
-		}
+	// Detect installed apps even when dependency ordering prevents batching.
+	for name := range InstalledApps(ctx, apps) {
+		si.apt.mark(&si.apt.preinstalled, name)
 	}
 	var candidates []types.CrossPlatformApp
 	var allPackages []string
 	for _, app := range apps {
-		if !isAptApp(app) {
+		if !isAptApp(app) || app.Validate() != nil {
 			continue
 		}
 		if err := system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { si.sendLog("INFO", message) }); err != nil {
@@ -225,6 +231,20 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 		return err
 	}
 
+	// Prepare every known source before any app can request the once-only update,
+	// including runs which must retain per-app dependency/hook ordering.
+	for _, app := range toBatch {
+		if err := state.AuditTargetsStep(ctx, []string{app.Name}, "apt-sources", func() error { return si.addAptSources(ctx, app.GetOSConfig()) }); err != nil {
+			return fmt.Errorf("prepare APT sources for %s: %w", app.Name, err)
+		}
+	}
+	// Pre-install hooks and dependency graphs must retain scheduler ordering.
+	for _, app := range apps {
+		cfg := app.GetOSConfig()
+		if len(cfg.Dependencies)+len(cfg.Conflicts)+len(cfg.PreInstall)+len(cfg.ConfigFiles)+len(cfg.Themes) > 0 {
+			return nil
+		}
+	}
 	var batchApps []types.CrossPlatformApp
 	var batchPackages []string
 	for _, app := range toBatch {
@@ -339,4 +359,13 @@ func populatedAptLists(path string) bool {
 		}
 	}
 	return false
+}
+
+// aptListsMaxAge uses the same duration syntax as --apt-lists-max-age.
+// Zero disables cache reuse. Invalid config values conservatively refresh.
+func aptListsMaxAge() time.Duration {
+	if !viper.IsSet("apt-lists-max-age") {
+		return 15 * time.Minute
+	}
+	return viper.GetDuration("apt-lists-max-age")
 }
