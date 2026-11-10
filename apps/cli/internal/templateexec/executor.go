@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
@@ -34,6 +37,7 @@ type ExecutionRuntime struct {
 }
 
 type ExecuteOptions struct {
+	Concurrency           int
 	ResumeRunID           string
 	Source                string
 	DryRun                bool
@@ -171,71 +175,98 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	}
 	runFailed := false
 	runError := ""
+	var resultMutex sync.Mutex
+	tasks := make([]scheduler.Task, len(plan.Steps))
 	for index, step := range plan.Steps {
-		if err := ctx.Err(); err != nil {
-			return result, finishFailure(err)
+		exclusive := (step.Type != templates.StepTypeApp && step.Type != templates.StepTypePlugin) || !strings.HasPrefix(step.Request.Plugin, "package-manager-")
+		if app := step.App; app != nil {
+			exclusive = exclusive || len(app.PreInstall)+len(app.PostInstall)+len(app.ConfigFiles)+len(app.Themes)+len(app.Conflicts) > 0
 		}
-		if step.Idempotent && completed[step.ID] {
-			if err := r.inheritStep(ctx, run, step, index); err != nil {
-				return result, finishFailure(err)
+		tasks[index] = scheduler.Task{
+			ID: step.ID, DependsOn: step.DependsOn,
+			Resource: scheduler.ManagerResource(step.Request.Plugin), Exclusive: exclusive,
+			IgnoreFailure: step.OnError == templates.ErrorPolicyContinue,
+			StopOnError:   step.OnError != templates.ErrorPolicyContinue,
+		}
+		tasks[index].Run = func(ctx context.Context) error {
+			if err := ctx.Err(); err != nil {
+				return err
 			}
-			continue
-		}
-		opID := operationID(run.ID, step.ID, index)
-		persistedStep := step
-		if index < len(redactedPlan.Steps) {
-			persistedStep = redactedPlan.Steps[index]
-		}
-		if err := r.startStep(ctx, run, persistedStep, opID); err != nil {
-			return result, finishFailure(err)
-		}
-
-		compensation, err := r.prepareCompensation(ctx, step)
-		if err != nil {
-			return result, finishFailure(err)
-		}
-		journal := map[string]any{compensationKey: compensation}
-		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusRunning, journal, ""); err != nil {
-			return result, finishFailure(err)
-		}
-		var outputs map[string]any
-		if compensation.Kind == "noop" && (step.Type == templates.StepTypeApp || step.Type == templates.StepTypePlugin) {
-			outputs = map[string]any{"skipped": "already installed"}
-		} else {
-			outputs, err = r.executeStep(ctx, step)
-		}
-		if outputs == nil {
-			outputs = make(map[string]any)
-		}
-		persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
-		if persistedOutputs == nil {
-			persistedOutputs = make(map[string]any)
-		}
-		persistedOutputs[compensationKey] = compensation
-		if err != nil {
-			if completeErr := r.finishStep(ctx, opID, persistedOutputs, err); completeErr != nil {
-				return result, finishFailure(errors.Join(err, completeErr))
-			}
-			if ctx.Err() != nil {
-				return result, finishFailure(errors.Join(err, ctx.Err()))
-			}
-			if step.OnError == templates.ErrorPolicyContinue {
-				runFailed = true
-				if runError == "" {
-					runError = err.Error()
+			if step.Idempotent && completed[step.ID] {
+				if err := r.inheritStep(ctx, run, step, index); err != nil {
+					return err
 				}
-				continue
+				return nil
 			}
-			return result, finishFailure(err)
-		}
+			opID := operationID(run.ID, step.ID, index)
+			persistedStep := step
+			if index < len(redactedPlan.Steps) {
+				persistedStep = redactedPlan.Steps[index]
+			}
+			if err := r.startStep(ctx, run, persistedStep, opID); err != nil {
+				return err
+			}
 
-		if err := r.finishStep(ctx, opID, persistedOutputs, nil); err != nil {
-			return result, finishFailure(err)
+			compensation, err := r.prepareCompensation(ctx, step)
+			if err != nil {
+				return err
+			}
+			journal := map[string]any{compensationKey: compensation}
+			if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusRunning, journal, ""); err != nil {
+				return err
+			}
+			var outputs map[string]any
+			if compensation.Kind == "noop" && (step.Type == templates.StepTypeApp || step.Type == templates.StepTypePlugin) {
+				outputs = map[string]any{"skipped": "already installed"}
+			} else {
+				outputs, err = r.executeStep(ctx, step)
+			}
+			if outputs == nil {
+				outputs = make(map[string]any)
+			}
+			persistedOutputs := templates.RedactMapWithSensitiveValues(outputs, plan.SensitiveValues)
+			if persistedOutputs == nil {
+				persistedOutputs = make(map[string]any)
+			}
+			persistedOutputs[compensationKey] = compensation
+			if err != nil {
+				if completeErr := r.finishStep(ctx, opID, persistedOutputs, err); completeErr != nil {
+					return errors.Join(err, completeErr)
+				}
+				if ctx.Err() != nil {
+					return errors.Join(err, ctx.Err())
+				}
+				if step.OnError == templates.ErrorPolicyContinue {
+					resultMutex.Lock()
+					runFailed = true
+					if runError == "" {
+						runError = err.Error()
+					}
+					resultMutex.Unlock()
+					return err
+				}
+				return err
+			}
+
+			if err := r.finishStep(ctx, opID, persistedOutputs, nil); err != nil {
+				return err
+			}
+			if err := r.recordResources(ctx, run.ID, plan.TemplateID, persistedStep, persistedOutputs); err != nil {
+				return err
+			}
+			resultMutex.Lock()
+			result.StepsExecuted++
+			resultMutex.Unlock()
+
+			return nil
 		}
-		if err := r.recordResources(ctx, run.ID, plan.TemplateID, persistedStep, persistedOutputs); err != nil {
-			return result, finishFailure(err)
-		}
-		result.StepsExecuted++
+	}
+	limit := opts.Concurrency
+	if limit == 0 {
+		limit = 1
+	}
+	if err := scheduler.Run(ctx, tasks, limit); err != nil {
+		return result, finishFailure(err)
 	}
 
 	runStatus := state.RunStatusSucceeded

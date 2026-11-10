@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -90,9 +91,9 @@ var _ = Describe("APT batching", func() {
 		return calls
 	}
 
-	It("runs the independent lane during a blocked APT update", func() {
+	It("finishes APT preparation before scheduled installations", func() {
 		signal := make(chan struct{})
-		installer.executor = &overlappingExecutor{CommandExecutor: NewDefaultCommandExecutor(), independent: signal}
+		installer.executor = &preparedExecutor{CommandExecutor: NewDefaultCommandExecutor(), prepared: signal}
 		app := aptApp("desktop", "org.example.App")
 		app.AllPlatforms.InstallMethod = "flatpak"
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -249,22 +250,22 @@ var _ = Describe("APT batching", func() {
 	})
 })
 
-// A handshake makes serial execution fail without relying on elapsed timings.
-type overlappingExecutor struct {
+// The executor checks observable preparation order without timing assumptions.
+type preparedExecutor struct {
 	CommandExecutor
-	independent chan struct{}
+	prepared chan struct{}
 }
 
-func (e *overlappingExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
+func (e *preparedExecutor) ExecuteCommand(ctx context.Context, command string) (*exec.Cmd, error) {
 	if strings.Contains(command, "apt-get update") {
-		select {
-		case <-e.independent:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		close(e.prepared)
 	}
 	if strings.HasPrefix(command, "flatpak install") {
-		close(e.independent)
+		select {
+		case <-e.prepared:
+		default:
+			return nil, fmt.Errorf("app started before APT preparation")
+		}
 	}
 	return e.CommandExecutor.ExecuteCommand(ctx, command)
 }

@@ -81,6 +81,9 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 				}
 				return err
 			}
+			if viper.GetInt("install-concurrency") < 1 {
+				return fmt.Errorf("install-concurrency must be at least 1")
+			}
 			if cmd.HasParent() && requiresCatalog(cmd) {
 				if err := loadCommandCatalog(cmd, settings); err != nil {
 					return err
@@ -190,6 +193,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.SetHelpCommand(NewHelpCmd(repo, settings))
 
 	// Define persistent flags (available to all subcommands)
+	cmd.PersistentFlags().Int("install-concurrency", 1, "Maximum concurrent installations (at least 1)")
+	_ = viper.BindPFlag("install-concurrency", cmd.PersistentFlags().Lookup("install-concurrency"))
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable debug logging unless log-level is configured")
 	cmd.PersistentFlags().BoolP("quiet", "q", false, "Suppress routine logs and notifications; preserve errors, results and consent prompts")
 	cmd.PersistentFlags().Bool("dry-run", false, "Show what would be done without executing")
@@ -292,6 +297,7 @@ func loadCLIConfig(cfgFile string) error {
 // setConfigurationDefaults sets default values for configuration options
 func setConfigurationDefaults() {
 	// Core application defaults
+	viper.SetDefault("install-concurrency", 1)
 	viper.SetDefault("verbose", false)
 	viper.SetDefault("quiet", false)
 	viper.SetDefault("dry-run", false)

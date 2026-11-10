@@ -98,7 +98,7 @@ func executeTemplateLifecycle(ctx context.Context, idOrPath string, action templ
 		return err
 	}
 	execRuntime := templateexec.NewExecutionRuntime(store, pluginExecutor)
-	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{Source: idOrPath})
+	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{Concurrency: installConcurrency(), Source: idOrPath})
 	reportRollback(os.Stderr, result)
 	if err != nil {
 		if action == templates.LifecycleStatus && len(resources) > 0 {

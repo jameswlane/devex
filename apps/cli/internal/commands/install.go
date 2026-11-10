@@ -313,7 +313,7 @@ func executeTemplateInstall(ctx context.Context, idOrPath string, opts templateI
 		return err
 	}
 	execRuntime := templateexec.NewExecutionRuntime(store, pluginExecutor)
-	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{Source: idOrPath, DryRun: opts.DryRun, RollbackOnFailure: viper.GetBool("rollback-on-failure")})
+	result, err := execRuntime.Execute(ctx, *plan, templateexec.ExecuteOptions{Concurrency: installConcurrency(), Source: idOrPath, DryRun: opts.DryRun, RollbackOnFailure: viper.GetBool("rollback-on-failure")})
 	reportRollback(os.Stderr, result)
 	if err != nil {
 		return err
