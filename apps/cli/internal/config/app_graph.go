@@ -69,6 +69,30 @@ func ClassifyInstallMethod(method string) InstallMethodSupport {
 	}
 }
 
+// SupportedInstallMethods lists install methods that have a package-manager
+// plugin. A non-empty platform (linux, macos, windows) limits the list to
+// methods the plugin supports there; all_platforms or "" returns every method.
+func SupportedInstallMethods(platform string) []string {
+	var methods []string
+	for _, method := range sortedKeys(pluginInstallMethods) {
+		if InstallMethodSupportsPlatform(method, platform) {
+			methods = append(methods, method)
+		}
+	}
+	return methods
+}
+
+// InstallMethodSupportsPlatform reports whether a plugin-backed method can
+// install on a platform key. Unknown methods and all_platforms are not
+// restricted here; callers classify the method separately.
+func InstallMethodSupportsPlatform(method, platform string) bool {
+	capabilities := pluginInstallMethods[method]
+	if len(capabilities) == 0 {
+		return false
+	}
+	return platform == "" || platform == "all_platforms" || slices.Contains(capabilities, platform)
+}
+
 // platformConfigs returns an app's non-empty platform entries by key.
 func platformConfigs(app types.CrossPlatformApp) map[string]types.OSConfig {
 	configs := map[string]types.OSConfig{}

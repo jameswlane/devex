@@ -85,53 +85,82 @@ func planAddition(ctx context.Context, settings config.CrossPlatformSettings, na
 	if err := visit(target); err != nil {
 		return nil, err
 	}
-	// Preflight destination collisions before creating backup/undo state.
+	if err := checkPlanCollisions(settings, configured, plan, nil); err != nil {
+		return nil, err
+	}
+	if err := validatePlan(ctx, settings, configured, plan, false); err != nil {
+		return nil, err
+	}
+	return plan, nil
+}
+
+// checkPlanCollisions preflights destination collisions before backup/undo state
+// is created. Applications named in replacing may overwrite their own files.
+func checkPlanCollisions(settings config.CrossPlatformSettings, configured, plan []types.CrossPlatformApp, replacing map[string]bool) error {
 	for _, app := range plan {
 		path, err := applicationConfigPath(settings.GetConfigDir(), "applications", app.Category, app.Name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if _, err := os.Stat(path); err == nil {
-			return nil, fmt.Errorf("configuration path %s already exists; rename the existing file or change the application's name or category, then retry", path)
+			if replacing[strings.ToLower(app.Name)] {
+				if owned, ownedErr := fileDefinesApplication(path, app.Name); ownedErr == nil && owned {
+					continue
+				}
+			}
+			return fmt.Errorf("configuration path %s already exists; rename the existing file or change the application's name or category, then retry", path)
 		} else if !os.IsNotExist(err) {
-			return nil, err
+			return err
 		}
 	}
 	// Also check for collisions with legacy files that migration will materialize.
 	for _, app := range configured {
+		if replacing[strings.ToLower(app.Name)] {
+			continue
+		}
 		oldPath, _ := applicationConfigPath(settings.GetConfigDir(), "applications", app.Category, app.Name)
 		for _, added := range plan {
 			newPath, _ := applicationConfigPath(settings.GetConfigDir(), "applications", added.Category, added.Name)
 			if filepath.Clean(oldPath) == filepath.Clean(newPath) {
-				return nil, fmt.Errorf("configuration path %s already exists; rename the existing file before adding %q", newPath, added.Name)
+				return fmt.Errorf("configuration path %s already exists; rename the existing file before adding %q", newPath, added.Name)
 			}
 		}
 	}
-	// Serialize candidates so required-field checks use the same schema path as disk config.
+	return nil
+}
+
+// validatePlan serializes candidates so required-field checks use the same
+// schema path as disk config, then validates their effective merge. Replacements
+// take the highest precedence so the old definition cannot shadow the candidate.
+func validatePlan(ctx context.Context, settings config.CrossPlatformSettings, configured, plan []types.CrossPlatformApp, replacing bool) error {
 	staged, err := os.MkdirTemp("", "devex-add-validation-")
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer os.RemoveAll(staged)
 	for _, app := range append(append([]types.CrossPlatformApp{}, configured...), plan...) {
 		path, err := applicationConfigPath(staged, "applications", app.Category, app.Name)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if err := writeNewApplicationConfig(app, path); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	candidate := config.CrossPlatformSettings{HomeDir: settings.HomeDir, ApplicationOverrides: []types.CrossPlatformApp{}}
 	dirs := config.EffectiveConfigDirs(settings)
-	dirs = append([]string{dirs[0], staged}, dirs[1:]...)
+	if replacing {
+		dirs = append(dirs, staged)
+	} else {
+		dirs = append([]string{dirs[0], staged}, dirs[1:]...)
+	}
 	// Validate the serialized selection independently, then its effective merge.
 	result, err := config.ValidateConfigDirs(ctx, candidate, []string{staged}, false)
 	if err == nil && result.Valid {
 		result, err = config.ValidateConfigDirs(ctx, candidate, dirs, false)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if !result.Valid {
 		var messages []string
@@ -140,8 +169,7 @@ func planAddition(ctx context.Context, settings config.CrossPlatformSettings, na
 				messages = append(messages, fmt.Sprintf("%s: %s: %s", diagnostic.File, diagnostic.Field, diagnostic.Message))
 			}
 		}
-		return nil, fmt.Errorf("configuration validation failed: %s", strings.Join(messages, "; "))
+		return fmt.Errorf("configuration validation failed: %s", strings.Join(messages, "; "))
 	}
-
-	return plan, nil
+	return nil
 }
