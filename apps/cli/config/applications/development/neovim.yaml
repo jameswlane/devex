@@ -103,6 +103,7 @@ windows:
           destination: ~/.config/nvim/lua/plugins/theme.lua
 linux:
   install_method: curlpipe
+  installed_binary: nvim
   download_url: https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
   destination: /opt
   official_support: true

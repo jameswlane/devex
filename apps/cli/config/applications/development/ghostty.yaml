@@ -99,6 +99,7 @@ linux:
       official_support: false
     - install_method: appimage
       install_command: Ghostty.AppImage
+      installed_binary: Ghostty.AppImage
       uninstall_command: Ghostty.AppImage
       download_url: https://github.com/ghostty-appimage/ghostty-appimage/releases/latest
       destination: ~/Applications/

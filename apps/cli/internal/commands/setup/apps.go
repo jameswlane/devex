@@ -36,19 +36,22 @@ func (m *SetupModel) getMiseApp() *types.CrossPlatformApp {
 		Name:        "mise",
 		Description: "Development environment manager for programming languages",
 		Linux: types.OSConfig{
-			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run",
-			InstallCommand: "curl https://mise.run | sh",
+			InstallMethod:   "curlpipe",
+			DownloadURL:     "https://mise.run",
+			InstallCommand:  "curl https://mise.run | sh",
+			InstalledBinary: "mise",
 		},
 		MacOS: types.OSConfig{
-			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run",
-			InstallCommand: "curl https://mise.run | sh",
+			InstallMethod:   "curlpipe",
+			DownloadURL:     "https://mise.run",
+			InstallCommand:  "curl https://mise.run | sh",
+			InstalledBinary: "mise",
 		},
 		Windows: types.OSConfig{
-			InstallMethod:  "curlpipe",
-			DownloadURL:    "https://mise.run",
-			InstallCommand: "curl https://mise.run | sh",
+			InstallMethod:   "curlpipe",
+			DownloadURL:     "https://mise.run",
+			InstallCommand:  "curl https://mise.run | sh",
+			InstalledBinary: "mise",
 		},
 	}
 }

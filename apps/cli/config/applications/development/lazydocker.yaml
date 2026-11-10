@@ -39,6 +39,7 @@ windows:
     - docker
 linux:
   install_method: curlpipe
+  installed_binary: lazydocker
   install_command: curl https://raw.githubusercontent.com/jesseduffield/lazydocker/master/scripts/install_update_linux.sh | bash
   uninstall_command: rm -f $HOME/.local/bin/lazydocker
   official_support: true
