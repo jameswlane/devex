@@ -104,6 +104,12 @@ var _ = Describe("Add custom applications", func() {
 		Expect(apps).To(ConsistOf(HaveField("AllPlatforms.InstallCommand", "tool@1.2")))
 	})
 
+	It("rejects all_platforms methods that do not run on every platform", func() {
+		err := execute("tool", "--custom", "--all-method", "apt", "--all-package", "tool", "--yes")
+		Expect(err).To(MatchError(And(ContainSubstring(`"apt" is not available on this platform`), ContainSubstring("mise"), Not(ContainSubstring("brew")))))
+		unchanged()
+	})
+
 	It("shows the YAML on dry run and writes nothing", func() {
 		Expect(execute(with("--dry-run", "--linux-post-install", "mytool --version")...)).To(Succeed())
 		Expect(output.String()).To(And(ContainSubstring("name: mytool"), ContainSubstring("install_method: apt"), ContainSubstring("shell: mytool --version"), ContainSubstring("Would add: mytool")))

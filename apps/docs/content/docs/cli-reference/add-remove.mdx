@@ -114,9 +114,6 @@ Add specific applications directly:
     
     # Add to config only (install later)
     devex add docker
-    
-    # Force add even if already configured
-    devex add docker --force
     ```
   </Tab>
   
@@ -244,7 +241,7 @@ windows:
   An unknown, planned (no plugin yet) or wrong-platform method is rejected with the list of supported methods.
   Download methods (`curlpipe`, `appimage`) need checksum verification, which flags cannot express; write those in the YAML directly.
 - **Packages**: `--<platform>-package` is a single identifier and is stored as `install_command`. Whitespace, a leading `-`
-  and shell characters (`; | & $ \` ( ) < >` and quotes) are rejected, so a package name can never smuggle in an argument or a command.
+  and shell characters (``; | & $ ` ( ) < >`` and quotes) are rejected, so a package name can never smuggle in an argument or a command.
   Put anything else in a hook.
 - **Hooks**: `--<platform>-pre-install` and `--<platform>-post-install` can be repeated and run in order. They are checked with the same
   command policy used at install time (`security.yaml` level and overrides), so a hook that would be refused later is refused now.
