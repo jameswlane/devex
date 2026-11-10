@@ -41,18 +41,22 @@ const (
 )
 
 type TemplateRun struct {
-	ID              string                  `json:"id"`
-	TemplateID      string                  `json:"template_id"`
-	TemplateVersion string                  `json:"template_version"`
-	Action          LifecycleAction         `json:"action"`
-	Inputs          map[string]any          `json:"inputs,omitempty"`
-	Plan            templates.ExecutionPlan `json:"plan"`
-	Status          RunStatus               `json:"status"`
-	Hostname        string                  `json:"hostname,omitempty"`
-	Platform        map[string]string       `json:"platform,omitempty"`
-	StartedAt       time.Time               `json:"started_at"`
-	CompletedAt     *time.Time              `json:"completed_at,omitempty"`
-	Error           string                  `json:"error,omitempty"`
+	Fingerprint      string                  `json:"fingerprint,omitempty"`
+	ResumeOf         string                  `json:"resume_of,omitempty"`
+	Source           string                  `json:"source,omitempty"`
+	ApplicationNames []string                `json:"application_names,omitempty"`
+	ID               string                  `json:"id"`
+	TemplateID       string                  `json:"template_id"`
+	TemplateVersion  string                  `json:"template_version"`
+	Action           LifecycleAction         `json:"action"`
+	Inputs           map[string]any          `json:"inputs,omitempty"`
+	Plan             templates.ExecutionPlan `json:"plan"`
+	Status           RunStatus               `json:"status"`
+	Hostname         string                  `json:"hostname,omitempty"`
+	Platform         map[string]string       `json:"platform,omitempty"`
+	StartedAt        time.Time               `json:"started_at"`
+	CompletedAt      *time.Time              `json:"completed_at,omitempty"`
+	Error            string                  `json:"error,omitempty"`
 }
 
 type ManagedResource struct {

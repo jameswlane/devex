@@ -34,6 +34,8 @@ type ExecutionRuntime struct {
 }
 
 type ExecuteOptions struct {
+	ResumeRunID           string
+	Source                string
 	DryRun                bool
 	RedactedPlan          *templates.ExecutionPlan
 	LockStaleTimeout      time.Duration
@@ -84,6 +86,14 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	if r.Store == nil {
 		return nil, fmt.Errorf("state store is required")
 	}
+	fingerprint, err := PlanFingerprint(plan)
+	if err != nil {
+		return nil, err
+	}
+	completed, err := r.resumeSteps(ctx, plan, opts.ResumeRunID, fingerprint)
+	if err != nil {
+		return nil, err
+	}
 	redactedPlan := templates.RedactPlanWithSensitiveValues(plan)
 	if opts.RedactedPlan != nil {
 		redactedPlan = *opts.RedactedPlan
@@ -116,6 +126,7 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	}
 
 	run := state.TemplateRun{
+		Fingerprint: fingerprint, ResumeOf: opts.ResumeRunID, Source: opts.Source,
 		ID:              plan.ID,
 		TemplateID:      plan.TemplateID,
 		TemplateVersion: plan.TemplateVersion,
@@ -152,7 +163,7 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 			result.Rollback, recoveryErr = r.rollback(cleanupCtx, run, false)
 		}
 		status := state.RunStatusFailed
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || errors.Is(cause, context.Canceled) || errors.Is(cause, context.DeadlineExceeded) {
 			status = state.RunStatusCanceled
 		}
 		recordErr := r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, status, cause.Error())
@@ -164,21 +175,18 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		if err := ctx.Err(); err != nil {
 			return result, finishFailure(err)
 		}
+		if step.Idempotent && completed[step.ID] {
+			if err := r.inheritStep(ctx, run, step, index); err != nil {
+				return result, finishFailure(err)
+			}
+			continue
+		}
 		opID := operationID(run.ID, step.ID, index)
 		persistedStep := step
 		if index < len(redactedPlan.Steps) {
 			persistedStep = redactedPlan.Steps[index]
 		}
-		if err := r.Store.RecordOperation(ctx, state.OperationRecord{
-			ID:         opID,
-			RunID:      run.ID,
-			TemplateID: run.TemplateID,
-			StepID:     step.ID,
-			Action:     run.Action,
-			Request:    persistedStep.Request,
-			Status:     state.OperationStatusRunning,
-			StartedAt:  r.now(),
-		}); err != nil {
+		if err := r.startStep(ctx, run, persistedStep, opID); err != nil {
 			return result, finishFailure(err)
 		}
 
@@ -205,9 +213,11 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 		}
 		persistedOutputs[compensationKey] = compensation
 		if err != nil {
-			if completeErr := r.Store.CompleteOperation(context.WithoutCancel(ctx), opID, state.OperationStatusFailed, persistedOutputs, err.Error()); completeErr != nil {
-				_ = r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, state.RunStatusFailed, completeErr.Error())
+			if completeErr := r.finishStep(ctx, opID, persistedOutputs, err); completeErr != nil {
 				return result, finishFailure(errors.Join(err, completeErr))
+			}
+			if ctx.Err() != nil {
+				return result, finishFailure(errors.Join(err, ctx.Err()))
 			}
 			if step.OnError == templates.ErrorPolicyContinue {
 				runFailed = true
@@ -219,7 +229,7 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 			return result, finishFailure(err)
 		}
 
-		if err := r.Store.CompleteOperation(ctx, opID, state.OperationStatusSucceeded, persistedOutputs, ""); err != nil {
+		if err := r.finishStep(ctx, opID, persistedOutputs, nil); err != nil {
 			return result, finishFailure(err)
 		}
 		if err := r.recordResources(ctx, run.ID, plan.TemplateID, persistedStep, persistedOutputs); err != nil {
@@ -232,7 +242,10 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	if runFailed {
 		runStatus = state.RunStatusFailed
 	}
-	if err := r.Store.CompleteRun(ctx, run.ID, runStatus, runError); err != nil {
+	if err := ctx.Err(); err != nil {
+		return result, finishFailure(err)
+	}
+	if err := r.Store.CompleteRun(context.WithoutCancel(ctx), run.ID, runStatus, runError); err != nil {
 		return result, err
 	}
 	return result, nil

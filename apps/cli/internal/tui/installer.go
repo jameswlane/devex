@@ -634,6 +634,22 @@ func (si *StreamingInstaller) GetProgressManager() *progresspkg.ProgressManager 
 // Returns:
 //   - error: joined per-app failures, cancellation, or authorization errors; nil on success
 func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.CrossPlatformApp, settings config.CrossPlatformSettings) (result error) {
+	run := state.CurrentApplicationRun(ctx)
+	ownsRun := run == nil
+	if ownsRun {
+		var err error
+		run, err = state.StartApplicationRun(ctx, apps, settings)
+		if err != nil {
+			return err
+		}
+	}
+	var recordErrors error
+	defer func() {
+		result = errors.Join(result, recordErrors)
+		if ownsRun {
+			result = errors.Join(result, run.Finish(ctx, result))
+		}
+	}()
 	ctx = state.WithInstallationAudit(ctx, "tui", struct {
 		Apps     []types.CrossPlatformApp
 		Settings config.CrossPlatformSettings
@@ -649,6 +665,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		defer finishMutex.Unlock()
 		if finish := finishes[name]; finish != nil {
 			finish(err)
+			recordErrors = errors.Join(recordErrors, run.CompleteApp(ctx, name, err))
 			delete(finishes, name)
 		}
 	}
@@ -1669,6 +1686,14 @@ func (si *StreamingInstaller) sendLog(level, message string) {
 // Returns:
 //   - error: nil on successful TUI completion, or error from TUI framework or installation
 func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) (result error) {
+	run, err := state.StartApplicationRun(ctx, apps, settings)
+	if err != nil {
+		return err
+	}
+	runCtx := ctx
+	ctx = state.WithApplicationRun(ctx, run)
+	defer func() { result = errors.Join(result, run.Finish(runCtx, result)) }()
+
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			result = errors.Join(result, fmt.Errorf("streaming installer panic: %v", recovered))
@@ -1683,6 +1708,7 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 		for _, app := range apps {
 			_, finish := state.BeginApplication(ctx, app.Name, "tui", app)
 			finish(err)
+			result = errors.Join(result, run.CompleteApp(ctx, app.Name, err))
 		}
 	}
 	if err := AuthorizeInstallation(ctx, apps, true); err != nil {

@@ -70,6 +70,7 @@ type TemplateInputValidation struct {
 }
 
 type TemplateStepSpec struct {
+	Idempotent  bool                   `yaml:"idempotent,omitempty"`
 	ID          string                 `yaml:"id"`
 	Order       int                    `yaml:"order,omitempty"`
 	If          string                 `yaml:"if,omitempty"`
