@@ -1,10 +1,12 @@
 package setup
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 // renderInstallPlan lists everything setup will install or change, built from
@@ -20,11 +22,16 @@ func (m *SetupModel) renderInstallPlan() string {
 	needsAptUpdate := false
 	section := func(title string, group planGroup) {
 		var lines []string
+		count := 0
 		for _, item := range plan {
 			if item.group != group {
 				continue
 			}
+			count++
 			line := "  • " + item.app.Name
+			if group == planDefault {
+				line = "  [x] " + item.app.Name
+			}
 			if item.reason != "" {
 				line += noteStyle.Render(" (for " + item.reason + ")")
 			}
@@ -37,11 +44,40 @@ func (m *SetupModel) renderInstallPlan() string {
 				}
 			}
 			lines = append(lines, line)
+			if !m.selections.alreadyInstalled[item.app.Name] {
+				config := item.app.GetOSConfig()
+				if len(config.Packages) > 0 {
+					data, _ := json.Marshal(struct {
+						Packages []string `json:"packages"`
+						Options  []string `json:"options,omitempty"`
+					}{config.Packages, config.Options})
+					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, data))
+				} else if config.InstallCommand != "" {
+					lines = append(lines, fmt.Sprintf("      %s: %s", config.InstallMethod, config.InstallCommand))
+				}
+				for _, hooks := range [][]types.InstallCommand{config.PreInstall, config.PostInstall} {
+					for _, hook := range hooks {
+						// Show only the selected shell, matching ApplyActions.
+						if hook.ShellInit != nil {
+							init := map[string]string{}
+							if line := hook.ShellInit[m.getSelectedShell()]; line != "" {
+								init[m.getSelectedShell()] = line
+							}
+							hook.ShellInit = init
+						}
+						data, _ := json.Marshal(hook)
+						lines = append(lines, "      Hook: "+string(data))
+					}
+				}
+				for _, file := range config.ConfigFiles {
+					lines = append(lines, fmt.Sprintf("      Config file: %s → %s", file.Source, file.Destination))
+				}
+			}
 		}
 		if len(lines) == 0 {
 			return
 		}
-		fmt.Fprintf(&b, "%s (%d):\n%s\n\n", title, len(lines), strings.Join(lines, "\n"))
+		fmt.Fprintf(&b, "%s (%d):\n%s\n\n", title, count, strings.Join(lines, "\n"))
 	}
 
 	section("📦 Default tools", planDefault)
@@ -49,7 +85,7 @@ func (m *SetupModel) renderInstallPlan() string {
 	section("✨ Your selections", planSelected)
 
 	if m.selections.skipDefaultApps {
-		b.WriteString(noteStyle.Render("Default tools skipped. Press 'd' to include them.") + "\n\n")
+		b.WriteString(noteStyle.Render("[ ] Default tools skipped. Press 'd' to include them.") + "\n\n")
 	}
 
 	b.WriteString("⚙️  Also:\n")

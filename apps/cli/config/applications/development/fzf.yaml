@@ -10,7 +10,10 @@ macos:
   uninstall_command: fzf
   official_support: true
   post_install:
-    - shell: $(brew --prefix)/opt/fzf/install --all
+    - shell_init:
+        bash: 'eval "$(fzf --bash)"'
+        zsh: 'source <(fzf --zsh)'
+        fish: 'fzf --fish | source'
   alternatives:
     - install_method: macports
       install_command: fzf
