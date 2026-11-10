@@ -24,7 +24,7 @@ var snapContracts = []operationContract{
 	{command: "remove", args: []string{"core", "vlc"}, argv: []string{"remove", "core", "vlc"}, elevated: true},
 	{command: "update", args: []string{"--channel=candidate", "vlc"}, argv: []string{"refresh", "--channel=candidate", "vlc"}, elevated: true},
 	// Search keeps today's single joined phrase rather than a multi-term policy.
-	{command: "search", args: []string{"media", "player"}, argv: []string{"search", "media player"}},
+	{command: "search", args: []string{"media", "player"}, argv: []string{"find", "media player"}},
 	{command: "list", argv: []string{"list"}},
 }
 

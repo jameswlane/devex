@@ -46,5 +46,5 @@ tags:
   - ubuntu
   - linux
   - universal
-# Incomplete contracts are documented in README.md.
+# Commands are complete but not yet verified on a real system (fake-exec tests only).
 status: experimental

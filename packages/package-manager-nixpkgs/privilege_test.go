@@ -18,7 +18,9 @@ import (
 
 // executableFor names the native binary a contract runs.
 func executableFor(contract operationContract) string {
-	_ = contract
+	if contract.executable != "" {
+		return contract.executable
+	}
 	return "nix-env"
 }
 
@@ -59,23 +61,14 @@ var _ = Describe("NIXPKGS execution boundary", func() {
 		plugin = main.NewNixpkgsPlugin()
 		for _, contract := range contracts {
 			err := plugin.Execute(contract.command, contract.args)
-			Expect(err).To(MatchError("nix-env is not available on this system; install Nix"), contract.command)
-		}
-		Expect(recorder.Calls("sudo")).To(BeEmpty())
-	})
-
-	It("still explains unsupported operations when the native tool is missing", func() {
-		recorder = sdktest.NewRecorder(GinkgoT())
-		plugin = main.NewNixpkgsPlugin()
-		for command, guidance := range unsupported {
-			Expect(plugin.Execute(command, nil)).To(MatchError(ContainSubstring(guidance)), command)
+			Expect(err).To(MatchError(executableFor(contract)+" is not available on this system; install Nix"), contract.command)
 		}
 		Expect(recorder.Calls("sudo")).To(BeEmpty())
 	})
 
 	Context("with the default sudo adapter", func() {
 		BeforeEach(func() {
-			recorder = sdktest.NewRecorder(GinkgoT(), "nix-env")
+			recorder = sdktest.NewRecorder(GinkgoT(), "nix-env", "nix-channel")
 			plugin = main.NewNixpkgsPlugin()
 		})
 
@@ -117,7 +110,7 @@ var _ = Describe("NIXPKGS execution boundary", func() {
 		var home string
 
 		BeforeEach(func() {
-			recorder = sdktest.NewRecorder(GinkgoT(), "nix-env")
+			recorder = sdktest.NewRecorder(GinkgoT(), "nix-env", "nix-channel")
 			plugin = main.NewNixpkgsPlugin()
 			home = GinkgoT().TempDir()
 			GinkgoT().Setenv("SUDO_USER", "builder")

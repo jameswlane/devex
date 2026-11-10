@@ -101,6 +101,13 @@ func (p *XbpsPlugin) ExecuteContext(ctx context.Context, command string, args []
 	}
 }
 
+// Native commands follow xbps-install(1), xbps-remove(1) and xbps-query(1):
+// `--yes` (-y) answers most questions but never accepts a new repository
+// signing key (import it beforehand), `--sync` (-S) refreshes repository
+// indexes, and `--update` (-u) upgrades installed packages, so upgrade is the
+// documented `xbps-install -yu`. Installing and removing use separate tools
+// (xbps-install / xbps-remove). Queries (`xbps-query -R --search`, `--list-pkgs`)
+// are read-only and run without sudo.
 func (p *XbpsPlugin) handleInstall(ctx context.Context, args []string) error {
 	if err := validatePackages(args); err != nil {
 		return err

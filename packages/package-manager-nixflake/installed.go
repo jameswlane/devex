@@ -5,9 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -23,24 +22,12 @@ func (p *NixflakePlugin) handleIsInstalled(ctx context.Context, args []string) e
 			return fmt.Errorf("invalid package name: %q", pkg)
 		}
 	}
-	native, err := exec.LookPath("nix")
-	if err != nil {
-		return err
+	var output, diagnostic bytes.Buffer
+	err := p.runWithIO(ctx, "is-installed", sdk.OperationIO{Stdout: &output, Stderr: &diagnostic}, "profile", "list", "--json")
+	if unsupportedProfileJSON(err, diagnostic.String()) {
+		return p.handlePlainIsInstalled(ctx, args)
 	}
-	native, err = filepath.Abs(native)
-	if err != nil {
-		return err
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	query := []string{"profile", "list", "--json"}
-	var output bytes.Buffer
-	err = sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeUser}, Name: native, Args: query, Dir: dir}, sdk.OperationIO{Stdout: &output, Stderr: os.Stderr})
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
+	_, _ = io.Copy(os.Stderr, &diagnostic)
 	if err != nil {
 		return err
 	}
@@ -76,6 +63,27 @@ func (p *NixflakePlugin) handleIsInstalled(ctx context.Context, args []string) e
 	default:
 		return fmt.Errorf("unsupported Nix profile version %d", profile.Version)
 	}
+	markInstalledAttrPaths(installed, elements)
+	return reportMissing(installed, args)
+}
+
+// handlePlainIsInstalled answers from the plain-text `nix profile list` of
+// Nix releases (2.8) that predate `--json`; the same listing drives removal.
+func (p *NixflakePlugin) handlePlainIsInstalled(ctx context.Context, args []string) error {
+	var output bytes.Buffer
+	if err := p.runWithIO(ctx, "is-installed", sdk.OperationIO{Stdout: &output, Stderr: os.Stderr}, "profile", "list"); err != nil {
+		return err
+	}
+	elements, err := plainProfileElements(output.String())
+	if err != nil {
+		return err
+	}
+	installed := make(map[string]bool)
+	markInstalledAttrPaths(installed, elements)
+	return reportMissing(installed, args)
+}
+
+func markInstalledAttrPaths(installed map[string]bool, elements []profileElement) {
 	for _, e := range elements {
 		if e.AttrPath != "" {
 			installed[e.AttrPath] = true
@@ -83,7 +91,9 @@ func (p *NixflakePlugin) handleIsInstalled(ctx context.Context, args []string) e
 			installed[parts[len(parts)-1]] = true
 		}
 	}
+}
 
+func reportMissing(installed map[string]bool, args []string) error {
 	var missing []string
 	for _, pkg := range args {
 		if !installed[pkg] {

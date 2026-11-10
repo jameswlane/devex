@@ -42,13 +42,15 @@ Nix command-line interface with flakes; requires the `nix-command` and `flakes` 
 | --- | --- | --- |
 | `install` | `nix profile install <installables>`; bare names such as `git` become `nixpkgs#git`, explicit references (`nixpkgs#git`, `github:owner/repo#pkg`, `./path`) pass through | user |
 | `remove` | `nix profile remove <element names>` | user |
+| `upgrade` | `nix profile upgrade --all` (named profiles) or `nix profile upgrade '.*'` (indexed profiles, chosen from the profile format) | user |
 | `update` | `nix flake update` for the flake in the current directory | user |
+| `is-installed` | `nix profile list --json`; falls back to plain `nix profile list` on Nix releases without `--json` (2.8) | user |
 | `search` | `nix search nixpkgs <phrase>` (name and description regex) | user |
 | `list` | `nix profile list` | user |
 
 Package arguments that are empty or start with `-` are rejected before any native command runs.
 
-The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
+Nothing here prompts, so unattended mode (`CI=true`, `DEVEX_UNATTENDED=1`) needs no extra flags; every operation runs as the invoking user without sudo.
 
 ## 🚀 Platform Support
 
@@ -91,13 +93,13 @@ and [Nix 2.24 removal interface](https://nix.dev/manual/nix/2.24/command-ref/new
 The fixtures in `testdata/profile-2.18.json` and `testdata/profile-2.24.json`
 model the corresponding manifest formats from the versioned Nix implementation.
 
-## Experimental limitations
+## Upgrade and installed queries
 
 `upgrade` runs `nix profile upgrade --all` for named profiles, or
 `nix profile upgrade '.*'` for legacy indexed profiles, while `update`
 continues to update inputs of the flake in the working directory.
 `is-installed` reads `nix profile list --json`, accepting indexed profile
-versions 1/2 and named version 3. It matches profile names and full or final
-attribute path components. Older Nix releases without JSON profile queries
-return an operational error rather than incorrectly reporting absence. This
-plugin remains experimental pending support for those older query formats.
+versions 1/2 and named version 3, and retries with the plain-text listing when
+the installed Nix rejects `--json`. It matches profile names and full or final
+attribute path components. A failing or malformed listing is an operational
+error, never a report of absence.
