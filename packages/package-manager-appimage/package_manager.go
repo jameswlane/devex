@@ -91,10 +91,12 @@ func (p *AppimagePlugin) handleInstall(ctx context.Context, args []string) error
 	}
 
 	// Validate URL accessibility
-	if err := p.validateURLAccessibility(ctx, downloadURL); err != nil {
-		return fmt.Errorf("URL validation failed: %w", err)
-	}
+	if verification.CachedPath == "" {
+		if err := p.validateURLAccessibility(ctx, downloadURL); err != nil {
+			return fmt.Errorf("URL validation failed: %w", err)
+		}
 
+	}
 	// Install the AppImage
 	if err := p.installAppImage(ctx, downloadURL, binaryName, installLocation, verification); err != nil {
 		return fmt.Errorf("failed to install AppImage: %w", err)

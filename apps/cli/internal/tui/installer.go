@@ -1092,15 +1092,30 @@ func (si *StreamingInstaller) downloadValidateExecute(ctx context.Context, appNa
 	}
 	defer si.cleanupTempScript(tmpFile)
 
-	// Download script to temporary file
-	if err := si.downloadScript(downloadURL, tmpFile); err != nil {
-		si.sendLog("ERROR", fmt.Sprintf("Failed to download script: %v", err))
-		return fmt.Errorf("failed to download script: %w", err)
-	}
-
 	verification := sdk.ArtifactVerification{}
 	if len(metadata) > 0 {
 		verification = metadata[0]
+	}
+	prepared, cleanup, err := installers.PrepareArtifact(ctx, downloadURL, verification)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	if prepared.CachedPath != "" {
+		if err := sdk.CopyCachedArtifact(ctx, prepared.CachedPath, tmpFile); err != nil {
+			return err
+		}
+	} else if err := si.downloadScript(ctx, downloadURL, tmpFile); err != nil {
+		return fmt.Errorf("failed to download script: %w", err)
+	}
+	if si.config.MaxScriptSize > 0 {
+		info, err := os.Stat(tmpFile)
+		if err != nil {
+			return err
+		}
+		if info.Size() > si.config.MaxScriptSize {
+			return fmt.Errorf("script exceeds maximum allowed size of %d bytes", si.config.MaxScriptSize)
+		}
 	}
 	verified, err := sdk.VerifyArtifact(ctx, tmpFile, verification)
 	if err != nil {
@@ -1108,7 +1123,7 @@ func (si *StreamingInstaller) downloadValidateExecute(ctx context.Context, appNa
 	}
 	si.sendLog("INFO", fmt.Sprintf("Download verification: checksum=%t signature=%t (false means skipped)", verified.ChecksumVerified, verified.SignatureVerified))
 	// Validate script content for basic safety
-	if err := si.validateScriptContent(tmpFile); err != nil {
+	if err := si.validateCachedScript(ctx, appName, downloadURL, tmpFile, verification); err != nil {
 		si.sendLog("ERROR", fmt.Sprintf("Script validation failed: %v", err))
 		return fmt.Errorf("script validation failed: %w", err)
 	}
@@ -1146,7 +1161,7 @@ func (si *StreamingInstaller) createTempScript() (string, error) {
 }
 
 // downloadScript downloads a script from URL to a file
-func (si *StreamingInstaller) downloadScript(downloadURL, filepath string) error {
+func (si *StreamingInstaller) downloadScript(ctx context.Context, downloadURL, filepath string) error {
 	si.sendLog("INFO", "Downloading installation script...")
 
 	// Create HTTP client with timeout
@@ -1154,7 +1169,7 @@ func (si *StreamingInstaller) downloadScript(downloadURL, filepath string) error
 		Timeout: si.config.HTTPTimeout,
 	}
 
-	req, err := http.NewRequestWithContext(si.ctx, "GET", downloadURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", downloadURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}

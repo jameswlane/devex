@@ -31,6 +31,28 @@ var _ = Describe("Script integrity before execution", func() {
 		}
 	})
 
+	It("executes a verified private handoff without downloading", func() {
+		file, err := os.CreateTemp(GinkgoT().TempDir(), "cached-*")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = file.WriteString("echo fixture\n")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(file.Close()).To(Succeed())
+		Expect(main.NewCurlpipePlugin().Execute("install", []string{"--artifact-path", file.Name(), "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("echo fixture\n"))), "https://get.docker.com"})).To(Succeed())
+		Expect(recorder.Calls("curl")).To(BeEmpty())
+		Expect(recorder.Calls("bash")).To(HaveLen(1))
+	})
+	It("rejects corrupt handoffs before execution without downloading", func() {
+		file, err := os.CreateTemp(GinkgoT().TempDir(), "cached-*")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = file.WriteString("corrupt")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(file.Close()).To(Succeed())
+		err = main.NewCurlpipePlugin().Execute("install", []string{"--artifact-path", file.Name(), "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("expected"))), "https://get.docker.com"})
+		Expect(err).To(MatchError(ContainSubstring("checksum mismatch")))
+		Expect(recorder.Calls("curl")).To(BeEmpty())
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+	})
+
 	It("rejects a mismatched digest before requesting script execution", func() {
 		err := main.NewCurlpipePlugin().Execute("install", []string{"--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("other"))), "https://get.docker.com"})
 		Expect(err).To(MatchError(ContainSubstring("checksum mismatch")))

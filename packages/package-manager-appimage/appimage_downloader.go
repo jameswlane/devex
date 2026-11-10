@@ -42,14 +42,16 @@ func (p *AppimagePlugin) installAppImage(ctx context.Context, downloadURL, binar
 
 	p.logger.Printf("Downloading AppImage to: %s\n", binaryPath)
 
-	// Download the AppImage
-	if err := p.downloadFile(ctx, downloadURL, temporary.Name()); err != nil {
-		return fmt.Errorf("failed to download AppImage: %w", err)
-	}
-
 	verification := sdk.ArtifactVerification{}
 	if len(metadata) > 0 {
 		verification = metadata[0]
+	}
+	if verification.CachedPath != "" {
+		if err := sdk.CopyCachedArtifact(ctx, verification.CachedPath, temporary.Name()); err != nil {
+			return err
+		}
+	} else if err := p.downloadFile(ctx, downloadURL, temporary.Name()); err != nil {
+		return fmt.Errorf("failed to download AppImage: %w", err)
 	}
 	verified, err := sdk.VerifyArtifact(ctx, temporary.Name(), verification)
 	if err != nil {

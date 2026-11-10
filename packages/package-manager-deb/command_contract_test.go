@@ -50,6 +50,34 @@ var _ = Describe("DEB command contracts", func() {
 		}
 	})
 
+	It("installs a private cached package without downloading", func() {
+		previous := http.DefaultTransport
+		http.DefaultTransport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+			Fail("unexpected download")
+			return nil, fmt.Errorf("unexpected download")
+		})
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		content, err := os.ReadFile(file)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(plugin.Execute("install", []string{"--artifact-path", file, "--sha256", fmt.Sprintf("%x", sha256.Sum256(content)), "https://example.invalid/tool.deb"})).To(Succeed())
+		calls := recorder.Calls("dpkg")
+		Expect(calls).To(HaveLen(1))
+
+		Expect(os.ReadFile(file)).To(Equal(content))
+	})
+	It("rejects corrupt cached packages before native commands", func() {
+		previous := http.DefaultTransport
+		http.DefaultTransport = roundTripFunc(func(*http.Request) (*http.Response, error) {
+			Fail("unexpected download")
+			return nil, fmt.Errorf("unexpected download")
+		})
+		DeferCleanup(func() { http.DefaultTransport = previous })
+		err := plugin.Execute("install", []string{"--artifact-path", file, "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("expected"))), "https://example.invalid/tool.deb"})
+		Expect(err).To(MatchError(ContainSubstring("checksum mismatch")))
+		Expect(recorder.Calls("dpkg")).To(BeEmpty())
+		Expect(recorder.Calls("dpkg-deb")).To(BeEmpty())
+	})
+
 	It("rejects tampered packages before native inspection or install", func() {
 		err := plugin.Execute("install", []string{"--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("different"))), file})
 		Expect(err).To(MatchError(ContainSubstring("checksum mismatch")))
