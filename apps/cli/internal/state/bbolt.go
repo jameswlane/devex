@@ -102,12 +102,13 @@ func (s *BoltStore) AcquireLifecycleLock(ctx context.Context, lock LifecycleLock
 		var existing LifecycleLock
 		if err := getJSON(bucket, lock.TemplateID, &existing); err == nil {
 			if !opts.Force && !s.isStaleLock(existing, opts.StaleTimeout, now) {
-				return fmt.Errorf("%w: template '%s' already has active %s run '%s' on %s (updated %s)",
+				return fmt.Errorf("%w: template '%s' already has active %s run '%s' on %s (pid %d, updated %s); stop the owning process, then retry to recover a dead-PID or expired lock",
 					ErrLifecycleLockActive,
 					existing.TemplateID,
 					existing.Action,
 					existing.RunID,
 					existing.Hostname,
+					existing.PID,
 					existing.UpdatedAt.Format(time.RFC3339),
 				)
 			}
@@ -509,7 +510,7 @@ func pidSignalMeansAlive(err error) bool {
 	if err == nil {
 		return true
 	}
-	return !errors.Is(err, syscall.ESRCH)
+	return !errors.Is(err, syscall.ESRCH) && !errors.Is(err, os.ErrProcessDone)
 }
 
 func statusIn(status RunStatus, statuses []RunStatus) bool {

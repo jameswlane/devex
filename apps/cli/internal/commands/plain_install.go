@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -50,7 +51,12 @@ func initializeApplicationInstallers(ctx context.Context, provider pluginBootstr
 	return nil
 }
 
-func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) error {
+func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) (result error) {
+	run, err := state.StartApplicationRun(ctx, apps, settings)
+	if err != nil {
+		return err
+	}
+	defer func() { result = errors.Join(result, run.Finish(ctx, result)) }()
 	ctx = state.WithInstallationAudit(ctx, "plain", struct {
 		Apps     []types.CrossPlatformApp
 		Settings config.CrossPlatformSettings
@@ -62,8 +68,12 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 	installed := 0
 	var failures []string
 	for _, app := range apps {
-		appCtx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
-		if bootstrapErr == nil && ctx.Err() == nil {
+		appCtx, auditFinish := state.BeginApplication(ctx, app.Name, "plain", app)
+		finishAudit := func(cause error) {
+			auditFinish(cause)
+			result = errors.Join(result, run.CompleteApp(ctx, app.Name, cause))
+		}
+		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) {
 			if existing, lookupErr := repo.GetApp(app.Name); lookupErr == nil && existing != nil {
 				present, queryErr := nativeApplicationInstalled(appCtx, app)
 				if queryErr != nil {
@@ -111,9 +121,12 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 		installed++
 		fmt.Fprintf(out, "installed %s\n", app.Name)
 	}
+	if ctx.Err() != nil {
+		return errors.Join(result, ctx.Err())
+	}
 	fmt.Fprintf(out, "installed %d of %d applications\n", installed, len(apps))
 	if len(failures) > 0 {
-		return fmt.Errorf("failed to install applications: %s", strings.Join(failures, ", "))
+		return errors.Join(result, fmt.Errorf("failed to install applications: %s", strings.Join(failures, ", ")))
 	}
-	return nil
+	return result
 }

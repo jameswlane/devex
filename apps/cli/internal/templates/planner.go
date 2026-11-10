@@ -54,6 +54,7 @@ type ExecutionPlan struct {
 }
 
 type PlannedStep struct {
+	Idempotent  bool                  `json:"idempotent,omitempty" yaml:"idempotent,omitempty"`
 	ID          string                `json:"id" yaml:"id"`
 	Order       int                   `json:"order" yaml:"order"`
 	Type        StepType              `json:"type" yaml:"type"`
@@ -177,12 +178,13 @@ func (p *TemplatePlanner) planStep(ctx context.Context, step TemplateStepSpec, e
 		return PlannedStep{}, err
 	}
 	result := PlannedStep{
-		ID:        step.ID,
-		Order:     step.Order,
-		OnError:   parseErrorPolicy(step.OnError),
-		DependsOn: append([]string(nil), step.DependsOn...),
-		Resources: interpolateResources(step.Resources, evalCtx),
-		Metadata:  map[string]any{"description": step.Description},
+		Idempotent: step.Idempotent,
+		ID:         step.ID,
+		Order:      step.Order,
+		OnError:    parseErrorPolicy(step.OnError),
+		DependsOn:  append([]string(nil), step.DependsOn...),
+		Resources:  interpolateResources(step.Resources, evalCtx),
+		Metadata:   map[string]any{"description": step.Description},
 	}
 
 	switch {
