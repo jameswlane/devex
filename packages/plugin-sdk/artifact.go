@@ -16,6 +16,7 @@ import (
 // Optional metadata is checked whenever supplied; required policy needs a digest
 // or a signature and a local trusted public key. Consent is a separate policy.
 type ArtifactVerification struct {
+	CachedPath    string `json:"-" yaml:"-" mapstructure:"-"`
 	Policy        string `json:"policy" yaml:"policy" mapstructure:"policy"`
 	SHA256        string `json:"sha256" yaml:"sha256" mapstructure:"sha256"`
 	SignatureURL  string `json:"signature_url" yaml:"signature_url" mapstructure:"signature_url"`
@@ -111,6 +112,8 @@ func ParseVerificationArgs(args []string) ([]string, ArtifactVerification, error
 	for i := 0; i < len(args); i++ {
 		var target *string
 		switch args[i] {
+		case "--artifact-path":
+			target = &metadata.CachedPath
 		case "--verification-policy":
 			target = &metadata.Policy
 		case "--sha256":
@@ -135,16 +138,42 @@ func ParseVerificationArgs(args []string) ([]string, ArtifactVerification, error
 	if metadata.Policy != "" && metadata.Policy != "required" && metadata.Policy != "optional" {
 		return nil, metadata, fmt.Errorf("unknown verification policy %q", metadata.Policy)
 	}
+	if metadata.CachedPath != "" && metadata.SHA256 == "" {
+		return nil, metadata, fmt.Errorf("--artifact-path requires a pinned --sha256")
+	}
 	return rest, metadata, nil
 }
 
 // Arguments encodes metadata for plugin argv dispatch without shell interpolation.
 func (m ArtifactVerification) Arguments() []string {
 	var args []string
-	for _, entry := range [][2]string{{"--verification-policy", m.Policy}, {"--sha256", m.SHA256}, {"--signature-url", m.SignatureURL}, {"--public-key", m.PublicKeyPath}, {"--signer-fingerprint", m.Fingerprint}} {
+	for _, entry := range [][2]string{{"--artifact-path", m.CachedPath}, {"--verification-policy", m.Policy}, {"--sha256", m.SHA256}, {"--signature-url", m.SignatureURL}, {"--public-key", m.PublicKeyPath}, {"--signer-fingerprint", m.Fingerprint}} {
 		if entry[1] != "" {
 			args = append(args, entry[0], entry[1])
 		}
 	}
 	return args
+}
+
+// CopyCachedArtifact copies a CLI-owned artifact into a plugin-owned file.
+// The plugin must still call VerifyArtifact before execution or installation.
+func CopyCachedArtifact(ctx context.Context, source, destination string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	input, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = input.Close() }()
+	output, err := os.OpenFile(destination, os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(output, input)
+	closeErr := output.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }

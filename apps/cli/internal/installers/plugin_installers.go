@@ -492,6 +492,17 @@ func (p *PluginBasedInstaller) InstallArtifact(ctx context.Context, app types.Ap
 	if err != nil {
 		return err
 	}
+	if len(app.Verification.Arguments()) > 0 && app.InstallMethod != "appimage" && len(packages) != 1 {
+		return fmt.Errorf("verification metadata requires exactly one artifact")
+	}
+	if len(packages) > 0 {
+		verification, cleanup, err := PrepareArtifact(ctx, packages[0], app.Verification)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		app.Verification = verification
+	}
 	args := append([]string{"install"}, app.Verification.Arguments()...)
 	args = append(args, packages...)
 	args = append(args, options...)

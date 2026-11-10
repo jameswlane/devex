@@ -186,7 +186,7 @@ func newCacheListCmd(repo types.Repository, settings config.CrossPlatformSetting
 		},
 	}
 
-	cmd.Flags().StringVar(&cacheTypeFilter, "type", "", "Filter by cache type (download, installation, metadata, performance, template, package)")
+	cmd.Flags().StringVar(&cacheTypeFilter, "type", "", "Filter by cache type (download, installation, metadata including validation results, performance, template, package)")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed information including checksums and creation times")
 
 	return cmd

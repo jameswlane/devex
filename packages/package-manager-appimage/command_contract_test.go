@@ -88,6 +88,22 @@ var _ = Describe("AppImage operation contracts", func() {
 		return path
 	}
 
+	It("installs a verified handoff without URL probes or downloads", func() {
+		source := filepath.Join(GinkgoT().TempDir(), "cached")
+		Expect(os.WriteFile(source, []byte("fixture"), 0600)).To(Succeed())
+		Expect(plugin.Execute("install", []string{url, "tool", "--cli", "--artifact-path", source, "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("fixture")))})).To(Succeed())
+		Expect(transport.calls).To(BeEmpty())
+		Expect(os.ReadFile(filepath.Join(home, ".local", "bin", "tool"))).To(Equal([]byte("fixture")))
+	})
+	It("does not publish a corrupt handoff", func() {
+		source := filepath.Join(GinkgoT().TempDir(), "cached")
+		Expect(os.WriteFile(source, []byte("corrupt"), 0600)).To(Succeed())
+		Expect(plugin.Execute("install", []string{url, "tool", "--cli", "--artifact-path", source, "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("expected")))})).To(MatchError(ContainSubstring("checksum mismatch")))
+		Expect(transport.calls).To(BeEmpty())
+		_, err := os.Stat(filepath.Join(home, ".local", "bin", "tool"))
+		Expect(os.IsNotExist(err)).To(BeTrue())
+	})
+
 	It("does not publish a tampered download or replace an existing binary", func() {
 		path := writeBinary("Applications", "tool", 0755)
 		err := plugin.Execute("install", []string{url, "tool", "--sha256", fmt.Sprintf("%x", sha256.Sum256([]byte("different")))})

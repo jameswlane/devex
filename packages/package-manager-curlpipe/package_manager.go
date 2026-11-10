@@ -102,7 +102,11 @@ func (p *CurlpipePlugin) handleInstall(ctx context.Context, args []string) error
 		_ = tempFile.Close()
 
 		// Download to temp file with curl ... -- <url> as separate argv
-		if err := sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", "-o", tempFile.Name(), "--", scriptURL); err != nil {
+		if verification.CachedPath != "" {
+			if err := sdk.CopyCachedArtifact(ctx, verification.CachedPath, tempFile.Name()); err != nil {
+				return err
+			}
+		} else if err := sdk.ExecCommandWithContext(ctx, false, "curl", "-fsSL", "-o", tempFile.Name(), "--", scriptURL); err != nil {
 			return fmt.Errorf("failed to download script from '%s': %w", scriptURL, err)
 		}
 

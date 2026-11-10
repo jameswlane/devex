@@ -195,7 +195,9 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.PersistentFlags().String("log-level", "info", "Log level (debug, info, warn, error)")
 	cmd.PersistentFlags().Bool("skip-plugin-download", false, "Skip automatic plugin downloads")
 	cmd.PersistentFlags().Bool("non-interactive", false, "Run without interactive prompts")
-	cmd.PersistentFlags().Bool("offline", false, "Run in offline mode (no plugin downloads)")
+	cmd.PersistentFlags().Bool("offline", false, "Use installed plugins and cached pinned installation artifacts only")
+	cmd.PersistentFlags().Bool("no-cache", false, "Bypass installation artifact and validation caches")
+	_ = viper.BindPFlag("no-cache", cmd.PersistentFlags().Lookup("no-cache"))
 
 	// Bind persistent flags to viper for global access
 	_ = viper.BindPFlag("quiet", cmd.PersistentFlags().Lookup("quiet"))

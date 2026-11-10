@@ -7,10 +7,13 @@ import (
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
 var _ = Describe("Artifact verification dispatch", func() {
+	BeforeEach(func() { viper.Set("no-cache", true) })
+	AfterEach(func() { viper.Set("no-cache", false) })
 	It("preserves YAML integrity metadata through OS conversion and plugin argv", func() {
 		var app types.CrossPlatformApp
 		Expect(yaml.Unmarshal([]byte(`name: tool

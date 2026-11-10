@@ -72,7 +72,20 @@ func (d *DebInstaller) handleInstall(ctx context.Context, args []string) error {
 		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
 			// Download the .deb file
 			d.logger.Printf("Downloading package from: %s\n", arg)
-			localPath, err := d.downloadDebFile(ctx, arg)
+			var localPath string
+			var err error
+			if verification.CachedPath != "" {
+				var temporary *os.File
+				temporary, err = os.CreateTemp("", "devex-cached-*.deb")
+				if err == nil {
+					localPath = temporary.Name()
+					_ = temporary.Close()
+					tempFiles[localPath] = true
+					err = sdk.CopyCachedArtifact(ctx, verification.CachedPath, localPath)
+				}
+			} else {
+				localPath, err = d.downloadDebFile(ctx, arg)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to download %s: %w", arg, err)
 			}
