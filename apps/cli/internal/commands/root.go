@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
@@ -193,6 +194,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.SetHelpCommand(NewHelpCmd(repo, settings))
 
 	// Define persistent flags (available to all subcommands)
+	cmd.PersistentFlags().Duration("apt-lists-max-age", 15*time.Minute, "Reuse populated APT lists younger than this duration (0 always refreshes)")
+	_ = viper.BindPFlag("apt-lists-max-age", cmd.PersistentFlags().Lookup("apt-lists-max-age"))
 	cmd.PersistentFlags().Int("install-concurrency", 1, "Maximum concurrent installations (at least 1)")
 	_ = viper.BindPFlag("install-concurrency", cmd.PersistentFlags().Lookup("install-concurrency"))
 	cmd.PersistentFlags().BoolP("verbose", "v", false, "Enable debug logging unless log-level is configured")

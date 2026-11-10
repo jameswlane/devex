@@ -677,8 +677,8 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			complete(app.Name, result)
 		}
 	}()
-	return si.installationResult(runInstallLanes(ctx, apps, si.prepareAptRun, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
-		if isAptApp(app) && si.apt.has(si.apt.preinstalled, app.Name) {
+	return si.installationResult(runInstallLanes(ctx, apps, si.preparePackageRun, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
+		if si.apt.has(si.apt.preinstalled, app.Name) {
 			complete(app.Name, nil)
 			si.sendLog("INFO", fmt.Sprintf("%s is already installed; skipping", app.Name))
 			if si.program != nil {
@@ -958,6 +958,9 @@ func (si *StreamingInstaller) recordFailedInstallation(appName string, startTime
 
 // executeInstallCommand executes the main installation command
 func (si *StreamingInstaller) executeInstallCommand(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
+	if si.apt.has(si.apt.batchInstalled, app.Name) {
+		return nil
+	}
 	if osConfig.InstallMethod == "deb" || osConfig.InstallMethod == "appimage" {
 		return installers.InstallArtifact(ctx, types.AppConfig{InstallMethod: osConfig.InstallMethod, InstallCommand: osConfig.InstallCommand, DownloadURL: osConfig.DownloadURL, Packages: osConfig.Packages, Options: osConfig.Options, Verification: osConfig.Verification})
 	}

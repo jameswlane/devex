@@ -75,7 +75,7 @@ func planApps(plan []planItem) []types.CrossPlatformApp {
 }
 
 // installedAppsCheck is replaced in tests.
-var installedAppsCheck = tui.InstalledAptApps
+var installedAppsCheck = tui.InstalledApps
 
 // refreshInstalledApps records which planned apps are already installed so the
 // Confirmation screen can show them as skipped, matching what the installer does.
@@ -85,5 +85,5 @@ func (m *SetupModel) refreshInstalledApps() {
 		ctx = context.Background()
 	}
 	m.refreshDesktopPreview(ctx)
-	m.selections.alreadyInstalled = installedAppsCheck(context.Background(), planApps(m.installPlan()))
+	m.selections.alreadyInstalled = installedAppsCheck(ctx, planApps(m.installPlan()))
 }
