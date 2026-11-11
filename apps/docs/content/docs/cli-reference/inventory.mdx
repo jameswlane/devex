@@ -1,0 +1,46 @@
+---
+title: devex inventory
+description: Export the software DevEx manages, with installed versions, and report drift.
+---
+
+# devex inventory
+
+`devex inventory` exports the applications DevEx manages on a machine, with the manager, packages and versions the native package manager reports, and reconciles DevEx's records with what is actually installed. It changes nothing.
+
+```bash
+devex inventory [--format table|json|yaml] [--include-hostname] [--check]
+```
+
+## What is reported
+
+For every application DevEx tracks:
+
+| Field | Meaning |
+| --- | --- |
+| `name` | The application |
+| `manager` | Its install method, from the definition DevEx recorded at install time |
+| `packages` | The packages that method installed |
+| `version` | The version the package manager reports now |
+| `state` | `installed`, `missing` (tracked but no longer installed) or `unknown` (the method cannot be queried) |
+| `managed_by` | Always `devex` |
+| `definition_recorded` | Whether DevEx recorded the definition when it installed the application |
+
+Versions come from `dpkg-query` for apt and deb packages, `snap list` and `flatpak info`. Other methods (mise, curlpipe, Docker, ...) are reported as `unknown`. For applications installed by DevEx versions that did not record definitions, the current catalog definition is used and the drift entry says so.
+
+## Drift
+
+`drift` lists differences: `missing` for tracked applications that are no longer installed, and `no_definition` for records without a definition (reinstall the application with `devex install` to record one). `--check` exits nonzero when there is drift, for use in automation.
+
+## Machine identity
+
+`machine.id` is a salted SHA-256 of `/etc/machine-id`, so exports from the same machine match without revealing its machine-id. The hostname is included only with `--include-hostname`. `machine` also lists the OS and architecture.
+
+## Ingestion
+
+The JSON and YAML output has `schema_version: devex.inventory/v1`; fields are only added, never renamed, within v1. Collect it from each machine, for example:
+
+```bash
+devex inventory --format json > "inventory-$(date +%F).json"
+# or in a fleet: devex remote install … then
+ssh devbox devex inventory --format json | jq '.items[] | {name, version, state}'
+```
