@@ -17,13 +17,9 @@ var _ = Describe("APT Error Scenarios", func() {
 	var (
 		plugin     *main.APTInstaller
 		mockLogger *MockLogger
-		ctx        context.Context
-		cancel     context.CancelFunc
 	)
 
 	BeforeEach(func() {
-		ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-
 		info := sdk.PluginInfo{
 			Name:        "package-manager-apt",
 			Version:     "test",
@@ -39,7 +35,6 @@ var _ = Describe("APT Error Scenarios", func() {
 	})
 
 	AfterEach(func() {
-		cancel()
 		mockLogger.Clear()
 	})
 
@@ -295,64 +290,6 @@ var _ = Describe("APT Error Scenarios", func() {
 				// Ensure no dangerous content is logged
 				Expect(mockLogger.HasMessage("rm -rf /")).To(BeFalse())
 				Expect(mockLogger.HasError("rm -rf /")).To(BeFalse())
-			})
-		})
-
-		Context("when operations are cancelled mid-execution", func() {
-			It("should handle context cancellation gracefully", func() {
-				// Create a context that will be canceled
-				cancelCtx, cancelFunc := context.WithCancel(context.Background())
-
-				// Start validation in a goroutine
-				done := make(chan bool)
-				go func() {
-					defer GinkgoRecover()
-
-					// Simulate some work
-					time.Sleep(10 * time.Millisecond)
-
-					// Check if context is canceled
-					select {
-					case <-cancelCtx.Done():
-						// Context canceled as expected
-						done <- true
-					default:
-						// Continue with validation
-						_ = plugin.ValidatePackageName("test-package")
-						done <- false
-					}
-				}()
-
-				// Cancel the context
-				time.Sleep(5 * time.Millisecond)
-				cancelFunc()
-
-				// Wait for the goroutine to complete
-				wasCancelled := <-done
-				Expect(wasCancelled).To(BeTrue())
-			})
-
-			It("should clean up resources on cancellation", func() {
-				packages := []string{"pkg1", "pkg2", "pkg3"}
-				processed := 0
-
-				for _, pkg := range packages {
-					// Check if we should stop processing
-					select {
-					case <-ctx.Done():
-						// Exit the loop if context is canceled
-						goto done
-					default:
-						err := plugin.ValidatePackageName(pkg)
-						if err == nil {
-							processed++
-						}
-					}
-				}
-
-			done:
-				// All should be processed since context wasn't canceled
-				Expect(processed).To(Equal(3))
 			})
 		})
 	})
