@@ -1,0 +1,79 @@
+---
+title: devex profile
+description: Keep separate configurations, such as work and personal, and switch between them.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# devex profile
+
+A profile is a named set of configuration overrides, such as `work` or `personal`. Its files are applied on top of your shared configuration while it is the current profile.
+
+```bash
+devex profile create <name> [--from <profile>]
+devex profile list [--format table|json]
+devex profile show [name]
+devex profile switch <name> [--dry-run] [--format table|json]
+```
+
+## Where profiles live
+
+Each profile is a directory named after it under `environments/` in a configuration tier:
+
+| Tier | Directory |
+| --- | --- |
+| User | `~/.config/devex/config/environments/<name>/` |
+| Team | `~/.config/devex/team/environments/<name>/` |
+| Default | `~/.local/share/devex/config/environments/<name>/` |
+
+Put the same kind of YAML files in it as in your configuration, for example `applications/work-vpn.yaml`. Configuration is applied in this order, with later entries winning: default, the profile's default overrides, team, the profile's team overrides, user, the profile's user overrides.
+
+Profile names use up to 40 lowercase letters, digits, `-` and `_`. `programming-languages`, `shell` and `fonts` are reserved, because DevEx keeps those directories under `environments/`.
+
+## The current profile
+
+`devex profile switch` saves the current profile in `~/.local/state/devex/profile`. Without a saved profile, `dev` is used. An environment variable overrides the saved profile for the commands it is set for, checked in this order: `DEVEX_ENV`, `ENVIRONMENT`, `NODE_ENV`. `devex profile list` and `switch` say when one is set.
+
+## Switching
+
+```bash
+devex profile switch personal --dry-run
+```
+
+```text
+Would switch from work to personal.
+Default applications added: steam
+Default applications removed from the profile: work-vpn (they stay installed)
+Nothing was installed or removed; run 'devex install' to apply the profile.
+```
+
+<Callout type="info" title="Switching never installs or removes software">
+Only the saved profile changes. Applications that the new profile no longer lists stay installed; remove them with `devex uninstall` if you want to. Run `devex install` to install the new profile's applications.
+</Callout>
+
+## Failure behavior
+
+- Switching to a profile that has no directory in any tier fails; create it first. `dev` always exists.
+- Invalid or reserved names are refused, and nothing is saved.
+- A saved profile file with an invalid name is ignored, and `dev` is used.
+- If a profile's configuration is invalid, `switch` reports the validation error and does not save the change.
+
+## Verify it yourself
+
+```bash
+devex profile create work
+mkdir -p ~/.config/devex/config/environments/work/applications
+cat > ~/.config/devex/config/environments/work/applications/work-tool.yaml <<'YAML'
+name: work-tool
+description: Example
+category: Utilities
+default: true
+linux:
+  install_method: apt
+  install_command: jq
+YAML
+devex profile switch work --dry-run   # shows "Default applications added: work-tool"
+devex profile switch work
+devex profile list                    # * work (user)
+devex profile switch dev              # work-tool listed as removed from the profile, still installed
+```

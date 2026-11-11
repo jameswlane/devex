@@ -6,6 +6,7 @@
 		"install",
 		"non-interactive",
 		"config",
+		"profile",
 		"template",
 		"add-remove",
 		"status-list",
