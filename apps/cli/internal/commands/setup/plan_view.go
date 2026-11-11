@@ -9,11 +9,12 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
-// renderInstallPlan lists everything setup will install or change, built from
-// the same plan the installer runs.
+// renderInstallPlan lists everything setup will install or change, plus any
+// excluded defaults. Included entries come from the same plan the installer runs.
 func (m *SetupModel) renderInstallPlan() string {
 	plan := m.installPlan()
 	noteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6B7280"))
+	cursorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#7C3AED")).Bold(true)
 
 	var b strings.Builder
 	b.WriteString("Setup will make these changes:\n\n")
@@ -21,16 +22,35 @@ func (m *SetupModel) renderInstallPlan() string {
 	toInstall := 0
 	needsAptUpdate := false
 	section := func(title string, group planGroup) {
+		items := plan
+		if group == planDefault && !m.selections.skipDefaultApps {
+			items = make([]planItem, 0, len(m.getDefaultApps()))
+			for _, app := range m.getDefaultApps() {
+				items = append(items, planItem{app: app, group: planDefault})
+			}
+		}
+
 		var lines []string
 		count := 0
-		for _, item := range plan {
+		for itemIndex, item := range items {
 			if item.group != group {
 				continue
 			}
 			count++
+			excluded := group == planDefault && m.selections.excludedDefaults[item.app.Name]
 			line := "  • " + item.app.Name
 			if group == planDefault {
 				line = "  [x] " + item.app.Name
+				if excluded {
+					line = "  [ ] " + item.app.Name
+				}
+				if m.step == StepConfirmation && itemIndex == m.cursor {
+					line = cursorStyle.Render("> " + strings.TrimPrefix(line, " "))
+				}
+			}
+			if excluded {
+				lines = append(lines, line+noteStyle.Render(" — skipped"))
+				continue
 			}
 			if item.reason != "" {
 				line += noteStyle.Render(" (for " + item.reason + ")")
@@ -118,6 +138,6 @@ func (m *SetupModel) renderInstallPlan() string {
 	if m.selections.skipDefaultApps {
 		toggle = "include"
 	}
-	fmt.Fprintf(&b, "Press Enter to start installation, 'd' to %s default tools, 'p' to go back, or 'q' to quit.", toggle)
+	fmt.Fprintf(&b, "Use ↑/↓ to navigate, Space to skip/include the highlighted default, Enter to start installation, 'd' to %s all default tools, 'p' to go back, or 'q' to quit.", toggle)
 	return b.String()
 }

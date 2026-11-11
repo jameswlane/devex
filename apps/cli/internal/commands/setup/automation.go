@@ -38,6 +38,13 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 		}
 	}
 
+	// Plan defaults for the same platform the exclusions are validated against.
+	detectedPlatform := platform.DetectPlatform()
+	excludedDefaults, err := configuredDefaultExclusions(settings, detectedPlatform)
+	if err != nil {
+		return nil, err
+	}
+
 	return &SetupModel{
 		step:          0,
 		cursor:        0,
@@ -45,8 +52,9 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// System information
 		system: SystemInfo{
-			shells:    shells,
-			languages: getProgrammingLanguageNames(settings),
+			shells:           shells,
+			languages:        getProgrammingLanguageNames(settings),
+			detectedPlatform: detectedPlatform,
 			databases: []string{
 				"PostgreSQL",
 				"MySQL",
@@ -59,8 +67,9 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// User selections
 		selections: UISelections{
-			skipDefaultApps: viper.GetBool("no-defaults"),
-			selectedShell:   defaultShellIdx,
+			skipDefaultApps:  viper.GetBool("no-defaults"),
+			excludedDefaults: excludedDefaults,
+			selectedShell:    defaultShellIdx,
 			selectedLangs: map[int]bool{
 				DefaultNodeJSIndex: true, // Node.js
 				DefaultPythonIndex: true, // Python
@@ -115,12 +124,7 @@ func (m *SetupModel) loadAutomatedGitIdentity(ctx context.Context) {
 // printAutomatedSetupPlan displays the planned installation to the user
 func printAutomatedSetupPlan(model *SetupModel) {
 	fmt.Println("🚀 Starting automated DevEx setup...")
-	fmt.Println("Selected for installation:")
-	fmt.Printf("  • %s shell with DevEx configuration\n", model.getSelectedShell())
-	fmt.Println("  • Essential development tools")
-	fmt.Println("  • Programming languages: Node.js, Python")
-	fmt.Println("  • Database: PostgreSQL")
-	fmt.Println()
+	fmt.Println(model.renderInstallPlan())
 }
 
 // printAutomatedSetupCompletion displays the completion message and next steps
@@ -192,7 +196,7 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
 
 	// Display the planned installation to the user
-	fmt.Println(model.renderInstallPlan())
+	printAutomatedSetupPlan(model)
 	if viper.GetBool("dry-run") {
 		return nil
 	}

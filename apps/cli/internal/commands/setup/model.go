@@ -56,10 +56,11 @@ type UISelections struct {
 	selectedTheme       int
 
 	// skipDefaultApps leaves default (default: true) apps out of the plan.
-	skipDefaultApps bool
-	desktopSettings bool
-	desktopPreview  string
-	desktopPlugin   string
+	skipDefaultApps  bool
+	excludedDefaults map[string]bool
+	desktopSettings  bool
+	desktopPreview   string
+	desktopPlugin    string
 	// alreadyInstalled holds planned apps found installed on the Confirmation screen.
 	alreadyInstalled map[string]bool
 }
@@ -260,6 +261,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 
 	shells := SupportedShells
 	defaultShellIdx := GetDefaultShellIndex(shells)
+	excludedDefaults, _ := configuredDefaultExclusions(settings, detectedPlatform)
 
 	return &SetupModel{
 		step:          StepSystemOverview,
@@ -281,6 +283,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 		// User selections
 		selections: UISelections{
 			skipDefaultApps:     viper.GetBool("no-defaults"),
+			excludedDefaults:    excludedDefaults,
 			selectedShell:       defaultShellIdx,
 			selectedLangs:       make(map[int]bool),
 			selectedDBs:         make(map[int]bool),

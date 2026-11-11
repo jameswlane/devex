@@ -117,6 +117,10 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 		maxItems = len(m.system.themes)
 	case StepGitConfig:
 		maxItems = 4 // Identity, SSH choice and key path
+	case StepConfirmation:
+		if !m.selections.skipDefaultApps {
+			maxItems = len(m.getDefaultApps())
+		}
 	default:
 		return m, nil // No navigation needed for other steps
 	}
@@ -148,6 +152,17 @@ func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 		m.selections.selectedShell = m.cursor
 	case StepTheme:
 		m.selections.selectedTheme = m.cursor
+	case StepConfirmation:
+		apps := m.getDefaultApps()
+		if m.selections.skipDefaultApps || m.cursor < 0 || m.cursor >= len(apps) {
+			return m, nil
+		}
+		if m.selections.excludedDefaults == nil {
+			m.selections.excludedDefaults = make(map[string]bool)
+		}
+		name := apps[m.cursor].Name
+		m.selections.excludedDefaults[name] = !m.selections.excludedDefaults[name]
+		m.refreshInstalledApps()
 	default:
 		return m, nil // No selection needed for other steps
 	}
