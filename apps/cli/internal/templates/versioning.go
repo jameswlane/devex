@@ -3,19 +3,20 @@ package templates
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 
-	"github.com/jameswlane/devex/apps/cli/internal/backup"
-	"github.com/jameswlane/devex/apps/cli/internal/undo"
-	"github.com/jameswlane/devex/apps/cli/internal/version"
+	"github.com/jameswlane/devex/apps/cli/assets"
 )
 
 const (
@@ -25,16 +26,14 @@ const (
 	TemplateManifest    = "manifest.yaml"
 )
 
-// TemplateVersionManager manages versioning for built-in and user templates
+// TemplateVersionManager records which version of each built-in and user
+// template is known. Built-in templates are compiled into the binary.
 type TemplateVersionManager struct {
-	baseDir        string
-	configDir      string
-	versionFile    string
-	builtinDir     string
-	userDir        string
-	versionManager *version.VersionManager
-	backupManager  *backup.BackupManager
-	undoManager    *undo.UndoManager
+	baseDir     string
+	configDir   string
+	versionFile string
+	builtin     fs.FS
+	userDir     string
 }
 
 // TemplateVersion represents version information for a template
@@ -77,40 +76,37 @@ type TemplateRegistry struct {
 
 // TemplateUpdateResult represents the result of a template update operation
 type TemplateUpdateResult struct {
-	TemplateID      string   `json:"template_id" yaml:"template_id"`
-	Success         bool     `json:"success" yaml:"success"`
-	OldVersion      string   `json:"old_version" yaml:"old_version"`
-	NewVersion      string   `json:"new_version" yaml:"new_version"`
-	FilesUpdated    []string `json:"files_updated" yaml:"files_updated"`
-	BackupCreated   string   `json:"backup_created,omitempty" yaml:"backup_created,omitempty"`
-	UndoOperationID string   `json:"undo_operation_id,omitempty" yaml:"undo_operation_id,omitempty"`
-	Warnings        []string `json:"warnings,omitempty" yaml:"warnings,omitempty"`
-	Message         string   `json:"message" yaml:"message"`
+	TemplateID    string   `json:"template_id" yaml:"template_id"`
+	Success       bool     `json:"success" yaml:"success"`
+	OldVersion    string   `json:"old_version" yaml:"old_version"`
+	NewVersion    string   `json:"new_version" yaml:"new_version"`
+	FilesVerified []string `json:"files_verified" yaml:"files_verified"`
+	Warnings      []string `json:"warnings,omitempty" yaml:"warnings,omitempty"`
+	Message       string   `json:"message" yaml:"message"`
 }
 
 // NewTemplateVersionManager creates a new template version manager
 func NewTemplateVersionManager(baseDir string) *TemplateVersionManager {
+	return NewTemplateVersionManagerWithBuiltins(baseDir, assets.Templates)
+}
+
+// NewTemplateVersionManagerWithBuiltins uses builtin as the built-in template
+// tree instead of the templates compiled into this binary.
+func NewTemplateVersionManagerWithBuiltins(baseDir string, builtin fs.FS) *TemplateVersionManager {
 	configDir := filepath.Join(baseDir, "config")
-
-	// Built-in templates are in the CLI assets, not user config
-	builtinDir := detectBuiltinTemplatesDir()
-
 	return &TemplateVersionManager{
-		baseDir:        baseDir,
-		configDir:      configDir,
-		versionFile:    filepath.Join(configDir, TemplateVersionFile),
-		builtinDir:     builtinDir,
-		userDir:        filepath.Join(configDir, UserTemplatesDir),
-		versionManager: version.NewVersionManager(baseDir),
-		backupManager:  backup.NewBackupManager(baseDir),
-		undoManager:    undo.NewUndoManager(baseDir),
+		baseDir:     baseDir,
+		configDir:   configDir,
+		versionFile: filepath.Join(configDir, TemplateVersionFile),
+		builtin:     builtin,
+		userDir:     filepath.Join(configDir, UserTemplatesDir),
 	}
 }
 
 // InitializeTemplateVersioning sets up the template versioning system
 func (tvm *TemplateVersionManager) InitializeTemplateVersioning() error {
 	// Ensure directories exist
-	dirs := []string{tvm.configDir, tvm.builtinDir, tvm.userDir}
+	dirs := []string{tvm.configDir, tvm.userDir}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0750); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
@@ -141,13 +137,15 @@ func (tvm *TemplateVersionManager) ScanAndRegisterTemplates() error {
 	}
 
 	// Scan builtin templates
-	if err := tvm.scanTemplatesInDir(tvm.builtinDir, "builtin", registry); err != nil {
+	if err := tvm.scanTemplates(tvm.builtin, "builtin", registry); err != nil {
 		return fmt.Errorf("failed to scan builtin templates: %w", err)
 	}
 
 	// Scan user templates
-	if err := tvm.scanTemplatesInDir(tvm.userDir, "user", registry); err != nil {
-		return fmt.Errorf("failed to scan user templates: %w", err)
+	if _, err := os.Stat(tvm.userDir); err == nil {
+		if err := tvm.scanTemplates(os.DirFS(tvm.userDir), "user", registry); err != nil {
+			return fmt.Errorf("failed to scan user templates: %w", err)
+		}
 	}
 
 	registry.LastChecked = time.Now()
@@ -166,7 +164,7 @@ func (tvm *TemplateVersionManager) CheckForUpdates() ([]string, error) {
 	for templateID, template := range registry.Templates {
 		if template.Source == "builtin" {
 			// Check if builtin template has been updated
-			manifest, err := tvm.getTemplateManifest(filepath.Join(tvm.builtinDir, templateID))
+			manifest, err := tvm.getTemplateManifest(tvm.builtin, templateID)
 			if err != nil {
 				continue // Skip if manifest cannot be read
 			}
@@ -197,7 +195,15 @@ func (tvm *TemplateVersionManager) CheckForUpdates() ([]string, error) {
 	return updatesAvailable, nil
 }
 
-// UpdateTemplate updates a specific template to the latest version
+// UpdateTemplate reconciles the registry record of a built-in template with
+// the template files compiled into this DevEx binary.
+//
+// Built-in templates ship inside the binary, so the only trusted source of a
+// newer built-in template is a verified DevEx release (devex upgrade). Update
+// therefore never downloads or replaces template files. It checks that the
+// shipped manifest has a valid version and that every file it lists exists,
+// then records that version and checksum. The record changes only after that
+// verification passes and the registry is saved.
 func (tvm *TemplateVersionManager) UpdateTemplate(templateID string, force bool) (*TemplateUpdateResult, error) {
 	registry, err := tvm.getRegistry()
 	if err != nil {
@@ -216,108 +222,60 @@ func (tvm *TemplateVersionManager) UpdateTemplate(templateID string, force bool)
 	result := &TemplateUpdateResult{
 		TemplateID: templateID,
 		OldVersion: template.Version,
-		Success:    false,
+		NewVersion: template.Version,
 	}
 
-	// Get latest manifest
-	templateDir := filepath.Join(tvm.builtinDir, templateID)
-	manifest, err := tvm.getTemplateManifest(templateDir)
+	manifest, err := tvm.getTemplateManifest(tvm.builtin, templateID)
 	if err != nil {
-		return result, fmt.Errorf("failed to get template manifest: %w", err)
+		return result, fmt.Errorf("built-in template %s is not shipped with this DevEx release: %w", templateID, err)
+	}
+	if _, err := semver.NewVersion(manifest.Version); err != nil {
+		return result, fmt.Errorf("built-in template %s has an invalid version %q: %w", templateID, manifest.Version, err)
 	}
 
-	// Check if update is needed
-	if !force && !template.UpdateAvailable {
-		result.Message = "Template is already up to date"
+	checksum, missing, err := tvm.calculateTemplateChecksum(tvm.builtin, templateID, manifest.Files)
+	if err != nil {
+		return result, fmt.Errorf("failed to verify built-in template %s: %w", templateID, err)
+	}
+	if len(missing) > 0 {
+		return result, fmt.Errorf("built-in template %s is incomplete; missing %s", templateID, strings.Join(missing, ", "))
+	}
+	result.FilesVerified = sortedCopy(manifest.Files)
+
+	if !force && template.Version == manifest.Version && template.Checksum == checksum {
 		result.Success = true
+		result.Message = fmt.Sprintf("Template %s matches the version shipped with this DevEx release (%s). Run 'devex upgrade' to get newer built-in templates.", templateID, manifest.Version)
 		return result, nil
 	}
 
-	// Create backup before update
-	backupMetadata, err := tvm.backupManager.CreateBackup(backup.BackupOptions{
-		Description: fmt.Sprintf("Pre-template-update backup: %s v%s -> v%s", templateID, template.Version, manifest.Version),
-		Type:        "template-update",
-		Tags:        []string{"template", templateID, "pre-update"},
-		Compress:    true,
-	})
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to create backup: %v", err))
-	} else {
-		result.BackupCreated = backupMetadata.ID
-	}
-
-	// Create undo operation
-	metadata := map[string]interface{}{
-		"template_id":   templateID,
-		"old_version":   template.Version,
-		"new_version":   manifest.Version,
-		"template_type": "builtin",
-	}
-
-	undoOp, err := tvm.undoManager.RecordOperation("template-update",
-		fmt.Sprintf("Updated template %s from v%s to v%s", templateID, template.Version, manifest.Version),
-		templateID,
-		metadata)
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to record undo operation: %v", err))
-	} else {
-		result.UndoOperationID = undoOp.ID
-	}
-
-	// Update template files and calculate checksums
-	updatedFiles, newChecksum, err := tvm.updateTemplateFiles(templateDir, manifest)
-	if err != nil {
-		return result, fmt.Errorf("failed to update template files: %w", err)
-	}
-
-	// Update registry entry
-	template.Version = manifest.Version
-	template.LastUpdated = time.Now()
-	template.Checksum = newChecksum
-	template.UpdateAvailable = false
-	template.LatestVersion = ""
-	template.Description = manifest.Description
+	updated := *template
+	updated.Name = manifest.Name
+	updated.Version = manifest.Version
+	updated.Description = manifest.Description
+	updated.Checksum = checksum
+	updated.LastUpdated = time.Now()
+	updated.UpdateAvailable = false
+	updated.LatestVersion = ""
 	if manifest.Metadata != nil {
-		if template.Metadata == nil {
-			template.Metadata = make(map[string]interface{})
+		metadata := make(map[string]interface{}, len(template.Metadata)+len(manifest.Metadata))
+		for k, v := range template.Metadata {
+			metadata[k] = v
 		}
 		for k, v := range manifest.Metadata {
-			template.Metadata[k] = v
+			metadata[k] = v
 		}
+		updated.Metadata = metadata
 	}
-
-	result.NewVersion = manifest.Version
-	result.FilesUpdated = updatedFiles
-	result.Success = true
-	result.Message = fmt.Sprintf("Successfully updated template %s to version %s", templateID, manifest.Version)
-
-	// Save updated registry
+	registry.Templates[templateID] = &updated
 	registry.LastChecked = time.Now()
 	registry.UpdatedBy = "template-update"
 	if err := tvm.saveRegistry(registry); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to save registry: %v", err))
+		return result, fmt.Errorf("failed to save template registry: %w", err)
 	}
 
-	// Create version entry for the update
-	_, versionErr := tvm.versionManager.UpdateVersion(
-		fmt.Sprintf("Updated template: %s v%s -> v%s", templateID, result.OldVersion, result.NewVersion),
-		[]string{
-			fmt.Sprintf("Template %s updated", templateID),
-			fmt.Sprintf("Version: %s -> %s", result.OldVersion, result.NewVersion),
-			fmt.Sprintf("Files updated: %d", len(result.FilesUpdated)),
-		},
-	)
-	if versionErr != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to create version: %v", versionErr))
-	}
-
-	// Update undo operation with completion info
-	if undoOp != nil {
-		if updateErr := tvm.undoManager.UpdateOperation(undoOp.ID); updateErr != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to update undo operation: %v", updateErr))
-		}
-	}
-
+	result.NewVersion = manifest.Version
+	result.Success = true
+	result.Message = fmt.Sprintf("Recorded template %s %s from this DevEx release; no template files were changed.", templateID, manifest.Version)
 	return result, nil
 }
 
@@ -388,14 +346,12 @@ func (tvm *TemplateVersionManager) GetTemplateInfo(templateID string) (*Template
 		return nil, nil, fmt.Errorf("template not found: %s", templateID)
 	}
 
-	var templateDir string
-	if template.Source == "builtin" {
-		templateDir = filepath.Join(tvm.builtinDir, templateID)
-	} else {
-		templateDir = filepath.Join(tvm.userDir, templateID)
+	fsys := tvm.builtin
+	if template.Source != "builtin" {
+		fsys = os.DirFS(tvm.userDir)
 	}
 
-	manifest, err := tvm.getTemplateManifest(templateDir)
+	manifest, err := tvm.getTemplateManifest(fsys, templateID)
 	if err != nil {
 		return template, nil, fmt.Errorf("failed to get template manifest: %w", err)
 	}
@@ -405,68 +361,59 @@ func (tvm *TemplateVersionManager) GetTemplateInfo(templateID string) (*Template
 
 // Helper functions
 
-func (tvm *TemplateVersionManager) scanTemplatesInDir(dir, source string, registry *TemplateRegistry) error {
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return nil // Directory doesn't exist, skip
+// scanTemplates registers every template directory with a manifest at the
+// root of fsys.
+func (tvm *TemplateVersionManager) scanTemplates(fsys fs.FS, source string, registry *TemplateRegistry) error {
+	entries, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		return err
 	}
 
-	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		templateID := entry.Name()
+		if _, err := fs.Stat(fsys, path.Join(templateID, TemplateManifest)); err != nil {
+			continue
+		}
+
+		manifest, err := tvm.getTemplateManifest(fsys, templateID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read manifest for template %s: %w", templateID, err)
 		}
 
-		if d.IsDir() && d.Name() != filepath.Base(dir) {
-			// This is a template directory
-			templateID := d.Name()
-			manifestPath := filepath.Join(path, TemplateManifest)
-
-			if _, err := os.Stat(manifestPath); err == nil {
-				manifest, err := tvm.getTemplateManifest(path)
-				if err != nil {
-					return fmt.Errorf("failed to read manifest for template %s: %w", templateID, err)
-				}
-
-				checksum, err := tvm.calculateTemplateChecksum(path, manifest.Files)
-				if err != nil {
-					return fmt.Errorf("failed to calculate checksum for template %s: %w", templateID, err)
-				}
-
-				// Check if template is already registered
-				existing, exists := registry.Templates[templateID]
-				if !exists || existing.Checksum != checksum {
-					templateVersion := &TemplateVersion{
-						ID:           templateID,
-						Name:         manifest.Name,
-						Version:      manifest.Version,
-						Description:  manifest.Description,
-						Source:       source,
-						LastUpdated:  time.Now(),
-						Checksum:     checksum,
-						Dependencies: []string{}, // Could be populated from manifest
-						Metadata:     make(map[string]interface{}),
-					}
-
-					// Copy metadata from manifest
-					if manifest.Metadata != nil {
-						for k, v := range manifest.Metadata {
-							templateVersion.Metadata[k] = v
-						}
-					}
-
-					registry.Templates[templateID] = templateVersion
-				}
-			}
-
-			return filepath.SkipDir // Don't recurse into template subdirectories
+		checksum, _, err := tvm.calculateTemplateChecksum(fsys, templateID, manifest.Files)
+		if err != nil {
+			return fmt.Errorf("failed to calculate checksum for template %s: %w", templateID, err)
 		}
 
-		return nil
-	})
+		existing, exists := registry.Templates[templateID]
+		if exists && existing.Checksum == checksum {
+			continue
+		}
+		templateVersion := &TemplateVersion{
+			ID:           templateID,
+			Name:         manifest.Name,
+			Version:      manifest.Version,
+			Description:  manifest.Description,
+			Source:       source,
+			LastUpdated:  time.Now(),
+			Checksum:     checksum,
+			Dependencies: []string{}, // Could be populated from manifest
+			Metadata:     make(map[string]interface{}),
+		}
+		for k, v := range manifest.Metadata {
+			templateVersion.Metadata[k] = v
+		}
+		registry.Templates[templateID] = templateVersion
+	}
+
+	return nil
 }
 
-func (tvm *TemplateVersionManager) getTemplateManifest(templateDir string) (*VersionableTemplateManifest, error) {
-	manifestPath := filepath.Join(templateDir, TemplateManifest)
-	data, err := os.ReadFile(manifestPath)
+func (tvm *TemplateVersionManager) getTemplateManifest(fsys fs.FS, templateID string) (*VersionableTemplateManifest, error) {
+	data, err := fs.ReadFile(fsys, path.Join(templateID, TemplateManifest))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read manifest: %w", err)
 	}
@@ -479,47 +426,41 @@ func (tvm *TemplateVersionManager) getTemplateManifest(templateDir string) (*Ver
 	return &manifest, nil
 }
 
-func (tvm *TemplateVersionManager) calculateTemplateChecksum(templateDir string, files []string) (string, error) {
+// calculateTemplateChecksum hashes the listed files of a template in sorted
+// order and returns the listed files that do not exist. A listed path that
+// is not a valid file path inside the template (for example one that uses
+// "..") counts as missing.
+func (tvm *TemplateVersionManager) calculateTemplateChecksum(fsys fs.FS, templateID string, files []string) (string, []string, error) {
 	hasher := sha256.New()
+	var missing []string
 
-	// Sort files to ensure consistent checksum
-	sortedFiles := make([]string, len(files))
-	copy(sortedFiles, files)
-	sort.Strings(sortedFiles)
-
-	for _, file := range sortedFiles {
-		filePath := filepath.Join(templateDir, file)
-		data, err := os.ReadFile(filePath)
+	for _, file := range sortedCopy(files) {
+		// Check before joining: path.Join would resolve "../x" to a file
+		// outside the template directory.
+		if !fs.ValidPath(file) {
+			missing = append(missing, file)
+			continue
+		}
+		data, err := fs.ReadFile(fsys, path.Join(templateID, file))
 		if err != nil {
-			continue // Skip missing files
+			if errors.Is(err, fs.ErrNotExist) || errors.Is(err, fs.ErrInvalid) {
+				missing = append(missing, file)
+				continue
+			}
+			return "", nil, fmt.Errorf("failed to read %s: %w", file, err)
 		}
 
 		hasher.Write([]byte(file)) // Include filename in hash
 		hasher.Write(data)
 	}
 
-	return fmt.Sprintf("%x", hasher.Sum(nil)), nil
+	return fmt.Sprintf("%x", hasher.Sum(nil)), missing, nil
 }
 
-func (tvm *TemplateVersionManager) updateTemplateFiles(templateDir string, manifest *VersionableTemplateManifest) ([]string, string, error) {
-	var updatedFiles []string
-
-	// In a real implementation, this would download or copy updated template files
-	// For now, we'll simulate by recalculating the checksum
-	newChecksum, err := tvm.calculateTemplateChecksum(templateDir, manifest.Files)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to calculate new checksum: %w", err)
-	}
-
-	// Track which files would be updated
-	for _, file := range manifest.Files {
-		filePath := filepath.Join(templateDir, file)
-		if _, err := os.Stat(filePath); err == nil {
-			updatedFiles = append(updatedFiles, file)
-		}
-	}
-
-	return updatedFiles, newChecksum, nil
+func sortedCopy(values []string) []string {
+	sorted := append([]string(nil), values...)
+	sort.Strings(sorted)
+	return sorted
 }
 
 func (tvm *TemplateVersionManager) getRegistry() (*TemplateRegistry, error) {

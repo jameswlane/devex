@@ -583,7 +583,7 @@ devex config list --format yaml
 #### Regular Maintenance
 ```bash
 # Weekly: Update and clean
-devex template update
+devex upgrade
 devex cache cleanup --max-age 7d
 
 # Before major changes: Backup

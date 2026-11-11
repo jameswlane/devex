@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,7 +18,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
-	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -68,7 +66,7 @@ Examples:
 	// Add subcommands
 	cmd.AddCommand(newTemplateListCmd())
 	cmd.AddCommand(newTemplateCheckUpdatesCmd())
-	cmd.AddCommand(newTemplateUpdateCmd(settings))
+	cmd.AddCommand(newTemplateUpdateCmd())
 	cmd.AddCommand(newTemplateInfoCmd())
 	cmd.AddCommand(newTemplateStatusCmd())
 	cmd.AddCommand(newTemplateInitCmd())
@@ -294,7 +292,7 @@ with the latest available versions to identify update opportunities.`,
 	return cmd
 }
 
-func newTemplateUpdateCmd(settings config.CrossPlatformSettings) *cobra.Command {
+func newTemplateUpdateCmd() *cobra.Command {
 	var (
 		all    bool
 		force  bool
@@ -303,26 +301,27 @@ func newTemplateUpdateCmd(settings config.CrossPlatformSettings) *cobra.Command 
 
 	cmd := &cobra.Command{
 		Use:   "update [template-name]",
-		Short: "Update templates to their latest versions",
-		Long: `Update one or more templates to their latest versions.
+		Short: "Record the built-in template versions shipped with this release",
+		Long: `Record the built-in template versions shipped with this DevEx release.
 
-This command safely updates templates by creating backups and undo points
-before making changes. Updates preserve user customizations and provide
-rollback capabilities.`,
+Built-in templates are compiled into the DevEx binary, so they change only when
+DevEx itself changes. Run 'devex upgrade' to get newer built-in templates.
+
+This command never downloads or replaces template files. It checks that each
+built-in template's manifest has a valid version and that every file it lists
+is present, then records that version in the template registry. Custom
+templates are managed with 'devex template custom'.`,
+		Example: `  # Record the shipped version of one built-in template
+  devex template update backend
+
+  # Record every built-in template, even ones already recorded
+  devex template update --all --force`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Check for --no-tui flag
-			noTUI, _ := cmd.Flags().GetBool("no-tui")
-
 			var templateID string
 			if len(args) > 0 {
 				templateID = args[0]
 			}
 
-			if !noTUI {
-				return runTemplateUpdateWithProgress(cmd.Context(), settings, templateID, all, force, format)
-			}
-
-			// Fallback to original implementation
 			baseDir, err := templateVersionBaseDir()
 			if err != nil {
 				return err
@@ -345,7 +344,10 @@ rollback capabilities.`,
 				if err != nil {
 					return fmt.Errorf("failed to update templates: %w", err)
 				}
-				return displayUpdateResults(results, format)
+				if err := displayUpdateResults(results, format); err != nil {
+					return err
+				}
+				return failedTemplateUpdates(results)
 			}
 
 			if len(args) == 0 {
@@ -366,6 +368,7 @@ rollback capabilities.`,
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force update even if no update is available")
 	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json, yaml)")
 	cmd.Flags().Bool("no-tui", false, "Disable TUI progress display")
+	_ = cmd.Flags().MarkDeprecated("no-tui", "template update always prints plain output")
 
 	return cmd
 }
@@ -732,11 +735,20 @@ func displayExecutionPlan(plan *templates.ExecutionPlan, format string) error {
 }
 
 // runTemplateUpdateWithProgress runs template update with TUI progress tracking
-func runTemplateUpdateWithProgress(ctx context.Context, settings config.CrossPlatformSettings, templateID string, all, force bool, format string) error {
-	runner := tui.NewProgressRunner(ctx, settings)
-	defer runner.Quit()
-
-	return runner.RunTemplateOperation("update", templateID, all, force, format)
+// failedTemplateUpdates returns an error naming every template whose update
+// failed, so the command exits non-zero when any of them did.
+func failedTemplateUpdates(results []*templates.TemplateUpdateResult) error {
+	var failed []string
+	for _, result := range results {
+		if !result.Success {
+			failed = append(failed, result.TemplateID)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	sort.Strings(failed)
+	return fmt.Errorf("failed to update %d template(s): %s", len(failed), strings.Join(failed, ", "))
 }
 
 func displayUpdateResults(results []*templates.TemplateUpdateResult, format string) error {
@@ -765,11 +777,8 @@ func displayUpdateResults(results []*templates.TemplateUpdateResult, format stri
 				if result.OldVersion != result.NewVersion {
 					fmt.Printf("  Version: %s → %s\n", result.OldVersion, result.NewVersion)
 				}
-				if len(result.FilesUpdated) > 0 {
-					fmt.Printf("  Files updated: %d\n", len(result.FilesUpdated))
-				}
-				if result.BackupCreated != "" {
-					fmt.Printf("  Backup: %s\n", result.BackupCreated)
+				if len(result.FilesVerified) > 0 {
+					fmt.Printf("  Files verified: %d\n", len(result.FilesVerified))
 				}
 			} else {
 				fmt.Printf("%s %s: %s\n", red("✗"), result.TemplateID, result.Message)

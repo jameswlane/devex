@@ -180,16 +180,17 @@ devex template export my-stack --output my-template.yaml
 
 ### How do I update templates?
 
+Built-in templates are part of the DevEx binary, so upgrading DevEx updates them:
+
 ```bash
-# Update all built-in templates
-devex template update
+# Get newer built-in templates
+devex upgrade
 
-# Update specific template
-devex template update web-fullstack
-
-# Update remote templates
-devex template update --remote
+# Record the built-in template versions shipped with this release
+devex template update --all
 ```
+
+`devex template update` never downloads or replaces template files. Custom templates are managed with `devex template custom`.
 
 ## Troubleshooting
 
