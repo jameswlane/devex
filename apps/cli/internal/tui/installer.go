@@ -1640,13 +1640,17 @@ func (si *StreamingInstaller) monitorForInput(stderr io.Reader, stdin io.WriteCl
 func (si *StreamingInstaller) sendLog(level, message string) {
 	// ALWAYS write to persistent log file first (for debugging support)
 	switch strings.ToUpper(level) {
-	case "ERROR", "STDERR":
+	case "ERROR":
 		log.Error(message, nil, "source", "tui_installer")
 	case "WARN", "WARNING":
 		log.Warn(message, "source", "tui_installer")
 	case "DEBUG":
 		log.Debug(message, "source", "tui_installer")
-	case "INFO", "STDOUT":
+	case "STDOUT", "STDERR":
+		// Native tools write progress and notices to stderr; a failed command
+		// is reported separately at error level, so stream lines are info.
+		log.Info(message, "source", "tui_installer", "stream", strings.ToLower(level))
+	case "INFO":
 		log.Info(message, "source", "tui_installer")
 	default:
 		log.Info(fmt.Sprintf("[%s] %s", level, message), "source", "tui_installer")
