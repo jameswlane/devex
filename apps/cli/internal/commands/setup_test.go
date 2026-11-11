@@ -87,6 +87,18 @@ var _ = Describe("Setup Command", func() {
 			Expect(cmd.ParseFlags([]string{"--skip-default", "bat,gh"})).To(Succeed())
 			Expect(viper.GetStringSlice("setup.skip_defaults")).To(Equal([]string{"bat", "gh"}))
 		})
+
+		It("rejects an unknown name before an explicit non-interactive application list runs", func() {
+			viper.Set("applications", []string{"anything"})
+			DeferCleanup(func() { viper.Set("applications", nil) })
+			cmd := commands.NewSetupCmd(repo, settings)
+			cmd.SetArgs([]string{"--non-interactive", "--skip-default", "definitely-not-a-default"})
+			cmd.SilenceUsage, cmd.SilenceErrors = true, true
+
+			err := cmd.Execute()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(`unknown default tool "definitely-not-a-default"`))
+		})
 	})
 
 	Describe("isInteractiveMode", func() {

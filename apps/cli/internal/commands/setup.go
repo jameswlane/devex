@@ -98,6 +98,11 @@ Run 'devex setup' to begin the guided installation process.`,
 				}
 			}
 
+			// Validate before choosing a path so no mode accepts an unknown name.
+			if err := setup.ValidateDefaultExclusions(settings, detectedPlatform); err != nil {
+				return err
+			}
+
 			if viper.GetBool("dry-run") && !viper.IsSet("applications") {
 				return setup.RunAutomatedSetup(ctx, repo, settings)
 			}
@@ -121,9 +126,6 @@ Run 'devex setup' to begin the guided installation process.`,
 			// The default model initializes plugins at its plugin step and reuses them
 			// for finalization. Custom flows need their bootstrap before constructing actions.
 			log.Info("Starting interactive setup")
-			if err := setup.ValidateDefaultExclusions(settings, detectedPlatform); err != nil {
-				return err
-			}
 			var model tea.Model
 			if setupConfig != nil {
 				pluginBootstrap, err := bootstrap.NewPluginBootstrap(viper.GetBool("skip-plugin-download") || viper.GetBool("offline"))

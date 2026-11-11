@@ -271,6 +271,9 @@ func isDesktopApp(app types.CrossPlatformApp) bool {
 }
 
 func isCompatibleWithPlatform(app types.CrossPlatformApp, detectedPlatform platform.DetectionResult) bool {
+	if app.AllPlatforms.InstallCommand != "" {
+		return true
+	}
 	switch detectedPlatform.OS {
 	case "linux":
 		return app.Linux.InstallCommand != ""

@@ -26,6 +26,25 @@ var _ = Describe("Default exclusion configuration", func() {
 		DeferCleanup(viper.Reset)
 	})
 
+	It("plans only defaults compatible with the detected platform in an automated run", func() {
+		settings.ApplicationOverrides = append(settings.ApplicationOverrides, types.CrossPlatformApp{
+			Name: "everywhere", Default: true, AllPlatforms: types.OSConfig{InstallMethod: "mise", InstallCommand: "everywhere@latest"},
+		})
+		model, err := createAutomatedSetupModel(mocks.NewMockRepository(), settings)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(model.system.detectedPlatform.OS).To(Equal(platform.DetectPlatform().OS))
+
+		defaults := model.getDefaultApps()
+		names := make([]string, 0, len(defaults))
+		for _, app := range defaults {
+			names = append(names, app.Name)
+		}
+		Expect(names).To(ContainElement("everywhere"))
+		if model.system.detectedPlatform.OS == "linux" {
+			Expect(names).To(ConsistOf("bat", "gh", "everywhere"))
+		}
+	})
+
 	It("seeds automated exclusions case-insensitively from setup.skip_defaults", func() {
 		viper.Set("setup.skip_defaults", []string{"BAT"})
 

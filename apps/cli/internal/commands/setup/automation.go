@@ -38,7 +38,9 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 		}
 	}
 
-	excludedDefaults, err := configuredDefaultExclusions(settings, platform.DetectPlatform())
+	// Plan defaults for the same platform the exclusions are validated against.
+	detectedPlatform := platform.DetectPlatform()
+	excludedDefaults, err := configuredDefaultExclusions(settings, detectedPlatform)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +52,9 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 
 		// System information
 		system: SystemInfo{
-			shells:    shells,
-			languages: getProgrammingLanguageNames(settings),
+			shells:           shells,
+			languages:        getProgrammingLanguageNames(settings),
+			detectedPlatform: detectedPlatform,
 			databases: []string{
 				"PostgreSQL",
 				"MySQL",
