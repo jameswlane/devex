@@ -78,6 +78,8 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("mcp serve is read-only", []string{"mcp", "serve"}, true),
 		Entry("mcp serve with a flag is read-only", []string{"mcp", "serve", "--request-timeout", "5s"}, true),
 		Entry("bare mcp is not a read route", []string{"mcp"}, false),
+		Entry("mcp serve with mutations records state", []string{"mcp", "serve", "--allow-mutations"}, false),
+		Entry("mcp serve with mutations disabled is read-only", []string{"mcp", "serve", "--allow-mutations=false"}, true),
 		Entry("install is not read-only", []string{"install", "git"}, false),
 	)
 })

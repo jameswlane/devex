@@ -54,7 +54,17 @@ func initializeApplicationInstallers(ctx context.Context, provider pluginBootstr
 	return nil
 }
 
-func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) (result error) {
+func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider) error {
+	return runPlainInstallObserved(ctx, out, apps, repo, settings, provider, nil)
+}
+
+// installObserver receives each application's outcome: installed, skipped or failed.
+type installObserver func(app, status string, err error)
+
+func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, provider pluginBootstrapProvider, observe installObserver) (result error) {
+	if observe == nil {
+		observe = func(string, string, error) {}
+	}
 	run, err := state.StartApplicationRun(ctx, apps, settings)
 	if err != nil {
 		return err
@@ -87,6 +97,7 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 				if queryErr != nil {
 					finishAudit(queryErr)
 					printLine("failed %s: %v\n", app.Name, queryErr)
+					observe(app.Name, "failed", queryErr)
 					mu.Lock()
 					failures = append(failures, app.Name)
 					mu.Unlock()
@@ -96,6 +107,7 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 					_ = state.AuditStep(appCtx, "installation", false, func() error { return nil })
 					finishAudit(nil)
 					printLine("skipped %s (already installed)\n", app.Name)
+					observe(app.Name, "skipped", nil)
 					return nil
 				}
 			}
@@ -125,6 +137,7 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 		finishAudit(err)
 		if err != nil {
 			printLine("failed %s: %v\n", app.Name, err)
+			observe(app.Name, "failed", err)
 			mu.Lock()
 			failures = append(failures, app.Name)
 			mu.Unlock()
@@ -134,6 +147,7 @@ func runPlainInstall(ctx context.Context, out io.Writer, apps []types.CrossPlatf
 		installed++
 		mu.Unlock()
 		printLine("installed %s\n", app.Name)
+		observe(app.Name, "installed", nil)
 		return nil
 	}), installConcurrency())
 	result = errors.Join(result, scheduleErr)

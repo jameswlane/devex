@@ -325,9 +325,21 @@ func readCommand(args []string) bool {
 	case "platform":
 		return true
 	case "mcp":
-		// The MCP server is read-only: no migrations, file logging, plugin
-		// bootstrap or state creation, and stdout stays reserved for MCP.
-		return len(words) > 1 && words[1] == "serve"
+		// The default MCP server is read-only: no migrations, file logging,
+		// plugin bootstrap or state creation. With --allow-mutations it records
+		// installations, so it takes the normal startup path.
+		if len(words) < 2 || words[1] != "serve" {
+			return false
+		}
+		for _, arg := range args {
+			if arg == "--" {
+				break
+			}
+			if arg == "--allow-mutations" || (strings.HasPrefix(arg, "--allow-mutations=") && arg != "--allow-mutations=false") {
+				return false
+			}
+		}
+		return true
 	case "list", "status":
 		// Interactive list and status keep first-run bootstrap and state
 		// creation; only the JSON inspection contract is side-effect free.
