@@ -75,6 +75,8 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("plain list bootstraps plugins", []string{"list", "available"}, false),
 		Entry("JSON list is read-only", []string{"list", "available", "--format", "json"}, true),
 		Entry("platform is read-only", []string{"platform"}, true),
+		Entry("agent skill installation is read-only", []string{"agent", "install-skill", "--agent", "claude", "--scope", "user"}, true),
+		Entry("agent group alone is not read-only", []string{"agent"}, false),
 		Entry("install is not read-only", []string{"install", "git"}, false),
 	)
 })

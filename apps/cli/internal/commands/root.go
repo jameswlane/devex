@@ -187,6 +187,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
+	cmd.AddCommand(NewAgentCmd())
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
@@ -427,6 +428,8 @@ func readAPICommand(cmd *cobra.Command) bool {
 		template, _ := cmd.Flags().GetString("template")
 		format, _ := cmd.Flags().GetString("format")
 		return !fix && template == "" && format == "json"
+	case "install-skill":
+		return cmd.Parent() != nil && cmd.Parent().Name() == "agent"
 	case "effective", "show", "validate":
 		return cmd.Parent() != nil && cmd.Parent().Name() == "config"
 	}

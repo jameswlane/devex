@@ -330,6 +330,8 @@ func readCommand(args []string) bool {
 		return jsonOutputRequested(args)
 	case "config":
 		return len(words) > 1 && (words[1] == "effective" || words[1] == "show")
+	case "agent":
+		return len(words) > 1 && words[1] == "install-skill"
 	}
 	return false
 }

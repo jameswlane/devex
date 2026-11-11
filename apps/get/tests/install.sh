@@ -73,6 +73,11 @@ test_shell() {
     fi
 
     first_output=$(run_installer "$@")
+    assert_contains "$first_output" 'devex agent install-skill --agent claude --scope user'
+    assert_contains "$first_output" 'Use --agent codex instead to cover both Codex and Kimi Code.'
+    [ ! -e "$HOME/.claude" ] || fail 'Installer hint created a Claude agent directory'
+    [ ! -e "$HOME/.agents" ] || fail 'Installer hint created a Codex agent directory'
+    [ ! -e "$HOME/.kimi-code" ] || fail 'Installer hint created a Kimi agent directory'
     for config in "${configs[@]}"; do
         if [ -f "$HOME/$config" ]; then cp "$HOME/$config" "$HOME/$(basename "$config").first"; fi
     done

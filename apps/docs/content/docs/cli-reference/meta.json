@@ -12,6 +12,7 @@
 		"plugin",
 		"recovery",
 		"self-update",
+		"agent-skills",
 		"global-flags"
 	]
 }
