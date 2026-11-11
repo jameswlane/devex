@@ -68,7 +68,9 @@ var _ = Describe("Setup undo", func() {
 
 			changes := snapshot.Changes()
 			Expect(changes).To(HaveLen(2))
-			Expect(changes[0]).To(Equal(setupundo.Change{Kind: setupundo.KindShellRC, Description: "DevEx block in " + bashrc, Path: bashrc, Existed: true, Entries: []string{"export OLD=1"}}))
+			resolved, err := filepath.EvalSymlinks(bashrc)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(changes[0]).To(Equal(setupundo.Change{Kind: setupundo.KindShellRC, Description: "DevEx block in " + bashrc, Path: bashrc, Existed: true, Entries: []string{"export OLD=1"}, Target: resolved}))
 			Expect(changes[1].Path).To(Equal(zshrc))
 			Expect(changes[1].Existed).To(BeFalse())
 
@@ -125,6 +127,48 @@ var _ = Describe("Setup undo", func() {
 			Expect(read(other)).To(Equal("keep me\n"))
 		})
 
+		It("refuses a path that only cleans to an rc file, even through a real symlink", func() {
+			outside := filepath.Join(GinkgoT().TempDir(), "subdir")
+			Expect(os.MkdirAll(outside, 0o700)).To(Succeed())
+			Expect(os.Symlink(outside, filepath.Join(home, "link"))).To(Succeed())
+			target := filepath.Join(filepath.Dir(outside), ".bashrc")
+			Expect(os.WriteFile(target, []byte("keep me\n"), 0o600)).To(Succeed())
+
+			path := home + "/link/../.bashrc" // filepath.Clean would turn this into ~/.bashrc
+			err := setupundo.Restore(ctx, runner.run, home, []setupundo.Change{{Kind: setupundo.KindShellRC, Description: "dotdot", Path: path, Existed: true, Entries: []string{"echo injected"}}})
+			Expect(err).To(MatchError(ContainSubstring("not a shell rc file")))
+			Expect(read(target)).To(Equal("keep me\n"))
+		})
+
+		It("restores through a dotfile symlink but refuses one repointed after setup", func() {
+			dotfiles := GinkgoT().TempDir()
+			real := filepath.Join(dotfiles, "bashrc")
+			Expect(os.WriteFile(real, []byte("export EDITOR=vim\n"), 0o600)).To(Succeed())
+			bashrc := filepath.Join(home, ".bashrc")
+			Expect(os.Symlink(real, bashrc)).To(Succeed())
+
+			snapshot := setupundo.SnapshotShellRC([]string{bashrc})
+			_, err := managed.Apply(bashrc, []string{"export A=1"})
+			Expect(err).NotTo(HaveOccurred())
+			changes := snapshot.Changes()
+			Expect(changes).To(HaveLen(1))
+			Expect(setupundo.Restore(ctx, runner.run, home, changes)).To(Succeed())
+			Expect(read(real)).To(Equal("export EDITOR=vim\n"))
+
+			_, err = managed.Apply(bashrc, []string{"export A=1"})
+			Expect(err).NotTo(HaveOccurred())
+			changes = setupundo.SnapshotShellRC([]string{bashrc}).Changes()
+			changes = append(changes, setupundo.Change{Kind: setupundo.KindShellRC, Description: "repointed", Path: bashrc, Existed: true, Target: real})
+			other := filepath.Join(dotfiles, "other")
+			Expect(os.WriteFile(other, []byte("other user file\n"), 0o600)).To(Succeed())
+			Expect(os.Remove(bashrc)).To(Succeed())
+			Expect(os.Symlink(other, bashrc)).To(Succeed())
+
+			err = setupundo.Restore(ctx, runner.run, home, changes[len(changes)-1:])
+			Expect(err).To(MatchError(ContainSubstring("now points to")))
+			Expect(read(other)).To(Equal("other user file\n"))
+		})
+
 		It("reports nothing when no managed block changed", func() {
 			bashrc := filepath.Join(home, ".bashrc")
 			Expect(os.WriteFile(bashrc, []byte("export A=1\n"), 0o600)).To(Succeed())
@@ -169,7 +213,15 @@ var _ = Describe("Setup undo", func() {
 
 		It("treats unsetting an already missing key as done, so undo can be retried", func() {
 			runner.errs["git config --global --unset user.email"] = exitStatusError(5)
+			runner.errs["git config --global --get-all user.email"] = exitStatusError(1)
 			Expect(setupundo.Restore(ctx, runner.run, home, []setupundo.Change{{Kind: setupundo.KindGitConfig, Description: "e", Key: "user.email", Unset: true}})).To(Succeed())
+		})
+
+		It("reports a conflict when Git refuses to unset a key that now has several values", func() {
+			runner.errs["git config --global --unset user.email"] = exitStatusError(5)
+			runner.outputs["git config --global --get-all user.email"] = "one@example.com\ntwo@example.com\n"
+			err := setupundo.Restore(ctx, runner.run, home, []setupundo.Change{{Kind: setupundo.KindGitConfig, Description: "e", Key: "user.email", Unset: true}})
+			Expect(err).To(MatchError(ContainSubstring("now has several values")))
 		})
 	})
 

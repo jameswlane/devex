@@ -64,6 +64,9 @@ type Change struct {
 	Path    string   `json:"path,omitempty"`
 	Existed bool     `json:"existed,omitempty"`
 	Entries []string `json:"entries,omitempty"`
+	// Target is where Path resolved after setup, so undo can refuse a symlink
+	// that was repointed since.
+	Target string `json:"target,omitempty"`
 	// Settings: the previous value, or Unset when the setting had none.
 	Key    string `json:"key,omitempty"`
 	Schema string `json:"schema,omitempty"`
@@ -123,7 +126,11 @@ func (s RCSnapshot) Changes() []Change {
 		if !before.exists {
 			description = "Created " + path
 		}
-		changes = append(changes, Change{Kind: KindShellRC, Description: description, Path: path, Existed: before.exists, Entries: before.entries})
+		target, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			target = ""
+		}
+		changes = append(changes, Change{Kind: KindShellRC, Description: description, Path: path, Existed: before.exists, Entries: before.entries, Target: target})
 	}
 	return changes
 }
@@ -287,7 +294,9 @@ func Restore(ctx context.Context, run Runner, home string, changes []Change) err
 		change := changes[i]
 		var err error
 		if change.Kind == KindShellRC {
-			if !slices.Contains(allowed, filepath.Clean(change.Path)) {
+			// Exact match: a path spelled with ".." or through another
+			// directory never reaches the filesystem.
+			if !slices.Contains(allowed, change.Path) {
 				err = fmt.Errorf("refusing to change %q: not a shell rc file in %s", change.Path, home)
 			} else {
 				err = restoreShellRC(change)
@@ -309,7 +318,13 @@ func restoreSetting(ctx context.Context, run Runner, change Change) error {
 	}
 	_, err = run(ctx, argv)
 	if code, ok := exitCode(err); ok && change.Kind == KindGitConfig && change.Unset && code == gitUnsetMissing {
-		return nil // already unset
+		// Status 5 means either "no such key" or "several values". Only the
+		// first is done; several values need the user to choose.
+		_, getErr := run(ctx, []string{"git", "config", "--global", "--get-all", change.Key})
+		if getCode, ok := exitCode(getErr); ok && getCode == gitGetMissing {
+			return nil
+		}
+		return fmt.Errorf("global Git %s now has several values; remove the ones you don't want with git config --global --unset-all %s", change.Key, change.Key)
 	}
 	if err != nil {
 		return fmt.Errorf("%s: %w", strings.Join(argv, " "), err)
@@ -319,34 +334,57 @@ func restoreSetting(ctx context.Context, run Runner, change Change) error {
 
 // restoreShellRC puts the managed block back as it was. Content outside the
 // block, including user edits made since setup, is left alone. A file setup
-// created is deleted only while it still holds nothing but a well-formed block
-// and was not replaced while undo checked it.
+// created is deleted only while it still holds nothing but a well-formed block.
 func restoreShellRC(change Change) error {
+	if change.Target != "" {
+		current, err := filepath.EvalSymlinks(change.Path)
+		if err == nil && current != change.Target {
+			return fmt.Errorf("%s now points to %s, not %s as after setup; not changed", change.Path, current, change.Target)
+		}
+	}
 	if !change.Existed {
-		before, err := os.Lstat(change.Path)
+		info, err := os.Lstat(change.Path)
 		if os.IsNotExist(err) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		if before.Mode().IsRegular() {
+		if info.Mode().IsRegular() {
 			only, err := managed.OnlyBlock(change.Path)
 			if err != nil {
 				return fmt.Errorf("not changed, fix the DevEx block markers first: %w", err)
 			}
 			if only {
-				after, err := os.Lstat(change.Path)
-				if err != nil {
-					return err
-				}
-				if !os.SameFile(before, after) || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
-					return fmt.Errorf("%s changed while undo was checking it; run undo again", change.Path)
-				}
-				return os.Remove(change.Path)
+				return removeCreatedRC(change.Path, info)
 			}
 		}
 	}
 	_, err := managed.Apply(change.Path, change.Entries)
 	return err
+}
+
+// removeCreatedRC deletes a file setup created without ever losing content an
+// editor wrote meanwhile: it first moves the file aside atomically, checks the
+// moved object is the one that was inspected and still holds only the block,
+// and only then deletes it. Anything else is moved back, or kept beside the rc
+// file when the path was reused, and reported.
+func removeCreatedRC(path string, inspected os.FileInfo) error {
+	aside := fmt.Sprintf("%s.devex-undo-%d", path, os.Getpid())
+	if err := os.Rename(path, aside); err != nil {
+		return err
+	}
+	moved, err := os.Lstat(aside)
+	unchanged := err == nil && os.SameFile(inspected, moved) && moved.Size() == inspected.Size() && moved.ModTime().Equal(inspected.ModTime())
+	if unchanged {
+		if only, onlyErr := managed.OnlyBlock(aside); onlyErr == nil && only {
+			return os.Remove(aside)
+		}
+	}
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		if err := os.Rename(aside, path); err == nil {
+			return fmt.Errorf("%s changed while undo was checking it; not removed, run undo again", path)
+		}
+	}
+	return fmt.Errorf("%s changed while undo was removing it; its content is kept at %s", path, aside)
 }
