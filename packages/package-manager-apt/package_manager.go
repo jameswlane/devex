@@ -61,7 +61,14 @@ func (a *APTInstaller) getLogger() sdk.Logger {
 
 // Execute handles command execution
 func (a *APTInstaller) Execute(command string, args []string) error {
-	ctx := context.Background()
+	return a.ExecuteContext(context.Background(), command, args)
+}
+
+// ExecuteContext handles command execution with caller cancellation.
+func (a *APTInstaller) ExecuteContext(ctx context.Context, command string, args []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Ensure APT is available
 	a.EnsureAvailable()
@@ -359,7 +366,18 @@ func (a *APTInstaller) handleSearch(ctx context.Context, args []string) error {
 	searchTerm := strings.Join(args, " ")
 	a.getLogger().Printf("Searching for: %s\\n", searchTerm)
 
-	return a.ExecManagerCommand("search", false, "search", searchTerm)
+	timeout := a.GetTimeout("search")
+	operationCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	commandArgs := []string{"search", searchTerm}
+	err := sdk.ExecOperationWithContext(operationCtx, sdk.OperationPrivilege{Scope: sdk.ScopeUser}, "apt", commandArgs...)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if errors.Is(operationCtx.Err(), context.DeadlineExceeded) {
+		return &sdk.TimeoutError{Command: "apt", Args: commandArgs, Timeout: timeout, Operation: "search"}
+	}
+	return err
 }
 
 // handleList lists packages
