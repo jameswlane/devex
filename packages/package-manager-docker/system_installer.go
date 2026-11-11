@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
@@ -95,47 +99,71 @@ func (d *DockerInstaller) installDockerEngine(ctx context.Context) error {
 	return fmt.Errorf("unsupported system: no supported package manager found")
 }
 
+const (
+	dockerAptKeyPath    = "/etc/apt/keyrings/docker.asc"
+	dockerAptSourcePath = "/etc/apt/sources.list.d/docker.list"
+)
+
 // installDockerEngineDebian installs Docker Engine on Debian/Ubuntu systems
 func (d *DockerInstaller) installDockerEngineDebian(ctx context.Context) error {
 	d.logger.Printf("Installing Docker Engine on Debian/Ubuntu...\n")
 
-	// Update package lists
+	osReleasePath := d.osReleasePath
+	if osReleasePath == "" {
+		osReleasePath = "/etc/os-release"
+	}
+	distro, codename, err := dockerAptRelease(osReleasePath)
+	if err != nil {
+		return err
+	}
+
 	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update"); err != nil {
-		d.logger.Warning("Failed to update package lists: %v", err)
+		return fmt.Errorf("failed to update apt package lists before installing Docker prerequisites: %w", err)
 	}
 
-	// Install required packages
 	d.logger.Printf("Installing prerequisites...\n")
-	prereqs := []string{"apt-transport-https", "ca-certificates", "curl", "gnupg", "lsb-release"}
-	prereqCmd := append([]string{"install", "-y"}, prereqs...)
-	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", prereqCmd...); err != nil {
-		d.logger.Warning("Failed to install prerequisites: %v", err)
+	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "install", "-y", "ca-certificates", "curl"); err != nil {
+		return fmt.Errorf("failed to install Docker prerequisites ca-certificates and curl; check apt sources and network connectivity: %w", err)
 	}
 
-	// Add Docker's official GPG key
 	d.logger.Printf("Adding Docker GPG key...\n")
-	if err := sdk.ExecCommandWithContext(ctx, true, "mkdir", "-p", "/etc/apt/keyrings"); err != nil {
-		d.logger.Warning("Failed to create keyrings directory: %v", err)
+	if err := sdk.ExecCommandWithContext(ctx, true, "install", "-m", "0755", "-d", "/etc/apt/keyrings"); err != nil {
+		return fmt.Errorf("failed to create apt keyrings directory: %w", err)
 	}
 
-	gpgCmd := "curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg"
-	if err := sdk.ExecCommandWithContext(ctx, true, "bash", "-c", gpgCmd); err != nil {
-		return fmt.Errorf("failed to add Docker GPG key: %w", err)
+	keyURL := fmt.Sprintf("https://download.docker.com/linux/%s/gpg", distro)
+	if err := sdk.ExecCommandWithContext(ctx, true, "curl", "-fsSL", keyURL, "-o", dockerAptKeyPath); err != nil {
+		return fmt.Errorf("failed to download Docker apt key from %s: %w", keyURL, err)
+	}
+	if err := sdk.ExecCommandWithContext(ctx, true, "chmod", "a+r", dockerAptKeyPath); err != nil {
+		return fmt.Errorf("failed to make Docker apt key readable: %w", err)
 	}
 
-	// Add Docker repository
+	architecture, err := sdk.ExecCommandOutputWithContext(ctx, "dpkg", "--print-architecture")
+	if err != nil {
+		return fmt.Errorf("failed to determine dpkg architecture for Docker repository: %w", err)
+	}
+	architecture = strings.TrimSpace(architecture)
+	if architecture == "" {
+		return fmt.Errorf("failed to determine dpkg architecture for Docker repository: command returned no architecture")
+	}
+
 	d.logger.Printf("Adding Docker repository...\n")
-	repoCmd := `echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null`
-	if err := sdk.ExecCommandWithContext(ctx, true, "bash", "-c", repoCmd); err != nil {
-		return fmt.Errorf("failed to add Docker repository: %w", err)
+	source := fmt.Sprintf("deb [arch=%s signed-by=%s] https://download.docker.com/linux/%s %s stable\n", architecture, dockerAptKeyPath, distro, codename)
+	request := sdk.ExecutionRequest{
+		Privilege: sdk.OperationPrivilege{Scope: sdk.ScopeSystem},
+		Name:      "tee",
+		Args:      []string{dockerAptSourcePath},
+	}
+	streams := sdk.OperationIO{Stdin: strings.NewReader(source), Stdout: io.Discard, Stderr: os.Stderr}
+	if err := sdk.RunOperation(ctx, request, streams); err != nil {
+		return fmt.Errorf("failed to write Docker apt source %s: %w", dockerAptSourcePath, err)
 	}
 
-	// Update package lists again
 	if err := sdk.ExecCommandWithContext(ctx, true, "apt-get", "update"); err != nil {
 		return fmt.Errorf("failed to update package lists after adding Docker repo: %w", err)
 	}
 
-	// Install Docker Engine
 	d.logger.Printf("Installing Docker Engine packages...\n")
 	dockerPkgs := []string{"docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin", "docker-compose-plugin"}
 	dockerCmd := append([]string{"install", "-y"}, dockerPkgs...)
@@ -144,6 +172,68 @@ func (d *DockerInstaller) installDockerEngineDebian(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func dockerAptRelease(path string) (string, string, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) && path == "/etc/os-release" {
+		// os-release(5): /usr/lib/os-release is the fallback when /etc has none.
+		data, err = os.ReadFile("/usr/lib/os-release")
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read %s to identify a Debian or Ubuntu system: %w", path, err)
+	}
+	values := parseOSRelease(data)
+
+	candidates := append([]string{values["ID"]}, strings.Fields(values["ID_LIKE"])...)
+	distro := ""
+	for _, candidate := range candidates {
+		if candidate == "debian" || candidate == "ubuntu" {
+			distro = candidate
+			break
+		}
+	}
+	if distro == "" {
+		return "", "", fmt.Errorf("docker apt installation requires Debian, Ubuntu, or a derivative with ID_LIKE in %s; select a supported package manager", path)
+	}
+
+	codename := values["UBUNTU_CODENAME"]
+	if codename == "" {
+		codename = values["VERSION_CODENAME"]
+	}
+	if codename == "" {
+		return "", "", fmt.Errorf("docker apt installation requires UBUNTU_CODENAME or VERSION_CODENAME in %s", path)
+	}
+	return distro, codename, nil
+}
+
+func parseOSRelease(data []byte) map[string]string {
+	values := make(map[string]string)
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+			// Values use shell quoting; fall back to stripping the quotes
+			// when an escape such as \$ is not valid Go syntax.
+			if unquoted, err := strconv.Unquote(value); err == nil {
+				value = unquoted
+			} else {
+				value = value[1 : len(value)-1]
+			}
+		} else if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
+			value = value[1 : len(value)-1]
+		}
+		values[key] = value
+	}
+	return values
 }
 
 // installDockerEngineFedora installs Docker Engine on Fedora/RHEL systems

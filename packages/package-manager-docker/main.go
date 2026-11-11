@@ -147,6 +147,7 @@ func NewDockerPlugin() *DockerInstaller {
 	return &DockerInstaller{
 		PackageManagerPlugin: sdk.NewPackageManagerPlugin(info, "docker"),
 		logger:               sdk.NewDefaultLogger(false),
+		osReleasePath:        "/etc/os-release",
 	}
 }
 
