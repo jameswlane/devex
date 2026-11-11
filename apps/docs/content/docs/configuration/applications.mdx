@@ -94,26 +94,37 @@ The editor opens every nested application YAML file in the default configuration
 
 ## Application configuration files
 
-Add `config_files` to the selected platform block (or `all_platforms`). Each entry copies one regular file:
+Add `config_files` to the selected platform block (or `all_platforms`). Each entry copies one regular file. An optional `requires_any` list limits the copy to systems where at least one listed marker file already exists; marker paths use the same expansion rules as sources and destinations:
 
 ```yaml
 linux:
   install_method: apt
   install_command: neovim
   config_files:
-    - source: ~/.local/share/devex/assets/defaults/neovim/init.vim
-      destination: ${HOME}/.config/nvim/init.vim
+    - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
+      destination: ${HOME}/.config/nvim/lazyvim.json
+      requires_any:
+        - ~/.config/nvim/lua/config/lazy.lua
+        - ~/.config/nvim/lazy-lock.json
 ```
 
-Both plain and TUI installation use this order: pre-install hooks, package installation, **configuration file copies**, then post-install hooks. The TUI also resolves dependencies before installing the package. Post-install hooks can read the copied files.
+Confirmation shows each mapping and its marker requirements. If no marker exists, installation logs a skip and does not create the destination, its parent directories, or a managed-file record. Empty marker paths and traversal segments fail configuration validation.
+
+Both plain and TUI installation use this order: pre-install hooks, package installation, **configuration file copies**, then post-install hooks. The TUI also resolves dependencies before installing the package. Post-install hooks can read the copied files. Selected theme files use the same conditional, backed-up copy handler.
 
 Paths support `~/`, `$HOME`, `$VAR`, `${VAR}`, and Windows-style `%VAR%` environment variables, including `%LOCALAPPDATA%`. Variables must be set and nonempty. Relative sources resolve from the CLI's working directory. Destinations must be absolute after expansion and stay inside the current `$HOME`; the schema does not grant exceptions for system paths. Traversal segments (`..`), symlinks at the destination, directories in place of files, and symlink escapes outside the home directory are rejected. Missing parent directories are created with user-only access, and copied files use mode `0600`.
 
-An existing destination is moved to a sibling named `<destination>.<UTC timestamp>.devex-bak` before replacement. Backups remain available after uninstall. Successful copies, their content hashes, backup paths, and mapping warnings are recorded per application in `~/.local/state/devex/config-files/<application-name-hash>.json`. Uninstall removes only recorded copies whose contents still match; user edits and untracked files are preserved. `--keep-config` preserves the managed copies as well.
+An existing destination with identical content is left unchanged. Otherwise, it is moved to a sibling named `<destination>.<UTC timestamp>.devex-bak` before replacement. Backups remain available after uninstall. Successful copies, their content hashes, backup paths, and mapping warnings are recorded per application in `~/.local/state/devex/config-files/<application-name-hash>.json`. Uninstall removes only recorded copies whose contents still match; user edits and untracked files are preserved. `--keep-config` preserves the managed copies as well.
 
 A failed mapping produces a warning with the application name, source, destination, and cause. Installation continues with the remaining mappings and post-install hooks, and the warning is saved in the configuration-stage result. TUI batch results also include these warnings. This policy does not undo a successfully installed package. If the result record cannot be opened, configuration copies are skipped with a warning.
 
 `devex install --dry-run` prints the planned copy, parent-directory creation, and timestamped backup operations without writing files or changing the result record. It reports invalid mappings, but cannot predict every permission error that may occur when the actual installation writes files.
+
+### Neovim and LazyVim layout
+
+DevEx installs Neovim but does not create `~/.config/nvim` or install a plugin manager. Configure Neovim yourself, and install LazyVim separately after reviewing its setup instructions.
+
+For an existing plain Neovim configuration (`init.lua` or `init.vim`), DevEx may add only the transparency snippet. For a lazy.nvim/LazyVim configuration, detected by `lua/config/lazy.lua` or `lazy-lock.json`, DevEx also applies `lazyvim.json` and the selected theme's lazy.nvim plugin spec under `lua/plugins/`. Theme specs require LazyVim; they are not standalone Neovim color configurations. Fresh setups without any of these marker files receive no Neovim configuration files. Existing different content is backed up before replacement, and repeated identical setup is a no-op.
 
 ## Consent rules for app and plugin authors
 

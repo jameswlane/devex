@@ -4,17 +4,15 @@ package theme
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 // Manager handles theme operations for applications
 type Manager struct {
-	repo            types.Repository
-	commandExecutor CommandExecutor
+	repo types.Repository
 }
 
 // CommandExecutor interface for executing system commands
@@ -23,11 +21,8 @@ type CommandExecutor interface {
 }
 
 // New creates a new theme manager
-func New(repo types.Repository, executor CommandExecutor) *Manager {
-	return &Manager{
-		repo:            repo,
-		commandExecutor: executor,
-	}
+func New(repo types.Repository, _ CommandExecutor) *Manager {
+	return &Manager{repo: repo}
 }
 
 // SelectTheme stores the theme selection for an application
@@ -105,63 +100,13 @@ func (m *Manager) ApplyTheme(ctx context.Context, appName string, availableTheme
 		return fmt.Errorf("selected theme '%s' not found for %s", selectedThemeName, appName)
 	}
 
-	// Apply theme files
-	for _, configFile := range selectedTheme.Files {
-		if err := m.applyThemeFile(ctx, configFile); err != nil {
-			// Log error but continue with other files
-			fmt.Printf("Warning: Failed to apply theme file %s: %v\n", configFile.Source, err)
-		}
+	result := configfiles.Apply(ctx, appName, selectedTheme.Files, false, func(message string) {
+		fmt.Println(message)
+	})
+	if len(result.Warnings) > 0 {
+		return fmt.Errorf("theme '%s' for %s applied with problems: %s", selectedThemeName, appName, strings.Join(result.Warnings, "; "))
 	}
-
 	return nil
-}
-
-// applyThemeFile copies a single theme configuration file
-func (m *Manager) applyThemeFile(ctx context.Context, file types.ConfigFile) error {
-	source := expandPath(file.Source)
-	destination := expandPath(file.Destination)
-
-	// Create destination directory if needed
-	destDir := filepath.Dir(destination)
-	if err := m.ensureDirectory(ctx, destDir); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", destDir, err)
-	}
-
-	// Copy the file
-	copyCmd := fmt.Sprintf("cp '%s' '%s'", source, destination)
-	if err := m.commandExecutor.Execute(ctx, copyCmd); err != nil {
-		return fmt.Errorf("failed to copy theme file: %w", err)
-	}
-
-	return nil
-}
-
-// ensureDirectory creates a directory if it doesn't exist
-func (m *Manager) ensureDirectory(ctx context.Context, dir string) error {
-	if dir == "." || dir == "/" {
-		return nil
-	}
-
-	// Check if directory exists
-	if _, err := os.Stat(dir); err == nil {
-		return nil
-	}
-
-	// Create directory
-	cmd := fmt.Sprintf("mkdir -p '%s'", dir)
-	return m.commandExecutor.Execute(ctx, cmd)
-}
-
-// expandPath expands tilde (~) in file paths to the user's home directory
-func expandPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		homeDir := os.Getenv("HOME")
-		if homeDir == "" {
-			homeDir = os.Getenv("USERPROFILE") // Windows fallback
-		}
-		return strings.Replace(path, "~", homeDir, 1)
-	}
-	return path
 }
 
 // ValidateTheme checks if a theme is valid and has all required files

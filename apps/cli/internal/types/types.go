@@ -105,8 +105,9 @@ type AptSource struct {
 
 // ConfigFile defines a source and destination for configuration files.
 type ConfigFile struct {
-	Source      string `mapstructure:"source" yaml:"source"`
-	Destination string `mapstructure:"destination" yaml:"destination"`
+	Source      string   `mapstructure:"source" yaml:"source"`
+	Destination string   `mapstructure:"destination" yaml:"destination"`
+	RequiresAny []string `mapstructure:"requires_any" yaml:"requires_any,omitempty"`
 }
 
 // Theme defines a theme configuration.

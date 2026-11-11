@@ -56,6 +56,10 @@ when a supported preview is unavailable, desktop settings remain skipped.
 
 The shipped catalog no longer bootstraps LazyVim or removes a Neovim config's
 `.git` directory automatically. Install/configure LazyVim separately after
-reviewing its setup instructions. Typora's theme/config file handler creates
-parent directories; a raw mkdir hook is unnecessary. Homebrew fzf initialization
-uses the selected shell's managed rc block instead of running its all-shell setup.
+reviewing its setup instructions. DevEx writes no Neovim files for a fresh
+configuration. Existing plain Neovim configurations can receive the transparency
+snippet; `lazyvim.json` and theme plugin specs require a detected lazy.nvim /
+LazyVim marker. These mappings use declarative `requires_any` conditions shown
+on Confirmation. Typora's theme/config file handler creates parent directories;
+a raw mkdir hook is unnecessary. Homebrew fzf initialization uses the selected
+shell's managed rc block instead of running its all-shell setup.

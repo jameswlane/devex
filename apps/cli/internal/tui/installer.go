@@ -1858,28 +1858,19 @@ func (si *StreamingInstaller) applySelectedTheme(ctx context.Context, appName st
 
 	si.sendLog("INFO", fmt.Sprintf("Applying theme '%s' for %s", selectedTheme.Name, appName))
 
-	// Apply theme files by copying them to their destinations
-	for index, configFile := range selectedTheme.Files {
-		si.sendLog("INFO", fmt.Sprintf("Copying theme file from %s to %s", configFile.Source, configFile.Destination))
-
-		// Expand tilde in paths
-		source := expandPath(configFile.Source)
-		destination := expandPath(configFile.Destination)
-
-		err := state.AuditStep(ctx, fmt.Sprintf("theme-file-%d", index), true, func() error {
-			if err := si.createDirectoryForFile(ctx, destination); err != nil {
-				return err
-			}
-			return si.executeCommandStream(ctx, fmt.Sprintf("cp '%s' '%s'", source, destination))
-		})
-		if err != nil {
-			si.sendLog("WARN", fmt.Sprintf("Failed to copy theme file from %s to %s: %v", source, destination, err))
-		} else {
-			si.sendLog("INFO", fmt.Sprintf("Successfully copied theme file to %s", destination))
+	result := configfiles.Apply(ctx, appName, selectedTheme.Files, false, func(message string) {
+		level := "INFO"
+		if strings.HasPrefix(message, "Warning:") {
+			level = "WARN"
 		}
+		si.sendLog(level, message)
+	})
+	if len(result.Warnings) > 0 {
+		si.sendLog("WARN", fmt.Sprintf("Theme '%s' for %s applied with %d problem(s)", selectedTheme.Name, appName, len(result.Warnings)))
+		return nil
 	}
 
-	si.sendLog("INFO", fmt.Sprintf("Theme '%s' applied successfully for %s", selectedTheme.Name, appName))
+	si.sendLog("INFO", fmt.Sprintf("Theme '%s' applied for %s", selectedTheme.Name, appName))
 	return nil
 }
 

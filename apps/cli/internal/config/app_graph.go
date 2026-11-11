@@ -166,6 +166,27 @@ func ValidateApplicationGraph(apps []types.CrossPlatformApp) (errs []ValidationE
 			for i, alternative := range osConfig.Alternatives {
 				checkMethod(alternative.InstallMethod, fmt.Sprintf("%s.alternatives[%d].install_method", field, i))
 			}
+			checkConfigFile := func(file types.ConfigFile, where string) {
+				for i, marker := range file.RequiresAny {
+					location := fmt.Sprintf("%s.requires_any[%d]", where, i)
+					if strings.TrimSpace(marker) == "" {
+						errs = append(errs, ValidationError{File: app.Name, Field: location, Message: "required marker path must not be empty"})
+					}
+					for _, part := range strings.FieldsFunc(marker, func(r rune) bool { return r == '/' || r == '\\' }) {
+						if part == ".." {
+							errs = append(errs, ValidationError{File: app.Name, Field: location, Message: "required marker path traversal is forbidden"})
+						}
+					}
+				}
+			}
+			for i, file := range osConfig.ConfigFiles {
+				checkConfigFile(file, fmt.Sprintf("%s.config_files[%d]", field, i))
+			}
+			for i, theme := range osConfig.Themes {
+				for j, file := range theme.Files {
+					checkConfigFile(file, fmt.Sprintf("%s.themes[%d].files[%d]", field, i, j))
+				}
+			}
 
 			for i, conflict := range osConfig.Conflicts {
 				if target, ok := index[strings.ToLower(conflict)]; ok && target != app.Name {

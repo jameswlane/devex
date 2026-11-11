@@ -3,6 +3,8 @@ package theme_test
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -188,7 +190,11 @@ var _ = Describe("Theme Manager", func() {
 	})
 
 	Describe("Theme Application", func() {
-		It("should apply theme files", func() {
+		It("should apply theme files through the backed-up config handler", func() {
+			home := GinkgoT().TempDir()
+			GinkgoT().Setenv("HOME", home)
+			source := filepath.Join(home, "theme.json")
+			Expect(os.WriteFile(source, []byte("theme"), 0600)).To(Succeed())
 			repo.data["app_theme_vscode"] = "dark"
 
 			themes := []types.Theme{
@@ -196,7 +202,7 @@ var _ = Describe("Theme Manager", func() {
 					Name: "dark",
 					Files: []types.ConfigFile{
 						{
-							Source:      "/themes/dark/config.json",
+							Source:      source,
 							Destination: "~/.config/vscode/config.json",
 						},
 					},
@@ -205,7 +211,10 @@ var _ = Describe("Theme Manager", func() {
 
 			err := manager.ApplyTheme(ctx, "vscode", themes)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(executor.executedCommands).To(HaveLen(2)) // mkdir and cp commands
+			data, err := os.ReadFile(filepath.Join(home, ".config", "vscode", "config.json"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(Equal("theme"))
+			Expect(executor.executedCommands).To(BeEmpty())
 		})
 
 		It("should handle missing selected theme", func() {
@@ -238,9 +247,9 @@ var _ = Describe("Theme Manager", func() {
 				},
 			}
 
-			// Should not return error even though individual files fail
+			// Every file is attempted, and the failures are reported, not hidden.
 			err := manager.ApplyTheme(ctx, "vscode", themes)
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err).To(MatchError(And(ContainSubstring("config1.json"), ContainSubstring("config2.json"))))
 		})
 	})
 

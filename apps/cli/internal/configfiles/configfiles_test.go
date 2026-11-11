@@ -44,4 +44,82 @@ var _ = Describe("Config file plans", func() {
 		_, err := configfiles.Expand("$UNSET_CONFIG_TEST/config")
 		Expect(err).To(MatchError(ContainSubstring("unset environment variable")))
 	})
+
+	Describe("conditional Neovim configuration", func() {
+		var home, source, destination string
+		var mappings []types.ConfigFile
+
+		BeforeEach(func() {
+			home = GinkgoT().TempDir()
+			GinkgoT().Setenv("HOME", home)
+			source = filepath.Join(home, "source.lua")
+			destination = filepath.Join(home, ".config", "nvim", "lazyvim.json")
+			Expect(os.WriteFile(source, []byte("managed"), 0600)).To(Succeed())
+			mappings = []types.ConfigFile{{
+				Source:      source,
+				Destination: destination,
+				RequiresAny: []string{
+					"~/.config/nvim/lua/config/lazy.lua",
+					"~/.config/nvim/lazy-lock.json",
+				},
+			}}
+		})
+
+		It("writes nothing when no Neovim configuration exists", func(ctx SpecContext) {
+			var plan []string
+			result := configfiles.Apply(ctx, "Neovim", mappings, false, func(line string) { plan = append(plan, line) })
+
+			Expect(result.Warnings).To(BeEmpty())
+			Expect(destination).NotTo(BeAnExistingFile())
+			Expect(filepath.Join(home, ".config")).NotTo(BeADirectory())
+			Expect(filepath.Join(home, ".local", "state", "devex")).NotTo(BeADirectory())
+			Expect(strings.Join(plan, "\n")).To(ContainSubstring("Skip"))
+		})
+
+		DescribeTable("accepts either lazy.nvim marker",
+			func(ctx SpecContext, marker string) {
+				markerPath := filepath.Join(home, ".config", "nvim", filepath.FromSlash(marker))
+				Expect(os.MkdirAll(filepath.Dir(markerPath), 0700)).To(Succeed())
+				Expect(os.WriteFile(markerPath, []byte("user config"), 0600)).To(Succeed())
+
+				first := configfiles.Apply(ctx, "Neovim", mappings, false, nil)
+				Expect(first.Warnings).To(BeEmpty())
+				Expect(destination).To(BeAnExistingFile())
+				Expect(first.Files[0].Backup).To(BeEmpty())
+				Expect(os.WriteFile(markerPath, []byte("user config"), 0600)).To(Succeed())
+
+				second := configfiles.Apply(ctx, "Neovim", mappings, false, nil)
+				Expect(second.Warnings).To(BeEmpty())
+				Expect(second.Files[0].Backup).To(BeEmpty())
+				data, err := os.ReadFile(markerPath)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(data)).To(Equal("user config"))
+				matches, err := filepath.Glob(destination + ".*.devex-bak")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(matches).To(BeEmpty())
+			},
+			Entry("LazyVim bootstrap", "lua/config/lazy.lua"),
+			Entry("lazy.nvim lockfile", "lazy-lock.json"),
+		)
+
+		It("backs up a user-modified destination before replacing it", func(ctx SpecContext) {
+			marker := filepath.Join(home, ".config", "nvim", "lazy-lock.json")
+			Expect(os.MkdirAll(filepath.Dir(marker), 0700)).To(Succeed())
+			Expect(os.WriteFile(marker, []byte("{}"), 0600)).To(Succeed())
+			configfiles.Apply(ctx, "Neovim", mappings, false, nil)
+			Expect(os.WriteFile(destination, []byte("user edit"), 0600)).To(Succeed())
+
+			result := configfiles.Apply(ctx, "Neovim", mappings, false, nil)
+
+			Expect(result.Warnings).To(BeEmpty())
+			backup := result.Files[0].Backup
+			Expect(backup).To(HaveSuffix(".devex-bak"))
+			data, err := os.ReadFile(backup)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(Equal("user edit"))
+			data, err = os.ReadFile(destination)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(data)).To(Equal("managed"))
+		})
+	})
 })

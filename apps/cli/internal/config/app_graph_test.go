@@ -100,4 +100,20 @@ var _ = Describe("Application graph validation", func() {
 		}
 		Expect(config.ValidateApplicationGraph(apps)).To(BeEmpty())
 	})
+
+	It("validates config file marker conditions, including theme files", func() {
+		app := linuxApp("Neovim", "apt", "neovim")
+		app.Linux.ConfigFiles = []types.ConfigFile{{Source: "source", Destination: "destination", RequiresAny: []string{""}}}
+		app.Linux.Themes = []types.Theme{{Files: []types.ConfigFile{{Source: "source", Destination: "destination", RequiresAny: []string{"../outside"}}}}}
+
+		errs := config.ValidateApplicationGraph([]types.CrossPlatformApp{app})
+
+		Expect(errs).To(ContainElements(
+			And(HaveField("Field", "linux.config_files[0].requires_any[0]"), HaveField("Message", ContainSubstring("empty"))),
+			And(HaveField("Field", "linux.themes[0].files[0].requires_any[0]"), HaveField("Message", ContainSubstring("traversal"))),
+		))
+		app.Linux.ConfigFiles[0].RequiresAny = []string{"~/.config/nvim/lazy-lock.json"}
+		app.Linux.Themes[0].Files[0].RequiresAny = []string{"~/.config/nvim/lua/config/lazy.lua"}
+		Expect(config.ValidateApplicationGraph([]types.CrossPlatformApp{app})).To(BeEmpty())
+	})
 })
