@@ -33,8 +33,11 @@ Git version control system configuration plugin for DevEx. Provides comprehensiv
 ## 🚀 Quick Start
 
 ```bash
-# Configure Git identity
-devex tool git setup --name "Your Name" --email "your@email.com"
+# Configure only the Git identity
+devex plugin run tool-git config --name "Your Name" --email "your@email.com"
+
+# Also apply recommended settings that are not already configured
+devex plugin run tool-git config --name "Your Name" --email "your@email.com" --defaults
 
 # Generate and configure SSH key
 devex plugin run tool-git ssh --mode generate --path "$HOME/.ssh/id_devex"
@@ -43,12 +46,18 @@ devex plugin run tool-git ssh --mode generate --path "$HOME/.ssh/id_devex"
 # Set up GPG signing
 devex tool git gpg --setup-signing --key-id "your-key-id"
 
-# Install useful aliases
-devex tool git aliases --install-defaults
+# Install recommended aliases that are not already configured
+devex plugin run tool-git aliases --defaults
 
 # Configure development workflow
 devex tool git workflow --enable-hooks --set-editor "code"
 ```
+
+`config` and the setup protocol change only `user.name` and `user.email` by
+default. Their `--defaults` flag opts into the nine recommended settings, and
+`aliases --defaults` opts into the recommended aliases. Every opt-in checks
+each global key first, reports whether it was set or kept, and never overwrites
+an existing value. DevEx CLI setup does not pass `--defaults`.
 
 ## 🔧 Configuration
 

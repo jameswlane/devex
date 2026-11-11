@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 )
 
-// HandleConfig configures Git settings including user info and sensible defaults
+// HandleConfig configures Git user info and explicitly requested defaults
 func (p *GitPlugin) HandleConfig(ctx context.Context, args []string) error {
 	fmt.Println("Configuring Git...")
 
@@ -47,9 +48,10 @@ func (p *GitPlugin) HandleConfig(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// Set sensible defaults
-	if err := p.SetSensibleDefaults(ctx); err != nil {
-		return err
+	if defaultsRequested(args) {
+		if err := p.SetSensibleDefaults(ctx); err != nil {
+			return err
+		}
 	}
 
 	fmt.Println("\nGit configuration complete!")
@@ -106,17 +108,10 @@ func (p *GitPlugin) SetUserConfig(ctx context.Context, fullName, email string) e
 	return nil
 }
 
-// SetSensibleDefaults sets recommended Git configuration defaults
+// SetSensibleDefaults sets recommended Git configuration defaults that are unset
 func (p *GitPlugin) SetSensibleDefaults(ctx context.Context) error {
-	// Set the default branch name
-	if err := sdk.ExecCommandWithTimeoutAndOperation(p.GetTimeout("shell"), "shell", false, "git", "config", "--global", "init.defaultBranch", "main"); err != nil {
-		fmt.Printf("Warning: failed to set default branch name: %v\n", err)
-	} else {
-		fmt.Println("Set default branch name to 'main'")
-	}
-
-	// Define sensible defaults
 	configs := map[string]string{
+		"init.defaultBranch":  "main",
 		"core.editor":         "vim",
 		"color.ui":            "auto",
 		"pull.rebase":         "false",
@@ -127,12 +122,43 @@ func (p *GitPlugin) SetSensibleDefaults(ctx context.Context) error {
 		"fetch.prune":         "true",
 	}
 
-	// Apply each configuration setting
 	for key, value := range configs {
-		if err := sdk.ExecCommandWithTimeoutAndOperation(p.GetTimeout("shell"), "shell", false, "git", "config", "--global", key, value); err != nil {
+		if _, err := p.setGlobalConfigIfUnset(ctx, key, value); err != nil {
 			fmt.Printf("Warning: failed to set %s: %v\n", key, err)
 		}
 	}
 
 	return nil
+}
+
+func (p *GitPlugin) setGlobalConfigIfUnset(ctx context.Context, key, value string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, p.GetTimeout("shell"))
+	defer cancel()
+
+	_, err := sdk.ExecCommandOutputWithContext(ctx, "git", "config", "--global", "--get", key)
+	if err == nil {
+		fmt.Printf("Kept %s\n", key)
+		return false, nil
+	}
+	// Only Git's "no value" status means unset. Anything else (several values,
+	// an unreadable config) leaves the key alone.
+	var exit interface{ ExitCode() int }
+	if !errors.As(err, &exit) || exit.ExitCode() != 1 {
+		return false, fmt.Errorf("read %s before setting it: %w", key, err)
+	}
+
+	if err := sdk.ExecCommandWithContext(ctx, false, "git", "config", "--global", key, value); err != nil {
+		return false, err
+	}
+	fmt.Printf("Set %s\n", key)
+	return true, nil
+}
+
+func defaultsRequested(args []string) bool {
+	for _, arg := range args {
+		if arg == "--defaults" {
+			return true
+		}
+	}
+	return false
 }

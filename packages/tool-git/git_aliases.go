@@ -15,17 +15,22 @@ func (p *GitPlugin) HandleAliases(ctx context.Context, args []string) error {
 		return p.setCustomAlias(ctx, args[1], args[2])
 	}
 
-	// Default behavior: install predefined aliases
+	if !defaultsRequested(args) {
+		fmt.Println("No aliases installed. Use 'tool-git aliases --defaults' to install the recommended aliases.")
+		return nil
+	}
+
 	fmt.Println("Installing Git aliases...")
 
 	aliases := p.GetGitAliases()
 
-	// Install each alias
 	installed := 0
 	for alias, command := range aliases {
-		if err := sdk.ExecCommandWithContext(ctx, false, "git", "config", "--global", fmt.Sprintf("alias.%s", alias), command); err != nil {
+		key := fmt.Sprintf("alias.%s", alias)
+		set, err := p.setGlobalConfigIfUnset(ctx, key, command)
+		if err != nil {
 			fmt.Printf("Warning: failed to install alias '%s': %v\n", alias, err)
-		} else {
+		} else if set {
 			installed++
 		}
 	}

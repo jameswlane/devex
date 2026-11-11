@@ -24,16 +24,20 @@ func NewGitPlugin() *GitPlugin {
 			{
 				Name:        "config",
 				Description: "Configure Git settings",
-				Usage:       "Set up Git user, email, and global configuration with sensible defaults",
+				Usage:       "Set Git user and email; optionally apply missing recommended global settings with --defaults",
 				Flags: map[string]string{
-					"name":  "Set Git user name",
-					"email": "Set Git user email",
+					"name":     "Set Git user name",
+					"email":    "Set Git user email",
+					"defaults": "Apply recommended global settings without overwriting existing values",
 				},
 			},
 			{
 				Name:        "aliases",
 				Description: "Install Git aliases",
-				Usage:       "Install useful Git aliases to improve workflow efficiency",
+				Usage:       "Install missing recommended Git aliases only with --defaults",
+				Flags: map[string]string{
+					"defaults": "Install recommended aliases without overwriting existing values",
+				},
 			},
 			{
 				Name:        "status",
@@ -43,7 +47,10 @@ func NewGitPlugin() *GitPlugin {
 			{
 				Name:        "setup",
 				Description: "Configure Git via setup protocol",
-				Usage:       "Called by DevEx CLI during setup workflow to configure Git with user information",
+				Usage:       "Configure Git user information during setup; --defaults also applies missing recommended settings",
+				Flags: map[string]string{
+					"defaults": "Apply recommended global settings without overwriting existing values",
+				},
 			},
 		},
 	}

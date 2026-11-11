@@ -46,14 +46,14 @@ func (p *GitPlugin) HandleSetup(ctx context.Context, args []string) error {
 		return sdk.SendError("failed to set user config", err)
 	}
 
-	// Send progress update
-	if err := sdk.SendProgress(60, "Applying sensible defaults..."); err != nil {
-		return err
-	}
+	if defaultsRequested(args) {
+		if err := sdk.SendProgress(60, "Applying sensible defaults..."); err != nil {
+			return err
+		}
 
-	// Set sensible defaults
-	if err := p.SetSensibleDefaults(ctx); err != nil {
-		return sdk.SendError("failed to set defaults", err)
+		if err := p.SetSensibleDefaults(ctx); err != nil {
+			return sdk.SendError("failed to set defaults", err)
+		}
 	}
 
 	// Send success response
