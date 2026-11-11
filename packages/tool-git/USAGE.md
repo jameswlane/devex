@@ -61,7 +61,11 @@ git config --global --list
 
 ### Default Configuration Settings
 
-The Git plugin automatically applies sensible defaults when you run the config command:
+The `config` and setup commands change only the Git identity by default. Pass
+`--defaults` to either command to apply the settings below. Existing global
+values are reported as kept and are never overwritten. Likewise, recommended
+aliases are installed only by `aliases --defaults`, which keeps existing
+aliases.
 
 #### Core Settings
 ```bash
@@ -108,7 +112,7 @@ devex plugin exec tool-git config \
 
 ```bash
 # Install all recommended aliases
-devex plugin exec tool-git aliases --install
+devex plugin exec tool-git aliases --defaults
 
 # Show available aliases before installing
 devex plugin exec tool-git aliases --show
@@ -403,8 +407,8 @@ git config --global --get-regexp alias
 # Remove conflicting alias
 git config --global --unset alias.conflicting-name
 
-# Reinstall DevEx aliases
-devex plugin exec tool-git aliases --install --force
+# Install missing DevEx aliases (existing aliases are kept)
+devex plugin exec tool-git aliases --defaults
 ```
 
 ### Debug Information
@@ -440,7 +444,7 @@ read -p "Enter your email address: " email
 devex plugin exec tool-git config --name "$name" --email "$email"
 
 # Install helpful aliases
-devex plugin exec tool-git aliases --install
+devex plugin exec tool-git aliases --defaults
 
 # Generate SSH key for GitHub
 devex plugin exec tool-git ssh-setup --generate-key --service github
@@ -474,7 +478,7 @@ git init
 
 # Apply DevEx Git configuration
 devex plugin exec tool-git config
-devex plugin exec tool-git aliases --install
+devex plugin exec tool-git aliases --defaults
 
 # Apply project template
 devex plugin exec tool-git template --apply "$template"
