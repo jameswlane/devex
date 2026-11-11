@@ -216,19 +216,20 @@ func (um *UndoManager) UndoOperation(operationID string, force bool) (*UndoResul
 		result.NewBackupID = preUndoBackup.ID
 	}
 
-	// Setup runs change the system outside DevEx's configuration; restore those
-	// changes from the recorded before-state. DevEx's own configuration is
-	// restored too, but a failure there only warns.
+	// Setup runs change the system outside DevEx's configuration; restore only
+	// those recorded changes. The operation's configuration backup was taken
+	// after setup finished, so restoring it would discard later edits.
 	if targetOp.Operation == setupundo.Operation {
 		changes, err := setupundo.Decode(targetOp.Metadata[setupundo.MetadataKey])
 		if err != nil {
 			return result, err
 		}
-		if err := setupundo.Restore(context.Background(), setupundo.ExecRunner, changes); err != nil {
-			return result, fmt.Errorf("failed to undo setup changes: %w", err)
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return result, fmt.Errorf("find home directory for setup undo: %w", err)
 		}
-		if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("DevEx configuration was not restored: %v", err))
+		if err := setupundo.Restore(context.Background(), setupundo.ExecRunner, home, changes); err != nil {
+			return result, fmt.Errorf("failed to undo setup changes (fix the cause and run undo again; every step is safe to repeat): %w", err)
 		}
 		result.RestoredFrom = "setup changes"
 		result.Message = fmt.Sprintf("Restored %d setup changes", len(changes))

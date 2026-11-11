@@ -19,6 +19,16 @@ var _ = Describe("Managed shell rc", func() {
 	var path string
 	BeforeEach(func() { path = filepath.Join(GinkgoT().TempDir(), ".bashrc") })
 	read := func() string { data, err := os.ReadFile(path); Expect(err).NotTo(HaveOccurred()); return string(data) }
+	It("reports whether a file holds only a well-formed managed block", func() {
+		_, err := rc.Apply(path, []string{"export A=1"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rc.OnlyBlock(path)).To(BeTrue())
+		Expect(os.WriteFile(path, []byte(read()+"export MINE=1\n"), 0600)).To(Succeed())
+		Expect(rc.OnlyBlock(path)).To(BeFalse())
+		Expect(os.WriteFile(path, []byte(rc.Start+"\nexport MINE=important\n"), 0600)).To(Succeed())
+		_, err = rc.OnlyBlock(path)
+		Expect(err).To(MatchError(ContainSubstring("unterminated DevEx block")))
+	})
 	It("reads the managed entries so a snapshot can be restored with Apply", func() {
 		exists, entries, err := rc.Read(path)
 		Expect(err).NotTo(HaveOccurred())

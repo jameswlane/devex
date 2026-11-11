@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/setupundo"
@@ -40,12 +42,19 @@ func (m *SetupModel) beginSystemUndo() {
 // captureGitIdentity records the global Git identity keys setup is about to set.
 func (m *SetupModel) captureGitIdentity(ctx context.Context, name, email string) []setupundo.Change {
 	var changes []setupundo.Change
-	if name != "" {
-		changes = append(changes, setupundo.GitConfigChange(ctx, systemUndoRunner, "user.name"))
+	for key, value := range map[string]string{"user.name": name, "user.email": email} {
+		if value == "" {
+			continue
+		}
+		change, err := setupundo.GitConfigChange(ctx, systemUndoRunner, key)
+		if err != nil {
+			log.Warn("Git identity change cannot be undone", "key", key, "error", err)
+			m.installation.addChange(fmt.Sprintf("Global Git %s cannot be undone: %v", key, err))
+			continue
+		}
+		changes = append(changes, change)
 	}
-	if email != "" {
-		changes = append(changes, setupundo.GitConfigChange(ctx, systemUndoRunner, "user.email"))
-	}
+	slices.SortFunc(changes, func(a, b setupundo.Change) int { return strings.Compare(a.Key, b.Key) })
 	return changes
 }
 

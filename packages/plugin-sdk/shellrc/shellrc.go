@@ -37,6 +37,23 @@ func MergeLegacy(path string, entries, known []string) (bool, error) {
 // Remove deletes the managed block and leaves all user content intact.
 func Remove(path string) (bool, error) { return Apply(path, nil) }
 
+// OnlyBlock reports whether path holds nothing outside a well-formed managed
+// block. Malformed markers are an error, so callers never treat user content
+// after a damaged block as DevEx's.
+func OnlyBlock(path string) (bool, error) {
+	editMu.Lock()
+	defer editMu.Unlock()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	outside, _, err := split(string(content), nil)
+	if err != nil {
+		return false, fmt.Errorf("read %s: %w", path, err)
+	}
+	return strings.TrimSpace(outside) == "", nil
+}
+
 // Read reports whether path exists and the entries inside its managed block,
 // so callers can snapshot the block and later restore it with Apply.
 func Read(path string) (exists bool, entries []string, err error) {

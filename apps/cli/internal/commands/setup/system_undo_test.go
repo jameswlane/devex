@@ -42,6 +42,10 @@ var _ = Describe("Setup undo record", func() {
 		}
 		Expect(undoLine).NotTo(BeEmpty(), "changes: %v", model.installation.getChanges())
 
+		// A DevEx configuration edit made after setup must survive the undo.
+		configFile := filepath.Join(devexpaths.ForHome(home).Config, "config", "applications.yaml")
+		Expect(os.WriteFile(configFile, []byte("later-user-edit\n"), 0o600)).To(Succeed())
+
 		recorder.Reset()
 		result, err := undo.NewUndoManager(devexpaths.ForHome(home).Config).UndoLast(false)
 		Expect(err).NotTo(HaveOccurred())
@@ -51,13 +55,16 @@ var _ = Describe("Setup undo record", func() {
 		data, err := os.ReadFile(bashrc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(data)).To(Equal("export EDITOR=vim\n"))
+		edited, err := os.ReadFile(configFile)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(edited)).To(Equal("later-user-edit\n"))
 		calls := recorder.Calls("git")
 		restores := make([][]string, 0, len(calls))
 		for _, call := range calls {
 			restores = append(restores, call.Args)
 		}
 		Expect(restores).To(ConsistOf(
-			[]string{"config", "--global", "user.name", "Old Name"},
+			[]string{"config", "--global", "--", "user.name", "Old Name"},
 			[]string{"config", "--global", "--unset", "user.email"},
 		))
 	})
