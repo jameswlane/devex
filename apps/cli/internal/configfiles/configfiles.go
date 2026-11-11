@@ -4,6 +4,7 @@
 package configfiles
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -101,9 +102,10 @@ func load(root *os.Root, app string) (Result, error) {
 	return result, err
 }
 
-// Apply copies regular files only, backs up conflicts, and records successful
-// copies by content hash. Dry runs validate and describe the same plan without
-// creating directories, backups, files, or manifests. emit receives plan/warnings.
+// Apply copies regular files only when their marker conditions match, backs up
+// conflicts, leaves identical destinations unchanged, and records copies by
+// content hash. Dry runs validate and describe the same plan without creating
+// directories, backups, files, or manifests. emit receives plan/warnings.
 func Apply(ctx context.Context, app string, mappings []types.ConfigFile, dryRun bool, emit func(string)) Result {
 	result := Result{}
 	if len(mappings) == 0 {
@@ -115,6 +117,40 @@ func Apply(ctx context.Context, app string, mappings []types.ConfigFile, dryRun 
 		if emit != nil {
 			emit("Warning: " + message)
 		}
+	}
+	eligible := make([]types.ConfigFile, 0, len(mappings))
+	for _, m := range mappings {
+		if len(m.RequiresAny) == 0 {
+			eligible = append(eligible, m)
+			continue
+		}
+		matched, invalid := false, false
+		for _, marker := range m.RequiresAny {
+			path, err := Expand(marker)
+			if err != nil {
+				warn(m, fmt.Errorf("evaluate required marker %q: %w", marker, err))
+				invalid = true
+				break
+			}
+			info, err := os.Stat(path)
+			if err == nil && info.Mode().IsRegular() {
+				matched = true
+				break
+			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+				warn(m, fmt.Errorf("access required marker %q: %w", marker, err))
+				invalid = true
+				break
+			}
+		}
+		if matched {
+			eligible = append(eligible, m)
+		} else if !invalid && emit != nil {
+			emit(fmt.Sprintf("Skip %s: none of the required files exist (%s)", m.Destination, strings.Join(m.RequiresAny, ", ")))
+		}
+	}
+	mappings = eligible
+	if len(mappings) == 0 {
+		return result
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -236,6 +272,16 @@ func applyOne(root *os.Root, home string, m types.ConfigFile, dryRun bool, emit 
 	if err == nil {
 		if !info.Mode().IsRegular() {
 			return File{}, errors.New("destination must be a regular file (symlinks are denied)")
+		}
+		existing, err := root.ReadFile(rel)
+		if err != nil {
+			return File{}, fmt.Errorf("read destination: %w", err)
+		}
+		if bytes.Equal(existing, data) {
+			if emit != nil {
+				emit(fmt.Sprintf("Unchanged %s", destination))
+			}
+			return file, nil
 		}
 		file.Backup = destination + "." + time.Now().UTC().Format("20060102T150405.000000000") + ".devex-bak"
 	} else if !errors.Is(err, os.ErrNotExist) {

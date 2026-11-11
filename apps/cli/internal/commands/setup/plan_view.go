@@ -89,8 +89,23 @@ func (m *SetupModel) renderInstallPlan() string {
 						lines = append(lines, "      Hook: "+string(data))
 					}
 				}
+				configFileLine := func(kind string, file types.ConfigFile) string {
+					line := fmt.Sprintf("      %s: %s → %s", kind, file.Source, file.Destination)
+					if len(file.RequiresAny) > 0 {
+						line += fmt.Sprintf(" (requires any existing file: %s)", strings.Join(file.RequiresAny, ", "))
+					}
+					return line
+				}
 				for _, file := range config.ConfigFiles {
-					lines = append(lines, fmt.Sprintf("      Config file: %s → %s", file.Source, file.Destination))
+					lines = append(lines, configFileLine("Config file", file))
+				}
+				for _, theme := range config.Themes {
+					if theme.Name != m.getSelectedTheme() {
+						continue
+					}
+					for _, file := range theme.Files {
+						lines = append(lines, configFileLine("Theme file", file))
+					}
 				}
 			}
 		}
@@ -114,7 +129,7 @@ func (m *SetupModel) renderInstallPlan() string {
 	}
 	fmt.Fprintf(&b, "  • Shell: %s\n", m.getSelectedShell())
 	if theme := m.getSelectedTheme(); theme != "" {
-		fmt.Fprintf(&b, "  • Theme preference (saved only): %s\n", theme)
+		fmt.Fprintf(&b, "  • Theme preference: %s\n", theme)
 	}
 	b.WriteString(m.renderDesktopPreview())
 

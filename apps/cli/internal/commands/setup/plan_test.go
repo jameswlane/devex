@@ -163,18 +163,20 @@ var _ = Describe("Install plan and Confirmation screen", func() {
 })
 
 var _ = Describe("Consent hook preview", func() {
-	It("shows commands and config destinations but only selected-shell initialization", func() {
+	It("shows commands and conditional config destinations but only selected-shell initialization", func() {
 		model := &SetupModel{step: StepConfirmation,
-			system: SystemInfo{shells: []string{"bash"}},
+			system:     SystemInfo{shells: []string{"bash"}, themes: []string{"Tokyo Night"}},
+			selections: UISelections{selectedTheme: 0},
 			settings: config.CrossPlatformSettings{ApplicationOverrides: []types.CrossPlatformApp{{Name: "example", Default: true,
 				Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "example",
 					PostInstall: []types.InstallCommand{{Shell: "example init"}, {ShellInit: map[string]string{"bash": "example init bash", "zsh": "example init zsh"}}, {Path: []string{"/opt/example/bin"}}},
-					ConfigFiles: []types.ConfigFile{{Source: "example.conf", Destination: "~/.config/example/config"}},
+					ConfigFiles: []types.ConfigFile{{Source: "example.conf", Destination: "~/.config/example/config", RequiresAny: []string{"~/.config/example/init.lua"}}},
+					Themes:      []types.Theme{{Name: "Tokyo Night", Files: []types.ConfigFile{{Source: "theme.lua", Destination: "~/.config/example/theme.lua", RequiresAny: []string{"~/.config/example/lazy-lock.json"}}}}},
 				},
 			}}},
 		}
 		view := model.renderInstallPlan()
-		for _, expected := range []string{"[x] example", "apt: example", "example init bash", "/opt/example/bin", "~/.config/example/config"} {
+		for _, expected := range []string{"[x] example", "apt: example", "example init bash", "/opt/example/bin", "~/.config/example/config", "~/.config/example/init.lua", "~/.config/example/theme.lua", "~/.config/example/lazy-lock.json"} {
 			Expect(view).To(ContainSubstring(expected))
 		}
 		Expect(view).NotTo(ContainSubstring("example init zsh"))

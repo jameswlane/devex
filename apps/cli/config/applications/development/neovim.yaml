@@ -47,8 +47,16 @@ macos:
   config_files:
     - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
       destination: ~/.config/nvim/plugin/after/transparency.lua
+      requires_any:
+        - ~/.config/nvim/init.lua
+        - ~/.config/nvim/init.vim
+        - ~/.config/nvim/lua/config/lazy.lua
+        - ~/.config/nvim/lazy-lock.json
     - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
       destination: ~/.config/nvim/lazyvim.json
+      requires_any:
+        - ~/.config/nvim/lua/config/lazy.lua
+        - ~/.config/nvim/lazy-lock.json
   system_requirements:
     required_commands:
       - git
@@ -60,6 +68,9 @@ macos:
       files:
         - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
           destination: ~/.config/nvim/lua/plugins/theme.lua
+          requires_any:
+            - ~/.config/nvim/lua/config/lazy.lua
+            - ~/.config/nvim/lazy-lock.json
 windows:
   install_method: winget
   install_command: Neovim.Neovim
@@ -101,6 +112,9 @@ windows:
       files:
         - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
           destination: ~/.config/nvim/lua/plugins/theme.lua
+          requires_any:
+            - ~/.config/nvim/lua/config/lazy.lua
+            - ~/.config/nvim/lazy-lock.json
 linux:
   install_method: curlpipe
   installed_binary: nvim
@@ -243,8 +257,16 @@ linux:
   config_files:
     - source: ~/.local/share/devex/assets/defaults/neovim/transparency.lua
       destination: ~/.config/nvim/plugin/after/transparency.lua
+      requires_any:
+        - ~/.config/nvim/init.lua
+        - ~/.config/nvim/init.vim
+        - ~/.config/nvim/lua/config/lazy.lua
+        - ~/.config/nvim/lazy-lock.json
     - source: ~/.local/share/devex/assets/defaults/neovim/lazyvim.json
       destination: ~/.config/nvim/lazyvim.json
+      requires_any:
+        - ~/.config/nvim/lua/config/lazy.lua
+        - ~/.config/nvim/lazy-lock.json
   system_requirements:
     required_commands:
       - git
@@ -256,3 +278,6 @@ linux:
       files:
         - source: ~/.local/share/devex/themes/neovim/tokyo-night.lua
           destination: ~/.config/nvim/lua/plugins/theme.lua
+          requires_any:
+            - ~/.config/nvim/lua/config/lazy.lua
+            - ~/.config/nvim/lazy-lock.json
