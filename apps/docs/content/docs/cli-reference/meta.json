@@ -7,6 +7,7 @@
 		"non-interactive",
 		"config",
 		"template",
+		"devcontainer",
 		"add-remove",
 		"status-list",
 		"plugin",

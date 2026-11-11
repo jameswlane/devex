@@ -1,0 +1,58 @@
+---
+title: devex devcontainer
+description: Generate a Development Container for a project from your DevEx applications.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# devex devcontainer generate
+
+`devex devcontainer generate` writes a [Development Container](https://containers.dev) for a project, `.devcontainer/devcontainer.json` and a `Dockerfile`, from your DevEx applications. Editors such as VS Code and tools such as the `devcontainer` CLI can then build and open the project inside that container.
+
+```bash
+devex devcontainer generate [--apps a,b] [--image IMAGE] [--dir DIR] [--name NAME] [--dry-run] [--force] [--format table|json]
+```
+
+## What goes into the container
+
+The applications are your configured defaults, or the ones named with `--apps`.
+
+| Application | In the container |
+| --- | --- |
+| Go, Node.js, Python, Rust, Ruby, Java | The official Dev Container Feature for that runtime |
+| GitHub CLI, git | Their official Features |
+| Docker | `docker-outside-of-docker`: the container uses the host's Docker daemon |
+| Applications installed with plain apt packages | One `apt-get install` layer in the Dockerfile |
+
+Everything else is left out and listed as `Skipped <app>: <reason>`, so you can add it yourself:
+
+- desktop applications and fonts, and flatpak, snap and AppImage packages;
+- apt packages from third-party repositories (add the repository to the Dockerfile);
+- applications with setup hooks, which DevEx runs on the host;
+- applications installed another way (curlpipe, mise and so on).
+
+The base image is `mcr.microsoft.com/devcontainers/base:ubuntu-24.04`; choose another with `--image`. The container runs as the image's non-root `vscode` user.
+
+## Local versus container setup
+
+`devex install` and `devex setup` configure your machine. The dev container is a separate, disposable environment for one project: nothing from your machine is copied or mounted into it. No SSH keys, credentials, Git configuration or home directory files are added; use your editor's credential forwarding or add `mounts` yourself if a project needs them.
+
+<Callout type="warn" title="Secrets">
+Do not bake secrets into the Dockerfile; the image layers keep them. Pass them at run time instead, for example with your editor's secret forwarding or `--env-file`.
+</Callout>
+
+## Files
+
+- Existing generated files are never replaced unless you pass `--force`; with `--force` both files are rewritten.
+- `--dry-run` prints both files and writes nothing.
+- The generated `devcontainer.json` is validated before it is written: it must parse, name the Dockerfile build, and use only the Features listed above.
+
+## Verify it yourself
+
+```bash
+devex devcontainer generate --apps Go,curl --dry-run
+devex devcontainer generate --apps Go,curl
+# with the devcontainer CLI installed:
+devcontainer up --workspace-folder .
+devcontainer exec --workspace-folder . go version
+```
