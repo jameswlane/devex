@@ -659,6 +659,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 	contexts := make(map[string]context.Context)
 	ctx = state.WithAuditApplications(ctx, contexts)
 	finishes := make(map[string]func(error))
+	outcomes := outcomeRecorder(ctx)
 	var finishMutex sync.Mutex
 	complete := func(name string, err error) {
 		finishMutex.Lock()
@@ -674,11 +675,13 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 	}
 	defer func() {
 		for _, app := range apps {
+			outcomes.Record(app.Name, unstartedOutcome(ctx, result), result)
 			complete(app.Name, result)
 		}
 	}()
 	return si.installationResult(runInstallLanes(ctx, apps, si.preparePackageRun, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
 		if si.apt.has(si.apt.preinstalled, app.Name) {
+			outcomes.Record(app.Name, OutcomeSkipped, nil)
 			complete(app.Name, nil)
 			si.sendLog("INFO", fmt.Sprintf("%s is already installed; skipping", app.Name))
 			if si.program != nil {
@@ -706,6 +709,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		}
 
 		installErr := si.InstallApp(state.WithAuditApplication(ctx, app.Name), app, settings)
+		outcomes.Record(app.Name, installOutcome(ctx, installErr), installErr)
 		complete(app.Name, installErr)
 		if err := installErr; err != nil {
 			si.sendLog("ERROR", fmt.Sprintf("Failed to install %s: %v", app.Name, err))
@@ -1724,6 +1728,7 @@ func StartInstallation(ctx context.Context, apps []types.CrossPlatformApp, repo 
 	}{apps, settings})
 	recordUnstarted := func(err error) {
 		for _, app := range apps {
+			outcomeRecorder(ctx).Record(app.Name, unstartedOutcome(ctx, err), err)
 			_, finish := state.BeginApplication(ctx, app.Name, "tui", app)
 			finish(err)
 			result = errors.Join(result, run.CompleteApp(ctx, app.Name, err))

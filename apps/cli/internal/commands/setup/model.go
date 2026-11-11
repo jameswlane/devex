@@ -12,6 +12,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -88,6 +89,9 @@ type InstallationState struct {
 	progress      float64
 	installErrors []string
 	hasErrors     bool
+	// outcomes and changes feed the completion screen's change inventory.
+	outcomes *tui.OutcomeRecorder
+	changes  []string
 }
 
 // Thread-safe methods for InstallationState

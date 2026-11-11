@@ -171,32 +171,6 @@ func TestAutoExitTiming(t *testing.T) {
 		assert.NotNil(t, cmd, "Should return wait command for activity polling")
 	})
 
-	t.Run("completion step should include installation summary", func(t *testing.T) {
-		model := createMockSetupModel()
-		model.selections.selectedShell = 0
-		model.system.shells = []string{"zsh", "bash", "fish"}
-
-		// Simulate some selections
-		model.selections.selectedLangs = map[int]bool{0: true, 2: true}
-		model.system.languages = []string{"Node.js", "Python", "Go"}
-
-		model.selections.selectedDBs = map[int]bool{1: true}
-		model.system.databases = []string{"PostgreSQL", "MySQL", "Redis"}
-
-		model.selections.selectedDesktopApps = map[string]bool{"VS Code": true}
-		model.system.desktopApps = []string{"VS Code", "Chrome"}
-
-		view := model.View()
-
-		// Should show what was attempted
-		assert.Contains(t, view, "What was attempted:", "Should show installation summary")
-		assert.Contains(t, view, "zsh shell with DevEx configuration", "Should show selected shell")
-		assert.Contains(t, view, "Essential development tools", "Should show essential tools")
-		assert.Contains(t, view, "Programming languages via mise", "Should show languages when selected")
-		assert.Contains(t, view, "Database containers via Docker", "Should show databases when selected")
-		assert.Contains(t, view, "Desktop applications", "Should show desktop apps when selected")
-	})
-
 	t.Run("completion step should provide helpful next steps", func(t *testing.T) {
 		model := createMockSetupModel()
 		model.installation.hasErrors = false
