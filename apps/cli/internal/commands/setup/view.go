@@ -195,6 +195,26 @@ func (m *SetupModel) View() string {
 		s += "\n\n"
 		s += "Use ↑/↓ to navigate, Space to select, Enter to continue"
 
+	case StepOhMyZsh:
+		s = titleStyle.Render("🐚 Optional Oh My Zsh Setup")
+		s += "\n\n"
+		s += subtitleStyle.Render("Install or reuse Oh My Zsh and deploy the bundled DevEx Zsh defaults.")
+		s += "\n"
+		s += "This changes ~/.zshrc only; it never changes your login shell.\n\n"
+		for i, label := range []string{"No (default)", "Yes, set up Oh My Zsh"} {
+			cursor := " "
+			if m.cursor == i {
+				cursor = cursorStyle.Render(">")
+			}
+			selected := " "
+			if (i == 1) == m.selections.ohMyZsh.enabled {
+				selected = selectedStyle.Render("●")
+			}
+			s += fmt.Sprintf("%s [%s] %s\n", cursor, selected, label)
+		}
+		s += fmt.Sprintf("\nTheme: %s; plugins: %s\n", m.selections.ohMyZsh.theme, strings.Join(m.selections.ohMyZsh.plugins, ", "))
+		s += "\nUse ↑/↓ to navigate, Space to select, Enter to continue"
+
 	case StepTheme:
 		s = titleStyle.Render("🎨 Select Your Theme")
 		s += "\n\n"

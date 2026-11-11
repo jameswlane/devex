@@ -118,6 +118,15 @@ Additional files that enhance functionality:
 
 ## Integration with DevEx CLI
 
+Interactive and unattended setup embeds and deploys the modular Zsh files `rc`,
+`shell`, `aliases`, and `init` only after the explicit Oh My Zsh opt-in. They are
+written under `defaults/zsh` in the resolved DevEx data directory, respecting
+`XDG_DATA_HOME` and `DEVEX_DATA_DIR`; existing files are kept unchanged. The
+managed `~/.zshrc` block sources `rc` before Oh My Zsh so the selected framework
+theme owns the prompt. The `prompt` asset is not deployed by this flow. The
+standalone `zshrc`, `oh-my-zsh`, and `zplug` templates are legacy assets and are
+not deployed either.
+
 ### Shell Manager Usage
 
 ```bash

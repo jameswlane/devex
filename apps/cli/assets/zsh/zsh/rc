@@ -1,4 +1,5 @@
-source ~/.local/share/devex/defaults/zsh/shell
-source ~/.local/share/devex/defaults/zsh/aliases
-source ~/.local/share/devex/defaults/zsh/prompt
-source ~/.local/share/devex/defaults/zsh/init
+_devex_zsh_rc_dir=${${(%):-%x}:A:h}
+source "$_devex_zsh_rc_dir/shell"
+source "$_devex_zsh_rc_dir/aliases"
+source "$_devex_zsh_rc_dir/init"
+unset _devex_zsh_rc_dir

@@ -168,6 +168,9 @@ func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstr
 	if err := runShellSetup(ctx, plugin.Path, selectedShell); err != nil {
 		return err
 	}
+	if err := m.applyOhMyZsh(ctx); err != nil {
+		return err
+	}
 
 	log.Info("Shell configuration completed successfully", "shell", selectedShell)
 	return nil
