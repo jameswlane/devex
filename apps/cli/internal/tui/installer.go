@@ -1292,12 +1292,6 @@ func (si *StreamingInstaller) cleanupTempScript(filepath string) {
 	}
 }
 
-// executeDockerInstall handles Docker container installations
-func (si *StreamingInstaller) executeDockerInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
-	si.sendLog("INFO", fmt.Sprintf("Starting Docker installation for %s", app.Name))
-	return si.executeCommandStream(ctx, osConfig.InstallCommand)
-}
-
 // executeMiseInstall handles mise tool installations with proper command construction
 func (si *StreamingInstaller) executeMiseInstall(ctx context.Context, app types.CrossPlatformApp, osConfig *types.OSConfig) error {
 	si.sendLog("INFO", fmt.Sprintf("Installing %s using mise...", app.Name))
