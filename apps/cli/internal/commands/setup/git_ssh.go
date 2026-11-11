@@ -46,6 +46,9 @@ func (m *SetupModel) applyGitConfiguration(ctx context.Context, manager configur
 		m.installation.addChange(fmt.Sprintf("Git identity kept: %s <%s>", name, email))
 		return nil
 	}
+	// Record the previous identity even if the plugin fails partway; restoring
+	// an unchanged key is harmless.
+	m.systemUndo.changes = append(m.systemUndo.changes, m.captureGitIdentity(ctx, name, email)...)
 	if err := runConfigurationPlugin(ctx, manager, "tool-git", gitConfigurationArgs(name, email)); err != nil {
 		return err
 	}

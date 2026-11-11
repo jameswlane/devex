@@ -336,6 +336,34 @@ After setup completes:
   <Step>**Customize**: Use `devex config` to fine-tune your setup</Step>
 </Steps>
 
+### What changed and undo
+
+The final screen lists **What changed**: which apps were installed, already
+installed (skipped), failed, canceled or not run, the default tools you chose to
+skip, and each configuration change (shell, desktop settings, Git identity, SSH
+key, theme).
+
+Setup also records an undo operation for the changes it makes outside DevEx's
+own configuration, and the final screen shows its ID:
+
+```bash
+devex undo setup-20261110-213000
+```
+
+Undo restores:
+
+- the DevEx-managed block (`# >>> devex >>>`) in `~/.bashrc`, `~/.zshrc` and
+  `~/.config/fish/config.fish`, as it was before setup ran. Lines outside the
+  block, including edits you made after setup, are left alone. Undo deletes an
+  rc file setup created, unless you have added your own content to it.
+- your global Git `user.name` and `user.email`. A key that had no value before
+  is unset again.
+- each GNOME (`gsettings`) or KDE (`kwriteconfig5`) setting setup changed, put
+  back to its previous value. A KDE key that had no value is deleted.
+
+Undo does not uninstall applications (use `devex uninstall`), and it never
+deletes an SSH key that setup created.
+
 ## Related Commands
 
 - [`devex install`](/docs/cli-reference/install) - Install without interactive prompts

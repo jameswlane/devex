@@ -66,6 +66,10 @@ func (m *SetupModel) installSelectedApps() {
 
 	ctx = shellrc.WithShell(ctx, m.getSelectedShell())
 	ctx = tui.WithOutcomeRecorder(ctx, m.installation.outcomeRecorder())
+	// Snapshot before install hooks can write shell rc files, and record the
+	// undo operation however this run ends.
+	m.beginSystemUndo()
+	defer m.finishSystemUndo()
 	if err := tui.StartInstallation(ctx, apps, m.repo, m.settings); err != nil {
 		log.Error("Streaming installer failed", err)
 		fmt.Printf("\n❌ Streaming installation failed: %v\n", err)

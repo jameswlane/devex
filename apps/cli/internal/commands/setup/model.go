@@ -206,7 +206,9 @@ type SetupModel struct {
 	selections   UISelections
 	git          GitConfiguration
 	installation InstallationState
-	plugins      PluginState
+	// systemUndo records shell, Git and desktop changes for devex undo.
+	systemUndo systemUndoState
+	plugins    PluginState
 
 	// One bootstrap attempt is shared by plugin installation and finalization.
 	pluginOnce      sync.Once

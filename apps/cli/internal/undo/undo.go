@@ -1,6 +1,7 @@
 package undo
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
+	"github.com/jameswlane/devex/apps/cli/internal/setupundo"
 	"github.com/jameswlane/devex/apps/cli/internal/version"
 )
 
@@ -214,8 +216,24 @@ func (um *UndoManager) UndoOperation(operationID string, force bool) (*UndoResul
 		result.NewBackupID = preUndoBackup.ID
 	}
 
-	// Attempt restoration from backup first
-	if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
+	// Setup runs change the system outside DevEx's configuration; restore only
+	// those recorded changes. The operation's configuration backup was taken
+	// after setup finished, so restoring it would discard later edits.
+	if targetOp.Operation == setupundo.Operation {
+		changes, err := setupundo.Decode(targetOp.Metadata[setupundo.MetadataKey])
+		if err != nil {
+			return result, err
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return result, fmt.Errorf("find home directory for setup undo: %w", err)
+		}
+		if err := setupundo.Restore(context.Background(), setupundo.ExecRunner, home, changes); err != nil {
+			return result, fmt.Errorf("failed to undo setup changes (fix the cause and run undo again; every step is safe to repeat): %w", err)
+		}
+		result.RestoredFrom = "setup changes"
+		result.Message = fmt.Sprintf("Restored %d setup changes", len(changes))
+	} else if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
 		// If backup restoration fails, try version rollback
 		if targetOp.VersionFrom != "" {
 			if rollbackErr := um.versionManager.RollbackToVersion(targetOp.VersionFrom); rollbackErr != nil {

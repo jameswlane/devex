@@ -19,6 +19,39 @@ var _ = Describe("Managed shell rc", func() {
 	var path string
 	BeforeEach(func() { path = filepath.Join(GinkgoT().TempDir(), ".bashrc") })
 	read := func() string { data, err := os.ReadFile(path); Expect(err).NotTo(HaveOccurred()); return string(data) }
+	It("reports whether a file holds only a well-formed managed block", func() {
+		_, err := rc.Apply(path, []string{"export A=1"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rc.OnlyBlock(path)).To(BeTrue())
+		Expect(os.WriteFile(path, []byte(read()+"export MINE=1\n"), 0600)).To(Succeed())
+		Expect(rc.OnlyBlock(path)).To(BeFalse())
+		Expect(os.WriteFile(path, []byte(rc.Start+"\nexport MINE=important\n"), 0600)).To(Succeed())
+		_, err = rc.OnlyBlock(path)
+		Expect(err).To(MatchError(ContainSubstring("unterminated DevEx block")))
+	})
+	It("reads the managed entries so a snapshot can be restored with Apply", func() {
+		exists, entries, err := rc.Read(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(BeFalse())
+		Expect(entries).To(BeEmpty())
+
+		Expect(os.WriteFile(path, []byte("export EDITOR=vim\n"), 0600)).To(Succeed())
+		_, err = rc.Apply(path, []string{"export CLICOLOR=1", "alias ll='ls -l'"})
+		Expect(err).NotTo(HaveOccurred())
+		exists, entries, err = rc.Read(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(exists).To(BeTrue())
+		Expect(entries).To(Equal([]string{"export CLICOLOR=1", "alias ll='ls -l'"}))
+
+		_, err = rc.Merge(path, []string{"export PAGER=less"})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rc.Apply(path, entries)
+		Expect(err).NotTo(HaveOccurred())
+		_, restored, err := rc.Read(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(restored).To(Equal(entries))
+		Expect(read()).To(HavePrefix("export EDITOR=vim\n"))
+	})
 	It("is byte identical on repeat, replaces entries, preserves mode and backs up only once", func() {
 		original := "# user content\nexport EDITOR=vim\n"
 		Expect(os.WriteFile(path, []byte(original), 0600)).To(Succeed())

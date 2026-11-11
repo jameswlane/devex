@@ -204,6 +204,7 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	// Use the regular installer system for non-interactive mode
 	var errors []string
 	outcomes := model.installation.outcomeRecorder()
+	model.beginSystemUndo()
 	for _, app := range apps {
 		if model.selections.alreadyInstalled[app.Name] {
 			outcomes.Record(app.Name, tui.OutcomeSkipped, nil)
@@ -233,6 +234,8 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 		model.installation.addError(fmt.Sprintf("Setup finalization: %v", err))
 		fmt.Printf("⚠️  Shell setup issues: %v\n", err)
 	}
+
+	model.finishSystemUndo()
 
 	// Display completion message and next steps
 	printAutomatedSetupCompletion(model)

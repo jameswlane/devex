@@ -24,6 +24,11 @@ Use these rules when reviewing application YAML and plugins:
 4. Check whether an app is already installed; skip it and report the skip.
 5. Back up user files and settings before writing, and record restoration data
    for undo. Use managed shell actions and backed-up config-file handling.
+   Setup snapshots the managed rc blocks, the global Git identity and every
+   desktop key in the accepted plan before changing them, then records one
+   `setup` undo operation (`internal/setupundo`). Desktop plans must use
+   `gsettings set SCHEMA KEY VALUE` or `kwriteconfig5 --file F --group G --key K
+   VALUE` records; setup reports any other command as not undoable.
 6. Report installed, skipped and failed items accurately. Propagate failures;
    successful package installation does not erase a failed configuration step.
 7. Enforce these rules in validation and behavior tests with fake executors.
