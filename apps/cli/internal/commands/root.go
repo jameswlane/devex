@@ -127,6 +127,10 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			if cmdName == "self-update" || cmdName == "paths" || cmdName == "help" {
 				return nil
 			}
+			// Detection installs and runs only the stack detector plugin.
+			if detectCommand(cmd) {
+				return nil
+			}
 			return runtime.initializePluginSystem(cmd.Context())
 		},
 		PersistentPostRun: func(cmd *cobra.Command, args []string) {

@@ -9,11 +9,11 @@ import (
 
 // Technology represents a detected technology with its metadata
 type Technology struct {
-	Name        string
-	Category    string
-	Confidence  int // 1-10 scale
-	Description string
-	Files       []string
+	Name        string   `json:"name"`
+	Category    string   `json:"category"`
+	Confidence  int      `json:"confidence"` // 1-10 scale
+	Description string   `json:"description"`
+	Files       []string `json:"files"`
 }
 
 // statCache provides thread-safe caching for os.Stat() calls to improve performance
