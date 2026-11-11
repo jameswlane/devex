@@ -31,13 +31,21 @@ var _ = Describe("Registry catalog", func() {
 		client = NewClient(server.URL)
 	})
 	AfterEach(func() { server.Close() })
-	It("maps the route and seed contract to existing CLI types", func() {
+	It("maps a recorded registry response, keeping platform alternatives and requirements", func() {
 		apps, _, _, err := client.List(context.Background(), Filters{}, "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(apps).To(HaveLen(1))
-		Expect(apps[0]).To(Equal(types.CrossPlatformApp{Name: "git", Description: "A distributed version control system", Category: "Dependency", DesktopEnvironments: []string{}, Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git"}}))
+		Expect(apps).To(HaveLen(2))
+		Expect(apps[0].Name).To(Equal("Eza"))
+		Expect(apps[0].Category).To(Equal("System Utilities"))
+		Expect(apps[0].Linux.Alternatives).NotTo(BeEmpty())
+		pacman := apps[0].Linux.Alternatives[0]
+		Expect(pacman.InstallMethod).To(Equal("pacman"))
+		Expect(pacman.InstallCommand).To(Equal("eza"))
+		Expect(pacman.PlatformRequirements).To(ContainElement(types.PlatformRequirement{OS: "arch"}))
+		Expect(apps[1].Name).To(Equal("GitHub CLI"))
+		Expect(apps[1].Linux.Alternatives[0].PlatformRequirements).To(ContainElement(types.PlatformRequirement{OS: "fedora"}))
 	})
-	It("reads the unwrapped detail response by escaped name", func() {
+	It("reads the recorded detail response by escaped name", func() {
 		detail, err := os.ReadFile("testdata/application.json")
 		Expect(err).NotTo(HaveOccurred())
 		server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,14 +54,64 @@ var _ = Describe("Registry catalog", func() {
 		})
 		app, err := client.Get(context.Background(), "git")
 		Expect(err).NotTo(HaveOccurred())
+		Expect(app.Linux.InstallMethod).To(Equal("apt"))
 		Expect(app.Linux.InstallCommand).To(Equal("git"))
 	})
-	It("preserves platform alternatives and desktop restrictions", func() {
-		a := Application{Name: "tool", DesktopEnvironments: []string{"gnome"}, Platforms: map[string]*Platform{"linux": {InstallMethod: "apt", InstallCommand: "tool", Alternatives: []Alternative{{Method: "dnf", Command: "tool"}}}}}
+	It("accepts the camelCase platform keys older registry seeds wrote", func() {
+		a := Application{Name: "tool", DesktopEnvironments: []string{"gnome"}, Platforms: map[string]json.RawMessage{
+			"linux": json.RawMessage(`{"installMethod":"apt","installCommand":"tool","officialSupport":true,"alternatives":[{"method":"dnf","command":"tool","platformRequirements":[{"os":"fedora"}]}]}`),
+			"macos": json.RawMessage(`null`),
+		}}
 		app, err := Map(a)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(app.Linux.Alternatives).To(ConsistOf(types.OSConfig{InstallMethod: "dnf", InstallCommand: "tool"}))
+		Expect(app.Linux.InstallMethod).To(Equal("apt"))
+		Expect(app.Linux.OfficialSupport).To(BeTrue())
+		Expect(app.Linux.Alternatives).To(HaveLen(1))
+		Expect(app.Linux.Alternatives[0].InstallMethod).To(Equal("dnf"))
+		Expect(app.Linux.Alternatives[0].PlatformRequirements).To(ConsistOf(types.PlatformRequirement{OS: "fedora"}))
+		Expect(app.MacOS).To(Equal(types.OSConfig{}))
 		Expect(app.DesktopEnvironments).To(Equal([]string{"gnome"}))
+	})
+	It("keeps the snake_case fields the YAML catalog defines", func() {
+		a := Application{Name: "tool", Platforms: map[string]json.RawMessage{
+			"linux": json.RawMessage(`{"install_method":"apt","install_command":"tool","uninstall_command":"tool","dependencies":["curl"],"apt_sources":[{"key_source":"https://example.invalid/key.gpg","key_name":"/etc/apt/keyrings/tool.gpg","source_repo":"deb https://example.invalid stable main","source_name":"/etc/apt/sources.list.d/tool.list"}]}`),
+		}}
+		app, err := Map(a)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(app.Linux.UninstallCommand).To(Equal("tool"))
+		Expect(app.Linux.Dependencies).To(Equal([]string{"curl"}))
+		Expect(app.Linux.AptSources).To(HaveLen(1))
+	})
+	It("rejects a platform that is not an object", func() {
+		_, err := Map(Application{Name: "tool", Platforms: map[string]json.RawMessage{"linux": json.RawMessage(`"apt"`)}})
+		Expect(err).To(MatchError(ContainSubstring("platform linux")))
+	})
+	Describe("WithBundled", func() {
+		bundled := []types.CrossPlatformApp{
+			{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git", Dependencies: []string{"ca-certificates"}}},
+			{Name: "Docker", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "docker-ce"}},
+		}
+		It("keeps every bundled definition when the registry is partial or lossy", func() {
+			registry := []types.CrossPlatformApp{{Name: "GIT", Linux: types.OSConfig{Alternatives: []types.OSConfig{{InstallMethod: "dnf", InstallCommand: "git"}}}}}
+			merged := WithBundled(bundled, registry)
+			Expect(merged).To(Equal(bundled))
+		})
+		It("adds installable registry applications the binary does not ship", func() {
+			registry := []types.CrossPlatformApp{
+				{Name: "newtool", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "newtool"}},
+				{Name: "empty"},
+				{Name: "alt-only", Linux: types.OSConfig{Alternatives: []types.OSConfig{{InstallMethod: "dnf", InstallCommand: "alt"}}}},
+			}
+			merged := WithBundled(bundled, registry)
+			names := make([]string, 0, len(merged))
+			for _, app := range merged {
+				names = append(names, app.Name)
+			}
+			Expect(names).To(Equal([]string{"git", "Docker", "newtool", "alt-only"}))
+		})
+		It("returns the bundled applications when the registry is empty", func() {
+			Expect(WithBundled(bundled, nil)).To(Equal(bundled))
+		})
 	})
 	It("paginates and forwards search, category, and platform filters", func() {
 		calls := 0
@@ -71,7 +129,7 @@ var _ = Describe("Registry catalog", func() {
 		})
 		apps, tag, _, err := client.List(context.Background(), Filters{Search: "git", Category: "development", Platform: "linux"}, "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(apps).To(HaveLen(2))
+		Expect(apps).To(HaveLen(4))
 		Expect(calls).To(Equal(2))
 		Expect(tag).To(BeEmpty())
 	})
@@ -118,7 +176,7 @@ var _ = Describe("Registry catalog", func() {
 		store.Offline = true
 		result := store.Load(context.Background(), nil)
 		Expect(result.Source).To(Equal("cache (stale)"))
-		Expect(result.Apps).To(HaveLen(1))
+		Expect(result.Apps).To(HaveLen(2))
 		Expect(calls).To(Equal(2))
 	})
 	It("uses stale cache on 5xx and bundled data without cache", func() {
@@ -154,7 +212,7 @@ var _ = Describe("Registry catalog", func() {
 		})
 		result := store.Load(context.Background(), nil)
 		Expect(result.Source).To(Equal("cache (stale)"))
-		Expect(result.Apps).To(HaveLen(1))
+		Expect(result.Apps).To(HaveLen(2))
 		Expect(result.Warning).To(HaveOccurred())
 	})
 	It("isolates registry caches and tolerates unwritable cache storage", func() {

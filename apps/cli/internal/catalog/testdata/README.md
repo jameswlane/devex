@@ -1,13 +1,14 @@
 # Registry contract fixtures
 
-These fixtures are derived offline, not downloaded from production.
-`applications.json` follows `app/api/v1/applications/route.ts`,
-`lib/transformation-service.ts` (`transformApplications`), and
-`lib/response-optimization.ts` (`createPaginatedResponse`). Values follow the
-Git YAML used by `scripts/sync-database.ts`, with the camelCase platform
-representation consumed by `scripts/seed.ts` (missing booleans/arrays default to
-false/[]).
-`application.json` records the unwrapped name-addressed detail response's fields
-plus database fields from `prisma/schema.prisma`; IDs and times are deterministic
-fixture values.
-Update the fixture and contract expectations together when the route changes.
+These are recorded responses from the production registry
+(`https://registry.devex.sh`) on 2026-11-11:
+
+- `applications.json`: `GET /api/v1/applications?limit=2&page=1`, with the
+  pagination rewritten to a single page (`total` 2, `hasNext` false) and a
+  fixed `meta.timestamp`.
+- `application.json`: `GET /api/v1/applications/git`.
+
+Platform objects use the YAML catalog's snake_case keys (`install_method`,
+`install_command`, `platform_requirements`, ...). Older seeds wrote camelCase;
+the client accepts both. Re-record both files when the registry routes change,
+and update the contract expectations in `client_test.go` with them.
