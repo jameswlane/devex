@@ -85,5 +85,8 @@ func (m *SetupModel) applyDesktopPreview(ctx context.Context, manager configurat
 		return nil
 	}
 	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(m.selections.desktopPreview)))
+	// Record previous values even if the plugin fails partway; restoring an
+	// unchanged setting is harmless.
+	m.systemUndo.changes = append(m.systemUndo.changes, m.captureDesktopSettings(ctx)...)
 	return runConfigurationPlugin(ctx, manager, m.selections.desktopPlugin, desktopConfigurationArgs(hash)[0])
 }

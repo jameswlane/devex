@@ -37,6 +37,31 @@ func MergeLegacy(path string, entries, known []string) (bool, error) {
 // Remove deletes the managed block and leaves all user content intact.
 func Remove(path string) (bool, error) { return Apply(path, nil) }
 
+// Read reports whether path exists and the entries inside its managed block,
+// so callers can snapshot the block and later restore it with Apply.
+func Read(path string) (exists bool, entries []string, err error) {
+	editMu.Lock()
+	defer editMu.Unlock()
+	if target, evalErr := filepath.EvalSymlinks(path); evalErr == nil {
+		path = target
+	}
+	content, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, err
+	}
+	_, entries, err = split(string(content), nil)
+	if err != nil {
+		return true, nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	for i, entry := range entries {
+		entries[i] = strings.TrimSpace(entry)
+	}
+	return true, entries, nil
+}
+
 func normalize(line string) string {
 	line = strings.ReplaceAll(line, "${HOME}", "$HOME")
 	line = strings.ReplaceAll(line, "~/", "$HOME/")

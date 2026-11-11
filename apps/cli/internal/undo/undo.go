@@ -1,6 +1,7 @@
 package undo
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
+	"github.com/jameswlane/devex/apps/cli/internal/setupundo"
 	"github.com/jameswlane/devex/apps/cli/internal/version"
 )
 
@@ -214,8 +216,23 @@ func (um *UndoManager) UndoOperation(operationID string, force bool) (*UndoResul
 		result.NewBackupID = preUndoBackup.ID
 	}
 
-	// Attempt restoration from backup first
-	if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
+	// Setup runs change the system outside DevEx's configuration; restore those
+	// changes from the recorded before-state. DevEx's own configuration is
+	// restored too, but a failure there only warns.
+	if targetOp.Operation == setupundo.Operation {
+		changes, err := setupundo.Decode(targetOp.Metadata[setupundo.MetadataKey])
+		if err != nil {
+			return result, err
+		}
+		if err := setupundo.Restore(context.Background(), setupundo.ExecRunner, changes); err != nil {
+			return result, fmt.Errorf("failed to undo setup changes: %w", err)
+		}
+		if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("DevEx configuration was not restored: %v", err))
+		}
+		result.RestoredFrom = "setup changes"
+		result.Message = fmt.Sprintf("Restored %d setup changes", len(changes))
+	} else if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
 		// If backup restoration fails, try version rollback
 		if targetOp.VersionFrom != "" {
 			if rollbackErr := um.versionManager.RollbackToVersion(targetOp.VersionFrom); rollbackErr != nil {
