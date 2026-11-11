@@ -7,17 +7,21 @@ desktop_environments:
 macos:
   install_method: brew
   install_command: --cask docker
+  installed_binary: docker
   uninstall_command: --cask docker
   brew_cask: true
   official_support: true
 windows:
   install_method: winget
   install_command: Docker.DockerDesktop
+  installed_binary: docker
   uninstall_command: Docker.DockerDesktop
   official_support: true
 linux:
   install_method: apt
   install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  # Any existing Docker CLI (docker.io, docker-ce or a manual install) counts as installed.
+  installed_binary: docker
   # Package removal preserves data; --remove-docker-data explicitly deletes /var/lib/docker and /var/lib/containerd.
   uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   official_support: true
@@ -63,6 +67,7 @@ linux:
   alternatives:
     - install_method: dnf
       install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      installed_binary: docker
       uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       official_support: true
       platform_requirements:
@@ -77,6 +82,7 @@ linux:
       post_install: *linux_post_install
     - install_method: dnf
       install_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+      installed_binary: docker
       uninstall_command: docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
       official_support: true
       platform_requirements:
@@ -91,6 +97,7 @@ linux:
       post_install: *linux_post_install
     - install_method: pacman
       install_command: docker docker-buildx docker-compose
+      installed_binary: docker
       uninstall_command: docker docker-buildx docker-compose
       official_support: true
       platform_requirements:

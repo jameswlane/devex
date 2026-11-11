@@ -15,22 +15,41 @@ const (
 	RedisPort      = "6379:6379"
 )
 
-// getDockerApp returns a CrossPlatformApp for Docker Engine installation using secure Go installer
+// getDockerApp returns the Docker app that database selections depend on. It
+// is the catalog's Docker entry, so the Confirmation screen shows the same
+// repository, package, service and group changes the installer makes. Without
+// a usable catalog entry it falls back to the distribution's own package.
 func (m *SetupModel) getDockerApp() *types.CrossPlatformApp {
+	for _, app := range m.settings.GetAllApps() {
+		if !strings.EqualFold(app.Name, "docker") {
+			continue
+		}
+		if m.system.detectedPlatform.OS != "" && !isCompatibleWithPlatform(app, m.system.detectedPlatform) {
+			break
+		}
+		if app.GetOSConfig().InstallMethod == "" {
+			break
+		}
+		return &app
+	}
 	return &types.CrossPlatformApp{
 		Name:        "docker",
 		Description: "Container platform and runtime for developing, shipping, and running applications",
 		Linux: types.OSConfig{
-			InstallMethod:  "docker",
-			InstallCommand: "docker-ce", // Triggers Docker Engine installation
+			InstallMethod:   "apt",
+			InstallCommand:  "docker.io",
+			InstalledBinary: "docker",
 		},
 		MacOS: types.OSConfig{
-			InstallMethod:  "brew",
-			InstallCommand: "docker",
+			InstallMethod:   "brew",
+			InstallCommand:  "--cask docker",
+			BrewCask:        true,
+			InstalledBinary: "docker",
 		},
 		Windows: types.OSConfig{
-			InstallMethod:  "winget",
-			InstallCommand: "Docker.DockerDesktop",
+			InstallMethod:   "winget",
+			InstallCommand:  "Docker.DockerDesktop",
+			InstalledBinary: "docker",
 		},
 	}
 }

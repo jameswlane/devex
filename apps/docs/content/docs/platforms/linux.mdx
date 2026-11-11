@@ -27,6 +27,18 @@ Optional Flatpak and Snap integrations are experimental and require suitable
 host tools and repositories. They are not automatically authorized by choosing
 APT.
 
+### Databases and Docker
+
+Choosing a database in `devex setup` adds Docker as a dependency. Setup uses the
+catalog's Docker entry, and the confirmation lists everything it does: add
+Docker's apt repository and signing key for Debian or Ubuntu, install Docker
+Engine, enable `docker.service` and add you to the `docker` group. If a `docker`
+executable already exists (for example the distribution's `docker.io`), setup
+skips Docker. Each database runs as a container bound to `127.0.0.1`
+(`postgres16`, `mysql8`, `redis`). If a container with that name already
+exists, setup leaves it as it is. Until you log out and back in, your session
+isn't in the `docker` group yet, so setup creates the containers with `sudo`.
+
 ## Other distributions: experimental
 
 DNF and Pacman now have native command implementations; they are not merely
