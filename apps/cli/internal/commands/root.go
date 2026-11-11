@@ -127,6 +127,10 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			if cmdName == "self-update" || cmdName == "paths" || cmdName == "help" {
 				return nil
 			}
+			// Remote installs run the remote host's DevEx and plugins, not local ones.
+			if cmd.Parent() != nil && cmd.Parent().Name() == "remote" {
+				return nil
+			}
 			return runtime.initializePluginSystem(cmd.Context())
 		},
 		PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -186,6 +190,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
+	cmd.AddCommand(NewRemoteCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))

@@ -4,6 +4,7 @@
 		"index",
 		"setup",
 		"install",
+		"remote",
 		"non-interactive",
 		"config",
 		"template",
