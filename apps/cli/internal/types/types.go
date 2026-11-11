@@ -358,17 +358,20 @@ type OSConfig struct {
 	BrewCask             bool                     `mapstructure:"brew_cask" yaml:"brew_cask,omitempty"`
 	BrewTap              string                   `mapstructure:"brew_tap" yaml:"brew_tap,omitempty"`
 	DownloadURL          string                   `mapstructure:"download_url" yaml:"download_url,omitempty"`
-	ExtractPath          string                   `mapstructure:"extract_path" yaml:"extract_path,omitempty"`
-	Destination          string                   `mapstructure:"destination" yaml:"destination,omitempty"`
-	Dependencies         []string                 `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
-	SystemRequirements   SystemRequirements       `mapstructure:"system_requirements" yaml:"system_requirements,omitempty"`
-	PreInstall           []InstallCommand         `mapstructure:"pre_install" yaml:"pre_install,omitempty"`
-	PostInstall          []InstallCommand         `mapstructure:"post_install" yaml:"post_install,omitempty"`
-	Alternatives         []OSConfig               `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
-	ConfigFiles          []ConfigFile             `mapstructure:"config_files" yaml:"config_files,omitempty"`
-	Themes               []Theme                  `mapstructure:"themes" yaml:"themes,omitempty"`
-	CleanupFiles         []string                 `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
-	Conflicts            []string                 `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
+	// InstalledBinary names the executable a script or download installs
+	// (curlpipe, appimage). Setup skips the app when it is already present.
+	InstalledBinary    string             `mapstructure:"installed_binary" yaml:"installed_binary,omitempty"`
+	ExtractPath        string             `mapstructure:"extract_path" yaml:"extract_path,omitempty"`
+	Destination        string             `mapstructure:"destination" yaml:"destination,omitempty"`
+	Dependencies       []string           `mapstructure:"dependencies" yaml:"dependencies,omitempty"`
+	SystemRequirements SystemRequirements `mapstructure:"system_requirements" yaml:"system_requirements,omitempty"`
+	PreInstall         []InstallCommand   `mapstructure:"pre_install" yaml:"pre_install,omitempty"`
+	PostInstall        []InstallCommand   `mapstructure:"post_install" yaml:"post_install,omitempty"`
+	Alternatives       []OSConfig         `mapstructure:"alternatives" yaml:"alternatives,omitempty"`
+	ConfigFiles        []ConfigFile       `mapstructure:"config_files" yaml:"config_files,omitempty"`
+	Themes             []Theme            `mapstructure:"themes" yaml:"themes,omitempty"`
+	CleanupFiles       []string           `mapstructure:"cleanup_files" yaml:"cleanup_files,omitempty"`
+	Conflicts          []string           `mapstructure:"conflicts" yaml:"conflicts,omitempty"`
 }
 
 // CrossPlatformApp defines an application with OS-specific installation methods

@@ -12,10 +12,21 @@ import (
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"github.com/spf13/viper"
 )
 
 var _ = Describe("Confirmation execution contract", func() {
 	It("runs only the displayed apt packages and one displayed list refresh", func() {
+		// Fresh host package lists would skip the update; always refresh here.
+		previous, wasSet := viper.Get("apt-lists-max-age"), viper.IsSet("apt-lists-max-age")
+		viper.Set("apt-lists-max-age", "0")
+		DeferCleanup(func() {
+			if wasSet {
+				viper.Set("apt-lists-max-age", previous)
+			} else {
+				viper.Set("apt-lists-max-age", nil)
+			}
+		})
 		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query")
 		model := &SetupModel{step: StepConfirmation,
 			system:     SystemInfo{hasDesktop: true, shells: []string{"bash"}, desktopAppDetails: []types.CrossPlatformApp{{Name: "editor", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "editor"}}}},

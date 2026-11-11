@@ -42,6 +42,7 @@ windows:
       - git
 linux:
   install_method: curlpipe
+  installed_binary: lazygit
   download_url: https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_*_Linux_x86_64.tar.gz
   destination: /usr/local/bin
   official_support: true
