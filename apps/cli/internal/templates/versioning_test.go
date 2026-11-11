@@ -75,7 +75,7 @@ var _ = Describe("Template version manager", func() {
 		Expect(updates).To(BeEmpty())
 	})
 
-	It("reports an up-to-date template and points to devex upgrade", func() {
+	It("reports an up-to-date template and points to devex self-update", func() {
 		tvm := registered(builtinTemplateFS("1.0.0", "applications: []\n"))
 		before := recorded(tvm, "backend")
 
@@ -84,7 +84,7 @@ var _ = Describe("Template version manager", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Success).To(BeTrue())
 		Expect(result.NewVersion).To(Equal("1.0.0"))
-		Expect(result.Message).To(ContainSubstring("devex upgrade"))
+		Expect(result.Message).To(ContainSubstring("devex self-update"))
 		Expect(recorded(tvm, "backend").LastUpdated).To(Equal(before.LastUpdated))
 	})
 
@@ -197,6 +197,43 @@ files:
 		}
 		Expect(sources).To(HaveKeyWithValue("backend", "builtin"))
 		Expect(sources).To(HaveKeyWithValue("full-stack", "builtin"))
+	})
+
+	It("keeps the recorded version on rescan so check-updates and update --all find the new release", func() {
+		registered(builtinTemplateFS("1.0.0", "applications: []\n"))
+		tvm := registered(builtinTemplateFS("1.1.0", "applications:\n  - name: git\n"))
+		Expect(recorded(tvm, "backend").Version).To(Equal("1.0.0"))
+
+		updates, err := tvm.CheckForUpdates()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updates).To(ConsistOf("backend"))
+
+		results, err := tvm.UpdateAllTemplates(false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(1))
+		Expect(results[0].Success).To(BeTrue())
+		Expect(recorded(tvm, "backend").Version).To(Equal("1.1.0"))
+	})
+
+	It("reports changed shipped contents even when the version was not bumped", func() {
+		registered(builtinTemplateFS("1.0.0", "applications: []\n"))
+		tvm := registered(builtinTemplateFS("1.0.0", "applications:\n  - name: git\n"))
+
+		updates, err := tvm.CheckForUpdates()
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updates).To(ConsistOf("backend"))
+	})
+
+	It("does not register a template whose listed files are missing", func() {
+		shipped := builtinTemplateFS("1.0.0", "applications: []\n")
+		delete(shipped, "backend/system.yaml")
+
+		tvm := registered(shipped)
+
+		versions, err := tvm.GetTemplateVersions()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(versions).NotTo(HaveKey("backend"))
 	})
 })
 

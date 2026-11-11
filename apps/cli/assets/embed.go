@@ -11,7 +11,7 @@ var templateFiles embed.FS
 
 // Templates contains the built-in templates shipped with this DevEx release,
 // rooted at the templates directory. Built-in templates change only when the
-// binary changes (for example through devex upgrade), so they always match the
+// binary changes (for example through devex self-update), so they always match the
 // running CLI version.
 var Templates fs.FS = mustSub(templateFiles, "templates")
 

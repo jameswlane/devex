@@ -390,7 +390,7 @@ devex template create <name> [flags]
 
 #### `devex template update`
 
-Record the built-in template versions shipped with this DevEx release. Built-in templates are compiled into the binary, so `devex upgrade` is what brings newer ones. This command never downloads or replaces template files: it checks that each manifest has a valid version and that every listed file is present, then records that version.
+Record the built-in template versions shipped with this DevEx release. Built-in templates are compiled into the binary, so updating DevEx (`devex self-update`, or your package manager) is what brings newer ones. This command never downloads or replaces template files: it checks that each manifest has a valid version and that every listed file is present, then records that version.
 
 ```bash
 devex template update [template] [flags]

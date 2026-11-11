@@ -17,6 +17,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/assets"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 )
 
 const (
@@ -146,6 +147,8 @@ func (tvm *TemplateVersionManager) ScanAndRegisterTemplates() error {
 		if err := tvm.scanTemplates(os.DirFS(tvm.userDir), "user", registry); err != nil {
 			return fmt.Errorf("failed to scan user templates: %w", err)
 		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("failed to inspect user templates: %w", err)
 	}
 
 	registry.LastChecked = time.Now()
@@ -179,7 +182,14 @@ func (tvm *TemplateVersionManager) CheckForUpdates() ([]string, error) {
 				continue
 			}
 
-			if latestVer.GreaterThan(currentVer) {
+			// Shipped contents that differ from the record also need recording,
+			// even when the manifest version was not bumped.
+			changed := false
+			if latestVer.Equal(currentVer) {
+				checksum, _, err := tvm.calculateTemplateChecksum(tvm.builtin, templateID, manifest.Files)
+				changed = err == nil && checksum != template.Checksum
+			}
+			if latestVer.GreaterThan(currentVer) || changed {
 				template.UpdateAvailable = true
 				template.LatestVersion = manifest.Version
 				updatesAvailable = append(updatesAvailable, templateID)
@@ -199,7 +209,8 @@ func (tvm *TemplateVersionManager) CheckForUpdates() ([]string, error) {
 // the template files compiled into this DevEx binary.
 //
 // Built-in templates ship inside the binary, so the only trusted source of a
-// newer built-in template is a verified DevEx release (devex upgrade). Update
+// newer built-in template is a verified DevEx release (devex self-update or the
+// system package manager). Update
 // therefore never downloads or replaces template files. It checks that the
 // shipped manifest has a valid version and that every file it lists exists,
 // then records that version and checksum. The record changes only after that
@@ -244,7 +255,7 @@ func (tvm *TemplateVersionManager) UpdateTemplate(templateID string, force bool)
 
 	if !force && template.Version == manifest.Version && template.Checksum == checksum {
 		result.Success = true
-		result.Message = fmt.Sprintf("Template %s matches the version shipped with this DevEx release (%s). Run 'devex upgrade' to get newer built-in templates.", templateID, manifest.Version)
+		result.Message = fmt.Sprintf("Template %s matches the version shipped with this DevEx release (%s). Update DevEx with 'devex self-update' (or your package manager) to get newer built-in templates.", templateID, manifest.Version)
 		return result, nil
 	}
 
@@ -375,7 +386,10 @@ func (tvm *TemplateVersionManager) scanTemplates(fsys fs.FS, source string, regi
 		}
 		templateID := entry.Name()
 		if _, err := fs.Stat(fsys, path.Join(templateID, TemplateManifest)); err != nil {
-			continue
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("failed to inspect template %s: %w", templateID, err)
 		}
 
 		manifest, err := tvm.getTemplateManifest(fsys, templateID)
@@ -383,12 +397,21 @@ func (tvm *TemplateVersionManager) scanTemplates(fsys fs.FS, source string, regi
 			return fmt.Errorf("failed to read manifest for template %s: %w", templateID, err)
 		}
 
-		checksum, _, err := tvm.calculateTemplateChecksum(fsys, templateID, manifest.Files)
+		existing, exists := registry.Templates[templateID]
+		// A recorded built-in template keeps its record until template update
+		// verifies and records the shipped one, so check-updates can report it.
+		if exists && existing.Source == "builtin" && source == "builtin" {
+			continue
+		}
+
+		checksum, missing, err := tvm.calculateTemplateChecksum(fsys, templateID, manifest.Files)
 		if err != nil {
 			return fmt.Errorf("failed to calculate checksum for template %s: %w", templateID, err)
 		}
-
-		existing, exists := registry.Templates[templateID]
+		if len(missing) > 0 {
+			log.Warn("Skipping incomplete template", "template", templateID, "source", source, "missing", strings.Join(missing, ", "))
+			continue
+		}
 		if exists && existing.Checksum == checksum {
 			continue
 		}

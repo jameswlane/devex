@@ -305,7 +305,8 @@ func newTemplateUpdateCmd() *cobra.Command {
 		Long: `Record the built-in template versions shipped with this DevEx release.
 
 Built-in templates are compiled into the DevEx binary, so they change only when
-DevEx itself changes. Run 'devex upgrade' to get newer built-in templates.
+DevEx itself changes. Run 'devex self-update' to get newer built-in templates;
+if DevEx was installed by a package manager, update it there instead.
 
 This command never downloads or replaces template files. It checks that each
 built-in template's manifest has a valid version and that every file it lists

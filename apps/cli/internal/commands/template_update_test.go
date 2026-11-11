@@ -66,7 +66,7 @@ var _ = Describe("template update", func() {
 		output, err := run("backend")
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(output).To(ContainSubstring("devex upgrade"))
+		Expect(output).To(ContainSubstring("devex self-update"))
 		Expect(output).NotTo(ContainSubstring("Download"))
 	})
 

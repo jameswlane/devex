@@ -180,11 +180,11 @@ devex template export my-stack --output my-template.yaml
 
 ### How do I update templates?
 
-Built-in templates are part of the DevEx binary, so upgrading DevEx updates them:
+Built-in templates are part of the DevEx binary, so updating DevEx updates them:
 
 ```bash
-# Get newer built-in templates
-devex upgrade
+# Get newer built-in templates (or update DevEx with your package manager)
+devex self-update
 
 # Record the built-in template versions shipped with this release
 devex template update --all
