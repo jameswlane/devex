@@ -799,3 +799,40 @@ func (bm *BackupManager) readPath(path string) string {
 	}
 	return path
 }
+
+// ValidateID accepts a backup ID that names one directory entry.
+func ValidateID(id string) error {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) || strings.HasPrefix(id, ".") {
+		return fmt.Errorf("invalid backup id %q", id)
+	}
+	return nil
+}
+
+// BackupDir returns the directory of an existing backup.
+func (bm *BackupManager) BackupDir(id string) (string, error) {
+	if err := ValidateID(id); err != nil {
+		return "", err
+	}
+	dir := bm.readPath(filepath.Join(bm.backupsDir, id))
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", fmt.Errorf("backup %s not found: %w", id, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("backup %s is not a directory", id)
+	}
+	return dir, nil
+}
+
+// NewBackupDir returns where a backup with id would be stored, refusing an
+// id that already exists.
+func (bm *BackupManager) NewBackupDir(id string) (string, error) {
+	if err := ValidateID(id); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(bm.backupsDir, id)
+	if _, err := os.Lstat(dir); err == nil {
+		return "", fmt.Errorf("backup %s already exists locally", id)
+	}
+	return dir, nil
+}

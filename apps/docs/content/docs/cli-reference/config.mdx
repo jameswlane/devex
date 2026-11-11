@@ -435,6 +435,35 @@ devex config backup <subcommand> [flags]
   </Tab>
 </Tabs>
 
+### Remote Backups
+
+Copy backups to S3-compatible object storage (AWS S3, Backblaze B2, Cloudflare R2, MinIO) so they survive the loss of the machine and can be used on another one.
+
+```bash
+devex config backup push <backup-id>   # upload a local backup
+devex config backup remote             # list remote backups
+devex config backup pull <backup-id>   # download one as a local backup
+devex config backup restore <backup-id>
+```
+
+Configuration (`~/.config/devex/config.yaml`):
+
+```yaml
+backup:
+  remote:
+    endpoint: s3.amazonaws.com   # host name, not a URL
+    bucket: my-devex-backups
+    region: us-east-1            # optional
+    prefix: devex-backups        # default
+    insecure: false              # true only for plain-HTTP test servers
+```
+
+Credentials come only from the environment and are never written to configuration: `DEVEX_BACKUP_ACCESS_KEY_ID` and `DEVEX_BACKUP_SECRET_ACCESS_KEY`, or `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Give the key access to this bucket (and prefix) only.
+
+**Encryption.** Backups can contain tokens and other sensitive configuration, so `push` encrypts them with AES-256-GCM using a key derived from `DEVEX_BACKUP_PASSPHRASE` (scrypt). Without a passphrase, `push` refuses to upload unless you set `backup.remote.encrypt: false` to accept unencrypted uploads. Keep the passphrase somewhere other than the machine you back up; without it an encrypted backup cannot be restored.
+
+**Verification.** `push` reads the uploaded object back and checks its SHA-256 and size before writing the manifest that makes the backup appear in `remote`, so an interrupted upload is never listed. `pull` checks the SHA-256 and size again, decryption authenticates the content, and archive entries must be regular files with safe relative paths. A pulled backup never replaces a local backup with the same ID, and nothing is restored until you run `devex config backup restore`.
+
 ### Version Management
 
 ```bash
