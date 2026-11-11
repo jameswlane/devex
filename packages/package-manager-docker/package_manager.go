@@ -24,7 +24,8 @@ import (
 // DockerInstaller implements Docker container management and Docker Engine installation
 type DockerInstaller struct {
 	*sdk.PackageManagerPlugin
-	logger sdk.Logger
+	logger        sdk.Logger
+	osReleasePath string
 }
 
 // Execute handles command execution
