@@ -324,6 +324,10 @@ func readCommand(args []string) bool {
 	switch words[0] {
 	case "platform":
 		return true
+	case "mcp":
+		// The MCP server is read-only: no migrations, file logging, plugin
+		// bootstrap or state creation, and stdout stays reserved for MCP.
+		return len(words) > 1 && words[1] == "serve"
 	case "list", "status":
 		// Interactive list and status keep first-run bootstrap and state
 		// creation; only the JSON inspection contract is side-effect free.

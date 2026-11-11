@@ -40,6 +40,7 @@ func NewRootCmd(version string, repo types.Repository, settings config.CrossPlat
 }
 
 func newRootCmd(version string, repo types.Repository, settings config.CrossPlatformSettings, options rootOptions) *cobra.Command {
+	mcpVersion = version
 	runtime := &rootRuntime{}
 	setupCmd := NewSetupCmd(repo, settings)
 	if options.runSetup == nil {
@@ -187,6 +188,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
+	cmd.AddCommand(NewMCPCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
 	cmd.AddCommand(NewCompletionCmd())
@@ -413,6 +415,9 @@ func (r *rootRuntime) getPluginBootstrap() *bootstrap.PluginBootstrap {
 }
 
 func readAPICommand(cmd *cobra.Command) bool {
+	if mcpServeCommand(cmd) {
+		return true
+	}
 	switch cmd.Name() {
 	case "platform":
 		return true

@@ -1,0 +1,68 @@
+---
+title: devex mcp serve
+description: Serve read-only DevEx tools and resources to Model Context Protocol clients over stdio.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# devex mcp serve
+
+`devex mcp serve` lets a Model Context Protocol (MCP) client, such as Claude Code or Codex, ask DevEx about applications, the platform, installation records, configuration and install plans. The client starts the command and talks to it over stdin and stdout.
+
+```bash
+devex mcp serve [--request-timeout 30s]
+```
+
+<Callout type="info" title="Read-only by design">
+No tool installs, removes or configures anything. The server never runs package managers, plugins or hooks, never downloads plugins or contacts the registry, and never creates configuration, state or log files. Install and uninstall tools are not registered, so calling them fails with `unknown tool`.
+</Callout>
+
+## Client configuration
+
+Claude Code:
+
+```bash
+claude mcp add devex -- devex mcp serve
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.devex]
+command = "devex"
+args = ["mcp", "serve"]
+```
+
+`devex` must be on the `PATH` the client uses, or give its absolute path (for example `~/.local/bin/devex`). The server reads the same configuration as the CLI for the user who runs it: `~/.config/devex`, or `XDG_CONFIG_HOME` / `DEVEX_CONFIG_DIR`.
+
+## Tools
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `list_apps` | `kind` (`available` default, `installed`, `categories`), `category`, `search`, `method`, `recommended`, `limit` (default 50, at most 200) | Matching applications or categories, `total`, and `truncated` when more matched than `limit` |
+| `detect_platform` | none | OS, distribution, desktop environment, version, architecture and package managers |
+| `get_status` | `apps` (names), `category` | Applications from DevEx's installation records. The server does not probe the system, so `status` is `unknown`; use `devex status` to check installed state |
+| `validate_config` | `strict` | Validation diagnostics; never fixes anything |
+| `plan_install` | `apps`, `categories` (configured defaults when both are empty) | The install plan: methods, plugins, dependencies, dependency order and warnings. Nothing is executed |
+
+Every tool publishes JSON input and output schemas, and returns structured results. Requests can name at most 100 applications or categories, and free-text fields are limited to 200 characters.
+
+Errors are tool errors whose text starts with a stable category: `invalid_request`, `not_found`, `timeout`, `cancelled`, `unavailable`, or another category from the [JSON API](/docs/cli-reference/agent-json).
+
+## Resource
+
+`devex://config/effective` (`application/json`) is the allowlisted effective configuration: application names, install methods, whether each is a default, and the configuration precedence. Scripts, commands, URLs, environment values and paths are never included. No other resource is exposed, and file or arbitrary URIs are rejected.
+
+## Behavior
+
+- **Applications** come from the local catalog cache when one exists, otherwise from the catalog bundled with DevEx. The registry is never contacted.
+- **Stdout** carries only MCP messages. Diagnostics go to stderr.
+- **Deadlines**: each tool call or resource read ends after `--request-timeout` (default 30 seconds) with a `timeout` error. Cancelling a request from the client stops it.
+- **Concurrency**: requests are handled one at a time, so concurrent calls cannot see each other's configuration access.
+- **Protocol**: built on the official Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.8.0), which negotiates the protocol version with the client.
+
+## Troubleshooting
+
+- **The client shows no tools.** Run `devex mcp serve` in a terminal: it should wait silently for input. An immediate error on stderr points to the problem. Press Ctrl+D to exit.
+- **No applications are listed.** Check that the client runs `devex` as your user, so it finds your configuration.
+- **Requests time out.** Raise `--request-timeout` in the client's arguments, for example `args = ["mcp", "serve", "--request-timeout", "60s"]`.
