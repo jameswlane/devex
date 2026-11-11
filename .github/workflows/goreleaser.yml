@@ -78,7 +78,7 @@ jobs:
         run: test -f "${{ steps.component.outputs.config }}" || { echo "::error::Missing ${{ steps.component.outputs.config }}"; exit 1; }
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.26.10"
+          go-version: "1.26.11"
           cache-dependency-path: '**/go.sum'
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0

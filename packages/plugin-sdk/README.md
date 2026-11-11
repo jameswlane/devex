@@ -404,7 +404,7 @@ compatible_devex_versions:
   - "<3.0.0"
 
 minimum_requirements:
-  go_version: "1.26.10"
+  go_version: "1.26.11"
   os_support: ["linux", "macos", "windows"]
 ```
 
