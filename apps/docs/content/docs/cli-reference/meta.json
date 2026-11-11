@@ -6,6 +6,7 @@
 		"install",
 		"non-interactive",
 		"config",
+		"dotfiles",
 		"template",
 		"add-remove",
 		"status-list",
