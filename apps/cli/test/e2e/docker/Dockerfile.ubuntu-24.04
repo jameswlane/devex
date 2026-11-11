@@ -9,6 +9,13 @@ FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# Mirror stalls are common on CI runners. APT's default 120 s timeout lets one
+# stalled connection use up the apt plugin's whole 2-minute update budget, so
+# fail a stalled connection after 20 s and retry it. The file stays in the
+# image, so apt-get update during the tests retries too.
+RUN printf '%s\n' 'Acquire::Retries "5";' 'Acquire::http::Timeout "20";' 'Acquire::https::Timeout "20";' \
+        > /etc/apt/apt.conf.d/80-devex-e2e-retries
+
 # Unpinned on purpose: the sandbox should track the distro's current packages.
 # curl, git and unzip are the CLI's required startup dependencies.
 # hadolint ignore=DL3008
