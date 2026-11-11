@@ -30,11 +30,13 @@ var _ = Describe("Confirmation execution contract", func() {
 		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query")
 		model := &SetupModel{step: StepConfirmation,
 			system:     SystemInfo{hasDesktop: true, shells: []string{"bash"}, desktopAppDetails: []types.CrossPlatformApp{{Name: "editor", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "editor"}}}},
-			selections: UISelections{selectedDesktopApps: map[string]bool{"editor": true}},
+			selections: UISelections{selectedDesktopApps: map[string]bool{"editor": true}, excludedDefaults: map[string]bool{"bat": true}},
 			settings:   config.CrossPlatformSettings{ApplicationOverrides: []types.CrossPlatformApp{{Name: "bat", Default: true, Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "bat"}}, {Name: "editor", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "editor"}}}},
 		}
 		view := model.renderInstallPlan()
-		Expect(view).To(ContainSubstring("apt: bat"))
+		Expect(view).To(ContainSubstring("[ ] bat"))
+		Expect(view).To(ContainSubstring("skipped"))
+		Expect(view).NotTo(ContainSubstring("apt: bat"))
 		Expect(view).To(ContainSubstring("apt: editor"))
 		Expect(view).To(ContainSubstring("apt-get update"))
 		apps := model.buildAppList()
@@ -43,6 +45,6 @@ var _ = Describe("Confirmation execution contract", func() {
 		calls := recorder.Calls("apt-get")
 		Expect(calls).To(HaveLen(2))
 		Expect(calls[0].Args).To(Equal([]string{"update"}))
-		Expect(calls[1].Args).To(Equal([]string{"install", "-y", "bat", "editor"}))
+		Expect(calls[1].Args).To(Equal([]string{"install", "-y", "editor"}))
 	})
 })

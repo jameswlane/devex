@@ -8,6 +8,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
+	"github.com/spf13/viper"
 )
 
 // buildAppList converts user selections into a list of CrossPlatformApp objects ready for installation
@@ -28,6 +29,49 @@ func (m *SetupModel) getDefaultApps() []types.CrossPlatformApp {
 	}
 
 	return defaultApps
+}
+
+func configuredDefaultExclusions(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) (map[string]bool, error) {
+	model := &SetupModel{
+		settings: settings,
+		system:   SystemInfo{detectedPlatform: detectedPlatform},
+	}
+	defaultApps := model.getDefaultApps()
+	validNames := make([]string, 0, len(defaultApps))
+	canonicalNames := make(map[string]string, len(defaultApps))
+	for _, app := range defaultApps {
+		validNames = append(validNames, app.Name)
+		canonicalNames[strings.ToLower(app.Name)] = app.Name
+	}
+	sort.Strings(validNames)
+
+	names := viper.GetStringSlice("setup.skip_defaults")
+	if raw, ok := viper.Get("setup.skip_defaults").(string); ok {
+		names = strings.Split(raw, ",")
+	}
+	excluded := make(map[string]bool, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		canonical, ok := canonicalNames[strings.ToLower(name)]
+		if !ok {
+			valid := strings.Join(validNames, ", ")
+			if valid == "" {
+				valid = "none"
+			}
+			return nil, fmt.Errorf("unknown default tool %q in --skip-default/setup.skip_defaults; valid default names on this platform: %s", name, valid)
+		}
+		excluded[canonical] = true
+	}
+	return excluded, nil
+}
+
+// ValidateDefaultExclusions validates configured names before the TUI starts.
+func ValidateDefaultExclusions(settings config.CrossPlatformSettings, detectedPlatform platform.DetectionResult) error {
+	_, err := configuredDefaultExclusions(settings, detectedPlatform)
+	return err
 }
 
 // getMiseApp returns a CrossPlatformApp for mise installation

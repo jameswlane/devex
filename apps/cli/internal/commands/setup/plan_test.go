@@ -92,6 +92,56 @@ var _ = Describe("Install plan and Confirmation screen", func() {
 		Expect(view).To(ContainSubstring("1 already installed"))
 	})
 
+	It("toggles one default without changing the others", func() {
+		installedOnStart["bat"] = true
+		updated, _ := model.Update(tea.KeyMsg{Type: tea.KeySpace})
+		model = updated.(*SetupModel)
+
+		Expect(model.selections.excludedDefaults).To(HaveKeyWithValue("bat", true))
+		Expect(model.selections.alreadyInstalled).NotTo(HaveKey("bat"))
+		var defaultNames []string
+		for _, item := range model.installPlan() {
+			if item.group == planDefault {
+				defaultNames = append(defaultNames, item.app.Name)
+			}
+		}
+		Expect(defaultNames).To(Equal([]string{"gh"}))
+		for _, app := range model.buildAppList() {
+			Expect(app.Name).NotTo(Equal("bat"))
+		}
+		view := model.View()
+		Expect(view).To(ContainSubstring("[ ] bat"))
+		Expect(view).To(ContainSubstring("skipped"))
+		Expect(view).To(ContainSubstring("[x] gh"))
+		Expect(view).NotTo(ContainSubstring("apt: bat"))
+
+		updated, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
+		model = updated.(*SetupModel)
+		Expect(model.selections.excludedDefaults).To(HaveKeyWithValue("bat", false))
+		Expect(model.selections.alreadyInstalled).To(HaveKeyWithValue("bat", true))
+		Expect(model.buildAppList()).To(ContainElement(HaveField("Name", "bat")))
+	})
+
+	It("preserves individual exclusions across a 'd' round trip", func() {
+		model.Update(tea.KeyMsg{Type: tea.KeySpace})
+		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+		Expect(model.selections.skipDefaultApps).To(BeTrue())
+		for _, app := range model.buildAppList() {
+			Expect(app.Default).To(BeFalse())
+		}
+
+		model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+		Expect(model.selections.skipDefaultApps).To(BeFalse())
+		Expect(model.selections.excludedDefaults).To(HaveKeyWithValue("bat", true))
+		var defaultNames []string
+		for _, item := range model.installPlan() {
+			if item.group == planDefault {
+				defaultNames = append(defaultNames, item.app.Name)
+			}
+		}
+		Expect(defaultNames).To(Equal([]string{"gh"}))
+	})
+
 	It("lets the user skip the default tools with 'd'", func() {
 		updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 		model = updated.(*SetupModel)

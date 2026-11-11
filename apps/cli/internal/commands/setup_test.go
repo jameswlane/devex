@@ -80,6 +80,15 @@ var _ = Describe("Setup Command", func() {
 		})
 	})
 
+	Describe("Default tool exclusion flag", func() {
+		It("binds --skip-default to setup.skip_defaults", func() {
+			cmd := commands.NewSetupCmd(repo, settings)
+
+			Expect(cmd.ParseFlags([]string{"--skip-default", "bat,gh"})).To(Succeed())
+			Expect(viper.GetStringSlice("setup.skip_defaults")).To(Equal([]string{"bat", "gh"}))
+		})
+	})
+
 	Describe("isInteractiveMode", func() {
 		// Helper function to test the private isInteractiveMode function
 		var testIsInteractiveMode = func() bool {

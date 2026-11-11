@@ -121,6 +121,9 @@ Run 'devex setup' to begin the guided installation process.`,
 			// The default model initializes plugins at its plugin step and reuses them
 			// for finalization. Custom flows need their bootstrap before constructing actions.
 			log.Info("Starting interactive setup")
+			if err := setup.ValidateDefaultExclusions(settings, detectedPlatform); err != nil {
+				return err
+			}
 			var model tea.Model
 			if setupConfig != nil {
 				pluginBootstrap, err := bootstrap.NewPluginBootstrap(viper.GetBool("skip-plugin-download") || viper.GetBool("offline"))
@@ -163,6 +166,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	cmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 	cmd.Flags().Bool("non-interactive", false, "Run in non-interactive mode (automated)")
 	cmd.Flags().Bool("no-defaults", false, "Skip the default tools; install only what you select")
+	cmd.Flags().StringSlice("skip-default", nil, "Skip a default tool by name (repeatable or comma-separated); config key: setup.skip_defaults")
 	cmd.Flags().String("git-name", "", "Git name for automated setup, only when unset; config key: setup.git.name")
 	cmd.Flags().String("git-email", "", "Git email for automated setup, only when unset; config key: setup.git.email")
 	cmd.Flags().String("shell", "", "Shell for automated setup (bash, zsh, fish); config key: setup.shell; defaults to the current shell")
@@ -171,6 +175,7 @@ Run 'devex setup' to begin the guided installation process.`,
 	_ = viper.BindPFlag("verbose", cmd.Flags().Lookup("verbose"))
 	_ = viper.BindPFlag("non-interactive", cmd.Flags().Lookup("non-interactive"))
 	_ = viper.BindPFlag("no-defaults", cmd.Flags().Lookup("no-defaults"))
+	_ = viper.BindPFlag("setup.skip_defaults", cmd.Flags().Lookup("skip-default"))
 	_ = viper.BindPFlag("setup.git.name", cmd.Flags().Lookup("git-name"))
 	_ = viper.BindPFlag("setup.git.email", cmd.Flags().Lookup("git-email"))
 	_ = viper.BindPFlag("setup.shell", cmd.Flags().Lookup("shell"))

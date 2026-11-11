@@ -32,6 +32,9 @@ func (m *SetupModel) installPlan() []planItem {
 
 	if !m.selections.skipDefaultApps {
 		for _, app := range m.getDefaultApps() {
+			if m.selections.excludedDefaults[app.Name] {
+				continue
+			}
 			plan = append(plan, planItem{app: app, group: planDefault})
 		}
 	}
@@ -80,6 +83,18 @@ var installedAppsCheck = tui.InstalledApps
 // refreshInstalledApps records which planned apps are already installed so the
 // Confirmation screen can show them as skipped, matching what the installer does.
 func (m *SetupModel) refreshInstalledApps() {
+	if m.step == StepConfirmation {
+		maxCursor := len(m.getDefaultApps()) - 1
+		switch {
+		case m.selections.skipDefaultApps || maxCursor < 0:
+			m.cursor = 0
+		case m.cursor > maxCursor:
+			m.cursor = maxCursor
+		case m.cursor < 0:
+			m.cursor = 0
+		}
+	}
+
 	ctx := m.ctx
 	if ctx == nil {
 		ctx = context.Background()

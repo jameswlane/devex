@@ -12,9 +12,15 @@ Use these rules when reviewing application YAML and plugins:
    scripts with options such as `--all` that modify other shells. Optional
    settings need visible consent; desktop settings start disabled and use `s`
    on Confirmation to opt in. Unattended setup does not apply desktop settings.
-3. Keep `default: true` apps in the visible Default tools section. Its checked
-   entries are enabled together; `d` toggles the group and `--no-defaults`
-   disables it for interactive or unattended setup.
+3. Keep `default: true` apps in the visible Default tools section. On
+   Confirmation, use Up/Down (or `j`/`k`) and Space to skip or restore the
+   highlighted app; excluded apps remain visible as `[ ] name — skipped`. The
+   `d` key still toggles the whole group and preserves individual exclusions.
+   Use `--skip-default NAME` (repeatable or comma-separated),
+   `setup.skip_defaults` in configuration, or `DEVEX_SETUP_SKIP_DEFAULTS` with
+   comma-separated names to exclude specific defaults in interactive or
+   unattended setup. Names are case-insensitive and must identify defaults
+   available on the current platform. `--no-defaults` disables the whole group.
 4. Check whether an app is already installed; skip it and report the skip.
 5. Back up user files and settings before writing, and record restoration data
    for undo. Use managed shell actions and backed-up config-file handling.
