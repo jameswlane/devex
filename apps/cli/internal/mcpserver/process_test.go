@@ -90,4 +90,31 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		Expect(filepath.IsAbs(binary)).To(BeTrue())
 		serve(ctx, GinkgoT().TempDir())
 	}, SpecTimeout(2*time.Minute))
+
+	It("serves the mutating tools over the reserved stdout with --allow-mutations", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		var stderr bytes.Buffer
+		command := exec.CommandContext(ctx, binary, "mcp", "serve", "--allow-mutations")
+		command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true"}
+		command.Stderr = &stderr
+
+		client := mcp.NewClient(&mcp.Implementation{Name: "process-test", Version: "0"}, nil)
+		session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
+		Expect(err).NotTo(HaveOccurred(), stderr.String())
+		defer func() { _ = session.Close() }()
+
+		tools, err := session.ListTools(ctx, nil)
+		Expect(err).NotTo(HaveOccurred())
+		names := make([]string, 0, len(tools.Tools))
+		for _, tool := range tools.Tools {
+			names = append(names, tool.Name)
+		}
+		Expect(names).To(ContainElements(mcpserver.MutatingTools))
+
+		// Preparing only plans; nothing is installed.
+		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_install", Arguments: map[string]any{"apps": []string{"git"}}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.IsError).To(BeFalse(), "%v %s", result.Content, stderr.String())
+		Expect(result.StructuredContent).To(HaveKey("plan_id"))
+	}, SpecTimeout(2*time.Minute))
 })

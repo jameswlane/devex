@@ -10,11 +10,11 @@ import { Callout } from 'fumadocs-ui/components/callout'
 `devex mcp serve` lets a Model Context Protocol (MCP) client, such as Claude Code or Codex, ask DevEx about applications, the platform, installation records, configuration and install plans. The client starts the command and talks to it over stdin and stdout.
 
 ```bash
-devex mcp serve [--request-timeout 30s]
+devex mcp serve [--request-timeout 30s] [--allow-mutations [--mutation-timeout 30m]]
 ```
 
-<Callout type="info" title="Read-only by design">
-No tool installs, removes or configures anything. The server never runs package managers, plugins or hooks, never downloads plugins or contacts the registry, and never creates configuration, state or log files. Install and uninstall tools are not registered, so calling them fails with `unknown tool`.
+<Callout type="info" title="Read-only by default">
+Without `--allow-mutations`, no tool installs, removes or configures anything. The server never runs package managers, plugins or hooks, never downloads plugins or contacts the registry, and never creates configuration, state or log files. Install and uninstall tools are not registered, so calling them fails with `unknown tool`.
 </Callout>
 
 ## Client configuration
@@ -52,6 +52,38 @@ Errors are tool errors whose text starts with a stable category: `invalid_reques
 ## Resource
 
 `devex://config/effective` (`application/json`) is the allowlisted effective configuration: application names, install methods, whether each is a default, and the configuration precedence. Scripts, commands, URLs, environment values and paths are never included. No other resource is exposed, and file or arbitrary URIs are rejected.
+
+## Mutating tools
+
+`--allow-mutations` adds four tools. They run only a plan the server issued and the user approved:
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `prepare_install` | `apps`, `categories` (at least one) | The install plan, a `plan_id`, a `digest`, `expires_at` and what is not included. Nothing is installed |
+| `install_apps` | `plan_id`, `digest` | `result` (`completed`, `partial_failure`, `failed`, `cancelled`) and an outcome for every planned application (`installed`, `skipped`, `failed`, `not_run`, `cancelled`) |
+| `prepare_uninstall` | `apps` (at least one, DevEx-tracked), `remove_config`, `remove_data` | The uninstall plan with each application's method and whether its configuration and data are kept or removed |
+| `uninstall_apps` | `plan_id`, `digest` | The same result and outcomes (`removed`, `failed`, ...) |
+
+**The trust boundary is the plan.** Show the prepared plan to the user and get their approval before calling `install_apps` or `uninstall_apps`. A tool annotation or a client-side "yes" does not authorize anything; the server checks the confirmation itself:
+
+- A plan can be used once, expires after 10 minutes, and belongs to one operation.
+- The `digest` must match. The server recomputes it from the current application definitions and platform and rejects the plan if anything changed since it was prepared.
+- Rejected confirmations fail with `plan_rejected` before any effect.
+
+What a plan never does:
+
+- Install defaults, everything, or a whole category's worth of uninstalls: applications must be named (installs may name categories).
+- Remove dependent applications: an uninstall that would break one fails. Orphaned packages, services, system files and Docker data are left alone. Configuration and data are kept unless the plan says otherwise.
+- Prompt for a password: installs run without a terminal and fail when `sudo` needs a password. Configure passwordless `sudo` for the package managers, or install from a terminal.
+- Roll back: applications that finished keep their changes when a later one fails or the request is cancelled.
+
+Errors in outcomes are bounded to one line, and URL credentials, query strings and secret-looking values are redacted. Installs and uninstalls are serialized and limited by `--mutation-timeout` (default 30 minutes). While mutations are enabled, the server keeps its original stdout for MCP messages and sends everything else that would go to stdout, including installer and plugin output, to stderr. `--allow-mutations` is available on Linux and macOS.
+
+Claude Code with mutations:
+
+```bash
+claude mcp add devex -- devex mcp serve --allow-mutations
+```
 
 ## Behavior
 

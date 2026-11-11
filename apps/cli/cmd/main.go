@@ -329,8 +329,9 @@ func readCommand(args []string) bool {
 	case "platform":
 		return true
 	case "mcp":
-		// The MCP server is read-only: no migrations, file logging, plugin
-		// bootstrap or state creation, and stdout stays reserved for MCP.
+		// The default MCP server is read-only: no migrations, file logging,
+		// plugin bootstrap or state creation. With --allow-mutations it records
+		// installations, so it takes the normal startup path.
 		return readOnlyMCPServe(args)
 	case "list", "status":
 		// Interactive list and status keep first-run bootstrap and state
@@ -342,8 +343,8 @@ func readCommand(args []string) bool {
 	return false
 }
 
-// readOnlyMCPServe identifies "devex mcp serve", which needs neither
-// installer tools nor writable state.
+// readOnlyMCPServe identifies "devex mcp serve" without --allow-mutations,
+// which needs neither installer tools nor writable state.
 func readOnlyMCPServe(args []string) bool {
 	var words []string
 	for i := 0; i < len(args); i++ {
@@ -351,7 +352,7 @@ func readOnlyMCPServe(args []string) bool {
 		if arg == "--" {
 			break
 		}
-		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" || arg == "--request-timeout" {
+		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" || arg == "--request-timeout" || arg == "--mutation-timeout" {
 			i++
 			continue
 		}
@@ -359,7 +360,20 @@ func readOnlyMCPServe(args []string) bool {
 			words = append(words, arg)
 		}
 	}
-	return len(words) >= 2 && words[0] == "mcp" && words[1] == "serve"
+	if len(words) < 2 || words[0] != "mcp" || words[1] != "serve" {
+		return false
+	}
+	// With --allow-mutations the server installs and records applications, so
+	// it takes the normal startup path, including installer dependency checks.
+	for _, arg := range args {
+		if arg == "--" {
+			break
+		}
+		if arg == "--allow-mutations" || (strings.HasPrefix(arg, "--allow-mutations=") && arg != "--allow-mutations=false") {
+			return false
+		}
+	}
+	return true
 }
 
 func jsonOutputRequested(args []string) bool {
