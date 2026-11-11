@@ -106,6 +106,22 @@ var _ = Describe("Setup undo", func() {
 			Expect(read(zshrc)).To(Equal("export MINE=1\n"))
 		})
 
+		It("never overwrites content an earlier failed undo kept beside the rc file", func() {
+			zshrc := filepath.Join(home, ".zshrc")
+			kept := filepath.Join(home, ".zshrc.devex-undo-"+fmt.Sprint(os.Getpid()))
+			Expect(os.WriteFile(kept, []byte("preserved user content\n"), 0o600)).To(Succeed())
+			snapshot := setupundo.SnapshotShellRC([]string{zshrc})
+			_, err := managed.Apply(zshrc, []string{"export A=1"})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(setupundo.Restore(ctx, runner.run, home, snapshot.Changes())).To(Succeed())
+			Expect(zshrc).NotTo(BeAnExistingFile())
+			Expect(read(kept)).To(Equal("preserved user content\n"))
+			leftovers, err := filepath.Glob(filepath.Join(home, ".zshrc.devex-undo-*"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(leftovers).To(ConsistOf(kept))
+		})
+
 		It("never deletes a created file whose block markers are damaged", func() {
 			zshrc := filepath.Join(home, ".zshrc")
 			content := managed.Start + "\nexport MINE=important\n"

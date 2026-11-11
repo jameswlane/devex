@@ -365,26 +365,35 @@ func restoreShellRC(change Change) error {
 }
 
 // removeCreatedRC deletes a file setup created without ever losing content an
-// editor wrote meanwhile: it first moves the file aside atomically, checks the
-// moved object is the one that was inspected and still holds only the block,
-// and only then deletes it. Anything else is moved back, or kept beside the rc
-// file when the path was reused, and reported.
+// editor wrote meanwhile: it moves the file into a fresh private directory
+// beside it, checks the moved object is the one that was inspected and still
+// holds only the block, and only then deletes it. Otherwise it puts the file
+// back with a hard link, which never replaces a file saved at the path in the
+// meantime, or keeps it in that directory and reports where.
 func removeCreatedRC(path string, inspected os.FileInfo) error {
-	aside := fmt.Sprintf("%s.devex-undo-%d", path, os.Getpid())
+	dir, err := os.MkdirTemp(filepath.Dir(path), "."+filepath.Base(path)+".devex-undo-")
+	if err != nil {
+		return err
+	}
+	aside := filepath.Join(dir, filepath.Base(path))
 	if err := os.Rename(path, aside); err != nil {
+		_ = os.Remove(dir)
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
 	moved, err := os.Lstat(aside)
 	unchanged := err == nil && os.SameFile(inspected, moved) && moved.Size() == inspected.Size() && moved.ModTime().Equal(inspected.ModTime())
 	if unchanged {
 		if only, onlyErr := managed.OnlyBlock(aside); onlyErr == nil && only {
-			return os.Remove(aside)
+			return errors.Join(os.Remove(aside), os.Remove(dir))
 		}
 	}
-	if _, err := os.Lstat(path); os.IsNotExist(err) {
-		if err := os.Rename(aside, path); err == nil {
-			return fmt.Errorf("%s changed while undo was checking it; not removed, run undo again", path)
-		}
+	if err := os.Link(aside, path); err == nil {
+		_ = os.Remove(aside)
+		_ = os.Remove(dir)
+		return fmt.Errorf("%s changed while undo was checking it; not removed, run undo again", path)
 	}
-	return fmt.Errorf("%s changed while undo was removing it; its content is kept at %s", path, aside)
+	return fmt.Errorf("%s changed while undo was removing it; its earlier content is kept at %s", path, aside)
 }
