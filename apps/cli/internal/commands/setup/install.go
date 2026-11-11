@@ -65,6 +65,7 @@ func (m *SetupModel) installSelectedApps() {
 	}
 
 	ctx = shellrc.WithShell(ctx, m.getSelectedShell())
+	ctx = tui.WithOutcomeRecorder(ctx, m.installation.outcomeRecorder())
 	if err := tui.StartInstallation(ctx, apps, m.repo, m.settings); err != nil {
 		log.Error("Streaming installer failed", err)
 		fmt.Printf("\n❌ Streaming installation failed: %v\n", err)
@@ -110,6 +111,8 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 		log.Warn("Shell configuration failed", "error", err)
 		m.recordShellConfigurationFailure(selectedShell, err)
 		// Don't fail the entire setup for shell config issues
+	} else {
+		m.installation.addChange(fmt.Sprintf("Shell configuration applied for %s", selectedShell))
 	}
 
 	// 2. Desktop theme configuration using desktop plugin based on detected environment
@@ -117,6 +120,8 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 		log.Warn("Desktop configuration failed", "error", err)
 		m.installation.addError(fmt.Sprintf("Desktop configuration: %v", err))
 		// Don't fail the entire setup for desktop config issues
+	} else if m.selections.desktopSettings && m.selections.desktopPreview != "" {
+		m.installation.addChange("Desktop settings applied, as listed on the Confirmation screen")
 	}
 
 	// 3. Git configuration using tool-git plugin (conditional on git config presence)
@@ -132,6 +137,7 @@ func (m *SetupModel) finalizeSetup(ctx context.Context) error {
 			log.Error("Failed to save theme preference", err)
 			return err
 		}
+		m.installation.addChange("Theme preference saved: " + m.getSelectedTheme())
 	}
 
 	return nil
@@ -185,6 +191,7 @@ func (m *SetupModel) handleGitConfiguration(ctx context.Context, pluginBootstrap
 	}
 	if m.gitIdentityUnchanged() && m.git.sshMode == "" {
 		log.Info("Keeping the existing global Git identity", "name", gitName, "email", gitEmail)
+		m.installation.addChange(fmt.Sprintf("Git identity kept: %s <%s>", gitName, gitEmail))
 		return nil
 	}
 

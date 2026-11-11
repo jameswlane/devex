@@ -136,15 +136,10 @@ func printAutomatedSetupCompletion(model *SetupModel) {
 		for _, issue := range model.installation.getErrors() {
 			fmt.Printf("  • %s\n", issue)
 		}
-		fmt.Printf("\nWhat was attempted:\n")
 	} else {
 		fmt.Printf("\n🎉 Automated setup complete!\n")
-		fmt.Printf("Your development environment has been set up with:\n")
 	}
-	fmt.Printf("  • %s shell with DevEx configuration\n", selectedShell)
-	fmt.Printf("  • Essential development tools\n")
-	fmt.Printf("  • Programming languages: Node.js, Python\n")
-	fmt.Printf("  • Database: PostgreSQL\n")
+	fmt.Printf("\n%s", model.renderChangeInventory())
 
 	switch {
 	case model.installation.hasInstallErrors():
@@ -193,7 +188,8 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	// Convert default selections to CrossPlatformApp objects
 	apps := model.buildAppList()
 
-	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", []string{"Node.js", "Python"}, "databases", []string{"PostgreSQL"})
+	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", model.getSelectedLanguages(), "databases", model.getSelectedDatabases())
+	model.selections.alreadyInstalled = installedAppsCheck(ctx, apps)
 
 	// Display the planned installation to the user
 	printAutomatedSetupPlan(model)
@@ -207,7 +203,12 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	}
 	// Use the regular installer system for non-interactive mode
 	var errors []string
+	outcomes := model.installation.outcomeRecorder()
 	for _, app := range apps {
+		if model.selections.alreadyInstalled[app.Name] {
+			outcomes.Record(app.Name, tui.OutcomeSkipped, nil)
+			continue
+		}
 		if err := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
 			return err
 		}
@@ -215,8 +216,11 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 			if authErr := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); authErr != nil {
 				return authErr
 			}
+			outcomes.Record(app.Name, tui.OutcomeFailed, err)
 			errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+			continue
 		}
+		outcomes.Record(app.Name, tui.OutcomeInstalled, nil)
 	}
 
 	for _, failure := range errors {

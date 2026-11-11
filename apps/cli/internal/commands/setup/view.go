@@ -318,19 +318,8 @@ func (m *SetupModel) View() string {
 			s += "Your development environment has been successfully set up!\n\n"
 		}
 
-		s += "What was attempted:\n"
-		s += fmt.Sprintf("  • %s shell with DevEx configuration\n", selectedShell)
-		s += "  • Essential development tools\n"
-		if len(m.getSelectedLanguages()) > 0 {
-			s += "  • Programming languages via mise\n"
-		}
-		if len(m.getSelectedDatabases()) > 0 {
-			s += "  • Database containers via Docker\n"
-		}
-		if len(m.getSelectedDesktopApps()) > 0 {
-			s += "  • Desktop applications\n"
-		}
-		s += "\n\n"
+		s += m.renderChangeInventory()
+		s += "\n"
 
 		if !m.installation.hasErrors {
 			if m.shellSwitched {

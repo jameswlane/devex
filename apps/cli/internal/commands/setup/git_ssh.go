@@ -33,9 +33,22 @@ func (m *SetupModel) applyGitConfiguration(ctx context.Context, manager configur
 		if err := runConfigurationPlugin(ctx, manager, "tool-git", args); err != nil {
 			return err
 		}
+		if m.git.sshMode == "generate" {
+			m.installation.addChange(fmt.Sprintf("SSH key created: %s and %s.pub", m.git.sshPath, m.git.sshPath))
+		} else {
+			m.installation.addChange(fmt.Sprintf("SSH key selected: %s (no files changed)", m.git.sshPath))
+		}
 	}
-	if (name == "" && email == "") || m.gitIdentityUnchanged() {
+	if name == "" && email == "" {
 		return nil
 	}
-	return runConfigurationPlugin(ctx, manager, "tool-git", gitConfigurationArgs(name, email))
+	if m.gitIdentityUnchanged() {
+		m.installation.addChange(fmt.Sprintf("Git identity kept: %s <%s>", name, email))
+		return nil
+	}
+	if err := runConfigurationPlugin(ctx, manager, "tool-git", gitConfigurationArgs(name, email)); err != nil {
+		return err
+	}
+	m.installation.addChange(fmt.Sprintf("Git identity set: %s <%s>", name, email))
+	return nil
 }
