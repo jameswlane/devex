@@ -69,8 +69,11 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 		Expect(content).To(ContainSubstring("alias ll='ls -la'"))
 	})
 
-	DescribeTable("leaves a user's rc untouched when it already loads Oh My Zsh",
+	DescribeTable("leaves a user's rc untouched when it already loads an installed Oh My Zsh",
 		func(sourceLine string) {
+			framework := filepath.Join(home, ".oh-my-zsh")
+			Expect(os.MkdirAll(framework, 0o700)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(framework, "oh-my-zsh.sh"), []byte("existing\n"), 0o600)).To(Succeed())
 			zshrc := filepath.Join(home, ".zshrc")
 			original := "export ZSH=\"$HOME/.oh-my-zsh\"\n" + sourceLine + "\nalias mine='keep'\n"
 			Expect(os.WriteFile(zshrc, []byte(original), 0o600)).To(Succeed())
@@ -88,6 +91,10 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 		Entry("dot source with a quoted ZSH variable", `. "$ZSH/oh-my-zsh.sh"`),
 		Entry("braced ZSH variable and trailing comment", `source "${ZSH}/oh-my-zsh.sh" # existing`),
 		Entry("single-quoted HOME path", `source '$HOME/.oh-my-zsh/oh-my-zsh.sh'`),
+		Entry("double-bracket conditional source", `[[ -f "$ZSH/oh-my-zsh.sh" ]] && source "$ZSH/oh-my-zsh.sh"`),
+		Entry("single-bracket conditional dot source", `[ -f "$ZSH/oh-my-zsh.sh" ] && . "$ZSH/oh-my-zsh.sh"`),
+		Entry("one-line if source", `if [ -f "$ZSH/oh-my-zsh.sh" ]; then source "$ZSH/oh-my-zsh.sh"; fi`),
+		Entry("unclassifiable mention is conservative", `print -r -- "$ZSH/oh-my-zsh.sh"`),
 	)
 
 	It("uses DEVEX_DATA_DIR for deployed files, rc sourcing, and undo", func() {
@@ -112,6 +119,8 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 		Expect(filepath.Join(defaultsDir, "prompt")).NotTo(BeAnExistingFile())
 
 		changes := append(model.systemUndo.rc.Changes(), model.systemUndo.changes...)
+		GinkgoT().Setenv("DEVEX_DATA_DIR", "")
+		GinkgoT().Setenv("XDG_DATA_HOME", "")
 		Expect(setupundo.Restore(context.Background(), nil, home, changes)).To(Succeed())
 		for _, name := range []string{"rc", "shell", "aliases", "init"} {
 			Expect(filepath.Join(defaultsDir, name)).NotTo(BeAnExistingFile())

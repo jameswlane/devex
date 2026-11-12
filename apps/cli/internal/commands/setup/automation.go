@@ -197,6 +197,9 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	if viper.GetBool("dry-run") {
 		return nil
 	}
+	if _, err := model.getOhMyZshPlan(); err != nil {
+		return err
+	}
 
 	ctx = shellrc.WithShell(ctx, model.getSelectedShell())
 	if err := tui.AuthorizeInstallation(ctx, apps, false); err != nil {

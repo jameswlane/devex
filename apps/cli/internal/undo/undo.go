@@ -228,11 +228,15 @@ func (um *UndoManager) UndoOperation(operationID string, force bool) (*UndoResul
 		if err != nil {
 			return result, fmt.Errorf("find home directory for setup undo: %w", err)
 		}
-		if err := setupundo.Restore(context.Background(), setupundo.ExecRunner, home, changes); err != nil {
-			return result, fmt.Errorf("failed to undo setup changes (fix the cause and run undo again; every step is safe to repeat): %w", err)
+		messages, restoreErr := setupundo.RestoreWithMessages(context.Background(), setupundo.ExecRunner, home, changes)
+		if restoreErr != nil {
+			return result, fmt.Errorf("failed to undo setup changes (fix the cause and run undo again; every step is safe to repeat): %w", restoreErr)
 		}
 		result.RestoredFrom = "setup changes"
 		result.Message = fmt.Sprintf("Restored %d setup changes", len(changes))
+		if len(messages) > 0 {
+			result.Message += "\n" + strings.Join(messages, "\n")
+		}
 	} else if err := um.backupManager.RestoreBackup(targetOp.BackupID, ""); err != nil {
 		// If backup restoration fails, try version rollback
 		if targetOp.VersionFrom != "" {

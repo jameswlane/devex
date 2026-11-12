@@ -14,7 +14,7 @@ func (m *SetupModel) renderOhMyZshPreview() string {
 		return ""
 	}
 	var b strings.Builder
-	if plan.alreadyLoads {
+	if plan.alreadyLoads && !plan.clone {
 		b.WriteString("  • your ~/.zshrc already loads Oh My Zsh; it is left unchanged\n")
 		b.WriteString("  • Login shell remains unchanged\n")
 		return b.String()
@@ -23,8 +23,14 @@ func (m *SetupModel) renderOhMyZshPreview() string {
 		fmt.Fprintf(&b, "  • Install Oh My Zsh in %s\n", plan.frameworkDir)
 		fmt.Fprintf(&b, "      Repository: %s\n", ohMyZshRepository)
 		fmt.Fprintf(&b, "      Pinned commit: %s; git fetch --depth 1, then detached checkout (no install script)\n", ohMyZshRevision)
-	} else {
+	} else if !plan.alreadyLoads {
 		fmt.Fprintf(&b, "  • Reuse Oh My Zsh at %s; do not modify it\n", plan.frameworkDir)
+	}
+	if plan.alreadyLoads {
+		b.WriteString("  • your ~/.zshrc already loads Oh My Zsh; it is left unchanged; the existing rc line will load it\n")
+		b.WriteString("  • Bundled Zsh defaults are not deployed\n")
+		b.WriteString("  • Login shell remains unchanged\n")
+		return b.String()
 	}
 	b.WriteString("  • Bundled Zsh defaults:\n")
 	b.WriteString("      History: keep 5,000 entries in memory and in ~/.zsh_history.\n")

@@ -399,7 +399,9 @@ Undo restores:
 - bundled Zsh default files setup created, provided their contents are still
   unchanged. An existing or subsequently customized file is never removed.
 - an Oh My Zsh clone only when it carries the matching DevEx ownership marker.
-  An existing installation is never removed.
+  Undo moves the clone to a unique sibling directory and reports the preserved
+  path, so themes, plugins, and other content you added later are not deleted.
+  An existing installation is never moved or removed.
 - your global Git `user.name` and `user.email`. A key that had no value before
   is unset again.
 - each GNOME (`gsettings`) or KDE (`kwriteconfig5`) setting setup changed, put

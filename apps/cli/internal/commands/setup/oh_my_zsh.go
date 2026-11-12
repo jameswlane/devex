@@ -115,10 +115,7 @@ func (m *SetupModel) getOhMyZshPlan() (*ohMyZshPlan, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", plan.rcFile, err)
 		}
-		if sourcesOhMyZshOutsideBlock(string(content), home) {
-			plan.alreadyLoads = true
-			return plan, nil
-		}
+		plan.alreadyLoads = sourcesOhMyZshOutsideBlock(string(content))
 	}
 
 	info, err := os.Lstat(plan.frameworkDir)
@@ -133,6 +130,9 @@ func (m *SetupModel) getOhMyZshPlan() (*ohMyZshPlan, error) {
 		if _, err := os.Stat(filepath.Join(plan.frameworkDir, "oh-my-zsh.sh")); err != nil {
 			return nil, fmt.Errorf("%s exists but is not a complete Oh My Zsh installation: %w", plan.frameworkDir, err)
 		}
+	}
+	if plan.alreadyLoads {
+		return plan, nil
 	}
 
 	for _, name := range []string{"rc", "shell", "aliases", "init"} {
@@ -152,7 +152,7 @@ func (m *SetupModel) getOhMyZshPlan() (*ohMyZshPlan, error) {
 	return plan, nil
 }
 
-func sourcesOhMyZshOutsideBlock(content, home string) bool {
+func sourcesOhMyZshOutsideBlock(content string) bool {
 	inBlock := false
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -164,19 +164,18 @@ func sourcesOhMyZshOutsideBlock(content, home string) bool {
 			inBlock = false
 			continue
 		}
-		if inBlock || trimmed == "" || strings.HasPrefix(trimmed, "#") {
+		if inBlock || trimmed == "" || strings.HasPrefix(trimmed, "#") || !strings.Contains(trimmed, "oh-my-zsh.sh") {
 			continue
 		}
 		normalized := strings.NewReplacer(`"`, "", `'`, "", "${ZSH}", "$ZSH", "${HOME}", "$HOME").Replace(trimmed)
-		fields := strings.Fields(normalized)
-		if len(fields) < 2 || (fields[0] != "source" && fields[0] != ".") {
-			continue
+		segments := strings.Split(strings.NewReplacer("&&", "\n", "||", "\n", ";", "\n", "then", "\n").Replace(normalized), "\n")
+		for _, segment := range segments {
+			fields := strings.Fields(segment)
+			if len(fields) >= 2 && (fields[0] == "source" || fields[0] == ".") && strings.Contains(fields[1], "oh-my-zsh.sh") {
+				return true
+			}
 		}
-		target := strings.TrimSuffix(fields[1], ";")
-		switch target {
-		case "$ZSH/oh-my-zsh.sh", "$HOME/.oh-my-zsh/oh-my-zsh.sh", "~/.oh-my-zsh/oh-my-zsh.sh", filepath.Join(home, ".oh-my-zsh", "oh-my-zsh.sh"):
-			return true
-		}
+		return true
 	}
 	return false
 }
@@ -224,17 +223,21 @@ func (m *SetupModel) applyOhMyZsh(ctx context.Context) error {
 	if err != nil || plan == nil {
 		return err
 	}
-	if plan.alreadyLoads {
-		m.installation.addChange("your ~/.zshrc already loads Oh My Zsh; it is left unchanged")
-		return nil
-	}
 	if plan.clone {
 		if err := m.cloneOhMyZsh(ctx, plan); err != nil {
 			return err
 		}
 		m.installation.addChange(fmt.Sprintf("Oh My Zsh installed at %s (pinned commit %s)", plan.frameworkDir, ohMyZshRevision))
-	} else {
+	} else if !plan.alreadyLoads {
 		m.installation.addChange(fmt.Sprintf("Existing Oh My Zsh reused unchanged at %s", plan.frameworkDir))
+	}
+	if plan.alreadyLoads {
+		message := "your ~/.zshrc already loads Oh My Zsh; it is left unchanged"
+		if plan.clone {
+			message += "; the existing rc line will load it"
+		}
+		m.installation.addChange(message)
+		return nil
 	}
 
 	for _, asset := range plan.assets {
@@ -251,7 +254,7 @@ func (m *SetupModel) applyOhMyZsh(ctx context.Context) error {
 		checksum := fmt.Sprintf("%x", sha256.Sum256(asset.data))
 		m.systemUndo.changes = append(m.systemUndo.changes, setupundo.Change{
 			Kind: setupundo.KindCreatedFile, Description: "Created bundled Zsh default " + asset.path,
-			Path: asset.path, Checksum: checksum,
+			Path: asset.path, Checksum: checksum, Root: plan.defaultsDir,
 		})
 		m.installation.addChange("Deployed bundled Zsh default: " + asset.path)
 	}
