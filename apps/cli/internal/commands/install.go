@@ -22,6 +22,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -50,6 +51,7 @@ func NewInstallCmdWithPluginProvider(repo types.Repository, settings config.Cros
 		answers        []string
 		answerFiles    []string
 		nonInteractive bool
+		expectPlan     string
 	)
 
 	cmd := &cobra.Command{
@@ -103,7 +105,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if !viper.GetBool("dry-run") || templateID != "" {
 					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
 				}
-				plan, err := agentapi.PlanInstall(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")}, currentExecutionPolicy(), currentExecutionTrust())
 				if err == nil {
 					selected, _, selectErr := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
 					if selectErr != nil {
@@ -113,7 +115,15 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 						_ = system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), message) })
 					}
 				}
-				return writeAPIJSON(cmd, plan, err)
+				// The digest lets a caller confirm this plan and install exactly it
+				// with --expect-plan. Roots are the applications whose lifecycles
+				// run; other planned dependencies are left to their package manager.
+				return writeAPIJSON(cmd, struct {
+					agentapi.Plan
+					Roots  []string                 `json:"roots"`
+					Policy agentapi.ExecutionPolicy `json:"policy"`
+					Digest string                   `json:"digest"`
+				}{snapshot.Plan, snapshot.RootNames(), snapshot.Policy, snapshot.Digest}, err)
 			}
 			if format != "table" {
 				return fmt.Errorf("unsupported format %q", format)
@@ -123,6 +133,25 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 			verbose := viper.GetBool("verbose")
 			dryRun := viper.GetBool("dry-run")
 			categories := viper.GetStringSlice("categories")
+
+			if expectPlan != "" {
+				if dryRun || templateID != "" {
+					return fmt.Errorf("--expect-plan installs a confirmed plan; it cannot be combined with --dry-run or --template")
+				}
+				if err := validateInstallInputs(args, categories); err != nil {
+					return fmt.Errorf("invalid inputs: %w", err)
+				}
+				// Resolve once, verify, then execute exactly this snapshot: its
+				// roots, settings and policy, never a fresh selection.
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories}, currentExecutionPolicy(), currentExecutionTrust())
+				if err != nil {
+					return fmt.Errorf("check the confirmed plan: %w", err)
+				}
+				if snapshot.Digest != expectPlan {
+					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, snapshot.Digest)
+				}
+				return executeSnapshot(ctx, cmd, snapshot, verbose, repo, getPluginBootstrap)
+			}
 
 			if templateID != "" {
 				if len(args) > 0 || len(categories) > 0 {
@@ -141,7 +170,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.ErrOrStderr(), "Rollback enabled: failed batches remove newly installed APT packages and restore backed-up files; hooks and dependencies may require manual recovery.")
+				fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
 				return runRollbackBatch(ctx, cmd.ErrOrStderr(), apps, repo, resolvedSettings, getPluginBootstrap)
 			}
 			return executeInstallWithOutput(ctx, args, categories, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
@@ -157,6 +186,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
 	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
+	cmd.Flags().StringVar(&expectPlan, "expect-plan", "", "Install only if the plan digest from 'install --dry-run --format json' still matches")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Install without the TUI; fail instead of prompting for template inputs")
 
 	// Bind flags to Viper for hierarchical config
@@ -214,7 +244,86 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 	if dryRun {
 		return previewInstallation(ctx, appsToInstall, provider, out)
 	}
+	return installSelected(ctx, span, appsToInstall, repo, settings, out, provider)
+}
 
+const rollbackEnabledNotice = "Rollback enabled: failed batches remove newly installed APT packages and restore backed-up files; hooks and dependencies may require manual recovery."
+
+// currentExecutionPolicy reads the effective install policy that a confirmed
+// plan digest binds.
+func currentExecutionPolicy() agentapi.ExecutionPolicy {
+	return agentapi.ExecutionPolicy{
+		RollbackOnFailure:  viper.GetBool("rollback-on-failure"),
+		InstallConcurrency: installConcurrency(),
+		Offline:            viper.GetBool("offline"),
+		NoCache:            viper.GetBool("no-cache"),
+		SkipPluginDownload: viper.GetBool("skip-plugin-download"),
+		AptListsMaxAge:     viper.GetDuration("apt-lists-max-age").String(),
+	}
+}
+
+// executeSnapshot installs a verified snapshot's roots with its settings,
+// choosing the execution path from its policy.
+func executeSnapshot(ctx context.Context, cmd *cobra.Command, snapshot agentapi.ExecutionSnapshot, verbose bool, repo types.Repository, provider pluginBootstrapProvider) error {
+	_, span := tracer.Start(ctx, "install_command",
+		trace.WithAttributes(
+			attribute.StringSlice("apps", snapshot.RootNames()),
+			attribute.String("plan_digest", snapshot.Digest),
+			attribute.String("platform", runtime.GOOS),
+		),
+	)
+	defer span.End()
+	settings := snapshot.Settings
+	settings.Verbose = verbose
+	if err := pinExecution(snapshot); err != nil {
+		return err
+	}
+	// Pin the confirmed local files for every step that reads them.
+	ctx = execinputs.With(ctx, snapshot.Inputs)
+	if snapshot.Policy.RollbackOnFailure {
+		fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
+		return runRollbackBatch(ctx, cmd.ErrOrStderr(), snapshot.Roots, repo, settings, provider)
+	}
+	// A confirmed install always runs the plain lifecycle, never the TUI.
+	return runPlainInstall(ctx, cmd.OutOrStdout(), snapshot.Roots, repo, settings, provider)
+}
+
+// currentExecutionTrust reads the effective plugin trust configuration that a
+// confirmed plan digest binds.
+func currentExecutionTrust() agentapi.ExecutionTrust {
+	trust := agentapi.ExecutionTrust{PluginRegistryURL: bootstrap.GetRegistryURL(), PluginPublicKey: viper.GetString("plugin.public-key")}
+	if trust.PluginPublicKey != "" {
+		trust.PluginPublicKeyDigest = execinputs.Fingerprint(trust.PluginPublicKey)
+	}
+	return trust
+}
+
+// pinExecution makes the rest of the process read the confirmed policy and
+// trust values, so later reads of configuration, the environment or
+// config.yaml cannot change them. Viper values set here take precedence over
+// flags, environment and config files.
+func pinExecution(snapshot agentapi.ExecutionSnapshot) error {
+	if key := snapshot.Trust.PluginPublicKey; key != "" && execinputs.Fingerprint(key) != snapshot.Trust.PluginPublicKeyDigest {
+		return fmt.Errorf("plugin public key %s %w; nothing was installed", key, execinputs.ErrChanged)
+	}
+	policy := snapshot.Policy
+	viper.Set("rollback-on-failure", policy.RollbackOnFailure)
+	viper.Set("install-concurrency", policy.InstallConcurrency)
+	viper.Set("offline", policy.Offline)
+	viper.Set("no-cache", policy.NoCache)
+	viper.Set("skip-plugin-download", policy.SkipPluginDownload)
+	viper.Set("apt-lists-max-age", policy.AptListsMaxAge)
+	viper.Set("plugin.public-key", snapshot.Trust.PluginPublicKey)
+	// The environment variable takes precedence over config.yaml, which plugin
+	// bootstrap would otherwise read again.
+	if err := os.Setenv("DEVEX_PLUGIN_REGISTRY_URL", snapshot.Trust.PluginRegistryURL); err != nil {
+		return fmt.Errorf("pin the plugin registry: %w", err)
+	}
+	return nil
+}
+
+// installSelected installs already selected applications.
+func installSelected(ctx context.Context, span trace.Span, appsToInstall []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, provider pluginBootstrapProvider) error {
 	if !interaction.IsInteractiveMode() {
 		return runPlainInstall(ctx, out, appsToInstall, repo, settings, provider)
 	}
