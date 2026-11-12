@@ -14,7 +14,10 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -205,8 +208,14 @@ var _ = Describe("Install with a confirmed plan digest", func() {
 	BeforeEach(func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
-		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
 		GinkgoT().Setenv("CI", "true")
+		// Keep every configuration path inside the temporary home, and restore
+		// the registry variable that a confirmed install pins.
+		GinkgoT().Setenv("DEVEX_CONFIG_DIR", filepath.Join(home, "config"))
+		GinkgoT().Setenv("DEVEX_DATA_DIR", filepath.Join(home, "data"))
+		GinkgoT().Setenv("DEVEX_PLUGIN_REGISTRY_URL", "")
 		viper.Set(state.DBPathConfigKey, filepath.Join(GinkgoT().TempDir(), "state.db"))
 		oldPrepare, oldInstall := prepareApplicationInstallers, installApplication
 		DeferCleanup(func() { prepareApplicationInstallers, installApplication = oldPrepare, oldInstall })
@@ -294,6 +303,121 @@ var _ = Describe("Install with a confirmed plan digest", func() {
 		Expect(installed).To(BeEmpty())
 	})
 
+	Context("with command security, plugin trust and local files", func() {
+		securityFile := func(level string) {
+			path := filepath.Join(os.Getenv("DEVEX_CONFIG_DIR"), "security.yaml")
+			Expect(os.MkdirAll(filepath.Dir(path), 0o750)).To(Succeed())
+			Expect(os.WriteFile(path, []byte("level: "+level+"\n"), 0o600)).To(Succeed())
+		}
+		// hookCheck records whether the installer's validator allows a benign
+		// unknown hook command: strict blocks it, moderate allows it.
+		var hookAllowed []bool
+		recordHookPolicy := func(beforeValidate func()) {
+			hookAllowed = nil
+			installApplication = func(_ context.Context, app types.CrossPlatformApp, s config.CrossPlatformSettings, _ types.Repository) error {
+				installed = append(installed, app)
+				if beforeValidate != nil {
+					beforeValidate()
+				}
+				validator, err := s.GetCommandValidator()
+				Expect(err).NotTo(HaveOccurred())
+				hookAllowed = append(hookAllowed, validator.ValidateCommandForApp("custom-tool --install", app.Name) == nil)
+				return nil
+			}
+		}
+
+		It("refuses when security.yaml changed after the plan was confirmed", func() {
+			securityFile("0") // strict
+			confirmed := confirm(settings, "git")
+			securityFile("1") // moderate
+			Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+			Expect(installed).To(BeEmpty())
+		})
+
+		It("refuses when embedded security settings changed after the plan was confirmed", func() {
+			settings.Security = config.SecurityConfigField{Level: 2}
+			confirmed := confirm(settings, "git")
+			changed := settings
+			changed.Security = config.SecurityConfigField{Level: 2, GlobalOverrides: []config.SecurityOverrideField{{RuleType: "allow", Pattern: "custom-tool", Reason: "test"}}}
+			Expect(install(changed, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+			Expect(installed).To(BeEmpty())
+		})
+
+		It("runs hooks with the confirmed security policy even if security.yaml changes during the install", func() {
+			securityFile("0") // strict blocks custom-tool
+			confirmed := confirm(settings, "git")
+			recordHookPolicy(func() { securityFile("1") })
+			Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(Succeed())
+			Expect(installed).To(HaveLen(1))
+			Expect(hookAllowed).To(Equal([]bool{false}), "the reloaded moderate policy would allow it")
+		})
+
+		It("refuses when the plugin registry changed after the plan was confirmed", func() {
+			confirmed := confirm(settings, "git")
+			GinkgoT().Setenv("DEVEX_PLUGIN_REGISTRY_URL", "https://registry.example.invalid")
+			Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+			Expect(installed).To(BeEmpty())
+		})
+
+		It("keeps the confirmed plugin registry when config.yaml changes during the install", func() {
+			confirmed := confirm(settings, "git")
+			var registry string
+			installApplication = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+				installed = append(installed, app)
+				path := filepath.Join(os.Getenv("DEVEX_CONFIG_DIR"), "config.yaml")
+				Expect(os.MkdirAll(filepath.Dir(path), 0o750)).To(Succeed())
+				Expect(os.WriteFile(path, []byte("plugin_registry_url: https://registry.example.invalid\n"), 0o600)).To(Succeed())
+				registry = bootstrap.GetRegistryURL()
+				return nil
+			}
+			Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(Succeed())
+			Expect(registry).To(Equal(bootstrap.DefaultRegistryURL))
+		})
+
+		It("refuses when the plugin public key changed after the plan was confirmed", func() {
+			key := filepath.Join(os.Getenv("HOME"), "plugin.pub")
+			Expect(os.WriteFile(key, []byte("key one"), 0o600)).To(Succeed())
+			viper.Set("plugin.public-key", key)
+			confirmed := confirm(settings, "git")
+			Expect(os.WriteFile(key, []byte("key two"), 0o600)).To(Succeed())
+			Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+			Expect(installed).To(BeEmpty())
+		})
+
+		It("refuses when a config_files source or marker changed after the plan was confirmed", func() {
+			home := os.Getenv("HOME")
+			source := filepath.Join(home, "assets", "gitconfig")
+			Expect(os.MkdirAll(filepath.Dir(source), 0o750)).To(Succeed())
+			Expect(os.WriteFile(source, []byte("[user]\n"), 0o600)).To(Succeed())
+			withFiles := git
+			withFiles.Linux.ConfigFiles = []types.ConfigFile{{Source: source, Destination: "~/.gitconfig", RequiresAny: []string{filepath.Join(home, "marker")}}}
+			withFiles.MacOS.ConfigFiles = withFiles.Linux.ConfigFiles
+			s := settings
+			s.ApplicationOverrides = []types.CrossPlatformApp{base, withFiles}
+			confirmed := confirm(s, "git")
+			Expect(os.WriteFile(source, []byte("[user]\n\tname = someone else\n"), 0o600)).To(Succeed())
+			Expect(install(s, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+			Expect(os.WriteFile(source, []byte("[user]\n"), 0o600)).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(home, "marker"), nil, 0o600)).To(Succeed())
+			Expect(install(s, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+			Expect(installed).To(BeEmpty())
+		})
+
+		It("pins the confirmed policy for the rest of the install", func() {
+			confirmed := confirm(settings, "git")
+			var offline bool
+			installApplication = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+				installed = append(installed, app)
+				// A later configuration source cannot override the pinned value.
+				Expect(viper.MergeConfigMap(map[string]any{"offline": true})).To(Succeed())
+				offline = viper.GetBool("offline")
+				return nil
+			}
+			Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(Succeed())
+			Expect(offline).To(BeFalse())
+		})
+	})
+
 	It("runs a confirmed rollback policy through the rollback path", func() {
 		// A method whose rollback compensation never queries this host's packages.
 		tool := types.CrossPlatformApp{Name: "tool", AllPlatforms: types.OSConfig{InstallMethod: "docker", InstallCommand: "tool"}}
@@ -310,5 +434,35 @@ var _ = Describe("Install with a confirmed plan digest", func() {
 		confirmed := confirm(settings, "git")
 		viper.Set("dry-run", true)
 		Expect(install(settings, "git", "--expect-plan", confirmed)).To(MatchError(ContainSubstring("cannot be combined with --dry-run")))
+	})
+})
+
+var _ = Describe("Confirmed installs with changed configuration files", func() {
+	BeforeEach(func() {
+		viper.Reset()
+		DeferCleanup(viper.Reset)
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		GinkgoT().Setenv("DEVEX_CONFIG_DIR", filepath.Join(home, "config"))
+		GinkgoT().Setenv("DEVEX_DATA_DIR", filepath.Join(home, "data"))
+		viper.Set(state.DBPathConfigKey, filepath.Join(GinkgoT().TempDir(), "state.db"))
+		old := prepareApplicationInstallers
+		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+		DeferCleanup(func() { prepareApplicationInstallers = old })
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
+	})
+
+	It("fails the install instead of warning when a confirmed source changes during it", func() {
+		home := os.Getenv("HOME")
+		source := filepath.Join(home, "tool.conf")
+		Expect(os.WriteFile(source, []byte("confirmed"), 0o600)).To(Succeed())
+		app := types.CrossPlatformApp{Name: "pinned-tool", AllPlatforms: types.OSConfig{InstallMethod: "apt", InstallCommand: "pinned-tool", ConfigFiles: []types.ConfigFile{{Source: source, Destination: "~/.config/tool/tool.conf"}}}}
+		ctx := execinputs.With(context.Background(), execinputs.Inputs{Files: map[string]string{source: execinputs.Fingerprint(source)}, Markers: map[string]bool{}})
+		Expect(os.WriteFile(source, []byte("swapped"), 0o600)).To(Succeed())
+		var output bytes.Buffer
+		err := runPlainInstall(ctx, &output, []types.CrossPlatformApp{app}, mocks.NewMockRepository(), config.CrossPlatformSettings{HomeDir: home}, nil)
+		Expect(err).To(MatchError(ContainSubstring("changed after the plan was confirmed")))
+		Expect(filepath.Join(home, ".config", "tool", "tool.conf")).NotTo(BeAnExistingFile())
 	})
 })

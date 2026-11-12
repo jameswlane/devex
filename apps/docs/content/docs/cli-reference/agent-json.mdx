@@ -169,10 +169,15 @@ are not tracked by the current loader.
 steps, hooks, files) run; other planned dependencies are left to their package
 manager. `policy` is the effective execution policy. `digest` covers the
 roots, the plan, the full definitions of every planned application (install
-commands, hooks, dependencies, files) and the policy.
+commands, hooks, dependencies, files), the policy, the plugin registry and
+signing key, the effective command-security policy, and the content of the
+configuration-file and copy-hook sources the roots read (with which
+`requires_any` markers exist). The registry, key, security policy and file
+contents are hashed but not shown.
 `devex install --expect-plan <digest>` resolves the same request once,
 installs only if that resolution has the confirmed digest, and then executes
-exactly that resolution: its roots, settings and policy. Any difference, such
+exactly that resolution: its roots, settings, policy, registry and security
+policy, refusing any configuration or copy source whose content changed. Any difference, such
 as naming another application, enabling `rollback-on-failure` or changing a
 definition, fails before anything is installed. `devex remote install` uses
 this to install exactly the plan you confirmed.

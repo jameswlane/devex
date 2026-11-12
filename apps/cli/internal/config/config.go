@@ -45,6 +45,10 @@ type CrossPlatformSettings struct {
 	Dotfiles             DotfilesConfig             `mapstructure:",squash"`
 	DesktopEnvironments  DesktopEnvironmentsConfig  `mapstructure:",inline"`
 	Security             SecurityConfigField        `mapstructure:"security"`
+	// ResolvedSecurity, when set, is the effective command-security policy
+	// resolved for a confirmed install. It is used instead of resolving the
+	// embedded settings or reading security.yaml again.
+	ResolvedSecurity *security.SecurityConfig `mapstructure:"-"`
 }
 
 // ApplicationsConfig represents the application configuration
@@ -912,6 +916,9 @@ func (s *CrossPlatformSettings) GetSecurityConfig() *security.SecurityConfig {
 
 // LoadSecurityConfigForSettings loads security configuration and applies it to settings
 func (s *CrossPlatformSettings) LoadSecurityConfigForSettings() (*security.SecurityConfig, error) {
+	if s.ResolvedSecurity != nil {
+		return s.ResolvedSecurity, nil
+	}
 	// Try to get from embedded config first
 	securityConfig := s.GetSecurityConfig()
 

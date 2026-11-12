@@ -22,6 +22,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
+	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
 	"github.com/jameswlane/devex/apps/cli/internal/help"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
@@ -104,7 +105,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if !viper.GetBool("dry-run") || templateID != "" {
 					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
 				}
-				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")}, currentExecutionPolicy())
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")}, currentExecutionPolicy(), currentExecutionTrust())
 				if err == nil {
 					selected, _, selectErr := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
 					if selectErr != nil {
@@ -142,7 +143,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				}
 				// Resolve once, verify, then execute exactly this snapshot: its
 				// roots, settings and policy, never a fresh selection.
-				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories}, currentExecutionPolicy())
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories}, currentExecutionPolicy(), currentExecutionTrust())
 				if err != nil {
 					return fmt.Errorf("check the confirmed plan: %w", err)
 				}
@@ -274,11 +275,51 @@ func executeSnapshot(ctx context.Context, cmd *cobra.Command, snapshot agentapi.
 	defer span.End()
 	settings := snapshot.Settings
 	settings.Verbose = verbose
+	if err := pinExecution(snapshot); err != nil {
+		return err
+	}
+	// Pin the confirmed local files for every step that reads them.
+	ctx = execinputs.With(ctx, snapshot.Inputs)
 	if snapshot.Policy.RollbackOnFailure {
 		fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
 		return runRollbackBatch(ctx, cmd.ErrOrStderr(), snapshot.Roots, repo, settings, provider)
 	}
-	return installSelected(ctx, span, snapshot.Roots, repo, settings, cmd.OutOrStdout(), provider)
+	// A confirmed install always runs the plain lifecycle, never the TUI.
+	return runPlainInstall(ctx, cmd.OutOrStdout(), snapshot.Roots, repo, settings, provider)
+}
+
+// currentExecutionTrust reads the effective plugin trust configuration that a
+// confirmed plan digest binds.
+func currentExecutionTrust() agentapi.ExecutionTrust {
+	trust := agentapi.ExecutionTrust{PluginRegistryURL: bootstrap.GetRegistryURL(), PluginPublicKey: viper.GetString("plugin.public-key")}
+	if trust.PluginPublicKey != "" {
+		trust.PluginPublicKeyDigest = execinputs.Fingerprint(trust.PluginPublicKey)
+	}
+	return trust
+}
+
+// pinExecution makes the rest of the process read the confirmed policy and
+// trust values, so later reads of configuration, the environment or
+// config.yaml cannot change them. Viper values set here take precedence over
+// flags, environment and config files.
+func pinExecution(snapshot agentapi.ExecutionSnapshot) error {
+	if key := snapshot.Trust.PluginPublicKey; key != "" && execinputs.Fingerprint(key) != snapshot.Trust.PluginPublicKeyDigest {
+		return fmt.Errorf("plugin public key %s %w; nothing was installed", key, execinputs.ErrChanged)
+	}
+	policy := snapshot.Policy
+	viper.Set("rollback-on-failure", policy.RollbackOnFailure)
+	viper.Set("install-concurrency", policy.InstallConcurrency)
+	viper.Set("offline", policy.Offline)
+	viper.Set("no-cache", policy.NoCache)
+	viper.Set("skip-plugin-download", policy.SkipPluginDownload)
+	viper.Set("apt-lists-max-age", policy.AptListsMaxAge)
+	viper.Set("plugin.public-key", snapshot.Trust.PluginPublicKey)
+	// The environment variable takes precedence over config.yaml, which plugin
+	// bootstrap would otherwise read again.
+	if err := os.Setenv("DEVEX_PLUGIN_REGISTRY_URL", snapshot.Trust.PluginRegistryURL); err != nil {
+		return fmt.Errorf("pin the plugin registry: %w", err)
+	}
+	return nil
 }
 
 // installSelected installs already selected applications.

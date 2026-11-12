@@ -22,7 +22,7 @@ var _ = Describe("Plan digests", func() {
 	}
 	resolve := func(apps []types.CrossPlatformApp, names []string, policy agentapi.ExecutionPolicy) agentapi.ExecutionSnapshot {
 		settings := config.CrossPlatformSettings{HomeDir: GinkgoT().TempDir(), ApplicationOverrides: apps}
-		snapshot, err := agentapi.ResolveExecution(context.Background(), settings, agentapi.PlanRequest{Names: names}, policy)
+		snapshot, err := agentapi.ResolveExecution(context.Background(), settings, agentapi.PlanRequest{Names: names}, policy, agentapi.ExecutionTrust{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(snapshot.Digest).To(MatchRegexp(`^sha256:[0-9a-f]{64}$`))
 		return snapshot
