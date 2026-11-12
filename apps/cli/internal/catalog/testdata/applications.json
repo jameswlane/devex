@@ -1,32 +1,350 @@
 {
 	"items": [
 		{
-			"name": "git",
-			"description": "A distributed version control system",
-			"category": "Dependency",
+			"name": "Eza",
+			"description": "A modern alternative to ls",
+			"category": "System Utilities",
 			"type": "application",
 			"official": false,
-			"default": false,
+			"default": true,
 			"platforms": {
 				"linux": {
-					"installMethod": "apt",
-					"installCommand": "git",
-					"officialSupport": false,
+					"alternatives": [
+						{
+							"install_method": "pacman",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "arch"
+								}
+							]
+						},
+						{
+							"install_method": "dnf",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "fedora"
+								}
+							]
+						},
+						{
+							"install_method": "zypper",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "opensuse"
+								}
+							]
+						},
+						{
+							"install_method": "emerge",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "gentoo"
+								}
+							]
+						},
+						{
+							"install_method": "xbps",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "void"
+								}
+							]
+						},
+						{
+							"install_method": "pkg",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "freebsd"
+								}
+							]
+						},
+						{
+							"install_method": "pkg_add",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "openbsd"
+								}
+							]
+						},
+						{
+							"install_method": "nixpkgs",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza",
+							"platform_requirements": [
+								{
+									"os": "nixos"
+								}
+							]
+						},
+						{
+							"install_method": "cargo",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza"
+						}
+					]
+				},
+				"macos": {
 					"alternatives": []
 				},
-				"macos": null,
-				"windows": null
+				"windows": {
+					"alternatives": [
+						{
+							"install_method": "scoop",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza"
+						},
+						{
+							"install_method": "cargo",
+							"install_command": "eza",
+							"official_support": true,
+							"uninstall_command": "eza"
+						}
+					]
+				}
 			},
 			"tags": [],
 			"desktopEnvironments": [],
 			"githubUrl": "https://github.com/jameswlane/devex",
-			"githubPath": "https://github.com/jameswlane/devex/tree/main/apps/web/app/generated/tools.json"
+			"githubPath": "apps/cli/config/applications/development/eza.yaml"
+		},
+		{
+			"name": "GitHub CLI",
+			"description": "GitHub official command line tool",
+			"category": "Development Tools",
+			"type": "application",
+			"official": false,
+			"default": true,
+			"platforms": {
+				"linux": {
+					"alternatives": [
+						{
+							"pre_install": [
+								{
+									"shell": "dnf install dnf5-plugins"
+								},
+								{
+									"shell": "dnf config-manager addrepo --from-repofile=https://cli.github.com/packages/rpm/gh-cli.repo"
+								}
+							],
+							"install_method": "dnf",
+							"install_command": "gh",
+							"official_support": true,
+							"uninstall_command": "gh",
+							"platform_requirements": [
+								{
+									"os": "fedora"
+								},
+								{
+									"version": "41+"
+								}
+							]
+						},
+						{
+							"pre_install": [
+								{
+									"shell": "dnf install 'dnf-command(config-manager)'"
+								},
+								{
+									"shell": "dnf config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo"
+								}
+							],
+							"install_method": "dnf",
+							"install_command": "gh",
+							"official_support": true,
+							"uninstall_command": "gh",
+							"platform_requirements": [
+								{
+									"os": "rhel",
+									"version": "9+"
+								},
+								{
+									"os": "centos",
+									"version": "9+"
+								}
+							]
+						},
+						{
+							"pre_install": [
+								{
+									"shell": "type -p yum-config-manager >/dev/null || yum install yum-utils"
+								},
+								{
+									"shell": "yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo"
+								}
+							],
+							"install_method": "yum",
+							"install_command": "gh",
+							"official_support": true,
+							"uninstall_command": "gh",
+							"platform_requirements": [
+								{
+									"os": "amazonlinux",
+									"version": "2"
+								}
+							]
+						},
+						{
+							"pre_install": [
+								{
+									"shell": "zypper addrepo https://cli.github.com/packages/rpm/gh-cli.repo"
+								},
+								{
+									"shell": "zypper ref"
+								}
+							],
+							"install_method": "zypper",
+							"install_command": "gh",
+							"official_support": true,
+							"uninstall_command": "gh",
+							"platform_requirements": [
+								{
+									"os": "opensuse"
+								},
+								{
+									"os": "suse"
+								}
+							]
+						},
+						{
+							"install_method": "pacman",
+							"install_command": "github-cli",
+							"official_support": false,
+							"uninstall_command": "github-cli",
+							"platform_requirements": [
+								{
+									"os": "arch"
+								}
+							]
+						},
+						{
+							"install_method": "emerge",
+							"install_command": "github-cli",
+							"official_support": false,
+							"uninstall_command": "github-cli",
+							"platform_requirements": [
+								{
+									"os": "gentoo"
+								}
+							]
+						},
+						{
+							"install_method": "xbps",
+							"install_command": "github-cli",
+							"official_support": false,
+							"uninstall_command": "github-cli",
+							"platform_requirements": [
+								{
+									"os": "void"
+								}
+							]
+						},
+						{
+							"install_method": "pkg",
+							"install_command": "gh",
+							"official_support": false,
+							"uninstall_command": "gh",
+							"platform_requirements": [
+								{
+									"os": "freebsd"
+								}
+							]
+						},
+						{
+							"install_method": "pkg_add",
+							"install_command": "github-cli",
+							"official_support": false,
+							"uninstall_command": "github-cli",
+							"platform_requirements": [
+								{
+									"os": "openbsd"
+								}
+							]
+						},
+						{
+							"install_method": "nixpkgs",
+							"install_command": "gh",
+							"official_support": false,
+							"uninstall_command": "gh",
+							"platform_requirements": [
+								{
+									"os": "nixos"
+								}
+							]
+						},
+						{
+							"install_method": "apk",
+							"install_command": "github-cli",
+							"official_support": false,
+							"uninstall_command": "github-cli",
+							"platform_requirements": [
+								{
+									"os": "alpine"
+								}
+							]
+						}
+					]
+				},
+				"macos": {
+					"alternatives": [
+						{
+							"install_method": "macports",
+							"install_command": "gh",
+							"official_support": false,
+							"uninstall_command": "gh"
+						}
+					]
+				},
+				"windows": {
+					"alternatives": [
+						{
+							"install_method": "chocolatey",
+							"install_command": "gh",
+							"official_support": false,
+							"uninstall_command": "gh"
+						},
+						{
+							"install_method": "scoop",
+							"install_command": "gh",
+							"official_support": false,
+							"uninstall_command": "gh"
+						}
+					]
+				}
+			},
+			"tags": [],
+			"desktopEnvironments": [],
+			"githubUrl": "https://github.com/jameswlane/devex",
+			"githubPath": "apps/cli/config/applications/development/github-cli.yaml"
 		}
 	],
 	"pagination": {
-		"total": 1,
-		"count": 1,
-		"limit": 100,
+		"total": 2,
+		"count": 2,
+		"limit": 2,
 		"offset": 0,
 		"page": 1,
 		"totalPages": 1,
@@ -36,8 +354,12 @@
 	"filters": {},
 	"meta": {
 		"source": "database",
-		"transformationCache": "enabled",
-		"queryOptimization": "composite-indexes",
-		"platformFiltering": "none"
+		"version": "2.1.0",
+		"timestamp": "2026-11-11T22:30:00.000Z",
+		"performance": {
+			"responseTime": 0.04,
+			"compressionEligible": true,
+			"cacheStrategy": "paginated"
+		}
 	}
 }
