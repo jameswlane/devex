@@ -53,8 +53,8 @@ repositories, applications with setup hooks) are left out and listed with the
 reason, so you can add them yourself.
 
 Any base image must be Debian or Ubuntu based. The Dockerfile switches to
-root for the apt layer and creates the --remote-user (default vscode) unless
-the image already provides it, as the official Dev Container images do.
+root for the apt layer and creates the --remote-user (default vscode) at
+build time if the image does not already have that user.
 
 Nothing is mounted from the host: no SSH keys, credentials or home
 directory. Existing files are never overwritten without --force.`,

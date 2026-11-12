@@ -31,7 +31,7 @@ Everything else is left out and listed as `Skipped <app>: <reason>`, so you can 
 - applications with setup hooks, which DevEx runs on the host;
 - applications installed another way (curlpipe, mise and so on).
 
-The base image is `mcr.microsoft.com/devcontainers/base:ubuntu-24.04`; choose another Debian or Ubuntu based image with `--image`. Editors connect as the non-root `remoteUser`, `vscode` unless you pass `--remote-user`. The official `mcr.microsoft.com/devcontainers/*` images already provide `vscode`; for any other image, or another user name, the Dockerfile creates the user if the image does not have it. The Dockerfile switches to `root` before the apt layer, so images whose default `USER` is not root still build.
+The base image is `mcr.microsoft.com/devcontainers/base:ubuntu-24.04`; choose another Debian or Ubuntu based image with `--image`. Editors connect as the non-root `remoteUser`, `vscode` unless you pass `--remote-user`. The Dockerfile checks for that user when the image is built and creates it if the image does not have it, so it works on any Debian or Ubuntu image, including official Dev Container images whose user is not `vscode` (such as `javascript-node`, which ships `node`; pass `--remote-user node` to use that user instead). The Dockerfile switches to `root` before the apt layer, so images whose default `USER` is not root still build.
 
 ## Local versus container setup
 

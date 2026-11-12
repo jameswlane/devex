@@ -186,10 +186,18 @@ var _ = Describe("Devcontainer command", func() {
 	})
 
 	Context("choosing the remote user", func() {
-		It("relies on the official images' vscode user", func() {
+		It("checks for the remote user even on official images that ship another user", func() {
+			Expect(execute("--image", "mcr.microsoft.com/devcontainers/javascript-node:24-trixie")).To(Succeed())
+			Expect(read("devcontainer.json")).To(ContainSubstring(`"remoteUser": "vscode"`))
+			dockerfile := read("Dockerfile")
+			Expect(dockerfile).To(ContainSubstring("if ! id -u vscode "))
+			Expect(dockerfile).To(ContainSubstring("useradd --create-home --shell /bin/bash --user-group vscode"))
+		})
+
+		It("checks for the remote user on the default image too", func() {
 			Expect(execute()).To(Succeed())
 			Expect(read("devcontainer.json")).To(ContainSubstring(`"remoteUser": "vscode"`))
-			Expect(read("Dockerfile")).NotTo(ContainSubstring("useradd"))
+			Expect(read("Dockerfile")).To(ContainSubstring("if ! id -u vscode "))
 		})
 
 		It("creates the remote user on other base images, after switching to root", func() {

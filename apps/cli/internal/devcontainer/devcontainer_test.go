@@ -73,14 +73,7 @@ var _ = Describe("Devcontainer generation", func() {
 	})
 
 	Describe("the remote user", func() {
-		It("relies on the official images' vscode user", func() {
-			result, err := devcontainer.Generate([]types.CrossPlatformApp{apt("curl")}, devcontainer.Options{Image: "mcr.microsoft.com/devcontainers/base:debian-12"})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Spec.RemoteUser).To(Equal("vscode"))
-			Expect(result.Dockerfile).NotTo(ContainSubstring("useradd"))
-		})
-
-		DescribeTable("is created in the Dockerfile when the base image may not provide it",
+		DescribeTable("is checked and created in the Dockerfile on every base image",
 			func(options devcontainer.Options, user string) {
 				result, err := devcontainer.Generate([]types.CrossPlatformApp{apt("curl")}, options)
 				Expect(err).NotTo(HaveOccurred())
@@ -90,6 +83,10 @@ var _ = Describe("Devcontainer generation", func() {
 				// A base image may default to a non-root USER; apt needs root.
 				Expect(strings.Index(result.Dockerfile, "USER root")).To(BeNumerically("<", strings.Index(result.Dockerfile, "apt-get")))
 			},
+			Entry("default image", devcontainer.Options{}, "vscode"),
+			Entry("official image that ships vscode", devcontainer.Options{Image: "mcr.microsoft.com/devcontainers/base:debian-12"}, "vscode"),
+			Entry("official javascript-node image, which ships node, not vscode", devcontainer.Options{Image: "mcr.microsoft.com/devcontainers/javascript-node:24-trixie"}, "vscode"),
+			Entry("official javascript-node image with its own user", devcontainer.Options{Image: "mcr.microsoft.com/devcontainers/javascript-node:24-trixie", RemoteUser: "node"}, "node"),
 			Entry("plain Debian", devcontainer.Options{Image: "debian:12-slim"}, "vscode"),
 			Entry("plain Ubuntu", devcontainer.Options{Image: "ubuntu:24.04"}, "vscode"),
 			Entry("another user on the default image", devcontainer.Options{RemoteUser: "dev"}, "dev"),
@@ -143,6 +140,7 @@ var _ = Describe("Devcontainer generation", func() {
 			},
 			Entry("default image", SpecTimeout(15*time.Minute), devcontainer.DefaultImage),
 			Entry("custom Debian image", SpecTimeout(15*time.Minute), "debian:12-slim"),
+			Entry("official image whose user is not vscode", SpecTimeout(15*time.Minute), "mcr.microsoft.com/devcontainers/javascript-node:24-trixie"),
 		)
 
 		DescribeTable("starts through the Dev Container CLI and executes as the remote user",
