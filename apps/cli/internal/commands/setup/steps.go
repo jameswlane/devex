@@ -50,6 +50,12 @@ func (m *SetupModel) nextStep() (*SetupModel, tea.Cmd) {
 			m.step = StepTheme // Windows gets theme selection without shell
 		}
 	case StepShell:
+		if m.getSelectedShell() == "zsh" {
+			m.step = StepOhMyZsh
+		} else {
+			m.step = StepTheme
+		}
+	case StepOhMyZsh:
 		m.step = StepTheme
 	case StepTheme:
 		// Skip the Git step when git already has a global name and email;
@@ -104,10 +110,17 @@ func (m *SetupModel) prevStep() (*SetupModel, tea.Cmd) {
 		m.step = StepLanguages
 	case StepShell:
 		m.step = StepDatabases
+	case StepOhMyZsh:
+		m.step = StepShell
+		m.cursor = m.selections.selectedShell
 	case StepTheme:
 		if m.system.detectedPlatform.OS != "windows" {
-			m.step = StepShell
-			m.cursor = m.selections.selectedShell
+			if m.getSelectedShell() == "zsh" {
+				m.step = StepOhMyZsh
+			} else {
+				m.step = StepShell
+				m.cursor = m.selections.selectedShell
+			}
 		} else {
 			m.step = StepDatabases
 		}

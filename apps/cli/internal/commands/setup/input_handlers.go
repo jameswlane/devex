@@ -20,7 +20,7 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 			return m.nextStep()
 		}
 		return m, nil
-	case StepDesktopApps, StepLanguages, StepDatabases, StepShell:
+	case StepDesktopApps, StepLanguages, StepDatabases, StepShell, StepOhMyZsh:
 		return m.nextStep()
 	case StepTheme:
 		// Theme step: Enter should not continue, only 'n' continues
@@ -47,6 +47,9 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		}
 		return m, nil
 	case StepConfirmation:
+		if _, err := m.getOhMyZshPlan(); err != nil {
+			return m, nil
+		}
 		m.step = StepInstalling
 		m.installation.setInstalling(true)
 		return m, m.startInstallation()
@@ -113,6 +116,8 @@ func (m *SetupModel) handleDown() (*SetupModel, tea.Cmd) {
 		maxItems = len(m.system.databases)
 	case StepShell:
 		maxItems = len(m.system.shells)
+	case StepOhMyZsh:
+		maxItems = 2
 	case StepTheme:
 		maxItems = len(m.system.themes)
 	case StepGitConfig:
@@ -150,6 +155,8 @@ func (m *SetupModel) handleSpace() (*SetupModel, tea.Cmd) {
 		m.selections.selectedDBs[m.cursor] = !m.selections.selectedDBs[m.cursor]
 	case StepShell:
 		m.selections.selectedShell = m.cursor
+	case StepOhMyZsh:
+		m.selections.ohMyZsh.enabled = m.cursor == 1
 	case StepTheme:
 		m.selections.selectedTheme = m.cursor
 	case StepConfirmation:

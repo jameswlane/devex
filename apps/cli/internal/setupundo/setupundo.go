@@ -1,5 +1,5 @@
 // Package setupundo records the system changes devex setup makes outside
-// DevEx's own configuration (shell rc blocks, Git identity, desktop settings)
+// DevEx's own configuration (shell rc blocks, created files, Git identity, desktop settings)
 // so `devex undo` can put each one back exactly as it was before setup ran.
 //
 // Changes are stored as typed records, never as command lines. Undo builds
@@ -33,10 +33,12 @@ const Operation = "setup"
 
 // Change kinds.
 const (
-	KindShellRC   = "shell-rc"
-	KindGitConfig = "git-config"
-	KindGSettings = "gsettings"
-	KindKConfig   = "kconfig"
+	KindShellRC     = "shell-rc"
+	KindCreatedFile = "created-file"
+	KindOhMyZsh     = "oh-my-zsh"
+	KindGitConfig   = "git-config"
+	KindGSettings   = "gsettings"
+	KindKConfig     = "kconfig"
 )
 
 // kreadUnset marks a KDE key that had no value before setup wrote it.
@@ -67,6 +69,10 @@ type Change struct {
 	// Target is where Path resolved after setup, so undo can refuse a symlink
 	// that was repointed since.
 	Target string `json:"target,omitempty"`
+	// Checksum identifies a newly created file that undo may remove unchanged.
+	Checksum string `json:"checksum,omitempty"`
+	// Root is the setup-time defaults directory for a newly created file.
+	Root string `json:"root,omitempty"`
 	// Settings: the previous value, or Unset when the setting had none.
 	Key    string `json:"key,omitempty"`
 	Schema string `json:"schema,omitempty"`
@@ -284,16 +290,25 @@ func Decode(value any) ([]Change, error) {
 	return changes, nil
 }
 
-// Restore undoes changes newest first. Shell rc changes may only target the
-// rc files under home. Every restore is idempotent, so a partly failed undo can
-// be retried; Restore keeps going after a failure and returns every failure.
+// Restore undoes changes newest first and discards informational messages.
 func Restore(ctx context.Context, run Runner, home string, changes []Change) error {
+	_, err := RestoreWithMessages(ctx, run, home, changes)
+	return err
+}
+
+// RestoreWithMessages undoes changes newest first and returns paths preserved
+// for the user. Shell rc changes may only target the rc files under home. Every
+// restore is idempotent, so a partly failed undo can be retried; restore keeps
+// going after a failure and returns every failure.
+func RestoreWithMessages(ctx context.Context, run Runner, home string, changes []Change) ([]string, error) {
 	allowed := ShellRCPaths(home)
+	var messages []string
 	var errs []error
 	for i := len(changes) - 1; i >= 0; i-- {
 		change := changes[i]
 		var err error
-		if change.Kind == KindShellRC {
+		switch change.Kind {
+		case KindShellRC:
 			// Exact match: a path spelled with ".." or through another
 			// directory never reaches the filesystem.
 			if !slices.Contains(allowed, change.Path) {
@@ -301,14 +316,22 @@ func Restore(ctx context.Context, run Runner, home string, changes []Change) err
 			} else {
 				err = restoreShellRC(change)
 			}
-		} else {
+		case KindCreatedFile:
+			err = restoreCreatedFile(home, change)
+		case KindOhMyZsh:
+			var message string
+			message, err = restoreOhMyZsh(home, change)
+			if message != "" {
+				messages = append(messages, message)
+			}
+		default:
 			err = restoreSetting(ctx, run, change)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("restore %s: %w", change.Description, err))
 		}
 	}
-	return errors.Join(errs...)
+	return messages, errors.Join(errs...)
 }
 
 func restoreSetting(ctx context.Context, run Runner, change Change) error {
