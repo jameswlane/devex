@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -23,7 +24,9 @@ var _ = Describe("Dotfiles commands", func() {
 		output, diagnostics bytes.Buffer
 	)
 	git := func(args ...string) string {
-		command := exec.Command("git", append([]string{"-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		command := exec.CommandContext(ctx, "git", append([]string{"-C", repo, "-c", "user.email=t@example.com", "-c", "user.name=t"}, args...)...)
 		out, err := command.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred(), string(out))
 		return strings.TrimSpace(string(out))
@@ -172,6 +175,44 @@ var _ = Describe("Dotfiles commands", func() {
 		Expect(execute("sync", "--repo", "https://me:token@example.invalid/d.git", "--yes")).To(MatchError(ContainSubstring("must not contain credentials")))
 		Expect(diagnostics.String()).NotTo(ContainSubstring("token"))
 	})
+
+	It("rolls back only files it deployed when a destination already matched", func() {
+		write(filepath.Join(home, ".zshrc"), "export EDITOR=vim\n")
+
+		Expect(execute("sync", "--repo", repo, "--yes")).To(Succeed())
+		Expect(output.String()).To(ContainSubstring("Deployed 1 file(s)"))
+		Expect(execute("status", "--format", "json")).To(Succeed())
+		var status struct {
+			Files []DotfileStatus `json:"files"`
+		}
+		Expect(json.Unmarshal(output.Bytes(), &status)).To(Succeed())
+		Expect(status.Files).To(ConsistOf(HaveField("Destination", filepath.Join(home, ".config", "git", "config"))))
+
+		Expect(execute("rollback", "--yes")).To(Succeed())
+		Expect(read(filepath.Join(home, ".zshrc"))).To(Equal("export EDITOR=vim\n"))
+		Expect(filepath.Join(home, ".config", "git", "config")).NotTo(BeAnExistingFile())
+	})
+
+	DescribeTable("refuses destinations that reach DevEx's own directories through a symlinked parent",
+		func(dir string) {
+			protected := filepath.Join(home, dir)
+			write(filepath.Join(protected, "config.yaml"), "mine\n")
+			Expect(os.Symlink(dir, filepath.Join(home, "alias"))).To(Succeed())
+			write(filepath.Join(repo, "devex-dotfiles.yaml"), "files:\n  - source: gitconfig\n    destination: ~/alias/config.yaml\n")
+			git("commit", "--quiet", "-am", "alias")
+
+			Expect(execute("sync", "--repo", repo, "--yes")).To(MatchError(ContainSubstring("nothing changed")))
+			Expect(diagnostics.String()).To(ContainSubstring("inside DevEx's own directory"))
+			Expect(read(filepath.Join(protected, "config.yaml"))).To(Equal("mine\n"))
+			Expect(backups(filepath.Join(dir, "*.devex-bak"))).To(BeEmpty())
+			Expect(filepath.Join(home, ".local", "state", "devex", "dotfiles.json")).NotTo(BeAnExistingFile())
+			Expect(filepath.Join(home, ".local", "state", "devex", "config-files")).NotTo(BeADirectory())
+		},
+		Entry("configuration", filepath.Join(".config", "devex")),
+		Entry("data", filepath.Join(".local", "share", "devex")),
+		Entry("state", filepath.Join(".local", "state", "devex")),
+		Entry("cache", filepath.Join(".cache", "devex")),
+	)
 
 	It("reports when nothing has been synced", func() {
 		Expect(execute("status")).To(Succeed())

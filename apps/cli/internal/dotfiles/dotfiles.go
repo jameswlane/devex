@@ -191,7 +191,8 @@ func redactError(err error, repository string) error {
 // LoadManifest reads the manifest from a checkout and turns it into config
 // file mappings. Sources must be regular files inside the checkout (no
 // symlinks, no ".."). Destinations must expand inside HOME and outside
-// DevEx's own directories; configfiles enforces HOME again when writing.
+// DevEx's own directories; configfiles enforces both again when writing, with
+// symlinks in the destination's path followed.
 func LoadManifest(checkout Checkout, home string) ([]types.ConfigFile, error) {
 	root, err := os.OpenRoot(checkout.Dir)
 	if err != nil {
@@ -215,8 +216,7 @@ func LoadManifest(checkout Checkout, home string) ([]types.ConfigFile, error) {
 	if len(manifest.Files) > MaxFiles {
 		return nil, fmt.Errorf("%s lists %d files; at most %d are allowed", ManifestFile, len(manifest.Files), MaxFiles)
 	}
-	dirs := devexpaths.ForHome(home)
-	protected := []string{dirs.Config, dirs.Data, dirs.State, dirs.Cache}
+	protected := ProtectedDirs(home)
 	destinations := map[string]bool{}
 	mappings := make([]types.ConfigFile, 0, len(manifest.Files))
 	for i, file := range manifest.Files {
@@ -254,6 +254,13 @@ func LoadManifest(checkout Checkout, home string) ([]types.ConfigFile, error) {
 		mappings = append(mappings, types.ConfigFile{Source: filepath.Join(checkout.Dir, filepath.FromSlash(source)), Destination: destination})
 	}
 	return mappings, nil
+}
+
+// ProtectedDirs lists DevEx's own directories, which no dotfile may be
+// deployed into (configuration overrides included).
+func ProtectedDirs(home string) []string {
+	dirs := devexpaths.ForHome(home)
+	return []string{dirs.Config, dirs.Data, dirs.State, dirs.Cache}
 }
 
 func inside(parent, path string) bool {

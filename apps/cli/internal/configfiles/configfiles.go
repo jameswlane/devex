@@ -70,6 +70,9 @@ func Expand(path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
+// recordsDir holds the managed-file records, relative to HOME.
+var recordsDir = filepath.Join(".local", "state", "devex", "config-files")
+
 func relativeDestination(home, path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		return "", errors.New("destination must be absolute and inside HOME")
@@ -78,11 +81,110 @@ func relativeDestination(home, path string) (string, error) {
 	if err != nil || !filepath.IsLocal(rel) || rel == "." {
 		return "", errors.New("destination outside HOME is denied")
 	}
-	stateDir := filepath.Join(".local", "state", "devex", "config-files")
-	if rel == stateDir || strings.HasPrefix(rel, stateDir+string(filepath.Separator)) {
+	if within(recordsDir, rel) {
 		return "", errors.New("destination overlaps DevEx managed-file records")
 	}
 	return rel, nil
+}
+
+// within reports whether rel is dir or inside it; both are relative to HOME.
+func within(dir, rel string) bool {
+	return rel == dir || strings.HasPrefix(rel, dir+string(filepath.Separator))
+}
+
+// maxSymlinks bounds symlink resolution, as the kernel does.
+const maxSymlinks = 40
+
+// resolve returns rel with every existing symlink along it followed, relative
+// to HOME. Components that do not exist yet are kept as written.
+func resolve(root *os.Root, home, rel string) (string, error) {
+	pending := strings.Split(filepath.Clean(rel), string(filepath.Separator))
+	resolved, hops := "", 0
+	for len(pending) > 0 {
+		part := pending[0]
+		pending = pending[1:]
+		switch part {
+		case "", ".":
+			continue
+		case "..":
+			if resolved == "" {
+				return "", fmt.Errorf("%s resolves outside HOME", filepath.Join(home, rel))
+			}
+			if resolved = filepath.Dir(resolved); resolved == "." {
+				resolved = ""
+			}
+			continue
+		}
+		next := filepath.Join(resolved, part)
+		info, err := root.Lstat(next)
+		if errors.Is(err, os.ErrNotExist) {
+			return filepath.Join(append([]string{next}, pending...)...), nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", filepath.Join(home, next), err)
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			resolved = next
+			continue
+		}
+		if hops++; hops > maxSymlinks {
+			return "", fmt.Errorf("resolve %s: too many symlinks", filepath.Join(home, rel))
+		}
+		target, err := root.Readlink(next)
+		if err != nil {
+			return "", fmt.Errorf("resolve %s: %w", filepath.Join(home, next), err)
+		}
+		if filepath.IsAbs(target) {
+			inHome, err := filepath.Rel(home, target)
+			if err != nil || (inHome != "." && !filepath.IsLocal(inHome)) {
+				return "", fmt.Errorf("%s links outside HOME (%s)", filepath.Join(home, next), target)
+			}
+			resolved, target = "", inHome
+		}
+		pending = append(strings.Split(target, string(filepath.Separator)), pending...)
+	}
+	return resolved, nil
+}
+
+// guarded is a directory no destination may resolve into, relative to HOME.
+type guarded struct {
+	rel, name, reason string
+}
+
+// guards lists the managed-file records and the protected directories inside
+// HOME, both as written and with symlinks followed.
+func guards(root *os.Root, home string, protected []string) []guarded {
+	var out []guarded
+	add := func(rel, reason string) {
+		out = append(out, guarded{rel: rel, name: filepath.Join(home, rel), reason: reason})
+		if real, err := resolve(root, home, rel); err == nil && real != rel {
+			out = append(out, guarded{rel: real, name: filepath.Join(home, rel), reason: reason})
+		}
+	}
+	add(recordsDir, "DevEx managed-file records")
+	for _, dir := range protected {
+		rel, err := filepath.Rel(home, filepath.Clean(dir))
+		if err != nil || !filepath.IsLocal(rel) {
+			continue // outside HOME, which no destination can reach
+		}
+		add(rel, "DevEx's own directory")
+	}
+	return out
+}
+
+// checkResolved refuses rel when, with symlinks in its path followed, it lands
+// inside a guarded directory.
+func checkResolved(root *os.Root, home, rel string, guarded []guarded) error {
+	real, err := resolve(root, home, rel)
+	if err != nil {
+		return err
+	}
+	for _, g := range guarded {
+		if within(g.rel, rel) || within(g.rel, real) {
+			return fmt.Errorf("destination resolves to %s, inside %s %s; choose a destination outside it", filepath.Join(home, real), g.reason, g.name)
+		}
+	}
+	return nil
 }
 
 func manifest(app string) string {
@@ -102,11 +204,25 @@ func load(root *os.Root, app string) (Result, error) {
 	return result, err
 }
 
+// Options adjusts ApplyWithOptions.
+type Options struct {
+	// Protected lists directories no destination may be inside, also when a
+	// symlink in the destination's path leads there.
+	Protected []string
+}
+
 // Apply copies regular files only when their marker conditions match, backs up
 // conflicts, leaves identical destinations unchanged, and records copies by
-// content hash. Dry runs validate and describe the same plan without creating
-// directories, backups, files, or manifests. emit receives plan/warnings.
+// content hash. A destination that already matched before DevEx wrote it is
+// not recorded, so cleanup and revert never remove it. Dry runs validate and
+// describe the same plan without creating directories, backups, files, or
+// manifests. emit receives plan/warnings.
 func Apply(ctx context.Context, app string, mappings []types.ConfigFile, dryRun bool, emit func(string)) Result {
+	return ApplyWithOptions(ctx, app, mappings, dryRun, emit, Options{})
+}
+
+// ApplyWithOptions is Apply with options.
+func ApplyWithOptions(ctx context.Context, app string, mappings []types.ConfigFile, dryRun bool, emit func(string), opts Options) Result {
 	result := Result{}
 	if len(mappings) == 0 {
 		return result
@@ -174,6 +290,7 @@ func Apply(ctx context.Context, app string, mappings []types.ConfigFile, dryRun 
 		}
 		return result
 	}
+	guarded := guards(root, home, opts.Protected)
 	result.Files = previous.Files
 	if !dryRun {
 		if err := save(root, app, result); err != nil {
@@ -188,10 +305,13 @@ func Apply(ctx context.Context, app string, mappings []types.ConfigFile, dryRun 
 			warn(m, err)
 			break
 		}
-		file, err := applyOne(root, home, m, previousCopy(previous, m), dryRun, emit)
+		file, err := applyOne(root, home, m, previousCopy(previous, m), guarded, dryRun, emit)
 		if err != nil {
 			warn(m, err)
 			continue
+		}
+		if file.Destination == "" {
+			continue // already matched and not DevEx's copy: not taken over
 		}
 		if !dryRun {
 			found := false
@@ -259,8 +379,10 @@ func previousCopy(previous Result, m types.ConfigFile) *File {
 
 // applyOne copies one mapping. A destination that still holds the previously
 // recorded copy is DevEx's own file: it is replaced without a new backup and
-// keeps the backup of the user's original file.
-func applyOne(root *os.Root, home string, m types.ConfigFile, recorded *File, dryRun bool, emit func(string)) (File, error) {
+// keeps the backup of the user's original file. A destination that already
+// matches but is not DevEx's copy returns an empty File: it is left alone and
+// not recorded.
+func applyOne(root *os.Root, home string, m types.ConfigFile, recorded *File, guarded []guarded, dryRun bool, emit func(string)) (File, error) {
 	source, err := Expand(m.Source)
 	if err != nil {
 		return File{}, err
@@ -271,6 +393,9 @@ func applyOne(root *os.Root, home string, m types.ConfigFile, recorded *File, dr
 	}
 	rel, err := relativeDestination(home, destination)
 	if err != nil {
+		return File{}, err
+	}
+	if err := checkResolved(root, home, rel, guarded); err != nil {
 		return File{}, err
 	}
 	info, err := os.Stat(source)
@@ -301,6 +426,9 @@ func applyOne(root *os.Root, home string, m types.ConfigFile, recorded *File, dr
 		if bytes.Equal(existing, data) {
 			if emit != nil {
 				emit(fmt.Sprintf("Unchanged %s", destination))
+			}
+			if !ownCopy {
+				return File{}, nil
 			}
 			return file, nil
 		}
@@ -440,10 +568,13 @@ func Cleanup(app string) error {
 	return errors.Join(failures...)
 }
 
-// Revert undoes recorded copies: an unchanged copy is removed and the backup of
-// the original file, if any, is moved back. A copy the user has changed since
-// is kept, and so is its backup; each is reported. With dryRun nothing changes.
-// The record is removed when every copy was reverted.
+// Revert undoes recorded copies: an unchanged copy is replaced by the backup of
+// the original file, or removed when there was none. A copy the user has
+// changed since is kept, and so is its backup; each is reported. A copy whose
+// recorded backup is missing, inaccessible or not a regular file is kept, as
+// is any copy that could not be reverted, and an error says what to do. With
+// dryRun nothing changes. Only reverted copies leave the record, which is
+// removed once none remain.
 func Revert(app string, dryRun bool, emit func(string)) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -489,11 +620,28 @@ func Revert(app string, dryRun bool, emit func(string)) error {
 		backupRel := ""
 		if file.Backup != "" {
 			if backupRel, err = relativeDestination(home, file.Backup); err != nil {
-				failures = append(failures, err)
+				failures = append(failures, fmt.Errorf("restore %s from %s: %w", file.Destination, file.Backup, err))
+				kept = append(kept, file)
 				continue
 			}
-			if info, err := root.Lstat(backupRel); err != nil || !info.Mode().IsRegular() {
-				backupRel = ""
+			info, err := root.Lstat(backupRel)
+			switch {
+			case errors.Is(err, os.ErrNotExist) && state == "missing":
+				// Nothing is left to restore or remove.
+				say("Forget %s: neither it nor its backup %s exists", file.Destination, file.Backup)
+				continue
+			case errors.Is(err, os.ErrNotExist):
+				failures = append(failures, fmt.Errorf("cannot restore %s: its backup %s is missing; %s and its record were kept; put the original back at %s, or delete %s if you no longer need it, then run the rollback again", file.Destination, file.Backup, file.Destination, file.Backup, file.Destination))
+				kept = append(kept, file)
+				continue
+			case err != nil:
+				failures = append(failures, fmt.Errorf("cannot restore %s: its backup %s is not accessible (%w); %s and its record were kept; fix access to the backup, then run the rollback again", file.Destination, file.Backup, err, file.Destination))
+				kept = append(kept, file)
+				continue
+			case !info.Mode().IsRegular():
+				failures = append(failures, fmt.Errorf("cannot restore %s: its backup %s is not a regular file; %s and its record were kept; put the original back at %s, then run the rollback again", file.Destination, file.Backup, file.Destination, file.Backup))
+				kept = append(kept, file)
+				continue
 			}
 		}
 		switch {
@@ -502,22 +650,22 @@ func Revert(app string, dryRun bool, emit func(string)) error {
 		case state == "unchanged":
 			say("Remove %s", file.Destination)
 		default:
-			continue
+			continue // missing and nothing to restore
 		}
 		if dryRun {
 			continue
 		}
-		if state == "unchanged" {
-			if err := root.Remove(rel); err != nil {
-				failures = append(failures, err)
-				continue
-			}
-		}
 		if backupRel != "" {
+			// Rename over the deployed copy: if it fails, that copy stays.
 			if err := root.Rename(backupRel, rel); err != nil {
-				failures = append(failures, fmt.Errorf("restore %s: %w", file.Destination, err))
+				failures = append(failures, fmt.Errorf("restore %s from %s: %w", file.Destination, file.Backup, err))
 				kept = append(kept, file)
 			}
+			continue
+		}
+		if err := root.Remove(rel); err != nil {
+			failures = append(failures, fmt.Errorf("remove %s: %w", file.Destination, err))
+			kept = append(kept, file)
 		}
 	}
 	if !dryRun {

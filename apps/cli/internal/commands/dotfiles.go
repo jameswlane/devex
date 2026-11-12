@@ -120,12 +120,13 @@ configuration.`,
 			}
 			fmt.Fprintf(stderr, "Plan for commit %s:\n", short)
 			changes := 0
-			preview := configfiles.Apply(ctx, dotfiles.RecordKey, mappings, true, func(line string) {
+			options := configfiles.Options{Protected: dotfiles.ProtectedDirs(settings.HomeDir)}
+			preview := configfiles.ApplyWithOptions(ctx, dotfiles.RecordKey, mappings, true, func(line string) {
 				if strings.HasPrefix(line, "Copy ") || strings.HasPrefix(line, "Update ") {
 					changes++
 				}
 				fmt.Fprintf(stderr, "  %s\n", line)
-			})
+			}, options)
 			if len(preview.Warnings) > 0 {
 				return fmt.Errorf("the plan has %d problem(s); nothing changed", len(preview.Warnings))
 			}
@@ -137,11 +138,11 @@ configuration.`,
 				if err := confirm(cmd, yes, "Deploy these files?", "deploy the files"); err != nil {
 					return err
 				}
-				result := configfiles.Apply(ctx, dotfiles.RecordKey, mappings, false, func(line string) {
+				result := configfiles.ApplyWithOptions(ctx, dotfiles.RecordKey, mappings, false, func(line string) {
 					if strings.HasPrefix(line, "Warning: ") {
 						fmt.Fprintln(stderr, line)
 					}
-				})
+				}, options)
 				if len(result.Warnings) > 0 {
 					return fmt.Errorf("%d file(s) could not be deployed; the rest were deployed and recorded; see 'devex dotfiles status'", len(result.Warnings))
 				}

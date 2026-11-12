@@ -28,7 +28,7 @@ files:
 ```
 
 - `source` is a path inside the repository. It must be a regular file: symlinks, `..`, absolute paths and files under `.git` are rejected.
-- `destination` must be inside your home directory, and outside DevEx's own configuration, data, state and cache directories. `~`, `$VAR` and `${VAR}` are expanded.
+- `destination` must be inside your home directory, and outside DevEx's own configuration, data, state and cache directories, also when a symlinked directory on the way leads there. `~`, `$VAR` and `${VAR}` are expanded.
 - A destination may appear only once. The manifest can list up to 500 files.
 
 ## Configuration
@@ -58,7 +58,7 @@ Use an SSH key or a git credential helper. DevEx never prompts for or stores pas
 
 Sync fetches the repository at the ref into a temporary directory (depth 1, no submodules), shows the plan, asks for confirmation, deploys, and removes the temporary directory.
 
-- A destination identical to the repository's file is left alone.
+- A destination identical to the repository's file is left alone and not recorded, so rollback never removes it.
 - A destination that DevEx deployed earlier and you haven't changed is updated in place, with no new backup.
 - Any other differing destination is backed up first, as `<file>.<timestamp>.devex-bak`, and then replaced.
 - Without a terminal, `--yes` is required. `--dry-run` shows the plan and changes nothing.
@@ -83,6 +83,8 @@ For each recorded file:
 
 - If it is still exactly as DevEx deployed it, it is removed, and the original file is restored from its backup if there was one.
 - If you have changed it since, it is kept, and its backup is reported so you can restore it yourself.
+- If its backup is missing, inaccessible or not a regular file, the deployed file and its record are kept and rollback fails with the backup's path, so you can put the original back and run rollback again.
+- A file that could not be removed or restored stays recorded; fix the problem and run rollback again.
 
 `--dry-run` shows the plan. Without a terminal, `--yes` is required.
 
