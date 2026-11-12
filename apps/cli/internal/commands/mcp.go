@@ -3,7 +3,6 @@ package commands
 import (
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -89,14 +88,15 @@ only.`,
 			}
 			var transport mcp.Transport = &mcp.StdioTransport{}
 			if allowMutations {
-				// Installers and plugins may write to stdout; keep it for MCP only
-				// and redact everything they write to stdout or stderr.
+				// Installers and plugins may read stdin or write to stdout; keep
+				// both for MCP only, give children the null device as stdin and
+				// redact everything they write to stdout or stderr.
 				stdio, err := mcpserver.ReserveStdout()
 				if err != nil {
 					return err
 				}
 				defer func() { _ = stdio.Close() }()
-				transport = &mcp.IOTransport{Reader: os.Stdin, Writer: stdio.Stdout}
+				transport = &mcp.IOTransport{Reader: stdio.Stdin, Writer: stdio.Stdout}
 				options.Mutations = true
 				options.Executor = &mcpExecutor{repo: repo, settings: settings, log: cmd.ErrOrStderr()}
 			}

@@ -2,6 +2,7 @@ package mcpserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -136,8 +137,9 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		Expect(result.StructuredContent).To(HaveKey("plan_id"))
 	}, SpecTimeout(2*time.Minute))
 
-	It("redacts installer and child-process output on stderr during a confirmed uninstall", func(ctx SpecContext) {
-		home := GinkgoT().TempDir()
+	// trackCurlpipe records a DevEx-tracked curlpipe application "canary"
+	// whose uninstall command is command, in the datastore under home.
+	trackCurlpipe := func(ctx SpecContext, home, command string) {
 		dirs := devexpaths.ForPlatform(runtime.GOOS, home, func(key string) string {
 			if key == "HOME" {
 				return home
@@ -150,23 +152,25 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		repo := repository.NewRepository(db)
 		Expect(repo.AddApp("canary")).To(Succeed())
 		definition, err := json.Marshal(types.CrossPlatformApp{Name: "canary", AllPlatforms: types.OSConfig{
-			InstallMethod:  "curlpipe",
-			InstallCommand: "https://example.invalid/install.sh",
-			UninstallCommand: `echo "stdout https://user:SECRET_CANARY@example.invalid/x?token=SECRET_CANARY"; ` +
-				`echo "stderr password=SECRET_CANARY" >&2; touch "$HOME/uninstalled"`,
+			InstallMethod: "curlpipe", InstallCommand: "https://example.invalid/install.sh", UninstallCommand: command,
 		}})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(repo.Set("installed-app-definition:canary", string(definition))).To(Succeed())
 		Expect(db.Close()).To(Succeed())
+	}
 
-		var stderr bytes.Buffer
-		command := exec.CommandContext(ctx, binary, "mcp", "serve", "--allow-mutations")
+	// serveMutations starts "devex mcp serve --allow-mutations" under home.
+	serveMutations := func(ctx SpecContext, home string, stderr *bytes.Buffer, args ...string) *mcp.ClientSession {
+		command := exec.CommandContext(ctx, binary, append([]string{"mcp", "serve", "--allow-mutations"}, args...)...)
 		command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true"}
-		command.Stderr = &stderr
+		command.Stderr = stderr
 		client := mcp.NewClient(&mcp.Implementation{Name: "process-test", Version: "0"}, nil)
 		session, err := client.Connect(ctx, &mcp.CommandTransport{Command: command}, nil)
 		Expect(err).NotTo(HaveOccurred(), stderr.String())
+		return session
+	}
 
+	prepareUninstall := func(ctx SpecContext, session *mcp.ClientSession, stderr *bytes.Buffer) (mcpserver.PreparedPlan, []byte) {
 		prepared, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_uninstall", Arguments: map[string]any{"apps": []string{"canary"}}})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(prepared.IsError).To(BeFalse(), "%s\n%s", toolText(prepared), stderr.String())
@@ -174,6 +178,17 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		data, err := json.Marshal(prepared.StructuredContent)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(json.Unmarshal(data, &plan)).To(Succeed())
+		return plan, data
+	}
+
+	It("redacts installer and child-process output on stderr during a confirmed uninstall", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		trackCurlpipe(ctx, home, `echo "stdout https://user:SECRET_CANARY@example.invalid/x?token=SECRET_CANARY"; `+
+			`echo "stderr password=SECRET_CANARY" >&2; touch "$HOME/uninstalled"`)
+		var stderr bytes.Buffer
+		session := serveMutations(ctx, home, &stderr)
+
+		plan, data := prepareUninstall(ctx, session, &stderr)
 		Expect(string(data)).NotTo(ContainSubstring("SECRET_CANARY"))
 
 		result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "uninstall_apps", Arguments: map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}})
@@ -189,5 +204,41 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		Expect(stderr.String()).To(ContainSubstring("stdout https://[redacted]@example.invalid/x?[redacted]"))
 		Expect(stderr.String()).To(ContainSubstring("stderr password=[redacted]"))
 		Expect(stderr.String()).NotTo(ContainSubstring("SECRET_CANARY"))
+	}, SpecTimeout(2*time.Minute))
+
+	It("gives child processes the null device as stdin so they cannot consume MCP requests", func(ctx SpecContext) {
+		home := GinkgoT().TempDir()
+		// The uninstall command signals that it started, then reads one line
+		// from stdin. Inheriting the MCP request stream, it would either block
+		// forever or swallow the next request.
+		trackCurlpipe(ctx, home, `touch "$HOME/started"; IFS= read -r line; printf '%s' "$line" > "$HOME/stdin"; touch "$HOME/uninstalled"`)
+		var stderr bytes.Buffer
+		session := serveMutations(ctx, home, &stderr, "--mutation-timeout", "20s")
+		plan, _ := prepareUninstall(ctx, session, &stderr)
+
+		uninstalled := make(chan *mcp.CallToolResult, 1)
+		go func() {
+			defer GinkgoRecover()
+			result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "uninstall_apps", Arguments: map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}})
+			Expect(err).NotTo(HaveOccurred())
+			uninstalled <- result
+		}()
+		Eventually(filepath.Join(home, "started"), 10*time.Second).Should(BeAnExistingFile())
+
+		// A request sent while the child runs must reach the server.
+		listCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		listed, err := session.CallTool(listCtx, &mcp.CallToolParams{Name: "list_apps", Arguments: map[string]any{"kind": "categories"}})
+		Expect(err).NotTo(HaveOccurred(), "the request sent while the uninstall command ran was not answered\n%s", stderr.String())
+		Expect(listed.IsError).To(BeFalse(), toolText(listed))
+
+		var result *mcp.CallToolResult
+		Eventually(uninstalled, 15*time.Second).Should(Receive(&result))
+		Expect(result.StructuredContent).To(HaveKeyWithValue("result", "completed"), "%v\n%s", result.StructuredContent, stderr.String())
+		Expect(filepath.Join(home, "uninstalled")).To(BeAnExistingFile())
+		captured, err := os.ReadFile(filepath.Join(home, "stdin"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(captured).To(BeEmpty(), "the uninstall command read MCP traffic from stdin")
+		Expect(session.Close()).To(Succeed())
 	}, SpecTimeout(2*time.Minute))
 })

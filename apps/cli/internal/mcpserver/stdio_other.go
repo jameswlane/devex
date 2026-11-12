@@ -9,6 +9,7 @@ import (
 
 // Stdio is unavailable on this platform.
 type Stdio struct {
+	Stdin  *os.File
 	Stdout *os.File
 }
 
