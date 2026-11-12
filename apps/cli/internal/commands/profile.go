@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -68,11 +69,21 @@ override the shared configuration while the profile is active.`,
 				if info, err := os.Stat(source); err != nil || !info.IsDir() {
 					return fmt.Errorf("profile %s has no user configuration to copy at %s", from, source)
 				}
+				// Create the destination first: an empty source copies no files,
+				// and an empty profile is still a profile.
+				if err := os.MkdirAll(dir, 0o750); err != nil {
+					return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
+				}
 				if err := copyConfigurationTree(source, dir); err != nil {
-					return fmt.Errorf("copy profile %s: %w", from, err)
+					// The destination did not exist before; remove the partial copy so
+					// the profile is not half created and the command can be retried.
+					if removeErr := os.RemoveAll(dir); removeErr != nil {
+						return fmt.Errorf("copy profile %s: %w; remove the partial profile at %s before retrying: %w", from, err, dir, removeErr)
+					}
+					return fmt.Errorf("copy profile %s: %w; nothing was created, fix the source profile at %s and retry", from, err, source)
 				}
 			} else if err := os.MkdirAll(dir, 0o750); err != nil {
-				return err
+				return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Created profile %s at %s\nSwitch to it with 'devex profile switch %s'.\n", name, dir, name)
 			return nil
@@ -90,13 +101,17 @@ type ProfileInfo struct {
 }
 
 func newProfileListCmd(settings config.CrossPlatformSettings) *cobra.Command {
-	var format string
 	cmd := &cobra.Command{
 		Use:          "list",
 		Short:        "List profiles and show the current one",
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			options, err := profileOptions(cmd, "format")
+			if err != nil {
+				return err
+			}
+			format := options.GetString("format")
 			if format != "table" && format != "json" {
 				return fmt.Errorf("unsupported format %q; use table or json", format)
 			}
@@ -142,7 +157,7 @@ func newProfileListCmd(settings config.CrossPlatformSettings) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
 	return cmd
 }
 
@@ -200,10 +215,6 @@ type ProfileSwitch struct {
 }
 
 func newProfileSwitchCmd(settings config.CrossPlatformSettings) *cobra.Command {
-	var (
-		dryRun bool
-		format string
-	)
 	cmd := &cobra.Command{
 		Use:   "switch <name>",
 		Short: "Make a profile the current one",
@@ -214,6 +225,11 @@ change. Only the saved profile changes: nothing is installed or removed. Run
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			options, err := profileOptions(cmd, "dry-run", "format")
+			if err != nil {
+				return err
+			}
+			dryRun, format := options.GetBool("dry-run"), options.GetString("format")
 			if format != "table" && format != "json" {
 				return fmt.Errorf("unsupported format %q; use table or json", format)
 			}
@@ -267,9 +283,29 @@ change. Only the saved profile changes: nothing is installed or removed. Run
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show the change without saving it")
-	cmd.Flags().StringVar(&format, "format", "table", "Output format (table, json)")
+	cmd.Flags().Bool("dry-run", false, "Show the change without saving it (also DEVEX_DRY_RUN or dry-run in the configuration file)")
+	cmd.Flags().String("format", "table", "Output format (table, json)")
 	return cmd
+}
+
+// profileOptions resolves command options with the flags > environment >
+// configuration file > defaults precedence used by the root command, so a
+// preview configured by DEVEX_DRY_RUN or the configuration file is honored
+// even when the command runs without its flag.
+func profileOptions(cmd *cobra.Command, keys ...string) (*viper.Viper, error) {
+	options := viper.New()
+	if err := options.MergeConfigMap(viper.AllSettings()); err != nil {
+		return nil, fmt.Errorf("resolve profile options: %w", err)
+	}
+	options.SetEnvPrefix("DEVEX")
+	options.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
+	options.AutomaticEnv()
+	for _, key := range keys {
+		if err := options.BindPFlag(key, cmd.Flags().Lookup(key)); err != nil {
+			return nil, fmt.Errorf("resolve profile option %s: %w", key, err)
+		}
+	}
+	return options, nil
 }
 
 func profileDefaultApps(ctx context.Context, settings config.CrossPlatformSettings, profile string) (map[string]bool, error) {

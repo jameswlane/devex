@@ -47,16 +47,20 @@ Default applications removed from the profile: work-vpn (they stay installed)
 Nothing was installed or removed; run 'devex install' to apply the profile.
 ```
 
+`--dry-run` can also be set with `DEVEX_DRY_RUN=true` or `dry-run: true` in the configuration file; an explicit `--dry-run=false` overrides them. `--format` follows the same order (flag, then `DEVEX_FORMAT`, then the configuration file).
+
 <Callout type="info" title="Switching never installs or removes software">
 Only the saved profile changes. Applications that the new profile no longer lists stay installed; remove them with `devex uninstall` if you want to. Run `devex install` to install the new profile's applications.
 </Callout>
 
 ## Failure behavior
 
+- `create --from` copies the source profile's user configuration, including when it is empty. If the copy fails, the partial profile is removed, so you can fix the source and retry.
 - Switching to a profile that has no directory in any tier fails; create it first. `dev` always exists.
 - Invalid or reserved names are refused, and nothing is saved.
 - A saved profile file with an invalid name is ignored, and `dev` is used.
 - If a profile's configuration is invalid, `switch` reports the validation error and does not save the change.
+- Profile commands only read and write configuration files. They never download, initialize or run plugins.
 
 ## Verify it yourself
 
