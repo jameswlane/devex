@@ -19,13 +19,15 @@ For every application DevEx tracks:
 | --- | --- |
 | `name` | The application |
 | `manager` | Its install method, from the definition DevEx recorded at install time |
-| `packages` | The packages that method installed |
+| `packages` | The native package identifiers that method installed (installation options such as `--classic` are left out) |
 | `version` | The version the package manager reports now |
-| `state` | `installed`, `missing` (tracked but no longer installed) or `unknown` (the method cannot be queried) |
+| `state` | `installed`, `missing` (the package manager reports it is not installed) or `unknown` (it could not be checked; `detail` says why) |
 | `managed_by` | Always `devex` |
 | `definition_recorded` | Whether DevEx recorded the definition when it installed the application |
 
 Versions come from `dpkg-query` for apt and deb packages, `snap list` and `flatpak info`. Other methods (mise, curlpipe, Docker, ...) are reported as `unknown`. For applications installed by DevEx versions that did not record definitions, the current catalog definition is used and the drift entry says so.
+
+An application is `missing` only when its package manager answers that the package is not installed. When the check itself fails (the manager is not on `PATH`, snapd is unreachable, a permission error), the application is `unknown` with the error in `detail`, and no drift is reported. Applications installed from a downloaded `.deb` file or URL are `unknown`: DevEx does not record the dpkg package name such a file installs, so it cannot be checked. If the command is canceled or times out, it fails instead of printing a partial export.
 
 ## Drift
 

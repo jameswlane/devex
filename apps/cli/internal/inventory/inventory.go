@@ -32,39 +32,39 @@ const (
 
 // Item is one managed application.
 type Item struct {
-	Name       string   `json:"name"`
-	Manager    string   `json:"manager"`
-	Packages   []string `json:"packages"`
-	Version    string   `json:"version,omitempty"`
-	State      string   `json:"state"`
-	ManagedBy  string   `json:"managed_by"`
-	Definition bool     `json:"definition_recorded"`
-	Detail     string   `json:"detail,omitempty"`
+	Name       string   `json:"name" yaml:"name"`
+	Manager    string   `json:"manager" yaml:"manager"`
+	Packages   []string `json:"packages" yaml:"packages"`
+	Version    string   `json:"version,omitempty" yaml:"version,omitempty"`
+	State      string   `json:"state" yaml:"state"`
+	ManagedBy  string   `json:"managed_by" yaml:"managed_by"`
+	Definition bool     `json:"definition_recorded" yaml:"definition_recorded"`
+	Detail     string   `json:"detail,omitempty" yaml:"detail,omitempty"`
 }
 
 // Machine identifies the host without revealing it.
 type Machine struct {
-	ID       string `json:"id"`
-	OS       string `json:"os"`
-	Arch     string `json:"arch"`
-	Hostname string `json:"hostname,omitempty"`
+	ID       string `json:"id" yaml:"id"`
+	OS       string `json:"os" yaml:"os"`
+	Arch     string `json:"arch" yaml:"arch"`
+	Hostname string `json:"hostname,omitempty" yaml:"hostname,omitempty"`
 }
 
 // Inventory is the export.
 type Inventory struct {
-	SchemaVersion string    `json:"schema_version"`
-	GeneratedAt   time.Time `json:"generated_at"`
-	DevexVersion  string    `json:"devex_version"`
-	Machine       Machine   `json:"machine"`
-	Items         []Item    `json:"items"`
-	Drift         []Drift   `json:"drift"`
+	SchemaVersion string    `json:"schema_version" yaml:"schema_version"`
+	GeneratedAt   time.Time `json:"generated_at" yaml:"generated_at"`
+	DevexVersion  string    `json:"devex_version" yaml:"devex_version"`
+	Machine       Machine   `json:"machine" yaml:"machine"`
+	Items         []Item    `json:"items" yaml:"items"`
+	Drift         []Drift   `json:"drift" yaml:"drift"`
 }
 
 // Drift is a difference between DevEx's records and the machine.
 type Drift struct {
-	App    string `json:"app"`
-	Kind   string `json:"kind"` // missing, no_definition
-	Detail string `json:"detail"`
+	App    string `json:"app" yaml:"app"`
+	Kind   string `json:"kind" yaml:"kind"` // missing, no_definition
+	Detail string `json:"detail" yaml:"detail"`
 }
 
 // Query reports whether a package is installed natively and its version.
@@ -128,12 +128,17 @@ func Build(ctx context.Context, repo Reader, options Options) (Inventory, error)
 		if config.InstallMethod != "" {
 			item.Manager = config.InstallMethod
 		}
-		item.Packages = packagesOf(config)
-		check(ctx, &item, options.Query)
+		if err := inspect(ctx, &item, config, options.Query); err != nil {
+			return result, err
+		}
 		if item.State == StateMissing {
 			result.Drift = append(result.Drift, Drift{App: record.Name, Kind: "missing", Detail: "tracked by DevEx but not installed according to " + item.Manager})
 		}
 		result.Items = append(result.Items, item)
+	}
+	// A query canceled during the last item must not yield a successful export.
+	if err := ctx.Err(); err != nil {
+		return result, err
 	}
 	sort.Slice(result.Items, func(i, j int) bool { return result.Items[i].Name < result.Items[j].Name })
 	sort.Slice(result.Drift, func(i, j int) bool { return result.Drift[i].App < result.Drift[j].App })
@@ -152,38 +157,80 @@ func recordedDefinition(repo Reader, name string) (types.CrossPlatformApp, bool)
 	return app, true
 }
 
-func packagesOf(config types.OSConfig) []string {
-	if len(config.Packages) > 0 {
-		return append([]string(nil), config.Packages...)
+// queryable lists the install methods NativeQuery can check.
+func queryable(manager string) bool {
+	switch manager {
+	case "apt", "deb", "snap", "flatpak":
+		return true
 	}
-	fields := strings.Fields(config.InstallCommand)
-	if len(fields) == 0 {
-		return []string{}
+	return false
+}
+
+// inspect resolves the native package identifiers of a definition and checks
+// them. It returns an error only when the context ends; every other failure
+// leaves the item unknown with a detail.
+func inspect(ctx context.Context, item *Item, config types.OSConfig, query Query) error {
+	request, parseErr := types.ResolvePackageInstall(config.InstallMethod, config.InstallCommand, config.Packages, config.Options)
+	if parseErr == nil {
+		item.Packages = request.Packages
+	} else if len(config.Packages) > 0 {
+		item.Packages = append([]string(nil), config.Packages...)
 	}
-	return fields
+	switch {
+	case item.Manager == "unknown":
+		item.Detail = "no package recorded"
+		return nil
+	case !queryable(item.Manager):
+		item.Detail = item.Manager + " packages are not queried"
+		return nil
+	case parseErr != nil:
+		item.Packages = []string{}
+		item.Detail = "cannot read package identifiers from the definition: " + parseErr.Error() + "; list them under packages in the definition"
+		return nil
+	case len(item.Packages) == 0:
+		item.Detail = "no package recorded"
+		return nil
+	}
+	if item.Manager == "apt" || item.Manager == "deb" {
+		for _, pkg := range item.Packages {
+			if debArtifact(pkg) {
+				item.Detail = pkg + " is a .deb file, not a dpkg package name; DevEx does not record the package name it installs, so its state cannot be verified"
+				return nil
+			}
+		}
+	}
+	return check(ctx, item, query)
+}
+
+// debArtifact reports whether a deb or apt identifier names a downloaded
+// package file rather than the package dpkg registers.
+func debArtifact(pkg string) bool {
+	return strings.Contains(pkg, "/") || strings.HasSuffix(strings.ToLower(pkg), ".deb")
 }
 
 // check queries every package; the item is installed only if all are.
-func check(ctx context.Context, item *Item, query Query) {
-	if len(item.Packages) == 0 || item.Manager == "unknown" {
-		item.Detail = "no package recorded"
-		return
-	}
+func check(ctx context.Context, item *Item, query Query) error {
 	versions := make([]string, 0, len(item.Packages))
 	for _, pkg := range item.Packages {
 		installed, version, err := query(ctx, item.Manager, pkg)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		if errors.Is(err, ErrUnsupported) {
 			item.State, item.Detail = StateUnknown, item.Manager+" packages are not queried"
-			return
+			return nil
 		}
 		if err != nil {
 			item.State, item.Detail = StateUnknown, "query failed: "+firstLine(err.Error())
-			return
+			return nil
 		}
 		if !installed {
 			item.State = StateMissing
 			item.Detail = pkg + " is not installed"
-			return
+			return nil
 		}
 		if version != "" {
 			versions = append(versions, version)
@@ -196,6 +243,7 @@ func check(ctx context.Context, item *Item, query Query) {
 			item.Version = strings.Join(versions, ", ")
 		}
 	}
+	return nil
 }
 
 func firstLine(text string) string {
@@ -222,31 +270,41 @@ func machine(options Options) Machine {
 	return result
 }
 
-// NativeQuery asks the package manager.
+// NativeQuery asks the package manager. It reports a package as absent only
+// when the manager says so; a missing executable, a daemon or permission
+// failure or any other error is returned so the item stays unknown.
 func NativeQuery(ctx context.Context, manager, pkg string) (bool, string, error) {
-	if strings.HasPrefix(pkg, "-") {
+	if pkg == "" || strings.HasPrefix(pkg, "-") {
 		return false, "", fmt.Errorf("invalid package name %q", pkg)
 	}
 	switch manager {
 	case "apt", "deb":
-		output, err := exec.CommandContext(ctx, "dpkg-query", "-W", "-f=${Status}\t${Version}", "--", pkg).Output()
+		output, err := runNative(ctx, "dpkg-query", "-W", "-f=${Status}\t${Version}", "--", pkg)
 		if err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
+			if notInstalled(err, "no packages found matching") {
 				return false, "", nil
 			}
 			return false, "", err
 		}
-		status, version, _ := strings.Cut(string(output), "\t")
-		return strings.HasSuffix(strings.TrimSpace(status), "installed") && !strings.Contains(status, "not-installed"), strings.TrimSpace(version), nil
-	case "snap":
-		output, err := exec.CommandContext(ctx, "snap", "list", "--", pkg).Output()
-		if err != nil {
+		status, version, _ := strings.Cut(output, "\t")
+		// Status is "want error state"; only the state "installed" counts, not
+		// half-installed, config-files or not-installed.
+		words := strings.Fields(status)
+		if len(words) == 0 || words[len(words)-1] != "installed" {
 			return false, "", nil
 		}
-		lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+		return true, strings.TrimSpace(version), nil
+	case "snap":
+		output, err := runNative(ctx, "snap", "list", "--", pkg)
+		if err != nil {
+			if notInstalled(err, "no matching snaps installed") {
+				return false, "", nil
+			}
+			return false, "", err
+		}
+		lines := strings.Split(strings.TrimSpace(output), "\n")
 		if len(lines) < 2 {
-			return false, "", nil
+			return false, "", fmt.Errorf("snap list printed no row for %s", pkg)
 		}
 		fields := strings.Fields(lines[1])
 		if len(fields) < 2 {
@@ -254,11 +312,60 @@ func NativeQuery(ctx context.Context, manager, pkg string) (bool, string, error)
 		}
 		return true, fields[1], nil
 	case "flatpak":
-		output, err := exec.CommandContext(ctx, "flatpak", "info", "--show-version", "--", pkg).Output()
+		output, err := runNative(ctx, "flatpak", "info", "--show-version", "--", pkg)
 		if err != nil {
-			return false, "", nil
+			if notInstalled(err, "not installed") {
+				return false, "", nil
+			}
+			return false, "", err
 		}
-		return true, strings.TrimSpace(string(output)), nil
+		return true, strings.TrimSpace(output), nil
 	}
 	return false, "", ErrUnsupported
+}
+
+// nativeError is a package manager that ran and failed.
+type nativeError struct {
+	tool   string
+	code   int
+	stderr string
+}
+
+func (e *nativeError) Error() string {
+	detail := firstLine(e.stderr)
+	if detail == "" {
+		detail = "no error output"
+	}
+	return fmt.Sprintf("%s exited with status %d: %s", e.tool, e.code, detail)
+}
+
+// notInstalled reports whether a failed query is the manager's own answer that
+// the package is not installed.
+func notInstalled(err error, message string) bool {
+	var native *nativeError
+	return errors.As(err, &native) && native.code == 1 && strings.Contains(strings.ToLower(native.stderr), message)
+}
+
+// runNative runs a read-only query in the C locale, so its messages can be
+// recognized, and returns its standard output.
+func runNative(ctx context.Context, tool string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, tool, args...)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return "", fmt.Errorf("%s query stopped: %w", tool, ctxErr)
+	}
+	if err == nil {
+		return string(output), nil
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return "", fmt.Errorf("%s is not on PATH; install it or add it to PATH so DevEx can check these packages: %w", tool, err)
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return "", &nativeError{tool: tool, code: exit.ExitCode(), stderr: stderr.String()}
+	}
+	return "", fmt.Errorf("run %s: %w", tool, err)
 }

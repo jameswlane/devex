@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -161,10 +162,209 @@ var _ = Describe("Inventory", func() {
 		if _, err := os.Stat("/usr/bin/dpkg-query"); err != nil {
 			Skip("dpkg-query is not available")
 		}
-		installed, _, err := inventory.NativeQuery(context.Background(), "apt", "definitely-not-a-real-package-xyz")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		installed, _, err := inventory.NativeQuery(ctx, "apt", "definitely-not-a-real-package-xyz")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(installed).To(BeFalse())
-		_, _, err = inventory.NativeQuery(context.Background(), "apt", "-bad")
+		_, _, err = inventory.NativeQuery(ctx, "apt", "-bad")
 		Expect(err).To(HaveOccurred())
+	})
+
+	Context("when a query is canceled", func() {
+		It("fails instead of exporting when the final query is canceled", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			repo = fakeRepo{apps: []string{"git"}, definitions: map[string]types.CrossPlatformApp{"git": aptApp("git", "git")}}
+			options.Query = func(ctx context.Context, _, _ string) (bool, string, error) {
+				cancel()
+				return false, "", ctx.Err()
+			}
+			_, err := inventory.Build(ctx, repo, options)
+			Expect(err).To(MatchError(context.Canceled))
+		})
+
+		It("fails even when a canceled query reports the package as absent", func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			repo = fakeRepo{apps: []string{"git"}, definitions: map[string]types.CrossPlatformApp{"git": aptApp("git", "git")}}
+			options.Query = func(context.Context, string, string) (bool, string, error) {
+				cancel()
+				return false, "", nil
+			}
+			_, err := inventory.Build(ctx, repo, options)
+			Expect(err).To(MatchError(context.Canceled))
+		})
+	})
+
+	Context("with legacy install commands", func() {
+		var queried []string
+
+		build := func(app types.CrossPlatformApp) inventory.Item {
+			queried = nil
+			options.Query = func(_ context.Context, _, pkg string) (bool, string, error) {
+				queried = append(queried, pkg)
+				return true, "1.0", nil
+			}
+			repo = fakeRepo{apps: []string{app.Name}, definitions: map[string]types.CrossPlatformApp{app.Name: app}}
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Items).To(HaveLen(1))
+			return result.Items[0]
+		}
+
+		It("queries only the application ID of a full flatpak install command", func() {
+			item := build(types.CrossPlatformApp{Name: "zen", Linux: types.OSConfig{InstallMethod: "flatpak", InstallCommand: "flatpak install flathub io.github.zen_browser.zen"}})
+			Expect(queried).To(Equal([]string{"io.github.zen_browser.zen"}))
+			Expect(item).To(SatisfyAll(HaveField("State", "installed"), HaveField("Packages", []string{"io.github.zen_browser.zen"})))
+		})
+
+		DescribeTable("drops snap options wherever they appear",
+			func(command string) {
+				item := build(types.CrossPlatformApp{Name: "neovim", Linux: types.OSConfig{InstallMethod: "snap", InstallCommand: command}})
+				Expect(queried).To(Equal([]string{"nvim"}))
+				Expect(item.State).To(Equal("installed"))
+			},
+			Entry("after the name", "nvim --classic"),
+			Entry("before the name", "--classic nvim"),
+			Entry("with a valued option", "sudo snap install --channel=stable nvim --classic"),
+		)
+
+		It("unquotes quoted package names", func() {
+			build(types.CrossPlatformApp{Name: "tools", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: `"git" 'curl'`}})
+			Expect(queried).To(Equal([]string{"git", "curl"}))
+		})
+
+		It("uses structured packages and never queries their options", func() {
+			build(types.CrossPlatformApp{Name: "code", Linux: types.OSConfig{InstallMethod: "snap", Packages: []string{"code"}, Options: []string{"--classic"}}})
+			Expect(queried).To(Equal([]string{"code"}))
+		})
+
+		It("reports a command it cannot read as unknown without querying fragments", func() {
+			item := build(types.CrossPlatformApp{Name: "odd", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git && make install"}})
+			Expect(queried).To(BeEmpty())
+			Expect(item).To(SatisfyAll(HaveField("State", "unknown"), HaveField("Detail", ContainSubstring("cannot read package identifiers"))))
+		})
+	})
+
+	Context("with deb artifacts", func() {
+		var queried []string
+
+		BeforeEach(func() {
+			queried = nil
+			// Everything is absent natively: a queried artifact would be missing.
+			options.Query = func(_ context.Context, _, pkg string) (bool, string, error) {
+				queried = append(queried, pkg)
+				return false, "", nil
+			}
+		})
+
+		DescribeTable("never reports a downloaded package file as missing",
+			func(method, command string) {
+				repo = fakeRepo{apps: []string{"artifact"}, definitions: map[string]types.CrossPlatformApp{
+					"artifact": {Name: "artifact", Linux: types.OSConfig{InstallMethod: method, InstallCommand: command}},
+				}}
+				result, err := inventory.Build(context.Background(), repo, options)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(queried).To(BeEmpty())
+				Expect(result.Items[0]).To(SatisfyAll(HaveField("State", "unknown"), HaveField("Detail", ContainSubstring("not a dpkg package name"))))
+				Expect(result.Drift).To(BeEmpty())
+			},
+			Entry("a deb URL", "deb", "https://proton.me/download/pass/linux/proton-pass_1.23.1_amd64.deb"),
+			Entry("a deb file name", "deb", "ulauncher_5.15.7_all.deb"),
+			Entry("a local deb installed with apt", "apt", "./tool_1.0_amd64.deb"),
+		)
+
+		It("queries the package name of a deb downloaded from download_url", func() {
+			repo = fakeRepo{apps: []string{"fastfetch"}, definitions: map[string]types.CrossPlatformApp{
+				"fastfetch": {Name: "fastfetch", Linux: types.OSConfig{InstallMethod: "deb", InstallCommand: "fastfetch", DownloadURL: "https://example.invalid/fastfetch.deb"}},
+			}}
+			result, err := inventory.Build(context.Background(), repo, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(queried).To(Equal([]string{"fastfetch"}))
+			Expect(result.Items[0].State).To(Equal("missing"))
+		})
+	})
+})
+
+var _ = Describe("NativeQuery", func() {
+	var bin, sleep string
+
+	// tool installs a fake package manager; PATH holds only the fakes.
+	tool := func(name, script string) {
+		Expect(os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+script+"\n"), 0o755)).To(Succeed())
+	}
+
+	BeforeEach(func() {
+		var err error
+		sleep, err = exec.LookPath("sleep")
+		Expect(err).NotTo(HaveOccurred())
+		bin = GinkgoT().TempDir()
+		GinkgoT().Setenv("PATH", bin)
+	})
+
+	query := func(manager, pkg string) (bool, string, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return inventory.NativeQuery(ctx, manager, pkg)
+	}
+
+	DescribeTable("reports a package as absent only when the manager says so",
+		func(manager, name, script string) {
+			tool(name, script)
+			installed, version, err := query(manager, "pkg")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(installed).To(BeFalse())
+			Expect(version).To(BeEmpty())
+		},
+		Entry("dpkg-query", "apt", "dpkg-query", `echo "dpkg-query: no packages found matching $4" >&2; exit 1`),
+		Entry("dpkg-query for a removed package with config files", "deb", "dpkg-query", `printf 'deinstall ok config-files\t1.0'`),
+		Entry("dpkg-query for a half-installed package", "apt", "dpkg-query", `printf 'install reinstreq half-installed\t1.0'`),
+		Entry("snap", "snap", "snap", `echo "error: no matching snaps installed" >&2; exit 1`),
+		Entry("flatpak", "flatpak", "flatpak", `echo "error: pkg/*unspecified*/*unspecified* not installed" >&2; exit 1`),
+	)
+
+	DescribeTable("returns operational failures instead of reporting absence",
+		func(manager, name, script, detail string) {
+			tool(name, script)
+			installed, _, err := query(manager, "pkg")
+			Expect(installed).To(BeFalse())
+			Expect(err).To(MatchError(ContainSubstring(detail)))
+		},
+		Entry("snapd unreachable", "snap", "snap", `echo "error: cannot communicate with server: connection refused" >&2; exit 1`, "cannot communicate with server"),
+		Entry("flatpak permission failure", "flatpak", "flatpak", `echo "error: Permission denied" >&2; exit 1`, "Permission denied"),
+		Entry("dpkg database failure", "apt", "dpkg-query", `echo "dpkg-query: error: parsing file '/var/lib/dpkg/status'" >&2; exit 2`, "status 2"),
+		Entry("snap killed without output", "snap", "snap", `exit 3`, "no error output"),
+	)
+
+	DescribeTable("returns an actionable error when the manager is unavailable",
+		func(manager, name string) {
+			_, _, err := query(manager, "pkg")
+			Expect(err).To(MatchError(SatisfyAll(ContainSubstring(name), ContainSubstring("not on PATH"))))
+		},
+		Entry("dpkg-query", "apt", "dpkg-query"),
+		Entry("snap", "snap", "snap"),
+		Entry("flatpak", "flatpak", "flatpak"),
+	)
+
+	It("reports installed versions", func() {
+		tool("dpkg-query", `printf 'install ok installed\t1:2.43.0-1'`)
+		tool("snap", `printf 'Name  Version  Rev\nnvim  0.10.2   3780\n'`)
+		tool("flatpak", `echo 1.2.3`)
+		for manager, want := range map[string]string{"apt": "1:2.43.0-1", "snap": "0.10.2", "flatpak": "1.2.3"} {
+			installed, version, err := query(manager, "pkg")
+			Expect(err).NotTo(HaveOccurred(), manager)
+			Expect(installed).To(BeTrue(), manager)
+			Expect(version).To(Equal(want), manager)
+		}
+	})
+
+	It("returns the context error when the query is canceled while it runs", func() {
+		tool("snap", "exec "+sleep+" 30")
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		installed, _, err := inventory.NativeQuery(ctx, "snap", "pkg")
+		Expect(installed).To(BeFalse())
+		Expect(err).To(MatchError(context.DeadlineExceeded))
 	})
 })

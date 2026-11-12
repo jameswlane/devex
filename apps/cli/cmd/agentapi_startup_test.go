@@ -23,7 +23,7 @@ var _ = Describe("Agent API startup", func() {
 		Expect(err).NotTo(HaveOccurred(), string(output))
 		before := startupSnapshot(home)
 		env = append(env, "DEVEX_CONFIG_DIR="+filepath.Join(home, "config"), "DEVEX_STATE_DIR="+filepath.Join(home, "state"), "DEVEX_CACHE_DIR="+filepath.Join(home, "cache"), "DEVEX_DATA_DIR="+filepath.Join(home, "data"), "DEVEX_DISABLE_UPDATE_CHECK=true")
-		for _, args := range [][]string{{"platform", "--format", "json"}, {"config", "effective", "--format", "json"}, {"config", "show", "--format", "json"}, {"list", "available", "--format", "json"}, {"status", "--app", "missing", "--format", "json"}} {
+		for _, args := range [][]string{{"platform", "--format", "json"}, {"inventory", "--format", "json"}, {"config", "effective", "--format", "json"}, {"config", "show", "--format", "json"}, {"list", "available", "--format", "json"}, {"status", "--app", "missing", "--format", "json"}} {
 			cmd := exec.CommandContext(ctx, binary, args...)
 			cmd.Env = env
 			var stderr bytes.Buffer
