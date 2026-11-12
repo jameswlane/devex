@@ -165,50 +165,78 @@ func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error 
 		targetDir = filepath.Join(bm.baseDir, "config")
 	}
 
-	// Snapshot the current configuration so a failed restore can be undone.
-	// On a machine without a configuration yet (a backup pulled onto a fresh
-	// machine) there is nothing to snapshot; undoing then removes what the
-	// restore created.
-	var currentBackup *BackupMetadata
-	targetExisted := pathExists(targetDir)
-	if pathExists(filepath.Join(bm.baseDir, "config")) || targetExisted {
-		currentBackup, err = bm.CreateBackup(BackupOptions{
-			Description: fmt.Sprintf("Pre-restore backup (restoring from %s)", backupID),
-			Type:        "pre-restore",
-			Tags:        []string{"auto", "pre-restore"},
-		})
-		if err != nil {
-			return fmt.Errorf("failed to create pre-restore backup before restoring %s to %s: %w", backupID, targetDir, err)
-		}
-	}
-	undo := func() {
-		switch {
-		case currentBackup != nil:
-			if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
-				// Log the restore error but don't fail the original error
-				fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
-			}
-		case !targetExisted:
-			if removeErr := os.RemoveAll(targetDir); removeErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to remove partially restored %s: %v\n", targetDir, removeErr)
-			}
-		}
-	}
-
 	compressedPath := filepath.Join(backupDir, "config.tar.gz")
-	if _, err := os.Stat(compressedPath); err == nil {
-		if err := bm.extractCompressedBackup(compressedPath, targetDir); err != nil {
-			undo()
-			return fmt.Errorf("failed to extract backup: %w", err)
+	restoreInto := func(dir string) error {
+		if _, err := os.Stat(compressedPath); err == nil {
+			if err := bm.extractCompressedBackup(compressedPath, dir); err != nil {
+				return fmt.Errorf("failed to extract backup: %w", err)
+			}
+			return nil
 		}
-	} else {
-		configBackupDir := filepath.Join(backupDir, "config")
-		if err := bm.copyDirectory(configBackupDir, targetDir); err != nil {
-			undo()
+		if err := bm.copyDirectory(filepath.Join(backupDir, "config"), dir); err != nil {
 			return fmt.Errorf("failed to restore files: %w", err)
 		}
+		return nil
 	}
 
+	// On a machine without a configuration yet (a backup pulled onto a fresh
+	// machine) there is nothing to snapshot.
+	if !pathExists(filepath.Join(bm.baseDir, "config")) && !pathExists(targetDir) {
+		return restoreFresh(targetDir, restoreInto)
+	}
+
+	// Snapshot the current configuration so a failed restore can be undone.
+	currentBackup, err := bm.CreateBackup(BackupOptions{
+		Description: fmt.Sprintf("Pre-restore backup (restoring from %s)", backupID),
+		Type:        "pre-restore",
+		Tags:        []string{"auto", "pre-restore"},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create pre-restore backup before restoring %s to %s: %w", backupID, targetDir, err)
+	}
+	if err := restoreInto(targetDir); err != nil {
+		if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
+			// Log the restore error but don't fail the original error
+			fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
+		}
+		return err
+	}
+
+	return nil
+}
+
+// beforeFreshRestore runs once a restore has found no configuration to
+// snapshot. Tests replace it to create the target as another process would.
+var beforeFreshRestore = func(targetDir string) {}
+
+// restoreFresh restores into targetDir, which did not exist when checked.
+// The files go into a staging directory this restore creates beside the
+// target, which is published only if nothing has appeared at the target in
+// the meantime. A failure removes only the staging directory, never anything
+// another process put at the target.
+func restoreFresh(targetDir string, restoreInto func(string) error) error {
+	beforeFreshRestore(targetDir)
+	parent := filepath.Dir(targetDir)
+	if err := os.MkdirAll(parent, 0750); err != nil {
+		return fmt.Errorf("failed to create %s: %w", parent, err)
+	}
+	staging, err := os.MkdirTemp(parent, "."+filepath.Base(targetDir)+".restore-*")
+	if err != nil {
+		return fmt.Errorf("failed to create a restore directory in %s: %w", parent, err)
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+	if err := restoreInto(staging); err != nil {
+		return err
+	}
+	if err := os.Chmod(staging, 0750); err != nil {
+		return err
+	}
+	if err := renameNoReplace(staging, targetDir); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%s was created while the backup was being restored, so it was left unchanged; run the restore again to snapshot and replace it", targetDir)
+		}
+		return fmt.Errorf("failed to move the restored configuration into %s: %w", targetDir, err)
+	}
 	return nil
 }
 

@@ -63,7 +63,19 @@ var _ = Describe("Backup manager", func() {
 			Expect(preRestoreBackups()).To(BeEmpty())
 		})
 
-		It("removes what a failed restore created", func() {
+		stagingDirs := func() []string {
+			matches, err := filepath.Glob(filepath.Join(filepath.Dir(configDir), ".config.restore-*"))
+			Expect(err).NotTo(HaveOccurred())
+			return matches
+		}
+
+		corruptArchive := func() {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(dir, "config.tar.gz"), []byte("not gzip"), 0o600)).To(Succeed())
+		}
+
+		It("removes only its own staging directory when a restore fails", func() {
 			dir, err := manager.BackupDir(id)
 			Expect(err).NotTo(HaveOccurred())
 			// A good entry is extracted before the unsafe one stops the restore.
@@ -82,8 +94,27 @@ var _ = Describe("Backup manager", func() {
 
 			Expect(manager.RestoreBackup(id, "")).To(MatchError(ContainSubstring("failed to extract backup")))
 			Expect(configDir).NotTo(BeAnExistingFile())
+			Expect(stagingDirs()).To(BeEmpty())
 			Expect(preRestoreBackups()).To(BeEmpty())
 		})
+
+		DescribeTable("leaves a target that another process creates during the restore untouched",
+			func(prepare func(), message string) {
+				prepare()
+				sentinel := []byte("written by another process\n")
+				DeferCleanup(backup.BeforeFreshRestore(func(target string) {
+					Expect(os.MkdirAll(target, 0o750)).To(Succeed())
+					Expect(os.WriteFile(filepath.Join(target, "config.yaml"), sentinel, 0o600)).To(Succeed())
+				}))
+
+				Expect(manager.RestoreBackup(id, "")).To(MatchError(ContainSubstring(message)))
+				Expect(os.ReadFile(filepath.Join(configDir, "config.yaml"))).To(Equal(sentinel))
+				Expect(os.ReadDir(configDir)).To(HaveLen(1))
+				Expect(stagingDirs()).To(BeEmpty())
+			},
+			Entry("when the restore succeeds", func() {}, "run the restore again"),
+			Entry("when the archive is corrupt", corruptArchive, "failed to extract backup"),
+		)
 	})
 
 	Context("when an imported backup cannot be indexed", func() {
