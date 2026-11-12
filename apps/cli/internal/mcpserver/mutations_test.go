@@ -22,6 +22,7 @@ import (
 )
 
 type fakeExecutor struct {
+	settings    config.CrossPlatformSettings
 	mu          sync.Mutex
 	installed   [][]string
 	uninstalled [][]string
@@ -34,7 +35,12 @@ type fakeExecutor struct {
 	block       bool
 }
 
-func (f *fakeExecutor) Install(ctx context.Context, apps []string) ([]mcpserver.Outcome, error) {
+func (f *fakeExecutor) ResolveInstall(ctx context.Context, request agentapi.PlanRequest) (agentapi.ExecutionSnapshot, error) {
+	return agentapi.ResolveExecution(ctx, f.settings, request, agentapi.ExecutionPolicy{}, agentapi.ExecutionTrust{})
+}
+
+func (f *fakeExecutor) Install(ctx context.Context, snapshot agentapi.ExecutionSnapshot) ([]mcpserver.Outcome, error) {
+	apps := snapshot.RootNames()
 	f.mu.Lock()
 	f.installed = append(f.installed, append([]string(nil), apps...))
 	f.mu.Unlock()
@@ -103,7 +109,7 @@ var _ = Describe("MCP mutating tools", func() {
 		DeferCleanup(viper.Reset)
 		settings := config.CrossPlatformSettings{HomeDir: GinkgoT().TempDir(), Catalog: &catalog.Result{}}
 		Expect(config.LoadCatalogOffline(ctx, settings)).To(Succeed())
-		executor = &fakeExecutor{}
+		executor = &fakeExecutor{settings: settings}
 		now = time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC)
 		host = platform.Platform{OS: "linux", Distribution: "ubuntu", Version: "24.04"}
 		options = mcpserver.Options{

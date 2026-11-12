@@ -1,6 +1,7 @@
 // Package configfiles implements the shared install stage between package installation
-// and post-install hooks. Mapping failures are warnings: remaining mappings and hooks
-// continue, while Result (including warnings) is persisted for inspection and cleanup.
+// and post-install hooks. Mapping failures are warnings unless an approved readable
+// source changed; those changes fail the install before post-install hooks. Result
+// (including warnings) is persisted for inspection and cleanup.
 package configfiles
 
 import (
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jameswlane/devex/apps/cli/internal/execinputs"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -28,6 +30,9 @@ type File struct {
 type Result struct {
 	Files    []File   `json:"files"`
 	Warnings []string `json:"warnings,omitempty"`
+	// Changed is set when a source or marker differs from a confirmed plan;
+	// unlike other warnings it must fail the install.
+	Changed error `json:"-"`
 }
 
 var windowsEnv = regexp.MustCompile(`%([A-Za-z_][A-Za-z0-9_]*)%`)
@@ -228,6 +233,9 @@ func ApplyWithOptions(ctx context.Context, app string, mappings []types.ConfigFi
 		return result
 	}
 	warn := func(mapping types.ConfigFile, err error) {
+		if result.Changed == nil && errors.Is(err, execinputs.ErrChanged) {
+			result.Changed = err
+		}
 		message := fmt.Sprintf("%s: config_files %q -> %q: %v", app, mapping.Source, mapping.Destination, err)
 		result.Warnings = append(result.Warnings, message)
 		if emit != nil {
@@ -249,7 +257,13 @@ func ApplyWithOptions(ctx context.Context, app string, mappings []types.ConfigFi
 				break
 			}
 			info, err := os.Stat(path)
-			if err == nil && info.Mode().IsRegular() {
+			present := err == nil && info.Mode().IsRegular()
+			if verifyErr := execinputs.VerifyMarker(ctx, path, present); verifyErr != nil {
+				warn(m, verifyErr)
+				invalid = true
+				break
+			}
+			if present {
 				matched = true
 				break
 			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -305,7 +319,7 @@ func ApplyWithOptions(ctx context.Context, app string, mappings []types.ConfigFi
 			warn(m, err)
 			break
 		}
-		file, err := applyOne(root, home, m, previousCopy(previous, m), guarded, dryRun, emit)
+		file, err := applyOne(ctx, root, home, m, previousCopy(previous, m), guarded, dryRun, emit)
 		if err != nil {
 			warn(m, err)
 			continue
@@ -377,12 +391,24 @@ func previousCopy(previous Result, m types.ConfigFile) *File {
 	return nil
 }
 
+// sourceAccessError keeps optional-source failures as warnings, but a source
+// approved as readable must remain readable and regular during execution.
+// Preserve the underlying I/O error alongside ErrChanged for diagnostics.
+func sourceAccessError(ctx context.Context, source string, cause error) error {
+	if inputs, pinned := execinputs.Pinned(ctx); pinned {
+		if approved, known := inputs.Files[source]; known && approved != execinputs.Missing {
+			return fmt.Errorf("source %s %w; cannot read the approved file: %w", source, execinputs.ErrChanged, cause)
+		}
+	}
+	return cause
+}
+
 // applyOne copies one mapping. A destination that still holds the previously
 // recorded copy is DevEx's own file: it is replaced without a new backup and
 // keeps the backup of the user's original file. A destination that already
 // matches but is not DevEx's copy returns an empty File: it is left alone and
 // not recorded.
-func applyOne(root *os.Root, home string, m types.ConfigFile, recorded *File, guarded []guarded, dryRun bool, emit func(string)) (File, error) {
+func applyOne(ctx context.Context, root *os.Root, home string, m types.ConfigFile, recorded *File, guarded []guarded, dryRun bool, emit func(string)) (File, error) {
 	source, err := Expand(m.Source)
 	if err != nil {
 		return File{}, err
@@ -400,14 +426,18 @@ func applyOne(root *os.Root, home string, m types.ConfigFile, recorded *File, gu
 	}
 	info, err := os.Stat(source)
 	if err != nil {
-		return File{}, fmt.Errorf("read source: %w", err)
+		return File{}, sourceAccessError(ctx, source, fmt.Errorf("read source: %w", err))
 	}
 	if !info.Mode().IsRegular() {
-		return File{}, errors.New("source must be a regular file")
+		return File{}, sourceAccessError(ctx, source, errors.New("source must be a regular file"))
 	}
 	data, err := os.ReadFile(source)
 	if err != nil {
-		return File{}, fmt.Errorf("read source: %w", err)
+		return File{}, sourceAccessError(ctx, source, fmt.Errorf("read source: %w", err))
+	}
+	// A confirmed install copies only the content that was confirmed.
+	if err := execinputs.VerifyFile(ctx, source, data); err != nil {
+		return File{}, err
 	}
 	file := File{Destination: destination, SHA256: fmt.Sprintf("%x", sha256.Sum256(data))}
 	info, err = root.Lstat(rel)

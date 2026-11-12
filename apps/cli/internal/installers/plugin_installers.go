@@ -346,6 +346,7 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	// Shared lifecycle stage: package install -> config_files -> post-install hooks.
 	// Config-file problems are warnings: the audit step records them as a failed
 	// step, but they don't fail the install.
+	var changed error
 	_ = state.AuditStep(ctx, "config-files", len(app.ConfigFiles) > 0, func() error {
 		result := configfiles.Apply(ctx, app.Name, app.ConfigFiles, false, func(message string) {
 			if strings.HasPrefix(message, "Warning:") {
@@ -354,11 +355,15 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 				log.Info(message)
 			}
 		})
+		changed = result.Changed
 		if len(result.Warnings) > 0 {
 			return errors.New(strings.Join(result.Warnings, "; "))
 		}
 		return nil
 	})
+	if changed != nil {
+		return fmt.Errorf("apply configuration files: %w", changed)
+	}
 
 	// Execute post-install commands
 	if err := state.AuditStep(ctx, "post-install", len(app.PostInstall) > 0, func() error { return runInstallCommands(ctx, app.PostInstall, policy) }); err != nil {

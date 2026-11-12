@@ -72,15 +72,38 @@ func (e *mcpExecutor) progress() *mcpserver.RedactingWriter {
 	return mcpserver.NewRedactingWriter(e.log)
 }
 
-func (e *mcpExecutor) Install(ctx context.Context, names []string) ([]mcpserver.Outcome, error) {
-	apps, settings, err := agentapi.SelectApplications(ctx, e.settings, agentapi.PlanRequest{Names: names})
-	if err != nil {
+func (e *mcpExecutor) ResolveInstall(ctx context.Context, request agentapi.PlanRequest) (agentapi.ExecutionSnapshot, error) {
+	return agentapi.ResolveExecution(ctx, e.settings, request, currentExecutionPolicy(), currentExecutionTrust())
+}
+
+func (e *mcpExecutor) Install(ctx context.Context, snapshot agentapi.ExecutionSnapshot) ([]mcpserver.Outcome, error) {
+	// Mutations are serialized by the server. Use a private Viper during
+	// execution so pinning cannot hide later config/environment changes from
+	// the next request, or mutate the original flags and override maps.
+	original := *viper.GetViper()
+	scoped := viper.New()
+	if err := scoped.MergeConfigMap(viper.AllSettings()); err != nil {
 		return nil, err
 	}
-	provider, err := e.plugins(ctx)
-	if err != nil {
+	*viper.GetViper() = *scoped
+	registry, hadRegistry := os.LookupEnv("DEVEX_PLUGIN_REGISTRY_URL")
+	defer func() {
+		*viper.GetViper() = original
+		if hadRegistry {
+			_ = os.Setenv("DEVEX_PLUGIN_REGISTRY_URL", registry)
+		} else {
+			_ = os.Unsetenv("DEVEX_PLUGIN_REGISTRY_URL")
+		}
+	}()
+	// Initialize under the verified trust, never reuse an earlier bootstrap.
+	if err := pinExecution(snapshot); err != nil {
 		return nil, err
 	}
+	plugins, err := initializeMCPPlugins(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("initialize package-manager plugins: %w", err)
+	}
+	provider := func() *bootstrap.PluginBootstrap { return plugins }
 	var (
 		mu       sync.Mutex
 		outcomes []mcpserver.Outcome
@@ -95,7 +118,7 @@ func (e *mcpExecutor) Install(ctx context.Context, names []string) ([]mcpserver.
 		outcomes = append(outcomes, outcome)
 	}
 	progress := e.progress()
-	runErr := runPlainInstallObserved(ctx, progress, apps, e.repo, settings, provider, observe)
+	runErr := executeSnapshotObserved(ctx, progress, progress, snapshot, e.repo, provider, observe)
 	_ = progress.Close()
 	mu.Lock()
 	defer mu.Unlock()
@@ -264,6 +287,7 @@ func (e *mcpExecutor) Uninstall(ctx context.Context, targets []mcpserver.Uninsta
 		}, e.repo, progress, progress)
 		if err != nil {
 			failed(err)
+			outcomes[len(outcomes)-1].Recovery = &target
 			continue
 		}
 		outcomes = append(outcomes, mcpserver.Outcome{App: target.Name, Status: "removed"})

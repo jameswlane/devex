@@ -334,6 +334,7 @@ var _ = Describe("Uninstall Command", func() {
 
 		DescribeTable("handles curlpipe removal without discarding files or records prematurely",
 			func(removal string, succeeds bool, manualRequired bool) {
+				Expect(os.MkdirAll(filepath.Join(tempDir, "home"), 0700)).To(Succeed())
 				GinkgoT().Setenv("HOME", filepath.Join(tempDir, "home"))
 				binary := filepath.Join(tempDir, "binary with spaces")
 				Expect(os.WriteFile(binary, []byte("installed"), 0600)).To(Succeed())

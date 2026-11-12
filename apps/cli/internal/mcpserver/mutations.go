@@ -30,6 +30,8 @@ type Outcome struct {
 	App    string `json:"app"`
 	Status string `json:"status"` // installed, skipped, removed, failed, cancelled, not_run
 	Error  string `json:"error,omitempty"`
+	// Recovery preserves the approved paths for retry/manual cleanup after an uninstall failure.
+	Recovery *UninstallTarget `json:"recovery,omitempty"`
 }
 
 // UninstallOptions selects what an uninstall removes besides the package.
@@ -64,8 +66,10 @@ type UninstallTarget struct {
 
 // Executor performs confirmed installs and uninstalls. The CLI provides it.
 type Executor interface {
-	// Install installs exactly the named applications and reports each one.
-	Install(ctx context.Context, apps []string) ([]Outcome, error)
+	// ResolveInstall binds the complete effective execution inputs without effects.
+	ResolveInstall(context.Context, agentapi.PlanRequest) (agentapi.ExecutionSnapshot, error)
+	// Install consumes the verified snapshot without resolving names again.
+	Install(ctx context.Context, snapshot agentapi.ExecutionSnapshot) ([]Outcome, error)
 	// PlanUninstall resolves DevEx-tracked applications without changing
 	// anything; it refuses applications DevEx does not track.
 	PlanUninstall(ctx context.Context, apps []string, options UninstallOptions) ([]UninstallTarget, error)
@@ -173,29 +177,21 @@ func sortedUnique(values []string) []string {
 	return out
 }
 
-// installDigest binds an install plan to the resolved definitions and platform.
-func (s *server) installDigest(ctx context.Context, names, categories []string) (agentapi.Plan, []string, string, error) {
+// installDigest binds the complete execution snapshot and stable platform.
+func (s *server) installDigest(ctx context.Context, names, categories []string) (agentapi.ExecutionSnapshot, []string, string, error) {
 	request := agentapi.PlanRequest{Names: names, Categories: categories}
-	plan, err := agentapi.PlanInstall(ctx, s.opts.Settings, request)
+	snapshot, err := s.opts.Executor.ResolveInstall(ctx, request)
 	if err != nil {
-		return agentapi.Plan{}, nil, "", err
+		return agentapi.ExecutionSnapshot{}, nil, "", err
 	}
-	selected, _, err := agentapi.SelectApplications(ctx, s.opts.Settings, request)
-	if err != nil {
-		return agentapi.Plan{}, nil, "", err
-	}
-	apps := make([]string, 0, len(selected))
-	for _, app := range selected {
-		apps = append(apps, app.Name)
-	}
+	apps := snapshot.RootNames()
 	sort.Strings(apps)
-	sort.Slice(selected, func(i, j int) bool { return selected[i].Name < selected[j].Name })
 	host, err := s.opts.DetectPlatform(ctx)
 	if err != nil {
-		return agentapi.Plan{}, nil, "", err
+		return agentapi.ExecutionSnapshot{}, nil, "", err
 	}
-	digest, err := digestOf("install", apps, selected, stablePlatform(host))
-	return plan, apps, digest, err
+	digest, err := digestOf("install", apps, snapshot.Digest, stablePlatform(host))
+	return snapshot, apps, digest, err
 }
 
 // stablePlatform returns host with its package managers sorted: detection
@@ -271,10 +267,11 @@ func (s *server) prepareInstall(ctx context.Context, _ *mcp.CallToolRequest, in 
 		return nil, PreparedPlan{}, err
 	}
 	defer done()
-	plan, apps, digest, err := s.installDigest(ctx, names, categories)
+	snapshot, apps, digest, err := s.installDigest(ctx, names, categories)
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
+	plan := snapshot.Plan
 	for _, app := range plan.Apps {
 		if app.UnknownEffects {
 			plan.Warnings = appendOnce(plan.Warnings, "Some plugin effects and required privileges are unknown until the plugin runs; installation runs without a terminal and fails if a password is required.")
@@ -311,15 +308,19 @@ func (s *server) installApps(ctx context.Context, _ *mcp.CallToolRequest, in Exe
 		return nil, ExecuteOutput{}, err
 	}
 	// The configuration, catalog or platform may have changed since the plan.
-	_, apps, digest, err := s.installDigest(ctx, plan.apps, nil)
+	snapshot, apps, digest, err := s.installDigest(ctx, plan.apps, nil)
 	if err != nil {
 		return nil, ExecuteOutput{}, toolError(err)
 	}
 	if digest != plan.digest || strings.Join(apps, "\x00") != strings.Join(plan.apps, "\x00") {
-		return nil, ExecuteOutput{}, errors.New("plan_rejected: the applications, their definitions or the platform changed since the plan was prepared; prepare a new plan")
+		return nil, ExecuteOutput{}, errors.New("plan_rejected: the execution inputs, security, policy, trust or platform changed since the plan was prepared; prepare a new plan")
 	}
-	outcomes, err := s.opts.Executor.Install(ctx, plan.apps)
-	return nil, finish(ctx, plan.apps, outcomes, err, "Installed applications are recorded by DevEx; there is no automatic rollback."), nil
+	outcomes, err := s.opts.Executor.Install(ctx, snapshot)
+	note := "Installed applications are recorded by DevEx; there is no automatic rollback."
+	if snapshot.Policy.RollbackOnFailure {
+		note = "Rollback was requested; hooks and dependencies may require manual recovery."
+	}
+	return nil, finish(ctx, plan.apps, outcomes, err, note), nil
 }
 
 // PrepareUninstallInput selects what to uninstall.

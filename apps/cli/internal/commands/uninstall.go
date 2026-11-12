@@ -505,7 +505,7 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			continue
 		}
 
-		if !installed {
+		if !installed && keepConfig && keepData {
 			fmt.Printf("  %s Not installed (skipping)\n", yellow("⚠️"))
 			skipped++
 			if err := clearUninstallRecords(repo, app.Name); err != nil {
@@ -514,7 +514,7 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			continue
 		}
 
-		if backup {
+		if backup && installed {
 			bm := NewBackupManager(repo)
 			backupEntry, err := bm.CreateBackup(ctx, &app)
 			if err != nil {
@@ -524,13 +524,18 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			}
 		}
 
-		if stopServices {
+		if stopServices && installed {
 			if err := stopAppServices(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to stop services: %v\n", yellow("⚠️"), err)
 			}
 		}
 
-		if err := uninstallConfiguredApplication(ctx, app, installer, repo); err != nil {
+		if err := func() error {
+			if !installed {
+				return nil
+			}
+			return uninstallConfiguredApplication(ctx, app, installer, repo)
+		}(); err != nil {
 			var manual *sdk.ManualRemovalRequiredError
 			if errors.As(err, &manual) {
 				fmt.Printf("  %s Not removed: %v\n", yellow("⚠️"), err)
@@ -541,17 +546,25 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			continue
 		}
 
-		if removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
+		if installed && removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
 			if err := removeDockerDataFiles(ctx); err != nil {
 				failures = append(failures, fmt.Errorf("%s: packages removed but Docker data cleanup failed: %w; retry with sudo rm -rf -- /var/lib/docker /var/lib/containerd", app.Name, err))
 			}
 		}
-		success++
-		fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
+		if installed {
+			success++
+			fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
+		} else {
+			skipped++
+			fmt.Fprintln(out, "  Package already absent; retrying requested cleanup")
+		}
 
+		cleanupFailed := false
 		if !keepConfig {
 			if err := cleanupConfig(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up config files: %v\n", yellow("⚠️"), err)
+				cleanupFailed = true
+				failures = append(failures, fmt.Errorf("%s: package removed; config cleanup failed: %w; tracking retained for retry or manual cleanup", app.Name, err))
 			} else if len(app.ConfigFiles) > 0 {
 				fmt.Printf("  %s Removed configuration files\n", green("🧹"))
 			}
@@ -560,12 +573,14 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 		if !keepData {
 			if err := cleanupDataFiles(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up data files: %v\n", yellow("⚠️"), err)
+				cleanupFailed = true
+				failures = append(failures, fmt.Errorf("%s: package removed; data cleanup failed: %w; tracking retained for retry or manual cleanup", app.Name, err))
 			} else if len(app.CleanupFiles) > 0 {
 				fmt.Printf("  %s Removed data files\n", green("🧹"))
 			}
 		}
 
-		if cleanupSystem {
+		if cleanupSystem && installed {
 			if err := cleanupSystemFiles(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up system files: %v\n", yellow("⚠️"), err)
 			} else {
@@ -573,6 +588,9 @@ func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, fa
 			}
 		}
 
+		if cleanupFailed {
+			continue
+		}
 		if err := clearUninstallRecords(repo, app.Name); err != nil {
 			fmt.Printf("  %s Failed to update installation records: %v\n", red("❌"), err)
 			failures = append(failures, fmt.Errorf("%s: uninstalled but failed to update installation records: %w", app.Name, err))

@@ -67,7 +67,8 @@ Errors are tool errors whose text starts with a stable category: `invalid_reques
 **The trust boundary is the plan.** Show the prepared plan to the user and get their approval before calling `install_apps` or `uninstall_apps`. A tool annotation or a client-side "yes" does not authorize anything; the server checks the confirmation itself:
 
 - A plan can be used once, expires after 10 minutes, and belongs to one operation.
-- The `digest` must match. The server recomputes it from the current application definitions and platform and rejects the plan if anything changed since it was prepared.
+- The `digest` binds the resolved application definitions, local config and copy-hook source bytes, marker presence, effective command security and execution policy, and plugin trust. Execution uses the verified snapshot; changed local inputs are refused before copying or running post-install hooks.
+- The `digest` must match. The server recomputes it from the current execution inputs and platform and rejects the plan if anything changed since it was prepared.
 - Uninstalls bind each application's full resolved definition, its tracking record and its managed-file record. Right before removing an application, DevEx resolves it again and refuses it, without any effect, if it is no longer tracked or anything differs, then runs exactly the definition it checked.
 - Only applications DevEx tracks can be uninstalled. Software installed some other way is refused even when the catalog knows it.
 - Rejected confirmations fail with `plan_rejected` before any effect.
@@ -77,7 +78,9 @@ What a plan never does:
 - Install defaults, everything, or a whole category's worth of uninstalls: applications must be named (installs may name categories).
 - Remove dependent applications: an uninstall that would break one fails. Orphaned packages, services, system files and Docker data are left alone. Configuration and data are kept unless the plan says otherwise.
 - Prompt for a password: installs run without a terminal and fail when `sudo` needs a password. Configure passwordless `sudo` for the package managers, or install from a terminal.
-- Roll back: applications that finished keep their changes when a later one fails or the request is cancelled.
+- Roll back by default: applications that finished keep their changes when a later one fails or the request is cancelled. If the effective `rollback-on-failure` policy is enabled, the snapshot binds it and execution uses the shared rollback lifecycle; hooks and dependencies may still require manual recovery.
+
+Requested config or data cleanup failures return a failed outcome even after the package was removed. Installation records are retained for retry, and the outcome’s `recovery` target preserves the approved command and config/data paths for manual cleanup. Reprepare after reviewing the failure; native packages already absent still allow cleanup to be retried.
 
 Errors in outcomes are bounded to one line, and URL credentials, query strings and secret-looking values are redacted. An error outside individual applications, such as failing to record the run, is reported in `note` and makes the result `partial_failure` or `failed`. Installs and uninstalls are serialized and limited by `--mutation-timeout` (default 30 minutes). While mutations are enabled, the server keeps its original stdout for MCP messages; everything else written to stdout or stderr, including installer, plugin and child-process output, is redacted the same way line by line and sent to stderr. Installers, plugins and their child processes get the null device as stdin, so they cannot read MCP requests. With mutations, the server starts like other DevEx commands and needs curl, git and unzip. `--allow-mutations` is available on Linux and macOS.
 

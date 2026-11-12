@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
@@ -48,6 +49,10 @@ func (i *mcpRecordingInstaller) Uninstall(command string, _ types.Repository) er
 }
 
 func (i *mcpRecordingInstaller) IsInstalled(string) (bool, error) { return true, nil }
+
+type mcpAbsentInstaller struct{ *mcpRecordingInstaller }
+
+func (i *mcpAbsentInstaller) IsInstalled(string) (bool, error) { return false, nil }
 
 var _ = Describe("MCP executor", func() {
 	var (
@@ -234,6 +239,71 @@ var _ = Describe("MCP executor", func() {
 			Expect(second).To(BeAnExistingFile())
 		})
 
+		DescribeTable("retains truthful cleanup failures and retry records", func(kind string) {
+			configFile := filepath.Join(home, ".config", "canary", "retry.conf")
+			recordConfig("canary", configFile)
+			record := filepath.Join(home, ".local", "state", "devex", "config-files", fmt.Sprintf("%x.json", sha256.Sum256([]byte("canary"))))
+			command := `touch "$DEVEX_TEST_MARKER_A"`
+			if kind == "record" {
+				GinkgoT().Setenv("MCP_CONFIG_RECORD", record)
+				command = `printf '{"files":[]}' > "$MCP_CONFIG_RECORD"`
+			}
+			track("canary", canary(command, dataA))
+			options := mcpserver.UninstallOptions{RemoveConfig: true, RemoveData: kind == "data"}
+			targets, err := executor.PlanUninstall(ctx, []string{"canary"}, options)
+			Expect(err).NotTo(HaveOccurred())
+			if kind != "record" {
+				dir := filepath.Dir(configFile)
+				if kind == "data" {
+					dir = filepath.Dir(dataA)
+				}
+				Expect(os.Chmod(dir, 0500)).To(Succeed())
+				DeferCleanup(func() { Expect(os.Chmod(dir, 0700)).To(Succeed()) })
+			}
+			outcomes, err := executor.Uninstall(ctx, targets, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(outcomes).To(HaveLen(1))
+			Expect(outcomes[0].Status).To(Equal("failed"))
+			Expect(outcomes[0].Error).To(ContainSubstring("cleanup failed"))
+			Expect(outcomes[0].Error).To(ContainSubstring("tracking retained"))
+			Expect(outcomes[0].Recovery).To(Equal(&targets[0]))
+			Expect(repo.GetApp("canary")).NotTo(BeNil())
+			Expect(repo.Get("installed-app-definition:canary")).NotTo(BeEmpty())
+			if kind == "data" {
+				Expect(dataA).To(BeAnExistingFile())
+			} else {
+				Expect(configFile).To(BeAnExistingFile())
+				Expect(record).To(BeAnExistingFile())
+			}
+		}, Entry("changed managed-file record", "record"), Entry("ordinary config removal failure", "config"), Entry("ordinary data removal failure", "data"))
+
+		It("retries retained cleanup even when the native package is already absent", func() {
+			track("canary", types.OSConfig{InstallMethod: "apt", InstallCommand: "canary", CleanupFiles: []string{dataA}})
+			getUninstallInstaller = func(context.Context, string) types.BaseInstaller {
+				return &mcpAbsentInstaller{&mcpRecordingInstaller{mu: &callsMu, calls: &installerCalls}}
+			}
+			options := mcpserver.UninstallOptions{RemoveData: true}
+			targets, err := executor.PlanUninstall(ctx, []string{"canary"}, options)
+			Expect(err).NotTo(HaveOccurred())
+			dir := filepath.Dir(dataA)
+			Expect(os.Chmod(dir, 0500)).To(Succeed())
+			DeferCleanup(func() { Expect(os.Chmod(dir, 0700)).To(Succeed()) })
+			outcomes, err := executor.Uninstall(ctx, targets, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(outcomes[0].Status).To(Equal("failed"))
+			Expect(repo.GetApp("canary")).NotTo(BeNil())
+			Expect(os.Chmod(dir, 0700)).To(Succeed())
+			targets, err = executor.PlanUninstall(ctx, []string{"canary"}, options)
+			Expect(err).NotTo(HaveOccurred())
+			outcomes, err = executor.Uninstall(ctx, targets, options)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(outcomes[0].Status).To(Equal("removed"))
+			Expect(dataA).NotTo(BeAnExistingFile())
+			_, err = repo.GetApp("canary")
+			Expect(err).To(HaveOccurred())
+			Expect(calls()).To(BeEmpty())
+		})
+
 		It("refuses to plan removing a protected data path", func() {
 			track("canary", canary(`touch "$DEVEX_TEST_MARKER_A"`, home))
 
@@ -330,7 +400,9 @@ var _ = Describe("MCP executor", func() {
 				return nil
 			}
 
-			outcomes, err := executor.Install(ctx, []string{"canary-app"})
+			snapshot, resolveErr := executor.ResolveInstall(ctx, agentapi.PlanRequest{Names: []string{"canary-app"}})
+			Expect(resolveErr).NotTo(HaveOccurred())
+			outcomes, err := executor.Install(ctx, snapshot)
 
 			Expect(outcomes).To(Equal([]mcpserver.Outcome{{App: "canary-app", Status: "installed"}}))
 			Expect(err).To(HaveOccurred())
@@ -341,7 +413,9 @@ var _ = Describe("MCP executor", func() {
 				return errors.New("download https://user:hunter2@example.invalid/x?token=SECRET_CANARY failed")
 			}
 
-			outcomes, err := executor.Install(ctx, []string{"canary-app"})
+			snapshot, resolveErr := executor.ResolveInstall(ctx, agentapi.PlanRequest{Names: []string{"canary-app"}})
+			Expect(resolveErr).NotTo(HaveOccurred())
+			outcomes, err := executor.Install(ctx, snapshot)
 
 			Expect(err).To(HaveOccurred())
 			Expect(outcomes).To(HaveLen(1))
