@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
+	"github.com/jameswlane/devex/apps/cli/internal/platform"
 )
 
 // DefaultPlanTTL is how long a prepared plan can be confirmed.
@@ -37,22 +38,42 @@ type UninstallOptions struct {
 	RemoveData   bool `json:"remove_data"`
 }
 
-// UninstallTarget is one application an uninstall plan removes.
+// UninstallTarget is one application an uninstall plan removes and exactly
+// what removing it does.
 type UninstallTarget struct {
 	Name   string `json:"name"`
 	Method string `json:"method"`
-	Config string `json:"config"` // kept or removed
-	Data   string `json:"data"`   // kept or removed
+	// Command is the uninstall command or package DevEx removes, redacted.
+	Command string `json:"command"`
+	// Privileges and UnknownEffects describe what the user cannot see in
+	// advance: package-manager plugins decide their own commands and may use
+	// sudo, which fails without a terminal.
+	Privileges     string `json:"privileges"`
+	UnknownEffects bool   `json:"unknown_effects"`
+	Config         string `json:"config"` // kept or removed
+	Data           string `json:"data"`   // kept or removed
+	// ConfigFiles and DataPaths are the files and paths deleted when
+	// configuration or data is removed.
+	ConfigFiles []string `json:"config_files"`
+	DataPaths   []string `json:"data_paths"`
+	// Definition is a SHA-256 digest of everything the uninstall uses: the
+	// resolved definition, the tracking record and the managed-file record.
+	// The executor refuses an application whose definition no longer matches.
+	Definition string `json:"definition"`
 }
 
 // Executor performs confirmed installs and uninstalls. The CLI provides it.
 type Executor interface {
 	// Install installs exactly the named applications and reports each one.
 	Install(ctx context.Context, apps []string) ([]Outcome, error)
-	// PlanUninstall resolves tracked applications without changing anything.
+	// PlanUninstall resolves DevEx-tracked applications without changing
+	// anything; it refuses applications DevEx does not track.
 	PlanUninstall(ctx context.Context, apps []string, options UninstallOptions) ([]UninstallTarget, error)
-	// Uninstall removes exactly the named applications and reports each one.
-	Uninstall(ctx context.Context, apps []string, options UninstallOptions) ([]Outcome, error)
+	// Uninstall removes exactly the approved targets and reports each one. It
+	// re-resolves every target immediately before acting on it and refuses,
+	// without any effect, a target that is no longer tracked or whose
+	// Definition differs; it executes the definition it verified.
+	Uninstall(ctx context.Context, targets []UninstallTarget, options UninstallOptions) ([]Outcome, error)
 }
 
 type storedPlan struct {
@@ -61,6 +82,7 @@ type storedPlan struct {
 	expires   time.Time
 	apps      []string
 	uninstall UninstallOptions
+	targets   []UninstallTarget
 }
 
 // PreparedPlan is returned by prepare_install and prepare_uninstall.
@@ -172,11 +194,23 @@ func (s *server) installDigest(ctx context.Context, names, categories []string) 
 	if err != nil {
 		return agentapi.Plan{}, nil, "", err
 	}
-	digest, err := digestOf("install", apps, selected, host)
+	digest, err := digestOf("install", apps, selected, stablePlatform(host))
 	return plan, apps, digest, err
 }
 
-func (s *server) store(operation, digest string, apps []string, uninstall UninstallOptions) (string, time.Time, error) {
+// stablePlatform returns host with its package managers sorted: detection
+// order varies between calls, which must not change a plan's digest.
+func stablePlatform(host *platform.Platform) platform.Platform {
+	if host == nil {
+		return platform.Platform{}
+	}
+	stable := *host
+	stable.PackageManagers = append([]string(nil), host.PackageManagers...)
+	sort.Strings(stable.PackageManagers)
+	return stable
+}
+
+func (s *server) store(operation, digest string, apps []string, uninstall UninstallOptions, targets []UninstallTarget) (string, time.Time, error) {
 	id, err := newPlanID()
 	if err != nil {
 		return "", time.Time{}, err
@@ -188,7 +222,7 @@ func (s *server) store(operation, digest string, apps []string, uninstall Uninst
 			delete(s.plans, key)
 		}
 	}
-	s.plans[id] = &storedPlan{operation: operation, digest: digest, expires: expires, apps: apps, uninstall: uninstall}
+	s.plans[id] = &storedPlan{operation: operation, digest: digest, expires: expires, apps: apps, uninstall: uninstall, targets: targets}
 	return id, expires, nil
 }
 
@@ -246,7 +280,7 @@ func (s *server) prepareInstall(ctx context.Context, _ *mcp.CallToolRequest, in 
 			plan.Warnings = appendOnce(plan.Warnings, "Some plugin effects and required privileges are unknown until the plugin runs; installation runs without a terminal and fails if a password is required.")
 		}
 	}
-	id, expires, err := s.store("install", digest, apps, UninstallOptions{})
+	id, expires, err := s.store("install", digest, apps, UninstallOptions{}, nil)
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
@@ -304,7 +338,7 @@ func (s *server) uninstallDigest(ctx context.Context, apps []string, options Uni
 	if err != nil {
 		return nil, "", err
 	}
-	digest, err := digestOf("uninstall", apps, options, targets, host)
+	digest, err := digestOf("uninstall", apps, options, targets, stablePlatform(host))
 	return targets, digest, err
 }
 
@@ -326,13 +360,14 @@ func (s *server) prepareUninstall(ctx context.Context, _ *mcp.CallToolRequest, i
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
-	id, expires, err := s.store("uninstall", digest, apps, options)
+	id, expires, err := s.store("uninstall", digest, apps, options, targets)
 	if err != nil {
 		return nil, PreparedPlan{}, toolError(err)
 	}
 	return nil, PreparedPlan{
 		PlanID: id, Digest: digest, ExpiresAt: expires, Operation: "uninstall", Uninstall: targets,
 		NotIncluded: []string{
+			"Only the listed command, config_files and data_paths are removed; an application whose definition or files change before confirmation is refused.",
 			"Dependent applications are never removed; an uninstall that would break a dependent application fails.",
 			"Orphaned packages, services, system files and Docker data are not cleaned up.",
 		},
@@ -355,9 +390,10 @@ func (s *server) uninstallApps(ctx context.Context, _ *mcp.CallToolRequest, in E
 		return nil, ExecuteOutput{}, toolError(err)
 	}
 	if digest != plan.digest {
-		return nil, ExecuteOutput{}, errors.New("plan_rejected: the tracked applications or platform changed since the plan was prepared; prepare a new plan")
+		return nil, ExecuteOutput{}, errors.New("plan_rejected: the tracked applications, their definitions, files or the platform changed since the plan was prepared; prepare a new plan")
 	}
-	outcomes, err := s.opts.Executor.Uninstall(ctx, plan.apps, plan.uninstall)
+	// The executor verifies each approved target again right before acting.
+	outcomes, err := s.opts.Executor.Uninstall(ctx, plan.targets, plan.uninstall)
 	return nil, finish(ctx, plan.apps, outcomes, err, "Removed applications are not reinstalled automatically."), nil
 }
 
@@ -398,9 +434,16 @@ func finish(ctx context.Context, apps []string, outcomes []Outcome, err error, n
 	case failed > 0:
 		result = "failed"
 	}
-	if err != nil && result == "completed" {
-		result = "failed"
-		note = Sanitize(err.Error()) + " " + note
+	if err != nil {
+		// Operation-level failures, such as recording the run, are reported
+		// even when every application reports success.
+		if result == "completed" {
+			result = "failed"
+			if succeeded > 0 {
+				result = "partial_failure"
+			}
+		}
+		note = "Error: " + Sanitize(strings.ReplaceAll(err.Error(), "\n", "; ")) + " " + note
 	}
 	return ExecuteOutput{Result: result, Outcomes: clean, Note: note}
 }
@@ -408,7 +451,8 @@ func finish(ctx context.Context, apps []string, outcomes []Outcome, err error, n
 var (
 	urlUserinfo = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)[^/@\s]+@`)
 	urlQuery    = regexp.MustCompile(`(?i)(https?://[^\s?#]+)\?[^\s#]+`)
-	secretPair  = regexp.MustCompile(`(?i)\b(token|password|passwd|secret|api[_-]?key|authorization)(\s*[=:]\s*)\S+`)
+	secretPair  = regexp.MustCompile(`(?i)\b(token|password|passwd|secret|api[_-]?key|authorization)(\s*[=:]\s*)(?:(?:bearer|basic)\s+)?\S+`)
+	bearer      = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[^\s,;]+`)
 )
 
 // MaxErrorLength bounds the error text returned for one application.
@@ -418,11 +462,19 @@ const MaxErrorLength = 300
 // secret-looking keys, keeps the first line and bounds its length.
 func Sanitize(message string) string {
 	message, _, _ = strings.Cut(message, "\n")
+	return bound(redact(message), MaxErrorLength)
+}
+
+func redact(message string) string {
 	message = urlUserinfo.ReplaceAllString(message, "$1[redacted]@")
 	message = urlQuery.ReplaceAllString(message, "$1?[redacted]")
 	message = secretPair.ReplaceAllString(message, "$1$2[redacted]")
-	if len(message) > MaxErrorLength {
-		message = message[:MaxErrorLength] + "…"
+	return bearer.ReplaceAllString(message, "$1 [redacted]")
+}
+
+func bound(message string, limit int) string {
+	if len(message) > limit {
+		return message[:limit] + "…"
 	}
 	return message
 }

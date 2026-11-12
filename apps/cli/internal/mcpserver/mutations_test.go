@@ -1,8 +1,11 @@
 package mcpserver_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,8 +25,11 @@ type fakeExecutor struct {
 	mu          sync.Mutex
 	installed   [][]string
 	uninstalled [][]string
+	targets     [][]mcpserver.UninstallTarget
 	options     []mcpserver.UninstallOptions
 	outcomes    []mcpserver.Outcome
+	installErr  error
+	definition  string
 	untracked   bool
 	block       bool
 }
@@ -37,7 +43,7 @@ func (f *fakeExecutor) Install(ctx context.Context, apps []string) ([]mcpserver.
 		return nil, ctx.Err()
 	}
 	if f.outcomes != nil {
-		return f.outcomes, nil
+		return f.outcomes, f.installErr
 	}
 	outcomes := []mcpserver.Outcome{}
 	for _, app := range apps {
@@ -59,20 +65,26 @@ func (f *fakeExecutor) PlanUninstall(_ context.Context, apps []string, options m
 		if options.RemoveData {
 			data = "removed"
 		}
-		targets = append(targets, mcpserver.UninstallTarget{Name: app, Method: "apt", Config: config, Data: data})
+		f.mu.Lock()
+		definition := f.definition
+		f.mu.Unlock()
+		targets = append(targets, mcpserver.UninstallTarget{Name: app, Method: "apt", Config: config, Data: data, Definition: definition})
 	}
 	return targets, nil
 }
 
-func (f *fakeExecutor) Uninstall(_ context.Context, apps []string, options mcpserver.UninstallOptions) ([]mcpserver.Outcome, error) {
+func (f *fakeExecutor) Uninstall(_ context.Context, targets []mcpserver.UninstallTarget, options mcpserver.UninstallOptions) ([]mcpserver.Outcome, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.uninstalled = append(f.uninstalled, append([]string(nil), apps...))
-	f.options = append(f.options, options)
-	outcomes := make([]mcpserver.Outcome, 0, len(apps))
-	for _, app := range apps {
-		outcomes = append(outcomes, mcpserver.Outcome{App: app, Status: "removed"})
+	apps := make([]string, 0, len(targets))
+	outcomes := make([]mcpserver.Outcome, 0, len(targets))
+	for _, target := range targets {
+		apps = append(apps, target.Name)
+		outcomes = append(outcomes, mcpserver.Outcome{App: target.Name, Status: "removed"})
 	}
+	f.uninstalled = append(f.uninstalled, apps)
+	f.targets = append(f.targets, targets)
+	f.options = append(f.options, options)
 	return outcomes, nil
 }
 
@@ -202,6 +214,29 @@ var _ = Describe("MCP mutating tools", func() {
 		Entry("platform changed", func(_ *mcpserver.PreparedPlan, _ *time.Time, h *platform.Platform) { h.Version = "26.04" }, "install_apps", "changed since the plan"),
 	)
 
+	It("accepts a plan when platform detection lists package managers in another order", func() {
+		detections := 0
+		options.DetectPlatform = func(context.Context) (*platform.Platform, error) {
+			detections++
+			managers := []string{"apt", "flatpak", "snap"}
+			if detections%2 == 0 {
+				managers = []string{"snap", "apt", "flatpak"}
+			}
+			return &platform.Platform{OS: "linux", Distribution: "ubuntu", PackageManagers: managers}, nil
+		}
+		session := connect()
+		plan := prepare(session, "git")
+
+		var out mcpserver.ExecuteOutput
+		decode(call(session, "install_apps", map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}), &out)
+		Expect(out.Result).To(Equal("completed"))
+
+		var uninstall mcpserver.PreparedPlan
+		decode(call(session, "prepare_uninstall", map[string]any{"apps": []string{"git"}}), &uninstall)
+		decode(call(session, "uninstall_apps", map[string]any{"plan_id": uninstall.PlanID, "digest": uninstall.Digest}), &out)
+		Expect(out.Result).To(Equal("completed"))
+	})
+
 	It("rejects a plan whose application definitions changed", func() {
 		session := connect()
 		plan := prepare(session, "git")
@@ -272,6 +307,58 @@ var _ = Describe("MCP mutating tools", func() {
 		executor.untracked = true
 		Expect(errorText(call(connect(), "prepare_uninstall", map[string]any{"apps": []string{"git"}}))).To(ContainSubstring("not_found: application git is not tracked"))
 	})
+
+	It("hands the executor exactly the approved uninstall targets", func() {
+		executor.definition = "approved-definition"
+		session := connect()
+		var plan mcpserver.PreparedPlan
+		decode(call(session, "prepare_uninstall", map[string]any{"apps": []string{"git"}}), &plan)
+
+		var out mcpserver.ExecuteOutput
+		decode(call(session, "uninstall_apps", map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}), &out)
+		Expect(executor.targets).To(Equal([][]mcpserver.UninstallTarget{plan.Uninstall}))
+		Expect(executor.targets[0][0].Definition).To(Equal("approved-definition"))
+	})
+
+	It("rejects an uninstall whose resolved definition changed before confirmation", func() {
+		executor.definition = "approved-definition"
+		session := connect()
+		var plan mcpserver.PreparedPlan
+		decode(call(session, "prepare_uninstall", map[string]any{"apps": []string{"git"}, "remove_data": true}), &plan)
+		executor.mu.Lock()
+		executor.definition = "changed-cleanup-paths"
+		executor.mu.Unlock()
+
+		Expect(errorText(call(session, "uninstall_apps", map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}))).To(ContainSubstring("changed since the plan"))
+		Expect(executor.uninstalled).To(BeEmpty())
+	})
+
+	It("reports an operation-level failure even when every application installed", func() {
+		executor.outcomes = []mcpserver.Outcome{{App: "git", Status: "installed"}}
+		executor.installErr = errors.New("record run: open https://user:hunter2@state.invalid/db: permission denied")
+		session := connect()
+		plan := prepare(session, "git")
+
+		var out mcpserver.ExecuteOutput
+		decode(call(session, "install_apps", map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}), &out)
+		Expect(out.Result).To(Equal("partial_failure"))
+		Expect(out.Outcomes).To(Equal([]mcpserver.Outcome{{App: "git", Status: "installed"}}))
+		Expect(out.Note).To(ContainSubstring("record run"))
+		Expect(out.Note).To(ContainSubstring("permission denied"))
+		Expect(out.Note).NotTo(ContainSubstring("hunter2"))
+	})
+
+	It("reports an operation-level failure alongside failed applications", func() {
+		executor.outcomes = []mcpserver.Outcome{{App: "git", Status: "failed", Error: "apt failed"}}
+		executor.installErr = errors.New("finish run: disk full")
+		session := connect()
+		plan := prepare(session, "git")
+
+		var out mcpserver.ExecuteOutput
+		decode(call(session, "install_apps", map[string]any{"plan_id": plan.PlanID, "digest": plan.Digest}), &out)
+		Expect(out.Result).To(Equal("failed"))
+		Expect(out.Note).To(ContainSubstring("finish run: disk full"))
+	})
 })
 
 var _ = Describe("Sanitize", func() {
@@ -282,5 +369,33 @@ var _ = Describe("Sanitize", func() {
 			long += "x"
 		}
 		Expect(len(mcpserver.Sanitize(long))).To(BeNumerically("<=", mcpserver.MaxErrorLength+len("…")))
+	})
+})
+
+var _ = Describe("RedactingWriter", func() {
+	It("redacts every line and forwards a final unterminated line on close", func() {
+		var out bytes.Buffer
+		writer := mcpserver.NewRedactingWriter(&out)
+
+		n, err := writer.Write([]byte("fetch https://user:hunter2@example.invalid/x?token=abc\nAuthorization: Bearer SECRET_CANARY\npass"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(n).To(Equal(len("fetch https://user:hunter2@example.invalid/x?token=abc\nAuthorization: Bearer SECRET_CANARY\npass")))
+		_, err = writer.Write([]byte("word=SECRET_CANARY"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(out.String()).NotTo(ContainSubstring("password"))
+		Expect(writer.Close()).To(Succeed())
+
+		Expect(out.String()).To(Equal("fetch https://[redacted]@example.invalid/x?[redacted]\nAuthorization: [redacted]\npassword=[redacted]\n"))
+	})
+
+	It("bounds overlong lines", func() {
+		var out bytes.Buffer
+		writer := mcpserver.NewRedactingWriter(&out)
+		_, err := writer.Write([]byte(strings.Repeat("x", 200*1024) + "\nnext\n"))
+		Expect(err).NotTo(HaveOccurred())
+		lines := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\n")
+		Expect(lines).To(HaveLen(2))
+		Expect(len(lines[0])).To(BeNumerically("<=", mcpserver.MaxLogLineLength+len("…")))
+		Expect(lines[1]).To(Equal("next"))
 	})
 })

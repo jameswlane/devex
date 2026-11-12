@@ -55,8 +55,10 @@ uninstall_apps. A prepare tool returns a plan with a plan_id and digest; the
 client must show the plan to the user and get approval, then call the
 matching tool with both. A plan is used once, expires after 10 minutes, and
 is rejected if the applications, their definitions or the platform changed.
-Installs run without a terminal and fail if a password is required. Linux and
-macOS only.`,
+Uninstall removes only DevEx-tracked applications. Installs run without a
+terminal and fail if a password is required. Installer, plugin and child
+output on stdout and stderr is redacted and sent to stderr. Linux and macOS
+only.`,
 		Example: `  # Claude Code
   claude mcp add devex -- devex mcp serve
 
@@ -87,13 +89,14 @@ macOS only.`,
 			}
 			var transport mcp.Transport = &mcp.StdioTransport{}
 			if allowMutations {
-				// Installers and plugins may write to stdout; keep it for MCP only.
-				stdout, err := mcpserver.ReserveStdout()
+				// Installers and plugins may write to stdout; keep it for MCP only
+				// and redact everything they write to stdout or stderr.
+				stdio, err := mcpserver.ReserveStdout()
 				if err != nil {
 					return err
 				}
-				defer func() { _ = stdout.Close() }()
-				transport = &mcp.IOTransport{Reader: os.Stdin, Writer: stdout}
+				defer func() { _ = stdio.Close() }()
+				transport = &mcp.IOTransport{Reader: os.Stdin, Writer: stdio.Stdout}
 				options.Mutations = true
 				options.Executor = &mcpExecutor{repo: repo, settings: settings, log: cmd.ErrOrStderr()}
 			}

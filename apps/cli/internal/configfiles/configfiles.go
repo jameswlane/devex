@@ -343,6 +343,33 @@ func ReadResult(app string) (Result, error) {
 // Cleanup removes only recorded files with unchanged content. User edits, untracked
 // files, and timestamped backups survive uninstall. All access stays beneath HOME.
 func Cleanup(app string) error {
+	return cleanup(app, nil)
+}
+
+// ErrRecordChanged reports that an application's managed-file record differs
+// from the one a caller approved.
+var ErrRecordChanged = errors.New("the managed configuration-file record changed since it was approved")
+
+// CleanupRecorded is Cleanup bound to an approved record: it removes nothing
+// and returns ErrRecordChanged unless the current record lists exactly the
+// approved files.
+func CleanupRecorded(app string, approved []File) error {
+	return cleanup(app, &approved)
+}
+
+func sameFiles(a, b []File) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func cleanup(app string, approved *[]File) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -355,6 +382,9 @@ func Cleanup(app string) error {
 	result, err := load(root, app)
 	if err != nil {
 		return err
+	}
+	if approved != nil && !sameFiles(result.Files, *approved) {
+		return fmt.Errorf("%s: %w; prepare the uninstall again", app, ErrRecordChanged)
 	}
 	var failures []error
 	for _, file := range result.Files {

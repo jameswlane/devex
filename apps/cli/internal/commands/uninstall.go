@@ -244,10 +244,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	settings = mergedSettings
 	settings.Verbose = viper.GetBool("verbose")
 
-	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
 
 	log.Info("Starting uninstall process")
 
@@ -330,6 +327,39 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	default:
 		return fmt.Errorf("you must specify --app, --apps, --category, or --all")
 	}
+
+	return executeUninstall(ctx, appsToUninstall, failures, uninstallExecution{
+		category: category, dryRun: dryRun, force: force, keepConfig: keepConfig, keepData: keepData,
+		removeOrphans: removeOrphans, cascade: cascade, backup: backup, stopServices: stopServices,
+		cleanupSystem: cleanupSystem, removeDockerData: removeDockerData,
+	}, repo, out, warnings)
+}
+
+// uninstallExecution selects what executeUninstall does for resolved applications.
+type uninstallExecution struct {
+	category                                                    string
+	dryRun, force, keepConfig, keepData, removeOrphans, cascade bool
+	backup, stopServices, cleanupSystem, removeDockerData       bool
+	// cleanupConfig removes an application's managed configuration files;
+	// cleanupConfigFiles when nil.
+	cleanupConfig func(*types.AppConfig) error
+}
+
+// executeUninstall checks conflicts for already resolved applications and
+// removes them. It uses exactly the given definitions and never re-resolves
+// them, so a caller that approved a definition controls what is executed.
+func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, failures []error, opts uninstallExecution, repo types.Repository, out io.Writer, warnings io.Writer) error {
+	category, dryRun, force, keepConfig, keepData := opts.category, opts.dryRun, opts.force, opts.keepConfig, opts.keepData
+	removeOrphans, cascade, backup, stopServices := opts.removeOrphans, opts.cascade, opts.backup, opts.stopServices
+	cleanupSystem, removeDockerData := opts.cleanupSystem, opts.removeDockerData
+	cleanupConfig := opts.cleanupConfig
+	if cleanupConfig == nil {
+		cleanupConfig = cleanupConfigFiles
+	}
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
 
 	if removeDockerData {
 		hasDocker := false
@@ -520,7 +550,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
 
 		if !keepConfig {
-			if err := cleanupConfigFiles(&app); err != nil {
+			if err := cleanupConfig(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up config files: %v\n", yellow("⚠️"), err)
 			} else if len(app.ConfigFiles) > 0 {
 				fmt.Printf("  %s Removed configuration files\n", green("🧹"))
