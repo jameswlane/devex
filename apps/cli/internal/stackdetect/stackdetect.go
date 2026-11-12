@@ -56,6 +56,46 @@ type ProjectSize struct {
 	LinesOfCode   int `json:"lines_of_code"`
 }
 
+// UnmarshalJSON accepts the snake_case names and the untagged field names
+// (TotalFiles, LinesOfCode, ...) that plugin releases before the JSON tags
+// emit. Go's case-insensitive matching does not bridge the underscores, so
+// without this an older plugin's sizes would silently decode as zero.
+func (s *ProjectSize) UnmarshalJSON(data []byte) error {
+	var fields struct {
+		TotalFiles          *int `json:"total_files"`
+		CodeFiles           *int `json:"code_files"`
+		ConfigFiles         *int `json:"config_files"`
+		DocumentFiles       *int `json:"document_files"`
+		LinesOfCode         *int `json:"lines_of_code"`
+		LegacyTotalFiles    *int `json:"TotalFiles"`
+		LegacyCodeFiles     *int `json:"CodeFiles"`
+		LegacyConfigFiles   *int `json:"ConfigFiles"`
+		LegacyDocumentFiles *int `json:"DocumentFiles"`
+		LegacyLinesOfCode   *int `json:"LinesOfCode"`
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	pick := func(current, legacy *int) int {
+		switch {
+		case current != nil:
+			return *current
+		case legacy != nil:
+			return *legacy
+		default:
+			return 0
+		}
+	}
+	*s = ProjectSize{
+		TotalFiles:    pick(fields.TotalFiles, fields.LegacyTotalFiles),
+		CodeFiles:     pick(fields.CodeFiles, fields.LegacyCodeFiles),
+		ConfigFiles:   pick(fields.ConfigFiles, fields.LegacyConfigFiles),
+		DocumentFiles: pick(fields.DocumentFiles, fields.LegacyDocumentFiles),
+		LinesOfCode:   pick(fields.LinesOfCode, fields.LegacyLinesOfCode),
+	}
+	return nil
+}
+
 // Summary is the plugin's high-level project assessment.
 type Summary struct {
 	PrimaryLanguage   string `json:"primary_language"`

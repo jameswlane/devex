@@ -63,6 +63,15 @@ var _ = Describe("Stack detection", func() {
 			Expect(parsed.Issues).NotTo(BeNil())
 		})
 
+		It("keeps every project-size metric from released plugins' untagged field names", func() {
+			current, err := stackdetect.ParseReport([]byte(`{"project_size":{"total_files":30,"code_files":12,"config_files":5,"document_files":3,"lines_of_code":400},"dependencies":[{"name":"react","version":"18","type":"direct","source":"package.json"}]}`))
+			Expect(err).NotTo(HaveOccurred())
+			legacy, err := stackdetect.ParseReport([]byte(`{"project_size":{"TotalFiles":30,"CodeFiles":12,"ConfigFiles":5,"DocumentFiles":3,"LinesOfCode":400},"dependencies":[{"Name":"react","Version":"18","Type":"direct","Source":"package.json"}]}`))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(legacy).To(Equal(current))
+			Expect(legacy.ProjectSize).To(Equal(stackdetect.ProjectSize{TotalFiles: 30, CodeFiles: 12, ConfigFiles: 5, DocumentFiles: 3, LinesOfCode: 400}))
+		})
+
 		It("explains output that is not a JSON report", func() {
 			_, err := stackdetect.ParseReport([]byte("🔍 Detecting development stack\nGo\n"))
 			Expect(err).To(MatchError(ContainSubstring("did not return a JSON report")))

@@ -319,9 +319,10 @@ func newDetectApplyCmd(settings config.CrossPlatformSettings) *cobra.Command {
 with their dependencies. This changes configuration only; run 'devex install'
 afterwards to install them.
 
-The applications are shown first. Each addition backs up your configuration
-and is validated like 'devex add'. Applications already configured are
-skipped. Without a terminal, --yes is required.`,
+The applications and their dependencies are resolved and validated together,
+like 'devex add', and shown first; --dry-run shows exactly what --yes adds.
+Each addition backs up your configuration. Applications already configured
+are skipped. Without a terminal, --yes is required.`,
 		Example: `  # Preview the additions
   devex detect apply --dry-run
 
@@ -351,9 +352,21 @@ skipped. Without a terminal, --yes is required.`,
 				fmt.Fprintln(stderr, "Nothing to add: every suggested application is already configured, or none matched.")
 				return writeApplyResult(cmd, opts.format, result)
 			}
-			fmt.Fprintf(stderr, "Configuration preview: add %s\n", strings.Join(pending, ", "))
+			// Plan every addition, with dependencies, before the preview so
+			// --dry-run shows and validates exactly what --yes writes.
+			plans, err := planDetectAdditions(cmd.Context(), settings, pending)
+			if err != nil {
+				return applyFailure(cmd, opts.format, result, err)
+			}
+			var planned []string
+			for _, plan := range plans {
+				for _, app := range plan {
+					planned = append(planned, app.Name)
+				}
+			}
+			fmt.Fprintf(stderr, "Configuration preview: add %s\n", strings.Join(planned, ", "))
 			if dryRun {
-				result.Added = pending
+				result.Added = planned
 				return writeApplyResult(cmd, opts.format, result)
 			}
 			if !yes {
@@ -366,21 +379,12 @@ skipped. Without a terminal, --yes is required.`,
 					return fmt.Errorf("apply cancelled; configuration unchanged")
 				}
 			}
-			for _, name := range pending {
+			for _, plan := range plans {
 				if err := cmd.Context().Err(); err != nil {
 					return err
 				}
-				plan, err := planAddition(cmd.Context(), settings, name)
-				if err != nil {
-					// A dependency added for an earlier application is already present.
-					if strings.Contains(err.Error(), "already in your configuration") {
-						result.Skipped = append(result.Skipped, name)
-						continue
-					}
-					return applyFailure(cmd, opts.format, result, fmt.Errorf("add %s: %w", name, err))
-				}
 				if err := saveAddition(settings, plan); err != nil {
-					return applyFailure(cmd, opts.format, result, fmt.Errorf("add %s: %w", name, err))
+					return applyFailure(cmd, opts.format, result, fmt.Errorf("add %s: %w", plan[len(plan)-1].Name, err))
 				}
 				for _, app := range plan {
 					result.Added = append(result.Added, app.Name)
@@ -393,6 +397,53 @@ skipped. Without a terminal, --yes is required.`,
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be added without changing configuration")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Add without prompting")
 	return cmd
+}
+
+// planDetectAdditions resolves each suggested application with its catalog
+// dependencies, like devex add. Applications already planned for an earlier
+// suggestion are dropped from later plans, so each definition is written once.
+// The combined plan is then checked for destination collisions and validated,
+// so a preview that succeeds describes an addition that will succeed.
+func planDetectAdditions(ctx context.Context, settings config.CrossPlatformSettings, names []string) ([][]types.CrossPlatformApp, error) {
+	planned := map[string]bool{}
+	var plans [][]types.CrossPlatformApp
+	var combined []types.CrossPlatformApp
+	for _, name := range names {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if planned[strings.ToLower(name)] {
+			continue // already added as a dependency of an earlier suggestion
+		}
+		plan, err := planAddition(ctx, settings, name)
+		if err != nil {
+			return nil, fmt.Errorf("plan %s: %w", name, err)
+		}
+		var unique []types.CrossPlatformApp
+		for _, app := range plan {
+			if key := strings.ToLower(app.Name); !planned[key] {
+				planned[key] = true
+				unique = append(unique, app)
+			}
+		}
+		if len(unique) > 0 {
+			plans = append(plans, unique)
+			combined = append(combined, unique...)
+		}
+	}
+	if len(plans) > 1 {
+		configured, err := config.LoadApplicationConfigs(settings.GetConfigDir())
+		if err != nil {
+			return nil, fmt.Errorf("read your application configuration: %w", err)
+		}
+		if err := checkPlanCollisions(settings, configured, combined, nil); err != nil {
+			return nil, err
+		}
+		if err := validatePlan(ctx, settings, configured, combined, false); err != nil {
+			return nil, err
+		}
+	}
+	return plans, nil
 }
 
 // applyFailure reports what was added before err, then returns err.

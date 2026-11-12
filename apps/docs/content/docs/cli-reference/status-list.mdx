@@ -413,7 +413,7 @@ Frameworks and tools map to the runtime they need: React, Next.js, Vite and simi
 
 ### Applying suggestions
 
-`devex detect apply` shows the applications first, then backs up your configuration and validates each addition like `devex add`. It changes configuration only; run `devex install` afterwards. Applications already in your configuration are skipped, so running it again makes no changes.
+`devex detect apply` first resolves every suggested application with its catalog dependencies and validates the whole set like `devex add`, then shows that list. `--dry-run` stops there, so its preview, including dependencies and any validation or file-collision error, is exactly what `--yes` adds. After confirmation it backs up your configuration before each addition. It changes configuration only; run `devex install` afterwards. Applications already in your configuration are skipped, so running it again makes no changes.
 
 ```bash
 # Preview

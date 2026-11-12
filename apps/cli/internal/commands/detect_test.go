@@ -166,6 +166,74 @@ var _ = Describe("Detect commands", func() {
 		Expect(configured()).To(BeEmpty())
 	})
 
+	Context("when the suggestions need planning", func() {
+		dryRunJSON := func() DetectApplyResult {
+			Expect(execute("apply", project, "--dry-run", "--format", "json")).To(Succeed())
+			var result DetectApplyResult
+			Expect(json.Unmarshal(output.Bytes(), &result)).To(Succeed())
+			output.Reset()
+			return result
+		}
+		unchanged := func() {
+			files, err := config.ConfigurationFiles(settings.GetConfigDir())
+			if !os.IsNotExist(err) {
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(files).To(BeEmpty())
+		}
+
+		It("previews catalog dependencies exactly as --yes adds them", func() {
+			settings.ApplicationOverrides = append(settings.ApplicationOverrides, app("Build Essential"))
+			settings.ApplicationOverrides[0].Linux.Dependencies = []string{"Build Essential"}
+			preview := dryRunJSON()
+			Expect(preview.Added).To(Equal([]string{"Build Essential", "Go", "Node.js"}))
+			Expect(diagnostics.String()).To(ContainSubstring("Configuration preview: add Build Essential, Go, Node.js"))
+			unchanged()
+
+			Expect(execute("apply", project, "--yes", "--format", "json")).To(Succeed())
+			var result DetectApplyResult
+			Expect(json.Unmarshal(output.Bytes(), &result)).To(Succeed())
+			Expect(result.Added).To(Equal(preview.Added))
+			Expect(configured()).To(ConsistOf("Build Essential", "Go", "Node.js"))
+		})
+
+		It("plans a dependency shared by several suggestions once", func() {
+			settings.ApplicationOverrides = append(settings.ApplicationOverrides, app("git"))
+			settings.ApplicationOverrides[0].Linux.Dependencies = []string{"git"}
+			settings.ApplicationOverrides[1].Linux.Dependencies = []string{"git"}
+			Expect(dryRunJSON().Added).To(Equal([]string{"git", "Go", "Node.js"}))
+
+			Expect(execute("apply", project, "--yes", "--format", "json")).To(Succeed())
+			var result DetectApplyResult
+			Expect(json.Unmarshal(output.Bytes(), &result)).To(Succeed())
+			Expect(result.Added).To(Equal([]string{"git", "Go", "Node.js"}))
+			Expect(result.Skipped).To(BeEmpty())
+			Expect(configured()).To(ConsistOf("git", "Go", "Node.js"))
+		})
+
+		It("fails the dry run on a configuration path collision", func() {
+			path, err := applicationConfigPath(settings.GetConfigDir(), "applications", "development", "Go")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(writeNewApplicationConfig(app("Other"), path)).To(Succeed())
+			Expect(execute("apply", project, "--dry-run")).To(MatchError(ContainSubstring("already exists")))
+			Expect(output.String()).NotTo(ContainSubstring("Would add"))
+			Expect(configured()).To(ConsistOf("Other"))
+		})
+
+		It("fails the dry run on an invalid definition", func() {
+			settings.ApplicationOverrides[1].Linux.InstallCommand = ""
+			Expect(execute("apply", project, "--dry-run")).To(MatchError(ContainSubstring("linux.install_command")))
+			unchanged()
+		})
+
+		It("validates the suggestions together before adding any of them", func() {
+			settings.ApplicationOverrides[1].Linux.Conflicts = []string{"Go"}
+			Expect(execute("apply", project, "--dry-run")).To(MatchError(ContainSubstring("remove one application")))
+			Expect(execute("apply", project, "--yes")).To(MatchError(ContainSubstring("remove one application")))
+			unchanged()
+		})
+	})
+
 	It("requires --yes without a terminal and changes nothing", func() {
 		Expect(execute("apply", project)).To(MatchError(ContainSubstring("--yes")))
 		Expect(configured()).To(BeEmpty())
