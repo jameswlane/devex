@@ -51,7 +51,7 @@ func main() {
 	}
 	// Validation must remain usable with malformed settings and must not create
 	// databases, migrate files or initialize installation state before reporting.
-	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) {
+	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) {
 		if presentationCommand(os.Args[1:]) {
 			if err := migrateLegacy(ctx, dirs, true, os.Args[1:], os.Stderr); err != nil {
 				handleError("checking legacy files", err)
@@ -298,6 +298,24 @@ func configurationValidationCommand(args []string) bool {
 		}
 	}
 	return len(words) >= 2 && words[0] == "config" && words[1] == "validate"
+}
+
+func agentSkillInstallCommand(args []string) bool {
+	var words []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") {
+			words = append(words, arg)
+		}
+	}
+	return len(words) >= 2 && words[0] == "agent" && words[1] == "install-skill"
 }
 
 func readCommand(args []string) bool {
