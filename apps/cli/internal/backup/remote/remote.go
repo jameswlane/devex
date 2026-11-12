@@ -58,6 +58,10 @@ const (
 // local extraction limit; tests lower it.
 var maxEntryBytes int64 = backup.MaxFileSize
 
+// maxEntries is the most archive entries (files and directories) a remote
+// backup holds; pack and unpack share it for the same reason. Tests lower it.
+var maxEntries = backup.MaxFiles
+
 // ErrNotFound is returned by a Store for a missing object.
 var ErrNotFound = errors.New("object not found")
 
@@ -322,12 +326,17 @@ func pack(dir string) ([]byte, error) {
 	defer func() { _ = root.Close() }()
 	var buffer bytes.Buffer
 	writer := tar.NewWriter(&buffer)
+	entries := 0
 	err = fs.WalkDir(root.FS(), ".", func(current string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if current == "." {
 			return nil
+		}
+		// Every header counts, directories included, exactly as unpack counts.
+		if entries++; entries > maxEntries {
+			return fmt.Errorf("backup has more than %d files and directories, the most a remote backup can hold; push a compressed backup instead (devex config backup create), which stores the configuration as one file", maxEntries)
 		}
 		rel := current
 		// Lstat through the root: a symlink is reported as one, never followed.
@@ -418,7 +427,7 @@ func extract(archive []byte, staging string) error {
 		if err != nil {
 			return fmt.Errorf("read backup archive: %w", err)
 		}
-		if files >= backup.MaxFiles {
+		if files >= maxEntries {
 			return errors.New("backup archive has too many files")
 		}
 		name := strings.TrimSuffix(header.Name, "/")

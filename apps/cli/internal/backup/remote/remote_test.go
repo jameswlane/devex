@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -358,6 +359,43 @@ var _ = Describe("Remote backups", func() {
 			addFile(backup.MaxFileSize + 1)
 			_, err := location.Push(ctx, manager, id, secret)
 			Expect(err).To(MatchError(ContainSubstring("over the 104857600-byte limit")))
+			Expect(store.objects).To(BeEmpty())
+		})
+	})
+
+	Context("with entry counts near the archive limit", func() {
+		// The local backup holds config.tar.gz and metadata.json; add a
+		// directory with files so the archive has exactly total entries.
+		addEntries := func(total int) {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.Mkdir(filepath.Join(dir, "extra"), 0o750)).To(Succeed())
+			for i := 0; i < total-3; i++ {
+				Expect(os.WriteFile(filepath.Join(dir, "extra", strconv.Itoa(i)), []byte("x"), 0o600)).To(Succeed())
+			}
+		}
+
+		It("pulls every backup it pushes, up to the limit", func() {
+			DeferCleanup(remote.SetMaxEntries(6))
+			addEntries(6)
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).NotTo(HaveOccurred())
+			expectPullable(readAside())
+		})
+
+		It("refuses before uploading an archive with more entries than a pull accepts", func() {
+			DeferCleanup(remote.SetMaxEntries(6))
+			addEntries(7)
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).To(MatchError(ContainSubstring("more than 6 files and directories")))
+			Expect(err).To(MatchError(ContainSubstring("compressed backup")))
+			Expect(store.objects).To(BeEmpty())
+		})
+
+		It("applies the local extraction limit by default", func() {
+			addEntries(backup.MaxFiles + 1)
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).To(MatchError(ContainSubstring("more than 10000 files and directories")))
 			Expect(store.objects).To(BeEmpty())
 		})
 	})

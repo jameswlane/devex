@@ -7,3 +7,11 @@ func SetMaxEntryBytes(limit int64) (restore func()) {
 	maxEntryBytes = limit
 	return func() { maxEntryBytes = previous }
 }
+
+// SetMaxEntries lowers the archive entry limit for a spec and returns a
+// restore function.
+func SetMaxEntries(limit int) (restore func()) {
+	previous := maxEntries
+	maxEntries = limit
+	return func() { maxEntries = previous }
+}

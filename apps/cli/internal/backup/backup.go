@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -660,12 +661,7 @@ func (bm *BackupManager) updateGlobalMetadata(metadata *BackupMetadata) error {
 
 	allBackups = append(allBackups, metadata)
 
-	data, err := json.MarshalIndent(allBackups, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(metadataPath, data, 0600)
+	return bm.writeIndex(allBackups)
 }
 
 func (bm *BackupManager) removeFromGlobalMetadata(backupID string) error {
@@ -688,12 +684,7 @@ func (bm *BackupManager) removeFromGlobalMetadata(backupID string) error {
 		}
 	}
 
-	data, err = json.MarshalIndent(filtered, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(metadataPath, data, 0600)
+	return bm.writeIndex(filtered)
 }
 
 func (bm *BackupManager) pruneOldBackups(maxBackups int) error {
@@ -907,9 +898,41 @@ func (bm *BackupManager) registerMetadata(metadata *BackupMetadata) error {
 		}
 	}
 	kept = append(kept, metadata)
-	data, err = json.MarshalIndent(kept, "", "  ")
+	return bm.writeIndex(kept)
+}
+
+// writeIndexData writes the new index into its temporary file. Tests replace
+// it to inject a failed write.
+var writeIndexData = func(file *os.File, data []byte) error {
+	_, err := file.Write(data)
+	return err
+}
+
+// writeIndex replaces the backup index atomically. The new index is written
+// to a temporary file beside it and renamed over the old one only once it is
+// complete, so a failed write (a full disk, an I/O error) leaves the previous
+// index and every backup it lists intact.
+func (bm *BackupManager) writeIndex(backups []*BackupMetadata) error {
+	data, err := json.MarshalIndent(backups, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(bm.backupsDir, MetadataFile), data, 0600)
+	file, err := os.CreateTemp(bm.backupsDir, MetadataFile+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("write backup index in %s: %w", bm.backupsDir, err)
+	}
+	temporary := file.Name()
+	writeErr := writeIndexData(file, data)
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		_ = os.Remove(temporary)
+		return fmt.Errorf("write backup index in %s (the previous index is unchanged): %w", bm.backupsDir, err)
+	}
+	if err := os.Rename(temporary, filepath.Join(bm.backupsDir, MetadataFile)); err != nil {
+		_ = os.Remove(temporary)
+		return fmt.Errorf("replace backup index in %s: %w", bm.backupsDir, err)
+	}
+	return nil
 }

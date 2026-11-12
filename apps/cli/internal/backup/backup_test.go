@@ -3,6 +3,7 @@ package backup_test
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/backup"
 )
 
-var _ = Describe("Restoring a backup", func() {
+var _ = Describe("Backup manager", func() {
 	var (
 		manager   *backup.BackupManager
 		configDir string
@@ -82,6 +83,32 @@ var _ = Describe("Restoring a backup", func() {
 			Expect(manager.RestoreBackup(id, "")).To(MatchError(ContainSubstring("failed to extract backup")))
 			Expect(configDir).NotTo(BeAnExistingFile())
 			Expect(preRestoreBackups()).To(BeEmpty())
+		})
+	})
+
+	Context("when an imported backup cannot be indexed", func() {
+		It("keeps the existing index and rolls the import back", func() {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			backups := filepath.Dir(dir)
+			index := filepath.Join(backups, backup.MetadataFile)
+			before, err := os.ReadFile(index)
+			Expect(err).NotTo(HaveOccurred())
+
+			staging, err := os.MkdirTemp(backups, ".devex-pull-*")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(staging, "metadata.json"), []byte(`{"id":"imported","type":"manual"}`), 0o600)).To(Succeed())
+
+			DeferCleanup(backup.FailIndexWrites(errors.New("no space left on device")))
+			_, err = manager.ImportBackup("imported", staging)
+			Expect(err).To(MatchError(ContainSubstring("no space left on device")))
+			Expect(err).To(MatchError(ContainSubstring("previous index is unchanged")))
+
+			Expect(os.ReadFile(index)).To(Equal(before))
+			Expect(manager.ListBackups("", 0)).To(ConsistOf(HaveField("ID", id)))
+			_, err = manager.BackupDir("imported")
+			Expect(err).To(HaveOccurred())
+			Expect(filepath.Glob(index + ".tmp-*")).To(BeEmpty())
 		})
 	})
 })
