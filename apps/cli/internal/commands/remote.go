@@ -187,6 +187,12 @@ func printRemotePlan(cmd *cobra.Command, host string, plan remoterun.Plan) {
 	if len(plan.DependencyOrder) > 0 {
 		fmt.Fprintf(stderr, "  order: %s\n", strings.Join(plan.DependencyOrder, ", "))
 	}
+	if len(plan.Roots) > 0 {
+		fmt.Fprintf(stderr, "  selected (their install steps and hooks run): %s\n", strings.Join(plan.Roots, ", "))
+	}
+	if plan.Policy.RollbackOnFailure {
+		fmt.Fprintln(stderr, "  rollback on failure: enabled; a failed batch removes newly installed APT packages and restores backed-up files")
+	}
 	for _, warning := range plan.Warnings {
 		fmt.Fprintf(stderr, "  warning: %s\n", warning)
 	}

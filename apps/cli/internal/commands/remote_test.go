@@ -3,8 +3,10 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,12 +16,13 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 const remoteDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-const remotePlanJSON = `{"apps":[{"name":"git","method":"apt","dependencies":[],"effects":["package_install","post_install_hooks"],"privileges":"unknown"}],"dependency_order":["git"],"warnings":[],"digest":"` + remoteDigest + `"}`
+const remotePlanJSON = `{"apps":[{"name":"git","method":"apt","dependencies":[],"effects":["package_install","post_install_hooks"],"privileges":"unknown"}],"dependency_order":["git"],"warnings":[],"roots":["git"],"policy":{"rollback_on_failure":false},"digest":"` + remoteDigest + `"}`
 
 var _ = Describe("Remote install command", func() {
 	var (
@@ -89,7 +92,16 @@ esac
 		Expect(output.String()).To(ContainSubstring("Remote me@devbox: devex version 9.9.9"))
 		Expect(output.String()).To(ContainSubstring("install git (apt); effects: package_install, post_install_hooks; privileges: unknown"))
 		Expect(output.String()).To(ContainSubstring("order: git"))
+		Expect(output.String()).To(ContainSubstring("selected (their install steps and hooks run): git"))
+		Expect(output.String()).NotTo(ContainSubstring("rollback on failure"))
 		Expect(calls()).NotTo(ContainSubstring("--non-interactive"))
+	})
+
+	It("shows a remote rollback policy for confirmation", func() {
+		withRollback := strings.Replace(remotePlanJSON, `"rollback_on_failure":false`, `"rollback_on_failure":true`, 1)
+		Expect(os.WriteFile(filepath.Join(dir, "plan.json"), []byte(withRollback), 0o600)).To(Succeed())
+		Expect(execute("git", "--dry-run")).To(Succeed())
+		Expect(output.String()).To(ContainSubstring("rollback on failure: enabled"))
 	})
 
 	It("requires --yes without a terminal", func() {
@@ -184,17 +196,27 @@ esac
 
 var _ = Describe("Install with a confirmed plan digest", func() {
 	var (
-		settings config.CrossPlatformSettings
-		output   bytes.Buffer
+		settings  config.CrossPlatformSettings
+		output    bytes.Buffer
+		installed []types.CrossPlatformApp
 	)
+	git := types.CrossPlatformApp{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git", Dependencies: []string{"base"}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "git", Dependencies: []string{"base"}}}
+	base := types.CrossPlatformApp{Name: "base", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "base", PostInstall: []types.InstallCommand{{Shell: "configure-base"}}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "base", PostInstall: []types.InstallCommand{{Shell: "configure-base"}}}}
 	BeforeEach(func() {
 		viper.Reset()
 		DeferCleanup(viper.Reset)
 		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
 		GinkgoT().Setenv("CI", "true")
-		settings = config.CrossPlatformSettings{HomeDir: os.Getenv("HOME"), ApplicationOverrides: []types.CrossPlatformApp{
-			{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "git"}},
-		}}
+		viper.Set(state.DBPathConfigKey, filepath.Join(GinkgoT().TempDir(), "state.db"))
+		oldPrepare, oldInstall := prepareApplicationInstallers, installApplication
+		DeferCleanup(func() { prepareApplicationInstallers, installApplication = oldPrepare, oldInstall })
+		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+		installed = nil
+		installApplication = func(_ context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+			installed = append(installed, app)
+			return nil
+		}
+		settings = config.CrossPlatformSettings{HomeDir: os.Getenv("HOME"), ApplicationOverrides: []types.CrossPlatformApp{base, git}}
 		output.Reset()
 	})
 	install := func(s config.CrossPlatformSettings, args ...string) error {
@@ -204,32 +226,89 @@ var _ = Describe("Install with a confirmed plan digest", func() {
 		cmd.SetArgs(args)
 		return cmd.ExecuteContext(context.Background())
 	}
-	digestOf := func(s config.CrossPlatformSettings) string {
-		_, digest, err := agentapi.PlanDigest(context.Background(), s, agentapi.PlanRequest{Names: []string{"git"}})
-		Expect(err).NotTo(HaveOccurred())
-		return digest
+	// confirm previews the request as a remote caller does and returns its digest.
+	confirm := func(s config.CrossPlatformSettings, args ...string) string {
+		viper.Set("dry-run", true)
+		defer viper.Set("dry-run", false)
+		output.Reset()
+		Expect(install(s, append(args, "--format", "json")...)).To(Succeed())
+		var preview struct {
+			Digest string   `json:"digest"`
+			Roots  []string `json:"roots"`
+		}
+		Expect(json.Unmarshal(output.Bytes(), &preview)).To(Succeed())
+		Expect(preview.Digest).To(MatchRegexp(`^sha256:[0-9a-f]{64}$`))
+		output.Reset()
+		return preview.Digest
 	}
 
-	It("adds the plan digest to the JSON dry-run plan", func() {
+	It("adds the selected roots, policy and digest to the JSON dry-run plan", func() {
 		viper.Set("dry-run", true)
 		Expect(install(settings, "git", "--format", "json")).To(Succeed())
-		Expect(output.String()).To(ContainSubstring(`"digest":"` + digestOf(settings) + `"`))
-		Expect(output.String()).To(ContainSubstring(`"dependency_order":["git"]`))
+		Expect(output.String()).To(ContainSubstring(`"dependency_order":["base","git"]`))
+		Expect(output.String()).To(ContainSubstring(`"roots":["git"]`))
+		Expect(output.String()).To(ContainSubstring(`"rollback_on_failure":false`))
+		Expect(output.String()).To(MatchRegexp(`"digest":"sha256:[0-9a-f]{64}"`))
+	})
+
+	It("installs exactly the confirmed roots with their confirmed definitions", func() {
+		confirmed := confirm(settings, "git")
+		Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(Succeed())
+		Expect(installed).To(Equal([]types.CrossPlatformApp{git}))
+		Expect(output.String()).To(ContainSubstring("installed git"))
 	})
 
 	It("refuses to install when the configuration changed after the plan was confirmed", func() {
-		confirmed := digestOf(settings)
+		confirmed := confirm(settings, "git")
 		changed := settings
-		changed.ApplicationOverrides = []types.CrossPlatformApp{
-			{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git-all"}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "git-all"}},
-		}
+		changedGit := git
+		changedGit.Linux.InstallCommand, changedGit.MacOS.InstallCommand = "git-all", "git-all"
+		changed.ApplicationOverrides = []types.CrossPlatformApp{base, changedGit}
 		err := install(changed, "git", "--non-interactive", "--expect-plan", confirmed)
 		Expect(err).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
 		Expect(err).To(MatchError(ContainSubstring("nothing was installed")))
+		Expect(installed).To(BeEmpty())
+	})
+
+	It("refuses a confirmed digest for a request with different roots", func() {
+		confirmed := confirm(settings, "git")
+		// Naming base too runs base's own lifecycle (its post-install hook),
+		// although the planned order is unchanged.
+		err := install(settings, "base", "git", "--non-interactive", "--expect-plan", confirmed)
+		Expect(err).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+		Expect(installed).To(BeEmpty())
+	})
+
+	It("refuses a confirmed digest when rollback on failure was enabled afterwards", func() {
+		confirmed := confirm(settings, "git")
+		viper.Set("rollback-on-failure", true)
+		err := install(settings, "git", "--non-interactive", "--expect-plan", confirmed)
+		Expect(err).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+		Expect(installed).To(BeEmpty())
+	})
+
+	It("refuses a confirmed digest when other execution policy changed afterwards", func() {
+		confirmed := confirm(settings, "git")
+		viper.Set("install-concurrency", 4)
+		Expect(install(settings, "git", "--non-interactive", "--expect-plan", confirmed)).To(MatchError(ContainSubstring(agentapi.PlanChangedMessage)))
+		Expect(installed).To(BeEmpty())
+	})
+
+	It("runs a confirmed rollback policy through the rollback path", func() {
+		// A method whose rollback compensation never queries this host's packages.
+		tool := types.CrossPlatformApp{Name: "tool", AllPlatforms: types.OSConfig{InstallMethod: "docker", InstallCommand: "tool"}}
+		withTool := config.CrossPlatformSettings{HomeDir: settings.HomeDir, ApplicationOverrides: []types.CrossPlatformApp{tool}}
+		viper.Set("rollback-on-failure", true)
+		confirmed := confirm(withTool, "tool")
+		Expect(install(withTool, "tool", "--non-interactive", "--expect-plan", confirmed)).To(Succeed())
+		Expect(output.String()).To(ContainSubstring("Rollback enabled"))
+		Expect(output.String()).To(ContainSubstring("Lifecycle run:"))
+		Expect(installed).To(Equal([]types.CrossPlatformApp{tool}))
 	})
 
 	It("refuses --expect-plan with --dry-run", func() {
+		confirmed := confirm(settings, "git")
 		viper.Set("dry-run", true)
-		Expect(install(settings, "git", "--expect-plan", digestOf(settings))).To(MatchError(ContainSubstring("cannot be combined with --dry-run")))
+		Expect(install(settings, "git", "--expect-plan", confirmed)).To(MatchError(ContainSubstring("cannot be combined with --dry-run")))
 	})
 })

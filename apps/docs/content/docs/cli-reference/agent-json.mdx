@@ -74,6 +74,15 @@ status and config-show contracts remain unchanged.
         }},
         "dependency_order": {"$ref": "#/$defs/strings"},
         "warnings": {"$ref": "#/$defs/strings"},
+        "roots": {"$ref": "#/$defs/strings"},
+        "policy": {"type": "object", "properties": {
+          "rollback_on_failure": {"type": "boolean"},
+          "install_concurrency": {"type": "integer"},
+          "offline": {"type": "boolean"},
+          "no_cache": {"type": "boolean"},
+          "skip_plugin_download": {"type": "boolean"},
+          "apt_lists_max_age": {"type": "string"}
+        }},
         "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
@@ -146,16 +155,27 @@ are not tracked by the current loader.
   }],
   "dependency_order": ["git"],
   "warnings": ["Plugin effects and required privileges are unknown; no plugins or hooks were executed."],
+  "roots": ["git"],
+  "policy": {
+    "rollback_on_failure": false, "install_concurrency": 1, "offline": false,
+    "no_cache": false, "skip_plugin_download": false, "apt_lists_max_age": "15m0s"
+  },
   "digest": "sha256:…"
 }
 ```
 
-`devex install --dry-run --format json` adds `digest`, which covers the plan
-and the full definitions of every planned application (install commands,
-hooks, dependencies, files). `devex install --expect-plan <digest>` with the
-same applications installs only if the digest still matches; otherwise it
-fails before installing anything. `devex remote install` uses this to install
-exactly the plan you confirmed.
+`devex install --dry-run --format json` adds `roots`, `policy` and `digest`.
+`roots` are the selected applications whose install lifecycles (install
+steps, hooks, files) run; other planned dependencies are left to their package
+manager. `policy` is the effective execution policy. `digest` covers the
+roots, the plan, the full definitions of every planned application (install
+commands, hooks, dependencies, files) and the policy.
+`devex install --expect-plan <digest>` resolves the same request once,
+installs only if that resolution has the confirmed digest, and then executes
+exactly that resolution: its roots, settings and policy. Any difference, such
+as naming another application, enabling `rollback-on-failure` or changing a
+definition, fails before anything is installed. `devex remote install` uses
+this to install exactly the plan you confirmed.
 
 Planning and execution share application selection: explicit app arguments,
 categories, inline definitions from the selected configuration, then default

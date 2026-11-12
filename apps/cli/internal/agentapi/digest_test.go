@@ -20,12 +20,15 @@ var _ = Describe("Plan digests", func() {
 			{Name: "app", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "app", Dependencies: []string{"base", "lib"}}, MacOS: types.OSConfig{InstallMethod: "brew", InstallCommand: "app", Dependencies: []string{"base", "lib"}}},
 		}
 	}
-	digest := func(apps []types.CrossPlatformApp) string {
+	resolve := func(apps []types.CrossPlatformApp, names []string, policy agentapi.ExecutionPolicy) agentapi.ExecutionSnapshot {
 		settings := config.CrossPlatformSettings{HomeDir: GinkgoT().TempDir(), ApplicationOverrides: apps}
-		_, value, err := agentapi.PlanDigest(context.Background(), settings, agentapi.PlanRequest{Names: []string{"app"}})
+		snapshot, err := agentapi.ResolveExecution(context.Background(), settings, agentapi.PlanRequest{Names: names}, policy)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(value).To(MatchRegexp(`^sha256:[0-9a-f]{64}$`))
-		return value
+		Expect(snapshot.Digest).To(MatchRegexp(`^sha256:[0-9a-f]{64}$`))
+		return snapshot
+	}
+	digest := func(apps []types.CrossPlatformApp) string {
+		return resolve(apps, []string{"app"}, agentapi.ExecutionPolicy{InstallConcurrency: 1}).Digest
 	}
 	BeforeEach(func() {
 		viper.Reset()
@@ -48,6 +51,34 @@ var _ = Describe("Plan digests", func() {
 		Entry("a dependency is removed", func(c *types.OSConfig) { c.Dependencies = []string{"base"} }),
 		Entry("the dependency order changes", func(c *types.OSConfig) { c.Dependencies = []string{"lib", "base"} }),
 	)
+
+	It("binds the selected roots, not only the planned order", func() {
+		confirmed := resolve(base(), []string{"app"}, agentapi.ExecutionPolicy{InstallConcurrency: 1})
+		widened := resolve(base(), []string{"base", "lib", "app"}, agentapi.ExecutionPolicy{InstallConcurrency: 1})
+		Expect(widened.Plan).To(Equal(confirmed.Plan), "both requests plan the same dependency order")
+		Expect(confirmed.RootNames()).To(Equal([]string{"app"}))
+		Expect(widened.RootNames()).To(Equal([]string{"base", "lib", "app"}))
+		Expect(widened.Digest).NotTo(Equal(confirmed.Digest))
+	})
+
+	DescribeTable("binds the execution policy",
+		func(policy agentapi.ExecutionPolicy) {
+			confirmed := resolve(base(), []string{"app"}, agentapi.ExecutionPolicy{InstallConcurrency: 1})
+			Expect(resolve(base(), []string{"app"}, policy).Digest).NotTo(Equal(confirmed.Digest))
+		},
+		Entry("rollback on failure", agentapi.ExecutionPolicy{InstallConcurrency: 1, RollbackOnFailure: true}),
+		Entry("concurrency", agentapi.ExecutionPolicy{InstallConcurrency: 4}),
+		Entry("offline", agentapi.ExecutionPolicy{InstallConcurrency: 1, Offline: true}),
+		Entry("cache bypass", agentapi.ExecutionPolicy{InstallConcurrency: 1, NoCache: true}),
+		Entry("plugin downloads", agentapi.ExecutionPolicy{InstallConcurrency: 1, SkipPluginDownload: true}),
+		Entry("APT list age", agentapi.ExecutionPolicy{InstallConcurrency: 1, AptListsMaxAge: "0s"}),
+	)
+
+	It("returns the selected roots and merged settings it was computed from", func() {
+		snapshot := resolve(base(), []string{"APP"}, agentapi.ExecutionPolicy{InstallConcurrency: 1})
+		Expect(snapshot.Roots).To(Equal([]types.CrossPlatformApp{base()[2]}))
+		Expect(snapshot.Settings.GetAllApps()).To(ContainElement(base()[0]))
+	})
 
 	It("changes when a dependency's own definition changes", func() {
 		changed := base()

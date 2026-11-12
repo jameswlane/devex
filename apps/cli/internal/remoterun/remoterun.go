@@ -179,7 +179,13 @@ type Plan struct {
 	Apps            []PlannedApp `json:"apps"`
 	DependencyOrder []string     `json:"dependency_order"`
 	Warnings        []string     `json:"warnings"`
-	Digest          string       `json:"digest"`
+	// Roots are the applications whose install lifecycles run; other planned
+	// dependencies are left to their package manager.
+	Roots  []string `json:"roots"`
+	Policy struct {
+		RollbackOnFailure bool `json:"rollback_on_failure"`
+	} `json:"policy"`
+	Digest string `json:"digest"`
 }
 
 // RemotePlan asks the remote DevEx to plan apps without executing anything.

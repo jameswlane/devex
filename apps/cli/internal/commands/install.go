@@ -104,7 +104,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if !viper.GetBool("dry-run") || templateID != "" {
 					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
 				}
-				plan, digest, err := agentapi.PlanDigest(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")}, currentExecutionPolicy())
 				if err == nil {
 					selected, _, selectErr := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
 					if selectErr != nil {
@@ -115,11 +115,14 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 					}
 				}
 				// The digest lets a caller confirm this plan and install exactly it
-				// with --expect-plan.
+				// with --expect-plan. Roots are the applications whose lifecycles
+				// run; other planned dependencies are left to their package manager.
 				return writeAPIJSON(cmd, struct {
 					agentapi.Plan
-					Digest string `json:"digest"`
-				}{plan, digest}, err)
+					Roots  []string                 `json:"roots"`
+					Policy agentapi.ExecutionPolicy `json:"policy"`
+					Digest string                   `json:"digest"`
+				}{snapshot.Plan, snapshot.RootNames(), snapshot.Policy, snapshot.Digest}, err)
 			}
 			if format != "table" {
 				return fmt.Errorf("unsupported format %q", format)
@@ -134,15 +137,19 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if dryRun || templateID != "" {
 					return fmt.Errorf("--expect-plan installs a confirmed plan; it cannot be combined with --dry-run or --template")
 				}
-				// Plan and install run in this process from the same loaded
-				// configuration, so the verified plan is the one executed.
-				_, digest, err := agentapi.PlanDigest(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories})
+				if err := validateInstallInputs(args, categories); err != nil {
+					return fmt.Errorf("invalid inputs: %w", err)
+				}
+				// Resolve once, verify, then execute exactly this snapshot: its
+				// roots, settings and policy, never a fresh selection.
+				snapshot, err := agentapi.ResolveExecution(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories}, currentExecutionPolicy())
 				if err != nil {
 					return fmt.Errorf("check the confirmed plan: %w", err)
 				}
-				if digest != expectPlan {
-					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, digest)
+				if snapshot.Digest != expectPlan {
+					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, snapshot.Digest)
 				}
+				return executeSnapshot(ctx, cmd, snapshot, verbose, repo, getPluginBootstrap)
 			}
 
 			if templateID != "" {
@@ -162,7 +169,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if err != nil {
 					return err
 				}
-				fmt.Fprintln(cmd.ErrOrStderr(), "Rollback enabled: failed batches remove newly installed APT packages and restore backed-up files; hooks and dependencies may require manual recovery.")
+				fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
 				return runRollbackBatch(ctx, cmd.ErrOrStderr(), apps, repo, resolvedSettings, getPluginBootstrap)
 			}
 			return executeInstallWithOutput(ctx, args, categories, verbose, dryRun, repo, settings, cmd.OutOrStdout(), getPluginBootstrap)
@@ -236,7 +243,46 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 	if dryRun {
 		return previewInstallation(ctx, appsToInstall, provider, out)
 	}
+	return installSelected(ctx, span, appsToInstall, repo, settings, out, provider)
+}
 
+const rollbackEnabledNotice = "Rollback enabled: failed batches remove newly installed APT packages and restore backed-up files; hooks and dependencies may require manual recovery."
+
+// currentExecutionPolicy reads the effective install policy that a confirmed
+// plan digest binds.
+func currentExecutionPolicy() agentapi.ExecutionPolicy {
+	return agentapi.ExecutionPolicy{
+		RollbackOnFailure:  viper.GetBool("rollback-on-failure"),
+		InstallConcurrency: installConcurrency(),
+		Offline:            viper.GetBool("offline"),
+		NoCache:            viper.GetBool("no-cache"),
+		SkipPluginDownload: viper.GetBool("skip-plugin-download"),
+		AptListsMaxAge:     viper.GetDuration("apt-lists-max-age").String(),
+	}
+}
+
+// executeSnapshot installs a verified snapshot's roots with its settings,
+// choosing the execution path from its policy.
+func executeSnapshot(ctx context.Context, cmd *cobra.Command, snapshot agentapi.ExecutionSnapshot, verbose bool, repo types.Repository, provider pluginBootstrapProvider) error {
+	_, span := tracer.Start(ctx, "install_command",
+		trace.WithAttributes(
+			attribute.StringSlice("apps", snapshot.RootNames()),
+			attribute.String("plan_digest", snapshot.Digest),
+			attribute.String("platform", runtime.GOOS),
+		),
+	)
+	defer span.End()
+	settings := snapshot.Settings
+	settings.Verbose = verbose
+	if snapshot.Policy.RollbackOnFailure {
+		fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
+		return runRollbackBatch(ctx, cmd.ErrOrStderr(), snapshot.Roots, repo, settings, provider)
+	}
+	return installSelected(ctx, span, snapshot.Roots, repo, settings, cmd.OutOrStdout(), provider)
+}
+
+// installSelected installs already selected applications.
+func installSelected(ctx context.Context, span trace.Span, appsToInstall []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings, out io.Writer, provider pluginBootstrapProvider) error {
 	if !interaction.IsInteractiveMode() {
 		return runPlainInstall(ctx, out, appsToInstall, repo, settings, provider)
 	}
