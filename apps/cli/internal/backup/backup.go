@@ -164,40 +164,57 @@ func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error 
 		targetDir = filepath.Join(bm.baseDir, "config")
 	}
 
-	currentBackup, err := bm.CreateBackup(BackupOptions{
-		Description: fmt.Sprintf("Pre-restore backup (restoring from %s)", backupID),
-		Type:        "pre-restore",
-		Tags:        []string{"auto", "pre-restore"},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create pre-restore backup before restoring %s to %s: %w", backupID, targetDir, err)
+	// Snapshot the current configuration so a failed restore can be undone.
+	// On a machine without a configuration yet (a backup pulled onto a fresh
+	// machine) there is nothing to snapshot; undoing then removes what the
+	// restore created.
+	var currentBackup *BackupMetadata
+	targetExisted := pathExists(targetDir)
+	if pathExists(filepath.Join(bm.baseDir, "config")) || targetExisted {
+		currentBackup, err = bm.CreateBackup(BackupOptions{
+			Description: fmt.Sprintf("Pre-restore backup (restoring from %s)", backupID),
+			Type:        "pre-restore",
+			Tags:        []string{"auto", "pre-restore"},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create pre-restore backup before restoring %s to %s: %w", backupID, targetDir, err)
+		}
+	}
+	undo := func() {
+		switch {
+		case currentBackup != nil:
+			if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
+				// Log the restore error but don't fail the original error
+				fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
+			}
+		case !targetExisted:
+			if removeErr := os.RemoveAll(targetDir); removeErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to remove partially restored %s: %v\n", targetDir, removeErr)
+			}
+		}
 	}
 
 	compressedPath := filepath.Join(backupDir, "config.tar.gz")
 	if _, err := os.Stat(compressedPath); err == nil {
 		if err := bm.extractCompressedBackup(compressedPath, targetDir); err != nil {
-			if currentBackup != nil {
-				if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
-					// Log the restore error but don't fail the original error
-					fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
-				}
-			}
+			undo()
 			return fmt.Errorf("failed to extract backup: %w", err)
 		}
 	} else {
 		configBackupDir := filepath.Join(backupDir, "config")
 		if err := bm.copyDirectory(configBackupDir, targetDir); err != nil {
-			if currentBackup != nil {
-				if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
-					// Log the restore error but don't fail the original error
-					fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
-				}
-			}
+			undo()
 			return fmt.Errorf("failed to restore files: %w", err)
 		}
 	}
 
 	return nil
+}
+
+// pathExists reports whether path exists; a dangling symlink counts.
+func pathExists(path string) bool {
+	_, err := os.Lstat(path)
+	return !os.IsNotExist(err)
 }
 
 func (bm *BackupManager) ListBackups(filter string, limit int) ([]*BackupMetadata, error) {

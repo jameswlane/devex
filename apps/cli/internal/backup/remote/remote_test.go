@@ -304,9 +304,6 @@ var _ = Describe("Remote backups", func() {
 			_, err = location.Pull(ctx, recovery, id, secret)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(recovery.ListBackups("", 0)).To(ConsistOf(HaveField("ID", id)))
-			// Restore snapshots the current configuration first, so it needs
-			// the configuration directory that devex setup creates.
-			Expect(os.MkdirAll(filepath.Join(devexpaths.ForHome(fresh).Config, "config"), 0o750)).To(Succeed())
 			Expect(recovery.RestoreBackup(id, "")).To(Succeed())
 			Expect(filepath.Join(devexpaths.ForHome(fresh).Config, "config", "config.yaml")).To(BeARegularFile())
 		})
