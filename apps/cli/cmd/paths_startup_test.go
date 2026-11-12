@@ -95,6 +95,7 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("integer global flag before install", []string{"--install-concurrency", "1", "install", "git"}, false),
 		Entry("a flag value that names a read route", []string{"--config", "platform", "install", "git"}, false),
 		Entry("unknown commands", []string{"--install-concurrency", "1", "not-a-command"}, false),
+		Entry("config show with --help=false is read-only", []string{"config", "show", "--help=false"}, true),
 	)
 
 	DescribeTable("skips installer dependency checks only for the read-only MCP server",
@@ -115,6 +116,7 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("config file before mcp serve", []string{"--config", "/x/config.yaml", "mcp", "serve"}, true),
 		Entry("config value named mcp", []string{"--config", "mcp", "serve"}, false),
 		Entry("after the argument terminator", []string{"install", "--", "mcp", "serve"}, false),
+		Entry("mcp serve --help=false still serves read-only", []string{"mcp", "serve", "--help=false"}, true),
 	)
 
 	DescribeTable("recognizes other startup routes after value-taking global flags",
@@ -132,5 +134,17 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("paths", informationalCommand, []string{"--install-concurrency", "1", "paths"}, true),
 		Entry("config show", informationalCommand, []string{"--apt-lists-max-age", "15m", "config", "show"}, true),
 		Entry("install is not informational", informationalCommand, []string{"--install-concurrency", "1", "install", "git"}, false),
+		// Explicitly false booleans are set but false, as Cobra treats them:
+		// these commands execute, so they must not take the nil-repository
+		// early presentation path.
+		Entry("install with --help=false", presentationCommand, []string{"install", "git", "--help=false", "--non-interactive"}, false),
+		Entry("install with --help=true then --help=false", presentationCommand, []string{"install", "git", "--help=true", "--help=false"}, false),
+		Entry("uninstall --forget with --help=false", presentationCommand, []string{"uninstall", "--forget", "git", "--force", "--help=false"}, false),
+		Entry("root --version=false", presentationCommand, []string{"--version=false"}, false),
+		Entry("install with --help=false is not informational", informationalCommand, []string{"install", "git", "--help=false"}, false),
+		Entry("root --version=false is not informational", informationalCommand, []string{"--version=false"}, false),
+		Entry("install with --help=true", presentationCommand, []string{"install", "git", "--help=true"}, true),
+		Entry("root --version=true", presentationCommand, []string{"--version=true"}, true),
+		Entry("-h", presentationCommand, []string{"install", "-h"}, true),
 	)
 })
