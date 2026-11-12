@@ -55,7 +55,8 @@ Only the saved profile changes. Applications that the new profile no longer list
 
 ## Failure behavior
 
-- `create --from` copies the source profile's user configuration, including when it is empty. If the copy fails, the partial profile is removed, so you can fix the source and retry.
+- `create --from` copies the source profile's user configuration, including when it is empty. The copy is built in a hidden staging directory beside the profile and published only when complete, so a failed copy creates nothing; fix the source and retry.
+- If another command creates the same profile while `create` runs, `create` fails and leaves that profile unchanged.
 - Switching to a profile that has no directory in any tier fails; create it first. `dev` always exists.
 - Invalid or reserved names are refused, and nothing is saved.
 - A saved profile file with an invalid name is ignored, and `dev` is used.

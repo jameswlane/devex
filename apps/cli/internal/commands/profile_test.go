@@ -152,6 +152,69 @@ var _ = Describe("Profile commands", func() {
 		Expect(filepath.Join(settings.ProfileDirs("personal")["user"], "applications", "work-tool.yaml")).To(BeAnExistingFile())
 	})
 
+	Context("when another command creates the profile while create runs", func() {
+		var destination, sentinel string
+		// concurrentCreator creates the destination, as a second 'devex profile
+		// create' would, after the first command's absence check.
+		concurrentCreator := func(withSentinel bool) {
+			destination = settings.ProfileDirs("personal")["user"]
+			sentinel = filepath.Join(destination, "applications", "theirs.yaml")
+			original := profileCreateRaceHook
+			DeferCleanup(func() { profileCreateRaceHook = original })
+			profileCreateRaceHook = func() {
+				Expect(os.MkdirAll(destination, 0o750)).To(Succeed())
+				if withSentinel {
+					Expect(os.MkdirAll(filepath.Dir(sentinel), 0o750)).To(Succeed())
+					Expect(os.WriteFile(sentinel, []byte("theirs"), 0o600)).To(Succeed())
+				}
+			}
+		}
+		stagingLeftovers := func() []string {
+			matches, err := filepath.Glob(filepath.Join(filepath.Dir(destination), ".personal.clone-*"))
+			Expect(err).NotTo(HaveOccurred())
+			return matches
+		}
+
+		It("keeps the other profile when the copy fails", func() {
+			app("broken", "work-tool")
+			invalid := filepath.Join(settings.ProfileDirs("broken")["user"], "environment.yaml")
+			Expect(os.WriteFile(invalid, []byte("languages: [unclosed\n"), 0o600)).To(Succeed())
+			concurrentCreator(true)
+
+			Expect(execute("create", "personal", "--from", "broken")).To(MatchError(ContainSubstring("nothing was created")))
+			Expect(os.ReadFile(sentinel)).To(Equal([]byte("theirs")))
+			Expect(filepath.Join(destination, "applications", "work-tool.yaml")).NotTo(BeAnExistingFile())
+			Expect(stagingLeftovers()).To(BeEmpty())
+		})
+
+		It("refuses to publish over a profile that appeared, keeping its files", func() {
+			app("work", "work-tool")
+			concurrentCreator(true)
+
+			Expect(execute("create", "personal", "--from", "work")).To(MatchError(ContainSubstring("created at " + destination + " by another command")))
+			Expect(os.ReadFile(sentinel)).To(Equal([]byte("theirs")))
+			Expect(filepath.Join(destination, "applications", "work-tool.yaml")).NotTo(BeAnExistingFile())
+			Expect(stagingLeftovers()).To(BeEmpty())
+		})
+
+		It("refuses to replace an empty profile that appeared", func() {
+			app("work", "work-tool")
+			concurrentCreator(false)
+
+			Expect(execute("create", "personal", "--from", "work")).To(MatchError(ContainSubstring("by another command")))
+			entries, err := os.ReadDir(destination)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(entries).To(BeEmpty())
+			Expect(stagingLeftovers()).To(BeEmpty())
+		})
+
+		It("does not claim an empty profile that appeared", func() {
+			concurrentCreator(true)
+			Expect(execute("create", "personal")).To(MatchError(ContainSubstring("by another command")))
+			Expect(os.ReadFile(sentinel)).To(Equal([]byte("theirs")))
+		})
+	})
+
 	It("resolves dry-run from the environment and lets an explicit flag override it", func() {
 		Expect(execute("create", "work")).To(Succeed())
 		GinkgoT().Setenv("DEVEX_DRY_RUN", "true")

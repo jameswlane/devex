@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -69,21 +70,11 @@ override the shared configuration while the profile is active.`,
 				if info, err := os.Stat(source); err != nil || !info.IsDir() {
 					return fmt.Errorf("profile %s has no user configuration to copy at %s", from, source)
 				}
-				// Create the destination first: an empty source copies no files,
-				// and an empty profile is still a profile.
-				if err := os.MkdirAll(dir, 0o750); err != nil {
-					return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
+				if err := cloneProfile(name, source, dir); err != nil {
+					return err
 				}
-				if err := copyConfigurationTree(source, dir); err != nil {
-					// The destination did not exist before; remove the partial copy so
-					// the profile is not half created and the command can be retried.
-					if removeErr := os.RemoveAll(dir); removeErr != nil {
-						return fmt.Errorf("copy profile %s: %w; remove the partial profile at %s before retrying: %w", from, err, dir, removeErr)
-					}
-					return fmt.Errorf("copy profile %s: %w; nothing was created, fix the source profile at %s and retry", from, err, source)
-				}
-			} else if err := os.MkdirAll(dir, 0o750); err != nil {
-				return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
+			} else if err := createEmptyProfile(name, dir); err != nil {
+				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Created profile %s at %s\nSwitch to it with 'devex profile switch %s'.\n", name, dir, name)
 			return nil
@@ -91,6 +82,67 @@ override the shared configuration while the profile is active.`,
 	}
 	cmd.Flags().StringVar(&from, "from", "", "Copy the user configuration of this profile")
 	return cmd
+}
+
+// profileCreateRaceHook runs after create's absence check, before the profile
+// is written. Specs use it to interleave a concurrent creator.
+var profileCreateRaceHook = func() {}
+
+// createEmptyProfile reserves dir exclusively, so a profile created
+// concurrently is reported rather than claimed.
+func createEmptyProfile(name, dir string) error {
+	profileCreateRaceHook()
+	if err := os.MkdirAll(filepath.Dir(dir), 0o750); err != nil {
+		return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
+	}
+	if err := os.Mkdir(dir, 0o750); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return profileAppearedError(name, dir)
+		}
+		return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
+	}
+	return nil
+}
+
+// cloneProfile copies source into a staging directory that DevEx owns beside
+// dir, then publishes it with a rename that never replaces an existing
+// directory. On any failure only the staging directory is removed, so a
+// profile another command created meanwhile is left untouched.
+func cloneProfile(name, source, dir string) error {
+	profileCreateRaceHook()
+	parent := filepath.Dir(dir)
+	if err := os.MkdirAll(parent, 0o750); err != nil {
+		return fmt.Errorf("create profile %s at %s: %w", name, dir, err)
+	}
+	// The leading dot keeps the staging directory out of profile listings.
+	staging, err := os.MkdirTemp(parent, "."+name+".clone-")
+	if err != nil {
+		return fmt.Errorf("create staging directory for profile %s in %s: %w", name, parent, err)
+	}
+	published := false
+	defer func() {
+		if !published {
+			_ = os.RemoveAll(staging)
+		}
+	}()
+	if err := os.Chmod(staging, 0o750); err != nil {
+		return fmt.Errorf("create staging directory for profile %s: %w", name, err)
+	}
+	if err := copyConfigurationTree(source, staging); err != nil {
+		return fmt.Errorf("copy profile from %s: %w; nothing was created, fix the source profile and retry", source, err)
+	}
+	if err := renameNoReplace(staging, dir); err != nil {
+		if errors.Is(err, fs.ErrExist) {
+			return profileAppearedError(name, dir)
+		}
+		return fmt.Errorf("publish profile %s at %s: %w; nothing was created, retry the command", name, dir, err)
+	}
+	published = true
+	return nil
+}
+
+func profileAppearedError(name, dir string) error {
+	return fmt.Errorf("profile %s was created at %s by another command while this one ran; it was left unchanged. Inspect it with 'devex profile show %s', or choose another name", name, dir, name)
 }
 
 // ProfileInfo describes one profile.
