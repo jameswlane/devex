@@ -75,6 +75,7 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("plain list bootstraps plugins", []string{"list", "available"}, false),
 		Entry("JSON list is read-only", []string{"list", "available", "--format", "json"}, true),
 		Entry("platform is read-only", []string{"platform"}, true),
+		Entry("inventory is read-only", []string{"inventory", "--format", "yaml"}, true),
 		Entry("install is not read-only", []string{"install", "git"}, false),
 	)
 })

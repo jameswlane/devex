@@ -40,6 +40,7 @@ func NewRootCmd(version string, repo types.Repository, settings config.CrossPlat
 }
 
 func newRootCmd(version string, repo types.Repository, settings config.CrossPlatformSettings, options rootOptions) *cobra.Command {
+	inventoryVersion = version
 	runtime := &rootRuntime{}
 	setupCmd := NewSetupCmd(repo, settings)
 	if options.runSetup == nil {
@@ -128,6 +129,10 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			if cmdName == "self-update" || cmdName == "paths" || cmdName == "help" {
 				return nil
 			}
+			// Detection installs and runs only the stack detector plugin.
+			if detectCommand(cmd) {
+				return nil
+			}
 			// Generating a dev container never runs plugins.
 			if cmd.Parent() != nil && cmd.Parent().Name() == "devcontainer" {
 				return nil
@@ -191,6 +196,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
+	cmd.AddCommand(NewInventoryCmd(repo, settings))
 	cmd.AddCommand(NewDevcontainerCmd(repo, settings))
 	cmd.AddCommand(NewDotfilesCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
@@ -421,7 +427,7 @@ func (r *rootRuntime) getPluginBootstrap() *bootstrap.PluginBootstrap {
 
 func readAPICommand(cmd *cobra.Command) bool {
 	switch cmd.Name() {
-	case "platform":
+	case "platform", "inventory":
 		return true
 	case "list":
 		// Interactive list keeps first-run bootstrap; JSON inspection does not.

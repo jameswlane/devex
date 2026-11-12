@@ -322,7 +322,7 @@ func readCommand(args []string) bool {
 		return false
 	}
 	switch words[0] {
-	case "platform":
+	case "platform", "inventory":
 		return true
 	case "list", "status":
 		// Interactive list and status keep first-run bootstrap and state
