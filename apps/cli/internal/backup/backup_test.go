@@ -1,0 +1,145 @@
+package backup_test
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"errors"
+	"os"
+	"path/filepath"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+
+	"github.com/jameswlane/devex/apps/cli/internal/backup"
+)
+
+var _ = Describe("Backup manager", func() {
+	var (
+		manager   *backup.BackupManager
+		configDir string
+		id        string
+	)
+
+	BeforeEach(func() {
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("HOME", home)
+		for _, key := range []string{
+			"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+			"DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR",
+		} {
+			GinkgoT().Setenv(key, "")
+		}
+		base := devexpaths.ForHome(home).Config
+		configDir = filepath.Join(base, "config")
+		Expect(os.MkdirAll(configDir, 0o750)).To(Succeed())
+		Expect(os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte("git:\n  name: Me\n"), 0o600)).To(Succeed())
+		manager = backup.NewBackupManager(base)
+		metadata, err := manager.CreateBackup(backup.BackupOptions{Type: "manual", Compress: true})
+		Expect(err).NotTo(HaveOccurred())
+		id = metadata.ID
+	})
+
+	preRestoreBackups := func() []*backup.BackupMetadata {
+		backups, err := manager.ListBackups("pre-restore", 0)
+		Expect(err).NotTo(HaveOccurred())
+		return backups
+	}
+
+	It("snapshots an existing configuration before restoring over it", func() {
+		Expect(manager.RestoreBackup(id, "")).To(Succeed())
+		Expect(preRestoreBackups()).To(HaveLen(1))
+	})
+
+	Context("on a machine with no configuration yet", func() {
+		BeforeEach(func() {
+			Expect(os.RemoveAll(filepath.Dir(configDir))).To(Succeed())
+		})
+
+		It("restores without a snapshot, since there is nothing to keep", func() {
+			Expect(manager.RestoreBackup(id, "")).To(Succeed())
+			Expect(os.ReadFile(filepath.Join(configDir, "config.yaml"))).To(Equal([]byte("git:\n  name: Me\n")))
+			Expect(preRestoreBackups()).To(BeEmpty())
+		})
+
+		stagingDirs := func() []string {
+			matches, err := filepath.Glob(filepath.Join(filepath.Dir(configDir), ".config.restore-*"))
+			Expect(err).NotTo(HaveOccurred())
+			return matches
+		}
+
+		corruptArchive := func() {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(dir, "config.tar.gz"), []byte("not gzip"), 0o600)).To(Succeed())
+		}
+
+		It("removes only its own staging directory when a restore fails", func() {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			// A good entry is extracted before the unsafe one stops the restore.
+			file, err := os.Create(filepath.Join(dir, "config.tar.gz"))
+			Expect(err).NotTo(HaveOccurred())
+			compressed := gzip.NewWriter(file)
+			archive := tar.NewWriter(compressed)
+			for _, name := range []string{"config.yaml", "../escape"} {
+				Expect(archive.WriteHeader(&tar.Header{Name: name, Mode: 0o600, Size: 1, Typeflag: tar.TypeReg})).To(Succeed())
+				_, err := archive.Write([]byte("x"))
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(archive.Close()).To(Succeed())
+			Expect(compressed.Close()).To(Succeed())
+			Expect(file.Close()).To(Succeed())
+
+			Expect(manager.RestoreBackup(id, "")).To(MatchError(ContainSubstring("failed to extract backup")))
+			Expect(configDir).NotTo(BeAnExistingFile())
+			Expect(stagingDirs()).To(BeEmpty())
+			Expect(preRestoreBackups()).To(BeEmpty())
+		})
+
+		DescribeTable("leaves a target that another process creates during the restore untouched",
+			func(prepare func(), message string) {
+				prepare()
+				sentinel := []byte("written by another process\n")
+				DeferCleanup(backup.BeforeFreshRestore(func(target string) {
+					Expect(os.MkdirAll(target, 0o750)).To(Succeed())
+					Expect(os.WriteFile(filepath.Join(target, "config.yaml"), sentinel, 0o600)).To(Succeed())
+				}))
+
+				Expect(manager.RestoreBackup(id, "")).To(MatchError(ContainSubstring(message)))
+				Expect(os.ReadFile(filepath.Join(configDir, "config.yaml"))).To(Equal(sentinel))
+				Expect(os.ReadDir(configDir)).To(HaveLen(1))
+				Expect(stagingDirs()).To(BeEmpty())
+			},
+			Entry("when the restore succeeds", func() {}, "run the restore again"),
+			Entry("when the archive is corrupt", corruptArchive, "failed to extract backup"),
+		)
+	})
+
+	Context("when an imported backup cannot be indexed", func() {
+		It("keeps the existing index and rolls the import back", func() {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			backups := filepath.Dir(dir)
+			index := filepath.Join(backups, backup.MetadataFile)
+			before, err := os.ReadFile(index)
+			Expect(err).NotTo(HaveOccurred())
+
+			staging, err := os.MkdirTemp(backups, ".devex-pull-*")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(os.WriteFile(filepath.Join(staging, "metadata.json"), []byte(`{"id":"imported","type":"manual"}`), 0o600)).To(Succeed())
+
+			DeferCleanup(backup.FailIndexWrites(errors.New("no space left on device")))
+			_, err = manager.ImportBackup("imported", staging)
+			Expect(err).To(MatchError(ContainSubstring("no space left on device")))
+			Expect(err).To(MatchError(ContainSubstring("previous index is unchanged")))
+
+			Expect(os.ReadFile(index)).To(Equal(before))
+			Expect(manager.ListBackups("", 0)).To(ConsistOf(HaveField("ID", id)))
+			_, err = manager.BackupDir("imported")
+			Expect(err).To(HaveOccurred())
+			Expect(filepath.Glob(index + ".tmp-*")).To(BeEmpty())
+		})
+	})
+})

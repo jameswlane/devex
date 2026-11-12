@@ -47,6 +47,9 @@ func (m *SetupModel) handleEnter() (*SetupModel, tea.Cmd) {
 		}
 		return m, nil
 	case StepConfirmation:
+		if _, err := m.getOhMyZshPlan(); err != nil {
+			return m, nil
+		}
 		m.step = StepInstalling
 		m.installation.setInstalling(true)
 		return m, m.startInstallation()

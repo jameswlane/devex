@@ -118,6 +118,11 @@ var _ = Describe("Oh My Zsh setup follow-up regressions", func() {
 		}
 		Expect(filepath.Join(defaultsDir, "prompt")).NotTo(BeAnExistingFile())
 
+		for _, change := range model.systemUndo.changes {
+			if change.Kind == setupundo.KindCreatedFile {
+				Expect(change.Target).To(Equal(change.Path))
+			}
+		}
 		changes := append(model.systemUndo.rc.Changes(), model.systemUndo.changes...)
 		GinkgoT().Setenv("DEVEX_DATA_DIR", "")
 		GinkgoT().Setenv("XDG_DATA_HOME", "")

@@ -231,7 +231,10 @@ existing `~/.zshrc` is backed up before its first managed write. Defaults live
 under `defaults/zsh` in the resolved DevEx data directory (`XDG_DATA_HOME` and
 `DEVEX_DATA_DIR` are respected), preserve the existing PATH, and define tool
 aliases only when those tools are installed. If the existing rc already loads
-Oh My Zsh, DevEx leaves it unchanged. Setup never runs `chsh` or changes the
+Oh My Zsh, DevEx leaves it unchanged. Before installing or writing files, setup
+rejects conflicting `ZSH` assignments, including paths containing a `..` segment.
+Remove the assignment or point it directly to `~/.oh-my-zsh` before opting in.
+Setup never runs `chsh` or changes the
 login shell as part of this opt-in.
 
 ### Preview Mode
@@ -396,8 +399,11 @@ Undo restores:
   `~/.config/fish/config.fish`, as it was before setup ran. Lines outside the
   block, including edits you made after setup, are left alone. Undo deletes an
   rc file setup created, unless you have added your own content to it.
-- bundled Zsh default files setup created, provided their contents are still
-  unchanged. An existing or subsequently customized file is never removed.
+- bundled Zsh default files setup created, provided their contents and recorded
+  resolved paths are still unchanged. Existing or subsequently customized files
+  are never removed. For older undo records without a resolved path, DevEx
+  preserves the file and asks you to inspect it; remove it manually only after
+  confirming it is the DevEx-created default, then retry undo.
 - an Oh My Zsh clone only when it carries the matching DevEx ownership marker.
   Undo moves the clone to a unique sibling directory and reports the preserved
   path, so themes, plugins, and other content you added later are not deleted.

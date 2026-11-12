@@ -24,20 +24,70 @@ var _ = Describe("Oh My Zsh undo records", func() {
 		Expect(os.MkdirAll(filepath.Dir(path), 0o700)).To(Succeed())
 		data := []byte("bundled defaults\n")
 		Expect(os.WriteFile(path, data, 0o600)).To(Succeed())
+		target, err := filepath.EvalSymlinks(path)
+		Expect(err).NotTo(HaveOccurred())
 		change := setupundo.Change{
 			Kind: setupundo.KindCreatedFile, Description: "bundled rc", Path: path,
-			Checksum: fmt.Sprintf("%x", sha256.Sum256(data)), Root: filepath.Dir(path),
+			Checksum: fmt.Sprintf("%x", sha256.Sum256(data)), Root: filepath.Dir(path), Target: target,
 		}
 		Expect(setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})).To(Succeed())
 		Expect(path).NotTo(BeAnExistingFile())
 		Expect(setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})).To(Succeed())
 
 		Expect(os.WriteFile(path, []byte("user customization\n"), 0o600)).To(Succeed())
-		err := setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})
+		err = setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})
 		Expect(err).To(MatchError(ContainSubstring("changed after setup")))
 		content, readErr := os.ReadFile(path)
 		Expect(readErr).NotTo(HaveOccurred())
 		Expect(string(content)).To(Equal("user customization\n"))
+	})
+
+	It("preserves an unchanged legacy file whose setup-time target is unknown", func() {
+		path := filepath.Join(home, ".local", "share", "devex", "defaults", "zsh", "rc")
+		Expect(os.MkdirAll(filepath.Dir(path), 0o700)).To(Succeed())
+		data := []byte("bundled defaults\n")
+		Expect(os.WriteFile(path, data, 0o600)).To(Succeed())
+		change := setupundo.Change{
+			Kind: setupundo.KindCreatedFile, Description: "legacy bundled rc", Path: path,
+			Checksum: fmt.Sprintf("%x", sha256.Sum256(data)), Root: filepath.Dir(path),
+		}
+
+		err := setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})
+		Expect(err).To(MatchError(ContainSubstring("legacy undo record")))
+		Expect(err).To(MatchError(ContainSubstring("not removed")))
+		Expect(err).To(MatchError(ContainSubstring("manually")))
+		content, readErr := os.ReadFile(path)
+		Expect(readErr).NotTo(HaveOccurred())
+		Expect(content).To(Equal(data))
+
+		Expect(os.Remove(path)).To(Succeed())
+		Expect(setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})).To(Succeed())
+	})
+
+	It("preserves a legacy file behind a repointed parent", func() {
+		root := filepath.Join(home, "data", "defaults", "zsh")
+		path := filepath.Join(root, "rc")
+		Expect(os.MkdirAll(root, 0o700)).To(Succeed())
+		data := []byte("identical bundled content\n")
+		Expect(os.WriteFile(path, data, 0o600)).To(Succeed())
+		change := setupundo.Change{
+			Kind: setupundo.KindCreatedFile, Description: "legacy bundled rc", Path: path,
+			Checksum: fmt.Sprintf("%x", sha256.Sum256(data)), Root: root,
+		}
+
+		movedRoot := filepath.Join(filepath.Dir(root), "zsh-created")
+		Expect(os.Rename(root, movedRoot)).To(Succeed())
+		replacement := filepath.Join(home, "user-zsh")
+		Expect(os.MkdirAll(replacement, 0o700)).To(Succeed())
+		replacementPath := filepath.Join(replacement, "rc")
+		Expect(os.WriteFile(replacementPath, data, 0o600)).To(Succeed())
+		Expect(os.Symlink(replacement, root)).To(Succeed())
+
+		err := setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})
+		Expect(err).To(MatchError(ContainSubstring("legacy undo record")))
+		Expect(err).To(MatchError(ContainSubstring("not removed")))
+		Expect(replacementPath).To(BeAnExistingFile())
+		Expect(filepath.Join(movedRoot, "rc")).To(BeAnExistingFile())
 	})
 
 	It("refuses paths outside the recorded root and symlinked defaults", func() {
@@ -60,6 +110,34 @@ var _ = Describe("Oh My Zsh undo records", func() {
 		Expect(setupundo.Restore(context.Background(), nil, home, []setupundo.Change{linkChange})).To(MatchError(ContainSubstring("not a regular file")))
 		Expect(target).To(BeAnExistingFile())
 		Expect(link).To(BeAnExistingFile())
+	})
+
+	It("refuses removal when a parent directory has been repointed", func() {
+		root := filepath.Join(home, "data", "defaults", "zsh")
+		path := filepath.Join(root, "rc")
+		Expect(os.MkdirAll(root, 0o700)).To(Succeed())
+		data := []byte("identical bundled content\n")
+		Expect(os.WriteFile(path, data, 0o600)).To(Succeed())
+		target, err := filepath.EvalSymlinks(path)
+		Expect(err).NotTo(HaveOccurred())
+		change := setupundo.Change{
+			Kind: setupundo.KindCreatedFile, Description: "bundled rc", Path: path,
+			Checksum: fmt.Sprintf("%x", sha256.Sum256(data)), Root: root, Target: target,
+		}
+
+		movedRoot := filepath.Join(filepath.Dir(root), "zsh-created")
+		Expect(os.Rename(root, movedRoot)).To(Succeed())
+		replacement := filepath.Join(home, "user-zsh")
+		Expect(os.MkdirAll(replacement, 0o700)).To(Succeed())
+		replacementPath := filepath.Join(replacement, "rc")
+		Expect(os.WriteFile(replacementPath, data, 0o600)).To(Succeed())
+		Expect(os.Symlink(replacement, root)).To(Succeed())
+
+		err = setupundo.Restore(context.Background(), nil, home, []setupundo.Change{change})
+		Expect(err).To(MatchError(ContainSubstring("now points to")))
+		Expect(err).To(MatchError(ContainSubstring("not removed")))
+		Expect(replacementPath).To(BeAnExistingFile())
+		Expect(filepath.Join(movedRoot, "rc")).To(BeAnExistingFile())
 	})
 
 	It("moves aside only a marked clone and preserves content the user added later", func() {

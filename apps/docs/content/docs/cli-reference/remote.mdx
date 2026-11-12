@@ -1,0 +1,70 @@
+---
+title: devex remote install
+description: Install applications on another host over SSH with the DevEx installed there.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# devex remote install
+
+`devex remote install` installs applications on another machine, such as a development VM or a fleet host, without logging in to it. It runs the DevEx installed on that host over SSH and streams its output back.
+
+```bash
+devex remote install <apps...> --host [user@]host [flags]
+```
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--host` | | SSH destination, `[user@]host` (required) |
+| `--port` | ssh config, or 22 | SSH port |
+| `--identity` | agent and ssh config | Private key file |
+| `--known-hosts` | `~/.ssh/known_hosts` | known_hosts file to verify the host key with |
+| `--accept-new-host-key` | `false` | Trust and record an unknown host key on first connection |
+| `--remote-devex` | `devex` | The devex command on the remote host |
+| `--ssh` | `ssh` | Local ssh executable |
+| `--dry-run` | `false` | Show the remote plan without installing |
+| `--yes`, `-y` | `false` | Install without prompting; required without a terminal |
+
+`--host`, `--port`, `--identity`, `--known-hosts`, `--remote-devex` and `--ssh` can also come from `DEVEX_REMOTE_HOST`, `DEVEX_REMOTE_PORT`, `DEVEX_REMOTE_IDENTITY`, `DEVEX_REMOTE_KNOWN_HOSTS`, `DEVEX_REMOTE_DEVEX` and `DEVEX_REMOTE_SSH`, or from the `remote:` section of the config file (keys `host`, `port`, `identity`, `known-hosts`, `devex`, `ssh`). Flags win over the environment, which wins over the config file. `--dry-run` also follows `DEVEX_DRY_RUN` and `dry-run` in the config file, so a configured preview never installs, even with `--yes`. `--accept-new-host-key` and `--yes` are trust and consent decisions and are flags only.
+
+```yaml
+# config.yaml
+remote:
+  host: me@devbox
+  port: 2222
+  identity: ~/.ssh/devbox
+```
+
+## What happens
+
+1. The application names are checked against your local catalog, across all platforms: an application that only has a definition for the remote host's platform is accepted, and the remote host decides whether it supports it.
+2. DevEx connects and reads the remote DevEx version.
+3. The remote DevEx plans the applications (`devex install --dry-run --format json`). Its own platform and configuration decide the install methods, so the plan can differ from what you'd get locally. The plan is shown for confirmation: each application's method, effects (such as hooks or configuration files), dependencies and privileges, and the install order.
+4. The plan names the selected applications whose install steps and hooks run, and shows when rollback on failure is enabled. It carries a digest of everything the install would execute: those selected applications, the plan itself, each planned application's full definition (including install commands, hooks and dependencies), the remote execution policy (rollback on failure, concurrency, offline, cache, plugin-download and APT list settings), the plugin registry and signing key, the effective command-security policy (from the configuration or `security.yaml`), and the content of every configuration file and copy-hook source the selected applications install, along with which `requires_any` markers exist.
+5. `devex install --non-interactive --expect-plan <digest>` runs on the remote host with `CI=true` and no terminal. That DevEx resolves the request again and installs only if the digest still matches, then executes exactly that resolution, in the same process and from the same loaded configuration. During the install it uses the confirmed security policy, registry and settings rather than reading them again, and a configuration file or copy source that changes mid-install fails it instead of being copied. If anything changed after you confirmed, it refuses and nothing is installed. Its output is streamed here, and a remote failure makes the command exit nonzero.
+
+Applications must be named: a remote install never uses the remote host's defaults implicitly.
+
+## SSH and host keys
+
+DevEx uses your OpenSSH client, so your `~/.ssh/config`, agent and keys apply. It runs in batch mode and never prompts for a password or passphrase; load your key into the agent or pass `--identity`.
+
+<Callout type="warn" title="Host keys are verified">
+An unknown host is refused. Add its key to known_hosts after checking the fingerprint (for example `ssh-keyscan host` against a fingerprint you trust), or pass `--accept-new-host-key` to trust it on the first connection. A changed host key is always refused.
+</Callout>
+
+## Privileges
+
+The remote install runs unattended, so package managers run through `sudo -n` and fail instead of asking for a password. Give the remote user passwordless `sudo` for package management, or connect as root. The remote host needs DevEx installed (`wget -qO- https://get.devex.sh/install | bash`) and its own configuration. Its DevEx must be recent enough to return plan digests and accept `--expect-plan`; an older one is refused with a request to upgrade it.
+
+## Cancellation
+
+Pressing Ctrl+C closes the SSH session. The remote install stops at its next output; a package operation that is already running may finish first.
+
+## Verify it yourself
+
+```bash
+devex remote install git --host me@devbox --dry-run
+devex remote install git --host me@devbox --yes
+ssh me@devbox devex status --app git
+```

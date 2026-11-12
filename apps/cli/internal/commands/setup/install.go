@@ -30,6 +30,11 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 }
 
 func (m *SetupModel) installSelectedApps() {
+	if _, err := m.getOhMyZshPlan(); err != nil {
+		m.installation.addError("Oh My Zsh configuration: " + err.Error())
+		return
+	}
+
 	// Convert selections to CrossPlatformApp objects
 	apps := m.buildAppList()
 

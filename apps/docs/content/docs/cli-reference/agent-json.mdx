@@ -5,7 +5,7 @@ description: Typed, read-only discovery, status, configuration and installation 
 
 The CLI adapters call `apps/cli/internal/agentapi` directly. A future adapter
 can call the same services without invoking Cobra or parsing terminal output.
-MCP transport is outside this API's scope.
+The [MCP server](/docs/cli-reference/mcp) is one such adapter.
 
 ```sh
 devex list available --search git --format json
@@ -73,7 +73,17 @@ status and config-show contracts remain unchanged.
           }
         }},
         "dependency_order": {"$ref": "#/$defs/strings"},
-        "warnings": {"$ref": "#/$defs/strings"}
+        "warnings": {"$ref": "#/$defs/strings"},
+        "roots": {"$ref": "#/$defs/strings"},
+        "policy": {"type": "object", "properties": {
+          "rollback_on_failure": {"type": "boolean"},
+          "install_concurrency": {"type": "integer"},
+          "offline": {"type": "boolean"},
+          "no_cache": {"type": "boolean"},
+          "skip_plugin_download": {"type": "boolean"},
+          "apt_lists_max_age": {"type": "string"}
+        }},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
     "effective": {
@@ -144,9 +154,33 @@ are not tracked by the current loader.
     "privileges": "unknown", "unknown_effects": true
   }],
   "dependency_order": ["git"],
-  "warnings": ["Plugin effects and required privileges are unknown; no plugins or hooks were executed."]
+  "warnings": ["Plugin effects and required privileges are unknown; no plugins or hooks were executed."],
+  "roots": ["git"],
+  "policy": {
+    "rollback_on_failure": false, "install_concurrency": 1, "offline": false,
+    "no_cache": false, "skip_plugin_download": false, "apt_lists_max_age": "15m0s"
+  },
+  "digest": "sha256:…"
 }
 ```
+
+`devex install --dry-run --format json` adds `roots`, `policy` and `digest`.
+`roots` are the selected applications whose install lifecycles (install
+steps, hooks, files) run; other planned dependencies are left to their package
+manager. `policy` is the effective execution policy. `digest` covers the
+roots, the plan, the full definitions of every planned application (install
+commands, hooks, dependencies, files), the policy, the plugin registry and
+signing key, the effective command-security policy, and the content of the
+configuration-file and copy-hook sources the roots read (with which
+`requires_any` markers exist). The registry, key, security policy and file
+contents are hashed but not shown.
+`devex install --expect-plan <digest>` resolves the same request once,
+installs only if that resolution has the confirmed digest, and then executes
+exactly that resolution: its roots, settings, policy, registry and security
+policy, refusing any configuration or copy source whose content changed. Any difference, such
+as naming another application, enabling `rollback-on-failure` or changing a
+definition, fails before anything is installed. `devex remote install` uses
+this to install exactly the plan you confirmed.
 
 Planning and execution share application selection: explicit app arguments,
 categories, inline definitions from the selected configuration, then default

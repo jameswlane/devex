@@ -1,0 +1,85 @@
+package commands
+
+import (
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/spf13/cobra"
+
+	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/mcpserver"
+	"github.com/jameswlane/devex/apps/cli/internal/types"
+)
+
+// mcpVersion is the DevEx version reported to MCP clients.
+var mcpVersion = "dev"
+
+// NewMCPCmd builds the mcp command group.
+func NewMCPCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "mcp",
+		Short: "Serve DevEx to Model Context Protocol clients",
+		Long: `Serve read-only DevEx tools and resources to Model Context Protocol (MCP)
+clients such as Claude Code and Codex.`,
+		SilenceUsage: true,
+	}
+	cmd.AddCommand(newMCPServeCmd(repo, settings))
+	return cmd
+}
+
+func newMCPServeCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
+	var timeout time.Duration
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Serve read-only DevEx tools over stdio",
+		Long: `Serve read-only DevEx tools and resources to an MCP client over stdin and
+stdout. The client starts this command; it is not meant to be run by hand.
+
+Tools: list_apps, detect_platform, get_status, validate_config, plan_install.
+Resource: devex://config/effective (allowlisted settings only).
+
+The server never installs, removes or configures anything, runs package
+managers, plugins or hooks, downloads plugins, or creates configuration or
+state. Stdout carries only MCP messages; diagnostics go to stderr.`,
+		Example: `  # Claude Code
+  claude mcp add devex -- devex mcp serve
+
+  # Codex (~/.codex/config.toml)
+  [mcp_servers.devex]
+  command = "devex"
+  args = ["mcp", "serve"]`,
+		Args:         cobra.NoArgs,
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if timeout <= 0 {
+				return fmt.Errorf("--request-timeout must be positive")
+			}
+			// Resolve applications from the local cache or the bundled catalog;
+			// the server never contacts the registry or writes a cache.
+			if err := config.LoadCatalogOffline(cmd.Context(), settings); err != nil {
+				return fmt.Errorf("load application catalog: %w", err)
+			}
+			server := mcpserver.New(mcpserver.Options{
+				Version:        mcpVersion,
+				Settings:       settings,
+				Repo:           repo,
+				RequestTimeout: timeout,
+			})
+			err := server.Run(cmd.Context(), &mcp.StdioTransport{})
+			// A client closing the connection or an interrupt is a normal shutdown.
+			if err == nil || errors.Is(err, cmd.Context().Err()) || errors.Is(err, mcp.ErrConnectionClosed) {
+				return nil
+			}
+			return err
+		},
+	}
+	cmd.Flags().DurationVar(&timeout, "request-timeout", mcpserver.DefaultRequestTimeout, "maximum time for each tool call or resource read")
+	return cmd
+}
+
+// mcpServeCommand reports whether cmd is mcp serve.
+func mcpServeCommand(cmd *cobra.Command) bool {
+	return cmd.Name() == "serve" && cmd.Parent() != nil && cmd.Parent().Name() == "mcp"
+}

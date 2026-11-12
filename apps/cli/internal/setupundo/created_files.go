@@ -39,6 +39,19 @@ func restoreCreatedFile(_ string, change Change) error {
 	if !info.Mode().IsRegular() {
 		return fmt.Errorf("%s is not a regular file; not removed", change.Path)
 	}
+	if change.Target == "" {
+		return fmt.Errorf("%s has no setup-time resolved target in its legacy undo record; not removed; inspect it and remove it manually only if it is the DevEx-created default", change.Path)
+	}
+	current, err := filepath.EvalSymlinks(change.Path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if current != change.Target {
+		return fmt.Errorf("%s now points to %s, not %s as after setup; not removed", change.Path, current, change.Target)
+	}
 	data, err := os.ReadFile(change.Path)
 	if err != nil {
 		return err

@@ -79,6 +79,74 @@ func configuredOhMyZsh(enabled bool) ohMyZshSelection {
 	return selection
 }
 
+func resolveZSHAssignment(raw, home string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", false
+	}
+	// Reject traversal before Join or Clean can erase it: a symlink followed
+	// by .. can resolve to a different installation than lexical cleanup.
+	for _, segment := range strings.Split(strings.Trim(value, `"'`), "/") {
+		if segment == ".." {
+			return "", false
+		}
+	}
+	doubleQuoted := false
+	switch value[0] {
+	case '\'':
+		if len(value) < 2 || value[len(value)-1] != '\'' || strings.Contains(value[1:len(value)-1], "'") {
+			return "", false
+		}
+		return value[1 : len(value)-1], true
+	case '"':
+		if len(value) < 2 || value[len(value)-1] != '"' || strings.ContainsAny(value[1:len(value)-1], `"\\`) {
+			return "", false
+		}
+		value = value[1 : len(value)-1]
+		doubleQuoted = true
+	default:
+		if strings.ContainsAny(value, `"'`) {
+			return "", false
+		}
+	}
+	value = strings.ReplaceAll(value, "${HOME}", "$HOME")
+	if strings.HasPrefix(value, "$HOME/") {
+		value = filepath.Join(home, strings.TrimPrefix(value, "$HOME/"))
+	} else if !doubleQuoted && strings.HasPrefix(value, "~/") {
+		value = filepath.Join(home, strings.TrimPrefix(value, "~/"))
+	}
+	return value, true
+}
+
+func hasConflictingZSHAssignment(content, home, frameworkDir string) bool {
+	assignment := regexp.MustCompile(`^(?:export\s+)?ZSH\s*=\s*(.*)$`)
+	inBlock := false
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch trimmed {
+		case managed.Start:
+			inBlock = true
+			continue
+		case managed.End:
+			inBlock = false
+			continue
+		}
+		if inBlock || trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		match := assignment.FindStringSubmatch(trimmed)
+		if len(match) != 2 {
+			continue
+		}
+		raw, _, _ := strings.Cut(match[1], " #")
+		value, ok := resolveZSHAssignment(raw, home)
+		if !ok || filepath.Clean(value) != filepath.Clean(frameworkDir) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *SetupModel) getOhMyZshPlan() (*ohMyZshPlan, error) {
 	selection := m.selections.ohMyZsh
 	if !selection.enabled || m.getSelectedShell() != "zsh" {
@@ -114,6 +182,9 @@ func (m *SetupModel) getOhMyZshPlan() (*ohMyZshPlan, error) {
 		content, err := os.ReadFile(plan.rcFile)
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", plan.rcFile, err)
+		}
+		if hasConflictingZSHAssignment(string(content), home, plan.frameworkDir) {
+			return nil, fmt.Errorf("conflicting ZSH assignment in %s: Oh My Zsh is managed at %s; remove the existing assignment or point it to that directory before opting in", plan.rcFile, plan.frameworkDir)
 		}
 		plan.alreadyLoads = sourcesOhMyZshOutsideBlock(string(content))
 	}
@@ -251,10 +322,14 @@ func (m *SetupModel) applyOhMyZsh(ctx context.Context) error {
 		if !created {
 			continue
 		}
+		target, err := filepath.EvalSymlinks(asset.path)
+		if err != nil {
+			return fmt.Errorf("resolve created bundled Zsh default %s: %w", asset.path, err)
+		}
 		checksum := fmt.Sprintf("%x", sha256.Sum256(asset.data))
 		m.systemUndo.changes = append(m.systemUndo.changes, setupundo.Change{
 			Kind: setupundo.KindCreatedFile, Description: "Created bundled Zsh default " + asset.path,
-			Path: asset.path, Checksum: checksum, Root: plan.defaultsDir,
+			Path: asset.path, Checksum: checksum, Root: plan.defaultsDir, Target: target,
 		})
 		m.installation.addChange("Deployed bundled Zsh default: " + asset.path)
 	}
