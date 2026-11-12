@@ -175,9 +175,9 @@ var _ = Describe("CLI startup regression coverage", func() {
 
 var _ = Describe("Runtime registry catalog", func() {
 	It("uses the registry for filtered JSON listings and explicit install resolution", func(ctx SpecContext) {
-		fixture, err := os.ReadFile("../internal/catalog/testdata/applications.json")
-		Expect(err).NotTo(HaveOccurred())
-		fixture = bytes.ReplaceAll(fixture, []byte(`"git"`), []byte(`"registry-only"`))
+		// A registry-only application in the registry's snake_case schema; the
+		// bundled applications stay in the catalog alongside it.
+		fixture := []byte(`{"items":[{"name":"registry-only","description":"Only in the registry","category":"Dependency","default":false,"desktopEnvironments":[],"platforms":{"linux":{"install_method":"apt","install_command":"registry-only","uninstall_command":"registry-only"},"macos":null,"windows":null}}],"pagination":{"total":1,"count":1,"limit":100,"offset":0,"page":1,"totalPages":1,"hasNext":false,"hasPrevious":false}}`)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(fixture) }))
 		defer server.Close()
 		home := GinkgoT().TempDir()
