@@ -1,9 +1,13 @@
 package devcontainer_test
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -68,25 +72,108 @@ var _ = Describe("Devcontainer generation", func() {
 		Expect(devcontainer.Validate([]byte(`{"build":{}}`))).To(HaveOccurred())
 	})
 
-	It("builds the generated Dockerfile in a disposable container", Label("docker"), func(ctx SpecContext) {
-		if _, err := exec.LookPath("docker"); err != nil {
-			Skip("docker is not installed")
+	Describe("the remote user", func() {
+		It("relies on the official images' vscode user", func() {
+			result, err := devcontainer.Generate([]types.CrossPlatformApp{apt("curl")}, devcontainer.Options{Image: "mcr.microsoft.com/devcontainers/base:debian-12"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Spec.RemoteUser).To(Equal("vscode"))
+			Expect(result.Dockerfile).NotTo(ContainSubstring("useradd"))
+		})
+
+		DescribeTable("is created in the Dockerfile when the base image may not provide it",
+			func(options devcontainer.Options, user string) {
+				result, err := devcontainer.Generate([]types.CrossPlatformApp{apt("curl")}, options)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Spec.RemoteUser).To(Equal(user))
+				Expect(result.Dockerfile).To(ContainSubstring("if ! id -u " + user + " "))
+				Expect(result.Dockerfile).To(ContainSubstring("--user-group " + user))
+				// A base image may default to a non-root USER; apt needs root.
+				Expect(strings.Index(result.Dockerfile, "USER root")).To(BeNumerically("<", strings.Index(result.Dockerfile, "apt-get")))
+			},
+			Entry("plain Debian", devcontainer.Options{Image: "debian:12-slim"}, "vscode"),
+			Entry("plain Ubuntu", devcontainer.Options{Image: "ubuntu:24.04"}, "vscode"),
+			Entry("another user on the default image", devcontainer.Options{RemoteUser: "dev"}, "dev"),
+		)
+
+		It("rejects root and malformed user names", func() {
+			for _, user := range []string{"root", "Bad", "a b", "x;rm -rf /"} {
+				_, err := devcontainer.Generate(nil, devcontainer.Options{RemoteUser: user})
+				Expect(err).To(MatchError(ContainSubstring("invalid remote user")), user)
+			}
+		})
+	})
+
+	Context("in a disposable container", Label("docker"), func() {
+		BeforeEach(func(ctx SpecContext) {
+			if _, err := exec.LookPath("docker"); err != nil {
+				Skip("docker is not installed")
+			}
+			if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
+				Skip("docker is not running")
+			}
+		})
+		// cleanup runs docker with a fresh, bounded context: the spec's own
+		// context is already cancelled when cleanup runs.
+		cleanup := func(args ...string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			_ = exec.CommandContext(ctx, "docker", args...).Run()
 		}
-		if err := exec.CommandContext(ctx, "docker", "info").Run(); err != nil {
-			Skip("docker is not running")
-		}
-		result, err := devcontainer.Generate([]types.CrossPlatformApp{apt("curl")}, devcontainer.Options{Image: "debian:12-slim"})
-		Expect(err).NotTo(HaveOccurred())
-		dir := GinkgoT().TempDir()
-		Expect(os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(result.Dockerfile), 0o600)).To(Succeed())
-		tag := "devex-devcontainer-test:" + time.Now().Format("150405")
-		DeferCleanup(func() { _ = exec.Command("docker", "rmi", "-f", tag).Run() })
-		build := exec.CommandContext(ctx, "docker", "build", "-q", "-t", tag, dir)
-		output, err := build.CombinedOutput()
-		Expect(err).NotTo(HaveOccurred(), string(output))
-		run := exec.CommandContext(ctx, "docker", "run", "--rm", tag, "curl", "--version")
-		output, err = run.CombinedOutput()
-		Expect(err).NotTo(HaveOccurred(), string(output))
-		Expect(string(output)).To(ContainSubstring("curl"))
-	}, SpecTimeout(10*time.Minute))
+
+		DescribeTable("builds the generated Dockerfile and runs a tool as the declared remote user",
+			func(ctx SpecContext, image string) {
+				result, err := devcontainer.Generate([]types.CrossPlatformApp{apt("curl")}, devcontainer.Options{Image: image})
+				Expect(err).NotTo(HaveOccurred())
+				data, err := result.Marshal()
+				Expect(err).NotTo(HaveOccurred())
+				var spec devcontainer.Spec
+				Expect(json.Unmarshal(data, &spec)).To(Succeed())
+				Expect(spec.RemoteUser).NotTo(BeEmpty())
+
+				dir := GinkgoT().TempDir()
+				Expect(os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(result.Dockerfile), 0o600)).To(Succeed())
+				tag := fmt.Sprintf("devex-devcontainer-test:%d", time.Now().UnixNano())
+				DeferCleanup(cleanup, "rmi", "-f", tag)
+				output, err := exec.CommandContext(ctx, "docker", "build", "-q", "-t", tag, dir).CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), string(output))
+				output, err = exec.CommandContext(ctx, "docker", "run", "--rm", "--user", spec.RemoteUser, tag, "sh", "-c", "id -un && curl --version").CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), string(output))
+				Expect(string(output)).To(HavePrefix(spec.RemoteUser + "\n"))
+				Expect(string(output)).To(ContainSubstring("curl"))
+			},
+			Entry("default image", SpecTimeout(15*time.Minute), devcontainer.DefaultImage),
+			Entry("custom Debian image", SpecTimeout(15*time.Minute), "debian:12-slim"),
+		)
+
+		DescribeTable("starts through the Dev Container CLI and executes as the remote user",
+			func(ctx SpecContext, apps []types.CrossPlatformApp, image string) {
+				if _, err := exec.LookPath("devcontainer"); err != nil {
+					Skip("the devcontainer CLI is not installed")
+				}
+				result, err := devcontainer.Generate(apps, devcontainer.Options{Image: image})
+				Expect(err).NotTo(HaveOccurred())
+				data, err := result.Marshal()
+				Expect(err).NotTo(HaveOccurred())
+				workspace := GinkgoT().TempDir()
+				Expect(os.MkdirAll(filepath.Join(workspace, ".devcontainer"), 0o755)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(workspace, ".devcontainer", "devcontainer.json"), data, 0o600)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(workspace, ".devcontainer", "Dockerfile"), []byte(result.Dockerfile), 0o600)).To(Succeed())
+				DeferCleanup(func() {
+					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+					defer cancel()
+					ids, _ := exec.CommandContext(ctx, "docker", "ps", "-aq", "--filter", "label=devcontainer.local_folder="+workspace).Output()
+					for _, id := range strings.Fields(string(ids)) {
+						cleanup("rm", "-f", id)
+					}
+				})
+				output, err := exec.CommandContext(ctx, "devcontainer", "up", "--workspace-folder", workspace).CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), string(output))
+				output, err = exec.CommandContext(ctx, "devcontainer", "exec", "--workspace-folder", workspace, "id", "-un").CombinedOutput()
+				Expect(err).NotTo(HaveOccurred(), string(output))
+				Expect(strings.TrimSpace(string(output))).To(HaveSuffix(result.Spec.RemoteUser))
+			},
+			Entry("default image with a Feature", SpecTimeout(20*time.Minute), []types.CrossPlatformApp{{Name: "git"}, apt("curl")}, devcontainer.DefaultImage),
+			Entry("custom Debian image with a Feature", SpecTimeout(20*time.Minute), []types.CrossPlatformApp{{Name: "git"}, apt("curl")}, "debian:12-slim"),
+		)
+	})
 })

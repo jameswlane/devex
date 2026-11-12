@@ -31,6 +31,7 @@ func newDevcontainerGenerateCmd(settings config.CrossPlatformSettings) *cobra.Co
 	var (
 		dir    string
 		image  string
+		user   string
 		name   string
 		apps   []string
 		dryRun bool
@@ -51,6 +52,10 @@ host (desktop apps, flatpak and snap packages, apt packages from third-party
 repositories, applications with setup hooks) are left out and listed with the
 reason, so you can add them yourself.
 
+Any base image must be Debian or Ubuntu based. The Dockerfile switches to
+root for the apt layer and creates the --remote-user (default vscode) unless
+the image already provides it, as the official Dev Container images do.
+
 Nothing is mounted from the host: no SSH keys, credentials or home
 directory. Existing files are never overwritten without --force.`,
 		Example: `  # Preview for the configured defaults
@@ -69,7 +74,7 @@ directory. Existing files are never overwritten without --force.`,
 			if err != nil {
 				return err
 			}
-			result, err := devcontainer.Generate(selected, devcontainer.Options{Name: name, Image: image})
+			result, err := devcontainer.Generate(selected, devcontainer.Options{Name: name, Image: image, RemoteUser: user})
 			if err != nil {
 				return err
 			}
@@ -81,7 +86,10 @@ directory. Existing files are never overwritten without --force.`,
 				return err
 			}
 			target := filepath.Join(dir, ".devcontainer")
-			files := map[string][]byte{filepath.Join(target, "devcontainer.json"): spec, filepath.Join(target, "Dockerfile"): []byte(result.Dockerfile)}
+			files := []devcontainerFile{
+				{path: filepath.Join(target, "devcontainer.json"), data: spec},
+				{path: filepath.Join(target, "Dockerfile"), data: []byte(result.Dockerfile)},
+			}
 			if !dryRun {
 				if err := writeDevcontainer(target, files, force); err != nil {
 					return err
@@ -111,6 +119,7 @@ directory. Existing files are never overwritten without --force.`,
 	}
 	cmd.Flags().StringVar(&dir, "dir", ".", "Project directory to write .devcontainer into")
 	cmd.Flags().StringVar(&image, "image", devcontainer.DefaultImage, "Base image")
+	cmd.Flags().StringVar(&user, "remote-user", devcontainer.DefaultRemoteUser, "Non-root user editors connect as; created in the Dockerfile unless the base image provides it")
 	cmd.Flags().StringVar(&name, "name", "DevEx", "Container name shown by editors")
 	cmd.Flags().StringSliceVar(&apps, "apps", nil, "Applications to include (default: your configured defaults)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the files without writing them")
@@ -151,33 +160,133 @@ func devcontainerApps(cmd *cobra.Command, settings config.CrossPlatformSettings,
 	return defaults, nil
 }
 
-// writeDevcontainer writes the files, refusing to replace any without force.
-func writeDevcontainer(target string, files map[string][]byte, force bool) error {
-	if info, err := os.Lstat(target); err == nil && !info.IsDir() {
-		return fmt.Errorf("%s exists and is not a directory", target)
+// devcontainerFile is one generated file and its contents.
+type devcontainerFile struct {
+	path string
+	data []byte
+}
+
+// devcontainerRename installs staged files; tests replace it to inject failures.
+var devcontainerRename = os.Rename
+
+// writeDevcontainer installs the files as a set. Every destination is checked
+// before anything is written, the contents are staged in exclusively created,
+// randomly named temporary files, and if installing any file fails the files
+// already installed are rolled back, so a failed run leaves an existing
+// configuration as it was. Existing files are only replaced with force.
+func writeDevcontainer(target string, files []devcontainerFile, force bool) (err error) {
+	if info, statErr := os.Lstat(target); statErr == nil && !info.IsDir() {
+		return fmt.Errorf("%s exists and is not a directory; move it aside or choose another --dir", target)
 	}
-	if !force {
-		for path := range files {
-			if _, err := os.Lstat(path); err == nil {
-				return fmt.Errorf("%s already exists; use --force to replace it", path)
-			}
+	for _, file := range files {
+		info, statErr := os.Lstat(file.path)
+		switch {
+		case errors.Is(statErr, os.ErrNotExist):
+		case statErr != nil:
+			return fmt.Errorf("checking %s: %w", file.path, statErr)
+		case !info.Mode().IsRegular():
+			return fmt.Errorf("%s is not a regular file; remove it and run the command again", file.path)
+		case !force:
+			return fmt.Errorf("%s already exists; use --force to replace it", file.path)
 		}
 	}
 	if err := os.MkdirAll(target, 0o755); err != nil {
-		return err
+		return fmt.Errorf("creating %s: %w", target, err)
 	}
-	for path, data := range files {
-		if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
-			return fmt.Errorf("%s is not a regular file", path)
+
+	staged := make([]string, 0, len(files))
+	defer func() {
+		for _, path := range staged {
+			_ = os.Remove(path) // already renamed into place on success
 		}
-		tmp := path + ".devex-tmp"
-		if err := os.WriteFile(tmp, data, 0o644); err != nil {
-			return err
+	}()
+	for _, file := range files {
+		tmp, stageErr := stageDevcontainerFile(target, file)
+		if stageErr != nil {
+			return stageErr
 		}
-		if err := os.Rename(tmp, path); err != nil {
-			_ = os.Remove(tmp)
-			return err
+		staged = append(staged, tmp)
+	}
+
+	// Install each file, moving any original aside first so it can be restored.
+	type installed struct{ path, backup string }
+	var done []installed
+	defer func() {
+		for i := len(done) - 1; i >= 0; i-- {
+			step := done[i]
+			switch {
+			case err == nil:
+				if step.backup != "" {
+					_ = os.Remove(step.backup)
+				}
+			case step.backup == "":
+				_ = os.Remove(step.path)
+			default:
+				if restoreErr := devcontainerRename(step.backup, step.path); restoreErr != nil {
+					err = fmt.Errorf("%w; restoring %s also failed, the original is at %s: %w", err, step.path, step.backup, restoreErr)
+				}
+			}
 		}
+	}()
+	for i, file := range files {
+		step := installed{path: file.path}
+		if _, statErr := os.Lstat(file.path); statErr == nil {
+			backup, reserveErr := reserveTemp(target, filepath.Base(file.path)+".devex-backup-*")
+			if reserveErr != nil {
+				return reserveErr
+			}
+			if renameErr := devcontainerRename(file.path, backup); renameErr != nil {
+				_ = os.Remove(backup)
+				return fmt.Errorf("backing up %s: %w", file.path, renameErr)
+			}
+			step.backup = backup
+		}
+		if renameErr := devcontainerRename(staged[i], file.path); renameErr != nil {
+			// Roll this file back together with the ones already installed.
+			if step.backup != "" {
+				done = append(done, step)
+			}
+			return fmt.Errorf("writing %s: %w; no files were changed", file.path, renameErr)
+		}
+		done = append(done, step)
 	}
 	return nil
+}
+
+// stageDevcontainerFile writes data to a new, exclusively created temporary
+// file next to the destination and returns its path.
+func stageDevcontainerFile(dir string, file devcontainerFile) (path string, err error) {
+	tmp, err := os.CreateTemp(dir, filepath.Base(file.path)+".devex-*.tmp")
+	if err != nil {
+		return "", fmt.Errorf("staging %s: %w", file.path, err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
+		}
+	}()
+	if _, err = tmp.Write(file.data); err != nil {
+		return "", fmt.Errorf("staging %s: %w", file.path, err)
+	}
+	if err = tmp.Chmod(0o644); err != nil {
+		return "", fmt.Errorf("staging %s: %w", file.path, err)
+	}
+	if err = tmp.Close(); err != nil {
+		return "", fmt.Errorf("staging %s: %w", file.path, err)
+	}
+	return tmp.Name(), nil
+}
+
+// reserveTemp creates an empty, exclusively owned temporary file name in dir.
+func reserveTemp(dir, pattern string) (string, error) {
+	tmp, err := os.CreateTemp(dir, pattern)
+	if err != nil {
+		return "", fmt.Errorf("reserving a backup name in %s: %w", dir, err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmp.Name())
+		return "", fmt.Errorf("reserving a backup name in %s: %w", dir, err)
+	}
+	return tmp.Name(), nil
 }

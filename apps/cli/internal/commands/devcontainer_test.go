@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,5 +105,111 @@ var _ = Describe("Devcontainer command", func() {
 		Expect(execute("--apps", "not-a-devex-app")).To(HaveOccurred())
 		Expect(execute("--image", "bad image")).To(MatchError(ContainSubstring("invalid image")))
 		Expect(strings.Contains(output.String(), "Wrote")).To(BeFalse())
+	})
+
+	Context("writing files safely", func() {
+		dir := func() string { return filepath.Join(project, ".devcontainer") }
+		entries := func() []string {
+			list, err := os.ReadDir(dir())
+			Expect(err).NotTo(HaveOccurred())
+			names := make([]string, 0, len(list))
+			for _, entry := range list {
+				names = append(names, entry.Name())
+			}
+			return names
+		}
+
+		It("never writes through pre-existing temporary-looking files or symlinks", func() {
+			Expect(os.MkdirAll(dir(), 0o755)).To(Succeed())
+			victim := filepath.Join(GinkgoT().TempDir(), "README")
+			Expect(os.WriteFile(victim, []byte("keep me\n"), 0o600)).To(Succeed())
+			Expect(os.Symlink(victim, filepath.Join(dir(), "Dockerfile.devex-tmp"))).To(Succeed())
+			Expect(os.WriteFile(filepath.Join(dir(), "devcontainer.json.devex-tmp"), []byte("unrelated\n"), 0o600)).To(Succeed())
+
+			Expect(execute()).To(Succeed())
+
+			Expect(os.ReadFile(victim)).To(Equal([]byte("keep me\n")))
+			link, err := os.Readlink(filepath.Join(dir(), "Dockerfile.devex-tmp"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(link).To(Equal(victim))
+			Expect(read("devcontainer.json.devex-tmp")).To(Equal("unrelated\n"))
+			info, err := os.Lstat(filepath.Join(dir(), "Dockerfile"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(info.Mode().IsRegular()).To(BeTrue())
+			Expect(read("Dockerfile")).To(ContainSubstring("FROM "))
+			Expect(entries()).To(ConsistOf("Dockerfile", "devcontainer.json", "Dockerfile.devex-tmp", "devcontainer.json.devex-tmp"))
+		})
+
+		DescribeTable("checks every destination before writing any file",
+			func(invalid, existing string) {
+				Expect(os.MkdirAll(filepath.Join(dir(), invalid), 0o755)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir(), existing), []byte("original\n"), 0o600)).To(Succeed())
+
+				Expect(execute("--force")).To(MatchError(ContainSubstring("is not a regular file")))
+
+				Expect(read(existing)).To(Equal("original\n"))
+				Expect(filepath.Join(dir(), invalid)).To(BeADirectory())
+				Expect(entries()).To(ConsistOf(invalid, existing))
+			},
+			Entry("Dockerfile is a directory", "Dockerfile", "devcontainer.json"),
+			Entry("devcontainer.json is a directory", "devcontainer.json", "Dockerfile"),
+		)
+
+		Context("when installing the second file fails", func() {
+			BeforeEach(func() {
+				DeferCleanup(func(original func(string, string) error) { devcontainerRename = original }, devcontainerRename)
+				devcontainerRename = func(from, to string) error {
+					if filepath.Base(to) == "Dockerfile" && strings.HasSuffix(from, ".tmp") {
+						return errors.New("disk full")
+					}
+					return os.Rename(from, to)
+				}
+			})
+
+			It("puts the existing files back as they were", func() {
+				Expect(os.MkdirAll(dir(), 0o755)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir(), "devcontainer.json"), []byte("old json\n"), 0o600)).To(Succeed())
+				Expect(os.WriteFile(filepath.Join(dir(), "Dockerfile"), []byte("old dockerfile\n"), 0o600)).To(Succeed())
+
+				Expect(execute("--force")).To(MatchError(And(ContainSubstring("disk full"), ContainSubstring("no files were changed"))))
+
+				Expect(read("devcontainer.json")).To(Equal("old json\n"))
+				Expect(read("Dockerfile")).To(Equal("old dockerfile\n"))
+				Expect(entries()).To(ConsistOf("devcontainer.json", "Dockerfile"))
+			})
+
+			It("removes the files it had already written", func() {
+				Expect(execute()).To(MatchError(ContainSubstring("disk full")))
+				Expect(entries()).To(BeEmpty())
+			})
+		})
+	})
+
+	Context("choosing the remote user", func() {
+		It("relies on the official images' vscode user", func() {
+			Expect(execute()).To(Succeed())
+			Expect(read("devcontainer.json")).To(ContainSubstring(`"remoteUser": "vscode"`))
+			Expect(read("Dockerfile")).NotTo(ContainSubstring("useradd"))
+		})
+
+		It("creates the remote user on other base images, after switching to root", func() {
+			Expect(execute("--image", "debian:12-slim")).To(Succeed())
+			Expect(read("devcontainer.json")).To(ContainSubstring(`"remoteUser": "vscode"`))
+			dockerfile := read("Dockerfile")
+			Expect(dockerfile).To(ContainSubstring("useradd --create-home --shell /bin/bash --user-group vscode"))
+			Expect(strings.Index(dockerfile, "USER root")).To(BeNumerically("<", strings.Index(dockerfile, "apt-get")))
+		})
+
+		It("uses the user named with --remote-user", func() {
+			Expect(execute("--remote-user", "dev")).To(Succeed())
+			Expect(read("devcontainer.json")).To(ContainSubstring(`"remoteUser": "dev"`))
+			Expect(read("Dockerfile")).To(ContainSubstring("--user-group dev"))
+		})
+
+		It("rejects root and malformed user names", func() {
+			Expect(execute("--remote-user", "root")).To(MatchError(ContainSubstring("non-root")))
+			Expect(execute("--remote-user", "bad user")).To(MatchError(ContainSubstring("invalid remote user")))
+			Expect(filepath.Join(project, ".devcontainer")).NotTo(BeADirectory())
+		})
 	})
 })

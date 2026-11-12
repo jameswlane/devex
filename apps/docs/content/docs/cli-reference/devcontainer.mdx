@@ -10,7 +10,7 @@ import { Callout } from 'fumadocs-ui/components/callout'
 `devex devcontainer generate` writes a [Development Container](https://containers.dev) for a project, `.devcontainer/devcontainer.json` and a `Dockerfile`, from your DevEx applications. Editors such as VS Code and tools such as the `devcontainer` CLI can then build and open the project inside that container.
 
 ```bash
-devex devcontainer generate [--apps a,b] [--image IMAGE] [--dir DIR] [--name NAME] [--dry-run] [--force] [--format table|json]
+devex devcontainer generate [--apps a,b] [--image IMAGE] [--remote-user USER] [--dir DIR] [--name NAME] [--dry-run] [--force] [--format table|json]
 ```
 
 ## What goes into the container
@@ -31,7 +31,7 @@ Everything else is left out and listed as `Skipped <app>: <reason>`, so you can 
 - applications with setup hooks, which DevEx runs on the host;
 - applications installed another way (curlpipe, mise and so on).
 
-The base image is `mcr.microsoft.com/devcontainers/base:ubuntu-24.04`; choose another with `--image`. The container runs as the image's non-root `vscode` user.
+The base image is `mcr.microsoft.com/devcontainers/base:ubuntu-24.04`; choose another Debian or Ubuntu based image with `--image`. Editors connect as the non-root `remoteUser`, `vscode` unless you pass `--remote-user`. The official `mcr.microsoft.com/devcontainers/*` images already provide `vscode`; for any other image, or another user name, the Dockerfile creates the user if the image does not have it. The Dockerfile switches to `root` before the apt layer, so images whose default `USER` is not root still build.
 
 ## Local versus container setup
 
@@ -44,6 +44,7 @@ Do not bake secrets into the Dockerfile; the image layers keep them. Pass them a
 ## Files
 
 - Existing generated files are never replaced unless you pass `--force`; with `--force` both files are rewritten.
+- Both files are checked before either is written, and they are installed together: if writing one fails, the other is put back as it was, so a failed run never leaves a mixed old and new configuration.
 - `--dry-run` prints both files and writes nothing.
 - The generated `devcontainer.json` is validated before it is written: it must parse, name the Dockerfile build, and use only the Features listed above.
 
