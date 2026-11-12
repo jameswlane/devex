@@ -9,6 +9,7 @@
 		"config",
 		"dotfiles",
 		"template",
+		"devcontainer",
 		"add-remove",
 		"status-list",
 		"plugin",

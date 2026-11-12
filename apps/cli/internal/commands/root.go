@@ -129,6 +129,14 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			if cmdName == "self-update" || cmdName == "paths" || cmdName == "help" {
 				return nil
 			}
+			// Detection installs and runs only the stack detector plugin.
+			if detectCommand(cmd) {
+				return nil
+			}
+			// Generating a dev container never runs plugins.
+			if cmd.Parent() != nil && cmd.Parent().Name() == "devcontainer" {
+				return nil
+			}
 			return runtime.initializePluginSystem(cmd.Context())
 		},
 		PersistentPostRun: func(cmd *cobra.Command, args []string) {
@@ -189,6 +197,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
 	cmd.AddCommand(NewRemoteCmd(repo, settings))
+	cmd.AddCommand(NewDevcontainerCmd(repo, settings))
 	cmd.AddCommand(NewDotfilesCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))

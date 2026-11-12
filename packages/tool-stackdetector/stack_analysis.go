@@ -18,19 +18,19 @@ type ProjectAnalysis struct {
 
 // Dependency represents a project dependency
 type Dependency struct {
-	Name    string
-	Version string
-	Type    string // "direct", "dev", "peer"
-	Source  string // file where found
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Type    string `json:"type"`   // "direct", "dev", "peer"
+	Source  string `json:"source"` // file where found
 }
 
 // ProjectSize represents project size metrics
 type ProjectSize struct {
-	TotalFiles    int
-	CodeFiles     int
-	ConfigFiles   int
-	DocumentFiles int
-	LinesOfCode   int
+	TotalFiles    int `json:"total_files"`
+	CodeFiles     int `json:"code_files"`
+	ConfigFiles   int `json:"config_files"`
+	DocumentFiles int `json:"document_files"`
+	LinesOfCode   int `json:"lines_of_code"`
 }
 
 // handleAnalyze performs deep project analysis
