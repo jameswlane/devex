@@ -52,6 +52,14 @@ var _ = Describe("Agent skill startup", func() {
 		Expect(string(output)).To(ContainSubstring("Would install"))
 		Expect(startupSnapshot(home)).To(Equal(before))
 
+		// Value-taking global flags before the command keep the same early path.
+		flagged := exec.CommandContext(boundedCtx, binary, "--install-concurrency", "4", "--apt-lists-max-age", "15m", "agent", "install-skill", "--agent", "claude", "--scope", "user", "--dry-run")
+		flagged.Env = runEnv
+		output, err = flagged.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(ContainSubstring("Would install"))
+		Expect(startupSnapshot(home)).To(Equal(before))
+
 		install := exec.CommandContext(boundedCtx, binary, args...)
 		install.Env = runEnv
 		output, err = install.CombinedOutput()
