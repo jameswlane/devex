@@ -33,19 +33,31 @@ Automatic technology stack detection plugin for DevEx. Intelligently detects pro
 
 ## 🚀 Quick Start
 
+Use the CLI's detect commands; they install this plugin when needed:
+
 ```bash
-# Detect current project stack
-devex tool stackdetector scan
+# Detect the current project's stack
+devex detect
 
-# Detect specific directory
-devex tool stackdetector scan /path/to/project
+# Full analysis of a directory
+devex detect analyze /path/to/project
 
-# Get tool recommendations
-devex tool stackdetector recommend
+# DevEx applications that match the project
+devex detect suggest
 
-# Install recommended tools
-devex tool stackdetector install-recommended
+# Add them to your configuration (preview first)
+devex detect apply --dry-run
 ```
+
+## Plugin commands
+
+| Command | Arguments | Output |
+|---------|-----------|--------|
+| `detect` | `[directory]` | Human-readable list of detected technologies |
+| `analyze` | `[directory] [--verbose]` | Human-readable analysis |
+| `report` | `[directory] [--path DIR] [--format text\|json\|yaml] [--output FILE]` | The stack report |
+
+`report --format json` writes only the JSON report to stdout (progress goes to stderr). The report has `project_path`, `technologies` (`name`, `category`, `confidence` 1-10, `description`, `files`), `dependencies`, `project_size`, `recommendations`, `issues` and `summary`. `devex detect` reads this report.
 
 ## 🚀 Platform Support
 
