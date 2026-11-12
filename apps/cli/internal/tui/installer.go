@@ -1391,8 +1391,8 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 
 	// Hand os/exec writers instead of StdoutPipe/StderrPipe: Wait closes those
 	// pipes as soon as the process exits, so reading them concurrently with
-	// Wait drops a short-lived command's output. With writers, Wait returns
-	// only after every byte has been copied to the readers below.
+	// Wait drops a short-lived command's output. With writers, Wait normally
+	// returns only after every byte has been copied to the readers below.
 	stdoutReader, stdoutWriter := io.Pipe()
 	stderrReader, stderrWriter := io.Pipe()
 	cmd.Stdout = stdoutWriter
@@ -1400,8 +1400,8 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 
 	// Cancel the whole process group, including shell pipeline children.
 	configureCommandCancellation(cmd)
-	// Bound how long Wait keeps copying after the process exits, in case a
-	// background grandchild inherited the output descriptors.
+	// Bound post-exit copying when a descendant holds output descriptors open.
+	// Expiry can also cut off a slow consumer; it does not establish the cause.
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = time.Second
 	}
@@ -1428,12 +1428,11 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	go stream(stdoutReader, "STDOUT")
 	go stream(stderrReader, "STDERR")
 
-	// Wait for command completion; os/exec has finished writing all output
-	// into the pipes once it returns.
+	// Wait for command completion and bounded output copying.
 	cmdErr := cmd.Wait()
-	if errors.Is(cmdErr, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
-		// The command itself succeeded; only a lingering descendant still held
-		// the output open.
+	captureCutOff := errors.Is(cmdErr, exec.ErrWaitDelay)
+	if captureCutOff && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// Preserve the direct command's success, but report the possible loss below.
 		cmdErr = nil
 	}
 
@@ -1441,6 +1440,9 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 	_ = stdoutWriter.Close()
 	_ = stderrWriter.Close()
 	wg.Wait()
+	if captureCutOff {
+		si.sendLog("WARN", fmt.Sprintf("Command output capture ended before copying completed; output may be incomplete (WaitDelay=%s)", cmd.WaitDelay))
+	}
 
 	if timeoutCtx.Err() != nil {
 		return timeoutCtx.Err()

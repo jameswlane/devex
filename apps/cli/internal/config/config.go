@@ -45,6 +45,10 @@ type CrossPlatformSettings struct {
 	Dotfiles             DotfilesConfig             `mapstructure:",squash"`
 	DesktopEnvironments  DesktopEnvironmentsConfig  `mapstructure:",inline"`
 	Security             SecurityConfigField        `mapstructure:"security"`
+	// ResolvedSecurity, when set, is the effective command-security policy
+	// resolved for a confirmed install. It is used instead of resolving the
+	// embedded settings or reading security.yaml again.
+	ResolvedSecurity *security.SecurityConfig `mapstructure:"-"`
 }
 
 // ApplicationsConfig represents the application configuration
@@ -778,13 +782,22 @@ func (s *CrossPlatformSettings) GetEnvironment() string {
 	if env := os.Getenv("NODE_ENV"); env != "" {
 		return env
 	}
+	// A profile chosen with devex profile switch.
+	if profile := CurrentProfile(s.HomeDir); profile != "" {
+		return profile
+	}
 	// Default to development
 	return "dev"
 }
 
 // GetConfigDirsWithEnvironment returns config directories with environment-specific paths
 func (s *CrossPlatformSettings) GetConfigDirsWithEnvironment() (defaultDir, teamDir, userDir string, envDirs map[string]string) {
-	env := s.GetEnvironment()
+	return s.ConfigDirsForEnvironment(s.GetEnvironment())
+}
+
+// ConfigDirsForEnvironment is GetConfigDirsWithEnvironment for a named
+// environment (profile) instead of the current one.
+func (s *CrossPlatformSettings) ConfigDirsForEnvironment(env string) (defaultDir, teamDir, userDir string, envDirs map[string]string) {
 	defaultDir = s.GetConfigDir()
 	teamDir = s.GetTeamConfigDir()
 	userDir = s.GetUserConfigDir()
@@ -912,6 +925,9 @@ func (s *CrossPlatformSettings) GetSecurityConfig() *security.SecurityConfig {
 
 // LoadSecurityConfigForSettings loads security configuration and applies it to settings
 func (s *CrossPlatformSettings) LoadSecurityConfigForSettings() (*security.SecurityConfig, error) {
+	if s.ResolvedSecurity != nil {
+		return s.ResolvedSecurity, nil
+	}
 	// Try to get from embedded config first
 	securityConfig := s.GetSecurityConfig()
 

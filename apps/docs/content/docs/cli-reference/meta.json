@@ -4,9 +4,11 @@
 		"index",
 		"setup",
 		"install",
+		"remote",
 		"non-interactive",
 		"config",
 		"dotfiles",
+		"profile",
 		"template",
 		"devcontainer",
 		"add-remove",
@@ -15,6 +17,7 @@
 		"plugin",
 		"recovery",
 		"self-update",
+		"mcp",
 		"global-flags"
 	]
 }
