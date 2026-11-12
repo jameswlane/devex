@@ -1,13 +1,14 @@
 // Package agentskills ships the DevEx Agent Skill (https://agentskills.io) so
 // coding agents get version-matched, tested instructions for using the CLI.
-// The canonical source is devex/SKILL.md; CLI and help changes must update it
-// in the same pull request.
+// The canonical source is the devex directory; CLI and help changes must update
+// it in the same pull request.
 package agentskills
 
 import (
 	"bufio"
 	"embed"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,15 @@ func Skill() (string, error) {
 		return "", fmt.Errorf("read embedded skill: %w", err)
 	}
 	return string(data), nil
+}
+
+// Bundle returns the complete embedded skill directory, rooted at the skill name.
+func Bundle() (fs.FS, error) {
+	bundle, err := fs.Sub(files, SkillName)
+	if err != nil {
+		return nil, fmt.Errorf("open embedded skill bundle: %w", err)
+	}
+	return bundle, nil
 }
 
 // ParseFrontmatter splits a SKILL.md into its YAML frontmatter and body.

@@ -36,6 +36,11 @@ var _ = Describe("Agent API startup", func() {
 			}
 			Expect(json.Valid(output)).To(BeTrue(), "%v: %s", args, output)
 		}
+		cmd := exec.CommandContext(ctx, binary, "agent", "install-skill", "--agent", "claude", "--scope", "user", "--dry-run")
+		cmd.Env = env
+		output, err = cmd.CombinedOutput()
+		Expect(err).NotTo(HaveOccurred(), string(output))
+		Expect(string(output)).To(ContainSubstring("Would install"))
 		Expect(startupSnapshot(home)).To(Equal(before))
 	})
 })

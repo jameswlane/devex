@@ -75,6 +75,8 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("plain list bootstraps plugins", []string{"list", "available"}, false),
 		Entry("JSON list is read-only", []string{"list", "available", "--format", "json"}, true),
 		Entry("platform is read-only", []string{"platform"}, true),
+		Entry("agent skill installation is read-only", []string{"agent", "install-skill", "--agent", "claude", "--scope", "user"}, true),
+		Entry("agent group alone is not read-only", []string{"agent"}, false),
 		Entry("mcp serve is read-only", []string{"mcp", "serve"}, true),
 		Entry("mcp serve with a flag is read-only", []string{"mcp", "serve", "--request-timeout", "5s"}, true),
 		Entry("bare mcp is not a read route", []string{"mcp"}, false),
@@ -93,6 +95,8 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("integer global flag before install", []string{"--install-concurrency", "1", "install", "git"}, false),
 		Entry("a flag value that names a read route", []string{"--config", "platform", "install", "git"}, false),
 		Entry("unknown commands", []string{"--install-concurrency", "1", "not-a-command"}, false),
+		Entry("integer global flag before agent install-skill", []string{"--install-concurrency", "4", "agent", "install-skill", "--agent", "claude"}, true),
+		Entry("integer global flag before the agent group", []string{"--install-concurrency", "4", "agent"}, false),
 		Entry("config show with --help=false is read-only", []string{"config", "show", "--help=false"}, true),
 	)
 
@@ -128,6 +132,15 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("paths", informationalCommand, []string{"--install-concurrency", "1", "paths"}, true),
 		Entry("config show", informationalCommand, []string{"--apt-lists-max-age", "15m", "config", "show"}, true),
 		Entry("install is not informational", informationalCommand, []string{"--install-concurrency", "1", "install", "git"}, false),
+		Entry("agent install-skill", agentSkillInstallCommand, []string{"agent", "install-skill", "--agent", "claude", "--scope", "user"}, true),
+		Entry("agent install-skill after an integer flag", agentSkillInstallCommand, []string{"--install-concurrency", "4", "agent", "install-skill", "--agent", "claude"}, true),
+		Entry("agent install-skill after a duration flag", agentSkillInstallCommand, []string{"--apt-lists-max-age", "15m", "agent", "install-skill", "--agent", "kimi"}, true),
+		Entry("agent install-skill after a config file", agentSkillInstallCommand, []string{"--config", "/x/config.yaml", "agent", "install-skill"}, true),
+		Entry("agent group alone", agentSkillInstallCommand, []string{"--install-concurrency", "4", "agent"}, false),
+		Entry("a flag value named agent", agentSkillInstallCommand, []string{"--config", "agent", "install-skill"}, false),
+		Entry("install-skill as an install argument", agentSkillInstallCommand, []string{"--install-concurrency", "4", "install", "agent", "install-skill"}, false),
+		Entry("after the argument terminator", agentSkillInstallCommand, []string{"install", "--", "agent", "install-skill"}, false),
+		Entry("agent install-skill --help=false still installs", agentSkillInstallCommand, []string{"agent", "install-skill", "--help=false"}, true),
 		// Explicitly false booleans are set but false, as Cobra treats them:
 		// these commands execute, so they must not take the nil-repository
 		// early presentation path.

@@ -123,6 +123,8 @@ try {
     & $pwsh -NoProfile -File $scriptPath -BaseUrl 'http://localhost:1' 6>$null
     Assert ($LASTEXITCODE -eq 1) 'Script failure must exit nonzero'
     $original = Get-Content -Raw $scriptPath
+    Assert ($original.Contains('Optional: devex agent install-skill --agent claude --scope user')) 'Agent skill hint is printed'
+    Assert ($original.Contains('Use --agent codex instead to cover both Codex and Kimi Code.')) 'Shared Codex and Kimi hint'
     $source = $original.Replace("[string]`$BaseUrl = 'https://github.com/jameswlane/devex/releases/download'", "[string]`$BaseUrl = 'http://localhost:1'")
     Assert ($source -cne $original) 'iex test points BaseUrl at localhost'
     # A child shell, so an installer that calls exit cannot end this test run.

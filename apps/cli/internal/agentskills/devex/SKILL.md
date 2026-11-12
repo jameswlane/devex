@@ -157,3 +157,24 @@ before running either operation; use `--non-interactive` for unattended runs.
 `update` never upgrades packages, and `upgrade` never substitutes a system-wide
 upgrade for the selected packages. Unsupported managers return errors; consult
 `devex update --help` and the CLI README's capability table.
+
+## Install or update this skill
+
+Ask which agent and user/project scope the user wants. Preview that exact
+selection, then install only after approval:
+
+```bash
+devex agent install-skill --agent codex --scope user --dry-run
+devex agent install-skill --agent codex --scope user
+```
+
+A Codex install under `.agents/skills` is also visible to Kimi Code, so a Kimi
+install skips when that shared copy exists. Codex still installs its own copy
+when a Kimi-specific copy exists, but warns with the exact Kimi path to remove
+so Kimi does not load DevEx twice. Use `--agent claude` for Claude Code, or
+`--agent kimi` only for a Kimi-specific location. Project scope defaults to the
+current working directory; `--project-dir PATH` selects another project.
+
+The installer uses only the bundle embedded in the running CLI and works
+offline. After a CLI upgrade, preview again and use `--overwrite` only if the
+user wants to replace local edits; the prior directory is retained as a backup.

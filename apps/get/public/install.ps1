@@ -142,6 +142,8 @@ function Install-DevEx {
         }
         Add-ToPath -BinPath $binPath
         Write-Host "DevEx $tag installed to $InstallDir."
+        Write-Host 'Optional: devex agent install-skill --agent claude --scope user'
+        Write-Host 'Use --agent codex instead to cover both Codex and Kimi Code.'
         $arguments = @('setup')
         if ($NonInteractive) { $arguments = @('install', '--non-interactive') }
         if ($Config) { $arguments += @('--config', $Config) }

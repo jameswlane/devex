@@ -53,7 +53,7 @@ func main() {
 	}
 	// Validation must remain usable with malformed settings and must not create
 	// databases, migrate files or initialize installation state before reporting.
-	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) {
+	if configurationValidationCommand(os.Args[1:]) || presentationCommand(os.Args[1:]) || agentSkillInstallCommand(os.Args[1:]) {
 		if presentationCommand(os.Args[1:]) {
 			if err := migrateLegacy(ctx, dirs, true, os.Args[1:], os.Stderr); err != nil {
 				handleError("checking legacy files", err)
@@ -266,6 +266,12 @@ func configurationValidationCommand(args []string) bool {
 	return resolveStartupRoute(args).configurationValidation()
 }
 
+// agentSkillInstallCommand identifies "devex agent install-skill", which only
+// copies the embedded bundle and needs no runtime startup.
+func agentSkillInstallCommand(args []string) bool {
+	return resolveStartupRoute(args).agentSkillInstall()
+}
+
 func readCommand(args []string) bool {
 	return resolveStartupRoute(args).read()
 }
@@ -416,6 +422,11 @@ func (r startupRoute) informational() bool {
 	return r.under("paths") || r.under("version") || r.is("config", "show")
 }
 
+// agentSkillInstall identifies "devex agent install-skill".
+func (r startupRoute) agentSkillInstall() bool {
+	return r.is("agent", "install-skill")
+}
+
 // configurationValidation identifies "devex config validate".
 func (r startupRoute) configurationValidation() bool {
 	return r.is("config", "validate")
@@ -455,6 +466,8 @@ func (r startupRoute) read() bool {
 		return r.flagValue("format") == "json"
 	case "config":
 		return r.is("config", "effective") || r.is("config", "show")
+	case "agent":
+		return r.agentSkillInstall()
 	}
 	return false
 }
