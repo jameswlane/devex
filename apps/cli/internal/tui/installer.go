@@ -1389,45 +1389,60 @@ func (si *StreamingInstaller) executeCommandStream(ctx context.Context, command 
 		return err
 	}
 
-	// Create pipes for stdout and stderr
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
+	// Hand os/exec writers instead of StdoutPipe/StderrPipe: Wait closes those
+	// pipes as soon as the process exits, so reading them concurrently with
+	// Wait drops a short-lived command's output. With writers, Wait normally
+	// returns only after every byte has been copied to the readers below.
+	stdoutReader, stdoutWriter := io.Pipe()
+	stderrReader, stderrWriter := io.Pipe()
+	cmd.Stdout = stdoutWriter
+	cmd.Stderr = stderrWriter
 
 	// Cancel the whole process group, including shell pipeline children.
 	configureCommandCancellation(cmd)
-	// Start command
-	if err := cmd.Start(); err != nil {
-		return err
+	// Bound post-exit copying when a descendant holds output descriptors open.
+	// Expiry can also cut off a slow consumer; it does not establish the cause.
+	if cmd.WaitDelay == 0 {
+		cmd.WaitDelay = time.Second
 	}
 
 	// Use WaitGroup to ensure all goroutines complete
 	var wg sync.WaitGroup
+	stream := func(reader *io.PipeReader, source string) {
+		defer wg.Done()
+		si.streamOutput(reader, source)
+		// Drain anything streamOutput left unread so the copy into the pipe
+		// never blocks Wait.
+		_, _ = io.Copy(io.Discard, reader)
+	}
+
+	// Start command
+	if err := cmd.Start(); err != nil {
+		_ = stdoutWriter.Close()
+		_ = stderrWriter.Close()
+		return err
+	}
 
 	// Stream output with goroutine tracking
 	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		si.streamOutput(stdout, "STDOUT")
-	}()
-	go func() {
-		defer wg.Done()
-		si.streamOutput(stderr, "STDERR")
-	}()
+	go stream(stdoutReader, "STDOUT")
+	go stream(stderrReader, "STDERR")
 
-	// Wait for command completion
+	// Wait for command completion and bounded output copying.
 	cmdErr := cmd.Wait()
+	captureCutOff := errors.Is(cmdErr, exec.ErrWaitDelay)
+	if captureCutOff && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// Preserve the direct command's success, but report the possible loss below.
+		cmdErr = nil
+	}
 
-	// Note: cmd.Wait() automatically closes stdout, stderr, and stdin pipes
-	// so we don't need to close them manually to avoid "file already closed" errors
-
-	// Wait for all goroutines to finish processing the remaining data
+	// Signal EOF to the readers and wait for them to log the remaining lines.
+	_ = stdoutWriter.Close()
+	_ = stderrWriter.Close()
 	wg.Wait()
+	if captureCutOff {
+		si.sendLog("WARN", fmt.Sprintf("Command output capture ended before copying completed; output may be incomplete (WaitDelay=%s)", cmd.WaitDelay))
+	}
 
 	if timeoutCtx.Err() != nil {
 		return timeoutCtx.Err()

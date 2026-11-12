@@ -1,0 +1,89 @@
+---
+title: Agent skill installation
+description: Install the DevEx skill bundled with your CLI for Claude Code, Codex, and Kimi Code.
+---
+
+`devex agent install-skill` copies the DevEx Agent Skill embedded in the
+installed CLI. It works offline and never downloads a separate or newer skill.
+The complete bundled directory is copied, including its frontmatter version
+metadata and any reference files, with relative paths preserved.
+
+```sh
+devex agent install-skill --agent claude --scope user
+devex agent install-skill --agent codex --scope user
+devex agent install-skill --agent kimi --scope user
+```
+
+Both `--agent` and `--scope` are required. Supported agents are `claude`,
+`codex`, and `kimi`; supported scopes are `user` and `project`. The command
+prints the resolved destination before installing.
+
+| Agent | User scope | Project scope |
+| --- | --- | --- |
+| Claude Code | `~/.claude/skills/devex/` | `PROJECT/.claude/skills/devex/` |
+| Codex | `~/.agents/skills/devex/` | `PROJECT/.agents/skills/devex/` |
+| Kimi Code | `$KIMI_CODE_HOME/skills/devex/`, defaulting to `~/.kimi-code/skills/devex/` | `PROJECT/.kimi-code/skills/devex/` |
+
+For project scope, `PROJECT` is the current working directory unless
+`--project-dir PATH` selects another existing directory. `--project-dir` is not
+valid with user scope. Paths are resolved with the operating system's home and
+path rules. The old `~/.codex/skills` convention is not used; there is no
+implicit legacy or custom Codex directory override.
+
+## One install for Codex and Kimi
+
+Kimi Code also scans `~/.agents/skills/` and `PROJECT/.agents/skills/`.
+Therefore this single user-level installation covers both Codex and Kimi Code:
+
+```sh
+devex agent install-skill --agent codex --scope user
+```
+
+Use the equivalent `--scope project` command for one project. A Kimi
+installation warns and skips when the shared Codex copy already exists. Codex
+always installs its own `.agents/skills/devex` copy because Codex does not read
+`.kimi-code/skills`. If a Kimi-specific copy already exists, the Codex install
+warns that Kimi Code will load DevEx twice and names the exact Kimi path to
+remove; the installer leaves that copy unchanged. Claude Code uses its separate
+`.claude` directory.
+
+## Preview, reinstall, and update
+
+Preview the resolved operation without creating directories or files:
+
+```sh
+devex agent install-skill --agent claude --scope project --dry-run
+```
+
+An identical reinstall is a no-op. If any installed content differs, including
+local edits or extra files, the command refuses to replace it unless
+`--overwrite` is explicit:
+
+```sh
+devex agent install-skill --agent claude --scope user --overwrite
+```
+
+After upgrading the DevEx CLI, rerun the original command with `--overwrite` to
+install the skill version bundled with that CLI. The installer stages the whole
+directory beside the destination, renames the old directory to a hidden
+`.devex-backup-*` sibling, and atomically publishes the staged directory. It
+prints the backup path and leaves it available for manual recovery. A failed
+publication restores the old directory. Other skills are not changed.
+
+## Discovery and reload
+
+Claude Code watches existing skill directories and normally picks up `SKILL.md`
+changes in the current session. If the top-level skills directory did not exist
+when the session started, run `/reload-skills` in Claude Code.
+
+Codex detects skill changes automatically; restart Codex if an update does not
+appear. Kimi Code refreshes discovered skills when their files change; reopen
+the session if the new skill is not listed.
+
+## Manual removal
+
+Remove only the resolved `devex/` directory shown by the installer. For example,
+remove `~/.claude/skills/devex/` for a user-level Claude installation, or
+`PROJECT/.agents/skills/devex/` for a shared project-level Codex/Kimi
+installation. Do not remove the parent `skills/` directory or any
+`.devex-backup-*` directory you still need for recovery.

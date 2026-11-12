@@ -36,7 +36,7 @@ var _ = Describe("Setup undo record", func() {
 
 		var undoLine string
 		for _, change := range model.installation.getChanges() {
-			if strings.HasPrefix(change, "Undo the shell, Git and desktop changes with: devex undo setup-") {
+			if strings.HasPrefix(change, "Undo the setup changes with: devex undo setup-") {
 				undoLine = change
 			}
 		}
@@ -69,7 +69,7 @@ var _ = Describe("Setup undo record", func() {
 		))
 	})
 
-	It("records nothing when setup changed no shell, Git or desktop settings", func() {
+	It("records nothing when setup changed no system settings or files", func() {
 		sdktest.NewRecorder(GinkgoT(), "git")
 		model := &SetupModel{settings: config.CrossPlatformSettings{HomeDir: os.Getenv("HOME")}}
 		model.beginSystemUndo()

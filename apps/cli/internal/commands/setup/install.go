@@ -30,6 +30,11 @@ func (m *SetupModel) startInstallation() tea.Cmd {
 }
 
 func (m *SetupModel) installSelectedApps() {
+	if _, err := m.getOhMyZshPlan(); err != nil {
+		m.installation.addError("Oh My Zsh configuration: " + err.Error())
+		return
+	}
+
 	// Convert selections to CrossPlatformApp objects
 	apps := m.buildAppList()
 
@@ -166,6 +171,9 @@ func (m *SetupModel) handleShellConfiguration(ctx context.Context, pluginBootstr
 	log.Info("Configuring shell using tool-shell plugin", "shell", selectedShell)
 
 	if err := runShellSetup(ctx, plugin.Path, selectedShell); err != nil {
+		return err
+	}
+	if err := m.applyOhMyZsh(ctx); err != nil {
 		return err
 	}
 

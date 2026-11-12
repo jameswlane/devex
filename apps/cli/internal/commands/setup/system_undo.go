@@ -92,10 +92,10 @@ func (m *SetupModel) finishSystemUndo() {
 		manager := undo.NewUndoManager(configDir)
 		var operation *undo.UndoOperation
 		operation, err = manager.RecordOperation(setupundo.Operation,
-			fmt.Sprintf("devex setup: %d shell, Git and desktop changes", len(changes)), "",
+			fmt.Sprintf("devex setup: %d system changes", len(changes)), "",
 			map[string]interface{}{setupundo.MetadataKey: encoded})
 		if err == nil {
-			m.installation.addChange(fmt.Sprintf("Undo the shell, Git and desktop changes with: devex undo %s", operation.ID))
+			m.installation.addChange(fmt.Sprintf("Undo the setup changes with: devex undo %s", operation.ID))
 			return
 		}
 	}

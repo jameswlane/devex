@@ -24,6 +24,7 @@ const (
 	StepLanguages
 	StepDatabases
 	StepShell     // Only for compatible systems (Linux/macOS)
+	StepOhMyZsh   // Optional framework setup, only for Zsh
 	StepTheme     // Theme selection after shell
 	StepGitConfig // Full name & email for git configuration
 	StepConfirmation
@@ -55,6 +56,7 @@ type UISelections struct {
 	selectedApps        map[int]bool
 	selectedDesktopApps map[string]bool
 	selectedTheme       int
+	ohMyZsh             ohMyZshSelection
 
 	// skipDefaultApps leaves default (default: true) apps out of the plan.
 	skipDefaultApps  bool
@@ -206,7 +208,7 @@ type SetupModel struct {
 	selections   UISelections
 	git          GitConfiguration
 	installation InstallationState
-	// systemUndo records shell, Git and desktop changes for devex undo.
+	// systemUndo records setup's system changes for devex undo.
 	systemUndo systemUndoState
 	plugins    PluginState
 
@@ -296,6 +298,7 @@ func NewSetupModel(repo types.Repository, settings config.CrossPlatformSettings,
 			selectedApps:        make(map[int]bool),
 			selectedDesktopApps: make(map[string]bool),
 			selectedTheme:       0,
+			ohMyZsh:             configuredOhMyZsh(false),
 		},
 
 		// Git configuration

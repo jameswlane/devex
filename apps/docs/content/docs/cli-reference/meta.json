@@ -18,6 +18,7 @@
 		"recovery",
 		"self-update",
 		"mcp",
+		"agent-skills",
 		"global-flags"
 	]
 }

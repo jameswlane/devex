@@ -79,6 +79,7 @@ func createAutomatedSetupModel(repo types.Repository, settings config.CrossPlatf
 			},
 			selectedApps:  make(map[int]bool), // No desktop apps for automated setup
 			selectedTheme: 0,
+			ohMyZsh:       configuredOhMyZsh(viper.GetBool("setup.oh_my_zsh.enabled")),
 		},
 
 		// Git configuration
@@ -195,6 +196,9 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	printAutomatedSetupPlan(model)
 	if viper.GetBool("dry-run") {
 		return nil
+	}
+	if _, err := model.getOhMyZshPlan(); err != nil {
+		return err
 	}
 
 	ctx = shellrc.WithShell(ctx, model.getSelectedShell())

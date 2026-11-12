@@ -195,6 +195,16 @@ var _ = Describe("Runtime logging configuration", func() {
 	})
 })
 
+var _ = Describe("Read-only command classification", func() {
+	It("routes agent skill installation through the shared inspection policy", func() {
+		cmd := NewRootCmd("test", nil, config.CrossPlatformSettings{})
+		agentSkill, _, err := cmd.Find([]string{"agent", "install-skill"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(agentSkill.Name()).To(Equal("install-skill"))
+		Expect(readAPICommand(agentSkill)).To(BeTrue())
+	})
+})
+
 var _ = Describe("Root platform support help", func() {
 	DescribeTable("labels support without starting setup or creating plugin state", func(args []string) {
 		viper.Reset()

@@ -128,6 +128,7 @@ func (m *SetupModel) renderInstallPlan() string {
 		b.WriteString("  • Update package lists (apt-get update, once)\n")
 	}
 	fmt.Fprintf(&b, "  • Shell: %s\n", m.getSelectedShell())
+	b.WriteString(m.renderOhMyZshPreview())
 	if theme := m.getSelectedTheme(); theme != "" {
 		fmt.Fprintf(&b, "  • Theme preference: %s\n", theme)
 	}

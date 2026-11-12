@@ -3,16 +3,22 @@ HISTSIZE=5000
 SAVEHIST=5000
 HISTFILE=~/.zsh_history
 
-# Autocompletion
-# source /usr/share/bash-completion/bash_completion
+# Resolve the DevEx data directory from this deployed file's location.
+_devex_shell_dir=${${(%):-%x}:A:h}
+export DEVEX_PATH="${_devex_shell_dir:h:h}"
+unset _devex_shell_dir
 
-# Set complete path
-export PATH="./bin:$HOME/.local/bin:$HOME/.local/share/devex/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-set +h
+# Keep the user's PATH and prepend DevEx directories only when missing.
+case ":$PATH:" in
+  *":$DEVEX_PATH/bin:"*) ;;
+  *) export PATH="$DEVEX_PATH/bin:$PATH" ;;
+esac
+case ":$PATH:" in
+  *":$HOME/.local/bin:"*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 
-export DEVEX_PATH="/home/$USER/.local/share/devex"
-
-# Enable mise if available
+# Enable mise if available.
 if command -v mise >/dev/null 2>&1; then
-    eval "$(mise activate zsh)"
+  eval "$(mise activate zsh)"
 fi

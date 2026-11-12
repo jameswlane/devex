@@ -236,6 +236,9 @@ func undoSpecificOperation(undoManager *undo.UndoManager, operationID string, fo
 	// Perform the undo
 	result, err := undoManager.UndoOperation(operationID, force)
 	if err != nil {
+		if result != nil && result.Message != "" {
+			fmt.Println(result.Message)
+		}
 		return fmt.Errorf("failed to undo operation: %w", err)
 	}
 
@@ -296,6 +299,9 @@ func undoLastOperation(undoManager *undo.UndoManager, force bool) error {
 	// Perform the undo
 	result, err := undoManager.UndoLast(force)
 	if err != nil {
+		if result != nil && result.Message != "" {
+			fmt.Println(result.Message)
+		}
 		return fmt.Errorf("failed to undo operation: %w", err)
 	}
 

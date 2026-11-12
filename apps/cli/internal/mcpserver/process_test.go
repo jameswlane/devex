@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -51,7 +52,7 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	// and checks that it speaks MCP, serves every tool and writes nothing.
 	serve := func(ctx SpecContext, path string, globalFlags ...string) {
 		home := GinkgoT().TempDir()
-		var stderr bytes.Buffer
+		var stderr processLogBuffer
 		command := exec.CommandContext(ctx, binary, append(globalFlags, "mcp", "serve")...)
 		command.Env = []string{
 			"HOME=" + home,
@@ -112,7 +113,7 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 
 	It("serves the mutating tools over the reserved stdout with --allow-mutations", func(ctx SpecContext) {
 		home := GinkgoT().TempDir()
-		var stderr bytes.Buffer
+		var stderr processLogBuffer
 		command := exec.CommandContext(ctx, binary, "mcp", "serve", "--allow-mutations")
 		command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true"}
 		command.Stderr = &stderr
@@ -160,7 +161,7 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	}
 
 	// serveMutations starts "devex mcp serve --allow-mutations" under home.
-	serveMutations := func(ctx SpecContext, home string, stderr *bytes.Buffer, args ...string) *mcp.ClientSession {
+	serveMutations := func(ctx SpecContext, home string, stderr *processLogBuffer, args ...string) *mcp.ClientSession {
 		command := exec.CommandContext(ctx, binary, append([]string{"mcp", "serve", "--allow-mutations"}, args...)...)
 		command.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9", "DEVEX_OFFLINE=true"}
 		command.Stderr = stderr
@@ -170,7 +171,7 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		return session
 	}
 
-	prepareUninstall := func(ctx SpecContext, session *mcp.ClientSession, stderr *bytes.Buffer) (mcpserver.PreparedPlan, []byte) {
+	prepareUninstall := func(ctx SpecContext, session *mcp.ClientSession, stderr *processLogBuffer) (mcpserver.PreparedPlan, []byte) {
 		prepared, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "prepare_uninstall", Arguments: map[string]any{"apps": []string{"canary"}}})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(prepared.IsError).To(BeFalse(), "%s\n%s", toolText(prepared), stderr.String())
@@ -185,7 +186,7 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		home := GinkgoT().TempDir()
 		trackCurlpipe(ctx, home, `echo "stdout https://user:SECRET_CANARY@example.invalid/x?token=SECRET_CANARY"; `+
 			`echo "stderr password=SECRET_CANARY" >&2; touch "$HOME/uninstalled"`)
-		var stderr bytes.Buffer
+		var stderr processLogBuffer
 		session := serveMutations(ctx, home, &stderr)
 
 		plan, data := prepareUninstall(ctx, session, &stderr)
@@ -212,7 +213,7 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		// from stdin. Inheriting the MCP request stream, it would either block
 		// forever or swallow the next request.
 		trackCurlpipe(ctx, home, `touch "$HOME/started"; IFS= read -r line; printf '%s' "$line" > "$HOME/stdin"; touch "$HOME/uninstalled"`)
-		var stderr bytes.Buffer
+		var stderr processLogBuffer
 		session := serveMutations(ctx, home, &stderr, "--mutation-timeout", "20s")
 		plan, _ := prepareUninstall(ctx, session, &stderr)
 
@@ -246,3 +247,21 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		serve(ctx, GinkgoT().TempDir(), "--install-concurrency", "1", "--apt-lists-max-age", "15m", "--log-level", "error")
 	}, SpecTimeout(2*time.Minute))
 })
+
+// processLogBuffer permits diagnostics while os/exec is still copying stderr.
+type processLogBuffer struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *processLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(p)
+}
+
+func (b *processLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.String()
+}
