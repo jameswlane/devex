@@ -30,10 +30,10 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 
 	// serve runs the read-only server with the given PATH under an empty home
 	// and checks that it speaks MCP, serves every tool and writes nothing.
-	serve := func(ctx SpecContext, path string) {
+	serve := func(ctx SpecContext, path string, globalFlags ...string) {
 		home := GinkgoT().TempDir()
 		var stderr bytes.Buffer
-		command := exec.CommandContext(ctx, binary, "mcp", "serve")
+		command := exec.CommandContext(ctx, binary, append(globalFlags, "mcp", "serve")...)
 		command.Env = []string{
 			"HOME=" + home,
 			"PATH=" + path,
@@ -89,5 +89,9 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 	It("starts without installer tools such as curl, git or unzip on PATH", func(ctx SpecContext) {
 		Expect(filepath.IsAbs(binary)).To(BeTrue())
 		serve(ctx, GinkgoT().TempDir())
+	}, SpecTimeout(2*time.Minute))
+
+	It("starts without installer tools and writes nothing when value-taking global flags precede the command", func(ctx SpecContext) {
+		serve(ctx, GinkgoT().TempDir(), "--install-concurrency", "1", "--apt-lists-max-age", "15m", "--log-level", "error")
 	}, SpecTimeout(2*time.Minute))
 })

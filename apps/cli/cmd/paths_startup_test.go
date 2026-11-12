@@ -79,6 +79,19 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("mcp serve with a flag is read-only", []string{"mcp", "serve", "--request-timeout", "5s"}, true),
 		Entry("bare mcp is not a read route", []string{"mcp"}, false),
 		Entry("install is not read-only", []string{"install", "git"}, false),
+		// Value-taking global flags before the command must not hide it.
+		Entry("integer global flag before mcp serve", []string{"--install-concurrency", "1", "mcp", "serve"}, true),
+		Entry("duration global flag before mcp serve", []string{"--apt-lists-max-age", "15m", "mcp", "serve"}, true),
+		Entry("config file before mcp serve", []string{"--config", "/x/config.yaml", "mcp", "serve"}, true),
+		Entry("log level before mcp serve", []string{"--log-level", "debug", "mcp", "serve"}, true),
+		Entry("integer global flag before platform", []string{"--install-concurrency", "1", "platform"}, true),
+		Entry("integer global flag before JSON status", []string{"--install-concurrency", "1", "status", "--format", "json"}, true),
+		Entry("duration global flag before JSON list", []string{"--apt-lists-max-age", "15m", "list", "available", "-f", "json"}, true),
+		Entry("integer global flag before config show", []string{"--install-concurrency", "1", "config", "show"}, true),
+		Entry("integer global flag before plain status", []string{"--install-concurrency", "1", "status"}, false),
+		Entry("integer global flag before install", []string{"--install-concurrency", "1", "install", "git"}, false),
+		Entry("a flag value that names a read route", []string{"--config", "platform", "install", "git"}, false),
+		Entry("unknown commands", []string{"--install-concurrency", "1", "not-a-command"}, false),
 	)
 
 	DescribeTable("skips installer dependency checks only for the read-only MCP server",
@@ -90,5 +103,27 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("bare mcp", []string{"mcp"}, false),
 		Entry("install", []string{"install", "git"}, false),
 		Entry("platform", []string{"platform"}, false),
+		Entry("integer global flag before mcp serve", []string{"--install-concurrency", "1", "mcp", "serve"}, true),
+		Entry("duration global flag before mcp serve", []string{"--apt-lists-max-age", "15m", "mcp", "serve"}, true),
+		Entry("config file before mcp serve", []string{"--config", "/x/config.yaml", "mcp", "serve"}, true),
+		Entry("config value named mcp", []string{"--config", "mcp", "serve"}, false),
+		Entry("after the argument terminator", []string{"install", "--", "mcp", "serve"}, false),
+	)
+
+	DescribeTable("recognizes other startup routes after value-taking global flags",
+		func(classify func([]string) bool, args []string, want bool) {
+			Expect(classify(args)).To(Equal(want))
+		},
+		Entry("config validate", configurationValidationCommand, []string{"--install-concurrency", "1", "config", "validate"}, true),
+		Entry("config validate after a duration", configurationValidationCommand, []string{"--apt-lists-max-age", "15m", "config", "validate"}, true),
+		Entry("config show is not validation", configurationValidationCommand, []string{"--install-concurrency", "1", "config", "show"}, false),
+		Entry("help command", presentationCommand, []string{"--install-concurrency", "1", "help", "install"}, true),
+		Entry("help flag", presentationCommand, []string{"--apt-lists-max-age", "15m", "install", "--help"}, true),
+		Entry("completion", presentationCommand, []string{"--install-concurrency", "1", "completion", "bash"}, true),
+		Entry("root version flag", presentationCommand, []string{"--install-concurrency", "1", "--version"}, true),
+		Entry("install is not presentation", presentationCommand, []string{"--install-concurrency", "1", "install", "git"}, false),
+		Entry("paths", informationalCommand, []string{"--install-concurrency", "1", "paths"}, true),
+		Entry("config show", informationalCommand, []string{"--apt-lists-max-age", "15m", "config", "show"}, true),
+		Entry("install is not informational", informationalCommand, []string{"--install-concurrency", "1", "install", "git"}, false),
 	)
 })
