@@ -836,3 +836,63 @@ func (bm *BackupManager) NewBackupDir(id string) (string, error) {
 	}
 	return dir, nil
 }
+
+// ImportBackup publishes the backup unpacked in staging as backup id and
+// records it in the backup index, so list, restore and retention see it as
+// they see a locally created backup. staging must be on the same file system
+// as the backups directory. Nothing is published unless the backup's own
+// metadata names id, and the backup is removed again if it cannot be indexed.
+func (bm *BackupManager) ImportBackup(id, staging string) (*BackupMetadata, error) {
+	target, err := bm.NewBackupDir(id)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := bm.loadMetadata(staging)
+	if err != nil {
+		return nil, fmt.Errorf("backup %s has no readable metadata.json, so it is not a DevEx backup: %w", id, err)
+	}
+	if metadata.ID != id {
+		return nil, fmt.Errorf("backup %s contains metadata for backup %q; it was not imported", id, metadata.ID)
+	}
+	if err := bm.ensureBackupsDir(); err != nil {
+		return nil, fmt.Errorf("failed to create backups directory: %w", err)
+	}
+	if err := os.Rename(staging, target); err != nil {
+		return nil, fmt.Errorf("store backup %s in %s: %w", id, bm.backupsDir, err)
+	}
+	if err := bm.registerMetadata(metadata); err != nil {
+		if removeErr := os.RemoveAll(target); removeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove unindexed backup %s: %v\n", target, removeErr)
+		}
+		return nil, fmt.Errorf("record backup %s in the backup index: %w", id, err)
+	}
+	return metadata, nil
+}
+
+// registerMetadata adds metadata to the backup index, replacing any stale
+// entry with its ID. Unlike updateGlobalMetadata it refuses to rewrite an
+// index it cannot parse, which would drop the other backups from it.
+func (bm *BackupManager) registerMetadata(metadata *BackupMetadata) error {
+	var all []*BackupMetadata
+	data, err := os.ReadFile(bm.readPath(filepath.Join(bm.backupsDir, MetadataFile)))
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(data, &all); err != nil {
+			return fmt.Errorf("parse %s: %w", MetadataFile, err)
+		}
+	case !os.IsNotExist(err):
+		return err
+	}
+	kept := make([]*BackupMetadata, 0, len(all)+1)
+	for _, entry := range all {
+		if entry != nil && entry.ID != metadata.ID {
+			kept = append(kept, entry)
+		}
+	}
+	kept = append(kept, metadata)
+	data, err = json.MarshalIndent(kept, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(bm.backupsDir, MetadataFile), data, 0600)
+}

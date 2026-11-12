@@ -62,12 +62,17 @@ var _ = Describe("Remote backup commands", func() {
 		output   bytes.Buffer
 		id       string
 	)
-	BeforeEach(func() {
-		viper.Reset()
-		DeferCleanup(viper.Reset)
+	// isolate points every DevEx directory into a new temporary home, whatever
+	// path overrides the developer or CI environment sets, and creates a
+	// local backup there.
+	isolate := func() {
 		home := GinkgoT().TempDir()
 		GinkgoT().Setenv("HOME", home)
-		for _, key := range []string{"XDG_CONFIG_HOME", "DEVEX_CONFIG_DIR", "DEVEX_BACKUP_PASSPHRASE", "DEVEX_BACKUP_ACCESS_KEY_ID", "DEVEX_BACKUP_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
+		for _, key := range []string{
+			"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+			"DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR",
+			"DEVEX_BACKUP_PASSPHRASE", "DEVEX_BACKUP_ACCESS_KEY_ID", "DEVEX_BACKUP_SECRET_ACCESS_KEY", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+		} {
 			GinkgoT().Setenv(key, "")
 		}
 		settings = config.CrossPlatformSettings{HomeDir: home}
@@ -77,6 +82,11 @@ var _ = Describe("Remote backup commands", func() {
 		metadata, err := backup.NewBackupManager(configDir).CreateBackup(backup.BackupOptions{Type: "manual", Compress: true})
 		Expect(err).NotTo(HaveOccurred())
 		id = metadata.ID
+	}
+	BeforeEach(func() {
+		viper.Reset()
+		DeferCleanup(viper.Reset)
+		isolate()
 		store = &memoryStore{objects: map[string][]byte{}}
 		previous := newRemoteBackupStore
 		newRemoteBackupStore = func() (remote.Store, error) { return store, nil }
@@ -102,7 +112,8 @@ var _ = Describe("Remote backup commands", func() {
 		GinkgoT().Setenv("DEVEX_BACKUP_PASSPHRASE", "pw")
 		viper.Set("backup.remote.prefix", "/team/laptop/")
 		Expect(execute("push", id)).To(Succeed())
-		Expect(store.objects).To(HaveKey("team/laptop/" + id + ".devexbak"))
+		Expect(store.objects).To(HaveKey("team/laptop/" + id + ".json"))
+		Expect(store.objects).To(HaveKey(And(HavePrefix("team/laptop/"+id+"."), HaveSuffix(".devexbak"))))
 
 		Expect(execute("remote")).To(Succeed())
 		Expect(output.String()).To(ContainSubstring(id))
@@ -113,6 +124,25 @@ var _ = Describe("Remote backup commands", func() {
 		Expect(os.RemoveAll(dir)).To(Succeed())
 		Expect(execute("pull", id)).To(Succeed())
 		Expect(output.String()).To(ContainSubstring("devex config backup restore " + id))
+	})
+
+	It("keeps backups inside the temporary home when path overrides are inherited", func() {
+		sentinels := map[string]string{}
+		for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "DEVEX_CONFIG_DIR", "DEVEX_DATA_DIR", "DEVEX_STATE_DIR", "DEVEX_CACHE_DIR"} {
+			sentinels[key] = GinkgoT().TempDir()
+			GinkgoT().Setenv(key, sentinels[key])
+		}
+		isolate()
+		GinkgoT().Setenv("DEVEX_BACKUP_PASSPHRASE", "pw")
+		Expect(execute("push", id)).To(Succeed())
+		dir, err := backup.NewBackupManager(devexpaths.ForHome(settings.HomeDir).Config).BackupDir(id)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(dir).To(HavePrefix(settings.HomeDir + string(os.PathSeparator)))
+		Expect(os.RemoveAll(dir)).To(Succeed())
+		Expect(execute("pull", id)).To(Succeed())
+		for key, sentinel := range sentinels {
+			Expect(os.ReadDir(sentinel)).To(BeEmpty(), key)
+		}
 	})
 
 	It("explains missing storage configuration and credentials", func() {

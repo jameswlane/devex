@@ -3,11 +3,13 @@
 //
 // A backup directory is packed into one tar archive, encrypted with
 // AES-256-GCM under a key derived from a passphrase (scrypt), and uploaded as
-// <prefix><id>.devexbak with a <prefix><id>.json manifest holding its SHA-256,
-// size and whether it is encrypted. Uploads are read back and verified; pulls
-// verify the checksum and size before decrypting, and GCM authenticates the
-// content. A pulled backup becomes a new local backup that the existing
-// restore command applies.
+// <prefix><id>.<sha256>.devexbak with a <prefix><id>.json manifest holding its
+// SHA-256, size and whether it is encrypted. Payload keys are content
+// addressed, so a push never replaces the payload an existing manifest names.
+// Uploads are read back and verified; pulls verify the checksum and size
+// before decrypting, and GCM authenticates the content. A pulled backup
+// becomes a new local backup, registered in the local backup index, that the
+// existing restore command applies.
 package remote
 
 import (
@@ -43,7 +45,18 @@ const (
 	manifestSuffix  = ".json"
 	magic           = "DEVEXBK1"
 	saltSize        = 16
+	nonceSize       = 12
+	tagSize         = 16
+	// encryptionOverhead is what Encrypt adds: magic, salt, nonce and GCM tag.
+	encryptionOverhead = len(magic) + saltSize + nonceSize + tagSize
+	// MaxObjectBytes bounds a stored payload: a full archive plus encryption.
+	MaxObjectBytes = MaxArchiveBytes + encryptionOverhead
 )
+
+// maxEntryBytes is the largest file a remote backup holds. Pack and unpack
+// share it, so every backup that can be pushed can also be pulled. It is the
+// local extraction limit; tests lower it.
+var maxEntryBytes int64 = backup.MaxFileSize
 
 // ErrNotFound is returned by a Store for a missing object.
 var ErrNotFound = errors.New("object not found")
@@ -88,6 +101,12 @@ type Remote struct {
 
 func (r Remote) key(id, suffix string) string { return r.Prefix + id + suffix }
 
+// payloadKey is content addressed: different payloads never share a key, so
+// publishing one cannot replace the payload another manifest names.
+func (r Remote) payloadKey(manifest Manifest) string {
+	return r.Prefix + manifest.ID + "." + manifest.SHA256 + archiveSuffix
+}
+
 // Push packs, protects, uploads and verifies the local backup id.
 func (r Remote) Push(ctx context.Context, manager *backup.BackupManager, id string, policy Policy) (Manifest, error) {
 	dir, err := manager.BackupDir(id)
@@ -96,6 +115,13 @@ func (r Remote) Push(ctx context.Context, manager *backup.BackupManager, id stri
 	}
 	if policy.Passphrase == "" && !policy.AllowUnencrypted {
 		return Manifest{}, errors.New("set DEVEX_BACKUP_PASSPHRASE to encrypt the backup, or set backup.remote.encrypt to false to upload it unencrypted")
+	}
+	// Never replace a published backup: it may be the only usable copy, or
+	// another machine's backup with the same timestamp-based id.
+	if _, err := r.Store.Get(ctx, r.key(id, manifestSuffix)); err == nil {
+		return Manifest{}, fmt.Errorf("remote storage already has backup %s under %q and it was left unchanged; if another machine pushed it, give each machine its own backup.remote.prefix", id, r.Prefix)
+	} else if !errors.Is(err, ErrNotFound) {
+		return Manifest{}, fmt.Errorf("check remote storage for backup %s: %w", id, err)
 	}
 	archive, err := pack(dir)
 	if err != nil {
@@ -108,16 +134,19 @@ func (r Remote) Push(ctx context.Context, manager *backup.BackupManager, id stri
 			return Manifest{}, err
 		}
 	}
+	if len(payload) > MaxObjectBytes {
+		return Manifest{}, fmt.Errorf("backup %s is %d bytes once protected, over the %d-byte remote limit; exclude large files from the backup", id, len(payload), MaxObjectBytes)
+	}
 	sum := sha256.Sum256(payload)
 	manifest := Manifest{ID: id, Encrypted: encrypted, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(payload)), PushedAt: time.Now().UTC()}
 	if metadata, err := manager.GetBackup(id); err == nil {
 		manifest.Metadata = metadata
 	}
-	if err := r.Store.Put(ctx, r.key(id, archiveSuffix), payload); err != nil {
+	if err := r.Store.Put(ctx, r.payloadKey(manifest), payload); err != nil {
 		return Manifest{}, fmt.Errorf("upload backup %s: %w", id, err)
 	}
 	// Read the upload back so an interrupted or altered transfer is caught now.
-	stored, err := r.Store.Get(ctx, r.key(id, archiveSuffix))
+	stored, err := r.Store.Get(ctx, r.payloadKey(manifest))
 	if err != nil {
 		return Manifest{}, fmt.Errorf("verify uploaded backup %s: %w", id, err)
 	}
@@ -128,7 +157,8 @@ func (r Remote) Push(ctx context.Context, manager *backup.BackupManager, id stri
 	if err != nil {
 		return Manifest{}, err
 	}
-	// The manifest is written last, so a listed backup is always complete.
+	// The manifest is written last and names a payload no other push can
+	// overwrite, so a listed backup is always complete.
 	if err := r.Store.Put(ctx, r.key(id, manifestSuffix), data); err != nil {
 		return Manifest{}, fmt.Errorf("upload manifest for %s: %w", id, err)
 	}
@@ -152,7 +182,10 @@ func (r Remote) Pull(ctx context.Context, manager *backup.BackupManager, id stri
 	if manifest.ID != id {
 		return Manifest{}, fmt.Errorf("manifest for %s names backup %q", id, manifest.ID)
 	}
-	payload, err := r.Store.Get(ctx, r.key(id, archiveSuffix))
+	if !validSHA256(manifest.SHA256) {
+		return Manifest{}, fmt.Errorf("manifest for %s has no valid SHA-256", id)
+	}
+	payload, err := r.Store.Get(ctx, r.payloadKey(manifest))
 	if err != nil {
 		return Manifest{}, fmt.Errorf("download backup %s: %w", id, err)
 	}
@@ -168,7 +201,13 @@ func (r Remote) Pull(ctx context.Context, manager *backup.BackupManager, id stri
 			return Manifest{}, err
 		}
 	}
-	if err := unpack(archive, target); err != nil {
+	staging, err := unpack(archive, filepath.Dir(target))
+	if err != nil {
+		return Manifest{}, err
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+	// Publish and index the backup so list, restore and retention see it.
+	if _, err := manager.ImportBackup(id, staging); err != nil {
 		return Manifest{}, err
 	}
 	return manifest, nil
@@ -197,6 +236,11 @@ func (r Remote) List(ctx context.Context) ([]Manifest, error) {
 	}
 	sort.Slice(manifests, func(i, j int) bool { return manifests[i].PushedAt.After(manifests[j].PushedAt) })
 	return manifests, nil
+}
+
+func validSHA256(sum string) bool {
+	decoded, err := hex.DecodeString(sum)
+	return err == nil && len(decoded) == sha256.Size && hex.EncodeToString(decoded) == sum
 }
 
 func verify(payload []byte, manifest Manifest) error {
@@ -294,6 +338,10 @@ func pack(dir string) ([]byte, error) {
 		if !info.Mode().IsRegular() && !info.IsDir() {
 			return fmt.Errorf("backup contains %s, which is not a regular file or directory", rel)
 		}
+		// Refuse before uploading anything a pull would reject.
+		if info.Mode().IsRegular() && info.Size() > maxEntryBytes {
+			return fmt.Errorf("%s is %d bytes, over the %d-byte limit for a file in a remote backup; push an uncompressed backup instead (devex config backup create --compress=false)", rel, info.Size(), maxEntryBytes)
+		}
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
 			return err
@@ -318,7 +366,7 @@ func pack(dir string) ([]byte, error) {
 			return err
 		}
 		if buffer.Len() > MaxArchiveBytes {
-			return fmt.Errorf("backup exceeds %d bytes", MaxArchiveBytes)
+			return fmt.Errorf("backup exceeds the %d-byte remote limit; exclude large files from the backup", MaxArchiveBytes)
 		}
 		return nil
 	})
@@ -328,22 +376,33 @@ func pack(dir string) ([]byte, error) {
 	if err := writer.Close(); err != nil {
 		return nil, err
 	}
+	// Close pads and terminates the archive, which can cross the limit.
+	if buffer.Len() > MaxArchiveBytes {
+		return nil, fmt.Errorf("pack backup: backup exceeds the %d-byte remote limit; exclude large files from the backup", MaxArchiveBytes)
+	}
 	return buffer.Bytes(), nil
 }
 
-// unpack extracts archive into a new target directory atomically. Only
-// regular files and directories with safe relative names are accepted.
-func unpack(archive []byte, target string) error {
-	staging, err := os.MkdirTemp(filepath.Dir(target), ".devex-pull-*")
-	if err != nil {
-		if mkErr := os.MkdirAll(filepath.Dir(target), 0o750); mkErr != nil {
-			return mkErr
-		}
-		if staging, err = os.MkdirTemp(filepath.Dir(target), ".devex-pull-*"); err != nil {
-			return err
-		}
+// unpack extracts archive into a new staging directory under parent and
+// returns it; the caller publishes or removes it. Only regular files and
+// directories with safe relative names are accepted.
+func unpack(archive []byte, parent string) (staging string, err error) {
+	if err := os.MkdirAll(parent, 0o750); err != nil {
+		return "", err
 	}
-	defer func() { _ = os.RemoveAll(staging) }()
+	if staging, err = os.MkdirTemp(parent, ".devex-pull-*"); err != nil {
+		return "", err
+	}
+	defer func() {
+		if err != nil {
+			_ = os.RemoveAll(staging)
+			staging = ""
+		}
+	}()
+	return staging, extract(archive, staging)
+}
+
+func extract(archive []byte, staging string) error {
 	root, err := os.OpenRoot(staging)
 	if err != nil {
 		return err
@@ -372,8 +431,8 @@ func unpack(archive []byte, target string) error {
 				return err
 			}
 		case tar.TypeReg:
-			if header.Size > backup.MaxFileSize {
-				return fmt.Errorf("backup archive entry %q is too large", name)
+			if header.Size > maxEntryBytes {
+				return fmt.Errorf("backup archive entry %q is %d bytes, over the %d-byte limit", name, header.Size, maxEntryBytes)
 			}
 			total += header.Size
 			if total > backup.MaxTotalSize {
@@ -396,8 +455,5 @@ func unpack(archive []byte, target string) error {
 			return fmt.Errorf("backup archive entry %q is not a regular file or directory", header.Name)
 		}
 	}
-	if err := root.Close(); err != nil {
-		return err
-	}
-	return os.Rename(staging, target)
+	return root.Close()
 }

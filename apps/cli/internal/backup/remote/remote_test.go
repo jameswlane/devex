@@ -27,11 +27,17 @@ type fakeStore struct {
 	failPut    string
 	truncateOn string
 	corruptOn  string
+	// beforePut runs before each Put, outside the lock, so a spec can
+	// interleave a second push at an exact point of the first.
+	beforePut func(key string)
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{objects: map[string][]byte{}} }
 
 func (f *fakeStore) Put(_ context.Context, key string, data []byte) error {
+	if f.beforePut != nil {
+		f.beforePut(key)
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failPut != "" && strings.HasSuffix(key, f.failPut) {
@@ -117,8 +123,9 @@ var _ = Describe("Remote backups", func() {
 		manifest, err := location.Push(ctx, manager, id, secret)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(manifest.Encrypted).To(BeTrue())
-		Expect(store.objects).To(HaveKey("devex-backups/" + id + ".devexbak"))
-		Expect(bytes.Contains(store.objects["devex-backups/"+id+".devexbak"], before[:16])).To(BeFalse())
+		payloadKey := "devex-backups/" + id + "." + manifest.SHA256 + ".devexbak"
+		Expect(store.objects).To(HaveKey(payloadKey))
+		Expect(bytes.Contains(store.objects[payloadKey], before[:16])).To(BeFalse())
 
 		listed, err := location.List(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -208,13 +215,154 @@ var _ = Describe("Remote backups", func() {
 		Expect(writer.Close()).To(Succeed())
 		payload, err := remote.Encrypt(buffer.Bytes(), secret.Passphrase)
 		Expect(err).NotTo(HaveOccurred())
-		manifest := remoteManifest("evil", payload)
-		store.objects["devex-backups/evil.devexbak"] = payload
-		store.objects["devex-backups/evil.json"] = manifest
+		publishRaw(store.objects, location.Prefix, "evil", payload)
 
 		_, err = location.Pull(ctx, manager, "evil", secret)
 		Expect(err).To(MatchError(ContainSubstring("not a safe relative path")))
 		Expect(filepath.Join(filepath.Dir(devexpaths.ForHome(home).Config), "escape")).NotTo(BeAnExistingFile())
+	})
+
+	// readAside returns the local backup's archive and removes the backup, as
+	// on a machine that has to recover it from remote storage.
+	readAside := func() []byte {
+		dir, err := manager.BackupDir(id)
+		Expect(err).NotTo(HaveOccurred())
+		data, err := os.ReadFile(filepath.Join(dir, "config.tar.gz"))
+		Expect(err).NotTo(HaveOccurred())
+		Expect(manager.DeleteBackup(id)).To(Succeed())
+		return data
+	}
+
+	expectPullable := func(want []byte) {
+		_, err := location.Pull(ctx, manager, id, secret)
+		Expect(err).NotTo(HaveOccurred())
+		dir, err := manager.BackupDir(id)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.ReadFile(filepath.Join(dir, "config.tar.gz"))).To(Equal(want))
+	}
+
+	Context("when the remote id is already in use", func() {
+		It("refuses to replace a published backup and leaves it pullable", func() {
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).NotTo(HaveOccurred())
+			published := map[string][]byte{}
+			for key, data := range store.objects {
+				published[key] = data
+			}
+
+			_, err = location.Push(ctx, manager, id, secret)
+			Expect(err).To(MatchError(ContainSubstring("already has backup " + id)))
+			Expect(err).To(MatchError(ContainSubstring("backup.remote.prefix")))
+			Expect(store.objects).To(Equal(published))
+			expectPullable(readAside())
+		})
+
+		DescribeTable("keeps the published backup pullable when a push of the same id interleaves",
+			func(otherManifestFails bool) {
+				var otherErr error
+				ran := false
+				store.beforePut = func(key string) {
+					if ran || !strings.HasSuffix(key, ".json") {
+						return
+					}
+					// The first push has uploaded and verified its payload and
+					// is about to publish its manifest; a second push of the
+					// same id runs to completion (or fails) right now.
+					ran = true
+					if otherManifestFails {
+						store.failPut = ".json"
+					}
+					_, otherErr = location.Push(ctx, manager, id, secret)
+					store.failPut = ""
+				}
+
+				_, err := location.Push(ctx, manager, id, secret)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ran).To(BeTrue())
+				if otherManifestFails {
+					Expect(otherErr).To(MatchError(ContainSubstring("upload manifest")))
+				} else {
+					Expect(otherErr).NotTo(HaveOccurred())
+				}
+				expectPullable(readAside())
+			},
+			Entry("and its manifest upload fails", true),
+			Entry("and it completes first", false),
+		)
+	})
+
+	Context("when pulling onto another machine", func() {
+		It("registers the pulled backup in a fresh local backup index", func() {
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).NotTo(HaveOccurred())
+
+			fresh := GinkgoT().TempDir()
+			GinkgoT().Setenv("HOME", fresh)
+			recovery := backup.NewBackupManager(devexpaths.ForHome(fresh).Config)
+			Expect(recovery.ListBackups("", 0)).To(BeEmpty())
+
+			_, err = location.Pull(ctx, recovery, id, secret)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(recovery.ListBackups("", 0)).To(ConsistOf(HaveField("ID", id)))
+			// Restore snapshots the current configuration first, so it needs
+			// the configuration directory that devex setup creates.
+			Expect(os.MkdirAll(filepath.Join(devexpaths.ForHome(fresh).Config, "config"), 0o750)).To(Succeed())
+			Expect(recovery.RestoreBackup(id, "")).To(Succeed())
+			Expect(filepath.Join(devexpaths.ForHome(fresh).Config, "config", "config.yaml")).To(BeARegularFile())
+		})
+
+		It("refuses an archive whose metadata names another backup", func() {
+			var buffer bytes.Buffer
+			writer := tar.NewWriter(&buffer)
+			metadata := []byte(`{"id":"other"}`)
+			Expect(writer.WriteHeader(&tar.Header{Name: "metadata.json", Mode: 0o600, Size: int64(len(metadata)), Typeflag: tar.TypeReg})).To(Succeed())
+			_, _ = writer.Write(metadata)
+			Expect(writer.Close()).To(Succeed())
+			payload, err := remote.Encrypt(buffer.Bytes(), secret.Passphrase)
+			Expect(err).NotTo(HaveOccurred())
+			publishRaw(store.objects, location.Prefix, "imported", payload)
+
+			_, err = location.Pull(ctx, manager, "imported", secret)
+			Expect(err).To(MatchError(ContainSubstring(`metadata for backup "other"`)))
+			_, err = manager.BackupDir("imported")
+			Expect(err).To(HaveOccurred())
+			Expect(manager.ListBackups("imported", 0)).To(BeEmpty())
+		})
+	})
+
+	Context("with files near the per-file limit", func() {
+		addFile := func(size int64) {
+			dir, err := manager.BackupDir(id)
+			Expect(err).NotTo(HaveOccurred())
+			file, err := os.Create(filepath.Join(dir, "large.bin"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(file.Truncate(size)).To(Succeed())
+			Expect(file.Close()).To(Succeed())
+		}
+
+		It("pulls every backup it pushes, up to the limit", func() {
+			DeferCleanup(remote.SetMaxEntryBytes(4096))
+			addFile(4096)
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).NotTo(HaveOccurred())
+			expectPullable(readAside())
+		})
+
+		It("refuses before uploading a file a pull would reject", func() {
+			DeferCleanup(remote.SetMaxEntryBytes(4096))
+			addFile(4097)
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).To(MatchError(ContainSubstring("large.bin is 4097 bytes")))
+			Expect(err).To(MatchError(ContainSubstring("--compress=false")))
+			Expect(store.objects).To(BeEmpty())
+		})
+
+		It("applies the local extraction limit by default", func() {
+			addFile(backup.MaxFileSize + 1)
+			_, err := location.Push(ctx, manager, id, secret)
+			Expect(err).To(MatchError(ContainSubstring("over the 104857600-byte limit")))
+			Expect(store.objects).To(BeEmpty())
+		})
 	})
 
 	It("round-trips encryption and detects tampering", func() {

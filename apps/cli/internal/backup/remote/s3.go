@@ -60,18 +60,21 @@ func (s *S3) Put(ctx context.Context, key string, data []byte) error {
 func (s *S3) Get(ctx context.Context, key string) ([]byte, error) {
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+			return nil, ErrNotFound
+		}
 		return nil, err
 	}
 	defer func() { _ = object.Close() }()
-	data, err := io.ReadAll(io.LimitReader(object, MaxArchiveBytes+1))
+	data, err := io.ReadAll(io.LimitReader(object, int64(MaxObjectBytes)+1))
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
-	if len(data) > MaxArchiveBytes {
-		return nil, fmt.Errorf("remote object %s exceeds %d bytes", key, MaxArchiveBytes)
+	if len(data) > MaxObjectBytes {
+		return nil, fmt.Errorf("remote object %s exceeds %d bytes", key, MaxObjectBytes)
 	}
 	return data, nil
 }

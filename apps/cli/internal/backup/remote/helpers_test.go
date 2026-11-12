@@ -9,8 +9,12 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/backup/remote"
 )
 
-func remoteManifest(id string, payload []byte) []byte {
+// publishRaw stores payload as remote backup id under prefix with a matching
+// manifest, as a push would, so specs can serve hand-built archives.
+func publishRaw(objects map[string][]byte, prefix, id string, payload []byte) {
 	sum := sha256.Sum256(payload)
-	data, _ := json.Marshal(remote.Manifest{ID: id, Encrypted: true, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(payload)), PushedAt: time.Now()})
-	return data
+	digest := hex.EncodeToString(sum[:])
+	data, _ := json.Marshal(remote.Manifest{ID: id, Encrypted: true, SHA256: digest, Size: int64(len(payload)), PushedAt: time.Now()})
+	objects[prefix+id+".json"] = data
+	objects[prefix+id+"."+digest+".devexbak"] = payload
 }
