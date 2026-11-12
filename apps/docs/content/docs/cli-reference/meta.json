@@ -8,6 +8,7 @@
 		"non-interactive",
 		"config",
 		"dotfiles",
+		"profile",
 		"template",
 		"devcontainer",
 		"add-remove",
