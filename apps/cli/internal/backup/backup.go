@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -164,6 +165,27 @@ func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error 
 		targetDir = filepath.Join(bm.baseDir, "config")
 	}
 
+	compressedPath := filepath.Join(backupDir, "config.tar.gz")
+	restoreInto := func(dir string) error {
+		if _, err := os.Stat(compressedPath); err == nil {
+			if err := bm.extractCompressedBackup(compressedPath, dir); err != nil {
+				return fmt.Errorf("failed to extract backup: %w", err)
+			}
+			return nil
+		}
+		if err := bm.copyDirectory(filepath.Join(backupDir, "config"), dir); err != nil {
+			return fmt.Errorf("failed to restore files: %w", err)
+		}
+		return nil
+	}
+
+	// On a machine without a configuration yet (a backup pulled onto a fresh
+	// machine) there is nothing to snapshot.
+	if !pathExists(filepath.Join(bm.baseDir, "config")) && !pathExists(targetDir) {
+		return restoreFresh(targetDir, restoreInto)
+	}
+
+	// Snapshot the current configuration so a failed restore can be undone.
 	currentBackup, err := bm.CreateBackup(BackupOptions{
 		Description: fmt.Sprintf("Pre-restore backup (restoring from %s)", backupID),
 		Type:        "pre-restore",
@@ -172,32 +194,56 @@ func (bm *BackupManager) RestoreBackup(backupID string, targetDir string) error 
 	if err != nil {
 		return fmt.Errorf("failed to create pre-restore backup before restoring %s to %s: %w", backupID, targetDir, err)
 	}
-
-	compressedPath := filepath.Join(backupDir, "config.tar.gz")
-	if _, err := os.Stat(compressedPath); err == nil {
-		if err := bm.extractCompressedBackup(compressedPath, targetDir); err != nil {
-			if currentBackup != nil {
-				if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
-					// Log the restore error but don't fail the original error
-					fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
-				}
-			}
-			return fmt.Errorf("failed to extract backup: %w", err)
+	if err := restoreInto(targetDir); err != nil {
+		if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
+			// Log the restore error but don't fail the original error
+			fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
 		}
-	} else {
-		configBackupDir := filepath.Join(backupDir, "config")
-		if err := bm.copyDirectory(configBackupDir, targetDir); err != nil {
-			if currentBackup != nil {
-				if restoreErr := bm.RestoreBackup(currentBackup.ID, targetDir); restoreErr != nil {
-					// Log the restore error but don't fail the original error
-					fmt.Fprintf(os.Stderr, "Warning: failed to restore backup %s: %v\n", currentBackup.ID, restoreErr)
-				}
-			}
-			return fmt.Errorf("failed to restore files: %w", err)
-		}
+		return err
 	}
 
 	return nil
+}
+
+// beforeFreshRestore runs once a restore has found no configuration to
+// snapshot. Tests replace it to create the target as another process would.
+var beforeFreshRestore = func(targetDir string) {}
+
+// restoreFresh restores into targetDir, which did not exist when checked.
+// The files go into a staging directory this restore creates beside the
+// target, which is published only if nothing has appeared at the target in
+// the meantime. A failure removes only the staging directory, never anything
+// another process put at the target.
+func restoreFresh(targetDir string, restoreInto func(string) error) error {
+	beforeFreshRestore(targetDir)
+	parent := filepath.Dir(targetDir)
+	if err := os.MkdirAll(parent, 0750); err != nil {
+		return fmt.Errorf("failed to create %s: %w", parent, err)
+	}
+	staging, err := os.MkdirTemp(parent, "."+filepath.Base(targetDir)+".restore-*")
+	if err != nil {
+		return fmt.Errorf("failed to create a restore directory in %s: %w", parent, err)
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+	if err := restoreInto(staging); err != nil {
+		return err
+	}
+	if err := os.Chmod(staging, 0750); err != nil {
+		return err
+	}
+	if err := renameNoReplace(staging, targetDir); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%s was created while the backup was being restored, so it was left unchanged; run the restore again to snapshot and replace it", targetDir)
+		}
+		return fmt.Errorf("failed to move the restored configuration into %s: %w", targetDir, err)
+	}
+	return nil
+}
+
+// pathExists reports whether path exists; a dangling symlink counts.
+func pathExists(path string) bool {
+	_, err := os.Lstat(path)
+	return !os.IsNotExist(err)
 }
 
 func (bm *BackupManager) ListBackups(filter string, limit int) ([]*BackupMetadata, error) {
@@ -643,12 +689,7 @@ func (bm *BackupManager) updateGlobalMetadata(metadata *BackupMetadata) error {
 
 	allBackups = append(allBackups, metadata)
 
-	data, err := json.MarshalIndent(allBackups, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(metadataPath, data, 0600)
+	return bm.writeIndex(allBackups)
 }
 
 func (bm *BackupManager) removeFromGlobalMetadata(backupID string) error {
@@ -671,12 +712,7 @@ func (bm *BackupManager) removeFromGlobalMetadata(backupID string) error {
 		}
 	}
 
-	data, err = json.MarshalIndent(filtered, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(metadataPath, data, 0600)
+	return bm.writeIndex(filtered)
 }
 
 func (bm *BackupManager) pruneOldBackups(maxBackups int) error {
@@ -798,4 +834,133 @@ func (bm *BackupManager) readPath(path string) string {
 		return dirs.ReadPath(path)
 	}
 	return path
+}
+
+// ValidateID accepts a backup ID that names one directory entry.
+func ValidateID(id string) error {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) || strings.HasPrefix(id, ".") {
+		return fmt.Errorf("invalid backup id %q", id)
+	}
+	return nil
+}
+
+// BackupDir returns the directory of an existing backup.
+func (bm *BackupManager) BackupDir(id string) (string, error) {
+	if err := ValidateID(id); err != nil {
+		return "", err
+	}
+	dir := bm.readPath(filepath.Join(bm.backupsDir, id))
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", fmt.Errorf("backup %s not found: %w", id, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("backup %s is not a directory", id)
+	}
+	return dir, nil
+}
+
+// NewBackupDir returns where a backup with id would be stored, refusing an
+// id that already exists.
+func (bm *BackupManager) NewBackupDir(id string) (string, error) {
+	if err := ValidateID(id); err != nil {
+		return "", err
+	}
+	dir := filepath.Join(bm.backupsDir, id)
+	if _, err := os.Lstat(dir); err == nil {
+		return "", fmt.Errorf("backup %s already exists locally", id)
+	}
+	return dir, nil
+}
+
+// ImportBackup publishes the backup unpacked in staging as backup id and
+// records it in the backup index, so list, restore and retention see it as
+// they see a locally created backup. staging must be on the same file system
+// as the backups directory. Nothing is published unless the backup's own
+// metadata names id, and the backup is removed again if it cannot be indexed.
+func (bm *BackupManager) ImportBackup(id, staging string) (*BackupMetadata, error) {
+	target, err := bm.NewBackupDir(id)
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := bm.loadMetadata(staging)
+	if err != nil {
+		return nil, fmt.Errorf("backup %s has no readable metadata.json, so it is not a DevEx backup: %w", id, err)
+	}
+	if metadata.ID != id {
+		return nil, fmt.Errorf("backup %s contains metadata for backup %q; it was not imported", id, metadata.ID)
+	}
+	if err := bm.ensureBackupsDir(); err != nil {
+		return nil, fmt.Errorf("failed to create backups directory: %w", err)
+	}
+	if err := os.Rename(staging, target); err != nil {
+		return nil, fmt.Errorf("store backup %s in %s: %w", id, bm.backupsDir, err)
+	}
+	if err := bm.registerMetadata(metadata); err != nil {
+		if removeErr := os.RemoveAll(target); removeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to remove unindexed backup %s: %v\n", target, removeErr)
+		}
+		return nil, fmt.Errorf("record backup %s in the backup index: %w", id, err)
+	}
+	return metadata, nil
+}
+
+// registerMetadata adds metadata to the backup index, replacing any stale
+// entry with its ID. Unlike updateGlobalMetadata it refuses to rewrite an
+// index it cannot parse, which would drop the other backups from it.
+func (bm *BackupManager) registerMetadata(metadata *BackupMetadata) error {
+	var all []*BackupMetadata
+	data, err := os.ReadFile(bm.readPath(filepath.Join(bm.backupsDir, MetadataFile)))
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(data, &all); err != nil {
+			return fmt.Errorf("parse %s: %w", MetadataFile, err)
+		}
+	case !os.IsNotExist(err):
+		return err
+	}
+	kept := make([]*BackupMetadata, 0, len(all)+1)
+	for _, entry := range all {
+		if entry != nil && entry.ID != metadata.ID {
+			kept = append(kept, entry)
+		}
+	}
+	kept = append(kept, metadata)
+	return bm.writeIndex(kept)
+}
+
+// writeIndexData writes the new index into its temporary file. Tests replace
+// it to inject a failed write.
+var writeIndexData = func(file *os.File, data []byte) error {
+	_, err := file.Write(data)
+	return err
+}
+
+// writeIndex replaces the backup index atomically. The new index is written
+// to a temporary file beside it and renamed over the old one only once it is
+// complete, so a failed write (a full disk, an I/O error) leaves the previous
+// index and every backup it lists intact.
+func (bm *BackupManager) writeIndex(backups []*BackupMetadata) error {
+	data, err := json.MarshalIndent(backups, "", "  ")
+	if err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(bm.backupsDir, MetadataFile+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("write backup index in %s: %w", bm.backupsDir, err)
+	}
+	temporary := file.Name()
+	writeErr := writeIndexData(file, data)
+	if writeErr == nil {
+		writeErr = file.Sync()
+	}
+	if err := errors.Join(writeErr, file.Close()); err != nil {
+		_ = os.Remove(temporary)
+		return fmt.Errorf("write backup index in %s (the previous index is unchanged): %w", bm.backupsDir, err)
+	}
+	if err := os.Rename(temporary, filepath.Join(bm.backupsDir, MetadataFile)); err != nil {
+		_ = os.Remove(temporary)
+		return fmt.Errorf("replace backup index in %s: %w", bm.backupsDir, err)
+	}
+	return nil
 }
