@@ -116,7 +116,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			cmdName := cmd.Name()
 			// Remote installs run the remote host's DevEx and plugins, not local ones.
 			for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
-				if parent.Name() == "plugin" || parent.Name() == "runs" || parent.Name() == "remote" {
+				// Dotfiles deployment never runs plugins.
+				if parent.Name() == "plugin" || parent.Name() == "runs" || parent.Name() == "remote" || parent.Name() == "dotfiles" {
 					return nil
 				}
 			}
@@ -188,6 +189,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
 	cmd.AddCommand(NewRemoteCmd(repo, settings))
+	cmd.AddCommand(NewDotfilesCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))

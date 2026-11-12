@@ -231,8 +231,8 @@ devex init --force
 # List available templates
 devex template list
 
-# Update templates to latest
-devex template update --all
+# Built-in templates ship with DevEx; update DevEx to get newer ones
+devex self-update
 ```
 
 ### Non-Interactive Mode Issues
