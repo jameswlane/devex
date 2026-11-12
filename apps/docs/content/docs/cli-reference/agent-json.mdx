@@ -5,7 +5,7 @@ description: Typed, read-only discovery, status, configuration and installation 
 
 The CLI adapters call `apps/cli/internal/agentapi` directly. A future adapter
 can call the same services without invoking Cobra or parsing terminal output.
-MCP transport is outside this API's scope.
+The [MCP server](/docs/cli-reference/mcp) is one such adapter.
 
 ```sh
 devex list available --search git --format json

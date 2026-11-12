@@ -16,6 +16,7 @@
 		"plugin",
 		"recovery",
 		"self-update",
+		"mcp",
 		"global-flags"
 	]
 }

@@ -30,11 +30,24 @@ func LoadCatalogSettings(ctx context.Context, home string) (CrossPlatformSetting
 
 // RefreshCatalog updates the shared snapshot after command flags and config are parsed.
 func RefreshCatalog(ctx context.Context, settings CrossPlatformSettings) error {
+	return loadCatalog(ctx, settings, viper.GetBool("offline"))
+}
+
+// LoadCatalogOffline resolves the catalog from the local cache, or from the
+// bundled applications when no cache exists, without network access or writes.
+func LoadCatalogOffline(ctx context.Context, settings CrossPlatformSettings) error {
+	return loadCatalog(ctx, settings, true)
+}
+
+func loadCatalog(ctx context.Context, settings CrossPlatformSettings, offline bool) error {
+	if settings.Catalog == nil {
+		return nil
+	}
 	bundled, err := bundledApplications()
 	if err != nil {
 		return err
 	}
-	store := catalog.Store{Client: catalog.NewClient(bootstrap.GetRegistryURL()), Dir: devexpaths.ForHome(settings.HomeDir).Cache, TTL: time.Hour, Offline: viper.GetBool("offline")}
+	store := catalog.Store{Client: catalog.NewClient(bootstrap.GetRegistryURL()), Dir: devexpaths.ForHome(settings.HomeDir).Cache, TTL: time.Hour, Offline: offline}
 	result := store.Load(ctx, bundled)
 	if result.Source != "bundled" {
 		// The registry only adds applications this binary does not ship; see
