@@ -2,7 +2,9 @@ package templates
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/jameswlane/devex/apps/cli/assets"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -79,60 +82,19 @@ type DesktopTemplate struct {
 
 // TemplateManager handles template operations
 type TemplateManager struct {
-	builtinTemplatesDir string
-	userTemplatesDir    string
-	paths               devexpaths.Dirs
+	builtinTemplates fs.FS
+	userTemplatesDir string
+	paths            devexpaths.Dirs
 }
 
-// NewTemplateManager creates a new template manager
+// NewTemplateManager creates a new template manager. Built-in templates come
+// from the binary itself, so they always match the running DevEx version.
 func NewTemplateManager(homeDir string) *TemplateManager {
-	// Detect if we're running from the CLI binary location or development
-	builtinDir := detectBuiltinTemplatesDir()
-
 	return &TemplateManager{
-		builtinTemplatesDir: builtinDir,
-		userTemplatesDir:    filepath.Join(devexpaths.ForHome(homeDir).Config, "templates"),
-		paths:               devexpaths.ForHome(homeDir),
+		builtinTemplates: assets.Templates,
+		userTemplatesDir: filepath.Join(devexpaths.ForHome(homeDir).Config, "templates"),
+		paths:            devexpaths.ForHome(homeDir),
 	}
-}
-
-// detectBuiltinTemplatesDir detects the location of built-in templates
-func detectBuiltinTemplatesDir() string {
-	// Try different possible locations for built-in templates
-	possiblePaths := []string{
-		"../../assets/templates",     // Test mode (from internal/templates)
-		"assets/templates",           // Development mode (relative to binary)
-		"./assets/templates",         // Current directory
-		"/usr/share/devex/templates", // System install
-		"/opt/devex/templates",       // Alternative system install
-	}
-
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-
-	// Fallback - try to find relative to the executable
-	if execPath, err := os.Executable(); err == nil {
-		execDir := filepath.Dir(execPath)
-		assetsPath := filepath.Join(execDir, "assets", "templates")
-		if _, err := os.Stat(assetsPath); err == nil {
-			return assetsPath
-		}
-
-		// Try going up directories (for development)
-		for i := 0; i < 3; i++ {
-			execDir = filepath.Dir(execDir)
-			assetsPath := filepath.Join(execDir, "assets", "templates")
-			if _, err := os.Stat(assetsPath); err == nil {
-				return assetsPath
-			}
-		}
-	}
-
-	// Final fallback
-	return "assets/templates"
 }
 
 // GetAvailableTemplates returns all available templates with user overrides
@@ -140,7 +102,7 @@ func (tm *TemplateManager) GetAvailableTemplates() ([]Template, error) {
 	templateMap := make(map[string]Template)
 
 	// Load built-in templates first
-	builtinTemplates, err := tm.loadTemplatesFromDir(tm.builtinTemplatesDir)
+	builtinTemplates, err := tm.loadTemplatesFromFS(tm.builtinTemplates)
 	if err != nil {
 		fmt.Printf("Warning: Failed to load built-in templates: %v\n", err)
 	} else {
@@ -177,7 +139,7 @@ func (tm *TemplateManager) ListTemplatesSources() (map[string]string, error) {
 	sources := make(map[string]string)
 
 	// Load built-in templates first
-	builtinTemplates, err := tm.loadTemplatesFromDir(tm.builtinTemplatesDir)
+	builtinTemplates, err := tm.loadTemplatesFromFS(tm.builtinTemplates)
 	if err == nil {
 		for _, template := range builtinTemplates {
 			sources[template.Metadata.Name] = "built-in"
@@ -291,20 +253,24 @@ func (tm *TemplateManager) ValidateTemplate(template Template) error {
 
 // loadTemplatesFromDir loads templates from a directory
 func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return make([]Template, 0), nil // Directory doesn't exist, return empty slice
+	}
+	return tm.loadTemplatesFromFS(os.DirFS(dir))
+}
+
+// loadTemplatesFromFS loads templates from the root of fsys.
+func (tm *TemplateManager) loadTemplatesFromFS(fsys fs.FS) ([]Template, error) {
 	templates := make([]Template, 0)
 
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return templates, nil // Directory doesn't exist, return empty slice
-	}
-
-	entries, err := os.ReadDir(dir)
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read templates directory: %w", err)
 	}
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			template, err := tm.loadLegacyTemplateFromDirectory(filepath.Join(dir, entry.Name()))
+			template, err := tm.loadLegacyTemplateFromDirectory(fsys, entry.Name())
 			if err != nil {
 				fmt.Printf("Warning: failed to load directory template %s: %v\n", entry.Name(), err)
 				continue
@@ -321,8 +287,7 @@ func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) 
 			continue
 		}
 
-		path := filepath.Join(dir, entry.Name())
-		data, err := os.ReadFile(path)
+		data, err := fs.ReadFile(fsys, entry.Name())
 		if err != nil {
 			fmt.Printf("Warning: failed to read template %s: %v\n", entry.Name(), err)
 			continue
@@ -349,9 +314,8 @@ func (tm *TemplateManager) loadTemplatesFromDir(dir string) ([]Template, error) 
 	return templates, nil
 }
 
-func (tm *TemplateManager) loadLegacyTemplateFromDirectory(dir string) (Template, error) {
-	manifestPath := filepath.Join(dir, "manifest.yaml")
-	manifestData, err := os.ReadFile(manifestPath)
+func (tm *TemplateManager) loadLegacyTemplateFromDirectory(fsys fs.FS, dir string) (Template, error) {
+	manifestData, err := fs.ReadFile(fsys, path.Join(dir, "manifest.yaml"))
 	if err != nil {
 		return Template{}, fmt.Errorf("failed to read manifest: %w", err)
 	}
@@ -361,7 +325,7 @@ func (tm *TemplateManager) loadLegacyTemplateFromDirectory(dir string) (Template
 		return Template{}, fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
-	apps, err := loadDirectoryTemplateApplications(filepath.Join(dir, "applications.yaml"))
+	apps, err := loadDirectoryTemplateApplications(fsys, path.Join(dir, "applications.yaml"))
 	if err != nil {
 		return Template{}, err
 	}

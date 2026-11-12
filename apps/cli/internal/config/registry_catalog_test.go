@@ -16,7 +16,7 @@ import (
 var _ = Describe("Registry settings integration", func() {
 	BeforeEach(func() { viper.Reset(); viper.SetEnvPrefix("DEVEX"); viper.AutomaticEnv() })
 	AfterEach(func() { viper.Reset() })
-	It("merges local definitions over registry and preserves custom applications", func() {
+	It("keeps bundled definitions online, merges local definitions over them and preserves custom applications", func() {
 		fixture, err := os.ReadFile("../catalog/testdata/applications.json")
 		Expect(err).NotTo(HaveOccurred())
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(fixture) }))
@@ -39,7 +39,10 @@ var _ = Describe("Registry settings integration", func() {
 		Expect(loaded.Catalog.Source).To(Equal("registry"))
 		Expect(loaded.GetAllApps()).To(ContainElement(SatisfyAll(HaveField("Name", "GIT"), HaveField("Linux.InstallCommand", "custom-git"))))
 		Expect(loaded.GetAllApps()).To(ContainElement(HaveField("Name", "custom")))
-		Expect(loaded.GetAllApps()).To(HaveLen(2))
+		// The registry fixture's apps are all bundled, so the bundled
+		// definitions are kept rather than replaced by the lossy registry ones.
+		Expect(loaded.GetAllApps()).To(ContainElement(SatisfyAll(HaveField("Name", "Docker"), HaveField("Linux.InstallMethod", Not(BeEmpty())))))
+		Expect(loaded.GetAllApps()).To(ContainElement(SatisfyAll(HaveField("Name", "Eza"), HaveField("Linux.InstallMethod", "apt"))))
 	})
 	It("provides embedded definitions on a fresh offline home without network", func() {
 		GinkgoT().Setenv("DEVEX_OFFLINE", "true")
