@@ -11,9 +11,11 @@
 		"devcontainer",
 		"add-remove",
 		"status-list",
+		"inventory",
 		"plugin",
 		"recovery",
 		"self-update",
+		"mcp",
 		"agent-skills",
 		"global-flags"
 	]

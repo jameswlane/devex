@@ -12,10 +12,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
+	"github.com/spf13/pflag"
 
 	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 	"github.com/jameswlane/devex/apps/cli/internal/catalog"
@@ -107,8 +109,12 @@ func main() {
 
 	// Required tools are checked with PATH lookups only (no subprocesses).
 	// Presentation commands returned above, so --help and --version stay usable.
-	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
-		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
+	// The read-only MCP server inspects bundled and local data only, so it must
+	// start in minimal environments that lack installer tools.
+	if !readOnlyMCPServe(os.Args[1:]) {
+		if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
+			handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
+		}
 	}
 
 	homeDir, err := utils.GetHomeDir()
@@ -239,37 +245,11 @@ func migrationDryRun(args []string) bool {
 // Informational commands validate migration without moving any files, keeping
 // inspection and repair available even when migration cannot proceed.
 func informationalCommand(args []string) bool {
-	var words []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
-		}
-		if arg == "--help" || arg == "-h" || arg == "--version" {
-			return true
-		}
-		if arg == "--config" || arg == "--log-level" {
-			i++
-			continue
-		}
-		if !strings.HasPrefix(arg, "-") {
-			words = append(words, arg)
-		}
-	}
-	if len(words) == 0 {
-		return false
-	}
-	switch words[0] {
-	case "help", "completion", "__complete", "__completeNoDesc", "paths", "version":
-		return true
-	case "config":
-		return len(words) > 1 && words[1] == "show"
-	}
-	return false
+	return resolveStartupRoute(args).informational()
 }
 
 func migrateLegacy(ctx context.Context, dirs devexpaths.Dirs, dryRun bool, args []string, out io.Writer) error {
-	informational := informationalCommand(args)
+	informational := informationalCommand(args) //nolint:contextcheck // only builds a throwaway command tree to classify args; nothing executes
 	err := dirs.Migrate(ctx, dryRun || informational, out)
 	if ctx.Err() != nil {
 		return ctx.Err()
@@ -283,75 +263,23 @@ func migrateLegacy(ctx context.Context, dirs devexpaths.Dirs, dryRun bool, args 
 
 // configurationValidationCommand identifies the read-only validation route before startup.
 func configurationValidationCommand(args []string) bool {
-	var words []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
-		}
-		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
-			i++
-			continue
-		}
-		if !strings.HasPrefix(arg, "-") {
-			words = append(words, arg)
-		}
-	}
-	return len(words) >= 2 && words[0] == "config" && words[1] == "validate"
+	return resolveStartupRoute(args).configurationValidation()
 }
 
+// agentSkillInstallCommand identifies "devex agent install-skill", which only
+// copies the embedded bundle and needs no runtime startup.
 func agentSkillInstallCommand(args []string) bool {
-	var words []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
-		}
-		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
-			i++
-			continue
-		}
-		if !strings.HasPrefix(arg, "-") {
-			words = append(words, arg)
-		}
-	}
-	return len(words) >= 2 && words[0] == "agent" && words[1] == "install-skill"
+	return resolveStartupRoute(args).agentSkillInstall()
 }
 
 func readCommand(args []string) bool {
-	var words []string
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
-		}
-		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
-			i++
-			continue
-		}
-		if arg == "--fix" || strings.HasPrefix(arg, "--template") {
-			return false
-		}
-		if !strings.HasPrefix(arg, "-") {
-			words = append(words, arg)
-		}
-	}
-	if len(words) == 0 {
-		return false
-	}
-	switch words[0] {
-	case "platform":
-		return true
-	case "list", "status":
-		// Interactive list and status keep first-run bootstrap and state
-		// creation; only the JSON inspection contract is side-effect free.
-		return jsonOutputRequested(args)
-	case "config":
-		return len(words) > 1 && (words[1] == "effective" || words[1] == "show")
-	case "agent":
-		return len(words) > 1 && words[1] == "install-skill"
-	}
-	return false
+	return resolveStartupRoute(args).read()
+}
+
+// readOnlyMCPServe identifies "devex mcp serve", which needs neither
+// installer tools nor writable state.
+func readOnlyMCPServe(args []string) bool {
+	return resolveStartupRoute(args).readOnlyMCPServe()
 }
 
 func jsonOutputRequested(args []string) bool {
@@ -371,29 +299,165 @@ func jsonOutputRequested(args []string) bool {
 
 // presentationCommand identifies Cobra-only routes before runtime initialization.
 func presentationCommand(args []string) bool {
-	firstWord := true
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		if arg == "--" {
-			break
+	return resolveStartupRoute(args).presentation()
+}
+
+// startupRoute is the command and flags Cobra resolves for a command line. It
+// is computed before runtime initialization with Cobra's own command tree and
+// flag definitions, so every flag, including value-taking global flags such as
+// --install-concurrency 1 before the command, is parsed exactly as it is at
+// execution and cannot be mistaken for a command name.
+type startupRoute struct {
+	// resolved is false when Cobra cannot resolve the command or parse its
+	// flags; execution then fails with Cobra's own error.
+	resolved bool
+	// path holds the command names below the root, such as [mcp serve].
+	path  []string
+	flags *pflag.FlagSet
+	// completion is set for Cobra's hidden shell-completion commands, which
+	// Cobra adds only while executing.
+	completion bool
+}
+
+var (
+	startupRoutesMu sync.Mutex
+	startupRoutes   = map[string]startupRoute{}
+)
+
+// resolveStartupRoute resolves args once per command line; the route is
+// read-only afterwards.
+func resolveStartupRoute(args []string) startupRoute {
+	key := strings.Join(args, "\x00")
+	startupRoutesMu.Lock()
+	defer startupRoutesMu.Unlock()
+	if route, ok := startupRoutes[key]; ok {
+		return route
+	}
+	route := computeStartupRoute(args)
+	startupRoutes[key] = route
+	return route
+}
+
+func computeStartupRoute(args []string) startupRoute {
+	if len(args) > 0 && (args[0] == "__complete" || args[0] == "__completeNoDesc") {
+		return startupRoute{resolved: true, path: []string{args[0]}, flags: pflag.NewFlagSet(args[0], pflag.ContinueOnError), completion: true}
+	}
+	// A throwaway tree: it is only used to resolve the route, never executed.
+	root := commands.NewRootCmd(version, nil, config.CrossPlatformSettings{})
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
+	cmd, _, err := root.Find(args)
+	if err != nil || cmd == nil {
+		return startupRoute{}
+	}
+	cmd.InitDefaultHelpFlag()
+	cmd.InitDefaultVersionFlag()
+	if err := cmd.ParseFlags(args); err != nil {
+		return startupRoute{}
+	}
+	path := strings.Fields(cmd.CommandPath())
+	return startupRoute{resolved: true, path: path[1:], flags: cmd.Flags()}
+}
+
+// is reports whether the route is exactly the given command path.
+func (r startupRoute) is(path ...string) bool {
+	if !r.resolved || len(r.path) != len(path) {
+		return false
+	}
+	for i := range path {
+		if r.path[i] != path[i] {
+			return false
 		}
-		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" {
-			i++
-			continue
-		}
-		if arg == "--help" || arg == "-h" || (firstWord && arg == "--version") {
-			return true
-		}
-		if strings.HasPrefix(arg, "-") {
-			continue
-		}
-		if firstWord {
-			switch arg {
-			case "help", "completion", "__complete", "__completeNoDesc":
-				return true
-			}
-			firstWord = false
-		}
+	}
+	return true
+}
+
+// under reports whether the route's first command is name.
+func (r startupRoute) under(name string) bool {
+	return r.resolved && len(r.path) > 0 && r.path[0] == name
+}
+
+// flagSet reports whether flag was given on the command line.
+func (r startupRoute) flagSet(name string) bool {
+	if !r.resolved {
+		return false
+	}
+	flag := r.flags.Lookup(name)
+	return flag != nil && flag.Changed
+}
+
+// flagValue returns a flag's parsed value, or "" when the command has no such flag.
+func (r startupRoute) flagValue(name string) string {
+	if !r.resolved {
+		return ""
+	}
+	if flag := r.flags.Lookup(name); flag != nil {
+		return flag.Value.String()
+	}
+	return ""
+}
+
+func (r startupRoute) helpRequested() bool {
+	return r.flagSet("help") || (len(r.path) == 0 && r.flagSet("version"))
+}
+
+// presentation identifies Cobra-only routes: help, completion and --version.
+func (r startupRoute) presentation() bool {
+	return r.completion || r.helpRequested() || r.under("help") || r.under("completion")
+}
+
+// informational identifies inspection routes that only preview migration.
+func (r startupRoute) informational() bool {
+	if r.presentation() {
+		return true
+	}
+	return r.under("paths") || r.under("version") || r.is("config", "show")
+}
+
+// agentSkillInstall identifies "devex agent install-skill".
+func (r startupRoute) agentSkillInstall() bool {
+	return r.is("agent", "install-skill")
+}
+
+// configurationValidation identifies "devex config validate".
+func (r startupRoute) configurationValidation() bool {
+	return r.is("config", "validate")
+}
+
+// readOnlyMCPServe identifies "devex mcp serve" without --allow-mutations,
+// which needs neither installer tools nor writable state.
+func (r startupRoute) readOnlyMCPServe() bool {
+	return r.is("mcp", "serve") && r.flagValue("allow-mutations") != "true"
+}
+
+// read identifies side-effect-free inspection routes.
+func (r startupRoute) read() bool {
+	if !r.resolved || len(r.path) == 0 {
+		return false
+	}
+	if r.flagValue("fix") == "true" {
+		return false
+	}
+	templated := false
+	r.flags.Visit(func(flag *pflag.Flag) {
+		templated = templated || strings.HasPrefix(flag.Name, "template")
+	})
+	if templated {
+		return false
+	}
+	switch r.path[0] {
+	case "platform", "inventory":
+		return true
+	case "mcp":
+		return r.readOnlyMCPServe()
+	case "list", "status":
+		// Interactive list and status keep first-run bootstrap and state
+		// creation; only the JSON inspection contract is side-effect free.
+		return r.flagValue("format") == "json"
+	case "config":
+		return r.is("config", "effective") || r.is("config", "show")
+	case "agent":
+		return r.agentSkillInstall()
 	}
 	return false
 }

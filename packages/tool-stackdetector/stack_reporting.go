@@ -43,6 +43,11 @@ func (p *StackDetectorPlugin) handleReport(args []string) error {
 				format = args[i+1]
 				i++
 			}
+		case "--path":
+			if i+1 < len(args) {
+				dir = args[i+1]
+				i++
+			}
 		case "--output":
 			if i+1 < len(args) {
 				outputPath = args[i+1]
@@ -66,7 +71,9 @@ func (p *StackDetectorPlugin) handleReport(args []string) error {
 		return err
 	}
 
-	fmt.Printf("📄 Generating stack report for: %s\n", dir)
+	// Progress goes to stderr so stdout carries only the report, which keeps
+	// JSON and YAML output machine-readable.
+	fmt.Fprintf(os.Stderr, "📄 Generating stack report for: %s\n", dir)
 
 	// Perform analysis
 	analysis, err := p.performProjectAnalysis(dir)
@@ -327,7 +334,7 @@ func (p *StackDetectorPlugin) outputReport(report *StackReport, format, outputPa
 		if err := os.WriteFile(outputPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write report to file: %w", err)
 		}
-		fmt.Printf("✅ Report saved to: %s\n", outputPath)
+		fmt.Fprintf(os.Stderr, "✅ Report saved to: %s\n", outputPath)
 	} else {
 		fmt.Print(content)
 	}
