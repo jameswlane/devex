@@ -1,9 +1,13 @@
 package utils
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"strconv"
+	"strings"
 
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 
@@ -58,6 +62,36 @@ func writeCopy(destination string, data []byte) error {
 	return dstFile.Close()
 }
 
+// copyAsUserScript writes stdin to $1 like cp: an existing destination is
+// truncated in place and keeps its mode and owner; a new one is created with
+// the source mode ($2, octal) less the umask, and is never more permissive
+// than that while it is written.
+const copyAsUserScript = `if [ -e "$1" ]; then exec cat > "$1"; fi
+mode=$(printf '%o' $(( 0$2 & ~0$(umask) ))) || exit 1
+umask 077
+cat > "$1" && chmod "$mode" "$1"`
+
+// writeCopyAsUser writes data to destination as the operation's intended
+// user, through the same sudo -n launch user-scope operations use.
+func writeCopyAsUser(ctx context.Context, privilege sdk.OperationPrivilege, destination string, mode os.FileMode, data []byte) error {
+	request := sdk.ExecutionRequest{Privilege: privilege, Name: "/bin/sh", Args: []string{"-c", copyAsUserScript, "devex-copy", destination, strconv.FormatUint(uint64(mode), 8)}}
+	cmd, err := sdk.PrepareOperation(ctx, request)
+	if err != nil {
+		return fmt.Errorf("copy user configuration as the intended user: %w; nothing was copied", err)
+	}
+	// sudo runs non-interactively (-n), so stdin carries only the content.
+	cmd.Stdin = bytes.NewReader(data)
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("copy user configuration: %s: %w", strings.TrimSpace(output.String()), err)
+	}
+	return nil
+}
+
 // CopyUserFileWithContext creates configuration files under the intended user's
 // authority, including when the CLI itself was invoked with sudo.
 func CopyUserFileWithContext(ctx context.Context, source, destination string) error {
@@ -82,8 +116,13 @@ func CopyUserFileWithContext(ctx context.Context, source, destination string) er
 		if !plan.SwitchUser {
 			return writeCopy(destination, data)
 		}
-		// cp runs as the intended user and rereads the source; it was verified
-		// just above.
+		// Never let another process reread the source: the verified bytes are
+		// written under the intended user's authority from stdin.
+		info, err := fs.AppFs.Stat(source)
+		if err != nil {
+			return fmt.Errorf("failed to open source file: %w", err)
+		}
+		return writeCopyAsUser(ctx, plan.Privilege, destination, info.Mode().Perm(), data)
 	}
 	if !plan.SwitchUser {
 		return CopyFile(source, destination)
