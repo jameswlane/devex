@@ -10,5 +10,9 @@ These are recorded responses from the production registry
 
 Platform objects use the YAML catalog's snake_case keys (`install_method`,
 `install_command`, `platform_requirements`, ...). Older seeds wrote camelCase;
-the client accepts both. Re-record both files when the registry routes change,
+the client accepts both, rewriting only schema field names: map keys such as
+`shell_init` shell names are kept, and the legacy `method`/`command` aliases
+apply only to platforms and their alternatives, never to install hooks.
+Universal definitions (`all_platforms` in the YAML catalog) are served under
+`platforms.all`. Re-record both files when the registry routes change,
 and update the contract expectations in `client_test.go` with them.

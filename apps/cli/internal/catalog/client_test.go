@@ -82,6 +82,48 @@ var _ = Describe("Registry catalog", func() {
 		Expect(app.Linux.Dependencies).To(Equal([]string{"curl"}))
 		Expect(app.Linux.AptSources).To(HaveLen(1))
 	})
+	It("keeps install hook commands and shell_init keys, in both key styles", func() {
+		a := Application{Name: "tool", Platforms: map[string]json.RawMessage{
+			"linux": json.RawMessage(`{"install_method":"apt","install_command":"tool",
+				"pre_install":[{"command":"prepare-tool","shell":"bash","sleep":2}],
+				"post_install":[{"command":"tool init","shell_init":{"PowerShell":"tool init pwsh","bash":"eval \"$(tool init bash)\""},"path":["~/.tool/bin"]}],
+				"alternatives":[{"method":"dnf","command":"tool","postInstall":[{"command":"tool setup","updateShellConfig":"~/.bashrc","shellInit":{"PowerShell":"tool init pwsh"},"copy":{"source":"a","destination":"b"}}]}]}`),
+			"macos": json.RawMessage(`{"installMethod":"brew","installCommand":"tool","preInstall":[{"command":"brew tap example/tool"}]}`),
+		}}
+		app, err := Map(a)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(app.Linux.PreInstall).To(Equal([]types.InstallCommand{{Command: "prepare-tool", Shell: "bash", Sleep: 2}}))
+		Expect(app.Linux.PostInstall).To(Equal([]types.InstallCommand{{
+			Command:   "tool init",
+			ShellInit: map[string]string{"PowerShell": "tool init pwsh", "bash": `eval "$(tool init bash)"`},
+			Path:      []string{"~/.tool/bin"},
+		}}))
+		Expect(app.Linux.Alternatives).To(HaveLen(1))
+		alternative := app.Linux.Alternatives[0]
+		Expect(alternative.InstallMethod).To(Equal("dnf"))
+		Expect(alternative.InstallCommand).To(Equal("tool"))
+		Expect(alternative.PostInstall).To(Equal([]types.InstallCommand{{
+			Command:           "tool setup",
+			UpdateShellConfig: "~/.bashrc",
+			ShellInit:         map[string]string{"PowerShell": "tool init pwsh"},
+			Copy:              &types.CopyCommand{Source: "a", Destination: "b"},
+		}}))
+		Expect(app.MacOS.InstallMethod).To(Equal("brew"))
+		Expect(app.MacOS.PreInstall).To(Equal([]types.InstallCommand{{Command: "brew tap example/tool"}}))
+	})
+	It("decodes the registry's universal platform into AllPlatforms and keeps it installable", func() {
+		var a Application
+		Expect(json.Unmarshal([]byte(`{"name":"universal-tool","description":"Cross-platform tool","category":"Development","platforms":{"all":{"install_method":"mise","install_command":"universal-tool@latest","post_install":[{"command":"universal-tool --version"}]}}}`), &a)).To(Succeed())
+		app, err := Map(a)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(app.AllPlatforms.InstallMethod).To(Equal("mise"))
+		merged := WithBundled([]types.CrossPlatformApp{{Name: "git", Linux: types.OSConfig{InstallMethod: "apt", InstallCommand: "git"}}}, []types.CrossPlatformApp{app})
+		Expect(merged).To(HaveLen(2))
+		config := merged[1].GetOSConfig()
+		Expect(config.InstallMethod).To(Equal("mise"))
+		Expect(config.InstallCommand).To(Equal("universal-tool@latest"))
+		Expect(config.PostInstall).To(Equal([]types.InstallCommand{{Command: "universal-tool --version"}}))
+	})
 	It("rejects a platform that is not an object", func() {
 		_, err := Map(Application{Name: "tool", Platforms: map[string]json.RawMessage{"linux": json.RawMessage(`"apt"`)}})
 		Expect(err).To(MatchError(ContainSubstring("platform linux")))
