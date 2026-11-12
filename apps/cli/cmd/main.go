@@ -377,7 +377,9 @@ func (r startupRoute) under(name string) bool {
 	return r.resolved && len(r.path) > 0 && r.path[0] == name
 }
 
-// flagSet reports whether flag was given on the command line.
+// flagSet reports whether flag was given on the command line, whatever its
+// value. For boolean flags, decisions must use flagTrue: --help=false is set
+// but false.
 func (r startupRoute) flagSet(name string) bool {
 	if !r.resolved {
 		return false
@@ -397,8 +399,14 @@ func (r startupRoute) flagValue(name string) string {
 	return ""
 }
 
+// flagTrue reports whether a boolean flag's parsed value is true, as Cobra
+// decides help and version output.
+func (r startupRoute) flagTrue(name string) bool {
+	return r.flagValue(name) == "true"
+}
+
 func (r startupRoute) helpRequested() bool {
-	return r.flagSet("help") || (len(r.path) == 0 && r.flagSet("version"))
+	return r.flagTrue("help") || (len(r.path) == 0 && r.flagTrue("version"))
 }
 
 // presentation identifies Cobra-only routes: help, completion and --version.
@@ -427,7 +435,7 @@ func (r startupRoute) configurationValidation() bool {
 // readOnlyMCPServe identifies "devex mcp serve" without --allow-mutations,
 // which needs neither installer tools nor writable state.
 func (r startupRoute) readOnlyMCPServe() bool {
-	return r.is("mcp", "serve") && r.flagValue("allow-mutations") != "true"
+	return r.is("mcp", "serve") && !r.flagTrue("allow-mutations")
 }
 
 // read identifies side-effect-free inspection routes.
@@ -435,9 +443,11 @@ func (r startupRoute) read() bool {
 	if !r.resolved || len(r.path) == 0 {
 		return false
 	}
-	if r.flagValue("fix") == "true" {
+	if r.flagTrue("fix") {
 		return false
 	}
+	// Any template flag given, even with a false or empty value, takes the
+	// normal startup path; that errs on the side of initializing state.
 	templated := false
 	r.flags.Visit(func(flag *pflag.Flag) {
 		templated = templated || strings.HasPrefix(flag.Name, "template")
