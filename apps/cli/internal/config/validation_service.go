@@ -72,7 +72,13 @@ func (r *ValidationResult) Add(d Diagnostic) {
 
 // EffectiveConfigDirs returns the runtime precedence order, including environment layers.
 func EffectiveConfigDirs(settings CrossPlatformSettings) []string {
-	d, t, u, e := settings.GetConfigDirsWithEnvironment()
+	return EffectiveConfigDirsFor(settings, settings.GetEnvironment())
+}
+
+// EffectiveConfigDirsFor returns the configuration tiers for a named
+// environment (profile).
+func EffectiveConfigDirsFor(settings CrossPlatformSettings, env string) []string {
+	d, t, u, e := settings.ConfigDirsForEnvironment(env)
 	dirs := []string{d, e["default"], t, e["team"], u, e["user"]}
 	for i := range dirs {
 		dirs[i] = devexpaths.ForHome(settings.HomeDir).ReadPath(dirs[i])

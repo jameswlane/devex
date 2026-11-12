@@ -120,6 +120,11 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 				if parent.Name() == "plugin" || parent.Name() == "runs" || parent.Name() == "dotfiles" {
 					return nil
 				}
+				// Profiles manage configuration files only; they never need, download
+				// or run plugins, even before invalid input is rejected.
+				if parent.Name() == "profile" && parent.Parent() == cmd.Root() {
+					return nil
+				}
 			}
 			if cmd.Parent() == nil || (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "update" || cmdName == "upgrade" || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
 				log.Debug("Deferring plugin initialization to command", "command", cmdName)
@@ -196,6 +201,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
+	cmd.AddCommand(NewProfileCmd(repo, settings))
 	cmd.AddCommand(NewInventoryCmd(repo, settings))
 	cmd.AddCommand(NewDevcontainerCmd(repo, settings))
 	cmd.AddCommand(NewDotfilesCmd(repo, settings))

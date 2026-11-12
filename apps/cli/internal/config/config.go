@@ -778,13 +778,22 @@ func (s *CrossPlatformSettings) GetEnvironment() string {
 	if env := os.Getenv("NODE_ENV"); env != "" {
 		return env
 	}
+	// A profile chosen with devex profile switch.
+	if profile := CurrentProfile(s.HomeDir); profile != "" {
+		return profile
+	}
 	// Default to development
 	return "dev"
 }
 
 // GetConfigDirsWithEnvironment returns config directories with environment-specific paths
 func (s *CrossPlatformSettings) GetConfigDirsWithEnvironment() (defaultDir, teamDir, userDir string, envDirs map[string]string) {
-	env := s.GetEnvironment()
+	return s.ConfigDirsForEnvironment(s.GetEnvironment())
+}
+
+// ConfigDirsForEnvironment is GetConfigDirsWithEnvironment for a named
+// environment (profile) instead of the current one.
+func (s *CrossPlatformSettings) ConfigDirsForEnvironment(env string) (defaultDir, teamDir, userDir string, envDirs map[string]string) {
 	defaultDir = s.GetConfigDir()
 	teamDir = s.GetTeamConfigDir()
 	userDir = s.GetUserConfigDir()
