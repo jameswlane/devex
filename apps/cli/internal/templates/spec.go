@@ -2,7 +2,9 @@ package templates
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -166,7 +168,7 @@ func (tm *TemplateManager) GetAvailableTemplateSpecsWithSources() ([]TemplateSpe
 	specMap := make(map[string]TemplateSpec)
 	sourceMap := make(map[string]string)
 
-	builtinSpecs, err := tm.loadTemplateSpecsFromDir(tm.builtinTemplatesDir)
+	builtinSpecs, err := tm.loadTemplateSpecsFromFS(tm.builtinTemplates)
 	if err != nil {
 		log.Warn("Failed to load built-in template specs", "error", err)
 	} else {
@@ -400,19 +402,23 @@ func validateDependsOnReferences(steps []TemplateStepSpec) error {
 }
 
 func (tm *TemplateManager) loadTemplateSpecsFromDir(dir string) ([]TemplateSpec, error) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return make([]TemplateSpec, 0), nil
+	}
+	return tm.loadTemplateSpecsFromFS(os.DirFS(dir))
+}
+
+// loadTemplateSpecsFromFS loads every valid template spec at the root of fsys.
+func (tm *TemplateManager) loadTemplateSpecsFromFS(fsys fs.FS) ([]TemplateSpec, error) {
 	specs := make([]TemplateSpec, 0)
 
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return specs, nil
-	}
-
-	entries, err := os.ReadDir(dir)
+	entries, err := fs.ReadDir(fsys, ".")
 	if err != nil {
 		return nil, fmt.Errorf("failed to read templates directory: %w", err)
 	}
 
 	for _, entry := range entries {
-		path := filepath.Join(dir, entry.Name())
+		name := entry.Name()
 		var (
 			spec    TemplateSpec
 			loadErr error
@@ -421,10 +427,10 @@ func (tm *TemplateManager) loadTemplateSpecsFromDir(dir string) ([]TemplateSpec,
 
 		switch {
 		case entry.IsDir():
-			spec, loadErr = tm.loadDirectoryTemplateSpec(path)
+			spec, loadErr = tm.loadDirectoryTemplateSpec(fsys, name)
 			loaded = loadErr == nil
-		case strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml"):
-			spec, loadErr = tm.loadFlatTemplateSpec(path)
+		case strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml"):
+			spec, loadErr = tm.loadFlatTemplateSpecFS(fsys, name)
 			loaded = loadErr == nil
 		default:
 			continue
@@ -447,12 +453,23 @@ func (tm *TemplateManager) loadTemplateSpecsFromDir(dir string) ([]TemplateSpec,
 	return specs, nil
 }
 
-func (tm *TemplateManager) loadFlatTemplateSpec(path string) (TemplateSpec, error) {
-	data, err := os.ReadFile(path)
+func (tm *TemplateManager) loadFlatTemplateSpec(filePath string) (TemplateSpec, error) {
+	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return TemplateSpec{}, fmt.Errorf("failed to read template: %w", err)
 	}
+	return tm.parseFlatTemplateSpec(data)
+}
 
+func (tm *TemplateManager) loadFlatTemplateSpecFS(fsys fs.FS, name string) (TemplateSpec, error) {
+	data, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return TemplateSpec{}, fmt.Errorf("failed to read template: %w", err)
+	}
+	return tm.parseFlatTemplateSpec(data)
+}
+
+func (tm *TemplateManager) parseFlatTemplateSpec(data []byte) (TemplateSpec, error) {
 	var spec TemplateSpec
 	if err := yaml.Unmarshal(data, &spec); err != nil {
 		return TemplateSpec{}, fmt.Errorf("failed to parse template spec: %w", err)
@@ -471,9 +488,8 @@ func (tm *TemplateManager) loadFlatTemplateSpec(path string) (TemplateSpec, erro
 	return ConvertLegacyTemplateToSpec(legacy), nil
 }
 
-func (tm *TemplateManager) loadDirectoryTemplateSpec(dir string) (TemplateSpec, error) {
-	manifestPath := filepath.Join(dir, "manifest.yaml")
-	data, err := os.ReadFile(manifestPath)
+func (tm *TemplateManager) loadDirectoryTemplateSpec(fsys fs.FS, dir string) (TemplateSpec, error) {
+	data, err := fs.ReadFile(fsys, path.Join(dir, "manifest.yaml"))
 	if err != nil {
 		return TemplateSpec{}, fmt.Errorf("failed to read manifest: %w", err)
 	}
@@ -486,7 +502,7 @@ func (tm *TemplateManager) loadDirectoryTemplateSpec(dir string) (TemplateSpec, 
 		return spec, nil
 	}
 
-	return tm.convertDirectoryTemplateToSpec(dir, data)
+	return tm.convertDirectoryTemplateToSpec(fsys, dir, data)
 }
 
 func ConvertLegacyTemplateToSpec(template Template) TemplateSpec {
@@ -519,13 +535,13 @@ func ConvertLegacyTemplateToSpec(template Template) TemplateSpec {
 	return spec
 }
 
-func (tm *TemplateManager) convertDirectoryTemplateToSpec(dir string, manifestData []byte) (TemplateSpec, error) {
+func (tm *TemplateManager) convertDirectoryTemplateToSpec(fsys fs.FS, dir string, manifestData []byte) (TemplateSpec, error) {
 	var manifest directoryTemplateManifest
 	if err := yaml.Unmarshal(manifestData, &manifest); err != nil {
 		return TemplateSpec{}, fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
-	apps, err := loadDirectoryTemplateApplications(filepath.Join(dir, "applications.yaml"))
+	apps, err := loadDirectoryTemplateApplications(fsys, path.Join(dir, "applications.yaml"))
 	if err != nil {
 		return TemplateSpec{}, err
 	}
@@ -549,8 +565,8 @@ func (tm *TemplateManager) convertDirectoryTemplateToSpec(dir string, manifestDa
 	return spec, nil
 }
 
-func loadDirectoryTemplateApplications(path string) ([]types.AppConfig, error) {
-	data, err := os.ReadFile(path)
+func loadDirectoryTemplateApplications(fsys fs.FS, name string) ([]types.AppConfig, error) {
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read applications file: %w", err)
 	}
@@ -628,7 +644,7 @@ func (tm *TemplateManager) LoadTemplateSpecFile(path string) (*TemplateSpec, err
 	var spec TemplateSpec
 	var err error
 	if filepath.Base(path) == "manifest.yaml" {
-		spec, err = tm.loadDirectoryTemplateSpec(filepath.Dir(path))
+		spec, err = tm.loadDirectoryTemplateSpec(os.DirFS(filepath.Dir(path)), ".")
 	} else {
 		spec, err = tm.loadFlatTemplateSpec(path)
 	}

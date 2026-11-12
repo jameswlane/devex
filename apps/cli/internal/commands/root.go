@@ -115,7 +115,8 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			// fails without downloads; bare devex and setup own their setup flow.
 			cmdName := cmd.Name()
 			for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
-				if parent.Name() == "plugin" || parent.Name() == "runs" {
+				// Dotfiles deployment never runs plugins.
+				if parent.Name() == "plugin" || parent.Name() == "runs" || parent.Name() == "dotfiles" {
 					return nil
 				}
 			}
@@ -186,6 +187,7 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	cmd.AddCommand(NewCacheCmd(repo, settings))
 	cmd.AddCommand(NewDetectCmd(repo, settings))
 	cmd.AddCommand(NewListCmd(repo, settings))
+	cmd.AddCommand(NewDotfilesCmd(repo, settings))
 	cmd.AddCommand(NewPlatformCmd(repo, settings))
 	cmd.AddCommand(NewShellCmd(repo, settings))
 	cmd.AddCommand(NewSystemCmd(settings))
