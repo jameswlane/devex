@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -44,6 +45,45 @@ var _ = Describe("Config files in a confirmed install", func() {
 		Expect(errors.Is(result.Changed, execinputs.ErrChanged)).To(BeTrue())
 		Expect(destination).NotTo(BeAnExistingFile())
 	})
+
+	DescribeTable("classifies failed source access against the approved readability", func(approval, failure string) {
+		if failure == "read" {
+			if runtime.GOOS != "linux" {
+				Skip("requires Linux /proc/self/mem for a root-independent read error")
+			}
+			info, err := os.Stat("/proc/self/mem")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(info.Mode().IsRegular()).To(BeTrue())
+			_, err = os.ReadFile("/proc/self/mem")
+			Expect(err).To(HaveOccurred())
+		}
+		ctx := context.Background()
+		if approval == "missing" {
+			Expect(os.Remove(source)).To(Succeed())
+		}
+		if approval != "unpinned" {
+			ctx = pinned()
+		}
+		if approval != "missing" {
+			Expect(os.Remove(source)).To(Succeed())
+		}
+		switch failure {
+		case "directory":
+			Expect(os.Mkdir(source, 0700)).To(Succeed())
+		case "read":
+			Expect(os.Symlink("/proc/self/mem", source)).To(Succeed())
+		}
+		result := configfiles.Apply(ctx, "tool", []types.ConfigFile{{Source: source, Destination: destination}}, false, nil)
+		Expect(result.Warnings).To(HaveLen(1))
+		if approval == "readable" {
+			Expect(errors.Is(result.Changed, execinputs.ErrChanged)).To(BeTrue())
+		} else {
+			Expect(result.Changed).NotTo(HaveOccurred())
+		}
+		Expect(destination).NotTo(BeAnExistingFile())
+	}, Entry("approved readable then removed", "readable", "missing"), Entry("approved readable then directory", "readable", "directory"), Entry("approved readable then read error", "readable", "read"),
+		Entry("unpinned missing stays optional", "unpinned", "missing"), Entry("unpinned directory stays optional", "unpinned", "directory"), Entry("unpinned read error stays optional", "unpinned", "read"),
+		Entry("approved missing stays optional", "missing", "missing"), Entry("approved missing then directory stays optional", "missing", "directory"), Entry("approved missing then read error stays optional", "missing", "read"))
 
 	It("refuses a marker whose presence changed after confirmation", func() {
 		ctx := pinned()

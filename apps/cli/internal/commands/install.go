@@ -273,19 +273,33 @@ func executeSnapshot(ctx context.Context, cmd *cobra.Command, snapshot agentapi.
 		),
 	)
 	defer span.End()
+	snapshot.Settings.Verbose = verbose
+	return executeSnapshotObserved(ctx, cmd.OutOrStdout(), cmd.ErrOrStderr(), snapshot, repo, provider, nil)
+}
+
+func executeSnapshotObserved(ctx context.Context, out, errOut io.Writer, snapshot agentapi.ExecutionSnapshot, repo types.Repository, provider pluginBootstrapProvider, observe installObserver) error {
 	settings := snapshot.Settings
-	settings.Verbose = verbose
 	if err := pinExecution(snapshot); err != nil {
 		return err
 	}
 	// Pin the confirmed local files for every step that reads them.
 	ctx = execinputs.With(ctx, snapshot.Inputs)
 	if snapshot.Policy.RollbackOnFailure {
-		fmt.Fprintln(cmd.ErrOrStderr(), rollbackEnabledNotice)
-		return runRollbackBatch(ctx, cmd.ErrOrStderr(), snapshot.Roots, repo, settings, provider)
+		fmt.Fprintln(errOut, rollbackEnabledNotice)
+		err := runRollbackBatch(ctx, errOut, snapshot.Roots, repo, settings, provider)
+		if observe != nil {
+			status := "installed"
+			if err != nil {
+				status = "failed"
+			}
+			for _, app := range snapshot.Roots {
+				observe(app.Name, status, err)
+			}
+		}
+		return err
 	}
 	// A confirmed install always runs the plain lifecycle, never the TUI.
-	return runPlainInstall(ctx, cmd.OutOrStdout(), snapshot.Roots, repo, settings, provider)
+	return runPlainInstallObserved(ctx, out, snapshot.Roots, repo, settings, provider, observe)
 }
 
 // currentExecutionTrust reads the effective plugin trust configuration that a

@@ -30,7 +30,11 @@ clients such as Claude Code and Codex.`,
 }
 
 func newMCPServeCmd(repo types.Repository, settings config.CrossPlatformSettings) *cobra.Command {
-	var timeout time.Duration
+	var (
+		timeout         time.Duration
+		mutationTimeout time.Duration
+		allowMutations  bool
+	)
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Serve read-only DevEx tools over stdio",
@@ -40,9 +44,20 @@ stdout. The client starts this command; it is not meant to be run by hand.
 Tools: list_apps, detect_platform, get_status, validate_config, plan_install.
 Resource: devex://config/effective (allowlisted settings only).
 
-The server never installs, removes or configures anything, runs package
-managers, plugins or hooks, downloads plugins, or creates configuration or
-state. Stdout carries only MCP messages; diagnostics go to stderr.`,
+By default the server never installs, removes or configures anything, runs
+package managers, plugins or hooks, downloads plugins, or creates
+configuration or state. Stdout carries only MCP messages; diagnostics go to
+stderr.
+
+--allow-mutations adds prepare_install, install_apps, prepare_uninstall and
+uninstall_apps. A prepare tool returns a plan with a plan_id and digest; the
+client must show the plan to the user and get approval, then call the
+matching tool with both. A plan is used once, expires after 10 minutes, and
+is rejected if the applications, their definitions or the platform changed.
+Uninstall removes only DevEx-tracked applications. Installs run without a
+terminal and fail if a password is required. Installer, plugin and child
+output on stdout and stderr is redacted and sent to stderr. Linux and macOS
+only.`,
 		Example: `  # Claude Code
   claude mcp add devex -- devex mcp serve
 
@@ -61,13 +76,32 @@ state. Stdout carries only MCP messages; diagnostics go to stderr.`,
 			if err := config.LoadCatalogOffline(cmd.Context(), settings); err != nil {
 				return fmt.Errorf("load application catalog: %w", err)
 			}
-			server := mcpserver.New(mcpserver.Options{
-				Version:        mcpVersion,
-				Settings:       settings,
-				Repo:           repo,
-				RequestTimeout: timeout,
-			})
-			err := server.Run(cmd.Context(), &mcp.StdioTransport{})
+			if mutationTimeout <= 0 {
+				return fmt.Errorf("--mutation-timeout must be positive")
+			}
+			options := mcpserver.Options{
+				Version:         mcpVersion,
+				Settings:        settings,
+				Repo:            repo,
+				RequestTimeout:  timeout,
+				MutationTimeout: mutationTimeout,
+			}
+			var transport mcp.Transport = &mcp.StdioTransport{}
+			if allowMutations {
+				// Installers and plugins may read stdin or write to stdout; keep
+				// both for MCP only, give children the null device as stdin and
+				// redact everything they write to stdout or stderr.
+				stdio, err := mcpserver.ReserveStdout()
+				if err != nil {
+					return err
+				}
+				defer func() { _ = stdio.Close() }()
+				transport = &mcp.IOTransport{Reader: stdio.Stdin, Writer: stdio.Stdout}
+				options.Mutations = true
+				options.Executor = &mcpExecutor{repo: repo, settings: settings, log: cmd.ErrOrStderr()}
+			}
+			server := mcpserver.New(options)
+			err := server.Run(cmd.Context(), transport)
 			// A client closing the connection or an interrupt is a normal shutdown.
 			if err == nil || errors.Is(err, cmd.Context().Err()) || errors.Is(err, mcp.ErrConnectionClosed) {
 				return nil
@@ -76,6 +110,8 @@ state. Stdout carries only MCP messages; diagnostics go to stderr.`,
 		},
 	}
 	cmd.Flags().DurationVar(&timeout, "request-timeout", mcpserver.DefaultRequestTimeout, "maximum time for each tool call or resource read")
+	cmd.Flags().BoolVar(&allowMutations, "allow-mutations", false, "also serve install and uninstall tools that run only a plan the user approved")
+	cmd.Flags().DurationVar(&mutationTimeout, "mutation-timeout", mcpserver.DefaultMutationTimeout, "maximum time for a confirmed install or uninstall")
 	return cmd
 }
 

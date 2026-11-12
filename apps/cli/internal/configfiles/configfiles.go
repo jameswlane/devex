@@ -1,6 +1,7 @@
 // Package configfiles implements the shared install stage between package installation
-// and post-install hooks. Mapping failures are warnings: remaining mappings and hooks
-// continue, while Result (including warnings) is persisted for inspection and cleanup.
+// and post-install hooks. Mapping failures are warnings unless an approved readable
+// source changed; those changes fail the install before post-install hooks. Result
+// (including warnings) is persisted for inspection and cleanup.
 package configfiles
 
 import (
@@ -390,6 +391,18 @@ func previousCopy(previous Result, m types.ConfigFile) *File {
 	return nil
 }
 
+// sourceAccessError keeps optional-source failures as warnings, but a source
+// approved as readable must remain readable and regular during execution.
+// Preserve the underlying I/O error alongside ErrChanged for diagnostics.
+func sourceAccessError(ctx context.Context, source string, cause error) error {
+	if inputs, pinned := execinputs.Pinned(ctx); pinned {
+		if approved, known := inputs.Files[source]; known && approved != execinputs.Missing {
+			return fmt.Errorf("source %s %w; cannot read the approved file: %w", source, execinputs.ErrChanged, cause)
+		}
+	}
+	return cause
+}
+
 // applyOne copies one mapping. A destination that still holds the previously
 // recorded copy is DevEx's own file: it is replaced without a new backup and
 // keeps the backup of the user's original file. A destination that already
@@ -413,14 +426,14 @@ func applyOne(ctx context.Context, root *os.Root, home string, m types.ConfigFil
 	}
 	info, err := os.Stat(source)
 	if err != nil {
-		return File{}, fmt.Errorf("read source: %w", err)
+		return File{}, sourceAccessError(ctx, source, fmt.Errorf("read source: %w", err))
 	}
 	if !info.Mode().IsRegular() {
-		return File{}, errors.New("source must be a regular file")
+		return File{}, sourceAccessError(ctx, source, errors.New("source must be a regular file"))
 	}
 	data, err := os.ReadFile(source)
 	if err != nil {
-		return File{}, fmt.Errorf("read source: %w", err)
+		return File{}, sourceAccessError(ctx, source, fmt.Errorf("read source: %w", err))
 	}
 	// A confirmed install copies only the content that was confirmed.
 	if err := execinputs.VerifyFile(ctx, source, data); err != nil {
@@ -534,6 +547,33 @@ func ReadResult(app string) (Result, error) {
 // Cleanup removes only recorded files with unchanged content. User edits, untracked
 // files, and timestamped backups survive uninstall. All access stays beneath HOME.
 func Cleanup(app string) error {
+	return cleanup(app, nil)
+}
+
+// ErrRecordChanged reports that an application's managed-file record differs
+// from the one a caller approved.
+var ErrRecordChanged = errors.New("the managed configuration-file record changed since it was approved")
+
+// CleanupRecorded is Cleanup bound to an approved record: it removes nothing
+// and returns ErrRecordChanged unless the current record lists exactly the
+// approved files.
+func CleanupRecorded(app string, approved []File) error {
+	return cleanup(app, &approved)
+}
+
+func sameFiles(a, b []File) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func cleanup(app string, approved *[]File) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -546,6 +586,9 @@ func Cleanup(app string) error {
 	result, err := load(root, app)
 	if err != nil {
 		return err
+	}
+	if approved != nil && !sameFiles(result.Files, *approved) {
+		return fmt.Errorf("%s: %w; prepare the uninstall again", app, ErrRecordChanged)
 	}
 	var failures []error
 	for _, file := range result.Files {

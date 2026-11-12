@@ -244,10 +244,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	settings = mergedSettings
 	settings.Verbose = viper.GetBool("verbose")
 
-	green := color.New(color.FgGreen).SprintFunc()
 	yellow := color.New(color.FgYellow).SprintFunc()
-	red := color.New(color.FgRed).SprintFunc()
-	cyan := color.New(color.FgCyan).SprintFunc()
 
 	log.Info("Starting uninstall process")
 
@@ -330,6 +327,39 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 	default:
 		return fmt.Errorf("you must specify --app, --apps, --category, or --all")
 	}
+
+	return executeUninstall(ctx, appsToUninstall, failures, uninstallExecution{
+		category: category, dryRun: dryRun, force: force, keepConfig: keepConfig, keepData: keepData,
+		removeOrphans: removeOrphans, cascade: cascade, backup: backup, stopServices: stopServices,
+		cleanupSystem: cleanupSystem, removeDockerData: removeDockerData,
+	}, repo, out, warnings)
+}
+
+// uninstallExecution selects what executeUninstall does for resolved applications.
+type uninstallExecution struct {
+	category                                                    string
+	dryRun, force, keepConfig, keepData, removeOrphans, cascade bool
+	backup, stopServices, cleanupSystem, removeDockerData       bool
+	// cleanupConfig removes an application's managed configuration files;
+	// cleanupConfigFiles when nil.
+	cleanupConfig func(*types.AppConfig) error
+}
+
+// executeUninstall checks conflicts for already resolved applications and
+// removes them. It uses exactly the given definitions and never re-resolves
+// them, so a caller that approved a definition controls what is executed.
+func executeUninstall(ctx context.Context, appsToUninstall []types.AppConfig, failures []error, opts uninstallExecution, repo types.Repository, out io.Writer, warnings io.Writer) error {
+	category, dryRun, force, keepConfig, keepData := opts.category, opts.dryRun, opts.force, opts.keepConfig, opts.keepData
+	removeOrphans, cascade, backup, stopServices := opts.removeOrphans, opts.cascade, opts.backup, opts.stopServices
+	cleanupSystem, removeDockerData := opts.cleanupSystem, opts.removeDockerData
+	cleanupConfig := opts.cleanupConfig
+	if cleanupConfig == nil {
+		cleanupConfig = cleanupConfigFiles
+	}
+	green := color.New(color.FgGreen).SprintFunc()
+	yellow := color.New(color.FgYellow).SprintFunc()
+	red := color.New(color.FgRed).SprintFunc()
+	cyan := color.New(color.FgCyan).SprintFunc()
 
 	if removeDockerData {
 		hasDocker := false
@@ -475,7 +505,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			continue
 		}
 
-		if !installed {
+		if !installed && keepConfig && keepData {
 			fmt.Printf("  %s Not installed (skipping)\n", yellow("⚠️"))
 			skipped++
 			if err := clearUninstallRecords(repo, app.Name); err != nil {
@@ -484,7 +514,7 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			continue
 		}
 
-		if backup {
+		if backup && installed {
 			bm := NewBackupManager(repo)
 			backupEntry, err := bm.CreateBackup(ctx, &app)
 			if err != nil {
@@ -494,13 +524,18 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
-		if stopServices {
+		if stopServices && installed {
 			if err := stopAppServices(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to stop services: %v\n", yellow("⚠️"), err)
 			}
 		}
 
-		if err := uninstallConfiguredApplication(ctx, app, installer, repo); err != nil {
+		if err := func() error {
+			if !installed {
+				return nil
+			}
+			return uninstallConfiguredApplication(ctx, app, installer, repo)
+		}(); err != nil {
 			var manual *sdk.ManualRemovalRequiredError
 			if errors.As(err, &manual) {
 				fmt.Printf("  %s Not removed: %v\n", yellow("⚠️"), err)
@@ -511,17 +546,25 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			continue
 		}
 
-		if removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
+		if installed && removeDockerData && runtime.GOOS == "linux" && strings.EqualFold(app.Name, "docker") {
 			if err := removeDockerDataFiles(ctx); err != nil {
 				failures = append(failures, fmt.Errorf("%s: packages removed but Docker data cleanup failed: %w; retry with sudo rm -rf -- /var/lib/docker /var/lib/containerd", app.Name, err))
 			}
 		}
-		success++
-		fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
+		if installed {
+			success++
+			fmt.Printf("  %s Successfully uninstalled\n", green("✅"))
+		} else {
+			skipped++
+			fmt.Fprintln(out, "  Package already absent; retrying requested cleanup")
+		}
 
+		cleanupFailed := false
 		if !keepConfig {
-			if err := cleanupConfigFiles(&app); err != nil {
+			if err := cleanupConfig(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up config files: %v\n", yellow("⚠️"), err)
+				cleanupFailed = true
+				failures = append(failures, fmt.Errorf("%s: package removed; config cleanup failed: %w; tracking retained for retry or manual cleanup", app.Name, err))
 			} else if len(app.ConfigFiles) > 0 {
 				fmt.Printf("  %s Removed configuration files\n", green("🧹"))
 			}
@@ -530,12 +573,14 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 		if !keepData {
 			if err := cleanupDataFiles(&app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up data files: %v\n", yellow("⚠️"), err)
+				cleanupFailed = true
+				failures = append(failures, fmt.Errorf("%s: package removed; data cleanup failed: %w; tracking retained for retry or manual cleanup", app.Name, err))
 			} else if len(app.CleanupFiles) > 0 {
 				fmt.Printf("  %s Removed data files\n", green("🧹"))
 			}
 		}
 
-		if cleanupSystem {
+		if cleanupSystem && installed {
 			if err := cleanupSystemFiles(ctx, &app); err != nil {
 				fmt.Printf("  %s Warning: Failed to clean up system files: %v\n", yellow("⚠️"), err)
 			} else {
@@ -543,6 +588,9 @@ func runUninstall(ctx context.Context, apps []string, category string, all bool,
 			}
 		}
 
+		if cleanupFailed {
+			continue
+		}
 		if err := clearUninstallRecords(repo, app.Name); err != nil {
 			fmt.Printf("  %s Failed to update installation records: %v\n", red("❌"), err)
 			failures = append(failures, fmt.Errorf("%s: uninstalled but failed to update installation records: %w", app.Name, err))

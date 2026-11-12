@@ -1,9 +1,11 @@
-// Package mcpserver exposes read-only DevEx operations to Model Context
-// Protocol clients over stdio.
+// Package mcpserver exposes DevEx operations to Model Context Protocol clients
+// over stdio.
 //
-// Every tool is backed by internal/agentapi and is read-only: no tool installs,
-// removes or configures anything, runs package managers, plugins or hooks, or
-// writes files. Mutating operations are intentionally absent; see issue #173.
+// By default every tool is backed by internal/agentapi and is read-only: no
+// tool installs, removes or configures anything, runs package managers,
+// plugins or hooks, or writes files. With Options.Mutations, install and
+// uninstall tools are added; they execute only a plan the server issued
+// earlier, identified by its plan_id and digest (see mutations.go).
 package mcpserver
 
 import (
@@ -25,6 +27,8 @@ import (
 const (
 	// DefaultRequestTimeout bounds each tool call and resource read.
 	DefaultRequestTimeout = 30 * time.Second
+	// DefaultMutationTimeout bounds a confirmed install or uninstall.
+	DefaultMutationTimeout = 30 * time.Minute
 	// DefaultListLimit and MaxListLimit bound list_apps results.
 	DefaultListLimit = 50
 	MaxListLimit     = 200
@@ -44,6 +48,15 @@ type Options struct {
 	RequestTimeout time.Duration
 	// DetectPlatform replaces platform detection in tests.
 	DetectPlatform func(context.Context) (*platform.Platform, error)
+	// Mutations registers the install and uninstall tools; Executor runs them.
+	Mutations bool
+	Executor  Executor
+	// PlanTTL is how long a prepared plan can be confirmed.
+	PlanTTL time.Duration
+	// MutationTimeout bounds a confirmed install or uninstall.
+	MutationTimeout time.Duration
+	// Clock replaces time.Now in tests.
+	Clock func() time.Time
 }
 
 // ReadOnlyTools lists every tool the server registers.
@@ -54,8 +67,10 @@ type server struct {
 	// slot serializes requests: agentapi reads process-global Viper state, so
 	// concurrent requests must not observe each other's configuration access.
 	// It is a one-slot semaphore rather than a mutex so a queued request
-	// stops waiting when it is cancelled or its deadline passes.
-	slot chan struct{}
+	// stops waiting when it is cancelled or its deadline passes. It also
+	// serializes package-manager mutations and guards plans.
+	slot  chan struct{}
+	plans map[string]*storedPlan
 }
 
 // New returns an MCP server with the read-only DevEx tools and the redacted
@@ -67,7 +82,16 @@ func New(opts Options) *mcp.Server {
 	if opts.DetectPlatform == nil {
 		opts.DetectPlatform = agentapi.DetectPlatform
 	}
-	s := &server{opts: opts, slot: make(chan struct{}, 1)}
+	if opts.MutationTimeout <= 0 {
+		opts.MutationTimeout = DefaultMutationTimeout
+	}
+	if opts.PlanTTL <= 0 {
+		opts.PlanTTL = DefaultPlanTTL
+	}
+	if opts.Clock == nil {
+		opts.Clock = time.Now
+	}
+	s := &server{opts: opts, slot: make(chan struct{}, 1), plans: map[string]*storedPlan{}}
 
 	impl := &mcp.Implementation{Name: "devex", Title: "DevEx", Version: opts.Version}
 	srv := mcp.NewServer(impl, &mcp.ServerOptions{
@@ -104,6 +128,10 @@ func New(opts Options) *mcp.Server {
 		Annotations: readOnly("Plan install"),
 	}, s.planInstall)
 
+	if opts.Mutations && opts.Executor != nil {
+		s.registerMutations(srv)
+	}
+
 	srv.AddResource(&mcp.Resource{
 		URI:         EffectiveConfigURI,
 		Name:        "effective-config",
@@ -114,12 +142,17 @@ func New(opts Options) *mcp.Server {
 	return srv
 }
 
-// begin applies the request deadline and then serializes the request. The
-// deadline covers time spent queued behind other requests, and a request that
-// is cancelled or times out while queued returns a categorized error without
-// running its operation.
+// begin applies the request deadline and then serializes the request.
 func (s *server) begin(ctx context.Context) (context.Context, func(), error) {
-	ctx, cancel := context.WithTimeout(ctx, s.opts.RequestTimeout)
+	return s.beginWithin(ctx, s.opts.RequestTimeout)
+}
+
+// beginWithin applies timeout and then serializes the request. The deadline
+// covers time spent queued behind other requests, and a request that is
+// cancelled or times out while queued returns a categorized error without
+// running its operation.
+func (s *server) beginWithin(ctx context.Context, timeout time.Duration) (context.Context, func(), error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	select {
 	case s.slot <- struct{}{}:
 	case <-ctx.Done():

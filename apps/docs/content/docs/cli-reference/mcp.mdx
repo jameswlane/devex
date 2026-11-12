@@ -10,11 +10,11 @@ import { Callout } from 'fumadocs-ui/components/callout'
 `devex mcp serve` lets a Model Context Protocol (MCP) client, such as Claude Code or Codex, ask DevEx about applications, the platform, installation records, configuration and install plans. The client starts the command and talks to it over stdin and stdout.
 
 ```bash
-devex mcp serve [--request-timeout 30s]
+devex mcp serve [--request-timeout 30s] [--allow-mutations [--mutation-timeout 30m]]
 ```
 
-<Callout type="info" title="Read-only by design">
-No tool installs, removes or configures anything. The server never runs package managers, plugins or hooks, never downloads plugins or contacts the registry, and never creates configuration, state or log files. Install and uninstall tools are not registered, so calling them fails with `unknown tool`.
+<Callout type="info" title="Read-only by default">
+Without `--allow-mutations`, no tool installs, removes or configures anything. The server never runs package managers, plugins or hooks, never downloads plugins or contacts the registry, and never creates configuration, state or log files. Install and uninstall tools are not registered, so calling them fails with `unknown tool`.
 </Callout>
 
 ## Client configuration
@@ -53,13 +53,50 @@ Errors are tool errors whose text starts with a stable category: `invalid_reques
 
 `devex://config/effective` (`application/json`) is the allowlisted effective configuration: application names, install methods, whether each is a default, and the configuration precedence. Scripts, commands, URLs, environment values and paths are never included. No other resource is exposed, and file or arbitrary URIs are rejected.
 
+## Mutating tools
+
+`--allow-mutations` adds four tools. They run only a plan the server issued and the user approved:
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `prepare_install` | `apps`, `categories` (at least one) | The install plan, a `plan_id`, a `digest`, `expires_at` and what is not included. Nothing is installed |
+| `install_apps` | `plan_id`, `digest` | `result` (`completed`, `partial_failure`, `failed`, `cancelled`) and an outcome for every planned application (`installed`, `skipped`, `failed`, `not_run`, `cancelled`) |
+| `prepare_uninstall` | `apps` (at least one, DevEx-tracked), `remove_config`, `remove_data` | The uninstall plan: for each application its method, the (redacted) uninstall command, `privileges`, `unknown_effects`, whether configuration and data are kept or removed, the exact `config_files` and `data_paths` deleted, and a `definition` digest |
+| `uninstall_apps` | `plan_id`, `digest` | The same result and outcomes (`removed`, `failed`, ...) |
+
+**The trust boundary is the plan.** Show the prepared plan to the user and get their approval before calling `install_apps` or `uninstall_apps`. A tool annotation or a client-side "yes" does not authorize anything; the server checks the confirmation itself:
+
+- A plan can be used once, expires after 10 minutes, and belongs to one operation.
+- The `digest` binds the resolved application definitions, local config and copy-hook source bytes, marker presence, effective command security and execution policy, and plugin trust. Execution uses the verified snapshot; changed local inputs are refused before copying or running post-install hooks.
+- The `digest` must match. The server recomputes it from the current execution inputs and platform and rejects the plan if anything changed since it was prepared.
+- Uninstalls bind each application's full resolved definition, its tracking record and its managed-file record. Right before removing an application, DevEx resolves it again and refuses it, without any effect, if it is no longer tracked or anything differs, then runs exactly the definition it checked.
+- Only applications DevEx tracks can be uninstalled. Software installed some other way is refused even when the catalog knows it.
+- Rejected confirmations fail with `plan_rejected` before any effect.
+
+What a plan never does:
+
+- Install defaults, everything, or a whole category's worth of uninstalls: applications must be named (installs may name categories).
+- Remove dependent applications: an uninstall that would break one fails. Orphaned packages, services, system files and Docker data are left alone. Configuration and data are kept unless the plan says otherwise.
+- Prompt for a password: installs run without a terminal and fail when `sudo` needs a password. Configure passwordless `sudo` for the package managers, or install from a terminal.
+- Roll back by default: applications that finished keep their changes when a later one fails or the request is cancelled. If the effective `rollback-on-failure` policy is enabled, the snapshot binds it and execution uses the shared rollback lifecycle; hooks and dependencies may still require manual recovery.
+
+Requested config or data cleanup failures return a failed outcome even after the package was removed. Installation records are retained for retry, and the outcome’s `recovery` target preserves the approved command and config/data paths for manual cleanup. Reprepare after reviewing the failure; native packages already absent still allow cleanup to be retried.
+
+Errors in outcomes are bounded to one line, and URL credentials, query strings and secret-looking values are redacted. An error outside individual applications, such as failing to record the run, is reported in `note` and makes the result `partial_failure` or `failed`. Installs and uninstalls are serialized and limited by `--mutation-timeout` (default 30 minutes). While mutations are enabled, the server keeps its original stdout for MCP messages; everything else written to stdout or stderr, including installer, plugin and child-process output, is redacted the same way line by line and sent to stderr. Installers, plugins and their child processes get the null device as stdin, so they cannot read MCP requests. With mutations, the server starts like other DevEx commands and needs curl, git and unzip. `--allow-mutations` is available on Linux and macOS.
+
+Claude Code with mutations:
+
+```bash
+claude mcp add devex -- devex mcp serve --allow-mutations
+```
+
 ## Behavior
 
 - **Applications** come from the local catalog cache when one exists, otherwise from the catalog bundled with DevEx. The registry is never contacted.
 - **Stdout** carries only MCP messages. Diagnostics go to stderr.
 - **Deadlines**: each tool call or resource read ends after `--request-timeout` (default 30 seconds) with a `timeout` error, including time spent waiting behind other requests. Cancelling a request from the client stops it, even while it waits.
 - **Concurrency**: requests are handled one at a time, so concurrent calls cannot see each other's configuration access.
-- **Dependencies**: the server needs none of the installer tools (curl, git, unzip) that other DevEx commands check for, so it starts in minimal containers.
+- **Dependencies**: without `--allow-mutations`, the server needs none of the installer tools (curl, git, unzip) that other DevEx commands check for, so it starts in minimal containers.
 - **Protocol**: built on the official Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.8.0), which negotiates the protocol version with the client.
 
 ## Troubleshooting
