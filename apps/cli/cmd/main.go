@@ -435,7 +435,7 @@ func (r startupRoute) read() bool {
 		return false
 	}
 	switch r.path[0] {
-	case "platform":
+	case "platform", "inventory":
 		return true
 	case "mcp":
 		return r.readOnlyMCPServe()

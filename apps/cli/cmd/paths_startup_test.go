@@ -78,6 +78,7 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("mcp serve is read-only", []string{"mcp", "serve"}, true),
 		Entry("mcp serve with a flag is read-only", []string{"mcp", "serve", "--request-timeout", "5s"}, true),
 		Entry("bare mcp is not a read route", []string{"mcp"}, false),
+		Entry("inventory is read-only", []string{"inventory", "--format", "yaml"}, true),
 		Entry("install is not read-only", []string{"install", "git"}, false),
 		// Value-taking global flags before the command must not hide it.
 		Entry("integer global flag before mcp serve", []string{"--install-concurrency", "1", "mcp", "serve"}, true),
