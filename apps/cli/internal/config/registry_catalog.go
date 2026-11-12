@@ -36,6 +36,11 @@ func RefreshCatalog(ctx context.Context, settings CrossPlatformSettings) error {
 	}
 	store := catalog.Store{Client: catalog.NewClient(bootstrap.GetRegistryURL()), Dir: devexpaths.ForHome(settings.HomeDir).Cache, TTL: time.Hour, Offline: viper.GetBool("offline")}
 	result := store.Load(ctx, bundled)
+	if result.Source != "bundled" {
+		// The registry only adds applications this binary does not ship; see
+		// catalog.WithBundled.
+		result.Apps = catalog.WithBundled(bundled, result.Apps)
+	}
 	*settings.Catalog = result
 	return nil
 }

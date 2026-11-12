@@ -31,8 +31,8 @@ Use `devex install --template`, `devex status --template`, `devex maintain --tem
 | Subcommand | Purpose |
 | --- | --- |
 | `list` | List available templates |
-| `check-updates` | Check for template updates |
-| `update` | Update one template or all templates |
+| `check-updates` | Find built-in templates whose recorded version is older than the shipped one |
+| `update` | Record the built-in template versions shipped with this release |
 | `info` | Show template metadata |
 | `status` | Show template system status |
 | `init` | Initialize template version tracking |
@@ -63,6 +63,33 @@ devex template list --include-user
 devex template list --source builtin --format json
 devex template list --updates-only
 ```
+
+## devex template update
+
+```bash
+devex template update [template-name] [flags]
+```
+
+Built-in templates are compiled into the DevEx binary, so they always match the DevEx version you are running. Run `devex self-update` to get newer built-in templates; it verifies the release download. If DevEx was installed by a package manager, update it there instead.
+
+`devex template update` never downloads or replaces template files. For each built-in template it checks that the manifest has a valid semantic version and that every file the manifest lists is present inside the template, then records that version and checksum in the template registry. If a check fails, the command exits with an error and the registry keeps its previous record.
+
+Options:
+
+| Flag | Type | Default | Description |
+| --- | --- | --- | --- |
+| `--all` | `bool` | `false` | Record every built-in template; the command fails if any of them fails |
+| `--force` | `bool` | `false` | Re-verify and record even when the recorded version already matches |
+| `--format` | `string` | `table` | Output format: `table`, `json`, or `yaml` |
+
+Examples:
+
+```bash
+devex template update backend
+devex template update --all --force --format json
+```
+
+Custom templates are not affected; manage them with `devex template custom`.
 
 ## devex template info
 

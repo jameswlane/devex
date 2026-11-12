@@ -8,9 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
@@ -27,23 +30,138 @@ func (e *APIError) Error() string {
 }
 func (e *APIError) Unwrap() error { return e.Err }
 
-type Alternative struct {
-	Method  string `json:"method"`
-	Command string `json:"command"`
-}
-type Platform struct {
-	InstallMethod   string        `json:"installMethod"`
-	InstallCommand  string        `json:"installCommand"`
-	OfficialSupport bool          `json:"officialSupport"`
-	Alternatives    []Alternative `json:"alternatives"`
-}
+// Application is one registry catalog entry. Platforms hold the same fields
+// as the YAML catalog's per-platform definitions.
 type Application struct {
-	Name                string               `json:"name"`
-	Description         string               `json:"description"`
-	Category            string               `json:"category"`
-	Default             bool                 `json:"default"`
-	DesktopEnvironments []string             `json:"desktopEnvironments"`
-	Platforms           map[string]*Platform `json:"platforms"`
+	Name                string                     `json:"name"`
+	Description         string                     `json:"description"`
+	Category            string                     `json:"category"`
+	Default             bool                       `json:"default"`
+	DesktopEnvironments []string                   `json:"desktopEnvironments"`
+	Platforms           map[string]json.RawMessage `json:"platforms"`
+}
+
+// legacyKeys are the method/command keys older registry seeds wrote for an
+// install definition (a platform or one of its alternatives), mapped to the
+// YAML catalog keys. They apply only to OSConfig objects: a pre/post-install
+// hook's "command" is its own field.
+var legacyKeys = map[string]string{"method": "install_method", "command": "install_command"}
+
+var osConfigType = reflect.TypeOf(types.OSConfig{})
+
+// normalizeKeys rewrites the camelCase object keys older registry seeds wrote
+// to the YAML catalog's snake_case keys, following the shape of target. Only
+// struct field names are rewritten: map keys are data (shell_init names
+// shells such as PowerShell) and are kept as served.
+func normalizeKeys(value any, target reflect.Type) any {
+	for target.Kind() == reflect.Pointer {
+		target = target.Elem()
+	}
+	switch target.Kind() {
+	case reflect.Struct:
+		object, ok := value.(map[string]any)
+		if !ok {
+			return value
+		}
+		fields := yamlFields(target)
+		normalized := make(map[string]any, len(object))
+		for key, item := range object {
+			if _, known := fields[key]; !known {
+				if mapped, ok := legacyKeys[key]; ok && target == osConfigType {
+					key = mapped
+				} else {
+					key = snakeCase(key)
+				}
+			}
+			if field, known := fields[key]; known {
+				item = normalizeKeys(item, field)
+			}
+			normalized[key] = item
+		}
+		return normalized
+	case reflect.Map:
+		object, ok := value.(map[string]any)
+		if !ok {
+			return value
+		}
+		for key, item := range object {
+			object[key] = normalizeKeys(item, target.Elem())
+		}
+		return object
+	case reflect.Slice, reflect.Array:
+		list, ok := value.([]any)
+		if !ok {
+			return value
+		}
+		for i, item := range list {
+			list[i] = normalizeKeys(item, target.Elem())
+		}
+		return list
+	default:
+		return value
+	}
+}
+
+// yamlFields maps a struct's YAML keys to their field types.
+func yamlFields(target reflect.Type) map[string]reflect.Type {
+	fields := make(map[string]reflect.Type, target.NumField())
+	for i := 0; i < target.NumField(); i++ {
+		field := target.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		name, _, _ := strings.Cut(field.Tag.Get("yaml"), ",")
+		if name == "-" {
+			continue
+		}
+		if name == "" {
+			name = strings.ToLower(field.Name)
+		}
+		fields[name] = field.Type
+	}
+	return fields
+}
+
+func snakeCase(key string) string {
+	var builder strings.Builder
+	for i, r := range key {
+		if r >= 'A' && r <= 'Z' {
+			if i > 0 {
+				builder.WriteByte('_')
+			}
+			builder.WriteRune(r + ('a' - 'A'))
+			continue
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String()
+}
+
+// decodePlatform decodes one platform definition into the CLI type through its
+// YAML field names, so every field the registry serves is kept.
+func decodePlatform(raw json.RawMessage) (types.OSConfig, error) {
+	var config types.OSConfig
+	if len(raw) == 0 || string(raw) == "null" {
+		return config, nil
+	}
+	var generic any
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		return config, err
+	}
+	if generic == nil {
+		return config, nil
+	}
+	if _, ok := generic.(map[string]any); !ok {
+		return config, fmt.Errorf("platform must be an object")
+	}
+	data, err := yaml.Marshal(normalizeKeys(generic, osConfigType))
+	if err != nil {
+		return config, err
+	}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return config, err
+	}
+	return config, nil
 }
 
 // Map is the single conversion boundary for both list and detail responses.
@@ -51,17 +169,17 @@ func Map(a Application) (types.CrossPlatformApp, error) {
 	if strings.TrimSpace(a.Name) == "" || a.Platforms == nil {
 		return types.CrossPlatformApp{}, &APIError{Kind: "schema", Err: fmt.Errorf("missing name or platforms")}
 	}
-	convert := func(p *Platform) types.OSConfig {
-		if p == nil {
-			return types.OSConfig{}
+	app := types.CrossPlatformApp{Name: a.Name, Description: a.Description, Category: a.Category, Default: a.Default, DesktopEnvironments: a.DesktopEnvironments}
+	// The registry serves universal definitions (all_platforms in the YAML
+	// catalog) under "all".
+	for name, target := range map[string]*types.OSConfig{"all": &app.AllPlatforms, "linux": &app.Linux, "macos": &app.MacOS, "windows": &app.Windows} {
+		config, err := decodePlatform(a.Platforms[name])
+		if err != nil {
+			return types.CrossPlatformApp{}, &APIError{Kind: "schema", Err: fmt.Errorf("application %s platform %s: %w", a.Name, name, err)}
 		}
-		c := types.OSConfig{InstallMethod: p.InstallMethod, InstallCommand: p.InstallCommand, OfficialSupport: p.OfficialSupport}
-		for _, alt := range p.Alternatives {
-			c.Alternatives = append(c.Alternatives, types.OSConfig{InstallMethod: alt.Method, InstallCommand: alt.Command})
-		}
-		return c
+		*target = config
 	}
-	return types.CrossPlatformApp{Name: a.Name, Description: a.Description, Category: a.Category, Default: a.Default, DesktopEnvironments: a.DesktopEnvironments, Linux: convert(a.Platforms["linux"]), MacOS: convert(a.Platforms["macos"]), Windows: convert(a.Platforms["windows"])}, nil
+	return app, nil
 }
 
 type Filters struct{ Search, Category, Platform string }
