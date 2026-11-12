@@ -373,113 +373,81 @@ and run an application in a loosely isolated environment called a container.
 
 ## devex detect
 
-Detect and display information about your current platform and environment.
+Detect the technologies a project uses (languages, frameworks, build tools and infrastructure), and turn them into DevEx application suggestions. For the operating system, distribution and package managers, use `devex platform`.
+
+Detection runs the `tool-stackdetector` plugin. DevEx downloads it the first time a detect command runs (not with `--offline`; install it beforehand with `devex plugin install tool-stackdetector`). Detection only reads the project directory.
 
 ### Usage
 
 ```bash
-devex detect [flags]
+devex detect [directory] [flags]
+devex detect analyze [directory] [flags]
+devex detect suggest [directory] [flags]
+devex detect apply [directory] [flags]
 ```
+
+The directory defaults to the current directory.
+
+| Command | What it does |
+|---------|--------------|
+| `devex detect` | Lists detected technologies with their category and confidence |
+| `devex detect analyze` | Adds declared dependencies, project size, issues and the plugin's recommendations |
+| `devex detect suggest` | Maps detected technologies to DevEx applications; already-configured ones are marked `configured` |
+| `devex detect apply` | Adds the suggested applications and their dependencies to your configuration, like `devex add` |
 
 ### Options
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--verbose` | `bool` | `false` | Show detailed detection information |
-| `--format` | `string` | `table` | Output format (table, json, yaml) |
+| Flag | Commands | Default | Description |
+|------|----------|---------|-------------|
+| `--format` | all | `table` | `table` or `json` |
+| `--confidence` | all | `0.5` | Minimum confidence, from `0.0` to `1.0` (the plugin scores 1-10) |
+| `--category` | all | | Only technologies in this category, for example `Language`, `Framework`, `Containerization` |
+| `--detailed` | `detect` | `false` | Show the files that identified each technology |
+| `--output` | `detect` | | Also save the JSON result to this file |
+| `--dry-run` | `apply` | `false` | Show what would be added without changing configuration |
+| `--yes`, `-y` | `apply` | `false` | Add without prompting; required without a terminal |
 
-### Platform Detection Output
+### Suggestions
 
-<Tabs items={['Basic Info', 'Verbose Mode', 'JSON Output']}>
-  <Tab value="Basic Info">
-    ```bash
-    devex detect
-    
-    Platform Information:
-    ┌─────────────────────┬─────────────────────────────────┐
-    │ Operating System    │ Linux                           │
-    │ Distribution        │ Ubuntu 22.04 LTS               │
-    │ Architecture        │ x86_64                          │
-    │ Desktop Environment │ GNOME 42.9                     │
-    │ Shell               │ zsh 5.8.1                      │
-    │ Terminal            │ gnome-terminal                  │
-    └─────────────────────┴─────────────────────────────────┘
-    
-    Package Managers:
-    ✓ apt (primary)
-    ✓ flatpak 
-    ✓ snap
-    ✓ mise (for languages)
-    
-    Recommendations:
-    → Primary installer: apt
-    → Universal packages: flatpak
-    → Programming languages: mise
-    ```
-  </Tab>
-  
-  <Tab value="Verbose Mode">
-    ```bash
-    devex detect --verbose
-    
-    System Details:
-    OS: Linux (Ubuntu 22.04.3 LTS)
-    Kernel: 5.15.0-78-generic
-    Architecture: x86_64
-    CPU: 8 cores (Intel Core i7-10700K)
-    Memory: 16 GB
-    Disk: 512 GB SSD (78% free)
-    
-    Desktop Environment:
-    DE: GNOME 42.9
-    Window Manager: Mutter
-    Display Server: Wayland
-    Theme: Adwaita-dark
-    
-    Development Environment:
-    Shell: zsh 5.8.1 (/usr/bin/zsh)
-    Terminal: gnome-terminal 3.44.0
-    Editor: $EDITOR not set
-    
-    Package Managers:
-    ✓ apt 2.4.9 (system packages)
-    ✓ flatpak 1.12.7 (universal apps)
-    ✓ snap 2.60.3 (snap packages)
-    ✓ mise 2024.8.3 (language versions)
-    ✗ docker not available
-    
-    Network:
-    Connectivity: ✓ Online
-    DNS: 8.8.8.8, 8.8.4.4
-    Proxy: None detected
-    ```
-  </Tab>
-  
-  <Tab value="JSON Output">
-    ```bash
-    devex detect --format json
-    
-    {
-      "os": "linux",
-      "distribution": "ubuntu",
-      "version": "22.04",
-      "architecture": "x86_64",
-      "desktop_environment": "gnome",
-      "shell": "zsh",
-      "package_managers": {
-        "primary": "apt",
-        "available": ["apt", "flatpak", "snap", "mise"],
-        "recommended": "apt"
-      },
-      "capabilities": {
-        "gui": true,
-        "containers": false,
-        "virtualization": true
-      }
-    }
-    ```
-  </Tab>
-</Tabs>
+Frameworks and tools map to the runtime they need: React, Next.js, Vite and similar map to Node.js; Poetry and Pipenv projects map to Python; Maven and Gradle map to Java; Docker Compose maps to Docker; Make and CMake map to Build Essential. Technologies without a DevEx application (for example PHP) are reported but not suggested.
+
+### Applying suggestions
+
+`devex detect apply` first resolves every suggested application with its catalog dependencies and validates the whole set like `devex add`, then shows that list. `--dry-run` stops there, so its preview, including dependencies and any validation or file-collision error, is exactly what `--yes` adds. After confirmation it backs up your configuration before each addition. It changes configuration only; run `devex install` afterwards. Applications already in your configuration are skipped, so running it again makes no changes.
+
+```bash
+# Preview
+devex detect apply --dry-run
+
+# Add only high-confidence suggestions without prompting
+devex detect apply --confidence 0.8 --yes
+
+# Then install them
+devex install
+```
+
+### JSON output
+
+```bash
+devex detect --format json
+```
+
+```json
+{
+  "project_path": "/home/me/src/service",
+  "summary": { "primary_language": "Go", "project_type": "Web Application" },
+  "technologies": [
+    { "name": "Go", "category": "Language", "confidence": 10, "files": ["go.mod"] },
+    { "name": "Docker", "category": "Containerization", "confidence": 8, "files": ["Dockerfile"] }
+  ]
+}
+```
+
+`devex detect suggest --format json` returns `[{"app", "category", "description", "confidence", "technologies", "configured"}]`, and `devex detect apply --format json` returns `{"added", "skipped", "dry_run"}`.
+
+### Plugin protocol
+
+The CLI runs `tool-stackdetector report --format json <directory>` and reads the report from the plugin's stdout; the plugin writes progress to stderr. The report has `project_path`, `technologies` (`name`, `category`, `confidence` 1-10, `description`, `files`), `dependencies`, `project_size`, `recommendations`, `issues` and `summary`.
 
 ## Output Formats
 
