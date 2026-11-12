@@ -80,4 +80,15 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("bare mcp is not a read route", []string{"mcp"}, false),
 		Entry("install is not read-only", []string{"install", "git"}, false),
 	)
+
+	DescribeTable("skips installer dependency checks only for the read-only MCP server",
+		func(args []string, skip bool) {
+			Expect(readOnlyMCPServe(args)).To(Equal(skip))
+		},
+		Entry("mcp serve", []string{"mcp", "serve"}, true),
+		Entry("mcp serve with a timeout", []string{"--log-level", "debug", "mcp", "serve", "--request-timeout", "5s"}, true),
+		Entry("bare mcp", []string{"mcp"}, false),
+		Entry("install", []string{"install", "git"}, false),
+		Entry("platform", []string{"platform"}, false),
+	)
 })

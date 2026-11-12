@@ -107,8 +107,12 @@ func main() {
 
 	// Required tools are checked with PATH lookups only (no subprocesses).
 	// Presentation commands returned above, so --help and --version stay usable.
-	if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
-		handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
+	// The read-only MCP server inspects bundled and local data only, so it must
+	// start in minimal environments that lack installer tools.
+	if !readOnlyMCPServe(os.Args[1:]) {
+		if err := utils.CheckDependencies(ctx, utils.RequiredDependencies); err != nil {
+			handleError("validating required dependencies", fmt.Errorf("%w; %s", err, utils.RequiredDependenciesHint()))
+		}
 	}
 
 	homeDir, err := utils.GetHomeDir()
@@ -327,7 +331,7 @@ func readCommand(args []string) bool {
 	case "mcp":
 		// The MCP server is read-only: no migrations, file logging, plugin
 		// bootstrap or state creation, and stdout stays reserved for MCP.
-		return len(words) > 1 && words[1] == "serve"
+		return readOnlyMCPServe(args)
 	case "list", "status":
 		// Interactive list and status keep first-run bootstrap and state
 		// creation; only the JSON inspection contract is side-effect free.
@@ -336,6 +340,26 @@ func readCommand(args []string) bool {
 		return len(words) > 1 && (words[1] == "effective" || words[1] == "show")
 	}
 	return false
+}
+
+// readOnlyMCPServe identifies "devex mcp serve", which needs neither
+// installer tools nor writable state.
+func readOnlyMCPServe(args []string) bool {
+	var words []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			break
+		}
+		if arg == "--config" || arg == "--log-level" || arg == "--format" || arg == "-f" || arg == "--request-timeout" {
+			i++
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") {
+			words = append(words, arg)
+		}
+	}
+	return len(words) >= 2 && words[0] == "mcp" && words[1] == "serve"
 }
 
 func jsonOutputRequested(args []string) bool {

@@ -57,8 +57,9 @@ Errors are tool errors whose text starts with a stable category: `invalid_reques
 
 - **Applications** come from the local catalog cache when one exists, otherwise from the catalog bundled with DevEx. The registry is never contacted.
 - **Stdout** carries only MCP messages. Diagnostics go to stderr.
-- **Deadlines**: each tool call or resource read ends after `--request-timeout` (default 30 seconds) with a `timeout` error. Cancelling a request from the client stops it.
+- **Deadlines**: each tool call or resource read ends after `--request-timeout` (default 30 seconds) with a `timeout` error, including time spent waiting behind other requests. Cancelling a request from the client stops it, even while it waits.
 - **Concurrency**: requests are handled one at a time, so concurrent calls cannot see each other's configuration access.
+- **Dependencies**: the server needs none of the installer tools (curl, git, unzip) that other DevEx commands check for, so it starts in minimal containers.
 - **Protocol**: built on the official Go SDK (`github.com/modelcontextprotocol/go-sdk` v1.8.0), which negotiates the protocol version with the client.
 
 ## Troubleshooting

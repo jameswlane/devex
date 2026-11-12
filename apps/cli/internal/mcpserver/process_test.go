@@ -28,13 +28,15 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		Expect(err).NotTo(HaveOccurred(), string(output))
 	}, NodeTimeout(5*time.Minute))
 
-	It("speaks MCP on stdout, keeps diagnostics on stderr and writes nothing under an empty home", func(ctx SpecContext) {
+	// serve runs the read-only server with the given PATH under an empty home
+	// and checks that it speaks MCP, serves every tool and writes nothing.
+	serve := func(ctx SpecContext, path string) {
 		home := GinkgoT().TempDir()
 		var stderr bytes.Buffer
 		command := exec.CommandContext(ctx, binary, "mcp", "serve")
 		command.Env = []string{
 			"HOME=" + home,
-			"PATH=" + os.Getenv("PATH"),
+			"PATH=" + path,
 			// An unreachable registry proves the server never contacts it.
 			"DEVEX_PLUGIN_REGISTRY_URL=http://127.0.0.1:9",
 		}
@@ -78,5 +80,14 @@ var _ = Describe("devex mcp serve process", Label("process"), func() {
 		})).To(Succeed())
 		Expect(created).To(BeEmpty(), "mcp serve created files under HOME")
 		Expect(stderr.String()).NotTo(ContainSubstring("panic"))
+	}
+
+	It("speaks MCP on stdout, keeps diagnostics on stderr and writes nothing under an empty home", func(ctx SpecContext) {
+		serve(ctx, os.Getenv("PATH"))
+	}, SpecTimeout(2*time.Minute))
+
+	It("starts without installer tools such as curl, git or unzip on PATH", func(ctx SpecContext) {
+		Expect(filepath.IsAbs(binary)).To(BeTrue())
+		serve(ctx, GinkgoT().TempDir())
 	}, SpecTimeout(2*time.Minute))
 })

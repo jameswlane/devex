@@ -282,6 +282,92 @@ var _ = Describe("Read-only MCP server", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	Context("when a request is queued behind a slow request", func() {
+		var (
+			release chan struct{}
+			started chan struct{}
+			calls   atomic.Int32
+		)
+
+		BeforeEach(func() {
+			release = make(chan struct{})
+			started = make(chan struct{})
+			calls.Store(0)
+			options.DetectPlatform = func(context.Context) (*platform.Platform, error) {
+				if calls.Add(1) == 1 {
+					close(started)
+					// The first request ignores its deadline and holds the
+					// server until the spec releases it.
+					<-release
+				}
+				return &platform.Platform{OS: "linux"}, nil
+			}
+		})
+
+		holdFirst := func(session *mcp.ClientSession) chan struct{} {
+			finished := make(chan struct{})
+			go func() {
+				defer GinkgoRecover()
+				defer close(finished)
+				_, _ = call(session, "detect_platform", map[string]any{})
+			}()
+			Eventually(started).Should(BeClosed())
+			DeferCleanup(func() {
+				select {
+				case <-release:
+				default:
+					close(release)
+				}
+				Eventually(finished).Should(BeClosed())
+			})
+			return finished
+		}
+
+		It("times out while queued instead of waiting for the slot", func() {
+			options.RequestTimeout = 50 * time.Millisecond
+			session := connect()
+			holdFirst(session)
+
+			queued := make(chan *mcp.CallToolResult, 1)
+			go func() {
+				defer GinkgoRecover()
+				result, err := call(session, "detect_platform", map[string]any{})
+				Expect(err).NotTo(HaveOccurred())
+				queued <- result
+			}()
+
+			var result *mcp.CallToolResult
+			Eventually(queued, 2*time.Second).Should(Receive(&result), "the queued request waited for the slow request")
+			Expect(toolErrorText(result)).To(HavePrefix("timeout:"))
+			Expect(calls.Load()).To(Equal(int32(1)), "the queued operation ran")
+		})
+
+		It("does not run a request the client cancelled while it was queued", func() {
+			options.RequestTimeout = time.Minute
+			session := connect()
+			holdFirst(session)
+
+			callCtx, cancel := context.WithCancel(ctx)
+			queued := make(chan error, 1)
+			go func() {
+				_, err := session.CallTool(callCtx, &mcp.CallToolParams{Name: "detect_platform", Arguments: map[string]any{}})
+				queued <- err
+			}()
+			// Let the queued request reach the server before cancelling it.
+			time.Sleep(100 * time.Millisecond)
+			cancel()
+			Eventually(queued).Should(Receive(HaveOccurred()))
+			// Give the server time to deliver the cancellation, then free the slot.
+			time.Sleep(200 * time.Millisecond)
+			close(release)
+
+			Consistently(calls.Load, 300*time.Millisecond).Should(Equal(int32(1)), "the cancelled request ran after the slot was freed")
+			result, err := call(session, "detect_platform", map[string]any{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.IsError).To(BeFalse())
+		})
+	})
+
 	It("serializes concurrent requests", func() {
 		var active, peak atomic.Int32
 		options.DetectPlatform = func(context.Context) (*platform.Platform, error) {

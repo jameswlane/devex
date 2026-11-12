@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -52,9 +51,11 @@ var ReadOnlyTools = []string{"list_apps", "detect_platform", "get_status", "vali
 
 type server struct {
 	opts Options
-	// mu serializes requests: agentapi reads process-global Viper state, so
+	// slot serializes requests: agentapi reads process-global Viper state, so
 	// concurrent requests must not observe each other's configuration access.
-	mu sync.Mutex
+	// It is a one-slot semaphore rather than a mutex so a queued request
+	// stops waiting when it is cancelled or its deadline passes.
+	slot chan struct{}
 }
 
 // New returns an MCP server with the read-only DevEx tools and the redacted
@@ -66,7 +67,7 @@ func New(opts Options) *mcp.Server {
 	if opts.DetectPlatform == nil {
 		opts.DetectPlatform = agentapi.DetectPlatform
 	}
-	s := &server{opts: opts}
+	s := &server{opts: opts, slot: make(chan struct{}, 1)}
 
 	impl := &mcp.Implementation{Name: "devex", Title: "DevEx", Version: opts.Version}
 	srv := mcp.NewServer(impl, &mcp.ServerOptions{
@@ -113,14 +114,28 @@ func New(opts Options) *mcp.Server {
 	return srv
 }
 
-// begin serializes a request and applies the request deadline.
-func (s *server) begin(ctx context.Context) (context.Context, func()) {
-	s.mu.Lock()
+// begin applies the request deadline and then serializes the request. The
+// deadline covers time spent queued behind other requests, and a request that
+// is cancelled or times out while queued returns a categorized error without
+// running its operation.
+func (s *server) begin(ctx context.Context) (context.Context, func(), error) {
 	ctx, cancel := context.WithTimeout(ctx, s.opts.RequestTimeout)
+	select {
+	case s.slot <- struct{}{}:
+	case <-ctx.Done():
+		cancel()
+		return nil, nil, toolError(ctx.Err())
+	}
+	// select picks randomly when both are ready; never start expired work.
+	if err := ctx.Err(); err != nil {
+		<-s.slot
+		cancel()
+		return nil, nil, toolError(err)
+	}
 	return ctx, func() {
 		cancel()
-		s.mu.Unlock()
-	}
+		<-s.slot
+	}, nil
 }
 
 // toolError converts an error into a sanitized, categorized tool error.
@@ -204,7 +219,10 @@ func (s *server) listApps(ctx context.Context, _ *mcp.CallToolRequest, in ListAp
 	}
 	out.Kind = kind
 
-	ctx, done := s.begin(ctx)
+	ctx, done, err := s.begin(ctx)
+	if err != nil {
+		return nil, out, err
+	}
 	defer done()
 	result, err := agentapi.List(ctx, s.opts.Repo, s.opts.Settings, agentapi.ListRequest{Kind: kind, Options: agentapi.ListCommandOptions{
 		Format: "json", Category: in.Category, Search: in.Search, Method: in.Method, Recommended: in.Recommended,
@@ -236,7 +254,10 @@ func capped[T any](items []T, limit int) ([]T, int, bool) {
 type Empty struct{}
 
 func (s *server) detectPlatform(ctx context.Context, _ *mcp.CallToolRequest, _ Empty) (*mcp.CallToolResult, platform.Platform, error) {
-	ctx, done := s.begin(ctx)
+	ctx, done, err := s.begin(ctx)
+	if err != nil {
+		return nil, platform.Platform{}, err
+	}
 	defer done()
 	result, err := s.opts.DetectPlatform(ctx)
 	if err != nil {
@@ -267,7 +288,10 @@ func (s *server) getStatus(ctx context.Context, _ *mcp.CallToolRequest, in Statu
 	if err := checkText("category", in.Category); err != nil {
 		return nil, out, err
 	}
-	ctx, done := s.begin(ctx)
+	ctx, done, err := s.begin(ctx)
+	if err != nil {
+		return nil, out, err
+	}
 	defer done()
 	var reader agentapi.StatusReader
 	if s.opts.Repo != nil {
@@ -288,7 +312,10 @@ type ValidateInput struct {
 }
 
 func (s *server) validateConfig(ctx context.Context, _ *mcp.CallToolRequest, in ValidateInput) (*mcp.CallToolResult, agentapi.ValidationResult, error) {
-	ctx, done := s.begin(ctx)
+	ctx, done, err := s.begin(ctx)
+	if err != nil {
+		return nil, agentapi.ValidationResult{}, err
+	}
 	defer done()
 	result, err := agentapi.ValidateConfig(ctx, s.opts.Settings, in.Strict)
 	if err != nil {
@@ -310,7 +337,10 @@ func (s *server) planInstall(ctx context.Context, _ *mcp.CallToolRequest, in Pla
 	if err := checkNames("categories", in.Categories); err != nil {
 		return nil, agentapi.Plan{}, err
 	}
-	ctx, done := s.begin(ctx)
+	ctx, done, err := s.begin(ctx)
+	if err != nil {
+		return nil, agentapi.Plan{}, err
+	}
 	defer done()
 	plan, err := agentapi.PlanInstall(ctx, s.opts.Settings, agentapi.PlanRequest{Names: in.Apps, Categories: in.Categories})
 	if err != nil {
@@ -323,7 +353,10 @@ func (s *server) effectiveConfig(ctx context.Context, req *mcp.ReadResourceReque
 	if req.Params.URI != EffectiveConfigURI {
 		return nil, mcp.ResourceNotFoundError(req.Params.URI)
 	}
-	ctx, done := s.begin(ctx)
+	ctx, done, err := s.begin(ctx)
+	if err != nil {
+		return nil, err
+	}
 	defer done()
 	effective, err := agentapi.Effective(ctx, s.opts.Settings)
 	if err != nil {
