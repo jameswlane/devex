@@ -2062,6 +2062,9 @@ and allows manual backup creation and restoration.`,
 	cmd.AddCommand(newConfigBackupRestoreCmd(settings))
 	cmd.AddCommand(newConfigBackupDeleteCmd(settings))
 	cmd.AddCommand(newConfigBackupCompareCmd(settings))
+	cmd.AddCommand(newConfigBackupPushCmd(settings))
+	cmd.AddCommand(newConfigBackupPullCmd(settings))
+	cmd.AddCommand(newConfigBackupRemoteCmd())
 
 	return cmd
 }
