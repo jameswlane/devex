@@ -73,7 +73,8 @@ status and config-show contracts remain unchanged.
           }
         }},
         "dependency_order": {"$ref": "#/$defs/strings"},
-        "warnings": {"$ref": "#/$defs/strings"}
+        "warnings": {"$ref": "#/$defs/strings"},
+        "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
     "effective": {
@@ -144,9 +145,17 @@ are not tracked by the current loader.
     "privileges": "unknown", "unknown_effects": true
   }],
   "dependency_order": ["git"],
-  "warnings": ["Plugin effects and required privileges are unknown; no plugins or hooks were executed."]
+  "warnings": ["Plugin effects and required privileges are unknown; no plugins or hooks were executed."],
+  "digest": "sha256:…"
 }
 ```
+
+`devex install --dry-run --format json` adds `digest`, which covers the plan
+and the full definitions of every planned application (install commands,
+hooks, dependencies, files). `devex install --expect-plan <digest>` with the
+same applications installs only if the digest still matches; otherwise it
+fails before installing anything. `devex remote install` uses this to install
+exactly the plan you confirmed.
 
 Planning and execution share application selection: explicit app arguments,
 categories, inline definitions from the selected configuration, then default

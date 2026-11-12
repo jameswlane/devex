@@ -50,6 +50,7 @@ func NewInstallCmdWithPluginProvider(repo types.Repository, settings config.Cros
 		answers        []string
 		answerFiles    []string
 		nonInteractive bool
+		expectPlan     string
 	)
 
 	cmd := &cobra.Command{
@@ -103,7 +104,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 				if !viper.GetBool("dry-run") || templateID != "" {
 					return writeAPIJSON(cmd, nil, &agentapi.Error{Category: "invalid_request", Message: "JSON install requires --dry-run without --template"})
 				}
-				plan, err := agentapi.PlanInstall(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
+				plan, digest, err := agentapi.PlanDigest(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
 				if err == nil {
 					selected, _, selectErr := agentapi.SelectApplications(ctx, settings, agentapi.PlanRequest{Names: args, Categories: viper.GetStringSlice("categories")})
 					if selectErr != nil {
@@ -113,7 +114,12 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 						_ = system.CheckApplicationRequirements(ctx, app.Name, app.GetOSConfig().SystemRequirements, func(message string) { fmt.Fprintln(cmd.ErrOrStderr(), message) })
 					}
 				}
-				return writeAPIJSON(cmd, plan, err)
+				// The digest lets a caller confirm this plan and install exactly it
+				// with --expect-plan.
+				return writeAPIJSON(cmd, struct {
+					agentapi.Plan
+					Digest string `json:"digest"`
+				}{plan, digest}, err)
 			}
 			if format != "table" {
 				return fmt.Errorf("unsupported format %q", format)
@@ -123,6 +129,21 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 			verbose := viper.GetBool("verbose")
 			dryRun := viper.GetBool("dry-run")
 			categories := viper.GetStringSlice("categories")
+
+			if expectPlan != "" {
+				if dryRun || templateID != "" {
+					return fmt.Errorf("--expect-plan installs a confirmed plan; it cannot be combined with --dry-run or --template")
+				}
+				// Plan and install run in this process from the same loaded
+				// configuration, so the verified plan is the one executed.
+				_, digest, err := agentapi.PlanDigest(ctx, settings, agentapi.PlanRequest{Names: args, Categories: categories})
+				if err != nil {
+					return fmt.Errorf("check the confirmed plan: %w", err)
+				}
+				if digest != expectPlan {
+					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, digest)
+				}
+			}
 
 			if templateID != "" {
 				if len(args) > 0 || len(categories) > 0 {
@@ -157,6 +178,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 	cmd.Flags().StringVar(&templateID, "template", "", "Install a DevEx lifecycle template by ID or path")
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
 	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
+	cmd.Flags().StringVar(&expectPlan, "expect-plan", "", "Install only if the plan digest from 'install --dry-run --format json' still matches")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Install without the TUI; fail instead of prompting for template inputs")
 
 	// Bind flags to Viper for hierarchical config

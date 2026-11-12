@@ -4,9 +4,11 @@
 //
 // Host keys are verified strictly: an unknown host is refused unless the
 // caller explicitly accepts new keys. SSH runs in batch mode, so it never
-// prompts for a password. The remote DevEx re-plans the same applications;
-// the run is refused when that plan differs from the confirmed one. The
-// install then runs unattended and its output is streamed back.
+// prompts for a password. The remote plan carries a digest of everything it
+// would execute; the install sends the confirmed digest back and the remote
+// DevEx re-plans and verifies it in the same process that installs, refusing
+// when anything changed. The install runs unattended and its output is
+// streamed back.
 package remoterun
 
 import (
@@ -18,10 +20,11 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jameswlane/devex/apps/cli/internal/agentapi"
 )
 
 // Target is an SSH destination and its authentication inputs.
@@ -46,7 +49,11 @@ var (
 	hostPattern = regexp.MustCompile(`^([A-Za-z0-9._-]+@)?[A-Za-z0-9.:_-]+$`)
 	appPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._+-]*$`)
 	devexPath   = regexp.MustCompile(`^[A-Za-z0-9._/~-]+$`)
+	digestValue = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 )
+
+// ErrPlanChanged reports that the remote plan no longer matches the confirmed one.
+var ErrPlanChanged = errors.New("the plan changed after it was confirmed; nothing was installed; review it again")
 
 // Validate checks the target.
 func (t Target) Validate() error {
@@ -157,17 +164,22 @@ func (t Target) Version(ctx context.Context) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// PlannedApp is the subset of a remote plan entry that is compared.
+// PlannedApp is a remote plan entry, as shown for confirmation.
 type PlannedApp struct {
-	Name   string `json:"name"`
-	Method string `json:"method"`
+	Name         string   `json:"name"`
+	Method       string   `json:"method"`
+	Dependencies []string `json:"dependencies"`
+	Effects      []string `json:"effects"`
+	Privileges   string   `json:"privileges"`
 }
 
-// Plan is the remote install plan.
+// Plan is the remote install plan. Digest binds it to the remote definitions
+// it would execute; Install sends it back to be verified.
 type Plan struct {
 	Apps            []PlannedApp `json:"apps"`
 	DependencyOrder []string     `json:"dependency_order"`
 	Warnings        []string     `json:"warnings"`
+	Digest          string       `json:"digest"`
 }
 
 // RemotePlan asks the remote DevEx to plan apps without executing anything.
@@ -189,27 +201,22 @@ func (t Target) RemotePlan(ctx context.Context, apps []string) (Plan, error) {
 		}
 		return Plan{}, Explain(err, stderr.String())
 	}
+	if !digestValue.MatchString(plan.Digest) {
+		return Plan{}, errors.New("the remote DevEx did not return a plan digest, so a confirmed plan cannot be verified there; upgrade DevEx on the remote host")
+	}
 	return plan, nil
 }
 
-// Same reports whether two plans install the same applications with the same methods.
-func Same(a, b Plan) bool {
-	key := func(plan Plan) string {
-		entries := make([]string, 0, len(plan.Apps))
-		for _, app := range plan.Apps {
-			entries = append(entries, strings.ToLower(app.Name)+"="+app.Method)
-		}
-		sort.Strings(entries)
-		return strings.Join(entries, ",")
+// Install runs the install remotely, streaming its output. The remote DevEx
+// installs only if its plan still has the confirmed digest; otherwise
+// ErrPlanChanged is returned. Another nonzero remote exit is returned as an
+// error naming the exit status.
+func (t Target) Install(ctx context.Context, apps []string, digest string, stdout, stderr io.Writer) error {
+	if !digestValue.MatchString(digest) {
+		return fmt.Errorf("invalid plan digest %q", digest)
 	}
-	return key(a) == key(b)
-}
-
-// Install runs the install remotely, streaming its output. A nonzero remote
-// exit is returned as an error naming the exit status.
-func (t Target) Install(ctx context.Context, apps []string, stdout, stderr io.Writer) error {
 	var captured bytes.Buffer
-	command := t.command(ctx, append([]string{"install", "--non-interactive"}, apps...)...)
+	command := t.command(ctx, append([]string{"install", "--non-interactive", "--expect-plan", digest}, apps...)...)
 	command.Stdout = stdout
 	command.Stderr = io.MultiWriter(stderr, &captured)
 	err := command.Run()
@@ -218,6 +225,12 @@ func (t Target) Install(ctx context.Context, apps []string, stdout, stderr io.Wr
 	}
 	if err == nil {
 		return nil
+	}
+	if strings.Contains(captured.String(), agentapi.PlanChangedMessage) {
+		return ErrPlanChanged
+	}
+	if strings.Contains(captured.String(), "unknown flag: --expect-plan") {
+		return errors.New("the remote DevEx cannot verify a confirmed plan (no --expect-plan); upgrade DevEx on the remote host")
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) && exit.ExitCode() != 255 && exit.ExitCode() != 127 {

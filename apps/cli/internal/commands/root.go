@@ -114,21 +114,18 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			// Install resolves applications before initializing plugins so invalid input
 			// fails without downloads; bare devex and setup own their setup flow.
 			cmdName := cmd.Name()
+			// Remote installs run the remote host's DevEx and plugins, not local ones.
 			for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
-				if parent.Name() == "plugin" || parent.Name() == "runs" {
+				if parent.Name() == "plugin" || parent.Name() == "runs" || parent.Name() == "remote" {
 					return nil
 				}
 			}
-			if cmd.Parent() == nil || (cmdName == "install" && cmd.Flags().Lookup("template").Value.String() == "") || cmdName == "update" || cmdName == "upgrade" || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
+			if cmd.Parent() == nil || (cmdName == "install" && !hasTemplateFlag(cmd)) || cmdName == "update" || cmdName == "upgrade" || cmdName == "setup" || (cmd.Parent() != nil && cmd.Parent().Name() == "setup") {
 				log.Debug("Deferring plugin initialization to command", "command", cmdName)
 				return nil
 			}
 
 			if cmdName == "self-update" || cmdName == "paths" || cmdName == "help" {
-				return nil
-			}
-			// Remote installs run the remote host's DevEx and plugins, not local ones.
-			if cmd.Parent() != nil && cmd.Parent().Name() == "remote" {
 				return nil
 			}
 			return runtime.initializePluginSystem(cmd.Context())
@@ -224,6 +221,13 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 	_ = viper.BindPFlag("offline", cmd.PersistentFlags().Lookup("offline"))
 
 	return cmd
+}
+
+// hasTemplateFlag reports whether a command was given a non-empty --template;
+// commands without that flag never have one.
+func hasTemplateFlag(cmd *cobra.Command) bool {
+	flag := cmd.Flags().Lookup("template")
+	return flag != nil && flag.Value.String() != ""
 }
 
 // initializeConfig implements 12-Factor configuration hierarchy:

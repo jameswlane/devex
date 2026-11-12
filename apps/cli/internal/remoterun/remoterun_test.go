@@ -17,7 +17,9 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/remoterun"
 )
 
-const plan = `{"apps":[{"name":"git","method":"apt"}],"dependency_order":["git"],"warnings":[]}`
+const digest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+const plan = `{"apps":[{"name":"git","method":"apt","dependencies":["base"],"effects":["package_install"],"privileges":"unknown"}],"dependency_order":["git"],"warnings":[],"digest":"` + digest + `"}`
 
 // fakeSSH writes an ssh stand-in that records its arguments and plays the
 // remote DevEx: --version, install --dry-run --format json, and install.
@@ -30,6 +32,8 @@ case "$FAKE_MODE" in
   hostkey) echo "Host key verification failed." >&2; exit 255 ;;
   auth) echo "me@host: Permission denied (publickey)." >&2; exit 255 ;;
   missing) echo "sh: 1: devex: not found" >&2; exit 127 ;;
+  changed) case "$remote" in *--expect-plan*) echo "Error: the installation plan changed after it was confirmed (confirmed x, now y)" >&2; exit 1 ;; esac ;;
+  old) case "$remote" in *--expect-plan*) echo "Error: unknown flag: --expect-plan" >&2; exit 1 ;; esac ;;
 esac
 case "$remote" in
   *--version*) echo "devex version 9.9.9" ;;
@@ -119,13 +123,13 @@ var _ = Describe("Remote runs", func() {
 
 	It("streams the remote install and propagates its exit status", func() {
 		var stdout, stderr bytes.Buffer
-		Expect(target.Install(ctx, []string{"git"}, &stdout, &stderr)).To(Succeed())
+		Expect(target.Install(ctx, []string{"git"}, digest, &stdout, &stderr)).To(Succeed())
 		Expect(stdout.String()).To(ContainSubstring("installing git...\ninstalled git"))
 		Expect(stderr.String()).To(ContainSubstring("remote warning"))
-		Expect(args()[len(args())-1]).To(Equal(`CI=true devex 'install' '--non-interactive' 'git'`))
+		Expect(args()[len(args())-1]).To(Equal(`CI=true devex 'install' '--non-interactive' '--expect-plan' '` + digest + `' 'git'`))
 
 		GinkgoT().Setenv("FAKE_EXIT", "3")
-		Expect(target.Install(ctx, []string{"git"}, &stdout, &stderr)).To(MatchError(ContainSubstring("exit status 3")))
+		Expect(target.Install(ctx, []string{"git"}, digest, &stdout, &stderr)).To(MatchError(ContainSubstring("exit status 3")))
 	})
 
 	It("closes the session on cancellation", func() {
@@ -133,17 +137,40 @@ var _ = Describe("Remote runs", func() {
 		ctx, cancel := context.WithTimeout(ctx, 300*time.Millisecond)
 		defer cancel()
 		started := time.Now()
-		err := target.Install(ctx, []string{"git"}, &bytes.Buffer{}, &bytes.Buffer{})
+		err := target.Install(ctx, []string{"git"}, digest, &bytes.Buffer{}, &bytes.Buffer{})
 		Expect(err).To(MatchError(ContainSubstring("cancelled")))
 		Expect(time.Since(started)).To(BeNumerically("<", 10*time.Second))
 	})
 
-	It("compares plans by application and method", func() {
-		a := remoterun.Plan{Apps: []remoterun.PlannedApp{{Name: "git", Method: "apt"}, {Name: "curl", Method: "apt"}}}
-		b := remoterun.Plan{Apps: []remoterun.PlannedApp{{Name: "Curl", Method: "apt"}, {Name: "git", Method: "apt"}}}
-		Expect(remoterun.Same(a, b)).To(BeTrue())
-		b.Apps[0].Method = "dnf"
-		Expect(remoterun.Same(a, b)).To(BeFalse())
+	It("returns the plan digest with every safety-relevant field", func() {
+		got, err := target.RemotePlan(ctx, []string{"git"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got.Digest).To(Equal(digest))
+		Expect(got.Apps).To(ConsistOf(remoterun.PlannedApp{Name: "git", Method: "apt", Dependencies: []string{"base"}, Effects: []string{"package_install"}, Privileges: "unknown"}))
+	})
+
+	It("refuses a remote plan without a digest", func() {
+		Expect(os.WriteFile(filepath.Join(dir, "plan.json"), []byte(`{"apps":[{"name":"git","method":"apt"}],"dependency_order":["git"],"warnings":[]}`), 0o600)).To(Succeed())
+		_, err := target.RemotePlan(ctx, []string{"git"})
+		Expect(err).To(MatchError(ContainSubstring("upgrade DevEx on the remote host")))
+	})
+
+	It("reports a remote plan that changed after confirmation", func() {
+		GinkgoT().Setenv("FAKE_MODE", "changed")
+		err := target.Install(ctx, []string{"git"}, digest, &bytes.Buffer{}, &bytes.Buffer{})
+		Expect(err).To(MatchError(remoterun.ErrPlanChanged))
+	})
+
+	It("explains a remote DevEx that cannot verify plans", func() {
+		GinkgoT().Setenv("FAKE_MODE", "old")
+		err := target.Install(ctx, []string{"git"}, digest, &bytes.Buffer{}, &bytes.Buffer{})
+		Expect(err).To(MatchError(ContainSubstring("upgrade DevEx on the remote host")))
+	})
+
+	It("refuses an invalid digest before connecting", func() {
+		err := target.Install(ctx, []string{"git"}, "sha256:x'; rm -rf ~", &bytes.Buffer{}, &bytes.Buffer{})
+		Expect(err).To(MatchError(ContainSubstring("invalid plan digest")))
+		Expect(filepath.Join(dir, "args")).NotTo(BeAnExistingFile())
 	})
 
 	It("runs against a disposable sshd", Label("sshd"), func(ctx SpecContext) {
@@ -156,7 +183,7 @@ var _ = Describe("Remote runs", func() {
 		}
 		keys := GinkgoT().TempDir()
 		for _, name := range []string{"host", "client"} {
-			Expect(exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", filepath.Join(keys, name)).Run()).To(Succeed())
+			Expect(exec.CommandContext(ctx, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", filepath.Join(keys, name)).Run()).To(Succeed())
 		}
 		client, err := os.ReadFile(filepath.Join(keys, "client.pub"))
 		Expect(err).NotTo(HaveOccurred())
@@ -182,10 +209,10 @@ var _ = Describe("Remote runs", func() {
 		Eventually(func() error { _, err := real.Version(ctx); return err }).WithTimeout(10 * time.Second).Should(Succeed())
 		got, err := real.RemotePlan(ctx, []string{"git"})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(got.Apps).To(ConsistOf(remoterun.PlannedApp{Name: "git", Method: "apt"}))
+		Expect(got.Digest).To(Equal(digest))
 		var stdout bytes.Buffer
-		Expect(real.Install(ctx, []string{"git"}, &stdout, &bytes.Buffer{})).To(Succeed())
-		Expect(stdout.String()).To(ContainSubstring("installed install --non-interactive git"))
+		Expect(real.Install(ctx, []string{"git"}, digest, &stdout, &bytes.Buffer{})).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring("installed install --non-interactive --expect-plan " + digest + " git"))
 
 		unknown := real
 		unknown.KnownHosts = filepath.Join(keys, "empty_known_hosts")
