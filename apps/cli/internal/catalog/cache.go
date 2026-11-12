@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -100,4 +101,40 @@ func writeSnapshot(path string, snapshot Snapshot) error {
 		return err
 	}
 	return os.Rename(file.Name(), path)
+}
+
+// WithBundled returns the bundled applications followed by the registry
+// applications the binary does not ship. Bundled definitions are complete and
+// match this CLI version, while registry entries may be partial or describe
+// features a released CLI does not support, so a registry entry never replaces
+// a bundled one. Registry entries without any install method are ignored.
+func WithBundled(bundled, registry []types.CrossPlatformApp) []types.CrossPlatformApp {
+	merged := append([]types.CrossPlatformApp(nil), bundled...)
+	known := make(map[string]bool, len(bundled))
+	for _, app := range bundled {
+		known[strings.ToLower(app.Name)] = true
+	}
+	for _, app := range registry {
+		key := strings.ToLower(app.Name)
+		if known[key] || !installable(app) {
+			continue
+		}
+		known[key] = true
+		merged = append(merged, app)
+	}
+	return merged
+}
+
+func installable(app types.CrossPlatformApp) bool {
+	for _, platform := range []types.OSConfig{app.AllPlatforms, app.Linux, app.MacOS, app.Windows} {
+		if platform.InstallMethod != "" {
+			return true
+		}
+		for _, alternative := range platform.Alternatives {
+			if alternative.InstallMethod != "" {
+				return true
+			}
+		}
+	}
+	return false
 }

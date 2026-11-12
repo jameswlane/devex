@@ -1,0 +1,109 @@
+---
+title: devex dotfiles
+description: Deploy files from your own dotfiles Git repository, with backups and rollback.
+---
+
+import { Callout } from 'fumadocs-ui/components/callout'
+
+# devex dotfiles
+
+`devex dotfiles` deploys files from your own dotfiles Git repository into your home directory. Every deployed file is recorded, any file it replaces is backed up first, and `devex dotfiles rollback` restores what was there before.
+
+```bash
+devex dotfiles sync [--repo URL] [--ref REF] [--dry-run] [--yes]
+devex dotfiles status [--format table|json]
+devex dotfiles rollback [--dry-run] [--yes]
+```
+
+## The manifest
+
+List the files to deploy in `devex-dotfiles.yaml` at the root of the repository:
+
+```yaml
+files:
+  - source: zsh/.zshrc
+    destination: ~/.zshrc
+  - source: git/config
+    destination: ~/.config/git/config
+```
+
+- `source` is a path inside the repository. It must be a regular file: symlinks, `..`, absolute paths and files under `.git` are rejected.
+- `destination` must be inside your home directory, and outside DevEx's own configuration, data, state and cache directories, also when a symlinked directory on the way leads there. `~`, `$VAR` and `${VAR}` are expanded.
+- A destination may appear only once. The manifest can list up to 500 files.
+
+## Configuration
+
+The repository and ref come from, in order of precedence:
+
+| Source | Repository | Ref |
+| --- | --- | --- |
+| Flags | `--repo` | `--ref` |
+| Environment | `DEVEX_DOTFILES_REPOSITORY` | `DEVEX_DOTFILES_REF` |
+| Config file | `dotfiles.repository` | `dotfiles.ref` |
+
+```yaml
+# ~/.config/devex/config.yaml
+dotfiles:
+  repository: git@github.com:me/dotfiles.git
+  ref: main
+```
+
+Repositories can be `https://`, `ssh://`, `git@host:path` or an absolute local path. With no ref, the repository's default branch is used. A ref can be a branch, tag or commit.
+
+<Callout type="warn" title="Private repositories">
+Use an SSH key or a git credential helper. DevEx never prompts for or stores passwords, runs git with prompts disabled, and refuses repository URLs that contain credentials (`https://user:token@…`), because they would be saved in plain text.
+</Callout>
+
+## devex dotfiles sync
+
+Sync fetches the repository at the ref into a temporary directory (depth 1, no submodules), shows the plan, asks for confirmation, deploys, and removes the temporary directory.
+
+- A destination identical to the repository's file is left alone and not recorded, so rollback never removes it.
+- A destination that DevEx deployed earlier and you haven't changed is updated in place, with no new backup.
+- Any other differing destination is backed up first, as `<file>.<timestamp>.devex-bak`, and then replaced.
+- Without a terminal, `--yes` is required. `--dry-run` shows the plan and changes nothing.
+
+Running sync again with no upstream changes changes nothing. Files removed from the manifest are left in place; `devex dotfiles rollback` handles every recorded file.
+
+```bash
+# Preview
+devex dotfiles sync --repo https://github.com/me/dotfiles --dry-run
+
+# Deploy a tag without prompting
+devex dotfiles sync --repo git@github.com:me/dotfiles.git --ref v2 --yes
+```
+
+## devex dotfiles status
+
+Shows the repository, ref and commit of the last sync, and whether each deployed file is `unchanged`, `modified` since deployment, or `missing`, with its backup.
+
+## devex dotfiles rollback
+
+For each recorded file:
+
+- If it is still exactly as DevEx deployed it, it is removed, and the original file is restored from its backup if there was one.
+- If you have changed it since, it is kept, and its backup is reported so you can restore it yourself.
+- If its backup is missing, inaccessible or not a regular file, the deployed file and its record are kept and rollback fails with the backup's path, so you can put the original back and run rollback again.
+- A file that could not be removed or restored stays recorded; fix the problem and run rollback again.
+
+`--dry-run` shows the plan. Without a terminal, `--yes` is required.
+
+## Failure behavior
+
+- An invalid repository URL, ref or manifest stops before anything is written.
+- If the fetch fails (network, authentication, unknown ref), nothing is written.
+- If a file can't be deployed, the others are still deployed and recorded. The command reports how many failed and exits nonzero; `devex dotfiles status` shows the state.
+
+## Verify it yourself
+
+```bash
+mkdir -p /tmp/dotfiles-demo && cd /tmp/dotfiles-demo
+git init -q && printf 'export EDITOR=vim\n' > zshrc
+printf 'files:\n  - source: zshrc\n    destination: ~/.zshrc\n' > devex-dotfiles.yaml
+git add . && git commit -qm init
+
+devex dotfiles sync --repo /tmp/dotfiles-demo --dry-run   # plan only
+devex dotfiles sync --repo /tmp/dotfiles-demo --yes       # deploys, backs up ~/.zshrc
+devex dotfiles status
+devex dotfiles rollback --yes                             # restores your ~/.zshrc
+```
