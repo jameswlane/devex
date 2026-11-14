@@ -23,13 +23,15 @@ func (p *RpmPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 
 	var missing []string
 	for _, pkg := range args {
-		var stderr bytes.Buffer
-		err := p.runWithStderr(ctx, "is-installed", io.MultiWriter(os.Stderr, &stderr), "--query", pkg)
+		// rpm prints "package X is not installed" as a translated notice on
+		// stdout, so pin the C locale and inspect stdout to recognise it.
+		var stdout bytes.Buffer
+		err := p.runWithIO(ctx, "is-installed", io.MultiWriter(os.Stdout, &stdout), os.Stderr, []string{"LC_ALL=C"}, "--query", pkg)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if err != nil {
-			if rpmPackageAbsent(pkg, err, stderr.String()) {
+			if rpmPackageAbsent(pkg, err, stdout.String()) {
 				missing = append(missing, pkg)
 				continue
 			}
@@ -43,7 +45,7 @@ func (p *RpmPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 	return nil
 }
 
-func rpmPackageAbsent(pkg string, err error, stderr string) bool {
+func rpmPackageAbsent(pkg string, err error, stdout string) bool {
 	var exitErr *exec.ExitError
-	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.Contains(stderr, "package "+pkg+" is not installed")
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.Contains(stdout, "package "+pkg+" is not installed")
 }

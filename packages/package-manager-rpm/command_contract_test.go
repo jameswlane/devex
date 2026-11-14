@@ -22,13 +22,15 @@ type operationContract struct {
 	args       []string
 	nativeArgv []string
 	elevated   bool
+	// env holds the per-operation assignments the SDK passes through sudo env.
+	env []string
 }
 
 var contracts = []operationContract{
 	{command: "install", args: []string{"testdata/git.rpm"}, nativeArgv: []string{"--install", "testdata/git.rpm"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--erase", "git", "vim"}, elevated: true},
 	{command: "list", nativeArgv: []string{"--query", "--all"}},
-	{command: "is-installed", args: []string{"git"}, nativeArgv: []string{"--query", "git"}},
+	{command: "is-installed", args: []string{"git"}, nativeArgv: []string{"--query", "git"}, env: []string{"LC_ALL=C"}},
 }
 
 // unsupported maps advertised commands that never run rpm to the

@@ -135,7 +135,8 @@ var _ = Describe("RPM execution boundary", func() {
 			}
 
 			It(fmt.Sprintf("runs %s as the invoking user instead of root", contract.command), func() {
-				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder", executable}, contract.nativeArgv...)
+				switchArgv := append([]string{"-n", "-H", "-u", "builder", "--", "env", "HOME=" + home, "USER=builder", "LOGNAME=builder"}, contract.env...)
+				switchArgv = append(append(switchArgv, executable), contract.nativeArgv...)
 				// Answer at the sudo boundary so the spec proves the identity switch, not root execution.
 				recorder.Script("sudo", switchArgv, sdktest.Response{})
 				Expect(plugin.Execute(contract.command, contract.args)).To(Succeed())

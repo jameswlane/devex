@@ -27,23 +27,18 @@ var _ = Describe("RPM installed-package queries", func() {
 		Expect(plugin.Execute("is-installed", []string{"git"})).To(Succeed())
 	})
 
-	It("reports a native not-installed answer with the SDK status", func() {
-		nativeStderr := "package git is not installed\n"
-		recorder.Script("rpm", []string{"--query", "git"}, sdktest.Response{ExitCode: 1, Stderr: nativeStderr})
-		var err error
-		stderr := captureStderr(func() {
-			err = plugin.Execute("is-installed", []string{"git"})
-		})
+	It("reports rpm's not-installed notice on stdout with the SDK status", func() {
+		recorder.Script("rpm", []string{"--query", "git"}, sdktest.Response{ExitCode: 1, Stdout: "package git is not installed\n"})
+		err := plugin.Execute("is-installed", []string{"git"})
 		var absent *sdk.NotInstalledError
 		Expect(errors.As(err, &absent)).To(BeTrue(), "expected NotInstalledError, got %v", err)
 		Expect(absent.Packages).To(Equal([]string{"git"}))
 		Expect(sdk.ExitStatus(err)).To(Equal(sdk.ExitCodeNotInstalled))
-		Expect(stderr).To(Equal(nativeStderr))
 	})
 
 	It("reports only the missing packages from separate native queries", func() {
 		recorder.Script("rpm", []string{"--query", "git"}, sdktest.Response{Stdout: "git-2.51.0-1.fc44.x86_64\n"})
-		recorder.Script("rpm", []string{"--query", "missing"}, sdktest.Response{ExitCode: 1, Stderr: "package missing is not installed\n"})
+		recorder.Script("rpm", []string{"--query", "missing"}, sdktest.Response{ExitCode: 1, Stdout: "package missing is not installed\n"})
 		err := plugin.Execute("is-installed", []string{"git", "missing"})
 		var absent *sdk.NotInstalledError
 		Expect(errors.As(err, &absent)).To(BeTrue())

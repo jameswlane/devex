@@ -125,7 +125,7 @@ func (p *RpmPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	var stderr bytes.Buffer
-	err := p.runWithStderr(ctx, "install", io.MultiWriter(os.Stderr, &stderr), append([]string{"--install"}, args...)...)
+	err := p.runWithIO(ctx, "install", os.Stdout, io.MultiWriter(os.Stderr, &stderr), nil, append([]string{"--install"}, args...)...)
 	if err != nil && strings.Contains(stderr.String(), "Failed dependencies") {
 		return fmt.Errorf("rpm does not resolve dependencies; use dnf or zypper to install them (for example, dnf install ./file.rpm): %w", err)
 	}
@@ -171,10 +171,11 @@ func (p *RpmPlugin) handleList(ctx context.Context, args []string) error {
 
 // run executes rpm with the privilege advertised for operation.
 func (p *RpmPlugin) run(ctx context.Context, operation string, args ...string) error {
-	return p.runWithStderr(ctx, operation, os.Stderr, args...)
+	return p.runWithIO(ctx, operation, os.Stdout, os.Stderr, nil, args...)
 }
 
-func (p *RpmPlugin) runWithStderr(ctx context.Context, operation string, stderr io.Writer, args ...string) error {
+// runWithIO is run with caller-supplied output streams and extra environment.
+func (p *RpmPlugin) runWithIO(ctx context.Context, operation string, stdout, stderr io.Writer, env []string, args ...string) error {
 	privilege := sdk.PluginOperationPrivilege(p.Info(), []string{operation})
 	if privilege == nil {
 		return fmt.Errorf("operation %s has no declared privilege", operation)
@@ -182,7 +183,7 @@ func (p *RpmPlugin) runWithStderr(ctx context.Context, operation string, stderr 
 	if !p.IsAvailable() {
 		return fmt.Errorf("rpm is not available on this system; this plugin requires an RPM-based distribution")
 	}
-	err := sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: *privilege, Name: "rpm", Args: args}, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: stderr})
+	err := sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: *privilege, Name: "rpm", Args: args, Env: env}, sdk.OperationIO{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr})
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
