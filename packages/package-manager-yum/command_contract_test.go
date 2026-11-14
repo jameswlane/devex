@@ -134,6 +134,13 @@ var _ = Describe("YUM command contracts", func() {
 		Expect(recorder.Calls("yum")).To(BeEmpty())
 	})
 
+	It("reports RPM database failures instead of treating them as missing packages", func() {
+		recorder.Script("rpm", []string{"-q", "--", "git"}, sdktest.Response{ExitCode: 1, Stderr: "error: rpmdb: BDB0113 Thread died\n"})
+		err := plugin.Execute("remove", []string{"git"})
+		Expect(err).To(MatchError(ContainSubstring(`cannot remove package "git": RPM query failed: error: rpmdb: BDB0113 Thread died`)))
+		Expect(recorder.Calls("yum")).To(BeEmpty())
+	})
+
 	It("removes a package matched by a provided capability", func() {
 		recorder.Script("rpm", []string{"-q", "--", "editor"}, sdktest.Response{ExitCode: 1})
 		Expect(plugin.Execute("remove", []string{"editor"})).To(Succeed())

@@ -53,7 +53,12 @@ func requireInstalledMatch(ctx context.Context, spec string) error {
 			return nil
 		}
 		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 || len(exitErr.Stderr) != 0 {
+			if exitErr != nil {
+				if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+					return fmt.Errorf("cannot remove package %q: RPM query failed: %s: %w", spec, stderr, err)
+				}
+			}
 			return fmt.Errorf("cannot remove package %q: RPM query failed: %w", spec, err)
 		}
 	}
