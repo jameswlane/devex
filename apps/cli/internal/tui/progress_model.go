@@ -129,8 +129,8 @@ func (m *ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewport.Width = msg.Width - 4
-		m.viewport.Height = msg.Height - 8 // Leave room for header and footer
+		m.viewport.Width = max(msg.Width-4, m.viewport.Style.GetHorizontalFrameSize())
+		m.viewport.Height = max(msg.Height-8, m.viewport.Style.GetVerticalFrameSize()) // Leave room for header and footer
 		m.ready = true
 		return m, nil
 

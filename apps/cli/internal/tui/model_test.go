@@ -69,6 +69,16 @@ var _ = Describe("Model", func() {
 
 			Expect(cmd).To(BeNil())
 		})
+
+		It("should not panic when logging to a zero-sized terminal", func() {
+			model := NewModel(createTestApps())
+
+			Expect(func() {
+				updatedModel, _ := model.Update(tea.WindowSizeMsg{Width: 0, Height: 0})
+				model = updatedModel.(*Model)
+				model.Update(LogMsg{Message: "installation output", Level: "INFO", Timestamp: time.Now()})
+			}).NotTo(Panic())
+		})
 	})
 
 	Describe("LogMessages", func() {
