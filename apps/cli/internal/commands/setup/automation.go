@@ -190,7 +190,8 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	apps := model.buildAppList()
 
 	log.Info("Automated setup will install apps:", "appCount", len(apps), "shell", model.getSelectedShell(), "languages", model.getSelectedLanguages(), "databases", model.getSelectedDatabases())
-	model.selections.alreadyInstalled = installedAppsCheck(ctx, apps)
+	// Apps whose DevEx lifecycle is unfinished run it again, so failed hooks are retried.
+	model.selections.alreadyInstalled = tui.SkippableInstalledApps(repo, installedAppsCheck(ctx, apps))
 
 	// Display the planned installation to the user
 	printAutomatedSetupPlan(model)
@@ -266,6 +267,9 @@ func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, al
 		if batch.BatchInstalled[app.Name] {
 			appCtx = installers.WithPackagesInstalled(ctx, app.Name)
 		}
+		if err := tui.RecordLifecycle(repo, app.Name, false); err != nil {
+			log.Warn("Could not record install state", "app", app.Name, "error", err)
+		}
 		if err := installAutomatedApp(appCtx, app, settings, repo); err != nil {
 			if authErr := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); authErr != nil {
 				return nil, authErr
@@ -273,6 +277,9 @@ func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, al
 			outcomes.Record(app.Name, tui.OutcomeFailed, err)
 			failures = append(failures, fmt.Sprintf("failed to install %s: %v", app.Name, err))
 			continue
+		}
+		if err := tui.RecordLifecycle(repo, app.Name, true); err != nil {
+			log.Warn("Could not record install state", "app", app.Name, "error", err)
 		}
 		outcomes.Record(app.Name, tui.OutcomeInstalled, nil)
 	}

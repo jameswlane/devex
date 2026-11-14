@@ -839,6 +839,9 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	}
 	policy := utils.InstallHookPolicy{Validator: validator, AppName: app.Name}
 
+	// Until registration finishes, a rerun must not skip this app as installed.
+	si.recordLifecycle(app.Name, false)
+
 	// Handle pre-install commands
 	if err := state.AuditStep(ctx, "pre-install", len(osConfig.PreInstall) > 0, func() error { return si.executeCommands(ctx, osConfig.PreInstall, policy) }); err != nil {
 		si.recordFailedInstallation(app.Name, startTime, err)
@@ -881,6 +884,8 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	})
 
 	// Optional hooks retain their failed audit result even when registration continues.
+	// The lifecycle stays incomplete so the next run retries the hook.
+	hooksComplete := true
 	if err := state.AuditStep(ctx, "post-install", len(osConfig.PostInstall) > 0, func() error { return si.executeCommands(ctx, osConfig.PostInstall, policy) }); err != nil {
 		var policyErr *utils.HookPolicyError
 		if errors.As(err, &policyErr) {
@@ -889,6 +894,7 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		hooksComplete = false
 		si.sendLog("WARN", fmt.Sprintf("Optional post-install step for %s failed: %v", app.Name, err))
 		si.postInstallMutex.Lock()
 		si.postInstallWarnings = append(si.postInstallWarnings, fmt.Errorf("%s: post-install step failed: %w", app.Name, err))
@@ -907,7 +913,13 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	err = state.AuditStep(ctx, "registration", true, func() error {
 		si.repoMutex.Lock()
 		defer si.repoMutex.Unlock()
-		return si.repo.AddApp(app.Name)
+		// A retried lifecycle may already be registered; app names are unique.
+		if existing, lookupErr := si.repo.GetApp(app.Name); lookupErr != nil || existing == nil {
+			if err := si.repo.AddApp(app.Name); err != nil {
+				return err
+			}
+		}
+		return RecordLifecycle(si.repo, app.Name, hooksComplete)
 	})
 	if err != nil {
 		// Enhanced error context with specific details
@@ -948,6 +960,16 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 
 	si.sendLog("INFO", fmt.Sprintf("Successfully installed %s", app.Name))
 	return nil
+}
+
+// recordLifecycle stores the lifecycle marker; a failed write only warns.
+func (si *StreamingInstaller) recordLifecycle(name string, complete bool) {
+	si.repoMutex.Lock()
+	err := RecordLifecycle(si.repo, name, complete)
+	si.repoMutex.Unlock()
+	if err != nil {
+		si.sendLog("WARN", fmt.Sprintf("Could not record install state for %s: %v", name, err))
+	}
 }
 
 // recordFailedInstallation records performance metrics for failed installations

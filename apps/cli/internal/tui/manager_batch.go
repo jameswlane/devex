@@ -57,6 +57,9 @@ func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []type
 		if err := AuthorizeInstallation(ctx, group, false); err != nil {
 			return err
 		}
+		for _, name := range targets {
+			si.recordLifecycle(name, false)
+		}
 		cfg := group[0].GetOSConfig()
 		cfg.InstallCommand = strings.Join(packages, " ")
 		cfg.Packages = nil

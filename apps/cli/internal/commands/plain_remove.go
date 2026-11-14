@@ -8,6 +8,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -68,6 +69,9 @@ func removeInstalledApplication(cmd *cobra.Command, name string, settings config
 		return true, err
 	}
 	if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), ""); err != nil {
+		return true, err
+	}
+	if err := tui.ClearLifecycle(repo, app.Name); err != nil {
 		return true, err
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "removed %s\n", app.Name)

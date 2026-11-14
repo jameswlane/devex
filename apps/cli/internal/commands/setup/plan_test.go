@@ -10,6 +10,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -90,6 +91,16 @@ var _ = Describe("Install plan and Confirmation screen", func() {
 		Expect(view).To(ContainSubstring("gh"))
 		Expect(view).To(ContainSubstring("already installed, will skip"))
 		Expect(view).To(ContainSubstring("1 already installed"))
+	})
+
+	It("does not mark an installed app as skipped when its DevEx lifecycle is unfinished", func() {
+		installedOnStart["gh"] = true
+		installedOnStart["bat"] = true
+		Expect(tui.RecordLifecycle(model.repo, "gh", false)).To(Succeed())
+		model.refreshInstalledApps()
+
+		Expect(model.selections.alreadyInstalled).To(Equal(map[string]bool{"bat": true}))
+		Expect(model.View()).To(ContainSubstring("1 already installed"))
 	})
 
 	It("toggles one default without changing the others", func() {
