@@ -1329,6 +1329,17 @@ type ExecutableManager struct {
 	cacheTime     time.Time
 	loadTimeout   atomic.Int64
 	mu            sync.RWMutex
+	pluginFilter  func(pluginName string) error
+}
+
+// SetPluginFilter makes the manager ignore plugins the filter rejects: they are
+// not run for discovery, not listed, and executing one returns the filter's error.
+func (em *ExecutableManager) SetPluginFilter(filter func(pluginName string) error) {
+	em.mu.Lock()
+	defer em.mu.Unlock()
+	em.pluginFilter = filter
+	em.cachedPlugins = make(map[string]PluginMetadata)
+	em.cacheTime = time.Time{}
 }
 
 // NewExecutableManager creates a new executable manager with caching
@@ -1399,6 +1410,9 @@ func (em *ExecutableManager) listPlugins(ctx context.Context, force bool) (map[s
 				pluginName = strings.TrimSuffix(pluginName, ".exe")
 			}
 
+			if em.pluginFilter != nil && em.pluginFilter(pluginName) != nil {
+				continue
+			}
 			pluginPath := filepath.Join(em.pluginDir, name)
 			metadata := em.getPluginMetadataWithContext(ctx, pluginName, pluginPath)
 			if metadata != nil {
@@ -1474,6 +1488,14 @@ func (em *ExecutableManager) ExecutePluginWithContext(ctx context.Context, plugi
 func (em *ExecutableManager) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams OperationIO) error {
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	em.mu.RLock()
+	filter := em.pluginFilter
+	em.mu.RUnlock()
+	if filter != nil {
+		if err := filter(pluginName); err != nil {
+			return err
+		}
 	}
 	plugins := em.ListPluginsWithContext(ctx)
 	pluginInfo, exists := plugins[pluginName]
