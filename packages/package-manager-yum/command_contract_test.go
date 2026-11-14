@@ -141,11 +141,19 @@ var _ = Describe("YUM command contracts", func() {
 		Expect(recorder.Calls("yum")).To(BeEmpty())
 	})
 
-	It("removes packages matched by a name glob", func() {
-		recorder.Script("rpm", []string{"-qa", "--", "git*"}, sdktest.Response{Stdout: "git-2.43.0-1.el9.x86_64\n"})
-		Expect(plugin.Execute("remove", []string{"git*"})).To(Succeed())
-		Expect(recorder.Calls("yum")).To(Equal([]sdktest.Call{{Args: []string{"remove", "--assumeyes", "git*"}, ElevationRequested: true}}))
-	})
+	DescribeTable("removes packages matched by a glob, as YUM does",
+		func(spec string) {
+			recorder.Script("rpm", []string{"-qa", "--queryformat", "%{NAME} %{VERSION} %{RELEASE} %{ARCH}\\n"},
+				sdktest.Response{Stdout: "gitx 2.43.0 1.el9 x86_64\n"})
+			Expect(plugin.Execute("remove", []string{spec})).To(Succeed())
+			Expect(recorder.Calls("yum")).To(Equal([]sdktest.Call{{Args: []string{"remove", "--assumeyes", spec}, ElevationRequested: true}}))
+		},
+		Entry("star", "git*"),
+		Entry("question mark", "git?"),
+		Entry("bracket", "git[xy]"),
+		Entry("name and arch", "gitx.x86_*"),
+		Entry("full NEVRA", "gitx-2.43.0-1.el9.*"),
+	)
 
 	It("refuses a name glob that matches nothing installed", func() {
 		err := plugin.Execute("remove", []string{"ghost*"})

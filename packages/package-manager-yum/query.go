@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path"
 	"regexp"
 	"strings"
 
@@ -68,13 +69,26 @@ func requireInstalledMatch(ctx context.Context, spec string) error {
 	}
 	failure := fmt.Sprintf("cannot remove package %q: RPM query failed", spec)
 	if strings.ContainsAny(spec, "*?[") {
-		// rpm -qa matches globs and exits 0 with no output when none match.
-		output, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-qa", "--", spec)
+		// Match globs here: RPM 4.11's "rpm -qa <pattern>" treats "?" as a
+		// regular-expression operator, unlike YUM.
+		output, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-qa", "--queryformat", "%{NAME} %{VERSION} %{RELEASE} %{ARCH}\\n")
 		if err != nil {
 			return queryFailure(failure, err)
 		}
-		if strings.TrimSpace(output) != "" {
-			return nil
+		if _, err := path.Match(spec, ""); err != nil {
+			return fmt.Errorf("cannot remove package %q: invalid glob: %w", spec, err)
+		}
+		for _, line := range strings.Split(output, "\n") {
+			fields := strings.Fields(line)
+			if len(fields) != 4 {
+				continue
+			}
+			name, evr, arch := fields[0], fields[1]+"-"+fields[2], fields[3]
+			for _, candidate := range []string{name, name + "." + arch, name + "-" + evr, name + "-" + evr + "." + arch} {
+				if matched, _ := path.Match(spec, candidate); matched {
+					return nil
+				}
+			}
 		}
 		return fmt.Errorf("cannot remove package %q: no installed package matches", spec)
 	}

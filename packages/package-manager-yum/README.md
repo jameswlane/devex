@@ -21,7 +21,7 @@ systems and runs nothing. Other distributions are not supported; use
 | Command | Native command | Elevated |
 | --- | --- | --- |
 | `install <pkg>...` | `<backend> install --assumeyes <pkg>...` | yes |
-| `remove <pkg>...` | `rpm -qa <glob>`, or `rpm -q` then `rpm -q --whatprovides`, check per package, then `<backend> remove --assumeyes <pkg>...` | removal only |
+| `remove <pkg>...` | per package: a glob is matched against installed names, `name.arch` and NEVRAs from `rpm -qa`; otherwise `rpm -q`, then `rpm -q --whatprovides`, then `<backend> remove --assumeyes <pkg>...` | removal only |
 | `update` | `<backend> makecache --assumeyes` | yes |
 | `upgrade [pkg]...` | `<backend> upgrade --assumeyes [pkg]...` | yes |
 | `search <keyword>...` | `<backend> search <keyword>...` | no |
