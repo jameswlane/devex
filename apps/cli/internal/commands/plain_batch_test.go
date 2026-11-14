@@ -38,9 +38,13 @@ var _ = Describe("Plain install package batching", func() {
 		viper.Set("apt-lists-max-age", "0s")
 		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
 		preparePackageBatch = tui.PreparePackageBatch
-		oldPrepare, oldInstall := prepareApplicationInstallers, installApplication
-		DeferCleanup(func() { prepareApplicationInstallers, installApplication = oldPrepare, oldInstall })
+		oldPrepare, oldInstall, oldQuery := prepareApplicationInstallers, installApplication, nativeApplicationInstalled
+		DeferCleanup(func() {
+			prepareApplicationInstallers, installApplication, nativeApplicationInstalled = oldPrepare, oldInstall, oldQuery
+		})
 		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+		// After the batch, native state reports every package as present.
+		nativeApplicationInstalled = func(context.Context, types.CrossPlatformApp) (bool, error) { return true, nil }
 		var mu sync.Mutex
 		batched := map[string]bool{}
 		installApplication = func(ctx context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
@@ -50,9 +54,12 @@ var _ = Describe("Plain install package batching", func() {
 			return nil
 		}
 
+		repo := mocks.NewMockRepository()
+		// A stale tracking row must not turn a batch-installed app into a skip.
+		Expect(repo.AddApp("bat")).To(Succeed())
 		var output bytes.Buffer
 		apps := []types.CrossPlatformApp{aptApp("bat", "bat"), aptApp("fzf", "fzf"), aptApp("GitHub CLI", "gh"), aptApp("databases", "sqlite3 libsqlite3-0")}
-		Expect(runPlainInstall(context.Background(), &output, apps, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)).To(Succeed())
+		Expect(runPlainInstall(context.Background(), &output, apps, repo, config.CrossPlatformSettings{}, nil)).To(Succeed())
 
 		var updates, installs []sdktest.Call
 		for _, call := range recorder.Calls("apt-get") {

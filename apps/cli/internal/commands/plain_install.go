@@ -115,7 +115,8 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 		if batch.BatchInstalled[app.Name] {
 			appCtx = installers.WithPackagesInstalled(appCtx, app.Name)
 		}
-		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) {
+		// The batch just installed these packages, so a native check would wrongly skip the lifecycle.
+		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) && !batch.BatchInstalled[app.Name] {
 			if existing, lookupErr := repo.GetApp(app.Name); lookupErr == nil && existing != nil {
 				present, queryErr := nativeApplicationInstalled(appCtx, app)
 				if queryErr != nil {
