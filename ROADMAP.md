@@ -39,7 +39,7 @@ Based on implementation complexity and market share, platforms are prioritized a
 
 **🟡 Priority 2: Red Hat-based Linux - CRITICAL MISSING INSTALLER**
 - [ ] **DNF (Fedora/RHEL/CentOS)** - ❌ **MISSING** - Blocks RHEL family support ([#174](https://github.com/jameswlane/devex/issues/174))
-- [ ] **YUM (Legacy RHEL/CentOS)** - ❌ Missing ([#104](https://github.com/jameswlane/devex/issues/104))
+- [x] **YUM (Legacy RHEL/CentOS)** - 🧪 Experimental plugin ([#104](https://github.com/jameswlane/devex/issues/104))
 - [ ] **RPM (Manual packages)** - ❌ Missing ([#105](https://github.com/jameswlane/devex/issues/105))
 
 **🟡 Priority 3: Arch-based Linux - CRITICAL MISSING INSTALLER**
@@ -259,7 +259,7 @@ A comprehensive configuration management system that empowers users to create, c
 
 **Milestone 1.1: Priority 2 - Red Hat Linux Support (Blocks 🟡)**
 - [ ] **Implement DNF installer** - Core package management for Fedora/RHEL/CentOS/Rocky/Alma ([#174](https://github.com/jameswlane/devex/issues/174))
-- [ ] **Add YUM fallback** - Legacy RHEL/CentOS 7 support ([#104](https://github.com/jameswlane/devex/issues/104))
+- [x] **Add YUM fallback** - Legacy RHEL/CentOS 7 support ([#104](https://github.com/jameswlane/devex/issues/104))
 - [ ] **Implement RPM installer** - Manual .rpm package support ([#105](https://github.com/jameswlane/devex/issues/105))
 - [ ] **Test on Fedora 40+, RHEL 9, CentOS Stream 9** ([#121](https://github.com/jameswlane/devex/issues/121))
 

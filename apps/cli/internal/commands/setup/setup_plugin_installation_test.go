@@ -50,6 +50,20 @@ var _ = Describe("Plugin Installation", func() {
 				Expect(plugins).To(ContainElement("desktop-kde"))
 			})
 
+			It("should detect YUM plugin for CentOS systems", func() {
+				plat := platform.DetectionResult{
+					OS:           "linux",
+					Distribution: "centos",
+					DesktopEnv:   "none",
+					Architecture: "x86_64",
+				}
+
+				plugins := DetectRequiredPlugins(plat)
+
+				Expect(plugins).To(ContainElement("package-manager-yum"))
+				Expect(plugins).NotTo(ContainElement("package-manager-dnf"))
+			})
+
 			It("should detect Pacman plugin for Arch systems", func() {
 				plat := platform.DetectionResult{
 					OS:           "linux",

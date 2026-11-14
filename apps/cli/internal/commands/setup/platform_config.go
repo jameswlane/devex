@@ -21,7 +21,7 @@ var platformPluginMappings = []PlatformPluginMapping{
 	{OS: "linux", Distribution: "ubuntu", RequiredPlugins: []string{"package-manager-apt", "tool-shell"}},
 	{OS: "linux", Distribution: "fedora", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
 	{OS: "linux", Distribution: "rhel", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
-	{OS: "linux", Distribution: "centos", RequiredPlugins: []string{"package-manager-dnf", "tool-shell"}},
+	{OS: "linux", Distribution: "centos", RequiredPlugins: []string{"package-manager-yum", "tool-shell"}},
 	{OS: "linux", Distribution: "arch", RequiredPlugins: []string{"package-manager-pacman", "tool-shell"}},
 	{OS: "linux", Distribution: "manjaro", RequiredPlugins: []string{"package-manager-pacman", "tool-shell"}},
 	{OS: "linux", Distribution: "opensuse", RequiredPlugins: []string{"package-manager-zypper", "tool-shell"}},
