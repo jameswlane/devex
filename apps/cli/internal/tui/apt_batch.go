@@ -183,8 +183,12 @@ func (si *StreamingInstaller) ensureAptLists(ctx context.Context) error {
 // must run before their packages are installed.
 func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.CrossPlatformApp) error {
 	// Detect installed apps even when dependency ordering prevents batching.
+	// Apps whose DevEx lifecycle is unfinished are not skipped, so failed or
+	// interrupted hooks and registration are retried.
 	for name := range InstalledApps(ctx, apps) {
-		si.apt.mark(&si.apt.preinstalled, name)
+		if !si.lifecycleUnfinished(name) {
+			si.apt.mark(&si.apt.preinstalled, name)
+		}
 	}
 	var candidates []types.CrossPlatformApp
 	var allPackages []string
@@ -217,8 +221,10 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 			}
 		}
 		switch {
-		case allInstalled:
+		case allInstalled && !si.lifecycleUnfinished(app.Name):
 			si.apt.mark(&si.apt.preinstalled, app.Name)
+		case allInstalled:
+			// Nothing to install; the app's own lifecycle retries its hooks.
 		default:
 			toBatch = append(toBatch, app)
 		}
@@ -303,6 +309,13 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 		si.apt.mark(&si.apt.batchInstalled, app.Name)
 	}
 	return nil
+}
+
+// lifecycleUnfinished reads the app's lifecycle marker under the repository lock.
+func (si *StreamingInstaller) lifecycleUnfinished(name string) bool {
+	si.repoMutex.Lock()
+	defer si.repoMutex.Unlock()
+	return LifecycleUnfinished(si.repo, name)
 }
 
 // InstalledAptApps reports which apt apps already have all their packages

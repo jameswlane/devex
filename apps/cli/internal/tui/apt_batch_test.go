@@ -16,6 +16,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	"github.com/spf13/viper"
@@ -128,6 +129,45 @@ var _ = Describe("APT batching", func() {
 		Expect(installs).To(HaveLen(1))
 		Expect(installs[0].Args).To(Equal([]string{"install", "-y", "bat"}))
 		Expect(repo.installedApps).To(ConsistOf("bat"))
+	})
+
+	It("retries an installed app whose lifecycle did not finish and records it finished", func() {
+		installedPkgs["gh"] = true
+		installedPkgs["bat"] = true
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		Expect(RecordLifecycle(tracked, "GitHub CLI", false)).To(Succeed())
+		apps := []types.CrossPlatformApp{aptApp("GitHub CLI", "gh"), aptApp("bat", "bat")}
+
+		Expect(installer.InstallApps(context.Background(), apps, config.CrossPlatformSettings{})).To(Succeed())
+
+		installs := aptGetCalls("install")
+		Expect(installs).To(HaveLen(1))
+		Expect(installs[0].Args).To(Equal([]string{"install", "-y", "gh"}))
+		Expect(tracked.GetApp("GitHub CLI")).NotTo(BeNil())
+		Expect(LifecycleUnfinished(tracked, "GitHub CLI")).To(BeFalse())
+		Expect(tracked.Get(lifecycleKey("GitHub CLI"))).To(Equal(lifecycleComplete))
+		// bat was installed outside a DevEx lifecycle, so it is still skipped.
+		_, err := tracked.GetApp("bat")
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("keeps the lifecycle unfinished when an optional post-install hook fails, so the next run retries it", func() {
+		recorder.Fallback("bash", sdktest.Response{ExitCode: 1})
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		app := aptApp("GitHub CLI", "gh")
+		app.AllPlatforms.PostInstall = []types.InstallCommand{{Shell: "gh extension install example/ext"}}
+
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{app}, config.CrossPlatformSettings{})).To(MatchError(ContainSubstring("post-install step failed")))
+		Expect(tracked.GetApp("GitHub CLI")).NotTo(BeNil())
+		Expect(LifecycleUnfinished(tracked, "GitHub CLI")).To(BeTrue())
+
+		// The packages are now installed, but the hook still has to run again.
+		installedPkgs["gh"] = true
+		hooksBefore := len(recorder.Calls("bash"))
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{app}, config.CrossPlatformSettings{})).To(HaveOccurred())
+		Expect(len(recorder.Calls("bash"))).To(BeNumerically(">", hooksBefore))
 	})
 
 	It("does not touch apt at all when every app is already installed", func() {

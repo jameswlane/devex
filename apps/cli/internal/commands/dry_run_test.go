@@ -279,7 +279,7 @@ var _ = Describe("Mutation-free command previews", func() {
 		useRecordingInstaller(installer)
 		Expect(execute("uninstall", "--dry-run=false", "--offline", "--force", "--app", "preview-app", "--keep-config", "--keep-data")).To(Succeed())
 		Expect(installer.uninstallCommands).To(Equal([]string{"preview-remove"}))
-		Expect(repo.writes).To(Equal([]string{"delete:preview-app", "set:installed-app-definition:preview-app"}))
+		Expect(repo.writes).To(Equal([]string{"delete:preview-app", "set:installed-app-definition:preview-app", "set:installed-app-lifecycle:preview-app"}))
 		app, err := repo.GetApp("preview-app")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(app).To(BeNil())

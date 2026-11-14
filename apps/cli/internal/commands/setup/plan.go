@@ -103,5 +103,5 @@ func (m *SetupModel) refreshInstalledApps() {
 		ctx = context.Background()
 	}
 	m.refreshDesktopPreview(ctx)
-	m.selections.alreadyInstalled = installedAppsCheck(ctx, planApps(m.installPlan()))
+	m.selections.alreadyInstalled = tui.SkippableInstalledApps(m.repo, installedAppsCheck(ctx, planApps(m.installPlan())))
 }
