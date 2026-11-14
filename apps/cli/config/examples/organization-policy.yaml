@@ -19,7 +19,7 @@ sources:
 privilege:
   max_scope: system # user denies system-scope installation hooks; system is the default.
 security:
-  minimum_level: moderate # strict, moderate, permissive, or enterprise.
+  minimum_level: moderate # strict, moderate, permissive, or enterprise; omit for no floor.
   allow_user_overrides: true # false ignores user global_overrides and app_overrides.
   deny_commands: [] # RE2 regular expressions; always denied, even by an override.
   # deny_commands:
