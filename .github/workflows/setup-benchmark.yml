@@ -58,6 +58,8 @@ jobs:
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # Older baseline refs can exit nonzero on since-fixed bugs; the summary reports them.
+    continue-on-error: ${{ matrix.variant == 'baseline' }}
     strategy:
       fail-fast: false
       matrix:

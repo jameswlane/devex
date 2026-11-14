@@ -94,7 +94,17 @@ The final **Aggregate benchmark report** job writes a step summary containing:
   counts, and exit code;
 - the median time for each variant; and
 - `PASS` only when the candidate median is strictly under 300 seconds, and
-  `INVALID` instead of a target result when any run's installation failed.
+  `INVALID` instead of a target result when any candidate installation failed.
+  A failed baseline run is listed with its exit code and a note but does not
+  invalidate the result: the default pre-#278 baseline exits 1 after installing
+  every app because of an fd-find post-install bug that was fixed later.
+
+On GitHub-hosted runners about 200-230 seconds of every run, in both variants, is
+plocate's package post-install building its first locate database over the
+runner's large preinstalled filesystem. The rest of the install took about 45s
+(candidate) vs. 75s (baseline) in the first proof run. Read the APT counts and the
+console log timestamps, not only the medians, to see what DevEx itself changed.
+Fast Azure mirrors also don't reproduce the per-request mirror stall from #267.
 
 A missed target is reported as `FAIL` in the table but does not fail the workflow.
 The workflow fails only for broken inputs, builds, installations, instrumentation,

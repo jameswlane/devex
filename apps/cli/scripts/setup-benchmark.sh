@@ -216,7 +216,8 @@ for key in sorted(expected):
     result = results[key]
     print(f"| {key[0]} | {key[1]} | {result['wall_clock_seconds']:.3f} | {result['apt_get_update_count']} | {result['apt_get_install_count']} | {result['exit_code']} |")
 
-failed = [key for key in sorted(expected) if results[key]['exit_code'] != 0]
+failed = [key for key in sorted(expected) if key[0] == 'candidate' and results[key]['exit_code'] != 0]
+baseline_failed = [key for key in sorted(expected) if key[0] == 'baseline' and results[key]['exit_code'] != 0]
 
 print()
 print('| Variant | Runs | Median wall time (s) | Under 5 minutes |')
@@ -239,6 +240,9 @@ else:
 print()
 print('Per-run revisions, OS/CPU/RAM, apt mirror URLs, and the measured command are in each artifact\'s `result.json`. The DevEx and console logs accompany it.')
 
+if baseline_failed:
+    print()
+    print(f'Baseline runs {baseline_failed} exited nonzero. Older refs can fail on bugs fixed since; check their logs before comparing timings.')
 if failed:
     print(f'Benchmark installation failed for: {failed}', file=sys.stderr)
     raise SystemExit(1)
