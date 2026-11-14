@@ -679,7 +679,14 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 			complete(app.Name, result)
 		}
 	}()
-	return si.installationResult(runInstallLanes(ctx, apps, si.preparePackageRun, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
+	prepare := func(ctx context.Context, apps []types.CrossPlatformApp) error {
+		allowed, err := policyBatchable(apps, settings.HomeDir)
+		if err != nil {
+			return err
+		}
+		return si.preparePackageRun(ctx, allowed)
+	}
+	return si.installationResult(runInstallLanes(ctx, apps, prepare, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
 		if si.apt.has(si.apt.preinstalled, app.Name) {
 			outcomes.Record(app.Name, OutcomeSkipped, nil)
 			complete(app.Name, nil)

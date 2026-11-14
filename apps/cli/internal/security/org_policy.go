@@ -306,7 +306,7 @@ func (p *OrgPolicy) CheckApp(app types.CrossPlatformApp) error {
 	if err := p.checkRules(p.Applications, "applications", app.Name); err != nil {
 		return err
 	}
-	return p.checkOSConfig(app.Name, app.GetOSConfig())
+	return p.checkOSConfig(app.GetOSConfig())
 }
 
 // CheckAppConfig applies application policy to the legacy installation shape.
@@ -324,36 +324,39 @@ func (p *OrgPolicy) CheckAppConfig(app types.AppConfig) error {
 	}})
 }
 
-func (p *OrgPolicy) checkOSConfig(appName string, config types.OSConfig) error {
-	configs := append([]types.OSConfig{config}, config.Alternatives...)
-	for _, candidate := range configs {
-		if err := p.checkRules(p.InstallMethods, "install_methods", candidate.InstallMethod); err != nil {
+// checkOSConfig checks the configuration GetOSConfig selected for this
+// platform; unused alternatives never run, so they are not checked.
+func (p *OrgPolicy) checkOSConfig(config types.OSConfig) error {
+	if err := p.checkRules(p.InstallMethods, "install_methods", config.InstallMethod); err != nil {
+		return err
+	}
+	if err := p.CheckPlugin("package-manager-" + config.InstallMethod); err != nil {
+		return err
+	}
+	for _, source := range appSources(config) {
+		if err := p.checkSource(source); err != nil {
 			return err
-		}
-		if err := p.CheckPlugin("package-manager-" + candidate.InstallMethod); err != nil {
-			return err
-		}
-		for _, source := range appSources(candidate) {
-			if err := p.checkSource(source); err != nil {
-				return err
-			}
-		}
-		for _, hook := range append(append([]types.InstallCommand{}, candidate.PreInstall...), candidate.PostInstall...) {
-			if err := p.CheckHook(hook.Shell, sdk.OperationScope(hook.Scope)); err != nil {
-				return err
-			}
 		}
 	}
-	_ = appName
+	for _, hook := range append(append([]types.InstallCommand{}, config.PreInstall...), config.PostInstall...) {
+		if err := p.CheckHook(hook.Shell, sdk.OperationScope(hook.Scope)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func appSources(config types.OSConfig) []string {
 	var sources []string
+	// Fields may hold more than a URL, such as an APT source line
+	// "deb [signed-by=...] https://repo suite main", so check every token.
 	add := func(values ...string) {
 		for _, value := range values {
-			if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
-				sources = append(sources, value)
+			for _, token := range strings.Fields(value) {
+				token = strings.Trim(token, `"'[]`)
+				if strings.HasPrefix(token, "http://") || strings.HasPrefix(token, "https://") {
+					sources = append(sources, token)
+				}
 			}
 		}
 	}

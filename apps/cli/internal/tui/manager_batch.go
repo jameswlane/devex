@@ -6,12 +6,29 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 var batchIdentifier = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._+/@:-]*$`)
+
+// policyBatchable keeps apps the organization policy denies out of shared
+// package transactions; each is then refused by its own install.
+func policyBatchable(apps []types.CrossPlatformApp, homeDir string) ([]types.CrossPlatformApp, error) {
+	policy, err := security.LoadOrgPolicy(homeDir)
+	if err != nil || policy == nil {
+		return apps, err
+	}
+	allowed := make([]types.CrossPlatformApp, 0, len(apps))
+	for _, app := range apps {
+		if policy.CheckApp(app) == nil {
+			allowed = append(allowed, app)
+		}
+	}
+	return allowed, nil
+}
 
 // preparePackageRun batches simple native requests without crossing dependency
 // or pre-install barriers. The normal lifecycle still runs each app's hooks.

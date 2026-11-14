@@ -204,14 +204,18 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 	loggerAdapter := NewSDKLoggerAdapter(true) // Always silent to avoid TUI conflicts
 	downloader.SetLogger(loggerAdapter)
 
-	return &PluginBootstrap{
+	b := &PluginBootstrap{
 		homeDir:      homeDir,
 		detector:     platform.NewDetector(),
 		downloader:   downloader,
 		manager:      sdk.NewExecutableManager(pluginDir),
 		skipDownload: skipDownload,
 		cache:        &BootstrapCache{},
-	}, nil
+	}
+	// Every caller of the manager, including setup's direct use of it, is
+	// kept from discovering or running plugins the organization policy denies.
+	b.manager.SetPluginFilter(b.checkOrgPolicy)
+	return b, nil
 }
 
 // Initialize performs the complete plugin bootstrap process with caching

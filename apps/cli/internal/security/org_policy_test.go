@@ -106,6 +106,23 @@ var _ = Describe("Organization policy", func() {
 			Expect(policy.CheckApp(types.CrossPlatformApp{Name: "LazyGit", AllPlatforms: types.OSConfig{InstallMethod: "apt"}})).To(MatchError(ContainSubstring("applications.deny")))
 		})
 
+		It("checks the repository URL inside an APT source line", func() {
+			policy := &OrgPolicy{Version: "1", Sources: PolicyRules{Allow: []string{"https://keys.example/"}}}
+			for _, line := range []string{
+				"deb https://repo.untrusted/apt stable main",
+				"deb [arch=amd64 signed-by=/etc/apt/keyrings/x.gpg] https://repo.untrusted/apt stable main",
+			} {
+				app := types.CrossPlatformApp{Name: "tool", AllPlatforms: types.OSConfig{InstallMethod: "apt", AptSources: []types.AptSource{{KeySource: "https://keys.example/x.gpg", SourceRepo: line}}}}
+				Expect(policy.CheckApp(app)).To(MatchError(ContainSubstring("https://repo.untrusted/apt")), line)
+			}
+		})
+
+		It("checks only the selected configuration, not unused alternatives", func() {
+			policy := &OrgPolicy{Version: "1", InstallMethods: PolicyRules{Allow: []string{"apt"}}}
+			app := types.CrossPlatformApp{Name: "gh", AllPlatforms: types.OSConfig{InstallMethod: "apt", Alternatives: []types.OSConfig{{InstallMethod: "dnf"}}}}
+			Expect(policy.CheckApp(app)).To(Succeed())
+		})
+
 		It("checks URL prefixes and hook scope and command rules", func() {
 			policy := &OrgPolicy{
 				Version: "1", Name: "acme",
