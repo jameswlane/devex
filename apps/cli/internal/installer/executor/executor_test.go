@@ -2,6 +2,7 @@ package executor_test
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,15 @@ func TestExecutor(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Executor Suite")
 }
+
+var _ = BeforeEach(func() {
+	home := GinkgoT().TempDir()
+	GinkgoT().Setenv("HOME", home)
+	GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", filepath.Join(home, "team"))
+	previous := security.SystemOrgPolicyPath
+	security.SystemOrgPolicyPath = filepath.Join(home, "system-policy.yaml")
+	DeferCleanup(func() { security.SystemOrgPolicyPath = previous })
+})
 
 var _ = Describe("Executor", func() {
 	var (

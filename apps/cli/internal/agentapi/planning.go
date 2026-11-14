@@ -3,9 +3,11 @@ package agentapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -42,9 +44,18 @@ type PlanRequest struct {
 	Categories []string
 }
 type Plan struct {
-	Apps            []PlannedApp `json:"apps"`
-	DependencyOrder []string     `json:"dependency_order"`
-	Warnings        []string     `json:"warnings"`
+	Apps               []PlannedApp `json:"apps"`
+	DependencyOrder    []string     `json:"dependency_order"`
+	Warnings           []string     `json:"warnings"`
+	OrganizationPolicy *PolicyRef   `json:"organization_policy,omitempty"`
+}
+
+// PolicyRef identifies the exact organization policy file used for a plan.
+type PolicyRef struct {
+	Name    string `json:"name,omitempty"`
+	Version string `json:"version"`
+	Source  string `json:"source"`
+	SHA256  string `json:"sha256"`
 }
 type PlannedApp struct {
 	Name           string   `json:"name"`
@@ -100,6 +111,14 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 	if err = config.RequireValidConfig(ctx, s); err != nil {
 		return result, APIError(err)
 	}
+	orgPolicy, err := security.LoadOrgPolicy(s.HomeDir)
+	if err != nil {
+		return result, &Error{Category: "policy_denied", Message: err.Error(), cause: err}
+	}
+	if orgPolicy != nil {
+		result.OrganizationPolicy = &PolicyRef{Name: orgPolicy.Name, Version: orgPolicy.Version, Source: orgPolicy.Source, SHA256: orgPolicy.SHA256}
+	}
+	var violations []string
 	byName := map[string]types.CrossPlatformApp{}
 	aliases := map[string]string{}
 	for _, app := range s.GetAllApps() {
@@ -121,6 +140,9 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 			return nil
 		}
 		visited[key] = true
+		if err := orgPolicy.CheckApp(app); err != nil {
+			violations = append(violations, err.Error())
+		}
 		c := app.GetOSConfig()
 		deps := append([]string{}, c.Dependencies...)
 		for _, dep := range deps {
@@ -165,6 +187,10 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 		if err := visit(app); err != nil {
 			return result, APIError(err)
 		}
+	}
+	if len(violations) > 0 {
+		err := fmt.Errorf("organization policy denied installation:\n%s", strings.Join(violations, "\n"))
+		return result, &Error{Category: "policy_denied", Message: err.Error(), cause: err}
 	}
 	if len(apps) > 0 {
 		result.Warnings = append(result.Warnings, "Plugin effects and required privileges are unknown; no plugins or hooks were executed.")

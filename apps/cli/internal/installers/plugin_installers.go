@@ -14,6 +14,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/system"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -335,6 +336,17 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
 	defer func() { finishAudit(result) }()
 	log.Info("Installing app", "app", app.Name)
+
+	orgPolicy, err := security.LoadOrgPolicy(settings.HomeDir)
+	if err != nil {
+		return err
+	}
+	if err := orgPolicy.CheckAppConfig(app); err != nil {
+		return err
+	}
+	if orgPolicy != nil {
+		fmt.Fprintf(os.Stderr, "Applying organization policy %s %s (%s)\n", orgPolicy.DisplayName(), orgPolicy.Version, orgPolicy.Source)
+	}
 
 	if err := system.CheckApplicationRequirements(ctx, app.Name, app.SystemRequirements, nil); err != nil {
 		return err

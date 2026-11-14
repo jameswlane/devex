@@ -66,12 +66,21 @@ type CommandValidator struct {
 	customBlacklist    map[string]bool
 	allowedExecutables []string // Dynamically discovered executables
 	securityConfig     *SecurityConfig
+	orgPolicy          *OrgPolicy
+	orgPolicyErr       error
 	logger             func(string, ...interface{})
 }
 
 // NewCommandValidator creates a validator with the specified security level
+// and the active organization policy, if any.
 func NewCommandValidator(level SecurityLevel) *CommandValidator {
-	return NewCommandValidatorWithConfig(level, nil)
+	cv := NewCommandValidatorWithConfig(level, nil)
+	policy, err := LoadOrgPolicy("")
+	cv.orgPolicyErr = err
+	if err == nil {
+		cv.WithOrgPolicy(policy)
+	}
+	return cv
 }
 
 // NewCommandValidatorWithConfig creates a validator with security configuration
@@ -93,6 +102,49 @@ func NewCommandValidatorWithConfig(level SecurityLevel, config *SecurityConfig) 
 	cv.discoverExecutables()
 
 	return cv
+}
+
+// WithOrgPolicy applies organization command rules and clamps lower-tier settings.
+func (cv *CommandValidator) WithOrgPolicy(policy *OrgPolicy) *CommandValidator {
+	cv.orgPolicy = policy
+	cv.orgPolicyErr = nil
+	if policy == nil {
+		return cv
+	}
+	minimum, err := parseSecurityLevel(policy.Security.MinimumLevel)
+	if policy.Security.MinimumLevel != "" && err == nil && cv.level > minimum {
+		cv.logger("WARNING: organization policy %s %s clamped user security level %s to required minimum %s", policy.DisplayName(), policy.Version, securityLevelName(cv.level), securityLevelName(minimum))
+		cv.level = minimum
+	}
+	if !policy.Security.AllowUserOverrides && cv.securityConfig != nil {
+		config := *cv.securityConfig
+		overridesIgnored := len(config.GlobalOverrides) > 0
+		for _, overrides := range config.AppSpecificOverrides {
+			overridesIgnored = overridesIgnored || len(overrides) > 0
+		}
+		if overridesIgnored {
+			cv.logger("WARNING: organization policy %s %s ignored user global_overrides and app_overrides because allow_user_overrides is false", policy.DisplayName(), policy.Version)
+		}
+		config.GlobalOverrides = nil
+		config.AppSpecificOverrides = nil
+		cv.securityConfig = &config
+	}
+	return cv
+}
+
+func securityLevelName(level SecurityLevel) string {
+	switch level {
+	case SecurityLevelStrict:
+		return "strict"
+	case SecurityLevelModerate:
+		return "moderate"
+	case SecurityLevelPermissive:
+		return "permissive"
+	case SecurityLevelEnterprise:
+		return "enterprise"
+	default:
+		return "unknown"
+	}
 }
 
 // initializePatterns sets up dangerous and safe patterns
@@ -210,9 +262,17 @@ func (cv *CommandValidator) ValidateCommand(command string) error {
 
 // ValidateCommandForApp checks if a command is safe to execute for a specific app
 func (cv *CommandValidator) ValidateCommandForApp(command, appName string) error {
+	if cv.orgPolicyErr != nil {
+		return cv.orgPolicyErr
+	}
 	command = strings.TrimSpace(command)
 	if command == "" {
 		return fmt.Errorf("empty command")
+	}
+	if cv.orgPolicy != nil {
+		if err := cv.orgPolicy.CheckHook(command, ""); err != nil {
+			return err
+		}
 	}
 
 	// Check for security overrides first
@@ -310,7 +370,7 @@ func (cv *CommandValidator) warnSecurityOverride(command string, override *Secur
 	if override.AppName != "" {
 		message += fmt.Sprintf(" for app '%s'", override.AppName)
 	}
-	cv.logger(message)
+	cv.logger("%s", message)
 }
 
 // validateEnterprise allows everything with warnings (enterprise admin override)
@@ -389,6 +449,12 @@ func (cv *CommandValidator) AddToBlacklist(command string) {
 
 // SetSecurityLevel changes the security level
 func (cv *CommandValidator) SetSecurityLevel(level SecurityLevel) {
+	if cv.orgPolicy != nil {
+		if minimum, err := parseSecurityLevel(cv.orgPolicy.Security.MinimumLevel); cv.orgPolicy.Security.MinimumLevel != "" && err == nil && level > minimum {
+			cv.logger("WARNING: organization policy %s %s clamped user security level %s to required minimum %s", cv.orgPolicy.DisplayName(), cv.orgPolicy.Version, securityLevelName(level), securityLevelName(minimum))
+			level = minimum
+		}
+	}
 	cv.level = level
 }
 

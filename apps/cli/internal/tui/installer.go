@@ -807,6 +807,17 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	}
 	si.sendLog("INFO", fmt.Sprintf("Starting installation of %s", app.Name))
 
+	orgPolicy, err := security.LoadOrgPolicy(settings.HomeDir)
+	if err != nil {
+		return err
+	}
+	if err := orgPolicy.CheckApp(app); err != nil {
+		return err
+	}
+	if orgPolicy != nil {
+		si.sendLog("INFO", fmt.Sprintf("Applying organization policy %s %s (%s)", orgPolicy.DisplayName(), orgPolicy.Version, orgPolicy.Source))
+	}
+
 	startTime := time.Now()
 
 	// Get platform-specific configuration

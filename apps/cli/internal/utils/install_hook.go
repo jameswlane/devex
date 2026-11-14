@@ -63,8 +63,15 @@ func ExecInstallHookWithContext(ctx context.Context, command types.InstallComman
 	if len(policies) > 0 {
 		policy = policies[0]
 	}
+	orgPolicy, err := security.LoadOrgPolicy("")
+	if err != nil {
+		return "", err
+	}
 	if policy.Validator == nil {
-		policy.Validator = security.NewCommandValidator(security.SecurityLevelModerate)
+		policy.Validator = security.NewCommandValidatorWithConfig(security.SecurityLevelModerate, nil).WithOrgPolicy(orgPolicy)
+	}
+	if err := orgPolicy.CheckHook(command.Shell, privilege.Scope); err != nil {
+		return "", &HookPolicyError{AppName: policy.AppName, Err: err}
 	}
 	if err := policy.Validator.ValidateCommandForApp(command.Shell, policy.AppName); err != nil {
 		return "", &HookPolicyError{AppName: policy.AppName, Err: err}

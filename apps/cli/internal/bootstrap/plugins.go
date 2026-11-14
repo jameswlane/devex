@@ -27,6 +27,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/platform"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	sdk "github.com/jameswlane/devex/packages/plugin-sdk"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -100,6 +101,7 @@ type PluginProgressCallback = sdk.PluginProgressCallback
 
 // PluginBootstrap handles the automatic plugin discovery and loading
 type PluginBootstrap struct {
+	homeDir        string
 	detector       *platform.Detector
 	downloader     *sdk.Downloader
 	manager        *sdk.ExecutableManager
@@ -203,6 +205,7 @@ func NewPluginBootstrap(skipDownload bool) (*PluginBootstrap, error) {
 	downloader.SetLogger(loggerAdapter)
 
 	return &PluginBootstrap{
+		homeDir:      homeDir,
 		detector:     platform.NewDetector(),
 		downloader:   downloader,
 		manager:      sdk.NewExecutableManager(pluginDir),
@@ -249,6 +252,21 @@ func (b *PluginBootstrap) InitializeWithProgress(ctx context.Context, progress s
 			log.Debug("Using cached required plugins list")
 		}
 
+		// Denied plugins are skipped rather than failing every command; running
+		// or installing them is still refused at the point of use.
+		allowedPlugins := make([]string, 0, len(requiredPlugins))
+		for _, pluginName := range requiredPlugins {
+			if err := b.checkOrgPolicy(pluginName); err != nil {
+				var violation *security.PolicyViolationError
+				if !errors.As(err, &violation) {
+					return err
+				}
+				log.Warn("Skipping plugin denied by organization policy", "plugin", pluginName, "error", err)
+				continue
+			}
+			allowedPlugins = append(allowedPlugins, pluginName)
+		}
+		requiredPlugins = allowedPlugins
 		if err := b.downloader.DownloadRequiredPluginsWithContextAndProgress(ctx, requiredPlugins, progress); err != nil {
 			b.recordDownloadErrors(err)
 			var unavailableErr *sdk.RegistryUnavailableError
@@ -297,6 +315,9 @@ func (b *PluginBootstrap) GetAvailablePlugins(ctx context.Context) (map[string]s
 func (b *PluginBootstrap) EnsurePluginWithContext(ctx context.Context, pluginName string) (sdk.PluginMetadata, error) {
 	if err := validatePluginName(pluginName); err != nil {
 		return sdk.PluginMetadata{}, fmt.Errorf("invalid plugin name: %w", err)
+	}
+	if err := b.checkOrgPolicy(pluginName); err != nil {
+		return sdk.PluginMetadata{}, err
 	}
 	if err := ctx.Err(); err != nil {
 		return sdk.PluginMetadata{}, err
@@ -378,6 +399,14 @@ func (b *PluginBootstrap) ExecutePluginWithContext(ctx context.Context, pluginNa
 	return b.ExecutePluginWithIO(ctx, pluginName, args, sdk.OperationIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
 }
 
+func (b *PluginBootstrap) checkOrgPolicy(pluginName string) error {
+	policy, err := security.LoadOrgPolicyCached(b.homeDir)
+	if err != nil {
+		return err
+	}
+	return policy.CheckPlugin(pluginName)
+}
+
 // ExecutePluginWithIO executes a plugin like ExecutePluginWithContext, with
 // caller-owned streams.
 func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName string, args []string, streams sdk.OperationIO) error {
@@ -386,6 +415,9 @@ func (b *PluginBootstrap) ExecutePluginWithIO(ctx context.Context, pluginName st
 	}
 	if err := validatePluginName(pluginName); err != nil {
 		return fmt.Errorf("invalid plugin name: %w", err)
+	}
+	if err := b.checkOrgPolicy(pluginName); err != nil {
+		return err
 	}
 	if _, installed := b.manager.ListPluginsWithContext(ctx)[pluginName]; !installed {
 		if err := b.PluginDownloadError(pluginName); err != nil {
@@ -624,6 +656,9 @@ func (b *PluginBootstrap) handleSearchPlugins(cmd *cobra.Command, args []string)
 }
 
 func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string) error {
+	if err := b.checkOrgPolicy(args[0]); err != nil {
+		return err
+	}
 	if err := requirePluginNetwork(); err != nil {
 		return err
 	}
@@ -674,6 +709,9 @@ func (b *PluginBootstrap) installed(cmd *cobra.Command, name string) (sdk.Plugin
 }
 
 func (b *PluginBootstrap) handleRunPlugin(cmd *cobra.Command, args []string) error {
+	if err := b.checkOrgPolicy(args[0]); err != nil {
+		return err
+	}
 	metadata, err := b.installed(cmd, args[0])
 	if err != nil {
 		return err
@@ -737,6 +775,9 @@ func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string)
 	}
 	// Validate the entire selection before starting downloads.
 	for _, name := range args {
+		if err := b.checkOrgPolicy(name); err != nil {
+			return err
+		}
 		if _, err := b.installed(cmd, name); err != nil {
 			return err
 		}

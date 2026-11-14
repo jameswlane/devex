@@ -412,6 +412,48 @@ devex system verify
   </Step>
 </Steps>
 
+## Organization Installation Policies
+
+Administrators can enforce installation rules across interactive, non-interactive,
+dry-run, plan, and MCP execution with an organization `policy.yaml`. DevEx uses
+`/etc/devex/policy.yaml` when present. Otherwise it uses
+`$DEVEX_TEAM_CONFIG_DIR/policy.yaml`, or `policy.yaml` in the `team` directory
+under the DevEx configuration directory. Only one file applies, and an unreadable
+or invalid file stops installation rather than bypassing policy.
+
+Policies can allow or deny application names, installation methods, plugin names,
+and HTTP(S) source URL prefixes. Deny rules win over allow rules; an empty allow
+list allows everything not denied. Additional rules can limit hooks to user
+privileges, set a minimum command-security level, disable user security overrides,
+and deny shell commands with regular expressions. User configuration may be
+stricter, but DevEx warns and clamps it when it would weaken the policy.
+
+```yaml
+version: "2026.11.1"
+name: acme-engineering
+applications:
+  allow: ["git", "node-*"]
+  deny: ["node-legacy"]
+install_methods:
+  deny: ["curlpipe"]
+plugins:
+  allow: ["package-manager-*", "tool-*"]
+sources:
+  allow: ["https://packages.example.com/"]
+privilege:
+  max_scope: user
+security:
+  minimum_level: moderate
+  allow_user_overrides: false
+  deny_commands: ['curl\s+http://']
+```
+
+Inspect the active file and its SHA-256 digest with `devex policy show`, or use
+`devex policy show --format json` for the complete policy. Dry-run JSON plans
+include an `organization_policy` reference, and execution digests bind that
+reference so a confirmed plan cannot run under different policy content. See
+`apps/cli/config/examples/organization-policy.yaml` for all fields and defaults.
+
 ## Security Compliance
 
 ### Enterprise Security Standards

@@ -196,6 +196,38 @@ security:
         - flatpak
 ```
 
+## Organization Installation Policies
+
+Administrators can enforce application, install-method, plugin, source, privilege,
+and command-security rules with `policy.yaml`. DevEx loads the first existing
+file from:
+
+1. `/etc/devex/policy.yaml`
+2. `$DEVEX_TEAM_CONFIG_DIR/policy.yaml`, or `<devex config dir>/team/policy.yaml`
+   when `DEVEX_TEAM_CONFIG_DIR` is not set
+
+The system file takes precedence; only one policy applies. See
+`apps/cli/config/examples/organization-policy.yaml` for the complete schema. The
+`version` field is required. Unknown fields, invalid YAML, invalid regular
+expressions, and unreadable files are errors: installations fail closed and name
+the affected file.
+
+Policy denies take precedence over allows, and both take precedence over user,
+team, and default configuration. Empty allow lists permit everything not denied.
+Application, method, and plugin rules use `path.Match` globs; source rules are
+URL prefixes. `privilege.max_scope: user` rejects system-scope hooks, and
+`security.deny_commands` rejects matching shell hooks before any user override.
+
+`security.minimum_level` clamps a more permissive user security level, and
+`allow_user_overrides: false` ignores user `global_overrides` and
+`app_overrides`. Both emit warnings naming the policy and version. Allowed plans
+record the policy name, version, source path, and SHA-256 digest; confirmed
+execution digests bind that reference.
+
+Use `devex policy show` or `devex policy show --format json` to inspect the active
+policy. During installation, DevEx prints
+`Applying organization policy <name> <version> (<path>)` to stderr.
+
 ## Migration Guide
 
 ### From Hard-coded Validation
