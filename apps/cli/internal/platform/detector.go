@@ -450,7 +450,10 @@ func (p *Platform) getPrimaryPackageManagers() []string {
 				isUniversal := pm == "flatpak" || pm == "snap" || pm == "appimage"
 
 				// For Linux, only include one native package manager, but allow all universal ones
+				// Mark it seen too, so the "remaining" pass below cannot re-add it
+				// (Fedora's yum alias would otherwise pull in package-manager-yum).
 				if p.OS == "linux" && !isUniversal && foundNativePackageManager {
+					seen[pm] = true
 					continue // Skip additional native package managers
 				}
 
