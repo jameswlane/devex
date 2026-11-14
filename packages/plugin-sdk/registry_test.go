@@ -29,7 +29,7 @@ var _ = Describe("Registry Client", func() {
 			case "/api/v1/registry":
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, `{"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}`)
+				_, _ = fmt.Fprint(w, `{"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {"test-plugin": {"name": "test-plugin", "version": "1.0.0"}}}`)
 			case "/api/v1/plugins/test-plugin":
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
@@ -234,7 +234,7 @@ var _ = Describe("Registry Client", func() {
 				// Simple API doesn't require authentication
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprint(w, `{"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {}}`)
+				_, _ = fmt.Fprint(w, `{"base_url": "https://registry.example.com", "version": "1.0", "last_updated": "2023-01-01T00:00:00Z", "plugins": {"test-plugin": {"name": "test-plugin", "version": "1.0.0"}}}`)
 			}))
 
 			config := sdk.RegistryConfig{

@@ -943,13 +943,12 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 
 	// Fetch fresh registry
 	client := &http.Client{Timeout: 30 * time.Second}
-	var body []byte
-	resp, err := d.doWithRetry(ctx, client, http.MethodGet, d.registryURL+"/api/v1/registry", func(resp *http.Response) error {
-		var err error
-		body, err = io.ReadAll(resp.Body)
-		return err
-	})
+	body, err := d.fetchRegistryPage(ctx, client, 1)
 	if err != nil {
+		var status registryStatusError
+		if errors.As(err, &status) {
+			return nil, err
+		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
@@ -962,21 +961,48 @@ func (d *Downloader) fetchRegistryWithContext(ctx context.Context) (*PluginRegis
 		}
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("registry server returned HTTP %d", resp.StatusCode)
+	resp, plugins, err := collectRegistryPages(body, func(page int) ([]byte, error) {
+		return d.fetchRegistryPage(ctx, client, page)
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	// Parse registry
-	var registry PluginRegistry
-	if err := json.Unmarshal(body, &registry); err != nil {
-		return nil, fmt.Errorf("failed to parse registry: %w", err)
+	registry := PluginRegistry{
+		BaseURL:     resp.BaseURL,
+		Version:     resp.Version,
+		LastUpdated: time.Now(),
+		Plugins:     plugins,
 	}
 
 	// Cache the registry
 	d.cacheRegistry(&registry)
 	return &registry, nil
+}
+
+// registryStatusError reports a registry listing request that got a non-200 response.
+type registryStatusError struct{ code int }
+
+func (e registryStatusError) Error() string {
+	return fmt.Sprintf("registry server returned HTTP %d", e.code)
+}
+
+// fetchRegistryPage returns the body of one page of the registry's plugin listing.
+func (d *Downloader) fetchRegistryPage(ctx context.Context, client *http.Client, page int) ([]byte, error) {
+	var body []byte
+	resp, err := d.doWithRetry(ctx, client, http.MethodGet, d.registryURL+registryPagePath(page), func(resp *http.Response) error {
+		var err error
+		body, err = io.ReadAll(resp.Body)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, registryStatusError{code: resp.StatusCode}
+	}
+	return body, nil
 }
 
 // loadCachedRegistry loads registry from cache
@@ -988,7 +1014,8 @@ func (d *Downloader) loadCachedRegistry() *PluginRegistry {
 	}
 
 	var registry PluginRegistry
-	if err := json.Unmarshal(data, &registry); err != nil {
+	if err := json.Unmarshal(data, &registry); err != nil || len(registry.Plugins) == 0 {
+		// Older SDKs cached an empty registry when they misread the listing.
 		return nil
 	}
 
