@@ -36,6 +36,17 @@ func aptApp(name, packages string, sources ...types.AptSource) types.CrossPlatfo
 	}
 }
 
+// uniqueAppRepository rejects duplicate registrations like the installed_apps
+// UNIQUE constraint.
+type uniqueAppRepository struct{ *mocks.MockRepository }
+
+func (r *uniqueAppRepository) AddApp(name string) error {
+	if app, err := r.GetApp(name); err == nil && app != nil {
+		return fmt.Errorf("UNIQUE constraint failed: installed_apps.app_name")
+	}
+	return r.MockRepository.AddApp(name)
+}
+
 var _ = Describe("APT batching", func() {
 	var (
 		recorder         *sdktest.Recorder
@@ -154,7 +165,7 @@ var _ = Describe("APT batching", func() {
 
 	It("keeps the lifecycle unfinished when an optional post-install hook fails, so the next run retries it", func() {
 		recorder.Fallback("bash", sdktest.Response{ExitCode: 1})
-		tracked := mocks.NewMockRepository()
+		tracked := &uniqueAppRepository{MockRepository: mocks.NewMockRepository()}
 		installer.repo = tracked
 		app := aptApp("GitHub CLI", "gh")
 		app.AllPlatforms.PostInstall = []types.InstallCommand{{Shell: "gh extension install example/ext"}}
@@ -168,6 +179,15 @@ var _ = Describe("APT batching", func() {
 		hooksBefore := len(recorder.Calls("bash"))
 		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{app}, config.CrossPlatformSettings{})).To(HaveOccurred())
 		Expect(len(recorder.Calls("bash"))).To(BeNumerically(">", hooksBefore))
+		Expect(LifecycleUnfinished(tracked, "GitHub CLI")).To(BeTrue())
+
+		// When the hook succeeds, the registered app is finished and later runs skip it.
+		recorder.Fallback("bash", sdktest.Response{})
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{app}, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(LifecycleUnfinished(tracked, "GitHub CLI")).To(BeFalse())
+		hooksBefore = len(recorder.Calls("bash"))
+		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{app}, config.CrossPlatformSettings{})).To(Succeed())
+		Expect(recorder.Calls("bash")).To(HaveLen(hooksBefore))
 	})
 
 	It("does not touch apt at all when every app is already installed", func() {

@@ -913,8 +913,11 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 	err = state.AuditStep(ctx, "registration", true, func() error {
 		si.repoMutex.Lock()
 		defer si.repoMutex.Unlock()
-		if err := si.repo.AddApp(app.Name); err != nil {
-			return err
+		// A retried lifecycle may already be registered; app names are unique.
+		if existing, lookupErr := si.repo.GetApp(app.Name); lookupErr != nil || existing == nil {
+			if err := si.repo.AddApp(app.Name); err != nil {
+				return err
+			}
 		}
 		return RecordLifecycle(si.repo, app.Name, hooksComplete)
 	})

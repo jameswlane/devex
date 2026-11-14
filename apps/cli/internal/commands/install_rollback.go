@@ -14,7 +14,6 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templateexec"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
-	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -100,9 +99,6 @@ func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlat
 			return failRegistration(err)
 		}
 		if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data)); err != nil {
-			return failRegistration(err)
-		}
-		if err := tui.RecordLifecycle(repo, app.Name, true); err != nil {
 			return failRegistration(err)
 		}
 	}
