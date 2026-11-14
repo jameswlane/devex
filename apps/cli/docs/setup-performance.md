@@ -24,6 +24,84 @@ allow independent scheduled apps to overlap; package-manager locks and hook
 barriers still apply. Eager batch preparation completes before scheduled work,
 so increasing this value does not overlap the APT batch with other managers.
 
+## Automated before/after benchmark
+
+The report-only **Setup benchmark** workflow (`.github/workflows/setup-benchmark.yml`)
+runs the before/after timing on GitHub-hosted `ubuntu-24.04` VMs. It has only a
+`workflow_dispatch` trigger and is not a required check. Every matrix job gets a
+fresh VM, so no package lists, installed applications, or download caches carry
+over from another run.
+
+Run it from the Actions tab by selecting **Setup benchmark** and **Run workflow**,
+or with:
+
+```sh
+gh workflow run setup-benchmark.yml \
+  --ref main \
+  -f baseline_ref=6178f6de3e037f4e3c6692999e3e314628f44db3 \
+  -f candidate_ref=main \
+  -f runs=3
+```
+
+The default baseline is the parent of `d0b8355`, immediately before PR #278.
+Use one to five runs per variant; three is the default. Each job builds its ref
+first, then starts the timer. Build and Go setup time are excluded.
+
+### Measured code path
+
+Both variants run no-argument `devex install` under a util-linux `script`
+pseudo-terminal, with `CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, and the DevEx
+non-interactive variables removed. This is unattended but deliberately not the
+CLI's non-interactive mode:
+
+- No arguments select the ref's actual default application catalog in
+  `internal/commands/install.go`.
+- Interactive selection calls `tui.StartInstallation`; its worker calls
+  `StreamingInstaller.InstallApps`, which invokes `preparePackageRun` and then
+  `prepareAptRun` (`internal/tui/manager_batch.go` and `apt_batch.go`).
+- By contrast, `install --non-interactive` selects `runPlainInstall`, and
+  `setup --non-interactive` loops over `installers.InstallCrossPlatformApp` in
+  `internal/commands/setup/automation.go`. Neither exercises the batched TUI
+  planner, so neither is a valid candidate timing for this issue.
+
+The install command has no confirmation screen, so the pseudo-terminal does not
+require scripted keystrokes or alter the selected apps. The baseline supports
+the identical invocation and reaches its pre-batching `StartInstallation`
+implementation. Timing includes CLI startup, plugin/catalog loading, installation,
+and command finalization; it ends when the install command exits.
+
+The app list is not hard-coded in the benchmark. At the time of writing, the
+bundled defaults are apache2-utils, bat, Eza, fd-find, fzf, GitHub CLI, plocate,
+ripgrep, tldr, and zoxide. In particular, `btop` is not marked as a default in
+the bundled configuration even though it appears in the issue's observed log.
+Registry additions can change the effective default set.
+
+Both variants fetch plugins from the live registry; the current CLI also
+consults the live application catalog. Plugin and catalog contents are therefore
+not pinned to the measured revisions. Treat this as a repeatable operational
+benchmark, not a hermetic historical reproduction.
+
+### Read the results
+
+The final **Aggregate benchmark report** job writes a step summary containing:
+
+- every baseline and candidate run's wall-clock seconds, APT update/install
+  counts, and exit code;
+- the median time for each variant; and
+- `PASS` only when the candidate median is strictly under 300 seconds.
+
+A missed target is reported as `FAIL` in the table but does not fail the workflow.
+The workflow fails only for broken inputs, builds, installations, instrumentation,
+or missing/invalid results. Open the step summary on the workflow run page.
+
+Each `setup-benchmark-<variant>-<run>` artifact contains `result.json`, the DevEx
+log, captured console output, and the APT invocation record. The JSON includes
+the requested and resolved refs, Ubuntu version, architecture, CPU and RAM, and
+APT mirror URLs. APT counts come from a `sudo` wrapper that observes the actual
+`apt-get` arguments; use the logs to audit those counts and diagnose mirror or
+installation failures. Compare all runs and their environments, not just the
+medians, before attributing a change to the CLI revisions.
+
 ## Reproduce the timing comparison
 
 Use a real Ubuntu machine or two VM clones of the same snapshot. Record Ubuntu
