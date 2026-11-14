@@ -21,10 +21,10 @@ systems and runs nothing. Other distributions are not supported; use
 | Command | Native command | Elevated |
 | --- | --- | --- |
 | `install <pkg>...` | `<backend> install --assumeyes <pkg>...` | yes |
-| `remove <pkg>...` | `rpm -q` / `rpm -q --whatprovides` check per package, then `<backend> remove --assumeyes <pkg>...` | removal only |
-| `update` | `<backend> makecache` | yes |
+| `remove <pkg>...` | `rpm -qa <glob>`, or `rpm -q` then `rpm -q --whatprovides`, check per package, then `<backend> remove --assumeyes <pkg>...` | removal only |
+| `update` | `<backend> makecache --assumeyes` | yes |
 | `upgrade [pkg]...` | `<backend> upgrade --assumeyes [pkg]...` | yes |
-| `search <term>` | `<backend> search <term>` | no |
+| `search <keyword>...` | `<backend> search <keyword>...` | no |
 | `list` | `<backend> list installed` on YUM 3, `<backend> list --installed` on DNF | no |
 | `is-installed <pkg>...` | `rpm -q -- <pkg>` per package | no |
 | `add-repository <https://...repo>` | `yum-config-manager --add-repo <url>` | yes |
@@ -45,7 +45,7 @@ Run these in throwaway containers; nothing touches the host.
 
 ```bash
 # Build the plugin for Linux from the repository root
-(cd packages/package-manager-yum && CGO_ENABLED=0 go build -o /tmp/yum-plugin .)
+(cd packages/package-manager-yum && GOOS=linux CGO_ENABLED=0 go build -o /tmp/yum-plugin .)
 
 # RHEL 8+ family: the yum alias backed by DNF
 docker run --rm -v /tmp/yum-plugin:/usr/local/bin/devex-plugin-package-manager-yum:ro \

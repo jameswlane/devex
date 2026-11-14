@@ -25,8 +25,8 @@ var contracts = []operationContract{
 	{command: "upgrade", nativeArgv: []string{"upgrade", "--assumeyes"}, elevated: true},
 	{command: "install", args: []string{"git", "vim"}, nativeArgv: []string{"install", "--assumeyes", "git", "vim"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"remove", "--assumeyes", "git", "vim"}, elevated: true},
-	{command: "update", nativeArgv: []string{"makecache"}, elevated: true},
-	{command: "search", args: []string{"web", "server"}, nativeArgv: []string{"search", "web server"}},
+	{command: "update", nativeArgv: []string{"makecache", "--assumeyes"}, elevated: true},
+	{command: "search", args: []string{"web", "server"}, nativeArgv: []string{"search", "web", "server"}},
 	{command: "list", nativeArgv: []string{"list", "--installed"}, probes: [][]string{{"--version"}}},
 }
 
@@ -110,7 +110,7 @@ var _ = Describe("YUM command contracts", func() {
 		Expect(plugin.Execute("update", nil)).To(Succeed())
 		removeFake("yum")
 		Expect(plugin.Execute("list", nil)).To(Succeed())
-		Expect(recorder.Calls("yum")).To(Equal([]sdktest.Call{{Args: []string{"makecache"}, ElevationRequested: true}}))
+		Expect(recorder.Calls("yum")).To(Equal([]sdktest.Call{{Args: []string{"makecache", "--assumeyes"}, ElevationRequested: true}}))
 		Expect(recorder.Calls("dnf")).To(Equal([]sdktest.Call{{Args: []string{"--version"}}, {Args: []string{"list", "--installed"}}}))
 	})
 
@@ -139,6 +139,24 @@ var _ = Describe("YUM command contracts", func() {
 		err := plugin.Execute("remove", []string{"git"})
 		Expect(err).To(MatchError(ContainSubstring(`cannot remove package "git": RPM query failed: error: rpmdb: BDB0113 Thread died`)))
 		Expect(recorder.Calls("yum")).To(BeEmpty())
+	})
+
+	It("removes packages matched by a name glob", func() {
+		recorder.Script("rpm", []string{"-qa", "--", "git*"}, sdktest.Response{Stdout: "git-2.43.0-1.el9.x86_64\n"})
+		Expect(plugin.Execute("remove", []string{"git*"})).To(Succeed())
+		Expect(recorder.Calls("yum")).To(Equal([]sdktest.Call{{Args: []string{"remove", "--assumeyes", "git*"}, ElevationRequested: true}}))
+	})
+
+	It("refuses a name glob that matches nothing installed", func() {
+		err := plugin.Execute("remove", []string{"ghost*"})
+		Expect(err).To(MatchError(`cannot remove package "ghost*": no installed package matches`))
+		Expect(recorder.Calls("yum")).To(BeEmpty())
+	})
+
+	It("keeps RPM stderr when an is-installed query fails", func() {
+		recorder.Script("rpm", []string{"-q", "--", "git"}, sdktest.Response{ExitCode: 1, Stderr: "error: rpmdb open failed\n"})
+		err := plugin.Execute("is-installed", []string{"git"})
+		Expect(err).To(MatchError(`RPM query failed for "git": error: rpmdb open failed: exit status 1`))
 	})
 
 	It("removes a package matched by a provided capability", func() {

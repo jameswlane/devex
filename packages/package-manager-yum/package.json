@@ -6,7 +6,7 @@
 	"main": "main.go",
 	"scripts": {
 		"build": "go build -o devex-plugin-package-manager-yum .",
-		"dev": "go build -race -o devex-plugin-package-manager-yum main.go",
+		"dev": "go build -race -o devex-plugin-package-manager-yum .",
 		"test": "go test ./...",
 		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",

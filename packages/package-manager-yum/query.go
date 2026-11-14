@@ -13,6 +13,25 @@ import (
 
 var rpmPackageName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+_.:-]*$`)
 
+// queryFailure wraps err from a native query, adding its captured stderr so
+// the diagnostic is not lost.
+func queryFailure(context string, err error) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+			return fmt.Errorf("%s: %s: %w", context, stderr, err)
+		}
+	}
+	return fmt.Errorf("%s: %w", context, err)
+}
+
+// absent reports whether err is RPM's plain "not installed" result: exit
+// status 1 with nothing on stderr.
+func absent(err error) bool {
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(exitErr.Stderr) == 0
+}
+
 func (p *YumPlugin) handleIsInstalled(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("no packages specified")
@@ -28,12 +47,11 @@ func (p *YumPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 		if err == nil {
 			continue
 		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && len(exitErr.Stderr) == 0 {
+		if absent(err) {
 			missing = append(missing, pkg)
 			continue
 		}
-		return fmt.Errorf("RPM query failed for %q: %w", pkg, err)
+		return queryFailure(fmt.Sprintf("RPM query failed for %q", pkg), err)
 	}
 	if len(missing) > 0 {
 		return &sdk.NotInstalledError{Packages: missing}
@@ -41,25 +59,32 @@ func (p *YumPlugin) handleIsInstalled(ctx context.Context, args []string) error 
 	return nil
 }
 
-// requireInstalledMatch checks the local RPM database for spec by name, then
-// by provided capability, the way "yum remove" resolves it.
+// requireInstalledMatch checks the local RPM database for spec the way
+// "yum remove" resolves it: a name glob such as "git*" against installed
+// packages, otherwise the exact name, then a provided capability.
 func requireInstalledMatch(ctx context.Context, spec string) error {
 	if strings.HasPrefix(spec, "-") {
 		return fmt.Errorf("cannot remove package %q: package specifications must not start with '-'", spec)
+	}
+	failure := fmt.Sprintf("cannot remove package %q: RPM query failed", spec)
+	if strings.ContainsAny(spec, "*?[") {
+		// rpm -qa matches globs and exits 0 with no output when none match.
+		output, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", "-qa", "--", spec)
+		if err != nil {
+			return queryFailure(failure, err)
+		}
+		if strings.TrimSpace(output) != "" {
+			return nil
+		}
+		return fmt.Errorf("cannot remove package %q: no installed package matches", spec)
 	}
 	for _, selector := range [][]string{{"-q", "--", spec}, {"-q", "--whatprovides", "--", spec}} {
 		_, err := sdk.ExecCommandOutputWithContext(ctx, "rpm", selector...)
 		if err == nil {
 			return nil
 		}
-		var exitErr *exec.ExitError
-		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 || len(exitErr.Stderr) != 0 {
-			if exitErr != nil {
-				if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
-					return fmt.Errorf("cannot remove package %q: RPM query failed: %s: %w", spec, stderr, err)
-				}
-			}
-			return fmt.Errorf("cannot remove package %q: RPM query failed: %w", spec, err)
+		if !absent(err) {
+			return queryFailure(failure, err)
 		}
 	}
 	return fmt.Errorf("cannot remove package %q: no installed package matches", spec)

@@ -90,7 +90,7 @@ func (p *YumPlugin) Execute(command string, args []string) error {
 		return sdk.ExecCommandWithContext(ctx, true, backend, append([]string{"upgrade", "--assumeyes"}, args...)...)
 	case "update":
 		fmt.Println("Updating package repositories...")
-		return sdk.ExecCommandWithContext(ctx, true, backend, "makecache")
+		return sdk.ExecCommandWithContext(ctx, true, backend, "makecache", "--assumeyes")
 	case "search":
 		return p.handleSearch(ctx, backend, args)
 	case "list":
@@ -129,7 +129,8 @@ func (p *YumPlugin) handleSearch(ctx context.Context, backend string, args []str
 	}
 	searchTerm := strings.Join(args, " ")
 	fmt.Printf("Searching for: %s\n", searchTerm)
-	return sdk.ExecCommandWithContext(ctx, false, backend, "search", searchTerm)
+	// Each argument is a separate keyword to YUM and DNF.
+	return sdk.ExecCommandWithContext(ctx, false, backend, append([]string{"search"}, args...)...)
 }
 
 // handleList lists installed packages. YUM 3 only accepts "list installed",
@@ -138,7 +139,7 @@ func (p *YumPlugin) handleSearch(ctx context.Context, backend string, args []str
 func (p *YumPlugin) handleList(ctx context.Context, backend string) error {
 	output, err := sdk.ExecCommandOutputWithContext(ctx, backend, "--version")
 	if err != nil {
-		return fmt.Errorf("detect %s version: %w", backend, err)
+		return queryFailure(fmt.Sprintf("detect %s version", backend), err)
 	}
 	selector := "--installed"
 	if strings.HasPrefix(strings.TrimSpace(output), "3.") {

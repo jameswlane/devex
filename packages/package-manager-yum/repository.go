@@ -20,7 +20,7 @@ func (p *YumPlugin) handleAddRepository(ctx context.Context, args []string) erro
 		return fmt.Errorf("invalid repository source: expected HTTPS .repo URL")
 	}
 	if _, err := p.lookPath("yum-config-manager"); err != nil {
-		return fmt.Errorf("yum-config-manager not found on PATH; install yum-utils (RHEL/CentOS 7) or dnf-plugins-core (RHEL 8+) and retry")
+		return fmt.Errorf("yum-config-manager not found on PATH; install yum-utils and retry")
 	}
 	return sdk.ExecCommandWithContext(ctx, true, "yum-config-manager", "--add-repo", value)
 }
