@@ -153,6 +153,57 @@ type RegistryResponse struct {
 	Data struct {
 		Plugins []PluginMetadata `json:"plugins"`
 	} `json:"data"`
+	Pagination struct {
+		TotalPages int `json:"totalPages"`
+	} `json:"pagination"`
+}
+
+const (
+	// registryPageLimit is the largest page size /api/v1/registry serves.
+	registryPageLimit = 100
+	// maxRegistryPages bounds pagination so a misbehaving server cannot loop forever.
+	maxRegistryPages = 100
+)
+
+// registryPagePath returns the path of one page of the registry's plugin listing.
+func registryPagePath(page int) string {
+	return fmt.Sprintf("/api/v1/registry?resource=plugins&limit=%d&page=%d", registryPageLimit, page)
+}
+
+// collectRegistryPages decodes the first page of the registry listing, fetches
+// any remaining pages, and returns the first page's response with every page's
+// plugins. A listing without plugins is an error: it means the response shape
+// was not understood, and treating it as an empty registry hides that.
+func collectRegistryPages(first []byte, fetchPage func(page int) ([]byte, error)) (*RegistryResponse, map[string]PluginMetadata, error) {
+	var resp RegistryResponse
+	if err := json.Unmarshal(first, &resp); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse registry response: %w", err)
+	}
+	plugins := resp.pluginMap()
+	totalPages := resp.Pagination.TotalPages
+	if totalPages > maxRegistryPages {
+		return nil, nil, fmt.Errorf("registry listing has %d pages, more than the %d this SDK reads", totalPages, maxRegistryPages)
+	}
+	for page := 2; page <= totalPages; page++ {
+		body, err := fetchPage(page)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to fetch registry page %d: %w", page, err)
+		}
+		var next RegistryResponse
+		if err := json.Unmarshal(body, &next); err != nil {
+			return nil, nil, fmt.Errorf("failed to parse registry page %d: %w", page, err)
+		}
+		if plugins == nil {
+			plugins = make(map[string]PluginMetadata)
+		}
+		for name, plugin := range next.pluginMap() {
+			plugins[name] = plugin
+		}
+	}
+	if len(plugins) == 0 {
+		return nil, nil, errors.New("registry response contained no plugins")
+	}
+	return &resp, plugins, nil
 }
 
 // pluginMap returns the response's plugins keyed by name, whichever shape the API used.
@@ -211,14 +262,16 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 	}
 	
 	c.logger.Debug("registry cache miss, fetching from API")
-	resp, err := c.simpleRequest(ctx, "GET", "/api/v1/registry")
+	resp, err := c.simpleRequest(ctx, "GET", registryPagePath(1))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch registry: %w", err)
 	}
 
-	var registryResp RegistryResponse
-	if err := json.Unmarshal(resp, &registryResp); err != nil {
-		return nil, fmt.Errorf("failed to parse registry response: %w", err)
+	registryResp, plugins, err := collectRegistryPages(resp, func(page int) ([]byte, error) {
+		return c.simpleRequest(ctx, "GET", registryPagePath(page))
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse the last updated timestamp
@@ -242,7 +295,7 @@ func (c *RegistryClient) GetRegistry(ctx context.Context) (*PluginRegistry, erro
 		BaseURL:     registryResp.BaseURL,
 		Version:     registryResp.Version,
 		LastUpdated: lastUpdated,
-		Plugins:     registryResp.pluginMap(),
+		Plugins:     plugins,
 	}
 
 	// Cache the result
