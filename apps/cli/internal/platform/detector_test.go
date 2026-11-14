@@ -211,6 +211,16 @@ var _ = Describe("Platform Detector", func() {
 			})
 		})
 
+		Context("on Linux with a second native package manager on PATH", func() {
+			It("keeps only the highest-priority native package manager", func() {
+				// Fedora and CentOS ship yum as an alias for dnf.
+				mockPlatform = &platform.Platform{OS: "linux", PackageManagers: []string{"dnf", "yum"}}
+				plugins := mockPlatform.GetRequiredPlugins()
+				Expect(plugins).To(ContainElement("package-manager-dnf"))
+				Expect(plugins).NotTo(ContainElement("package-manager-yum"))
+			})
+		})
+
 		Context("on Linux with only universal package managers", func() {
 			BeforeEach(func() {
 				mockPlatform = &platform.Platform{
