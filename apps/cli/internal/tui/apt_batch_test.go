@@ -190,6 +190,18 @@ var _ = Describe("APT batching", func() {
 		Expect(recorder.Calls("bash")).To(HaveLen(hooksBefore))
 	})
 
+	It("leaves batch-installed apps retryable if the run stops before their own lifecycle", func() {
+		tracked := mocks.NewMockRepository()
+		installer.repo = tracked
+		apps := []types.CrossPlatformApp{aptApp("bat", "bat"), aptApp("fzf", "fzf")}
+
+		Expect(installer.prepareAptRun(context.Background(), apps)).To(Succeed())
+
+		Expect(aptGetCalls("install")).To(HaveLen(1))
+		Expect(LifecycleUnfinished(tracked, "bat")).To(BeTrue())
+		Expect(LifecycleUnfinished(tracked, "fzf")).To(BeTrue())
+	})
+
 	It("does not touch apt at all when every app is already installed", func() {
 		installedPkgs["gh"] = true
 		installedPkgs["bat"] = true

@@ -296,6 +296,11 @@ func (si *StreamingInstaller) prepareAptRun(ctx context.Context, apps []types.Cr
 		return nil
 	}
 
+	// The batch installs packages before each app's own lifecycle starts, so an
+	// interrupted run must still leave these apps retryable.
+	for _, name := range targets {
+		si.recordLifecycle(name, false)
+	}
 	si.sendLog("INFO", fmt.Sprintf("Installing %d APT packages for %d apps in one transaction...", len(batchPackages), len(batchApps)))
 	command := "sudo -n apt-get install -y " + strings.Join(batchPackages, " ")
 	if err := state.AuditTargetsStep(ctx, targets, "install-batch", func() error { return si.executeCommandStream(ctx, command) }); err != nil {
