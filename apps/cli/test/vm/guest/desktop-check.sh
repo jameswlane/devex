@@ -180,6 +180,20 @@ install_extensions() {
 	fi
 }
 
+# configure and configure-fonts succeed when only some writes fail, warning
+# about each failed one, so any such warning fails the check.
+run_settings() {
+	local plugin="$1" output
+	shift
+	output="$(devex plugin run "$plugin" "$@" 2>&1)"
+	printf '%s\n' "$output"
+	if grep -q "Warning: Failed" <<<"$output"; then
+		fail "$plugin $1 could not apply every setting"
+	else
+		pass "$plugin $1 applied every setting"
+	fi
+}
+
 # Plugins accept the SHA-256 of the previewed JSON line, without its newline.
 plan_hash() {
 	printf '%s' "$(<"$1")" | sha256sum | cut -d' ' -f1
@@ -198,12 +212,12 @@ apply_desktop() {
 	local hash
 	hash="$(plan_hash "$STATE/plan.json")"
 	log "applying settings plan $hash"
-	devex plugin run "$plugin" configure --expected-plan "$hash"
+	run_settings "$plugin" configure --expected-plan "$hash"
 	log "installing and configuring fonts"
 	devex plugin run "$plugin" install-fonts jetbrainsmono
 	case "$DESKTOP" in
 	gnome)
-		devex plugin run "$plugin" configure-fonts "$MONO_FONT 11"
+		run_settings "$plugin" configure-fonts "$MONO_FONT 11"
 		devex plugin run "$plugin" apply-theme Adwaita-dark
 		local shell
 		shell="$(gnome-shell --version | awk '{print $3}')"
@@ -213,7 +227,7 @@ apply_desktop() {
 		install_extensions
 		;;
 	kde)
-		devex plugin run "$plugin" configure-fonts "$MONO_FONT"
+		run_settings "$plugin" configure-fonts "$MONO_FONT"
 		devex plugin run "$plugin" apply-theme BreezeDark
 		;;
 	esac

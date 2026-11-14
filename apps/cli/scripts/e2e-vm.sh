@@ -246,9 +246,11 @@ cleanup() {
 		log "VM_KEEP=1: VM left running. Connect with:"
 		printf '  ssh -i %q -p %s -o StrictHostKeyChecking=no %s@127.0.0.1\n' "$WORK/id_ed25519" "$SSH_PORT" "$GUEST_USER" >&2
 		log "press Ctrl-C to destroy it"
-		trap - INT
+		# A trapped SIGINT interrupts wait, so cleanup continues below.
+		trap : INT
 		sleep infinity &
 		wait $! 2>/dev/null
+		kill $! 2>/dev/null
 	fi
 	collect
 	if vm_running; then
