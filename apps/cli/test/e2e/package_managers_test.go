@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -121,6 +122,71 @@ var _ = Describe("Package manager install lifecycle", func() {
 			})
 		})
 	}
+})
+
+var _ = Describe("RPM local package lifecycle", Ordered, Label("destructive", "pm:rpm"), func() {
+	const packageName = "devex-rpm-roundtrip"
+	var home, plugin, packageFile string
+
+	BeforeAll(func() {
+		if os.Getenv("DEVEX_E2E_DESTRUCTIVE") != "1" {
+			Skip("requires DEVEX_E2E_DESTRUCTIVE=1 in a disposable sandbox")
+		}
+		if distro := currentDistro(); !contains([]string{"fedora-44", "centos-9"}, distro) {
+			Skip(fmt.Sprintf("RPM local package lifecycle runs on fedora-44 and centos-9, not %s", distro))
+		}
+		home = sandbox.isolatedHome()
+		plugin = pluginPath(home, "package-manager-rpm")
+
+		topdir := filepath.Join(home, "rpmbuild")
+		for _, directory := range []string{"BUILD", "BUILDROOT", "RPMS", "SOURCES", "SPECS", "SRPMS"} {
+			Expect(os.MkdirAll(filepath.Join(topdir, directory), 0o700)).To(Succeed())
+		}
+		spec := fmt.Sprintf(`Name: %s
+Version: 1.0
+Release: 1
+Summary: DevEx RPM plugin round-trip fixture
+License: MIT
+BuildArch: noarch
+
+%%description
+Tiny noarch package for the isolated RPM plugin lifecycle.
+
+%%files
+`, packageName)
+		specFile := filepath.Join(topdir, "SPECS", packageName+".spec")
+		Expect(os.WriteFile(specFile, []byte(spec), 0o600)).To(Succeed())
+		output, err := sandbox.run(home, "rpmbuild", time.Minute, nil, "-bb", "--define", "_topdir "+topdir, specFile)
+		Expect(err).NotTo(HaveOccurred(), "rpmbuild failed:\n%s", output)
+		packageFile = filepath.Join(topdir, "RPMS", "noarch", packageName+"-1.0-1.noarch.rpm")
+		Expect(packageFile).To(BeAnExistingFile())
+
+		output, err = sandbox.run(home, sandbox.binary, time.Minute, nil, "plugin", "install", "package-manager-rpm")
+		Expect(err).NotTo(HaveOccurred(), "installing the source RPM plugin failed:\n%s", output)
+	})
+
+	It("installs the local noarch package", func() {
+		output, err := sandbox.run(home, plugin, time.Minute, nil, "install", packageFile)
+		Expect(err).NotTo(HaveOccurred(), "RPM plugin install failed:\n%s", output)
+	})
+
+	It("reports the package as installed", func() {
+		output, err := sandbox.run(home, plugin, 30*time.Second, nil, "is-installed", packageName)
+		Expect(err).NotTo(HaveOccurred(), "RPM plugin installed query failed:\n%s", output)
+	})
+
+	It("removes the package", func() {
+		output, err := sandbox.run(home, plugin, time.Minute, nil, "remove", packageName)
+		Expect(err).NotTo(HaveOccurred(), "RPM plugin remove failed:\n%s", output)
+	})
+
+	It("reports the removed package as not installed", func() {
+		output, err := sandbox.run(home, plugin, 30*time.Second, nil, "is-installed", packageName)
+		var exitErr *exec.ExitError
+		Expect(errors.As(err, &exitErr)).To(BeTrue(), "missing package must exit with the plugin status: %v\n%s", err, output)
+		Expect(exitErr.ExitCode()).To(Equal(3), "missing package must use the SDK not-installed status:\n%s", output)
+		Expect(output).To(ContainSubstring("not installed: " + packageName))
+	})
 })
 
 // dpkgInstalled checks dpkg's status for pkg and runs the installed command.
