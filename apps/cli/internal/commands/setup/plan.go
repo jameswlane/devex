@@ -80,6 +80,9 @@ func planApps(plan []planItem) []types.CrossPlatformApp {
 // installedAppsCheck is replaced in tests.
 var installedAppsCheck = tui.InstalledApps
 
+// preparePackageBatch shares the TUI's batched package transactions; tests replace it.
+var preparePackageBatch = tui.PreparePackageBatch
+
 // refreshInstalledApps records which planned apps are already installed so the
 // Confirmation screen can show them as skipped, matching what the installer does.
 func (m *SetupModel) refreshInstalledApps() {

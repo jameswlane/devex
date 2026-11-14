@@ -206,26 +206,10 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 		return err
 	}
 	// Use the regular installer system for non-interactive mode
-	var errors []string
-	outcomes := model.installation.outcomeRecorder()
 	model.beginSystemUndo()
-	for _, app := range apps {
-		if model.selections.alreadyInstalled[app.Name] {
-			outcomes.Record(app.Name, tui.OutcomeSkipped, nil)
-			continue
-		}
-		if err := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
-			return err
-		}
-		if err := installers.InstallCrossPlatformApp(ctx, app, settings, repo); err != nil {
-			if authErr := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); authErr != nil {
-				return authErr
-			}
-			outcomes.Record(app.Name, tui.OutcomeFailed, err)
-			errors = append(errors, fmt.Sprintf("failed to install %s: %v", app.Name, err))
-			continue
-		}
-		outcomes.Record(app.Name, tui.OutcomeInstalled, nil)
+	errors, err := installAutomatedApps(ctx, apps, model.selections.alreadyInstalled, model.installation.outcomeRecorder(), settings, repo)
+	if err != nil {
+		return err
 	}
 
 	for _, failure := range errors {
@@ -246,6 +230,53 @@ func RunAutomatedSetup(ctx context.Context, repo types.Repository, settings conf
 	model.logCompletion()
 
 	return model.CompletionError()
+}
+
+// installAutomatedApp installs one app after the batch; tests replace it.
+var installAutomatedApp = installers.InstallCrossPlatformApp
+
+// installAutomatedApps installs the planned apps with the TUI's shared package
+// batch, then runs each app's own lifecycle. It returns per-app failures and
+// stops only for cancellation or lost sudo authorization.
+func installAutomatedApps(ctx context.Context, apps []types.CrossPlatformApp, alreadyInstalled map[string]bool, outcomes *tui.OutcomeRecorder, settings config.CrossPlatformSettings, repo types.Repository) ([]string, error) {
+	var pending []types.CrossPlatformApp
+	for _, app := range apps {
+		if !alreadyInstalled[app.Name] {
+			pending = append(pending, app)
+		}
+	}
+	batch, batchErr := preparePackageBatch(ctx, pending, repo, settings)
+	if batchErr != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		// Each app reports its own failure when it installs on its own.
+		log.Warn("Batch package preparation failed; installing apps one at a time", "error", batchErr)
+	}
+	var failures []string
+	for _, app := range apps {
+		if alreadyInstalled[app.Name] || batch.Preinstalled[app.Name] {
+			outcomes.Record(app.Name, tui.OutcomeSkipped, nil)
+			continue
+		}
+		if err := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); err != nil {
+			return nil, err
+		}
+		appCtx := ctx
+		if batch.BatchInstalled[app.Name] {
+			appCtx = installers.WithPackagesInstalled(ctx, app.Name)
+		}
+		if err := installAutomatedApp(appCtx, app, settings, repo); err != nil {
+			if authErr := tui.AuthorizeInstallation(ctx, []types.CrossPlatformApp{app}, false); authErr != nil {
+				return nil, authErr
+			}
+			outcomes.Record(app.Name, tui.OutcomeFailed, err)
+			failures = append(failures, fmt.Sprintf("failed to install %s: %v", app.Name, err))
+			continue
+		}
+		outcomes.Record(app.Name, tui.OutcomeInstalled, nil)
+	}
+	return failures, nil
 }
 
 // ConfigureAutomatedGit applies requested Git identity after an explicit application

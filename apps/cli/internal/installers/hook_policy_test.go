@@ -48,4 +48,14 @@ var _ = Describe("Noninteractive hook policy", func() {
 		Expect(err).To(MatchError(ContainSubstring("not supported")))
 		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", script}}}))
 	})
+
+	It("skips only the install step for packages a batch already installed", func() {
+		app := types.AppConfig{BaseConfig: types.BaseConfig{Name: "example"}, InstallMethod: "unsupported-test-method", PostInstall: []types.InstallCommand{{Shell: "echo configured"}}}
+		Expect(InstallApp(context.Background(), app, config.CrossPlatformSettings{}, nil)).To(MatchError(ContainSubstring("not supported")))
+		Expect(recorder.Calls("bash")).To(BeEmpty())
+
+		Expect(InstallApp(WithPackagesInstalled(context.Background(), "example"), app, config.CrossPlatformSettings{}, nil)).To(Succeed())
+		Expect(recorder.Calls("bash")).To(Equal([]sdktest.Call{{Args: []string{"-c", "echo configured"}}}))
+		Expect(PackagesInstalled(WithPackagesInstalled(context.Background(), "other"), "example")).To(BeFalse())
+	})
 })

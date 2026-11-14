@@ -267,6 +267,20 @@ func executeInstallCommand(ctx context.Context, app types.AppConfig, repo types.
 	return installer.Install(app.InstallCommand, repo)
 }
 
+type packagesInstalledKey struct{}
+
+// WithPackagesInstalled marks an app whose packages a shared batch transaction
+// already installed, so InstallApp skips only its install step.
+func WithPackagesInstalled(ctx context.Context, appName string) context.Context {
+	return context.WithValue(ctx, packagesInstalledKey{}, appName)
+}
+
+// PackagesInstalled reports whether WithPackagesInstalled marked this app.
+func PackagesInstalled(ctx context.Context, appName string) bool {
+	name, ok := ctx.Value(packagesInstalledKey{}).(string)
+	return ok && name == appName
+}
+
 // InstallCrossPlatformApp installs a cross-platform application using the appropriate OS-specific configuration
 func InstallCrossPlatformApp(ctx context.Context, app types.CrossPlatformApp, settings config.CrossPlatformSettings, repo types.Repository) (result error) {
 	ctx, finishAudit := state.BeginApplication(ctx, app.Name, "plain", app)
@@ -339,7 +353,13 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	}
 
 	// Execute the actual install command
-	if err := state.AuditStep(ctx, "install", true, func() error { return executeInstallCommand(ctx, app, repo) }); err != nil {
+	if err := state.AuditStep(ctx, "install", true, func() error {
+		if PackagesInstalled(ctx, app.Name) {
+			log.Info("Packages were installed in the batch transaction", "app", app.Name)
+			return nil
+		}
+		return executeInstallCommand(ctx, app, repo)
+	}); err != nil {
 		return fmt.Errorf("failed to execute install command: %w", err)
 	}
 
