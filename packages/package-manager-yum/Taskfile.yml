@@ -1,0 +1,32 @@
+version: '3'
+vars:
+  PLUGIN_NAME: devex-plugin-package-manager-yum
+  BUILD_PLATFORMS: >-
+    linux/amd64 linux/arm64
+includes:
+  plugin:
+    taskfile: ../Taskfile.plugin.yml
+    flatten: true
+tasks:
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v ./...
+  lint:
+    desc: Run linters
+    cmds:
+      - golangci-lint run
+  install:local:
+    vars:
+      PLUGIN_DIR:
+        sh: go -C ../plugin-sdk run ./cmd/plugin-path
+    desc: Install plugin locally for testing
+    cmds:
+      - task: build
+      - mkdir -p "{{.PLUGIN_DIR}}"
+      - cp dist/{{.PLUGIN_NAME}}-{{OS}}-{{ARCH}}* "{{.PLUGIN_DIR}}"/{{.PLUGIN_NAME}}
+      - chmod +x "{{.PLUGIN_DIR}}"/{{.PLUGIN_NAME}}
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf dist/

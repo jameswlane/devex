@@ -1,0 +1,47 @@
+{
+	"name": "@devex/package-manager-yum",
+	"private": true,
+	"version": "0.1.0",
+	"description": "YUM plugin for DevEx CLI",
+	"main": "main.go",
+	"scripts": {
+		"build": "go build -o devex-plugin-package-manager-yum .",
+		"dev": "go build -race -o devex-plugin-package-manager-yum .",
+		"test": "go test ./...",
+		"lint": "golangci-lint run --allow-parallel-runners",
+		"download": "go mod download",
+		"mod": "go mod tidy"
+	},
+	"keywords": [
+		"yum",
+		"rhel",
+		"centos",
+		"linux"
+	],
+	"author": "DevEx Team",
+	"license": "Apache-2.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/jameswlane/devex",
+		"directory": "packages/package-manager-yum"
+	},
+	"devex": {
+		"plugin": {
+			"type": "package-manager",
+			"platforms": [
+				"linux"
+			],
+			"dependencies": [
+				"yum"
+			],
+			"priority": 95,
+			"supports": {
+				"install": true,
+				"remove": true,
+				"update": true,
+				"search": true,
+				"list": true
+			}
+		}
+	}
+}

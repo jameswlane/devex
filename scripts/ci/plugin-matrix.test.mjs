@@ -143,6 +143,7 @@ describe("command line", () => {
 			"package-manager-dnf",
 			"package-manager-snap",
 			"package-manager-yay",
+			"package-manager-yum",
 		]) {
 			assert.ok(selected.includes(plugin), `${plugin} is selected`);
 		}

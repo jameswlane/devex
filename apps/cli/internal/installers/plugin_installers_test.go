@@ -43,7 +43,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Expect(executor.name).To(Equal("package-manager-" + method))
 		Expect(executor.args).To(Equal([]string{"is-installed", "git", "curl"}))
 		Expect(executor.ctx.Done()).To(Equal(ctx.Done()))
-	}, Entry("APT", "apt"), Entry("DNF", "dnf"))
+	}, Entry("APT", "apt"), Entry("DNF", "dnf"), Entry("YUM", "yum"))
 
 	DescribeTable("preserves plugin discovery errors for package-specific probes",
 		func(method, operation string) {
@@ -59,6 +59,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		},
 		Entry("apt probe", "apt", "is-installed"),
 		Entry("dnf probe", "dnf", "is-installed"),
+		Entry("yum probe", "yum", "is-installed"),
 		Entry("flatpak probe", "flatpak", "is-installed"),
 		Entry("pip probe", "pip", "is-installed"),
 	)
@@ -76,6 +77,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("apt", "apt"),
 		Entry("deb", "deb"),
 		Entry("dnf", "dnf"),
+		Entry("yum", "yum"),
 		Entry("flatpak", "flatpak"),
 		Entry("mise", "mise"),
 		Entry("pip", "pip"),

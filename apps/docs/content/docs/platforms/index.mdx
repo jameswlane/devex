@@ -27,6 +27,7 @@ and root CLI help together when support changes.
 | --- | --- | --- | --- |
 | Debian / Ubuntu | APT | stable | [Plugin and tests](https://github.com/jameswlane/devex/tree/main/packages/package-manager-apt), [container coverage](https://github.com/jameswlane/devex/tree/main/apps/cli/test/e2e) |
 | Fedora / RHEL family | DNF | experimental | [Implementation](https://github.com/jameswlane/devex/tree/main/packages/package-manager-dnf), [lifecycle coverage #121](https://github.com/jameswlane/devex/issues/121) |
+| Legacy RHEL / CentOS 7, RHEL 8+ yum alias | YUM | experimental | [Implementation and smoke procedure](https://github.com/jameswlane/devex/tree/main/packages/package-manager-yum) |
 | Arch family | Pacman, Yay | experimental | [Pacman implementation #106](https://github.com/jameswlane/devex/issues/106), [lifecycle coverage #122](https://github.com/jameswlane/devex/issues/122), [Yay #107](https://github.com/jameswlane/devex/issues/107) |
 | openSUSE | Zypper | experimental | [Operations #108](https://github.com/jameswlane/devex/issues/108), [lifecycle coverage #123](https://github.com/jameswlane/devex/issues/123) |
 | Alpine, Gentoo, Void, Solus, Nix | APK, Emerge, XBPS, Eopkg, Nixpkgs, Nixflake | experimental | [Native command audit #187](https://github.com/jameswlane/devex/issues/187) |
@@ -39,7 +40,6 @@ and root CLI help together when support changes.
 | Windows native | winget | planned | [Plugin #111](https://github.com/jameswlane/devex/issues/111) |
 | Windows native | Chocolatey | planned | [Plugin #112](https://github.com/jameswlane/devex/issues/112) |
 | Windows native | Scoop | planned | [Plugin #113](https://github.com/jameswlane/devex/issues/113) |
-| Legacy RHEL | YUM | planned | [Plugin #104](https://github.com/jameswlane/devex/issues/104) |
 
 These levels describe DevEx integration, not the upstream package manager's
 quality. Native command tests do not establish support for every OS release,
