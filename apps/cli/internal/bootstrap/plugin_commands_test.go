@@ -194,6 +194,7 @@ var _ = Describe("Registered plugin commands", func() {
 		Expect(os.WriteFile(recordPath, []byte("original record"), 0o600)).To(Succeed())
 		Expect(execute(context.Background(), "--dry-run", "update", "recorder")).To(Succeed())
 		Expect(stdout.String()).To(ContainSubstring("Would update recorder from 1.0.0 to 2.0.0"))
+		Expect(stdout.String()).To(ContainSubstring("Checksum: " + checksum))
 		Expect(stdout.String()).To(ContainSubstring("Path: " + path))
 		data, err := os.ReadFile(path)
 		Expect(err).NotTo(HaveOccurred())

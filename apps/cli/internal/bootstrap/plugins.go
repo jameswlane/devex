@@ -628,17 +628,12 @@ func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string)
 		return err
 	}
 	if viper.GetBool("dry-run") {
-		metadata, err := b.downloader.FetchPluginMetadata(cmd.Context(), args[0])
+		version, checksum, err := b.previewPluginDownload(cmd, args[0])
 		if err != nil {
 			return fmt.Errorf("preview install plugin %s: %w", args[0], err)
 		}
-		platformKey := runtime.GOOS + "-" + runtime.GOARCH
-		binary, ok := metadata.Binaries[platformKey]
-		if !ok {
-			return fmt.Errorf("plugin %s not available for platform %s", args[0], platformKey)
-		}
 		path := filepath.Join(b.manager.GetPluginDir(), "devex-plugin-"+args[0])
-		cmd.Printf("Would install %s %s\nChecksum: %s\nPath: %s\n", args[0], metadata.Version, binary.Checksum, path)
+		cmd.Printf("Would install %s %s\nChecksum: %s\nPath: %s\n", args[0], version, checksum, path)
 		return nil
 	}
 	if err := b.downloader.DownloadValidatedPluginWithContext(cmd.Context(), args[0]); err != nil {
@@ -649,6 +644,21 @@ func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string)
 	}
 	cmd.Printf("Plugin %s installed successfully. Run 'devex plugin info %s' for commands.\n", args[0], args[0])
 	return nil
+}
+
+// previewPluginDownload returns the version and checksum a download would
+// install for this platform, without downloading.
+func (b *PluginBootstrap) previewPluginDownload(cmd *cobra.Command, name string) (string, string, error) {
+	metadata, err := b.downloader.FetchPluginMetadata(cmd.Context(), name)
+	if err != nil {
+		return "", "", err
+	}
+	platformKey := runtime.GOOS + "-" + runtime.GOARCH
+	binary, ok := metadata.Binaries[platformKey]
+	if !ok {
+		return "", "", fmt.Errorf("plugin %s not available for platform %s", name, platformKey)
+	}
+	return metadata.Version, binary.Checksum, nil
 }
 
 func (b *PluginBootstrap) installed(cmd *cobra.Command, name string) (sdk.PluginMetadata, error) {
@@ -742,12 +752,12 @@ func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string)
 			return err
 		}
 		if dryRun {
-			metadata, err := b.downloader.FetchPluginMetadata(cmd.Context(), name)
+			version, checksum, err := b.previewPluginDownload(cmd, name)
 			if err != nil {
 				failures = append(failures, fmt.Errorf("preview update plugin %s: %w", name, err))
 				continue
 			}
-			cmd.Printf("Would update %s from %s to %s\nPath: %s\n", name, plugins[name].Version, metadata.Version, plugins[name].Path)
+			cmd.Printf("Would update %s from %s to %s\nChecksum: %s\nPath: %s\n", name, plugins[name].Version, version, checksum, plugins[name].Path)
 			continue
 		}
 		if err := b.downloader.DownloadValidatedPluginWithContext(cmd.Context(), name); err != nil {
