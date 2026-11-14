@@ -1,0 +1,137 @@
+name: Setup benchmark
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_ref:
+        description: 'Pre-batching ref (defaults to the parent of d0b8355 / PR #278)'
+        required: true
+        type: string
+        default: '6178f6de3e037f4e3c6692999e3e314628f44db3'
+      candidate_ref:
+        description: 'Candidate ref'
+        required: true
+        type: string
+        default: 'main'
+      runs:
+        description: 'Runs per variant (1-5)'
+        required: true
+        type: number
+        default: 3
+permissions:
+  actions: read
+  contents: read
+jobs:
+  validate:
+    name: Validate inputs
+    runs-on: ubuntu-24.04
+    outputs:
+      baseline_sha: ${{ steps.resolve.outputs.baseline_sha }}
+      candidate_sha: ${{ steps.resolve.outputs.candidate_sha }}
+    steps:
+      - name: Check run count
+        env:
+          RUNS: ${{ inputs.runs }}
+        run: |
+          if [[ ! "$RUNS" =~ ^[1-5]$ ]]; then
+            echo "runs must be an integer from 1 through 5; got $RUNS" >&2
+            exit 1
+          fi
+      - name: Resolve refs once so every run measures the same commits
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+          CANDIDATE_REF: ${{ inputs.candidate_ref }}
+        run: |
+          baseline_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASELINE_REF" --jq .sha)
+          candidate_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CANDIDATE_REF" --jq .sha)
+          for sha in "$baseline_sha" "$candidate_sha"; do
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "could not resolve benchmark refs: baseline=$BASELINE_REF candidate=$CANDIDATE_REF" >&2
+              exit 1
+            fi
+          done
+          echo "baseline_sha=$baseline_sha" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha=$candidate_sha" >> "$GITHUB_OUTPUT"
+  benchmark:
+    name: ${{ matrix.variant }} / run ${{ matrix.run }}
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # Older baseline refs can exit nonzero on since-fixed bugs; the summary reports them.
+    continue-on-error: ${{ matrix.variant == 'baseline' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [baseline, candidate]
+        run: ${{ fromJSON(inputs.runs == 1 && '[1]' || inputs.runs == 2 && '[1,2]' || inputs.runs == 3 && '[1,2,3]' || inputs.runs == 4 && '[1,2,3,4]' || '[1,2,3,4,5]') }}
+    steps:
+      - name: Checkout benchmark tooling
+        # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          path: tooling
+      - name: Checkout measured ref
+        # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.variant == 'baseline' && needs.validate.outputs.baseline_sha || needs.validate.outputs.candidate_sha }}
+          path: source
+      - name: Set up Go
+        # v7.0.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: source/apps/cli/go.mod
+          cache-dependency-path: source/apps/cli/go.sum
+      - name: Build CLI (not timed)
+        working-directory: source/apps/cli
+        run: go build -trimpath -o "$RUNNER_TEMP/devex" ./cmd/main.go
+      - name: Record resolved revision
+        run: echo "RESOLVED_REVISION=$(git -C source rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Seed the shipped default configuration (not timed)
+        # Older refs (e.g. the pre-#278 baseline) read defaults only from disk
+        # and select no apps on a fresh machine. Seed both variants alike.
+        run: |
+          mkdir -p "$HOME/.local/share/devex/config"
+          cp -R source/apps/cli/config/. "$HOME/.local/share/devex/config/"
+      - name: Time default application installation
+        env:
+          BENCHMARK_REF: ${{ matrix.variant == 'baseline' && inputs.baseline_ref || inputs.candidate_ref }}
+          BENCHMARK_RUN: ${{ matrix.run }}
+          BENCHMARK_VARIANT: ${{ matrix.variant }}
+        run: |
+          "$GITHUB_WORKSPACE/tooling/apps/cli/scripts/setup-benchmark.sh" run \
+            "$RUNNER_TEMP/devex" "$BENCHMARK_VARIANT" "$BENCHMARK_RUN" \
+            "$BENCHMARK_REF" "$RESOLVED_REVISION" \
+            "$GITHUB_WORKSPACE/artifacts/$BENCHMARK_VARIANT-$BENCHMARK_RUN"
+      - name: Upload benchmark result and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: setup-benchmark-${{ matrix.variant }}-${{ matrix.run }}
+          path: artifacts/${{ matrix.variant }}-${{ matrix.run }}/
+          if-no-files-found: warn
+  summarize:
+    name: Aggregate benchmark report
+    needs: benchmark
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout benchmark tooling
+        # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - name: Download all benchmark results
+        uses: actions/download-artifact@v7
+        with:
+          pattern: setup-benchmark-*
+          path: artifacts
+      - name: Write step summary
+        env:
+          EXPECTED_RUNS: ${{ inputs.runs }}
+        run: ./apps/cli/scripts/setup-benchmark.sh summarize artifacts "$EXPECTED_RUNS" >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail if a benchmark job failed
+        if: needs.benchmark.result != 'success'
+        run: exit 1
