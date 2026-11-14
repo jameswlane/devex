@@ -29,6 +29,11 @@ func PreparePackageBatch(ctx context.Context, apps []types.CrossPlatformApp, rep
 		switch method := app.GetOSConfig().InstallMethod; method {
 		case "apt", "mise", "flatpak":
 			if !installers.IsInstallerSupported(ctx, method) {
+				cfg := app.GetOSConfig()
+				// Its hooks or dependencies still order the run, so batch nothing.
+				if len(cfg.Dependencies)+len(cfg.Conflicts)+len(cfg.PreInstall)+len(cfg.ConfigFiles)+len(cfg.Themes) > 0 {
+					return PackageBatch{}, nil
+				}
 				continue
 			}
 		}

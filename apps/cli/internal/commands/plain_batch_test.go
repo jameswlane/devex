@@ -99,4 +99,17 @@ var _ = Describe("Plain install package batching", func() {
 		Expect(recorder.Calls("apt-get")).To(BeEmpty())
 		Expect(output.String()).To(Equal("installing jq...\nfailed jq: required plugin package-manager-apt is unavailable\ninstalled 0 of 1 applications\n"))
 	})
+
+	It("batches nothing when an app without its plugin has a pre-install hook", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query")
+		preparePackageBatch = tui.PreparePackageBatch
+		// Test mode reports apt, but not mise, as available.
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
+		tool := types.CrossPlatformApp{Name: "tool", Description: "tool test app", Category: "Development", AllPlatforms: types.OSConfig{InstallMethod: "mise", InstallCommand: "node", PreInstall: []types.InstallCommand{{Shell: "true"}}}}
+		batch, err := preparePackageBatch(context.Background(), []types.CrossPlatformApp{tool, aptApp("bat", "bat")}, mocks.NewMockRepository(), config.CrossPlatformSettings{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(batch.BatchInstalled).To(BeEmpty())
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
+	})
 })
