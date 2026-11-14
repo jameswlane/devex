@@ -180,7 +180,10 @@ func collectRegistryPages(first []byte, fetchPage func(page int) ([]byte, error)
 		return nil, nil, fmt.Errorf("failed to parse registry response: %w", err)
 	}
 	plugins := resp.pluginMap()
-	totalPages := min(resp.Pagination.TotalPages, maxRegistryPages)
+	totalPages := resp.Pagination.TotalPages
+	if totalPages > maxRegistryPages {
+		return nil, nil, fmt.Errorf("registry listing has %d pages, more than the %d this SDK reads", totalPages, maxRegistryPages)
+	}
 	for page := 2; page <= totalPages; page++ {
 		body, err := fetchPage(page)
 		if err != nil {

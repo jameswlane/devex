@@ -101,6 +101,20 @@ var _ = Describe("Downloader registry listing", func() {
 		Expect(pages).To(Equal([]string{"1", "2"}))
 	})
 
+	It("rejects a listing with more pages than it reads instead of truncating it", func() {
+		requests := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			requests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, registryPage(1, 101, "tool-git"))
+		}))
+		defer server.Close()
+
+		_, err := newDownloader(server.URL).GetAvailablePlugins(context.Background())
+		Expect(err).To(MatchError(ContainSubstring("registry listing has 101 pages")))
+		Expect(requests).To(Equal(1))
+	})
+
 	DescribeTable("reports a listing without plugins as an error",
 		func(body string) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
