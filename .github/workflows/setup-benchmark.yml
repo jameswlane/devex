@@ -24,6 +24,9 @@ jobs:
   validate:
     name: Validate inputs
     runs-on: ubuntu-24.04
+    outputs:
+      baseline_sha: ${{ steps.resolve.outputs.baseline_sha }}
+      candidate_sha: ${{ steps.resolve.outputs.candidate_sha }}
     steps:
       - name: Check run count
         env:
@@ -33,6 +36,15 @@ jobs:
             echo "runs must be an integer from 1 through 5; got $RUNS" >&2
             exit 1
           fi
+      - name: Resolve refs once so every run measures the same commits
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_REF: ${{ inputs.baseline_ref }}
+          CANDIDATE_REF: ${{ inputs.candidate_ref }}
+        run: |
+          echo "baseline_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASELINE_REF" --jq .sha)" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CANDIDATE_REF" --jq .sha)" >> "$GITHUB_OUTPUT"
   benchmark:
     name: ${{ matrix.variant }} / run ${{ matrix.run }}
     needs: validate
@@ -54,7 +66,7 @@ jobs:
         # v7.0.1
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ matrix.variant == 'baseline' && inputs.baseline_ref || inputs.candidate_ref }}
+          ref: ${{ matrix.variant == 'baseline' && needs.validate.outputs.baseline_sha || needs.validate.outputs.candidate_sha }}
           path: source
       - name: Set up Go
         # v7.0.0
@@ -67,6 +79,12 @@ jobs:
         run: go build -trimpath -o "$RUNNER_TEMP/devex" ./cmd/main.go
       - name: Record resolved revision
         run: echo "RESOLVED_REVISION=$(git -C source rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Seed the shipped default configuration (not timed)
+        # Older refs (e.g. the pre-#278 baseline) read defaults only from disk
+        # and select no apps on a fresh machine. Seed both variants alike.
+        run: |
+          mkdir -p "$HOME/.local/share/devex/config"
+          cp -R source/apps/cli/config/. "$HOME/.local/share/devex/config/"
       - name: Time default application installation
         env:
           BENCHMARK_REF: ${{ matrix.variant == 'baseline' && inputs.baseline_ref || inputs.candidate_ref }}

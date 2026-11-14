@@ -65,9 +65,14 @@ CLI's non-interactive mode:
   planner, so neither is a valid candidate timing for this issue.
 
 The install command has no confirmation screen, so the pseudo-terminal does not
-require scripted keystrokes or alter the selected apps. The baseline supports
-the identical invocation and reaches its pre-batching `StartInstallation`
-implementation. Timing includes CLI startup, plugin/catalog loading, installation,
+require scripted keystrokes or alter the selected apps. `script` gives the child
+a 0x0 terminal, so the runner sets 40 rows by 120 columns before starting the TUI.
+Before the timer starts, both variants get the ref's shipped `apps/cli/config`
+tree copied to `~/.local/share/devex/config`. The baseline reads defaults only
+from there and otherwise selects no apps on a fresh machine. Seeded, both refs
+select the same default set and reach their own `StartInstallation`. Each
+requested ref is resolved to one commit in the validate job, so all runs of a
+variant measure the same revision. Timing includes CLI startup, plugin/catalog loading, installation,
 and command finalization; it ends when the install command exits.
 
 The app list is not hard-coded in the benchmark. At the time of writing, the
@@ -88,7 +93,8 @@ The final **Aggregate benchmark report** job writes a step summary containing:
 - every baseline and candidate run's wall-clock seconds, APT update/install
   counts, and exit code;
 - the median time for each variant; and
-- `PASS` only when the candidate median is strictly under 300 seconds.
+- `PASS` only when the candidate median is strictly under 300 seconds, and
+  `INVALID` instead of a target result when any run's installation failed.
 
 A missed target is reported as `FAIL` in the table but does not fail the workflow.
 The workflow fails only for broken inputs, builds, installations, instrumentation,

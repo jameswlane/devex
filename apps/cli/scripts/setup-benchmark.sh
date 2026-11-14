@@ -51,10 +51,12 @@ for argument in "$@"; do
 	fi
 	previous=$argument
 done
-exec /usr/bin/sudo "$@"
+exec /usr/bin/sudo --preserve-env=DEBIAN_FRONTEND "$@"
 SH
 	cat > "$runner" <<'SH'
 #!/usr/bin/env bash
+# script(1) gives the child a 0x0 terminal; set a realistic size for the TUI.
+stty rows 40 cols 120
 exec env -u CI -u GITHUB_ACTIONS -u GITLAB_CI -u DEVEX_NONINTERACTIVE -u DEVEX_NON_INTERACTIVE \
 	TERM=xterm-256color DEBIAN_FRONTEND=noninteractive "$DEVEX_BENCHMARK_BINARY" install
 SH
@@ -214,20 +216,29 @@ for key in sorted(expected):
     result = results[key]
     print(f"| {key[0]} | {key[1]} | {result['wall_clock_seconds']:.3f} | {result['apt_get_update_count']} | {result['apt_get_install_count']} | {result['exit_code']} |")
 
+failed = [key for key in sorted(expected) if results[key]['exit_code'] != 0]
+
 print()
 print('| Variant | Runs | Median wall time (s) | Under 5 minutes |')
 print('| --- | ---: | ---: | --- |')
 medians = {}
 for variant in ('baseline', 'candidate'):
     medians[variant] = statistics.median(results[(variant, run)]['wall_clock_seconds'] for run in range(1, expected_runs + 1))
-    target = 'PASS' if variant == 'candidate' and medians[variant] < 300 else 'FAIL' if variant == 'candidate' else 'n/a'
+    if variant != 'candidate':
+        target = 'n/a'
+    elif failed:
+        target = 'INVALID'
+    else:
+        target = 'PASS' if medians[variant] < 300 else 'FAIL'
     print(f'| {variant} | {expected_runs} | {medians[variant]:.3f} | {target} |')
 print()
-print(f"Candidate median target result: **{'PASS' if medians['candidate'] < 300 else 'FAIL'}** (target is strictly under 300 seconds; report only).")
+if failed:
+    print(f'Candidate median target result: **INVALID** (installation failed for {failed}; timings above are diagnostic only).')
+else:
+    print(f"Candidate median target result: **{'PASS' if medians['candidate'] < 300 else 'FAIL'}** (target is strictly under 300 seconds; report only).")
 print()
 print('Per-run revisions, OS/CPU/RAM, apt mirror URLs, and the measured command are in each artifact\'s `result.json`. The DevEx and console logs accompany it.')
 
-failed = [key for key in sorted(expected) if results[key]['exit_code'] != 0]
 if failed:
     print(f'Benchmark installation failed for: {failed}', file=sys.stderr)
     raise SystemExit(1)
