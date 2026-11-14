@@ -231,8 +231,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 
 		// Update viewport size (70% width, most of height)
-		m.viewport.Width = int(float64(msg.Width)*0.7) - 4
-		m.viewport.Height = msg.Height - 4
+		m.viewport.Width = max(int(float64(msg.Width)*0.7)-4, m.viewport.Style.GetHorizontalFrameSize())
+		m.viewport.Height = max(msg.Height-4, m.viewport.Style.GetVerticalFrameSize())
 
 		m.ready = true
 		return m, nil
