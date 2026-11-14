@@ -16,12 +16,17 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/bootstrap"
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
+	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
 var installApplication = installers.InstallCrossPlatformApp
 var prepareApplicationInstallers = initializeApplicationInstallers
+
+// preparePackageBatch shares the TUI's batched package transactions; tests replace it.
+var preparePackageBatch = tui.PreparePackageBatch
 
 // Query the native manager rather than trusting a potentially stale tracking row.
 var nativeApplicationInstalled = func(ctx context.Context, app types.CrossPlatformApp) (bool, error) {
@@ -78,6 +83,15 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 	if len(apps) > 0 {
 		bootstrapErr = prepareApplicationInstallers(ctx, provider)
 	}
+	var batch tui.PackageBatch
+	if bootstrapErr == nil && ctx.Err() == nil && len(apps) > 0 {
+		var batchErr error
+		batch, batchErr = preparePackageBatch(ctx, apps, repo, settings)
+		if batchErr != nil && ctx.Err() == nil {
+			// Each app reports its own failure when it installs on its own.
+			log.Warn("Batch package preparation failed; installing apps one at a time", "error", batchErr)
+		}
+	}
 	installed := 0
 	var failures []string
 	var mu sync.Mutex
@@ -91,7 +105,18 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 			defer mu.Unlock()
 			result = errors.Join(result, recordErr)
 		}
-		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) {
+		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) && batch.Preinstalled[app.Name] {
+			_ = state.AuditStep(appCtx, "installation", false, func() error { return nil })
+			finishAudit(nil)
+			printLine("skipped %s (already installed)\n", app.Name)
+			observe(app.Name, "skipped", nil)
+			return nil
+		}
+		if batch.BatchInstalled[app.Name] {
+			appCtx = installers.WithPackagesInstalled(appCtx, app.Name)
+		}
+		// The batch just installed these packages, so a native check would wrongly skip the lifecycle.
+		if bootstrapErr == nil && ctx.Err() == nil && !state.IsResuming(ctx) && !batch.BatchInstalled[app.Name] {
 			if existing, lookupErr := repo.GetApp(app.Name); lookupErr == nil && existing != nil {
 				present, queryErr := nativeApplicationInstalled(appCtx, app)
 				if queryErr != nil {
