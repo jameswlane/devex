@@ -31,7 +31,7 @@ var _ = Describe("Registered plugin commands", func() {
 	var checksum string
 	var requests []string
 	var stdout, stderr bytes.Buffer
-	var execute func(context.Context, ...string) error
+	var execute, executeRoot func(context.Context, ...string) error
 
 	script := func(name, version string) []byte {
 		info, err := json.Marshal(sdk.PluginInfo{Name: name, Version: version, Description: "recorder", Commands: []sdk.PluginCommand{{Name: "record"}, {Name: "fail"}, {Name: "wait"}}})
@@ -85,15 +85,18 @@ var _ = Describe("Registered plugin commands", func() {
 		GinkgoT().Setenv("DEVEX_PLUGIN_REGISTRY_URL", registry.URL)
 		stdout.Reset()
 		stderr.Reset()
-		execute = func(ctx context.Context, args ...string) error {
+		executeRoot = func(ctx context.Context, args ...string) error {
 			stdout.Reset()
 			stderr.Reset()
 			root := commands.NewRootCmd("test", nil, config.CrossPlatformSettings{})
 			root.SetIn(strings.NewReader("input\n"))
 			root.SetOut(&stdout)
 			root.SetErr(&stderr)
-			root.SetArgs(append([]string{"plugin"}, args...))
+			root.SetArgs(args)
 			return root.ExecuteContext(ctx)
+		}
+		execute = func(ctx context.Context, args ...string) error {
+			return executeRoot(ctx, append([]string{"plugin"}, args...)...)
 		}
 	})
 
@@ -155,6 +158,64 @@ var _ = Describe("Registered plugin commands", func() {
 		Expect(execute(context.Background(), "install", "recorder")).To(Succeed())
 		Expect(filepath.Join(dir, "devex-plugin-recorder")).To(BeAnExistingFile())
 		Expect(filepath.Join(dir, ".devex-plugin-recorder.install.json")).To(BeAnExistingFile())
+	})
+	It("previews installs under dry-run without downloading or writing files", func() {
+		binaryPath := filepath.Join(dir, "devex-plugin-recorder")
+		recordPath := filepath.Join(dir, ".devex-plugin-recorder.install.json")
+		for _, args := range [][]string{{"--dry-run", "install", "recorder"}, {"install", "recorder", "--dry-run"}} {
+			Expect(execute(context.Background(), args...)).To(Succeed())
+			Expect(stdout.String()).To(ContainSubstring("Would install recorder 2.0.0"))
+			Expect(stdout.String()).To(ContainSubstring("Checksum: " + checksum))
+			Expect(stdout.String()).To(ContainSubstring("Path: " + binaryPath))
+			Expect(binaryPath).NotTo(BeAnExistingFile())
+			Expect(recordPath).NotTo(BeAnExistingFile())
+		}
+		Expect(requests).NotTo(ContainElement(ContainSubstring("/binary")))
+		Expect(requests).NotTo(ContainElement(ContainSubstring("/download/")))
+	})
+	It("previews removal under dry-run without deleting the binary or install record", func() {
+		path := install("recorder", "1.0.0")
+		recordPath := filepath.Join(dir, ".devex-plugin-recorder.install.json")
+		Expect(os.WriteFile(recordPath, []byte("original record"), 0o600)).To(Succeed())
+		Expect(execute(context.Background(), "--dry-run", "remove", "recorder")).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring("Would remove recorder"))
+		Expect(stdout.String()).To(ContainSubstring("Binary: " + path))
+		Expect(stdout.String()).To(ContainSubstring("Install record: " + recordPath))
+		Expect(stdout.String()).To(ContainSubstring("Commands that would stop working: devex plugin run recorder {record, fail, wait}"))
+		Expect(path).To(BeAnExistingFile())
+		Expect(recordPath).To(BeAnExistingFile())
+		data, err := os.ReadFile(recordPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(data)).To(Equal("original record"))
+	})
+	It("previews updates under dry-run without replacing files or downloading binaries", func() {
+		path := install("recorder", "1.0.0")
+		recordPath := filepath.Join(dir, ".devex-plugin-recorder.install.json")
+		Expect(os.WriteFile(recordPath, []byte("original record"), 0o600)).To(Succeed())
+		Expect(execute(context.Background(), "--dry-run", "update", "recorder")).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring("Would update recorder from 1.0.0 to 2.0.0"))
+		Expect(stdout.String()).To(ContainSubstring("Checksum: " + checksum))
+		Expect(stdout.String()).To(ContainSubstring("Path: " + path))
+		data, err := os.ReadFile(path)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(data).To(Equal(script("recorder", "1.0.0")))
+		data, err = os.ReadFile(recordPath)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(string(data)).To(Equal("original record"))
+		Expect(requests).NotTo(ContainElement(ContainSubstring("/binary")))
+		Expect(requests).NotTo(ContainElement(ContainSubstring("/download/")))
+	})
+	It("applies global flags before plugin run and forwards the remaining arguments unchanged", func() {
+		install("recorder", "1.0.0")
+		Expect(executeRoot(context.Background(), "--verbose", "plugin", "run", "recorder", "record", "--literal", "two words", "--", "-x")).To(Succeed())
+		Expect(viper.GetBool("verbose")).To(BeTrue())
+		Expect(stdout.String()).To(Equal("record\n--literal\ntwo words\n--\n-x\ninput\n"))
+		Expect(requests).To(BeEmpty())
+	})
+	It("shows run help instead of treating --help as a plugin name", func() {
+		Expect(execute(context.Background(), "run", "--help")).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring("run <name> <command> [args...]"))
+		Expect(stderr.String()).NotTo(ContainSubstring("Usage of plugin-run"))
 	})
 	It("updates named plugins and --all and removes binaries with their install records", func() {
 		install("recorder", "1.0.0")
