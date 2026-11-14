@@ -27,7 +27,7 @@ type operationContract struct {
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"testdata/git.rpm"}, nativeArgv: []string{"--install", "testdata/git.rpm"}, elevated: true},
+	{command: "install", args: []string{"testdata/git.rpm"}, nativeArgv: []string{"--install", "--nomanifest", "testdata/git.rpm"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--erase", "git", "vim"}, elevated: true},
 	{command: "list", nativeArgv: []string{"--query", "--all"}},
 	{command: "is-installed", args: []string{"git"}, nativeArgv: []string{"--query", "git"}, env: []string{"LC_ALL=C"}},
@@ -151,7 +151,7 @@ var _ = Describe("RPM command contracts", func() {
 
 	It("explains dependency failures while preserving native stderr", func() {
 		nativeStderr := "error: Failed dependencies:\n\tlibexample.so()(64bit) is needed by git-1.0-1.x86_64\n"
-		recorder.Script("rpm", []string{"--install", "testdata/git.rpm"}, sdktest.Response{ExitCode: 1, Stderr: nativeStderr})
+		recorder.Script("rpm", []string{"--install", "--nomanifest", "testdata/git.rpm"}, sdktest.Response{ExitCode: 1, Stderr: nativeStderr})
 		var err error
 		stderr := captureStderr(func() {
 			err = plugin.Execute("install", []string{"testdata/git.rpm"})

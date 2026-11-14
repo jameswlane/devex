@@ -35,7 +35,7 @@ Low-level RPM operations on package files and the local database. RPM has no rep
 
 | Command | Native command | Privilege |
 | --- | --- | --- |
-| `install` | `rpm --install <files>`; arguments must be existing, regular local `.rpm` files, and dependencies are not resolved | system |
+| `install` | `rpm --install --nomanifest <files>`; arguments must be existing, regular local `.rpm` files (`--nomanifest` stops rpm from reading a non-package file as a manifest of URLs), and dependencies are not resolved | system |
 | `is-installed` | `rpm --query <package>` for each package name; reports missing packages with the SDK's not-installed status | user |
 | `remove` | `rpm --erase <packages>` | system |
 | `update` | Unsupported: rpm has no repositories to refresh | n/a (no native call) |

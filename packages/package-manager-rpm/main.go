@@ -42,7 +42,7 @@ func NewRpmPlugin() *RpmPlugin {
 			{
 				Name:        "install",
 				Description: "Install package files using RPM",
-				Usage:       "Install one or more local .rpm files (rpm --install); dependencies are not resolved",
+				Usage:       "Install one or more local .rpm files (rpm --install --nomanifest); dependencies are not resolved",
 				Privilege:   system,
 			},
 			{
@@ -125,7 +125,7 @@ func (p *RpmPlugin) handleInstall(ctx context.Context, args []string) error {
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
 	var stderr bytes.Buffer
-	err := p.runWithIO(ctx, "install", os.Stdout, io.MultiWriter(os.Stderr, &stderr), nil, append([]string{"--install"}, args...)...)
+	err := p.runWithIO(ctx, "install", os.Stdout, io.MultiWriter(os.Stderr, &stderr), nil, append([]string{"--install", "--nomanifest"}, args...)...)
 	if err != nil && strings.Contains(stderr.String(), "Failed dependencies") {
 		return fmt.Errorf("rpm does not resolve dependencies; use dnf or zypper to install them (for example, dnf install ./file.rpm): %w", err)
 	}

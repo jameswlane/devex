@@ -49,6 +49,14 @@ var _ = Describe("RPM installed-package queries", func() {
 		}))
 	})
 
+	It("does not mistake a database failure that also prints the notice for absence", func() {
+		recorder.Script("rpm", []string{"--query", "git"}, sdktest.Response{ExitCode: 1, Stdout: "package git is not installed\n", Stderr: "error: cannot open Packages database in /var/lib/rpm\n"})
+		err := plugin.Execute("is-installed", []string{"git"})
+		var absent *sdk.NotInstalledError
+		Expect(errors.As(err, &absent)).To(BeFalse(), "got %v", err)
+		Expect(err).To(MatchError(ContainSubstring("failed to check installation status of git")))
+	})
+
 	It("does not mistake an RPM database failure for absence", func() {
 		recorder.Script("rpm", []string{"--query", "git"}, sdktest.Response{ExitCode: 1, Stderr: "error: rpmdb open failed\n"})
 		err := plugin.Execute("is-installed", []string{"git"})
