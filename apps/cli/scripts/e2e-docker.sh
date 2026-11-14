@@ -127,17 +127,20 @@ build_binaries() {
 			-o "$context/e2e.test" ./test/e2e
 	)
 
-	# Source runs rebuild the native plugin too, so PR changes cannot be masked
+	# Source runs rebuild the native plugins too, so PR changes cannot be masked
 	# by the registry's latest release. Released CLI runs retain released plugins.
 	mkdir -p "$context/testdata/plugins"
 	if [[ -z "${E2E_DEVEX_BINARY:-}" ]]; then
-		local method=apt
-		case "$DISTRO" in fedora-* | centos-stream-*) method=dnf ;; esac
-		log "building package-manager-$method from source (linux/$goarch)"
-		(
-			cd "$CLI_DIR/../../packages/package-manager-$method"
-			CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath -o "$context/testdata/plugins/package-manager-$method" .
-		)
+		local methods=(apt)
+		case "$DISTRO" in fedora-* | centos-stream-*) methods=(dnf rpm) ;; esac
+		local method
+		for method in "${methods[@]}"; do
+			log "building package-manager-$method from source (linux/$goarch)"
+			(
+				cd "$CLI_DIR/../../packages/package-manager-$method"
+				CGO_ENABLED=0 GOOS=linux GOARCH="$goarch" go build -trimpath -o "$context/testdata/plugins/package-manager-$method" .
+			)
+		done
 	fi
 
 	chmod 0755 "$context/devex" "$context/e2e.test"

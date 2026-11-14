@@ -3,9 +3,10 @@ package main
 // Build timestamp: 2025-09-03 17:41:19
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"net/url"
+	"io"
 	"os"
 	"strings"
 
@@ -41,8 +42,14 @@ func NewRpmPlugin() *RpmPlugin {
 			{
 				Name:        "install",
 				Description: "Install package files using RPM",
-				Usage:       "Install one or more local or remote .rpm files (rpm --install); dependencies are not resolved",
+				Usage:       "Install one or more local .rpm files (rpm --install --nomanifest); dependencies are not resolved",
 				Privilege:   system,
+			},
+			{
+				Name:        "is-installed",
+				Description: "Check whether every package is installed",
+				Usage:       "Check installed packages by name (rpm --query)",
+				Privilege:   user,
 			},
 			{
 				Name:        "remove",
@@ -90,6 +97,8 @@ func (p *RpmPlugin) ExecuteContext(ctx context.Context, command string, args []s
 	switch command {
 	case "install":
 		return p.handleInstall(ctx, args)
+	case "is-installed":
+		return p.handleIsInstalled(ctx, args)
 	case "remove":
 		return p.handleRemove(ctx, args)
 	case "update":
@@ -108,22 +117,39 @@ func (p *RpmPlugin) handleInstall(ctx context.Context, args []string) error {
 		return err
 	}
 	for _, file := range args {
-		operandPath := file
-		if strings.Contains(file, "://") {
-			remote, err := url.Parse(file)
-			if err != nil {
-				return fmt.Errorf("invalid RPM URL %q: %w", file, err)
-			}
-			operandPath = remote.Path
-		}
-		if !strings.HasSuffix(strings.ToLower(operandPath), ".rpm") {
-			return fmt.Errorf("rpm installs package files, not repository packages: %q is not an .rpm file; use the dnf or zypper plugin to install by name", file)
+		if err := validateRPMFile(file); err != nil {
+			return err
 		}
 	}
 
 	fmt.Printf("Installing packages: %s\n", strings.Join(args, ", "))
 
-	return p.run(ctx, "install", append([]string{"--install"}, args...)...)
+	var stderr bytes.Buffer
+	err := p.runWithIO(ctx, "install", os.Stdout, io.MultiWriter(os.Stderr, &stderr), nil, append([]string{"--install", "--nomanifest"}, args...)...)
+	if err != nil && strings.Contains(stderr.String(), "Failed dependencies") {
+		return fmt.Errorf("rpm does not resolve dependencies; use dnf or zypper to install them (for example, dnf install ./file.rpm): %w", err)
+	}
+	return err
+}
+
+func validateRPMFile(file string) error {
+	if strings.Contains(file, "://") {
+		return fmt.Errorf("remote RPM URLs are not supported: %q; download and verify the file yourself, then pass its local path, or use dnf or zypper to install URLs", file)
+	}
+	if !strings.HasSuffix(strings.ToLower(file), ".rpm") {
+		return fmt.Errorf("rpm installs package files, not repository packages: %q is not an .rpm file; use the dnf or zypper plugin to install by name", file)
+	}
+	info, err := os.Stat(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("RPM package file %q does not exist; pass an existing local .rpm file", file)
+		}
+		return fmt.Errorf("cannot access RPM package file %q: %w", file, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("RPM package file %q is not a regular file; pass a local .rpm file", file)
+	}
+	return nil
 }
 
 func (p *RpmPlugin) handleRemove(ctx context.Context, args []string) error {
@@ -145,6 +171,11 @@ func (p *RpmPlugin) handleList(ctx context.Context, args []string) error {
 
 // run executes rpm with the privilege advertised for operation.
 func (p *RpmPlugin) run(ctx context.Context, operation string, args ...string) error {
+	return p.runWithIO(ctx, operation, os.Stdout, os.Stderr, nil, args...)
+}
+
+// runWithIO is run with caller-supplied output streams and extra environment.
+func (p *RpmPlugin) runWithIO(ctx context.Context, operation string, stdout, stderr io.Writer, env []string, args ...string) error {
 	privilege := sdk.PluginOperationPrivilege(p.Info(), []string{operation})
 	if privilege == nil {
 		return fmt.Errorf("operation %s has no declared privilege", operation)
@@ -152,7 +183,7 @@ func (p *RpmPlugin) run(ctx context.Context, operation string, args ...string) e
 	if !p.IsAvailable() {
 		return fmt.Errorf("rpm is not available on this system; this plugin requires an RPM-based distribution")
 	}
-	err := sdk.ExecOperationWithContext(ctx, *privilege, "rpm", args...)
+	err := sdk.RunOperation(ctx, sdk.ExecutionRequest{Privilege: *privilege, Name: "rpm", Args: args, Env: env}, sdk.OperationIO{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr})
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

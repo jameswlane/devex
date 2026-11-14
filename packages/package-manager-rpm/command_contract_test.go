@@ -3,6 +3,9 @@ package main_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -19,12 +22,15 @@ type operationContract struct {
 	args       []string
 	nativeArgv []string
 	elevated   bool
+	// env holds the per-operation assignments the SDK passes through sudo env.
+	env []string
 }
 
 var contracts = []operationContract{
-	{command: "install", args: []string{"./git.rpm", "https://example.com/vim.x86_64.RPM"}, nativeArgv: []string{"--install", "./git.rpm", "https://example.com/vim.x86_64.RPM"}, elevated: true},
+	{command: "install", args: []string{"testdata/git.rpm"}, nativeArgv: []string{"--install", "--nomanifest", "testdata/git.rpm"}, elevated: true},
 	{command: "remove", args: []string{"git", "vim"}, nativeArgv: []string{"--erase", "git", "vim"}, elevated: true},
 	{command: "list", nativeArgv: []string{"--query", "--all"}},
+	{command: "is-installed", args: []string{"git"}, nativeArgv: []string{"--query", "git"}, env: []string{"LC_ALL=C"}},
 }
 
 // unsupported maps advertised commands that never run rpm to the
@@ -113,24 +119,71 @@ var _ = Describe("RPM command contracts", func() {
 		},
 		Entry("install without packages", "install", nil, "no packages specified"),
 		Entry("remove without packages", "remove", nil, "no packages specified"),
+		Entry("is-installed without packages", "is-installed", nil, "no packages specified"),
 		Entry("install by repository name", "install", []string{"git"}, "is not an .rpm file"),
 		Entry("install with an option-like file", "install", []string{"--nodeps.rpm"}, "invalid package name"),
+		Entry("install with a blank file", "install", []string{""}, "invalid package name"),
+		Entry("install with a missing file", "install", []string{"testdata/missing.rpm"}, "does not exist"),
 		Entry("remove with an option-like package", "remove", []string{"--nodeps"}, "invalid package name"),
 		Entry("remove with a blank package", "remove", []string{""}, "invalid package name"),
+		Entry("is-installed with an option-like package", "is-installed", []string{"--query"}, "invalid package name"),
+		Entry("is-installed with a blank package", "is-installed", []string{""}, "invalid package name"),
 		Entry("list with arguments", "list", []string{"git"}, "list takes no arguments"),
 	)
 
-	It("validates remote URL paths while preserving signed queries and fragments", func() {
-		file := "https://example.test/pkg.RPM?token=signed#download"
-		Expect(plugin.Execute("install", []string{file})).To(Succeed())
-		Expect(recorder.Calls("rpm")).To(Equal([]sdktest.Call{{Args: []string{"--install", file}, ElevationRequested: true}}))
-	})
-	It("does not accept an rpm suffix appearing only in a URL query", func() {
-		Expect(plugin.Execute("install", []string{"https://example.test/archive.txt?name=package.rpm"})).To(MatchError(ContainSubstring("is not an .rpm file")))
+	It("rejects a directory even when its name ends in .rpm", func() {
+		directory := filepath.Join(GinkgoT().TempDir(), "directory.rpm")
+		Expect(os.Mkdir(directory, 0o700)).To(Succeed())
+		Expect(plugin.Execute("install", []string{directory})).To(MatchError(ContainSubstring("not a regular file")))
 		expectNoNativeCalls()
+	})
+
+	It("rejects remote URLs with safe alternatives and no native call", func() {
+		file := "https://example.test/pkg.RPM?token=signed#download"
+		err := plugin.Execute("install", []string{file})
+		Expect(err).To(MatchError(And(
+			ContainSubstring("remote RPM URLs are not supported"),
+			ContainSubstring("download and verify"),
+			ContainSubstring("dnf or zypper"),
+		)))
+		expectNoNativeCalls()
+	})
+
+	It("explains dependency failures while preserving native stderr", func() {
+		nativeStderr := "error: Failed dependencies:\n\tlibexample.so()(64bit) is needed by git-1.0-1.x86_64\n"
+		recorder.Script("rpm", []string{"--install", "--nomanifest", "testdata/git.rpm"}, sdktest.Response{ExitCode: 1, Stderr: nativeStderr})
+		var err error
+		stderr := captureStderr(func() {
+			err = plugin.Execute("install", []string{"testdata/git.rpm"})
+		})
+		Expect(err).To(MatchError(And(
+			ContainSubstring("rpm does not resolve dependencies"),
+			ContainSubstring("dnf or zypper"),
+			ContainSubstring("dnf install ./file.rpm"),
+			ContainSubstring("exit status 1"),
+		)))
+		Expect(stderr).To(Equal(nativeStderr))
 	})
 	It("rejects an unknown command", func() {
 		Expect(plugin.Execute("unknown", nil)).To(MatchError("unknown command: unknown"))
 		expectNoNativeCalls()
 	})
 })
+
+func captureStderr(fn func()) string {
+	GinkgoHelper()
+	reader, writer, err := os.Pipe()
+	Expect(err).NotTo(HaveOccurred())
+	output := make(chan []byte, 1)
+	go func() {
+		data, _ := io.ReadAll(reader)
+		_ = reader.Close()
+		output <- data
+	}()
+	original := os.Stderr
+	os.Stderr = writer
+	defer func() { os.Stderr = original }()
+	fn()
+	Expect(writer.Close()).To(Succeed())
+	return string(<-output)
+}

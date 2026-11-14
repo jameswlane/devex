@@ -23,7 +23,8 @@ Run plugin operations through `devex plugin run`; the [Operations](#operations) 
 # Install package files (dependencies are not resolved)
 devex plugin run package-manager-rpm install ./example-1.0-1.x86_64.rpm
 
-# Remove a package and list installed packages
+# Check, remove, and list installed packages
+devex plugin run package-manager-rpm is-installed example
 devex plugin run package-manager-rpm remove example
 devex plugin run package-manager-rpm list
 ```
@@ -34,15 +35,18 @@ Low-level RPM operations on package files and the local database. RPM has no rep
 
 | Command | Native command | Privilege |
 | --- | --- | --- |
-| `install` | `rpm --install <files>`; arguments must be local or remote `.rpm` files, and dependencies are not resolved | system |
+| `install` | `rpm --install --nomanifest <files>`; arguments must be existing, regular local `.rpm` files (`--nomanifest` stops rpm from reading a non-package file as a manifest of URLs), and dependencies are not resolved | system |
+| `is-installed` | `rpm --query <package>` for each package name; reports missing packages with the SDK's not-installed status | user |
 | `remove` | `rpm --erase <packages>` | system |
 | `update` | Unsupported: rpm has no repositories to refresh | n/a (no native call) |
 | `search` | Unsupported: rpm has no repository search; use `list` for installed packages | n/a (no native call) |
 | `list` | `rpm --query --all` | user |
 
-Package arguments that are empty or start with `-` are rejected before any native command runs.
+Package arguments that are empty or start with `-` are rejected before any native command runs. Install paths must exist, be regular files, and end in `.rpm` (case-insensitive).
 
-The plugin does not advertise an `is-installed` query, so `devex status` and uninstall checks report installation state as unknown for this manager instead of probing it.
+Remote URLs are rejected because this low-level plugin does not download or verify artifacts. Download and verify the RPM yourself, then pass the local file, or use the dnf or zypper plugin, which can install URLs. If RPM reports `Failed dependencies`, install dependencies with dnf or zypper instead (for example, `dnf install ./file.rpm`); RPM's native diagnostic is preserved.
+
+For `is-installed`, a native `package <name> is not installed` answer returns the standard not-installed exit code 3. Missing RPM executables, database failures, cancellation, and other native errors remain query failures rather than being treated as absence.
 
 ## 🚀 Platform Support
 

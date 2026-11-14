@@ -13,7 +13,7 @@ var _ = Describe("Unattended rpm execution", func() {
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
 		plugin := main.NewRpmPlugin()
-		Expect(plugin.Execute("install", []string{"example.rpm"})).To(Succeed())
+		Expect(plugin.Execute("install", []string{"testdata/git.rpm"})).To(Succeed())
 		Expect(plugin.Execute("remove", []string{"example"})).To(Succeed())
 		Expect(recorder.Calls("rpm")).To(HaveLen(2))
 	})

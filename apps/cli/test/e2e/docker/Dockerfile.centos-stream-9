@@ -4,7 +4,7 @@ FROM quay.io/centos/centos:stream9
 # Track current distro packages; jq must stay absent until the lifecycle test.
 # Fedora's minimal base supplies curl-minimal, so use --allowerasing for curl.
 # hadolint ignore=DL3041
-RUN dnf install -y --allowerasing ca-certificates curl git gzip procps-ng sudo tar unzip xz shadow-utils \
+RUN dnf install -y --allowerasing ca-certificates curl git gzip procps-ng rpm-build sudo tar unzip xz shadow-utils \
     && dnf clean all \
     && ! rpm -q jq
 
