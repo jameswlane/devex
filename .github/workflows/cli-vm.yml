@@ -1,0 +1,92 @@
+name: CLI desktop VM
+# Full desktop sessions in disposable KVM virtual machines. Each job boots a
+# cloud image, installs GNOME or KDE Plasma, logs a user in, and checks DevEx
+# desktop setup inside that session. A job takes 20-40 minutes, so the suite
+# runs weekly, on demand, and on changes to the harness itself.
+on:
+  schedule:
+    - cron: '17 4 * * 0'
+  pull_request:
+    paths:
+      - 'apps/cli/scripts/e2e-vm.sh'
+      - 'apps/cli/test/vm/**'
+      - '.github/workflows/cli-vm.yml'
+  workflow_dispatch:
+    inputs:
+      distro:
+        description: 'Distribution to test'
+        required: false
+        type: choice
+        options: [all, ubuntu-24.04, debian-12]
+        default: all
+      desktop:
+        description: 'Desktop environment to test'
+        required: false
+        type: choice
+        options: [all, gnome, kde]
+        default: all
+permissions:
+  contents: read
+concurrency:
+  group: cli-vm-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  vm:
+    name: ${{ matrix.distro }} / ${{ matrix.desktop }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        distro: ${{ fromJSON((inputs.distro == '' || inputs.distro == 'all') && '["ubuntu-24.04", "debian-12"]' || format('["{0}"]', inputs.distro)) }}
+        desktop: ${{ fromJSON((inputs.desktop == '' || inputs.desktop == 'all') && '["gnome", "kde"]' || format('["{0}"]', inputs.desktop)) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up development tools
+        uses: jdx/mise-action@v4
+        with:
+          install: true
+          cache: true
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable KVM and install QEMU
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' |
+            sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils
+      - name: Run desktop VM suite
+        working-directory: apps/cli
+        env:
+          DISTRO: ${{ matrix.distro }}
+          DESKTOP: ${{ matrix.desktop }}
+          VM_CACHE_DIR: ${{ runner.temp }}/devex-vm
+          VM_CPUS: '4'
+          VM_MEMORY: '8192'
+        run: ./scripts/e2e-vm.sh
+      - name: Upload VM artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cli-vm-${{ matrix.distro }}-${{ matrix.desktop }}
+          path: ./apps/cli/artifacts/vm/**
+          if-no-files-found: warn
+      - name: Publish check summary
+        if: always()
+        working-directory: apps/cli
+        env:
+          RESULTS: artifacts/vm/${{ matrix.distro }}-${{ matrix.desktop }}
+        run: |
+          {
+            echo "## ${{ matrix.distro }} / ${{ matrix.desktop }}"
+            for phase in apply verify; do
+              log="$RESULTS/$phase.log"
+              [ -f "$log" ] || continue
+              echo "### $phase"
+              echo "- Passed: $(grep -c '^\[pass\]' "$log" || true)"
+              echo "- Failed: $(grep -c '^\[FAIL\]' "$log" || true)"
+              grep '^\[FAIL\]' "$log" | sed 's/^/  - /' || true
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

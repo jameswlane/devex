@@ -135,6 +135,22 @@ tasks:
         vars: {DISTRO: fedora-44}
       - task: e2e:docker
         vars: {DISTRO: centos-stream-9}
+  # === DESKTOP VIRTUAL MACHINES ===
+  e2e:vm:
+    desc: Run desktop setup in a disposable KVM virtual machine (DISTRO=ubuntu-24.04|debian-12, DESKTOP=gnome|kde)
+    vars:
+      DISTRO: '{{.DISTRO | default "ubuntu-24.04"}}'
+      DESKTOP: '{{.DESKTOP | default "gnome"}}'
+    cmds:
+      - DISTRO="{{.DISTRO}}" DESKTOP="{{.DESKTOP}}" ./scripts/e2e-vm.sh
+  e2e:vm:all:
+    desc: Run desktop setup in every supported distro and desktop virtual machine
+    cmds:
+      - for: [ubuntu-24.04/gnome, ubuntu-24.04/kde, debian-12/gnome, debian-12/kde]
+        task: e2e:vm
+        vars:
+          DISTRO: '{{splitList "/" .ITEM | first}}'
+          DESKTOP: '{{splitList "/" .ITEM | last}}'
   # === CLEANUP ===
   clean:
     desc: Clean build artifacts and temporary files

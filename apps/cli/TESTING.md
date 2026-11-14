@@ -94,9 +94,41 @@ Label destructive lifecycle specs with `destructive` and `pm:<method>`, and skip
 
 Local runs write JUnit XML, logs, and captured CLI state under `artifacts/e2e/` in `apps/cli`. CI runs the full suite in all distribution/desktop matrix jobs with destructive specs enabled, uploads that directory even after failures, and includes each job's JUnit test, failure, error, skip, and pending counts in the job summary.
 
+## Desktop virtual machine suite
+
+Containers cannot run a real desktop session, so `scripts/e2e-vm.sh` checks desktop setup in a disposable QEMU/KVM virtual machine. Each run:
+
+1. Downloads the distribution's cloud image once into `~/.cache/devex-vm` and verifies its published checksum on every run.
+2. Boots it on a throwaway qcow2 overlay, installs the desktop (`ubuntu-desktop-minimal` or `gnome-core` for GNOME, `kde-plasma-desktop` with SDDM for KDE), and reboots into an automatic login for the `tester` user.
+3. Joins that graphical session by taking its D-Bus, display and desktop variables from the running `gnome-shell` or `plasmashell` process, then runs the desktop plugin through `devex plugin run`: `describe`, `configure --expected-plan <hash>` (the same confirmed-plan path setup uses), `install-fonts jetbrainsmono`, `configure-fonts`, `apply-theme`, and on GNOME `install-extensions` with the Caffeine extension from extensions.gnome.org.
+4. Reads every value back through the session (`gsettings get`, `kreadconfig5`, `fc-list`, `gnome-extensions`), reboots, and checks the values again in a fresh login, including that the extension is running.
+5. Saves screenshots of the VM display before setup, after setup and after the new login, plus the serial console, journal, provisioning and check logs, loginctl state, and the user's DevEx, dconf and KDE configuration, then destroys the VM and its disk.
+
+Supported targets are Ubuntu 24.04 and Debian 12, each with GNOME and KDE Plasma:
+
+```bash
+task e2e:vm DISTRO=ubuntu-24.04 DESKTOP=gnome
+task e2e:vm DISTRO=debian-12 DESKTOP=kde
+task e2e:vm:all
+```
+
+The host needs `qemu-system-x86_64`, `qemu-img`, `python3`, OpenSSH and read/write access to `/dev/kvm` (on Debian and Ubuntu, `sudo apt-get install qemu-system-x86 qemu-utils` and add yourself to the `kvm` group). A run downloads about 2 GB of packages in the guest and takes 15–40 minutes. Artifacts land in `artifacts/vm/<distro>-<desktop>/`.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DISTRO` | `ubuntu-24.04` | `ubuntu-24.04` or `debian-12`. |
+| `DESKTOP` | `gnome` | `gnome` or `kde`. |
+| `VM_CACHE_DIR` | `${XDG_CACHE_HOME:-~/.cache}/devex-vm` | Where base images are cached. |
+| `VM_MEMORY`, `VM_CPUS`, `VM_DISK_SIZE` | `6144`, `4`, `24G` | Guest resources. |
+| `VM_KEEP` | disabled | Set to `1` to keep the VM running after the checks; the runner prints an SSH command and destroys the VM on Ctrl-C. |
+| `E2E_DEVEX_BINARY` | built from source | Prebuilt Linux amd64 `devex` binary to test. |
+| `DEVEX_PLUGIN_REGISTRY_URL` | the CLI default | Plugin registry the guest downloads desktop plugins from. |
+
+The CLI is built from source, and the desktop plugins come from the plugin registry, so the suite checks the plugins users receive. Because a run is slow, the `CLI desktop VM` workflow runs every job weekly, on manual dispatch (with optional distro and desktop filters), and on pull requests that change the harness. GitHub-hosted Ubuntu runners provide KVM.
+
 ## Roadmap
 
-Later end-to-end testing phases will add headless GNOME and KDE containers, QEMU/Packer virtual machines, and Arch coverage.
+Later end-to-end testing phases will add Arch and Fedora desktop virtual machines.
 
 ### Fedora and EL lifecycle coverage
 
