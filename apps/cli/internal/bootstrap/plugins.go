@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	"github.com/jameswlane/devex/apps/cli/internal/installretry"
@@ -467,14 +468,47 @@ func (b *PluginBootstrap) createPluginManagementCmd() *cobra.Command {
 	update.Flags().Bool("all", false, "Update all installed plugins")
 	info := &cobra.Command{Use: "info <name>", Short: "Show installed plugin metadata and commands", Args: pluginNamesArgs(1), RunE: b.handlePluginInfo}
 	run := &cobra.Command{Use: "run <name> <command> [args...]", Short: "Run an installed plugin command (flags are passed through)", DisableFlagParsing: true, Args: func(cmd *cobra.Command, args []string) error {
-		if err := cobra.MinimumNArgs(2)(cmd, args); err != nil {
+		// Cobra validates args before running hooks, so global flags given
+		// before the plugin name are applied here, ahead of config setup.
+		remaining, err := parsePluginRunFlags(cmd, args)
+		if errors.Is(err, pflag.ErrHelp) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
-		return validatePluginName(args[0])
-	}, RunE: b.handleRunPlugin}
+		if err := cobra.MinimumNArgs(2)(cmd, remaining); err != nil {
+			return err
+		}
+		return validatePluginName(remaining[0])
+	}, RunE: func(cmd *cobra.Command, args []string) error {
+		remaining, err := parsePluginRunFlags(cmd, args)
+		if errors.Is(err, pflag.ErrHelp) {
+			return cmd.Help()
+		}
+		if err != nil {
+			return err
+		}
+		return b.handleRunPlugin(cmd, remaining)
+	}}
 	registry := &cobra.Command{Use: "registry", Short: "Show plugin registry configuration", Args: cobra.NoArgs, RunE: b.handleRegistryInfo}
 	cmd.AddCommand(list, search, install, remove, update, info, run, registry)
 	return cmd
+}
+
+// parsePluginRunFlags applies global flags that precede the plugin name and
+// returns the rest unparsed, so plugin flags pass through unchanged.
+func parsePluginRunFlags(cmd *cobra.Command, args []string) ([]string, error) {
+	flags := pflag.NewFlagSet("plugin-run", pflag.ContinueOnError)
+	flags.SetInterspersed(false)
+	flags.SetOutput(io.Discard)
+	flags.Usage = func() {}
+	flags.AddFlagSet(cmd.Root().PersistentFlags())
+	flags.AddFlagSet(cmd.InheritedFlags())
+	if err := flags.Parse(args); err != nil {
+		return nil, err
+	}
+	return flags.Args(), nil
 }
 
 func pluginNamesArgs(count int) cobra.PositionalArgs {
@@ -593,6 +627,20 @@ func (b *PluginBootstrap) handleInstallPlugin(cmd *cobra.Command, args []string)
 	if err := requirePluginNetwork(); err != nil {
 		return err
 	}
+	if viper.GetBool("dry-run") {
+		metadata, err := b.downloader.FetchPluginMetadata(cmd.Context(), args[0])
+		if err != nil {
+			return fmt.Errorf("preview install plugin %s: %w", args[0], err)
+		}
+		platformKey := runtime.GOOS + "-" + runtime.GOARCH
+		binary, ok := metadata.Binaries[platformKey]
+		if !ok {
+			return fmt.Errorf("plugin %s not available for platform %s", args[0], platformKey)
+		}
+		path := filepath.Join(b.manager.GetPluginDir(), "devex-plugin-"+args[0])
+		cmd.Printf("Would install %s %s\nChecksum: %s\nPath: %s\n", args[0], metadata.Version, binary.Checksum, path)
+		return nil
+	}
 	if err := b.downloader.DownloadValidatedPluginWithContext(cmd.Context(), args[0]); err != nil {
 		return fmt.Errorf("install plugin %s: %w", args[0], err)
 	}
@@ -644,6 +692,11 @@ func (b *PluginBootstrap) handleRemovePlugin(cmd *cobra.Command, args []string) 
 	if critical && !force {
 		return fmt.Errorf("refusing to remove critical plugin %s without --force; commands that will stop working: %s", args[0], affected)
 	}
+	if viper.GetBool("dry-run") {
+		recordPath := filepath.Join(b.manager.GetPluginDir(), ".devex-plugin-"+args[0]+".install.json")
+		cmd.Printf("Would remove %s\nBinary: %s\nInstall record: %s\nCommands that would stop working: %s\n", args[0], metadata.Path, recordPath, affected)
+		return nil
+	}
 	// Root confines cleanup to the plugin directory, including sidecar paths.
 	root, err := os.OpenRoot(b.manager.GetPluginDir())
 	if err != nil {
@@ -682,10 +735,20 @@ func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string)
 		cmd.Println("No plugins installed to update")
 		return nil
 	}
+	dryRun := viper.GetBool("dry-run")
 	var failures []error
 	for _, name := range args {
 		if err := cmd.Context().Err(); err != nil {
 			return err
+		}
+		if dryRun {
+			metadata, err := b.downloader.FetchPluginMetadata(cmd.Context(), name)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("preview update plugin %s: %w", name, err))
+				continue
+			}
+			cmd.Printf("Would update %s from %s to %s\nPath: %s\n", name, plugins[name].Version, metadata.Version, plugins[name].Path)
+			continue
 		}
 		if err := b.downloader.DownloadValidatedPluginWithContext(cmd.Context(), name); err != nil {
 			failures = append(failures, fmt.Errorf("update plugin %s: %w", name, err))
@@ -693,8 +756,10 @@ func (b *PluginBootstrap) handleUpdatePlugins(cmd *cobra.Command, args []string)
 		}
 		cmd.Printf("Updated %s\n", name)
 	}
-	if err := b.manager.DiscoverPluginsWithContext(cmd.Context()); err != nil {
-		failures = append(failures, err)
+	if !dryRun {
+		if err := b.manager.DiscoverPluginsWithContext(cmd.Context()); err != nil {
+			failures = append(failures, err)
+		}
 	}
 	return errors.Join(failures...)
 }

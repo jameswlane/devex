@@ -784,6 +784,12 @@ func (d *Downloader) downloadPluginAttempt(ctx context.Context, pluginName strin
 	return d.downloadAndVerifyPluginValidated(ctx, pluginName, metadata.Version, binary, validate)
 }
 
+// FetchPluginMetadata returns the registry metadata a download of pluginName
+// would use, without downloading or changing anything on disk.
+func (d *Downloader) FetchPluginMetadata(ctx context.Context, pluginName string) (*PluginMetadata, error) {
+	return d.fetchPluginDirect(ctx, pluginName)
+}
+
 // fetchPluginDirect fetches plugin metadata directly from the API endpoint
 func (d *Downloader) fetchPluginDirect(ctx context.Context, pluginName string) (*PluginMetadata, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
