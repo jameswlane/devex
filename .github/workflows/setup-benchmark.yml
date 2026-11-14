@@ -43,8 +43,16 @@ jobs:
           BASELINE_REF: ${{ inputs.baseline_ref }}
           CANDIDATE_REF: ${{ inputs.candidate_ref }}
         run: |
-          echo "baseline_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASELINE_REF" --jq .sha)" >> "$GITHUB_OUTPUT"
-          echo "candidate_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CANDIDATE_REF" --jq .sha)" >> "$GITHUB_OUTPUT"
+          baseline_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BASELINE_REF" --jq .sha)
+          candidate_sha=$(gh api "repos/$GITHUB_REPOSITORY/commits/$CANDIDATE_REF" --jq .sha)
+          for sha in "$baseline_sha" "$candidate_sha"; do
+            if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "could not resolve benchmark refs: baseline=$BASELINE_REF candidate=$CANDIDATE_REF" >&2
+              exit 1
+            fi
+          done
+          echo "baseline_sha=$baseline_sha" >> "$GITHUB_OUTPUT"
+          echo "candidate_sha=$candidate_sha" >> "$GITHUB_OUTPUT"
   benchmark:
     name: ${{ matrix.variant }} / run ${{ matrix.run }}
     needs: validate
