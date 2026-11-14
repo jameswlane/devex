@@ -79,6 +79,8 @@ check_host() {
 fetch_image() {
 	local name="${IMAGE_URL##*/}" dir="$CACHE_DIR/$DISTRO"
 	mkdir -p "$dir"
+	# qemu-img resolves a relative backing file against the overlay's directory.
+	dir="$(cd "$dir" && pwd)"
 	BASE_IMAGE="$dir/$name"
 	curl -fsSL --retry 3 -o "$dir/SUMS" "$SUMS_URL"
 	if [[ -f "$BASE_IMAGE" ]] && (cd "$dir" && grep -E "[ *]$name\$" SUMS | sed 's/ \*/  /' | "$SUM_TOOL" --check --strict --status -); then

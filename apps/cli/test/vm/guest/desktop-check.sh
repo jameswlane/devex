@@ -89,7 +89,24 @@ normalize_gsetting() { # strip GVariant string quoting
 verify_plan() {
 	# Each plan command becomes five NUL-separated fields: tool, schema or
 	# file, group, key, value.
-	local tool target group key value
+	local tool target group key value fields="$STATE/plan-fields-$MODE"
+	# Parse first, so a missing or invalid plan fails instead of checking nothing.
+	if ! python3 -c '
+import json, sys
+plan = json.load(open(sys.argv[1]))
+assert isinstance(plan, list) and plan, "empty plan"
+for c in plan:
+    if c[:2] == ["gsettings", "set"] and len(c) == 5:
+        fields = ["gsettings", c[2], "", c[3], c[4]]
+    elif c[0] == "kwriteconfig5" and len(c) == 8 and c[1:7:2] == ["--file", "--group", "--key"]:
+        fields = ["kwriteconfig5", c[2], c[4], c[6], c[7]]
+    else:
+        fields = ["unknown", " ".join(c), "", "", ""]
+    sys.stdout.write("".join(f + "\0" for f in fields))
+' "$STATE/plan.json" >"$fields"; then
+		fail "could not read the settings plan $STATE/plan.json"
+		return
+	fi
 	while IFS= read -r -d '' tool && IFS= read -r -d '' target && IFS= read -r -d '' group &&
 		IFS= read -r -d '' key && IFS= read -r -d '' value; do
 		case "$tool" in
@@ -103,17 +120,7 @@ verify_plan() {
 			;;
 		*) fail "unexpected plan command: $tool $target $group $key $value" ;;
 		esac
-	done < <(python3 -c '
-import json, sys
-for c in json.load(open(sys.argv[1])):
-    if c[:2] == ["gsettings", "set"] and len(c) == 5:
-        fields = ["gsettings", c[2], "", c[3], c[4]]
-    elif c[0] == "kwriteconfig5" and len(c) == 8 and c[1:7:2] == ["--file", "--group", "--key"]:
-        fields = ["kwriteconfig5", c[2], c[4], c[6], c[7]]
-    else:
-        fields = ["unknown", " ".join(c), "", "", ""]
-    sys.stdout.write("".join(f + "\0" for f in fields))
-' "$STATE/plan.json")
+	done <"$fields"
 }
 
 verify_desktop() {
@@ -183,11 +190,13 @@ install_extensions() {
 # configure and configure-fonts succeed when only some writes fail, warning
 # about each failed one, so any such warning fails the check.
 run_settings() {
-	local plugin="$1" output
+	local plugin="$1" output status=0
 	shift
-	output="$(devex plugin run "$plugin" "$@" 2>&1)"
+	output="$(devex plugin run "$plugin" "$@" 2>&1)" || status=$?
 	printf '%s\n' "$output"
-	if grep -q "Warning: Failed" <<<"$output"; then
+	if ((status != 0)); then
+		fail "$plugin $1 exited $status; see its output above"
+	elif grep -q "Warning: Failed" <<<"$output"; then
 		fail "$plugin $1 could not apply every setting"
 	else
 		pass "$plugin $1 applied every setting"
