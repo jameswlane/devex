@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 )
 
@@ -19,11 +20,23 @@ type PackageBatch struct {
 // PreparePackageBatch runs the TUI's package batch planner without a TUI, so
 // unattended installs get the same single apt-get update, single batched
 // apt-get install, and batched mise/Flatpak installs. A failed batch leaves
-// BatchInstalled empty and each app installs on its own.
+// BatchInstalled empty and each app installs on its own. Apps whose installer
+// plugin is unavailable stay out of the batch so they fail on their own, as
+// before.
 func PreparePackageBatch(ctx context.Context, apps []types.CrossPlatformApp, repo types.Repository, settings config.CrossPlatformSettings) (PackageBatch, error) {
+	available := make([]types.CrossPlatformApp, 0, len(apps))
+	for _, app := range apps {
+		switch method := app.GetOSConfig().InstallMethod; method {
+		case "apt", "mise", "flatpak":
+			if !installers.IsInstallerSupported(ctx, method) {
+				continue
+			}
+		}
+		available = append(available, app)
+	}
 	si := NewStreamingInstaller(nil, repo, ctx, settings)
 	defer si.cancel()
-	err := si.preparePackageRun(ctx, apps)
+	err := si.preparePackageRun(ctx, available)
 	si.apt.mu.Lock()
 	defer si.apt.mu.Unlock()
 	return PackageBatch{Preinstalled: copySet(si.apt.preinstalled), BatchInstalled: copySet(si.apt.batchInstalled)}, err

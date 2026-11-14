@@ -5,6 +5,7 @@ package commands
 import (
 	"bytes"
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
@@ -38,6 +39,9 @@ var _ = Describe("Plain install package batching", func() {
 		viper.Set("apt-lists-max-age", "0s")
 		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
 		preparePackageBatch = tui.PreparePackageBatch
+		// Test mode reports the apt installer plugin as available.
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
 		oldPrepare, oldInstall, oldQuery := prepareApplicationInstallers, installApplication, nativeApplicationInstalled
 		DeferCleanup(func() {
 			prepareApplicationInstallers, installApplication, nativeApplicationInstalled = oldPrepare, oldInstall, oldQuery
@@ -75,5 +79,24 @@ var _ = Describe("Plain install package batching", func() {
 		Expect(installs[0].Args).To(Equal([]string{"install", "-y", "bat", "fzf", "sqlite3", "libsqlite3-0"}))
 		Expect(batched).To(Equal(map[string]bool{"bat": true, "fzf": true, "databases": true}))
 		Expect(output.String()).To(Equal("installing bat...\ninstalled bat\ninstalling fzf...\ninstalled fzf\nskipped GitHub CLI (already installed)\ninstalling databases...\ninstalled databases\ninstalled 3 of 4 applications\n"))
+	})
+
+	It("leaves apps whose installer plugin is unavailable to fail on their own", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query")
+		preparePackageBatch = tui.PreparePackageBatch
+		oldPrepare, oldInstall := prepareApplicationInstallers, installApplication
+		DeferCleanup(func() { prepareApplicationInstallers, installApplication = oldPrepare, oldInstall })
+		prepareApplicationInstallers = func(context.Context, pluginBootstrapProvider) error { return nil }
+		installApplication = func(ctx context.Context, app types.CrossPlatformApp, _ config.CrossPlatformSettings, _ types.Repository) error {
+			Expect(installers.PackagesInstalled(ctx, app.Name)).To(BeFalse())
+			return errors.New("required plugin package-manager-apt is unavailable")
+		}
+
+		var output bytes.Buffer
+		err := runPlainInstall(context.Background(), &output, []types.CrossPlatformApp{aptApp("jq", "jq")}, mocks.NewMockRepository(), config.CrossPlatformSettings{}, nil)
+
+		Expect(err).To(HaveOccurred())
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
+		Expect(output.String()).To(Equal("installing jq...\nfailed jq: required plugin package-manager-apt is unavailable\ninstalled 0 of 1 applications\n"))
 	})
 })

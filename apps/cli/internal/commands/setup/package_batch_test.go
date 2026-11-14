@@ -36,6 +36,9 @@ var _ = Describe("Automated setup package batching", func() {
 		viper.Set("apt-lists-max-age", "0s")
 		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
 		preparePackageBatch = tui.PreparePackageBatch
+		// Test mode reports the apt installer plugin as available.
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
 		original := installAutomatedApp
 		DeferCleanup(func() { installAutomatedApp = original })
 		batched := map[string]bool{}
