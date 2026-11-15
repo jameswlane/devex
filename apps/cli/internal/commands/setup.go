@@ -62,6 +62,13 @@ Run 'devex setup' to begin the guided installation process.`,
 			if ctx == nil {
 				ctx = context.Background()
 			}
+			// Setup installs without a confirmed plan, so a policy that
+			// requires approved plans refuses it before any change.
+			if !viper.GetBool("dry-run") {
+				if err := refuseUnapprovedInstall(ctx, settings.HomeDir); err != nil {
+					return err
+				}
+			}
 
 			verbose := viper.GetBool("verbose")
 			configPath := viper.GetString("config")

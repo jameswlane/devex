@@ -56,6 +56,9 @@ type PolicyRef struct {
 	Version string `json:"version"`
 	Source  string `json:"source"`
 	SHA256  string `json:"sha256"`
+	// ApprovalRequired means the plan installs only with a signed approval
+	// of its digest (install --expect-plan <digest> --approval <file>).
+	ApprovalRequired bool `json:"approval_required,omitempty"`
 }
 type PlannedApp struct {
 	Name           string   `json:"name"`
@@ -116,7 +119,7 @@ func PlanInstall(ctx context.Context, s config.CrossPlatformSettings, r PlanRequ
 		return result, &Error{Category: "policy_denied", Message: err.Error(), cause: err}
 	}
 	if orgPolicy != nil {
-		result.OrganizationPolicy = &PolicyRef{Name: orgPolicy.Name, Version: orgPolicy.Version, Source: orgPolicy.Source, SHA256: orgPolicy.SHA256}
+		result.OrganizationPolicy = &PolicyRef{Name: orgPolicy.Name, Version: orgPolicy.Version, Source: orgPolicy.Source, SHA256: orgPolicy.SHA256, ApprovalRequired: orgPolicy.ApprovalRequired()}
 	}
 	var violations []string
 	byName := map[string]types.CrossPlatformApp{}

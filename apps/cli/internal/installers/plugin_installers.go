@@ -344,6 +344,9 @@ func InstallApp(ctx context.Context, app types.AppConfig, settings config.CrossP
 	if err := orgPolicy.CheckAppConfig(app); err != nil {
 		return err
 	}
+	if err := orgPolicy.CheckApproval(ctx); err != nil {
+		return err
+	}
 	if orgPolicy != nil {
 		fmt.Fprintf(os.Stderr, "Applying organization policy %s %s (%s)\n", orgPolicy.DisplayName(), orgPolicy.Version, orgPolicy.Source)
 	}

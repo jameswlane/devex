@@ -39,6 +39,10 @@ func NewPolicyCmd(settings config.CrossPlatformSettings) *cobra.Command {
 			}
 			cmd.Printf("Name: %s\nVersion: %s\nSource: %s\nSHA256: %s\n", policy.DisplayName(), policy.Version, policy.Source, policy.SHA256)
 			cmd.Printf("Maximum privilege scope: %s\nMinimum security level: %s\nUser overrides allowed: %t\n", policy.Privilege.MaxScope, policy.Security.MinimumLevel, policy.Security.AllowUserOverrides)
+			cmd.Printf("Plan approval required: %t\n", policy.Approval.Required)
+			for _, approver := range policy.Approval.Approvers {
+				cmd.Printf("Approver: %s %s\n", approver.ID, approver.PublicKey)
+			}
 			return nil
 		},
 	}

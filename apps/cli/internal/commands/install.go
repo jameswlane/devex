@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	devexpaths "github.com/jameswlane/devex/packages/plugin-sdk/paths"
 
@@ -53,6 +54,7 @@ func NewInstallCmdWithPluginProvider(repo types.Repository, settings config.Cros
 		answerFiles    []string
 		nonInteractive bool
 		expectPlan     string
+		approvalFile   string
 	)
 
 	cmd := &cobra.Command{
@@ -135,6 +137,9 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 			dryRun := viper.GetBool("dry-run")
 			categories := viper.GetStringSlice("categories")
 
+			if approvalFile != "" && expectPlan == "" {
+				return fmt.Errorf("--approval approves a confirmed plan; use it with --expect-plan <digest>")
+			}
 			if expectPlan != "" {
 				if dryRun || templateID != "" {
 					return fmt.Errorf("--expect-plan installs a confirmed plan; it cannot be combined with --dry-run or --template")
@@ -149,11 +154,21 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 					return fmt.Errorf("check the confirmed plan: %w", err)
 				}
 				if snapshot.Digest != expectPlan {
+					recordPlanChangedApproval(settings.HomeDir, expectPlan, approvalFile)
 					return fmt.Errorf("%s (confirmed %s, now %s); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage, expectPlan, snapshot.Digest)
+				}
+				ctx, err = approvePlan(ctx, settings.HomeDir, snapshot, approvalFile)
+				if err != nil {
+					return err
 				}
 				return executeSnapshot(ctx, cmd, snapshot, verbose, repo, getPluginBootstrap)
 			}
 
+			if !dryRun {
+				if err := refuseUnapprovedInstall(ctx, settings.HomeDir); err != nil {
+					return err
+				}
+			}
 			if templateID != "" {
 				if len(args) > 0 || len(categories) > 0 {
 					return fmt.Errorf("--template cannot be combined with app arguments or --categories")
@@ -188,6 +203,7 @@ Configuration files are located in $DEVEX_DATA_DIR/config/:
 	cmd.Flags().StringArrayVar(&answers, "answer", nil, "Template input answer in key=value form")
 	cmd.Flags().StringArrayVar(&answerFiles, "answers", nil, "YAML file containing template input answers")
 	cmd.Flags().StringVar(&expectPlan, "expect-plan", "", "Install only if the plan digest from 'install --dry-run --format json' still matches")
+	cmd.Flags().StringVar(&approvalFile, "approval", "", "Signed plan approval file for --expect-plan, when the organization policy requires one")
 	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", false, "Install without the TUI; fail instead of prompting for template inputs")
 
 	// Bind flags to Viper for hierarchical config
@@ -246,6 +262,85 @@ func executeInstallWithOutput(ctx context.Context, apps, categories []string, ve
 		return previewInstallation(ctx, appsToInstall, provider, out)
 	}
 	return installSelected(ctx, span, appsToInstall, repo, settings, out, provider)
+}
+
+// approvePlan verifies a signed approval of the confirmed plan digest when the
+// organization policy requires one (or when one is supplied), records the
+// decision in the audit log, and marks ctx as running the approved plan.
+func approvePlan(ctx context.Context, homeDir string, snapshot agentapi.ExecutionSnapshot, approvalFile string) (context.Context, error) {
+	digest := snapshot.Digest
+	policy, err := security.LoadOrgPolicy(homeDir)
+	if err != nil {
+		return ctx, err
+	}
+	// The approval binds the policy the plan was resolved with.
+	planned := ""
+	if ref := snapshot.Plan.OrganizationPolicy; ref != nil {
+		planned = ref.SHA256
+	}
+	current := ""
+	if policy != nil {
+		current = policy.SHA256
+	}
+	if planned != current {
+		recordPlanChangedApproval(homeDir, digest, approvalFile)
+		return ctx, fmt.Errorf("%s (the organization policy changed); nothing was installed; review the plan again with --dry-run --format json", agentapi.PlanChangedMessage)
+	}
+	if approvalFile == "" {
+		if !policy.ApprovalRequired() {
+			return ctx, nil
+		}
+		err := policy.CheckApproval(ctx)
+		state.RecordApprovalDecision(digest, "", approvalPolicyID(policy), err)
+		return ctx, err
+	}
+	approval, err := security.LoadPlanApproval(approvalFile)
+	if err != nil {
+		state.RecordApprovalDecision(digest, "", approvalPolicyID(policy), err)
+		return ctx, err
+	}
+	approved, err := policy.VerifyApproval(approval, digest, time.Now())
+	state.RecordApprovalDecision(digest, approval.Approver, approvalPolicyID(policy), err)
+	if err != nil {
+		return ctx, err
+	}
+	log.Info("Plan approval verified", "digest", digest, "approver", approved.Approver, "expires_at", approved.ExpiresAt)
+	return security.WithApprovedPlan(ctx, approved), nil
+}
+
+// refuseUnapprovedInstall refuses an unconfirmed install up front when the
+// organization policy requires approved plans; the installers enforce it too.
+func refuseUnapprovedInstall(ctx context.Context, homeDir string) error {
+	policy, err := security.LoadOrgPolicy(homeDir)
+	if err != nil || !policy.ApprovalRequired() {
+		return err
+	}
+	err = policy.CheckApproval(ctx)
+	state.RecordApprovalDecision("", "", approvalPolicyID(policy), err)
+	return err
+}
+
+// recordPlanChangedApproval audits a refused approved plan whose plan or
+// policy changed after it was confirmed.
+func recordPlanChangedApproval(homeDir, digest, approvalFile string) {
+	policy, err := security.LoadOrgPolicy(homeDir)
+	if err != nil || (approvalFile == "" && !policy.ApprovalRequired()) {
+		return
+	}
+	approver := ""
+	if approvalFile != "" {
+		if approval, loadErr := security.LoadPlanApproval(approvalFile); loadErr == nil {
+			approver = approval.Approver
+		}
+	}
+	state.RecordApprovalDecision(digest, approver, approvalPolicyID(policy), fmt.Errorf("%s; nothing was installed", agentapi.PlanChangedMessage))
+}
+
+func approvalPolicyID(policy *security.OrgPolicy) string {
+	if policy == nil {
+		return ""
+	}
+	return policy.DisplayName() + "@" + policy.Version
 }
 
 const rollbackEnabledNotice = "Rollback enabled: failed batches remove newly installed APT packages and restore backed-up files; hooks and dependencies may require manual recovery."

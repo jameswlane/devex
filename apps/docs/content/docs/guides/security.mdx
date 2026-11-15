@@ -454,6 +454,55 @@ include an `organization_policy` reference, and execution digests bind that
 reference so a confirmed plan cannot run under different policy content. See
 `apps/cli/config/examples/organization-policy.yaml` for all fields and defaults.
 
+### Plan approvals
+
+`approval.required: true` makes every installation wait for a reviewed plan.
+DevEx then refuses `devex install` (interactive, non-interactive, rollback and
+template installs) and `devex setup` unless the run is a confirmed plan with a
+signed approval of its digest:
+
+```bash
+# Approver (once): create a key, then add its public key to approval.approvers
+# in policy.yaml before anyone previews a plan (the digest binds the policy).
+devex approval keygen --out ~/.config/devex/approver.pem
+
+# Requester: preview the plan and send the digest to an approver.
+devex install git docker --dry-run --format json   # "approval_required": true, "digest": "sha256:..."
+
+# Approver: sign a decision (or --decision rejected --reason "...").
+devex approval sign sha256:... --key ~/.config/devex/approver.pem \
+  --approver it-security --expires 24h --out approval.json
+
+# Requester: install exactly the approved plan.
+devex install git docker --expect-plan sha256:... --approval approval.json
+```
+
+```yaml
+approval:
+  required: true
+  max_validity: 48h
+  approvers:
+    - id: it-security
+      public_key: "ed25519:<base64 public key>"
+```
+
+Only approvers listed in the policy are trusted, and each record's Ed25519
+signature covers the digest, decision, approver, reason and validity window.
+DevEx refuses a rejected plan (showing the approver's reason), an expired
+approval, one valid for longer than `max_validity`, one issued in the future, an
+unknown approver or a bad signature. Because the digest binds the policy, any
+change to the plan or to `policy.yaml` invalidates the approval. Each installer
+checks the approval again before every application and shared package batch
+starts, so once the approval expires no further application or batch starts (one
+already running finishes). Check a file with
+`devex approval verify approval.json`. Every decision is recorded in the audit
+log: `devex runs audit --event approval` lists the plan digest, the approver, the
+policy and the result.
+
+Template plans and MCP `execute` calls cannot carry an approval yet, so a policy
+that requires approval refuses them. Uninstalls and plugin commands are not
+gated.
+
 ## Security Compliance
 
 ### Enterprise Security Standards

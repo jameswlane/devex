@@ -181,6 +181,9 @@ policy, refusing any configuration or copy source whose content changed. Any dif
 as naming another application, enabling `rollback-on-failure` or changing a
 definition, fails before anything is installed. `devex remote install` uses
 this to install exactly the plan you confirmed.
+When `organization_policy.approval_required` is true, the install also needs
+`--approval <file>`: an approval of that digest signed by an approver the policy
+lists (see [Plan approvals](/docs/guides/security#plan-approvals)).
 
 Planning and execution share application selection: explicit app arguments,
 categories, inline definitions from the selected configuration, then default

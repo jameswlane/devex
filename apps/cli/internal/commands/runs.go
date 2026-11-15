@@ -307,7 +307,7 @@ func newRunsAuditCmd() *cobra.Command {
 	var format string
 	var status string
 	cmd := &cobra.Command{
-		Use: "audit", Short: "Query installation audit start/result events",
+		Use: "audit", Short: "Query installation audit start/result and approval events",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if format != "json" {
@@ -339,7 +339,7 @@ func newRunsAuditCmd() *cobra.Command {
 	cmd.Flags().StringVar(&filter.RunID, "run-id", "", "Filter by installation run ID")
 	cmd.Flags().StringVar(&filter.Target, "app", "", "Filter by exact application name")
 	cmd.Flags().StringVar(&filter.Mode, "mode", "", "Filter by plain or tui")
-	cmd.Flags().StringVar(&filter.Event, "event", "", "Filter by start or result")
+	cmd.Flags().StringVar(&filter.Event, "event", "", "Filter by start, result, or approval")
 	cmd.Flags().StringVar(&status, "status", "", "Filter by running, succeeded, failed, canceled, or skipped")
 	return cmd
 }

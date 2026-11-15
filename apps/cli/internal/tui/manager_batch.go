@@ -15,11 +15,15 @@ import (
 var batchIdentifier = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._+/@:-]*$`)
 
 // policyBatchable keeps apps the organization policy denies out of shared
-// package transactions; each is then refused by its own install.
-func policyBatchable(apps []types.CrossPlatformApp, homeDir string) ([]types.CrossPlatformApp, error) {
+// package transactions; each is then refused by its own install. Without a
+// required plan approval nothing is batched.
+func policyBatchable(ctx context.Context, apps []types.CrossPlatformApp, homeDir string) ([]types.CrossPlatformApp, error) {
 	policy, err := security.LoadOrgPolicy(homeDir)
 	if err != nil || policy == nil {
 		return apps, err
+	}
+	if err := policy.CheckApproval(ctx); err != nil {
+		return nil, err
 	}
 	allowed := make([]types.CrossPlatformApp, 0, len(apps))
 	for _, app := range apps {
@@ -32,7 +36,7 @@ func policyBatchable(apps []types.CrossPlatformApp, homeDir string) ([]types.Cro
 
 // preparePackageRun batches simple native requests without crossing dependency
 // or pre-install barriers. The normal lifecycle still runs each app's hooks.
-func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []types.CrossPlatformApp) error {
+func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []types.CrossPlatformApp, homeDir string) error {
 	if err := si.prepareAptRun(ctx, apps); err != nil {
 		return err
 	}
@@ -71,6 +75,14 @@ func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []type
 		if len(group) < 2 {
 			continue
 		}
+		// An approval can expire during an earlier batch; none starts after.
+		policy, err := security.LoadOrgPolicy(homeDir)
+		if err != nil {
+			return err
+		}
+		if err := policy.CheckApproval(ctx); err != nil {
+			return err
+		}
 		if err := AuthorizeInstallation(ctx, group, false); err != nil {
 			return err
 		}
@@ -80,7 +92,7 @@ func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []type
 		cfg := group[0].GetOSConfig()
 		cfg.InstallCommand = strings.Join(packages, " ")
 		cfg.Packages = nil
-		err := state.AuditTargetsStep(ctx, targets, "install-batch", func() error {
+		err = state.AuditTargetsStep(ctx, targets, "install-batch", func() error {
 			if manager == "mise" {
 				return si.executeMiseInstall(ctx, group[0], &cfg)
 			}
