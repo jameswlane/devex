@@ -154,7 +154,7 @@ func planPackageMaintenance(action string, apps []types.CrossPlatformApp) ([]pac
 			supported = true
 		case "apk", "emerge":
 			supported = action == "update"
-		case "snap", "nixpkgs":
+		case "snap", "nixpkgs", "mas":
 			supported = action == "upgrade"
 		}
 		if !supported {
@@ -218,7 +218,7 @@ func maintenanceNativeCommands(op packageMaintenanceOperation) []string {
 		"apt:upgrade-packages": {"apt-get update", "apt-get install --only-upgrade -y"},
 		"dnf:upgrade":          {"dnf upgrade --assumeyes"}, "zypper:upgrade": {"zypper --non-interactive update"},
 		"xbps:upgrade": {"xbps-install --yes --update"}, "eopkg:upgrade": {"eopkg upgrade --yes-all"},
-		"snap:upgrade": {"snap refresh"}, "nixpkgs:upgrade": {"nix-env --upgrade"},
+		"snap:upgrade": {"snap refresh"}, "nixpkgs:upgrade": {"nix-env --upgrade"}, "mas:upgrade": {"mas upgrade"},
 	}
 	result := append([]string(nil), commands[op.manager+":"+op.args[0]]...)
 	if op.manager == "apt" && interaction.IsInteractiveMode() {

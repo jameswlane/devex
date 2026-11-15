@@ -224,7 +224,7 @@ func (config OSConfig) ShellPackageArguments() (string, error) {
 
 func isPackageManager(name string) bool {
 	switch name {
-	case "sudo", "apt", "apt-get", "snap", "dnf", "yum", "brew", "flatpak", "pip", "pacman", "zypper":
+	case "sudo", "apt", "apt-get", "snap", "dnf", "yum", "brew", "flatpak", "mas", "pip", "pacman", "zypper":
 		return true
 	}
 	return false

@@ -35,7 +35,7 @@ var _ = Describe("Catalog package arguments", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(installed).To(BeTrue())
 			switch method {
-			case "apt", "brew", "deb", "dnf", "flatpak", "mise", "pip", "appimage", "zypper":
+			case "apt", "brew", "deb", "dnf", "flatpak", "mas", "mise", "pip", "appimage", "zypper":
 				Expect(executor.args).To(Equal(append([]string{"is-installed"}, want...)))
 			default:
 				// List-only methods skip the installed probe; the last call is the removal.
@@ -56,6 +56,8 @@ var _ = Describe("Catalog package arguments", func() {
 		Entry("versioned tool", "mise", "node@lts", []string{"node@lts"}),
 		Entry("container tag", "docker", "mysql:8.4", []string{"mysql:8.4"}),
 		Entry("qualified package", "emerge", "app-editors/neovim", []string{"app-editors/neovim"}),
+		Entry("App Store app ID", "mas", "497799835", []string{"497799835"}),
+		Entry("App Store command", "mas", "mas install 497799835", []string{"497799835"}),
 		Entry("brew tap", "brew", "jesseduffield/lazydocker/lazydocker", []string{"jesseduffield/lazydocker/lazydocker"}),
 		Entry("Windows identifier", "winget", "GitHub.cli", []string{"GitHub.cli"}),
 		Entry("flake reference", "nixflake", "github:ghostty-org/ghostty", []string{"github:ghostty-org/ghostty"}),

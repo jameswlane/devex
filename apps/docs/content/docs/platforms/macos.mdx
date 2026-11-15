@@ -1,11 +1,11 @@
 ---
 title: macOS Support
-description: Experimental Homebrew integration and planned macOS package managers.
+description: Experimental Homebrew and Mac App Store integration, and planned macOS package managers.
 ---
 
 # macOS Support
 
-macOS integration is **experimental**. A Homebrew plugin exists, but this is not
+macOS integration is **experimental**. Homebrew and Mac App Store plugins exist, but this is not
 a claim of full macOS setup, release or architecture coverage. Debian/Ubuntu
 checks do not validate native macOS behavior.
 
@@ -16,12 +16,36 @@ for remaining integration work. Do not assume DevEx automatically provisions
 Xcode Command Line Tools, Homebrew, Rosetta, or system preferences. Review and
 explicitly choose prerequisite installations and configuration changes.
 
+## Mac App Store (mas): experimental
+
+The `package-manager-mas` plugin installs, checks, upgrades and removes App
+Store apps through [mas](https://github.com/mas-cli/mas), selected by numeric
+App Store ID:
+
+```yaml
+name: Xcode
+description: Apple's IDE for macOS and iOS development
+category: Development Tools
+default: false
+macos:
+  install_method: mas
+  install_command: "497799835"
+  uninstall_command: "497799835"
+```
+
+Install mas first (`brew install mas`) and sign in to the App Store app; mas
+cannot sign in for you. `mas install` only installs apps the Apple Account has
+already got, and installs, upgrades and removals need administrator rights.
+`devex upgrade` upgrades the selected apps; `devex update` reports that the App
+Store has no metadata to refresh. See the
+[plugin README](https://github.com/jameswlane/devex/tree/main/packages/package-manager-mas)
+for every operation and a macOS smoke procedure.
+
 ## Planned managers
 
-There are no DevEx plugins for these managers yet. Their presence in application
-configuration does not make those installation paths available.
+There is no DevEx plugin for this manager yet. Its presence in application
+configuration does not make that installation path available.
 
-- [Mac App Store (mas) plugin #110](https://github.com/jameswlane/devex/issues/110)
 - [MacPorts plugin #124](https://github.com/jameswlane/devex/issues/124)
 
 ## Deferred integration
