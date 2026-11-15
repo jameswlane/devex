@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,7 +26,7 @@ var _ = Describe("Brew user operations", func() {
 		dir := GinkgoT().TempDir()
 		Expect(os.WriteFile(filepath.Join(dir, "brew"), []byte("#!/bin/sh\nexit 42\n"), 0755)).To(Succeed())
 		GinkgoT().Setenv("PATH", dir)
-		err := NewBrewPlugin().handleInstall(context.Background(), []string{"example"})
+		err := NewBrewPlugin().Execute("install", []string{"example"})
 		Expect(err).To(HaveOccurred())
 		Expect(sdk.ExitStatus(err)).To(Equal(42))
 	})

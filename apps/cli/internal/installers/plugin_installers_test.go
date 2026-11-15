@@ -62,6 +62,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("yum probe", "yum", "is-installed"),
 		Entry("flatpak probe", "flatpak", "is-installed"),
 		Entry("pip probe", "pip", "is-installed"),
+		Entry("brew probe", "brew", "is-installed"),
 	)
 
 	DescribeTable("reports a package the plugin found absent as not installed, without an error",
@@ -82,6 +83,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		Entry("mise", "mise"),
 		Entry("pip", "pip"),
 		Entry("appimage", "appimage"),
+		Entry("brew", "brew"),
 	)
 
 	DescribeTable("skips the installed probe for plugins without an is-installed operation",
@@ -95,15 +97,15 @@ var _ = Describe("Plugin installation discovery", func() {
 			Expect(installed).To(BeTrue())
 			Expect(executor.args).To(BeNil())
 		},
-		Entry("brew plugin", "brew"),
 		Entry("pacman plugin", "pacman"),
+		Entry("zypper plugin", "zypper"),
 	)
 
 	It("allows removal when a list-only plugin's list operation would fail offline", func() {
 		executor := &recordingPluginExecutor{
 			err: errors.New("offline metadata failure"),
 		}
-		installer := &PluginBasedInstaller{method: "brew", pluginBootstrap: executor, ctx: context.Background()}
+		installer := &PluginBasedInstaller{method: "pacman", pluginBootstrap: executor, ctx: context.Background()}
 
 		// IsInstalled skips probe and treats package as present
 		installed, err := installer.IsInstalled("git")
@@ -115,7 +117,7 @@ var _ = Describe("Plugin installation discovery", func() {
 		executor.err = nil
 		err = installer.Uninstall("sudo remove -y git", nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(executor.name).To(Equal("package-manager-brew"))
+		Expect(executor.name).To(Equal("package-manager-pacman"))
 		Expect(executor.args).To(Equal([]string{"remove", "git"}))
 	})
 })
