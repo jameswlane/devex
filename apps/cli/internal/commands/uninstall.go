@@ -22,6 +22,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/configfiles"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
 	"github.com/jameswlane/devex/apps/cli/internal/interaction"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/tui"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -222,6 +223,9 @@ func clearUninstallRecords(repo types.Repository, name string) error {
 	}
 	if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(name), ""); err != nil {
 		return fmt.Errorf("failed to clear saved application definition: %w", err)
+	}
+	if err := repo.Set(inventory.ReceiptKey(name), ""); err != nil {
+		return fmt.Errorf("failed to clear install receipt: %w", err)
 	}
 	if err := tui.ClearLifecycle(repo, name); err != nil {
 		return fmt.Errorf("failed to clear install state: %w", err)

@@ -101,6 +101,7 @@ func runRollbackBatch(ctx context.Context, out io.Writer, apps []types.CrossPlat
 		if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data)); err != nil {
 			return failRegistration(err)
 		}
+		recordInstallReceipt(ctx, repo, app)
 	}
 	return nil
 }

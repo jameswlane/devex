@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
+	"github.com/jameswlane/devex/apps/cli/internal/inventory"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
@@ -57,6 +58,9 @@ var _ = Describe("Rollback application batches", func() {
 			definition, err := repo.Get("installed-app-definition:first")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(definition).To(ContainSubstring("first"))
+			receipt, err := repo.Get(inventory.ReceiptKey("first"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(receipt).To(SatisfyAll(ContainSubstring(`"manager":"docker"`), ContainSubstring(`"managed_by":"devex"`), ContainSubstring(`"machine_id"`)))
 			return
 		}
 		Expect(errors.Is(err, original)).To(BeTrue())

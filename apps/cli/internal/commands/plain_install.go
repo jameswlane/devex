@@ -190,6 +190,7 @@ func runPlainInstallObserved(ctx context.Context, out io.Writer, apps []types.Cr
 				if err := repo.Set("installed-app-definition:"+normalizeInstallLookup(app.Name), string(data)); err != nil {
 					return err
 				}
+				recordInstallReceipt(appCtx, repo, app)
 				return tui.RecordLifecycle(repo, app.Name, true)
 			})
 		}
