@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/scheduler"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 
 	"github.com/jameswlane/devex/apps/cli/internal/state"
 	"github.com/jameswlane/devex/apps/cli/internal/templates"
@@ -89,6 +90,17 @@ func (r *ExecutionRuntime) Execute(ctx context.Context, plan templates.Execution
 	}
 	if r.Store == nil {
 		return nil, fmt.Errorf("state store is required")
+	}
+	if plan.Action == templates.LifecycleInstall || plan.Action == templates.LifecycleMaintain {
+		// Template plans cannot carry an approval, so a policy that requires
+		// one refuses them before any step runs.
+		orgPolicy, err := security.LoadOrgPolicy("")
+		if err != nil {
+			return nil, err
+		}
+		if err := orgPolicy.CheckApproval(ctx); err != nil {
+			return nil, err
+		}
 	}
 	fingerprint, err := PlanFingerprint(plan)
 	if err != nil {

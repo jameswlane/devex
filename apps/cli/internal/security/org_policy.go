@@ -59,6 +59,7 @@ type OrgPolicy struct {
 	Sources        PolicyRules        `yaml:"sources,omitempty" json:"sources"`
 	Privilege      OrgPrivilegePolicy `yaml:"privilege,omitempty" json:"privilege"`
 	Security       OrgSecurityPolicy  `yaml:"security,omitempty" json:"security"`
+	Approval       OrgApprovalPolicy  `yaml:"approval,omitempty" json:"approval"`
 	Source         string             `yaml:"-" json:"source"`
 	SHA256         string             `yaml:"-" json:"sha256"`
 }
@@ -71,6 +72,7 @@ type rawOrgPolicy struct {
 	Plugins        PolicyRules        `yaml:"plugins"`
 	Sources        PolicyRules        `yaml:"sources"`
 	Privilege      OrgPrivilegePolicy `yaml:"privilege"`
+	Approval       OrgApprovalPolicy  `yaml:"approval"`
 	Security       struct {
 		MinimumLevel       string   `yaml:"minimum_level"`
 		AllowUserOverrides *bool    `yaml:"allow_user_overrides"`
@@ -190,7 +192,7 @@ func loadOrgPolicyFile(path string) (*OrgPolicy, error) {
 	policy := &OrgPolicy{
 		Version: raw.Version, Name: raw.Name,
 		Applications: raw.Applications, InstallMethods: raw.InstallMethods,
-		Plugins: raw.Plugins, Sources: raw.Sources, Privilege: raw.Privilege,
+		Plugins: raw.Plugins, Sources: raw.Sources, Privilege: raw.Privilege, Approval: raw.Approval,
 		Security: OrgSecurityPolicy{MinimumLevel: raw.Security.MinimumLevel, AllowUserOverrides: allowOverrides, DenyCommands: raw.Security.DenyCommands},
 		Source:   path,
 	}
@@ -230,6 +232,9 @@ func (p *OrgPolicy) validate() error {
 		if _, err := regexp.Compile(pattern); err != nil {
 			return fmt.Errorf("security.deny_commands pattern %q: %w", pattern, err)
 		}
+	}
+	if err := p.Approval.validate(); err != nil {
+		return err
 	}
 	for _, rules := range []PolicyRules{p.Applications, p.InstallMethods, p.Plugins} {
 		for _, pattern := range append(append([]string{}, rules.Allow...), rules.Deny...) {

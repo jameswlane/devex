@@ -158,6 +158,9 @@ func (rsi *RefactoredStreamingInstaller) InstallApp(ctx context.Context, app typ
 	if err := orgPolicy.CheckApp(app); err != nil {
 		return err
 	}
+	if err := orgPolicy.CheckApproval(ctx); err != nil {
+		return err
+	}
 	if orgPolicy != nil {
 		rsi.sendLog("INFO", fmt.Sprintf("Applying organization policy %s %s (%s)", orgPolicy.DisplayName(), orgPolicy.Version, orgPolicy.Source))
 	}

@@ -15,11 +15,15 @@ import (
 var batchIdentifier = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._+/@:-]*$`)
 
 // policyBatchable keeps apps the organization policy denies out of shared
-// package transactions; each is then refused by its own install.
-func policyBatchable(apps []types.CrossPlatformApp, homeDir string) ([]types.CrossPlatformApp, error) {
+// package transactions; each is then refused by its own install. Without a
+// required plan approval nothing is batched.
+func policyBatchable(ctx context.Context, apps []types.CrossPlatformApp, homeDir string) ([]types.CrossPlatformApp, error) {
 	policy, err := security.LoadOrgPolicy(homeDir)
 	if err != nil || policy == nil {
 		return apps, err
+	}
+	if err := policy.CheckApproval(ctx); err != nil {
+		return nil, err
 	}
 	allowed := make([]types.CrossPlatformApp, 0, len(apps))
 	for _, app := range apps {

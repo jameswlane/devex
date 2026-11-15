@@ -7,6 +7,7 @@ import (
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	securitypkg "github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	. "github.com/onsi/ginkgo/v2"
@@ -42,6 +43,24 @@ var _ = Describe("Organization policy interactive installation", func() {
 		writePolicy("version: '1'\napplications:\n  allow: [editor]\n")
 		Expect(installer.InstallApp(context.Background(), aptApp("editor", "editor"), settings)).To(Succeed())
 		Expect(recorder.Calls("apt-get")).NotTo(BeEmpty())
+	})
+
+	It("installs and batches nothing without a required plan approval", func() {
+		recorder := sdktest.NewRecorder(GinkgoT(), "apt-get", "dpkg-query")
+		viper.Set("apt-lists-max-age", "0s")
+		DeferCleanup(func() { viper.Set("apt-lists-max-age", nil) })
+		installers.EnableTestMode()
+		DeferCleanup(installers.DisableTestMode)
+		_, public, err := securitypkg.GenerateApprovalKey()
+		Expect(err).NotTo(HaveOccurred())
+		writePolicy("version: '1'\napproval:\n  required: true\n  approvers:\n    - id: it\n      public_key: " + public + "\n")
+		settings := config.CrossPlatformSettings{HomeDir: home}
+
+		installer := NewStreamingInstaller(nil, &MockRepository{}, context.Background(), settings)
+		Expect(installer.InstallApp(context.Background(), aptApp("editor", "editor"), settings)).To(MatchError(ContainSubstring("requires an approved plan")))
+		_, err = PreparePackageBatch(context.Background(), []types.CrossPlatformApp{aptApp("bat", "bat"), aptApp("jq", "jq")}, &MockRepository{}, settings)
+		Expect(err).To(MatchError(ContainSubstring("requires an approved plan")))
+		Expect(recorder.Calls("apt-get")).To(BeEmpty())
 	})
 
 	It("keeps a denied app out of the shared package transaction", func() {

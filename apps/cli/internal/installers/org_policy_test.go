@@ -5,9 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/installers"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -42,6 +44,19 @@ var _ = Describe("Organization policy non-interactive installation", func() {
 
 		writePolicy("version: '1'\napplications:\n  allow: [editor]\n")
 		Expect(installers.InstallApp(context.Background(), app(), settings, nil)).To(Succeed())
+	})
+
+	It("refuses an app without an approved plan when the policy requires one", func() {
+		_, public, err := security.GenerateApprovalKey()
+		Expect(err).NotTo(HaveOccurred())
+		writePolicy("version: '1'\napproval:\n  required: true\n  approvers:\n    - id: it\n      public_key: " + public + "\n")
+		settings := config.CrossPlatformSettings{HomeDir: home}
+		Expect(installers.InstallApp(context.Background(), app(), settings, nil)).To(MatchError(ContainSubstring("requires an approved plan")))
+
+		policy, err := security.LoadOrgPolicy(home)
+		Expect(err).NotTo(HaveOccurred())
+		approved := security.WithApprovedPlan(context.Background(), security.ApprovedPlan{Digest: "sha256:x", Approver: "it", ExpiresAt: time.Now().Add(time.Hour), PolicySHA256: policy.SHA256})
+		Expect(installers.InstallApp(approved, app(), settings, nil)).To(Succeed())
 	})
 
 	It("reports the executing policy on stderr", func() {

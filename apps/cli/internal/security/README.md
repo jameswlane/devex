@@ -228,6 +228,18 @@ Use `devex policy show` or `devex policy show --format json` to inspect the acti
 policy. During installation, DevEx prints
 `Applying organization policy <name> <version> (<path>)` to stderr.
 
+### Plan approvals
+
+`approval.required` (in `approval.go`) requires a signed `PlanApproval` of the
+confirmed plan digest. `install --expect-plan <digest> --approval <file>` verifies
+it with `OrgPolicy.VerifyApproval` (listed Ed25519 approver, signature, digest,
+decision, `max_validity`, clock skew, expiry), records an `approval` audit event,
+and carries an `ApprovedPlan` in the context. `OrgPolicy.CheckApproval` then
+gates every install entry point: the plain installer, both TUI installers, shared
+package batches and template install/maintain plans. It re-checks expiry and the
+policy SHA-256 at each step. Unconfirmed `install` and `setup` runs are refused up
+front. `devex approval keygen|sign|verify` manages keys and records.
+
 ## Migration Guide
 
 ### From Hard-coded Validation

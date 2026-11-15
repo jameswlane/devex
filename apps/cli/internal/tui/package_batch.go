@@ -39,7 +39,7 @@ func PreparePackageBatch(ctx context.Context, apps []types.CrossPlatformApp, rep
 		}
 		available = append(available, app)
 	}
-	available, err := policyBatchable(available, settings.HomeDir)
+	available, err := policyBatchable(ctx, available, settings.HomeDir)
 	if err != nil {
 		return PackageBatch{}, err
 	}

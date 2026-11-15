@@ -680,7 +680,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		}
 	}()
 	prepare := func(ctx context.Context, apps []types.CrossPlatformApp) error {
-		allowed, err := policyBatchable(apps, settings.HomeDir)
+		allowed, err := policyBatchable(ctx, apps, settings.HomeDir)
 		if err != nil {
 			return err
 		}
@@ -819,6 +819,9 @@ func (si *StreamingInstaller) InstallApp(ctx context.Context, app types.CrossPla
 		return err
 	}
 	if err := orgPolicy.CheckApp(app); err != nil {
+		return err
+	}
+	if err := orgPolicy.CheckApproval(ctx); err != nil {
 		return err
 	}
 	if orgPolicy != nil {

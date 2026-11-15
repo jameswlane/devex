@@ -25,3 +25,10 @@ security:
   # deny_commands:
   #   - 'curl\s+http://'
   #   - '\brm\s+-rf\s+/'
+approval:
+  required: false # true installs only confirmed plans with a signed approval of their digest.
+  max_validity: 72h # Longest approval an approver may sign; the default is 72h.
+  approvers: [] # Required when approval.required is true. Create keys with 'devex approval keygen'.
+  # approvers:
+  #   - id: it-security
+  #     public_key: "ed25519:<base64 public key>"

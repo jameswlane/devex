@@ -36,6 +36,7 @@ type AuditEvent struct {
 	PlanID        string    `json:"plan_id"`
 	PolicyID      string    `json:"policy_id"`
 	Mode          string    `json:"mode"`
+	Approver      string    `json:"approver,omitempty"`
 }
 
 type AuditFilter struct {
@@ -245,6 +246,28 @@ func (a *auditApplication) start(step string) func(OperationStatus, error) {
 		}
 		writeAudit(event)
 	}
+}
+
+// RecordApprovalDecision appends one "approval" event for a plan approval
+// check: succeeded when an approval was accepted, failed when the policy
+// refused the plan (missing, invalid, rejected, expired or changed). Target
+// and plan_id are the plan digest; policy_id names the organization policy.
+func RecordApprovalDecision(planDigest, approver, policyID string, cause error) {
+	now := time.Now().UTC()
+	actor := "unknown"
+	if identity, err := sdk.NewPrivilegeResolver().ResolveUser(nil); err == nil {
+		actor = identity.Username
+	}
+	version := log.CLIVersion()
+	if version == "unknown" {
+		version = "dev"
+	}
+	event := AuditEvent{OperationRecord: OperationRecord{ID: uuid.NewString(), RunID: uuid.NewString(), StepID: "approval", Action: "install", Status: OperationStatusSucceeded, StartedAt: now, CompletedAt: &now}, SchemaVersion: 1, Event: "approval", Timestamp: now, Actor: redactAudit(actor), Target: planDigest, ToolVersion: version, PlanID: planDigest, PolicyID: redactAudit(policyID), Mode: "plain", Approver: redactAudit(approver)}
+	if cause != nil {
+		event.Status = OperationStatusFailed
+		event.Error = redactAudit(cause.Error())
+	}
+	writeAudit(event)
 }
 
 // Audit persistence is deliberately best-effort, including open, retention and close failures.
