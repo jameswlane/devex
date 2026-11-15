@@ -4,7 +4,11 @@ import { withAccelerate } from "@prisma/extension-accelerate";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as yaml from "yaml";
-import { PrismaClient } from "../generated/prisma/client";
+import { type Prisma, PrismaClient } from "../generated/prisma/client";
+import {
+	type ApplicationYaml,
+	applicationPlatformData,
+} from "../lib/application-platforms";
 import { prismaConnectionOptions } from "../lib/prisma-connection";
 
 // Get GitHub URL from environment variable
@@ -16,18 +20,13 @@ const prisma = new PrismaClient(prismaConnectionOptions()).$extends(
 	withAccelerate(),
 );
 
-interface ApplicationConfig {
+interface ApplicationConfig extends ApplicationYaml {
 	name: string;
 	description: string;
 	category: string;
 	official?: boolean;
 	default?: boolean;
 	tags?: string[];
-	allPlatforms?: any;
-	linux?: any;
-	macos?: any;
-	windows?: any;
-	desktopEnvironments?: string[];
 }
 
 interface PluginConfig {
@@ -132,31 +131,13 @@ async function syncApplications() {
 					app.category = categoryEntry.name;
 				}
 
-				// Prepare platform support data
-				const platforms: any = {};
-				let supportsLinux = false;
-				let supportsMacOS = false;
-				let supportsWindows = false;
-
-				if (app.allPlatforms) {
-					platforms.all = app.allPlatforms;
-					supportsLinux = true;
-					supportsMacOS = true;
-					supportsWindows = true;
-				} else {
-					if (app.linux) {
-						platforms.linux = app.linux;
-						supportsLinux = true;
-					}
-					if (app.macos) {
-						platforms.macos = app.macos;
-						supportsMacOS = true;
-					}
-					if (app.windows) {
-						platforms.windows = app.windows;
-						supportsWindows = true;
-					}
-				}
+				const {
+					platforms,
+					supportsLinux,
+					supportsMacOS,
+					supportsWindows,
+					desktopEnvironments,
+				} = applicationPlatformData(app);
 
 				await prisma.application.upsert({
 					where: { name: app.name },
@@ -166,11 +147,11 @@ async function syncApplications() {
 						official: app.official ?? false,
 						default: app.default ?? false,
 						tags: app.tags ?? [],
-						platforms,
+						platforms: platforms as Prisma.InputJsonObject,
 						supportsLinux,
 						supportsMacOS,
 						supportsWindows,
-						desktopEnvironments: app.desktopEnvironments ?? [],
+						desktopEnvironments,
 						githubUrl: GITHUB_BASE_URL,
 						githubPath: `apps/cli/config/applications/${categoryEntry.name}/${yamlFile}`,
 						lastSynced: new Date(),
@@ -182,11 +163,11 @@ async function syncApplications() {
 						official: app.official ?? false,
 						default: app.default ?? false,
 						tags: app.tags ?? [],
-						platforms,
+						platforms: platforms as Prisma.InputJsonObject,
 						supportsLinux,
 						supportsMacOS,
 						supportsWindows,
-						desktopEnvironments: app.desktopEnvironments ?? [],
+						desktopEnvironments,
 						githubUrl: GITHUB_BASE_URL,
 						githubPath: `apps/cli/config/applications/${categoryEntry.name}/${yamlFile}`,
 						lastSynced: new Date(),

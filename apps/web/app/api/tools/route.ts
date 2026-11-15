@@ -71,9 +71,9 @@ async function fetchRegistryData(): Promise<Tool[]> {
 			// Map platform names from metadata to expected format
 			if (pluginPlatforms.includes("linux")) {
 				platforms.linux = {
-					installMethod: "devex",
-					installCommand: plugin.name,
-					officialSupport: true,
+					install_method: "devex",
+					install_command: plugin.name,
+					official_support: true,
 				};
 			}
 			if (
@@ -81,16 +81,16 @@ async function fetchRegistryData(): Promise<Tool[]> {
 				pluginPlatforms.includes("macos")
 			) {
 				platforms.macos = {
-					installMethod: "devex",
-					installCommand: plugin.name,
-					officialSupport: true,
+					install_method: "devex",
+					install_command: plugin.name,
+					official_support: true,
 				};
 			}
 			if (pluginPlatforms.includes("windows")) {
 				platforms.windows = {
-					installMethod: "devex",
-					installCommand: plugin.name,
-					officialSupport: true,
+					install_method: "devex",
+					install_command: plugin.name,
+					official_support: true,
 				};
 			}
 

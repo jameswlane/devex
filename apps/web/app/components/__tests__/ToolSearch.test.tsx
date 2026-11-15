@@ -66,9 +66,9 @@ const mockToolsResponse = {
 			default: false,
 			platforms: {
 				linux: {
-					installMethod: "apt",
-					installCommand: "apt install test1",
-					officialSupport: true,
+					install_method: "apt",
+					install_command: "apt install test1",
+					official_support: true,
 				},
 				macos: null,
 				windows: null,
@@ -84,19 +84,19 @@ const mockToolsResponse = {
 			default: false,
 			platforms: {
 				linux: {
-					installMethod: "devex",
-					installCommand: "test-plugin-1",
-					officialSupport: true,
+					install_method: "devex",
+					install_command: "test-plugin-1",
+					official_support: true,
 				},
 				macos: {
-					installMethod: "devex",
-					installCommand: "test-plugin-1",
-					officialSupport: true,
+					install_method: "devex",
+					install_command: "test-plugin-1",
+					official_support: true,
 				},
 				windows: {
-					installMethod: "devex",
-					installCommand: "test-plugin-1",
-					officialSupport: true,
+					install_method: "devex",
+					install_command: "test-plugin-1",
+					official_support: true,
 				},
 			},
 			tags: ["Plugin", "test"],

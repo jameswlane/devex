@@ -6,6 +6,7 @@ import type {
 	RegistryStats,
 	Stack,
 } from "../generated/prisma/client";
+import { platformDocuments } from "./application-platforms";
 import { REGISTRY_CONFIG } from "./config";
 import { logger } from "./logger";
 import { redis } from "./redis";
@@ -64,51 +65,20 @@ type PluginWithExtras = {
 	lastDownload: Date | null;
 };
 
-// Platform support interface
-interface PlatformSupportInfo {
-	installMethod: string;
-	installCommand: string;
-	officialSupport: boolean;
-	alternatives?: Array<{
-		method: string;
-		command: string;
-		priority: number;
-	}>;
-}
-
-type ApplicationWithSupport =
-	| {
-			name: string;
-			description: string;
-			category: string;
-			official: boolean;
-			default: boolean;
-			tags: string[];
-			desktopEnvironments: string[];
-			githubUrl: string | null;
-			githubPath: string | null;
-			// Optimized JSON platform support structure
-			platforms: {
-				linux?: PlatformSupportInfo | null;
-				macos?: PlatformSupportInfo | null;
-				windows?: PlatformSupportInfo | null;
-			};
-	  }
-	| {
-			// Legacy support format for backward compatibility
-			name: string;
-			description: string;
-			category: string;
-			official: boolean;
-			default: boolean;
-			tags: string[];
-			desktopEnvironments: string[];
-			githubUrl: string | null;
-			githubPath: string | null;
-			linuxSupport: PlatformSupportInfo | null;
-			macosSupport: PlatformSupportInfo | null;
-			windowsSupport: PlatformSupportInfo | null;
-	  };
+// Application row with its stored platform documents (the JSON column, or
+// the result of platformDocuments)
+type ApplicationWithSupport = {
+	name: string;
+	description: string;
+	category: string;
+	official: boolean;
+	default: boolean;
+	tags: string[];
+	desktopEnvironments: string[];
+	githubUrl?: string | null;
+	githubPath: string | null;
+	platforms: unknown;
+};
 
 // Configuration content interface based on type
 interface ConfigContent {
@@ -460,7 +430,9 @@ export class RegistryTransformationService {
 		if (applications.length === 0) return [];
 
 		const hash = this.generateDataHash(applications);
-		const cacheKey = this.getCacheKey("applications", hash);
+		// v2: platforms are the stored documents (#479); don't serve entries
+		// cached in the old shape.
+		const cacheKey = this.getCacheKey("applications:v2", hash);
 
 		try {
 			const cached = await redis.get(cacheKey);
@@ -487,44 +459,6 @@ export class RegistryTransformationService {
 			const batch = applications.slice(i, i + TRANSFORMATION_CACHE.BATCH_SIZE);
 
 			const batchTransformed = batch.map((app) => {
-				// Handle both new JSON format and legacy format
-				const getPlatformSupport = (
-					platformName: "linux" | "macos" | "windows",
-				) => {
-					// New JSON format
-					if ("platforms" in app && app.platforms) {
-						const platform = app.platforms[platformName];
-						return platform
-							? {
-									installMethod: platform.installMethod,
-									installCommand: platform.installCommand,
-									officialSupport: platform.officialSupport,
-									alternatives:
-										(platform.alternatives as Array<{
-											method: string;
-											command: string;
-										}>) || [],
-								}
-							: null;
-					}
-
-					// Legacy format
-					const legacyApp = app as any;
-					const legacyPlatform = legacyApp[`${platformName}Support`];
-					return legacyPlatform
-						? {
-								installMethod: legacyPlatform.installMethod,
-								installCommand: legacyPlatform.installCommand,
-								officialSupport: legacyPlatform.officialSupport,
-								alternatives:
-									(legacyPlatform.alternatives as Array<{
-										method: string;
-										command: string;
-									}>) || [],
-							}
-						: null;
-				};
-
 				return {
 					name: app.name,
 					description: app.description,
@@ -532,11 +466,7 @@ export class RegistryTransformationService {
 					type: "application" as const,
 					official: app.official,
 					default: app.default,
-					platforms: {
-						linux: getPlatformSupport("linux"),
-						macos: getPlatformSupport("macos"),
-						windows: getPlatformSupport("windows"),
-					},
+					platforms: platformDocuments(app.platforms),
 					tags: app.tags,
 					desktopEnvironments: app.desktopEnvironments,
 					githubUrl: app.githubUrl,

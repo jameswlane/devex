@@ -3,14 +3,14 @@ import { validateAndSanitizeSearch } from "./search-sanitization";
 
 // Tool type definition
 interface PlatformInfo {
-	installMethod: string;
-	installCommand: string;
+	install_method: string;
+	install_command: string;
 	alternatives?: Array<{
 		install_method: string;
 		install_command: string;
 		official_support?: boolean;
 	}>;
-	officialSupport: boolean;
+	official_support: boolean;
 }
 
 export interface Tool {

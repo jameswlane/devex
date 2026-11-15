@@ -1,18 +1,6 @@
 // Core type definitions for the registry API
 
-// Alternative installation method
-export interface InstallAlternative {
-	method: string;
-	command: string;
-}
-
-// Platform-specific installation info
-export interface PlatformInstallInfo {
-	installMethod: string;
-	installCommand: string;
-	officialSupport: boolean;
-	alternatives: InstallAlternative[];
-}
+import type { PlatformDocuments } from "../application-platforms";
 
 // Binary information for a specific platform
 export interface PlatformBinary {
@@ -56,11 +44,9 @@ export interface ApplicationResponse {
 	type: "application";
 	official: boolean;
 	default: boolean;
-	platforms: {
-		linux: PlatformInstallInfo | null;
-		macos: PlatformInstallInfo | null;
-		windows: PlatformInstallInfo | null;
-	};
+	// Platform documents as the YAML catalog writes them (install_method,
+	// install_command, official_support, alternatives, ...)
+	platforms: PlatformDocuments;
 	tags: string[];
 	desktopEnvironments: string[];
 	githubUrl?: string | null;
