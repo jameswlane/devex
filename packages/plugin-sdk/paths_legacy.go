@@ -226,6 +226,9 @@ func (p Paths) Migrate(ctx context.Context, dryRun bool, out io.Writer) error {
 	}
 	moves := p.legacyMoves()
 	trusted := p.trustedBases()
+	if owner != nil { // Elevated: links beneath the invoking user's home are theirs, not trusted.
+		trusted = []string{p.Home}
+	}
 	for _, name := range []string{"cache", "plugin-cache", "setup-cache"} {
 		if err := validateLegacy(ctx, filepath.Join(p.Home, ".devex", name), trusted); err != nil {
 			return err

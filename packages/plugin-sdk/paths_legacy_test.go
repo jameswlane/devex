@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"os"
+	"os/user"
 	"path/filepath"
 )
 
@@ -109,6 +110,28 @@ var _ = Describe("Legacy directory migration", func() {
 		write(filepath.Join(old, "plugins", "other"), "other")
 		Expect(p.Migrate(context.Background(), false, &output)).To(MatchError(ContainSubstring(sdk.ErrMigrationRefused.Error())))
 		Expect(filepath.Join(outside, "other")).NotTo(BeAnExistingFile())
+	})
+	It("trusts only HOME when migrating with elevation", func() {
+		account, err := user.Current()
+		Expect(err).NotTo(HaveOccurred())
+		original := sdk.NewPrivilegeResolver
+		DeferCleanup(func() { sdk.NewPrivilegeResolver = original })
+		sdk.NewPrivilegeResolver = func() sdk.PrivilegeResolver {
+			return sdk.PrivilegeResolver{Elevated: true, CurrentUser: func() (*user.User, error) { return &user.User{Uid: "0", HomeDir: "/root"}, nil }, LookupUser: func(string) (*user.User, error) {
+				return &user.User{Uid: account.Uid, Gid: account.Gid, Username: account.Username, HomeDir: home}, nil
+			}, Getenv: func(k string) string {
+				if k == "SUDO_USER" {
+					return account.Username
+				}
+				return ""
+			}}
+		}
+		outside := GinkgoT().TempDir()
+		write(filepath.Join(outside, "devex", "logs", "log"), "outside")
+		Expect(os.MkdirAll(filepath.Join(home, ".local"), 0700)).To(Succeed())
+		Expect(os.Symlink(outside, filepath.Join(home, ".local", "share"))).To(Succeed())
+		Expect(p.Migrate(context.Background(), false, &output)).To(MatchError(ContainSubstring(sdk.ErrMigrationRefused.Error())))
+		Expect(os.ReadFile(filepath.Join(outside, "devex", "logs", "log"))).To(Equal([]byte("outside")))
 	})
 	It("honors cancellation and leaves recoverable sources", func() {
 		source := filepath.Join(home, ".devex/config.yaml")
