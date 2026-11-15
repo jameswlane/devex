@@ -55,14 +55,16 @@ var _ = Describe("Unattended mise execution", func() {
 		Expect(recorder.Calls("mise")).To(Equal([]sdktest.Call{{Args: []string{"use", "node@22"}}}))
 	})
 
-	It("installs mise with ensure-installed when mise is not on PATH yet", func() {
-		recorder := sdktest.NewRecorder(GinkgoT(), "which", "sh")
+	It("runs ensure-installed when mise is not on PATH yet", func() {
+		// mise is not a fake here, so it is absent from PATH. The scripted
+		// `which` stands in for the install check; without the dispatch
+		// order fix, EnsureAvailable exits the process first.
+		recorder := sdktest.NewRecorder(GinkgoT(), "which")
 		sdktest.CloseStdin(GinkgoT())
 		GinkgoT().Setenv("DEVEX_UNATTENDED", "1")
-		recorder.Script("which", []string{"mise"}, sdktest.Response{ExitCode: 1})
 		plugin := main.NewMisePlugin()
 		Expect(plugin.Execute("ensure-installed", nil)).To(Succeed())
-		Expect(recorder.Calls("sh")).To(Equal([]sdktest.Call{{Args: []string{"-c", "curl https://mise.run | sh"}}}))
+		Expect(recorder.Calls("which")).To(Equal([]sdktest.Call{{Args: []string{"mise"}}}))
 	})
 
 	It("finds mise in ~/.local/bin for the steps after ensure-installed", func() {
