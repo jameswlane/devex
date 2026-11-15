@@ -357,15 +357,17 @@ func computeStartupRoute(args []string) startupRoute {
 	if err := cmd.ParseFlags(rest); err != nil {
 		return startupRoute{}
 	}
-	// Unknown commands fail the root's argument check, which Cobra now runs
-	// after flag parsing; other commands keep their route until execution.
-	if !cmd.HasParent() && !cmd.Flags().Changed("help") {
+	path := strings.Fields(cmd.CommandPath())
+	route := startupRoute{resolved: true, path: path[1:], flags: cmd.Flags()}
+	// Unknown commands fail the root's argument check, which Cobra runs after
+	// flag parsing and after printing help or the version; other commands keep
+	// their route until execution.
+	if !cmd.HasParent() && !route.helpRequested() {
 		if err := cmd.ValidateArgs(cmd.Flags().Args()); err != nil {
 			return startupRoute{}
 		}
 	}
-	path := strings.Fields(cmd.CommandPath())
-	return startupRoute{resolved: true, path: path[1:], flags: cmd.Flags()}
+	return route
 }
 
 // is reports whether the route is exactly the given command path.
