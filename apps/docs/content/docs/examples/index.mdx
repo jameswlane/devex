@@ -1,6 +1,6 @@
 ---
 title: Examples Overview
-description: Real-world DevEx configurations and use cases for different development scenarios
+description: Set up common development environments with the DevEx application catalog and built-in lifecycle templates
 ---
 
 import { Card, Cards } from 'fumadocs-ui/components/card'
@@ -8,383 +8,120 @@ import { Callout } from 'fumadocs-ui/components/callout'
 
 # Examples Overview
 
-This section provides real-world examples of DevEx configurations for different development scenarios. Each example includes complete configuration files, setup instructions, and best practices.
-
-## Available Examples
+Each example sets up one kind of development machine with commands that work on the current CLI. Each page ends with a smoke procedure that you can run on a fresh Debian or Ubuntu VM.
 
 <Callout type="info">
-These examples build on the concepts in our [Configuration Guide](/docs/configuration). For basic setup, start with [Getting Started](/docs/guides/getting-started).
+These examples build on the [Template Runtime](/docs/configuration/templates) and the [Configuration Guide](/docs/configuration). For basic setup, start with [Getting Started](/docs/guides/getting-started).
 </Callout>
 
 <Cards>
-  <Card 
+  <Card
     title="Web Development"
     href="/docs/examples/web-development"
-    description="Complete frontend development environment with React, Vue, and modern tools"
+    description="Node.js, Git, the GitHub CLI, and PostgreSQL and Redis containers"
   />
-  <Card 
-    title="Backend Development" 
+  <Card
+    title="Backend Development"
     href="/docs/examples/backend-development"
-    description="Server-side development with Node.js, Python, Go, and databases"
+    description="Go, Python, Docker, kubectl, Helm, and PostgreSQL and Redis containers"
   />
-  <Card 
+  <Card
     title="Data Science"
-    href="/docs/examples/data-science" 
+    href="/docs/examples/data-science"
     description="Isolated JupyterLab (Python, R, or both) and MLflow containers from the data-science template"
   />
-  <Card 
+  <Card
     title="Mobile Development"
     href="/docs/examples/mobile-development"
     description="React Native, Flutter, Android and iOS prerequisites from the mobile template"
   />
-  <Card 
+  <Card
     title="DevOps"
     href="/docs/examples/devops"
     description="Docker, kubectl, Helm, kind, Terraform or OpenTofu, and the AWS CLI at pinned versions"
   />
-  <Card 
+  <Card
     title="Game Development"
     href="/docs/examples/game-development"
     description="Opt-in Godot editor setup, with what to do for Unity and Unreal"
   />
 </Cards>
 
-The data science, mobile, DevOps and game development examples are built-in lifecycle templates. List them with `devex template list`, and install one with `devex install --template <id>`.
+## How the examples work
 
-## How to Use These Examples
+The examples use two parts of DevEx:
 
-Each example provides:
+- **The application catalog.** `devex init` writes it to `~/.local/share/devex/config`. List it with `devex list available`, and install from it by name, for example `devex install git Docker`.
+- **Built-in lifecycle templates.** A template is a set of install, status, maintain and remove steps with inputs. List them with `devex template list`.
 
-### 1. Complete Configuration Files
-Ready-to-use YAML files that you can copy to your `~/.devex/` directory:
+The data science, mobile, DevOps and game development examples each use one template. The web and backend examples combine catalog apps, mise and the `databases` and `devops` templates, because the built-in `web-development`, `full-stack` and `backend` templates don't install on a fresh machine yet ([#461](https://github.com/jameswlane/devex/issues/461), [#462](https://github.com/jameswlane/devex/issues/462), [#463](https://github.com/jameswlane/devex/issues/463)).
 
-```bash
-# Copy an example configuration
-curl -fsSL https://raw.githubusercontent.com/jameswlane/devex/main/examples/web-development.yaml > ~/.devex/web-dev.yaml
-
-# Apply the configuration
-devex config apply --file ~/.devex/web-dev.yaml
-devex install
-```
-
-### 2. Step-by-Step Setup Instructions
-Detailed walkthrough of the setup process, including:
-- Prerequisites and system requirements
-- Installation commands
-- Configuration explanations
-- Verification steps
-
-### 3. Customization Options
-Guidelines for adapting the examples to your specific needs:
-- Adding or removing tools
-- Modifying versions
-- Team-specific adjustments
-
-### 4. Best Practices
-Proven approaches for:
-- Team collaboration
-- CI/CD integration
-- Environment management
-- Troubleshooting
-
-## Common Patterns
-
-### Multi-Environment Setup
-
-Most examples follow this pattern for handling different environments:
-
-```yaml
-# Base configuration for all environments
-applications:
-  development:
-    - name: git
-      default: true
-    - name: docker
-      default: true
-
-# Development-specific tools
-development:
-  applications:
-    - name: docker-compose
-      default: true
-    - name: dev-tools
-      default: true
-
-# Production-specific configurations
-production:
-  applications:
-    - name: monitoring-agent
-      default: true
-  security:
-    enabled: true
-```
-
-### Team Collaboration Structure
-
-Examples include team-friendly configurations:
-
-```yaml
-# Team base configuration
-team:
-  name: "frontend-team"
-  tools:
-    editor: "vscode"
-    shell: "zsh"
-    theme: "tokyo-night"
-
-# Role-based additions
-roles:
-  senior-developer:
-    additional_tools:
-      - kubernetes-cli
-      - terraform
-  
-  junior-developer:
-    guided_setup: true
-    documentation_tools:
-      - devdocs
-```
-
-### Cross-Platform Compatibility
-
-All examples include platform-specific configurations:
-
-```yaml
-applications:
-  development:
-    - name: node
-      linux:
-        install_method: mise
-        install_command: node@lts
-      macos:
-        install_method: mise
-        install_command: node@lts
-      windows:
-        install_method: mise
-        install_command: node@lts
-```
-
-## Quick Start with Examples
-
-### 1. Explore Available Examples
+## Work with a template
 
 ```bash
-# List all available examples
-devex examples list
+# Find a template and read what it does
+devex template list
+devex template info databases
 
-# Show example details
-devex examples show web-development
+# Check it and see the steps an install would run
+devex template validate databases
+devex template plan databases --action install --answer databases=postgres --answer mysql_password=unused --non-interactive
 
-# Preview what would be installed
-devex examples preview web-development
+# Preview, then install (see the note below about Docker)
+devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive --dry-run
+devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive
+
+# Check, update or remove what the latest install created
+devex status --template databases --run latest
+devex maintain --template databases --run latest
+devex remove --template databases --run latest --force
 ```
 
-### 2. Apply an Example
+`--answer key=value` sets one input. Put several in a YAML file and pass `--answers <file>`. `devex template info` lists a template's inputs, and the [Template Runtime](/docs/configuration/templates) page covers the schema.
 
-```bash
-# Apply example directly
-devex examples apply web-development
+To record a template's profile in your configuration, run `devex init --profile <name>`. `devex init --help` lists the profiles.
 
-# Or download and customize
-devex examples download web-development --output ~/.devex/my-config.yaml
-# Edit ~/.devex/my-config.yaml
-devex config apply --file ~/.devex/my-config.yaml
-```
-
-### 3. Combine Multiple Examples
-
-```bash
-# Combine examples for full-stack development
-devex examples apply web-development backend-development
-
-# Merge specific categories
-devex examples apply web-development --category frontend
-devex examples apply backend-development --category databases
-```
-
-## Example Categories
-
-### Development Stacks
-
-**Frontend-Focused:**
-- React development environment
-- Vue.js development setup
-- Angular development stack
-- Static site generation tools
-
-**Backend-Focused:**
-- Node.js API development
-- Python web development
-- Go microservices
-- Java enterprise development
-
-**Full-Stack:**
-- MEAN/MERN stack
-- JAMstack development
-- Serverless development
-- Microservices architecture
-
-### Specialized Environments
-
-**Data & Analytics:**
-- Python data science
-- R statistical analysis
-- Machine learning development
-- Business intelligence tools
-
-**Mobile Development:**
-- React Native setup
-- Flutter development
-- Native iOS development
-- Native Android development
-
-**DevOps & Infrastructure:**
-- Kubernetes development
-- Terraform infrastructure
-- Ansible automation
-- Monitoring and observability
-
-### Industry-Specific
-
-**Enterprise Development:**
-- Java enterprise stack
-- .NET development
-- Security-hardened environments
-- Compliance-ready setups
-
-**Startup Environment:**
-- Rapid prototyping tools
-- Multi-language support
-- Cost-optimized tooling
-- Collaboration-focused setup
-
-## Contributing Examples
-
-Have a useful DevEx configuration? Contribute it to help others!
-
-### Example Structure
-
-```
-examples/
-├── example-name/
-│   ├── README.md                 # Description and instructions
-│   ├── devex.yaml              # Main configuration
-│   ├── team/                   # Team variations
-│   │   ├── frontend.yaml
-│   │   └── backend.yaml
-│   ├── environments/           # Environment-specific configs
-│   │   ├── development.yaml
-│   │   ├── staging.yaml
-│   │   └── production.yaml
-│   └── assets/                 # Supporting files
-│       ├── vscode-settings.json
-│       └── git-hooks/
-```
-
-### Contribution Guidelines
-
-1. **Complete Documentation**: Include clear README with setup instructions
-2. **Cross-Platform Support**: Test on Linux, macOS, and Windows
-3. **Security Best Practices**: Follow security guidelines
-4. **Real-World Testing**: Verify the configuration works in practice
-5. **Team Feedback**: Get feedback from actual users
-
-```bash
-# Fork the repository
-git clone https://github.com/yourusername/devex.git
-
-# Create your example
-mkdir -p examples/my-development-stack
-cd examples/my-development-stack
-
-# Create configuration files
-# ... add your files ...
-
-# Test the example
-devex config apply --file devex.yaml --dry-run
-devex examples test my-development-stack
-
-# Submit pull request
-git add .
-git commit -m "Add my-development-stack example"
-git push origin my-example-branch
-```
-
-<Callout type="tip">
-**Example Best Practices:**
-
-1. **Start Simple**: Begin with essential tools, add complexity gradually
-2. **Document Decisions**: Explain why specific tools were chosen
-3. **Include Alternatives**: Provide options for different preferences
-4. **Test Thoroughly**: Verify on clean systems and different platforms
-5. **Keep Updated**: Maintain examples as tools and versions evolve
-6. **Real-World Focus**: Base examples on actual development needs
+<Callout type="info">
+On a fresh machine, run `devex init` before you plan a template or install catalog apps ([#466](https://github.com/jameswlane/devex/issues/466)). Install any plugin a template needs, such as `package-manager-mise` or `package-manager-docker`, with `devex plugin install` first ([#460](https://github.com/jameswlane/devex/issues/460)). For templates that run containers, install Docker with `devex install Docker`, then log out and back in, before the template install ([#470](https://github.com/jameswlane/devex/issues/470), [#455](https://github.com/jameswlane/devex/issues/455)).
 </Callout>
 
-## Community Examples
+## Write your own template
 
-Beyond the official examples, the DevEx community shares configurations:
-
-- **Company Examples**: Real configurations from various companies
-- **Open Source Projects**: Configurations from popular open source projects
-- **Personal Setups**: Individual developer configurations
-- **Educational**: Examples for learning and teaching
-
-### Finding Community Examples
+A template is one YAML file. Start from a built-in one in [`apps/cli/assets/templates`](https://github.com/jameswlane/devex/tree/main/apps/cli/assets/templates), then check and install it by path:
 
 ```bash
-# Search community examples
-devex community search "react development"
-
-# Browse by category
-devex community browse --category "data-science"
-
-# Install community example
-devex community install awesome-python-setup --author @pythonista
+devex template validate ./my-stack.yaml
+devex template plan ./my-stack.yaml --action install --non-interactive
+devex install --template ./my-stack.yaml --non-interactive --dry-run
 ```
 
-## Getting Help
+To share a template with the project, add it to `apps/cli/assets/templates` with a smoke procedure in its example page, and open a pull request.
 
-If you need help with examples:
+## Smoke procedure
 
-<Cards>
-  <Card title="GitHub Discussions" href="https://github.com/jameswlane/devex/discussions" />
-  <Card title="Discord Community" href="#" />
-  <Card title="Stack Overflow" href="#" />
-  <Card title="Reddit Community" href="#" />
-</Cards>
+Run this on a fresh Debian 12 or Ubuntu 24.04 VM to check the commands on this page. It needs `curl`, `git` and `unzip`, and sudo for the Docker steps.
 
-### Example-Specific Support
+```bash
+devex init --profile backend --non-interactive
+devex list available
+devex template list
+devex template info databases
+devex template validate databases
+devex template plan databases --action install --answer databases=postgres --answer mysql_password=unused --non-interactive
+devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive --dry-run
 
-When asking for help with examples:
+devex plugin install package-manager-docker
+devex install Docker --non-interactive
 
-1. **Specify the example** you're using
-2. **Share your modifications** if any
-3. **Include error messages** in full
-4. **Mention your platform** (OS, version, etc.)
-5. **Provide context** about your development needs
+# Log out and back in so the docker group applies, then:
+devex install --template databases --answer databases=postgres --answer mysql_password=unused --non-interactive
+timeout 60 sh -c "until docker exec devex-postgres pg_isready; do sleep 2; done"
 
-Ready to explore specific examples? Choose from the categories below:
+devex status --template databases --run latest
+devex maintain --template databases --run latest
+devex remove --template databases --run latest --force
+```
 
-<Cards>
-  <Card 
-    title="Web Development"
-    href="/docs/examples/web-development"
-    description="Modern frontend development with React, Vue, and cutting-edge tools"
-  />
-  <Card 
-    title="Backend Development" 
-    href="/docs/examples/backend-development"
-    description="Server-side development across multiple languages and frameworks"
-  />
-  <Card 
-    title="Data Science"
-    href="/docs/examples/data-science" 
-    description="Complete Python data science and machine learning environment"
-  />
-  <Card 
-    title="Mobile Development"
-    href="/docs/examples/mobile-development"
-    description="Cross-platform and native mobile development setup"
-  />
-</Cards>
+## Getting help
+
+Ask in [GitHub Discussions](https://github.com/jameswlane/devex/discussions) or [open an issue](https://github.com/jameswlane/devex/issues). Include the example you followed, your OS and version, and the full error output.
