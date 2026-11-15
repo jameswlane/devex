@@ -175,6 +175,11 @@ All installations are configurable via YAML files in $DEVEX_DATA_DIR/config/`,
 			// Invoke the handler directly: Execute on a child restarts the root command.
 			return options.runSetup(cmd, args)
 		},
+		// Cobra's default check for root arguments runs while it looks up the
+		// command, before flags are parsed, so an unknown flag swallows the next
+		// word and "devex --bogus plugin run" reported "run" as an unknown
+		// command. Checking arguments here runs after flag parsing instead.
+		Args:         rootArgs,
 		SilenceUsage: true, // Prevent usage spam on runtime errors
 	}
 
@@ -471,4 +476,27 @@ func readAPICommand(cmd *cobra.Command) bool {
 		return cmd.Parent() != nil && (cmd.Parent().Name() == "config" || (cmd.Name() == "show" && cmd.Parent().Name() == "policy"))
 	}
 	return false
+}
+
+// rootArgs rejects positional arguments to the root command with the same
+// message Cobra's lookup gives an unknown command.
+func rootArgs(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "unknown command %q for %q", args[0], cmd.CommandPath())
+	if !cmd.DisableSuggestions {
+		if cmd.SuggestionsMinimumDistance <= 0 {
+			cmd.SuggestionsMinimumDistance = 2
+		}
+		if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+			sb.WriteString("\n\nDid you mean this?\n")
+			for _, s := range suggestions {
+				fmt.Fprintf(&sb, "\t%v\n", s)
+			}
+		}
+	}
+	fmt.Fprintf(&sb, "\nRun '%s --help' for usage.", cmd.CommandPath())
+	return errors.New(sb.String())
 }
