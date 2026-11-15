@@ -346,17 +346,28 @@ func computeStartupRoute(args []string) startupRoute {
 	root := commands.NewRootCmd(version, nil, config.CrossPlatformSettings{})
 	root.InitDefaultHelpCmd()
 	root.InitDefaultCompletionCmd()
-	cmd, _, err := root.Find(args)
+	cmd, rest, err := root.Find(args)
 	if err != nil || cmd == nil {
 		return startupRoute{}
 	}
 	cmd.InitDefaultHelpFlag()
 	cmd.InitDefaultVersionFlag()
-	if err := cmd.ParseFlags(args); err != nil {
+	// Parse what Find leaves after the command path, as Cobra does at
+	// execution, so the remaining positional arguments can be validated.
+	if err := cmd.ParseFlags(rest); err != nil {
 		return startupRoute{}
 	}
 	path := strings.Fields(cmd.CommandPath())
-	return startupRoute{resolved: true, path: path[1:], flags: cmd.Flags()}
+	route := startupRoute{resolved: true, path: path[1:], flags: cmd.Flags()}
+	// Unknown commands fail the root's argument check, which Cobra runs after
+	// flag parsing and after printing help or the version; other commands keep
+	// their route until execution.
+	if !cmd.HasParent() && !route.helpRequested() {
+		if err := cmd.ValidateArgs(cmd.Flags().Args()); err != nil {
+			return startupRoute{}
+		}
+	}
+	return route
 }
 
 // is reports whether the route is exactly the given command path.

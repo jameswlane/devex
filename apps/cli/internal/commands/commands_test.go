@@ -91,5 +91,22 @@ var _ = Describe("Commands", func() {
 			Expect(errBuf.String()).To(ContainSubstring(`unknown command "notacommand" for "devex"`))
 			Expect(errBuf.String()).To(ContainSubstring("Run 'devex --help' for usage."))
 		})
+
+		DescribeTable("reports an unknown flag before a nested command as an unknown flag",
+			func(args ...string) {
+				rootCmd := commands.NewRootCmd("test", repo, settings)
+				var errBuf bytes.Buffer
+				rootCmd.SetErr(&errBuf)
+				rootCmd.SetOut(&errBuf)
+				rootCmd.SetArgs(args)
+
+				err := rootCmd.Execute()
+				Expect(err).To(MatchError("unknown flag: --bogus"))
+				Expect(errBuf.String()).NotTo(ContainSubstring("unknown command"))
+			},
+			Entry("plugin run", "--bogus", "plugin", "run", "tool-stackdetector", "detect"),
+			Entry("plugin info", "--bogus", "plugin", "info", "tool-stackdetector"),
+			Entry("plugin list", "--bogus", "plugin", "list"),
+		)
 	})
 })

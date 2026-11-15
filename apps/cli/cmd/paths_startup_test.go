@@ -158,6 +158,9 @@ var _ = Describe("Read-only startup classification", func() {
 		Entry("root --version=false is not informational", informationalCommand, []string{"--version=false"}, false),
 		Entry("install with --help=true", presentationCommand, []string{"install", "git", "--help=true"}, true),
 		Entry("root --version=true", presentationCommand, []string{"--version=true"}, true),
+		Entry("root --version before an unknown command", presentationCommand, []string{"--version", "notacommand"}, true),
+		Entry("root --help before an unknown command", presentationCommand, []string{"--help", "notacommand"}, true),
+		Entry("unknown command", presentationCommand, []string{"notacommand"}, false),
 		Entry("-h", presentationCommand, []string{"install", "-h"}, true),
 	)
 })
