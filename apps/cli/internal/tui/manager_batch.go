@@ -75,6 +75,14 @@ func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []type
 		if len(group) < 2 {
 			continue
 		}
+		// An approval can expire during an earlier batch; none starts after.
+		policy, err := security.LoadOrgPolicy("")
+		if err != nil {
+			return err
+		}
+		if err := policy.CheckApproval(ctx); err != nil {
+			return err
+		}
 		if err := AuthorizeInstallation(ctx, group, false); err != nil {
 			return err
 		}
@@ -84,7 +92,7 @@ func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []type
 		cfg := group[0].GetOSConfig()
 		cfg.InstallCommand = strings.Join(packages, " ")
 		cfg.Packages = nil
-		err := state.AuditTargetsStep(ctx, targets, "install-batch", func() error {
+		err = state.AuditTargetsStep(ctx, targets, "install-batch", func() error {
 			if manager == "mise" {
 				return si.executeMiseInstall(ctx, group[0], &cfg)
 			}

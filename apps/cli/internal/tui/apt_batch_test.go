@@ -17,6 +17,7 @@ import (
 	"github.com/jameswlane/devex/apps/cli/internal/config"
 	"github.com/jameswlane/devex/apps/cli/internal/log"
 	"github.com/jameswlane/devex/apps/cli/internal/mocks"
+	"github.com/jameswlane/devex/apps/cli/internal/security"
 	"github.com/jameswlane/devex/apps/cli/internal/types"
 	"github.com/jameswlane/devex/packages/plugin-sdk/sdktest"
 	"github.com/spf13/viper"
@@ -388,6 +389,26 @@ var _ = Describe("APT batching", func() {
 		Expect(installer.InstallApps(context.Background(), []types.CrossPlatformApp{a, b}, config.CrossPlatformSettings{})).To(Succeed())
 		Expect(recorder.Calls("bash")).To(HaveLen(1))
 		Expect(recorder.Calls("bash")[0].Args[1]).To(ContainSubstring("mise use --global node@22 python@3.13"))
+	})
+
+	It("starts no manager batch after the plan approval expired", func() {
+		teamDir := filepath.Join(GinkgoT().TempDir(), "team")
+		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
+		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
+		_, public, err := security.GenerateApprovalKey()
+		Expect(err).NotTo(HaveOccurred())
+		Expect(os.WriteFile(filepath.Join(teamDir, "policy.yaml"), []byte("version: '1'\napproval:\n  required: true\n  approvers:\n    - id: it\n      public_key: "+public+"\n"), 0o600)).To(Succeed())
+		policy, err := security.LoadOrgPolicy("")
+		Expect(err).NotTo(HaveOccurred())
+		expired := security.WithApprovedPlan(context.Background(), security.ApprovedPlan{Digest: "sha256:x", Approver: "it", ExpiresAt: time.Now().Add(-time.Second), PolicySHA256: policy.SHA256})
+
+		a, b := aptApp("node", "node@22"), aptApp("python", "python@3.13")
+		a.AllPlatforms.InstallMethod = "mise"
+		b.AllPlatforms.InstallMethod = "mise"
+		recorder.Script("mise", []string{"where", "node@22"}, sdktest.Response{ExitCode: 1})
+		recorder.Script("mise", []string{"where", "python@3.13"}, sdktest.Response{ExitCode: 1})
+		Expect(installer.preparePackageRun(expired, []types.CrossPlatformApp{a, b})).To(MatchError(ContainSubstring("approval expired")))
+		Expect(recorder.Calls("bash")).To(BeEmpty())
 	})
 
 	It("does not rewrite an unchanged source or invalidate fresh lists", func() {
