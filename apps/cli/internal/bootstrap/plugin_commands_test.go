@@ -217,6 +217,13 @@ var _ = Describe("Registered plugin commands", func() {
 		Expect(stdout.String()).To(ContainSubstring("run <name> <command> [args...]"))
 		Expect(stderr.String()).NotTo(ContainSubstring("Usage of plugin-run"))
 	})
+	It("shows run help even when the config file cannot be loaded", func() {
+		missing := filepath.Join(home, "missing.yaml")
+		Expect(executeRoot(context.Background(), "--config", missing, "plugin", "run", "--help")).To(Succeed())
+		Expect(stdout.String()).To(ContainSubstring("run <name> <command> [args...]"))
+		Expect(executeRoot(context.Background(), "--config", missing, "plugin", "run", "recorder", "record")).To(MatchError(ContainSubstring("missing.yaml")))
+		Expect(requests).To(BeEmpty())
+	})
 	It("updates named plugins and --all and removes binaries with their install records", func() {
 		install("recorder", "1.0.0")
 		Expect(execute(context.Background(), "update", "recorder")).To(Succeed())
