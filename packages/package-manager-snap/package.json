@@ -6,7 +6,7 @@
 	"main": "main.go",
 	"scripts": {
 		"build": "go build -o devex-plugin-package-manager-snap .",
-		"dev": "go build -race -o devex-plugin-package-manager-snap main.go",
+		"dev": "go build -race -o devex-plugin-package-manager-snap .",
 		"test": "go test ./...",
 		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",

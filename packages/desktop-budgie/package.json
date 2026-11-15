@@ -6,7 +6,7 @@
 	"main": "main.go",
 	"scripts": {
 		"build": "go build -o devex-plugin-desktop-budgie .",
-		"dev": "go build -race -o devex-plugin-desktop-budgie main.go",
+		"dev": "go build -race -o devex-plugin-desktop-budgie .",
 		"test": "go test ./...",
 		"lint": "golangci-lint run --allow-parallel-runners",
 		"download": "go mod download",
