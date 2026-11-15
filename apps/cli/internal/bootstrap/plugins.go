@@ -462,6 +462,13 @@ func (b *PluginBootstrap) createPluginManagementCmd() *cobra.Command {
 		Use: "plugin", Short: "Install, inspect, run, update, and remove DevEx plugins",
 		Example: "  devex plugin list --format json\n  devex plugin install tool-stackdetector\n  devex plugin run tool-stackdetector detect --path .\n  devex plugin update --all",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Cobra cannot short-circuit help for run, which parses its own
+			// flags, so skip config and plugin setup when run help is requested.
+			if cmd.DisableFlagParsing {
+				if _, err := parsePluginRunFlags(cmd, args); errors.Is(err, pflag.ErrHelp) {
+					return nil
+				}
+			}
 			// Preserve the root's configuration setup when overriding its hook.
 			if root := cmd.Root(); root.Name() != "plugin" && root.PersistentPreRunE != nil {
 				if err := root.PersistentPreRunE(cmd, args); err != nil {
