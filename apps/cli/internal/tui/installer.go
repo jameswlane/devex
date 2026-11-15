@@ -684,7 +684,7 @@ func (si *StreamingInstaller) InstallApps(ctx context.Context, apps []types.Cros
 		if err != nil {
 			return err
 		}
-		return si.preparePackageRun(ctx, allowed)
+		return si.preparePackageRun(ctx, allowed, settings.HomeDir)
 	}
 	return si.installationResult(runInstallLanes(ctx, apps, prepare, func(ctx context.Context, i int, app types.CrossPlatformApp) error {
 		if si.apt.has(si.apt.preinstalled, app.Name) {

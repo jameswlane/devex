@@ -45,7 +45,7 @@ func PreparePackageBatch(ctx context.Context, apps []types.CrossPlatformApp, rep
 	}
 	si := NewStreamingInstaller(nil, repo, ctx, settings)
 	defer si.cancel()
-	err = si.preparePackageRun(ctx, available)
+	err = si.preparePackageRun(ctx, available, settings.HomeDir)
 	si.apt.mu.Lock()
 	defer si.apt.mu.Unlock()
 	return PackageBatch{Preinstalled: copySet(si.apt.preinstalled), BatchInstalled: copySet(si.apt.batchInstalled)}, err

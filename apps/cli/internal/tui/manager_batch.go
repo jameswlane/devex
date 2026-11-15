@@ -36,7 +36,7 @@ func policyBatchable(ctx context.Context, apps []types.CrossPlatformApp, homeDir
 
 // preparePackageRun batches simple native requests without crossing dependency
 // or pre-install barriers. The normal lifecycle still runs each app's hooks.
-func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []types.CrossPlatformApp) error {
+func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []types.CrossPlatformApp, homeDir string) error {
 	if err := si.prepareAptRun(ctx, apps); err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (si *StreamingInstaller) preparePackageRun(ctx context.Context, apps []type
 			continue
 		}
 		// An approval can expire during an earlier batch; none starts after.
-		policy, err := security.LoadOrgPolicy("")
+		policy, err := security.LoadOrgPolicy(homeDir)
 		if err != nil {
 			return err
 		}

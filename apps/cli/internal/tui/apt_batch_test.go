@@ -392,13 +392,20 @@ var _ = Describe("APT batching", func() {
 	})
 
 	It("starts no manager batch after the plan approval expired", func() {
-		teamDir := filepath.Join(GinkgoT().TempDir(), "team")
-		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", teamDir)
+		// The policy lives in the invoking user's home, which can differ from
+		// $HOME under sudo, so the recheck must use the resolved home.
+		home := GinkgoT().TempDir()
+		GinkgoT().Setenv("DEVEX_TEAM_CONFIG_DIR", "")
+		GinkgoT().Setenv("HOME", GinkgoT().TempDir())
+		GinkgoT().Setenv("XDG_CONFIG_HOME", "")
+		GinkgoT().Setenv("DEVEX_CONFIG_DIR", "")
+		Expect(security.TeamConfigDir(home)).NotTo(Equal(security.TeamConfigDir("")))
+		teamDir := security.TeamConfigDir(home)
 		Expect(os.MkdirAll(teamDir, 0o750)).To(Succeed())
 		_, public, err := security.GenerateApprovalKey()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(os.WriteFile(filepath.Join(teamDir, "policy.yaml"), []byte("version: '1'\napproval:\n  required: true\n  approvers:\n    - id: it\n      public_key: "+public+"\n"), 0o600)).To(Succeed())
-		policy, err := security.LoadOrgPolicy("")
+		policy, err := security.LoadOrgPolicy(home)
 		Expect(err).NotTo(HaveOccurred())
 		expired := security.WithApprovedPlan(context.Background(), security.ApprovedPlan{Digest: "sha256:x", Approver: "it", ExpiresAt: time.Now().Add(-time.Second), PolicySHA256: policy.SHA256})
 
@@ -407,7 +414,7 @@ var _ = Describe("APT batching", func() {
 		b.AllPlatforms.InstallMethod = "mise"
 		recorder.Script("mise", []string{"where", "node@22"}, sdktest.Response{ExitCode: 1})
 		recorder.Script("mise", []string{"where", "python@3.13"}, sdktest.Response{ExitCode: 1})
-		Expect(installer.preparePackageRun(expired, []types.CrossPlatformApp{a, b})).To(MatchError(ContainSubstring("approval expired")))
+		Expect(installer.preparePackageRun(expired, []types.CrossPlatformApp{a, b}, home)).To(MatchError(ContainSubstring("approval expired")))
 		Expect(recorder.Calls("bash")).To(BeEmpty())
 	})
 
